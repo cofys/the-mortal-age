@@ -2041,6 +2041,7 @@ export class PluginManager {
       LocModelType: require("../game/cache/codec/rs/config/loctype/LocModelType").LocModelType,
       MapObjects: require("../game/entity/impl/object/MapObjects").MapObjects,
       ItemOnGroundManager: require("../game/entity/impl/grounditem/ItemOnGroundManager").ItemOnGroundManager,
+      Wilderness: require("../game/content/wilderness/Wilderness").Wilderness,
       ItemOnGround: require("../game/entity/impl/grounditem/ItemOnGround").ItemOnGround,
       GroundItemState: require("../game/entity/impl/grounditem/ItemOnGround").State,
       ItemDefinition: require("../game/definition/ItemDefinition").ItemDefinition,
