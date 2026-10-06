@@ -160,6 +160,115 @@ function chatHeardEventName() {
   return EVENT_CITIZEN_CHAT_HEARD;
 }
 
+/**
+ * Social keywords: player says something like "be my friend" or "yes" to a
+ * pending invite. Returns true if handled (no LLM reply needed).
+ */
+function handleSocialKeyword(citizenUsername, speakerUsername, text) {
+  const said = String(text ?? "").toLowerCase().trim();
+  if (!said) return false;
+  let SocialMechanics, Bonds;
+  try {
+    SocialMechanics = require("../lib/CitizenSocialMechanics");
+    Bonds = require("../lib/CitizenBonds");
+  } catch {
+    return false;
+  }
+
+  // "yes" / "accept" — accept a pending invite from this citizen.
+  if (/^(yes|yeah|yep|accept|sure|ok|okay)$/.test(said)) {
+    const invite = SocialMechanics.acceptInvite(speakerUsername, citizenUsername);
+    if (invite) {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, invite.kind);
+      return true;
+    }
+    return false; // No pending invite — let the LLM handle the "yes".
+  }
+
+  // "be my friend" / "let's be friends" — player requests friendship.
+  if (/\b(be my friend|let'?s be friends|add me as friend|friend me)\b/.test(said)) {
+    const result = SocialMechanics.requestFriend(speakerUsername, citizenUsername);
+    if (result.already) return false; // Already friends — LLM can riff.
+    if (result.enemy) return false; // Enemies — cold shoulder already handled.
+    // Citizen decides: befriendable ones accept immediately, others get a request.
+    if (SocialMechanics.citizenAcceptFriend(citizenUsername, speakerUsername)) {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "friend_accept");
+    } else {
+      // Not ready — the request is pending; citizen will decide later.
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "friend_pending");
+    }
+    return true;
+  }
+
+  // "join my party" / "party up" — player invites citizen to party.
+  if (/\b(join my party|party up|join us|come with (me|us))\b/.test(said)) {
+    const party = Bonds.getParty(speakerUsername);
+    if (party) {
+      SocialMechanics.joinParty(citizenUsername, party);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "party_join");
+    } else {
+      const newParty = SocialMechanics.createParty(speakerUsername, [citizenUsername]);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "party_create");
+    }
+    return true;
+  }
+
+  // "leave party" / "disband" — player leaves or disbands.
+  if (/\b(leave party|disband( party)?)\b/.test(said)) {
+    SocialMechanics.leaveParty(speakerUsername);
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Tell the player what happened, via the citizen's "voice" (a game message
+ * from the citizen). The LLM will pick up the new relationship in context
+ * on the next exchange.
+ */
+function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
+  if (!pluginApi) return;
+  try {
+    const { getDirector } = require("../director/CitizenDirector");
+    const director = getDirector();
+    const bot = director?.getBot?.(director?.roster?.get?.(citizenUsername));
+    const display = director?.roster?.get?.(citizenUsername)?.displayName ?? citizenUsername;
+    const messages = {
+      friend_request: `${display}: I'd like that. We're friends now.`,
+      friend_accept: `${display}: Friends! I won't forget this.`,
+      friend_pending: `${display}: Hmm... give me some time. Let's see how it goes.`,
+      party_join: `${display}: I'm with you. Lead on.`,
+      party_create: `${display}: A party! I'm in. Where to?`,
+      clan_invite: `${display}: Join my clan chat — we'd be glad to have you.`,
+      boss_trip: `${display}: A boss trip? I'm in. Let's go.`,
+    };
+    const msg = messages[kind] ?? `${display} nods.`;
+    // Send as a game message "from" the citizen (the citizen's next LLM
+    // reply will be in their real voice).
+    const { getMemory } = require("../lib/CitizenMemory");
+    // Find the speaker's player to message them.
+    const speaker = findPlayerByName(speakerUsername);
+    if (speaker) speaker.sendMessage(msg);
+    // Also force-chat on the bot so nearby players see it.
+    try {
+      bot?.forceChat?.(msg.split(": ").slice(1).join(": ") || msg);
+    } catch {
+      // Non-fatal.
+    }
+  } catch {
+    // Non-fatal.
+  }
+}
+
+function findPlayerByName(username) {
+  try {
+    return pluginApi?.core?.World?.getPlayerByName?.(username) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   initCitizenChat,
   registerCitizenForChat,

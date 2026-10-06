@@ -472,6 +472,23 @@ function openStall(api, player, merchant) {
   if (player.busy?.()) {
     return;
   }
+  const stallMerchantName = merchant.getUsername?.() ?? "?";
+  const stallPlayerName = player.getUsername?.() ?? "?";
+  // Enemies don't get served. The merchant refuses outright.
+  try {
+    const { isEnemy } = require("../lib/CitizenBonds");
+    if (isEnemy(stallMerchantName, stallPlayerName)) {
+      player.sendMessage(`${stallMerchantName}: I don't serve your kind. Leave.`);
+      try {
+        merchant.forceChat?.("I don't serve enemies.");
+      } catch {
+        // Non-fatal.
+      }
+      return;
+    }
+  } catch {
+    // Non-fatal — fall through to normal handling.
+  }
   if (isKingdomAtWar(kingdomIdOf(merchant))) {
     player.sendMessage("The market is closed while the kingdom is at war.");
     return;

@@ -45,6 +45,8 @@ const { getMemory } = require("../lib/CitizenMemory");
 const { getJournal } = require("../lib/CitizenJournal");
 const { backgroundStep } = require("../lib/CitizenBackground");
 const { maybeSocialize } = require("../chat/CitizenSocial");
+const SocialMechanics = require("../lib/CitizenSocialMechanics");
+const CitizenBonds = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
   ensureNeeds,
@@ -223,6 +225,11 @@ class CitizenDirector {
     this.roster = new Map(); // username -> record
     this.usedNames = new Set();
     this.taskStarted = false;
+    try {
+      SocialMechanics.init(api);
+    } catch {
+      // Non-fatal.
+    }
   }
 
   runtime() {
@@ -683,6 +690,36 @@ class CitizenDirector {
           error: String(error?.message ?? error),
         });
       }
+      // Social mechanics + agency (data tier, zero LLM). Agency runs for
+      // everyone — citizens pursue goals even offline. Social (invites,
+      // friend requests) only for online citizens with players nearby.
+      try {
+        const arng = agentRng(`agency:${record.username}:${Date.now() >> 16}`);
+        SocialMechanics.tickAgency(record, arng);
+      } catch (error) {
+        this.log("agency failed", {
+          citizen: record.username,
+          error: String(error?.message ?? error),
+        });
+      }
+      if (online && bot) {
+        try {
+          const nearby = [];
+          try {
+            for (const p of bot.getLocalPlayers?.() ?? []) {
+              if (p !== bot && p?.isPlayerBot?.() !== true) nearby.push(p);
+            }
+          } catch {
+            // Non-fatal.
+          }
+          SocialMechanics.tickCitizen(record, (r) => this.getBot(r), nearby);
+        } catch (error) {
+          this.log("social mechanics failed", {
+            citizen: record.username,
+            error: String(error?.message ?? error),
+          });
+        }
+      }
       // Needs decay for everyone (the logged-out are asleep and recover);
       // the visible threshold lines only fire for online citizens.
       const needs = tickNeeds(record.username, bot, nowMs);
@@ -729,6 +766,13 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen journal save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      CitizenBonds.save();
+    } catch (error) {
+      this.log("citizen bonds save failed", {
         error: String(error?.message ?? error),
       });
     }
