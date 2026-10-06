@@ -465,8 +465,6 @@ class CitizenDirector {
         continue;
       }
       if (!online) {
-        if (this._spawnDiagCount === undefined) this._spawnDiagCount = 0;
-        if (this._spawnDiagCount < 5) { this._spawnDiagCount++; console.log("[DIAG] Spawning " + record.username + " role=" + record.role + " hour=" + hour); }
         this.spawnCitizen(record);
         continue;
       }
