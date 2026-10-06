@@ -77,7 +77,15 @@ regardless of provider context windows — free-tier *request* limits are the
 binding constraint now, not context size.
 
 Calls per day on the free tier: Gemini allows ~1,500 requests/day, Groq ~1,000.
-The daily budget default of 1000 stays under both.
+Request limits are NOT the binding constraint for Groq: at ~920 tokens/call,
+1,000 calls = 920K tokens, 4.6x over Groq's 200K/day token quota. So every
+provider carries BOTH a daily call cap and a daily token cap at 80% of free
+tier (see the SAFETY MODEL comment at the top of ProviderChain.js):
+Gemini 1,200 calls / 800K tokens, Groq 800 calls / 150K tokens. Token counting
+is conservative (prompt chars/4 + full maxTokens). When either cap is hit the
+provider is skipped for the rest of the UTC day; all capped means silence.
+Jon's rule: we never exceed free tier, never spend money. All four numbers are
+env-overridable (`<PROVIDER>_DAILY_CALL_CAP`, `<PROVIDER>_DAILY_TOKEN_CAP`).
 
 ## What's STUBBED (awaiting keys)
 
