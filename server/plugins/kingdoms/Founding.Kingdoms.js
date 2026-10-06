@@ -144,7 +144,7 @@ function isUnclaimed(pos) {
     [2880, 3280, 3040, 3519], // asgarnia
     [3072, 3168, 3296, 3512], // misthalin
     [2432, 3072, 2656, 3360], // kandarin
-    [3264, 3408, 3536, 3776], // morytania (note: x/y order in source)
+    [3408, 3776, 3264, 3536], // morytania
     [2816, 2944, 10112, 10272], // keldagrim
   ];
   for (const [x1, x2, y1, y2] of rects) {
