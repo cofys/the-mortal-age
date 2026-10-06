@@ -26,21 +26,25 @@
  *   kingdom:war-demand     { kingdomId, need }                 (quartermaster)
  *
  * State: the war stockpile persists on the kingdom record via
- * KingdomStore flags (sim:stockpile). Announcement throttles are
+ * KingdomStore flags (sim:stockpile). Office policy set by player office
+ * holders through the war table (OfficeTools.Kingdoms) lives on the same
+ * record: sim:tax-rate, sim:war-levy, sim:stockpile-target-peace/war,
+ * sim:patrol-order, sim:supply-order, sim:petitions, sim:rumors. The tick
+ * reads them; the consoles write them. Announcement throttles are
  * in-memory — losing them on restart just means one extra notice.
  */
 
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const Store = require("./KingdomStore");
 const Offices = require("./Offices.Kingdoms");
+const OfficeTools = require("./OfficeTools.Kingdoms");
+const Tension = require("./Tension.Kingdoms");
 
 // ~10 minutes at 600ms/tick.
 const SIM_TICK_TICKS = 1000;
 // Don't announce the same kind of office news more often than this.
 const NOTICE_COOLDOWN_MS = 45 * 60 * 1000;
 
-const STOCKPILE_PEACE_TARGET = 400;
-const STOCKPILE_WAR_TARGET = 1200;
 const WAR_BURN_PER_TICK = 60;
 // What each online guard is paid from the treasury every realm tick.
 const WAGE_PER_GUARD = 25;
@@ -103,24 +107,35 @@ function pick(array) {
 
 /** Steward: taxes in. Returns the amount collected (0 when vacant). */
 function stewardTick(kingdom, warsHere) {
-  if (!holderKind(kingdom.id, "steward")) {
+  const held = holderKind(kingdom.id, "steward");
+  if (!held) {
     if (noticeDue(kingdom.id, "steward-vacant")) {
       announceToRealm(
         `[Realm] Taxes go uncollected in ${kingdom.name} — the Steward's seat sits empty.`
       );
     }
+    OfficeTools.tickPetitions(kingdom, null);
     return 0;
   }
   const wartime = warsHere.length > 0;
+  const rate = OfficeTools.getTaxRate(kingdom.id);
+  const levy = wartime ? OfficeTools.getWarLevy(kingdom.id) : 1;
   const base = 180 + Math.floor(Math.random() * 240);
-  const amount = wartime ? Math.floor(base * 1.6) : base;
+  const amount = Math.max(1, Math.floor(base * rate * levy));
   const treasury = Store.grantTax(kingdom.id, amount);
+  Store.setFlag(kingdom.id, "sim:last-tax", amount);
   pluginApi.emitCustomEvent("kingdom:tax-collected", {
     kingdomId: kingdom.id,
     amount,
     wartime,
     treasury,
   });
+  // A heavy hand fills the coffers and empties the streets' patience.
+  if (rate >= 1.5 && Math.random() < 0.6) {
+    OfficeTools.emitUnrest(kingdom.id, "taxes");
+  }
+  // Citizens petition the court every tick; only a present steward answers.
+  OfficeTools.tickPetitions(kingdom, held);
   if (noticeDue(kingdom.id, "tax")) {
     announceToRealm(
       `[Realm] The Steward of ${kingdom.name} has collected ${amount} coins in taxes` +
@@ -145,7 +160,9 @@ function quartermasterTick(kingdom, warsHere, taxRevenue) {
     return;
   }
   const wartime = warsHere.length > 0;
-  const target = wartime ? STOCKPILE_WAR_TARGET : STOCKPILE_PEACE_TARGET;
+  // The quartermaster's targets are set at the war table; unset means the
+  // old defaults.
+  const target = OfficeTools.stockpileTarget(kingdom.id, wartime);
   if (wartime) {
     stockpile = Math.max(0, stockpile - WAR_BURN_PER_TICK);
     setStockpile(kingdom.id, stockpile);
@@ -182,6 +199,39 @@ function marshalTick(kingdom, warsHere) {
     return;
   }
   const wartime = warsHere.length > 0;
+  // A standing patrol order (set at the war table) overrides the ambient
+  // patrols: the guards are paid from the treasury every realm tick, and a
+  // watched border is a calmer border. An empty treasury stands them down.
+  const order = OfficeTools.getPatrolOrder(kingdom.id);
+  if (order) {
+    const cost = order.guards * WAGE_PER_GUARD;
+    if (Store.spendTax(kingdom.id, cost)) {
+      Store.setFlag(kingdom.id, "sim:patrol-cost-last", cost);
+      const level = wartime ? "war" : order.guards >= 8 ? "doubled" : "routine";
+      pluginApi.emitCustomEvent("kingdom:patrol-ordered", { kingdomId: kingdom.id, level });
+      if (order.target && order.target !== "home" && Store.getKingdom(order.target)) {
+        try {
+          // A watched border is a calmer border (addTension only raises).
+          const calm = Math.max(0, Tension.getTension(kingdom.id, order.target) - 2);
+          Store.setRawTension(kingdom.id, order.target, calm);
+        } catch {
+          // A calm border is cosmetic next to a crashed tick.
+        }
+      }
+    } else {
+      OfficeTools.clearPatrolOrder(kingdom.id);
+      OfficeTools.emitUnrest(kingdom.id, "empty");
+    }
+    if (wartime && noticeDue(kingdom.id, "levy")) {
+      const foe = warsHere[0].attackerId === kingdom.id ? warsHere[0].defenderId : warsHere[0].attackerId;
+      const foeName = Store.getKingdom(foe)?.name ?? foe;
+      announceToRealm(
+        `[Realm] The Marshal of ${kingdom.name} has raised the war levy against ${foeName}. ` +
+          `Every able blade is wanted.`
+      );
+    }
+    return;
+  }
   const level = wartime ? "war" : Math.random() < 0.25 ? "doubled" : "routine";
   pluginApi.emitCustomEvent("kingdom:patrol-ordered", { kingdomId: kingdom.id, level });
   if (wartime && noticeDue(kingdom.id, "levy")) {
@@ -228,6 +278,8 @@ function spymasterTick(kingdom, warsHere) {
     ]);
   }
   pluginApi.emitCustomEvent("kingdom:rumor", { kingdomId: kingdom.id, text });
+  // The spymaster's console shows what circulates; record it there.
+  OfficeTools.recordRumor(kingdom.id, text);
 }
 
 function simTick() {
@@ -258,6 +310,13 @@ function simTick() {
         error: String(error?.message ?? error),
       });
     }
+  }
+  // The tick mutates world state (treasuries, stockpiles, policy) — persist
+  // it once per tick rather than trusting some later mutation to save.
+  try {
+    Store.save();
+  } catch {
+    // The next tick saves again; the realm forgets nothing for long.
   }
   pluginApi?.log?.("[kingdoms] realm tick", {
     kingdoms: kingdoms.length,
