@@ -240,26 +240,20 @@ function crossedThreshold(player, threshold, heat) {
 }
 
 /**
- * A player asked about the heir near a Misthalin citizen. Raise heat,
- * escalate at thresholds, and maybe grant a fragment from a keeper.
+ * Raise a player's heat by `amount` and fire the threshold side-effects
+ * (25: watched, 55: grey-man rumor + possible retraction, 85: grey-man
+ * meeting). Shared by the heir-question path and the keepers layer —
+ * bribes and found letters are digging too.
  */
-function onHeirQuestion({ player, citizenUsername }) {
-  if (!player || player.isPlayerBot?.() === true) return;
+function addSuccessionHeat(player, amount) {
+  if (!player || player.isPlayerBot?.() === true) return currentHeat(player);
+  const newHeat = Math.max(0, Math.min(100, currentHeat(player) + amount));
+  setHeat(player, newHeat);
+  fireHeatThresholds(player, newHeat, Date.now());
+  return newHeat;
+}
 
-  // Per-player cooldown so one curious burst doesn't max heat instantly.
-  const now = Date.now();
-  const lastQ = player.getAttribute?.("succession:last-question-at") ?? 0;
-  const heat = currentHeat(player);
-  if (now - lastQ >= QUESTION_COOLDOWN_MS) {
-    try {
-      player.setAttribute("succession:last-question-at", now);
-    } catch {
-      // best-effort
-    }
-    setHeat(player, heat + HEAT_PER_QUESTION);
-  }
-  const newHeat = currentHeat(player);
-
+function fireHeatThresholds(player, newHeat, now) {
   // Threshold 25: the first chill.
   if (crossedThreshold(player, THRESHOLD_WATCHED, newHeat)) {
     player.sendMessage("You feel eyes on you. When you turn, no one is watching.");
@@ -293,6 +287,27 @@ function onHeirQuestion({ player, citizenUsername }) {
         "\"Careful what you ask about, friend.\" Then he's gone."
     );
   }
+}
+
+/**
+ * A player asked about the heir near a Misthalin citizen. Raise heat,
+ * escalate at thresholds, and maybe grant a fragment from a keeper.
+ */
+function onHeirQuestion({ player, citizenUsername }) {
+  if (!player || player.isPlayerBot?.() === true) return;
+
+  // Per-player cooldown so one curious burst doesn't max heat instantly.
+  const now = Date.now();
+  const lastQ = player.getAttribute?.("succession:last-question-at") ?? 0;
+  if (now - lastQ >= QUESTION_COOLDOWN_MS) {
+    try {
+      player.setAttribute("succession:last-question-at", now);
+    } catch {
+      // best-effort
+    }
+    addSuccessionHeat(player, HEAT_PER_QUESTION);
+  }
+  const newHeat = currentHeat(player);
 
   // Keepers: refused at 40+, locked at 70+.
   if (newHeat >= THRESHOLD_LOCKED) return;
@@ -389,3 +404,7 @@ function attachSuccessionDeep(api) {
 
 module.exports = attachSuccessionDeep;
 module.exports.attachSuccessionDeep = attachSuccessionDeep;
+// Shared with the keepers layer (stages 5-8): bribes and found letters dig too.
+module.exports.successionHeat = currentHeat;
+module.exports.addSuccessionHeat = addSuccessionHeat;
+module.exports.grantSuccessionFragment = grantFragment;
