@@ -28,6 +28,7 @@
 
 const Politics = require("./Politics.Kingdoms");
 const Store = require("./KingdomStore");
+const OfficeTools = require("./OfficeTools.Kingdoms");
 
 const CHEST_OBJECT_NAME = "Donation chest";
 
@@ -91,6 +92,53 @@ function promptAmount(player, title, onInput) {
   }
 }
 
+/** Deliver provisions against the quartermaster's standing supply order. */
+function showSupplyMenu(player, kingdomId) {
+  if (!player) return;
+  const order = OfficeTools.getSupplyOrder(kingdomId);
+  if (!order) {
+    player.sendMessage("The quartermaster seeks no supplies just now.");
+    return;
+  }
+  const inventory = player.getInventory?.();
+  const pairs = [];
+  for (const [itemId, spec] of Object.entries(OfficeTools.SUPPLY_ITEMS)) {
+    const id = Number(itemId);
+    const have = inventory?.getAmount?.(id) ?? 0;
+    pairs.push(`${spec.name} - you carry ${have} (${spec.units} units each).`, () => {
+      if (have <= 0) {
+        player.sendMessage(`You carry no ${spec.name.toLowerCase()}.`);
+        showSupplyMenu(player, kingdomId);
+        return;
+      }
+      promptAmount(
+        player,
+        `Deliver how many ${spec.name.toLowerCase()}? (you carry ${have})`,
+        (amount) => {
+          const result = OfficeTools.deliverSupplies(player, kingdomId, id, amount);
+          player.sendMessage(`[Quartermaster] ${result.message}`);
+          if (result.ok && OfficeTools.getSupplyOrder(kingdomId)) {
+            showSupplyMenu(player, kingdomId);
+          } else {
+            openDonationPrompt({ player });
+          }
+        }
+      );
+    });
+  }
+  pairs.push("Never mind.", () => openDonationPrompt({ player }));
+  try {
+    pluginApi.sendMultiChatboxPrompt(
+      player,
+      `Deliver provisions - ${formatCoins(order.units)} units wanted at ${order.pricePer}c each`,
+      ...pairs
+    );
+  } catch (error) {
+    console.warn("[donation-chest] supply prompt failed", error?.message ?? error);
+    player.sendMessage("The chest's lid sticks. Try again.");
+  }
+}
+
 function openDonationPrompt({ player }) {
   if (!player || player.isPlayerBot?.() === true) return;
   const kingdomId = kingdomAt(player);
@@ -113,6 +161,14 @@ function openDonationPrompt({ player }) {
       else openDonationPrompt({ player });
     })
   );
+  // The quartermaster's standing supply order: deliver provisions for coin.
+  const order = OfficeTools.getSupplyOrder(kingdomId);
+  if (order) {
+    options.push(
+      `Deliver provisions (${formatCoins(order.units)} units wanted at ${order.pricePer}c each).`,
+      () => showSupplyMenu(player, kingdomId)
+    );
+  }
   options.push("Never mind.", () => {});
   try {
     pluginApi.sendMultiChatboxPrompt(
