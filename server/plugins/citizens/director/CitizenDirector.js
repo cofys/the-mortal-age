@@ -677,6 +677,8 @@ class CitizenDirector {
   tick() {
     const hour = hourNow();
     const nowMs = Date.now();
+    console.log(`[citizens-DIAG] tick running: roster=${this.roster.size}, hour=${hour}`);
+    let spawned = 0, skippedSleep = 0;
     for (const record of this.roster.values()) {      const online = this.isOnline(record);
       const bot = online ? this.getBot(record) : null;
       // Background tier (Jon's two-tier sim): every citizen lives as data
@@ -725,13 +727,14 @@ class CitizenDirector {
       const needs = tickNeeds(record.username, bot, nowMs);
       const phase = desiredPhase(record, hour);
       if (!phase.online) {
+        skippedSleep++;
         if (online) {
           this.logoutCitizen(record);
         }
         continue;
       }
       if (!online) {
-        this.spawnCitizen(record);
+        if (this.spawnCitizen(record)) spawned++;
         continue;
       }
       if (!bot) {
@@ -760,6 +763,7 @@ class CitizenDirector {
     } catch (error) {
       this.log("socialize failed", { error: String(error?.message ?? error) });
     }
+    console.log(`[citizens-DIAG] tick done: spawned=${spawned}, asleep=${skippedSleep}, roster=${this.roster.size}`);
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
