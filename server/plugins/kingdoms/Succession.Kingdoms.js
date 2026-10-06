@@ -11,7 +11,7 @@
  * questline, not to ambient content).
  *
  * What it does: a whisper-stage counter (`succession:whisper-stage` on
- * Misthalin, 0-12) advances very slowly — days per stage. Each new stage
+ * Misthalin, 0-17) advances very slowly — days per stage. Each new stage
  * drops ONE rare, deniable rumor into Varrock's streets via kingdom:rumor:
  *
  *   stage 1 — a drunk courtier's slip in a tavern
@@ -26,10 +26,17 @@
  *   stage 10 — the Hand's charity auction, the palace bidding (the backers)
  *   stage 11 — a reward poster for the cut ledger page (the page)
  *   stage 12 — the grey men stop asking, start watching (the warning)
+ *   stage 13 — the hunted young man surfaces, somewhere unexpected (Port Sarim)
+ *   stage 14 — the Hand's auction donors, pinned on the market board (the trace)
+ *   stage 15 — the reward poster, claimed by a grey cloak (the page, gone again)
+ *   stage 16 — the drunk courtier disappears (someone knew too much)
+ *   stage 17 — a second buyer for old paper, gold not silver (the second player)
  *
  * Stages 5-8 are the escalation beats; their interactive layer lives in
- * SuccessionKeepers.Kingdoms.js. The rule never changes: rare, deniable,
- * never naming the son.
+ * SuccessionKeepers.Kingdoms.js. Stages 9-12 are the trail; their interactive
+ * layer lives in SuccessionTrail.Kingdoms.js. Stages 13-17 are the hunt;
+ * their interactive layer lives in SuccessionHunt.Kingdoms.js. The rule
+ * never changes: rare, deniable, never naming the son.
  *
  * A royal death anywhere in the realm can also stir a surge whisper
  * ("they say Roald looked grey at the funeral") — grief makes people talk.
@@ -59,7 +66,7 @@ const DEATH_SURGE_CHANCE = 0.2;
 
 const WHISPER_STAGE_FLAG = "succession:whisper-stage";
 const LAST_ADVANCE_FLAG = "succession:last-advance-at";
-const MAX_STAGE = 12;
+const MAX_STAGE = 17;
 
 let pluginApi = null;
 
@@ -100,6 +107,26 @@ const STAGE_WHISPERS = {
   12: "The grey men aren't asking questions anymore. They're just watching. " +
     "A friend of a friend got a visit. 'Some stones are better left unturned,' " +
     "they told him. He hasn't slept since.",
+  // Stages 13-17: the hunt. The young man surfaces, the backers leave a
+  // trace, the page is claimed, someone disappears, a second player appears.
+  // Colder still — but the world keeps moving, and movement leaves marks.
+  13: "They say a lad with a Riverlands farm accent is working the Port Sarim " +
+    "docks. Young, strong, quiet. Keeps a packed bag by his bunk and looks over " +
+    "his shoulder when the gulls cry. Somebody taught that boy to run.",
+  14: "The Merciful Hand pinned its auction donors on the market board — a long " +
+    "vellum list, and one name struck through in palace-green ink. Below it, " +
+    "in a fresh hand: 'the palace thanks its friends.' Nobody's asked whose " +
+    "name was underneath the ink.",
+  15: "That reward poster — the torn ledger page, the fortune for a leaf of " +
+    "vellum — it's gone. A grey-cloaked man took it down yesterday and walked " +
+    "toward the palace quarter. The charcoal underneath said one word: 'sold.'",
+  16: "The courtier with the loose tongue — the one who slurred about 'the " +
+    "king's heir' in the Blue Moon — hasn't been seen in a fortnight. His " +
+    "lodgings are let to a quiet man in grey. Nobody saw him leave. Nobody's asking.",
+  17: "There's a second buyer for old paper now. Not the Hand — a private man, " +
+    "plain clothes, paying in gold where the Hand pays silver. No charity, no " +
+    "questions, no face anyone remembers. What he buys, he buys for a fortune. " +
+    "What he wants it for, nobody knows.",
 };
 
 const DEATH_SURGE_WHISPERS = [
@@ -178,5 +205,5 @@ module.exports = attachSuccession;
 module.exports.attachSuccession = attachSuccession;
 module.exports.successionTick = successionTick;
 module.exports.SUCCESSION_TICK_TICKS = SUCCESSION_TICK_TICKS;
-/** Current whisper stage (0-8). The keepers layer gates its beats on this. */
+/** Current whisper stage (0-17). The keepers/trail/hunt layers gate their beats on this. */
 module.exports.whisperStage = stageOf;
