@@ -73,12 +73,16 @@ function initCitizens(api) {
   initCitizenMemory(); // what citizens remember; loads data/saves/citizen-memory.json
   initCitizenJournal(); // what citizens have been up to; loads data/saves/citizen-journal.json
   registerCitizenActionTypes();
+  console.log(`[citizens-debug] action types registered`);
   const added = registerCitizenActivities();
+  console.log(`[citizens-debug] activities registered: ${added.length}`);
   api.log?.("[citizens] activities registered", { added });
   // The market board is a world object, not a citizen — it works regardless.
   initMarketBoard(api);
+  console.log(`[citizens-debug] market board done`);
   // The market registrar is a market fixture, not a citizen — it works regardless.
   initMarketRegistrar(api);
+  console.log(`[citizens-debug] market registrar done`);
   if (!CITIZENS_ENABLED) {
     api.log?.("[citizens] director idle — set CITIZENS_ENABLED=1 to spawn the population");
     return;
