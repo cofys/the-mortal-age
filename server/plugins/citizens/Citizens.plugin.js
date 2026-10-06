@@ -60,55 +60,30 @@ const {
   ROLE_COURTIER,
 } = require("./constants");
 
-const CITIZENS_ENABLED = (process.env.CITIZENS_ENABLED ?? "1") === "1";
+function citizensEnabled() {
+  // Check at runtime, not module load — the module may be cached from a
+  // context where the env var wasn't set yet.
+  return (process.env.CITIZENS_ENABLED ?? "1") === "1";
+}
 
 let pluginApi = null;
 
 function initCitizens(api) {
-  console.log("[citizens-debug] initCitizens START, CITIZENS_ENABLED=" + process.env.CITIZENS_ENABLED);
   pluginApi = api;
-  try {
-    console.log("[citizens-debug] step: initCitizenChat");
-    initCitizenChat(api);
-    console.log("[citizens-debug] step: initCitizenSocial");
-    initCitizenSocial(api);
-    console.log("[citizens-debug] step: initCitizenMemory");
-    initCitizenMemory();
-    console.log("[citizens-debug] step: initCitizenJournal");
-    initCitizenJournal();
-    console.log("[citizens-debug] step: registerCitizenActionTypes");
-    registerCitizenActionTypes();
-    console.log("[citizens-debug] step: registerCitizenActivities");
-    const added = registerCitizenActivities();
-    console.log("[citizens-debug] activities registered:", added);
-    api.log?.("[citizens] activities registered", { added });
-    console.log("[citizens-debug] step: initMarketBoard");
-    initMarketBoard(api);
-    console.log("[citizens-debug] step: initMarketRegistrar");
-    initMarketRegistrar(api);
-    console.log("[citizens-debug] step: market registrar done");
-  } catch (e) {
-    console.log("[citizens-debug] INIT FAILED AT STEP:", e?.message ?? e);
-    throw e;
-  }
-  console.log("[citizens-debug] checking CITIZENS_ENABLED constant:", CITIZENS_ENABLED, "env:", process.env.CITIZENS_ENABLED);
-  if (!CITIZENS_ENABLED) {
+  initCitizenChat(api);
+  initCitizenSocial(api);
+  initCitizenMemory();
+  initCitizenJournal();
+  registerCitizenActionTypes();
+  const added = registerCitizenActivities();
+  api.log?.("[citizens] activities registered", { added });
+  initMarketBoard(api);
+  initMarketRegistrar(api);
+  if (!citizensEnabled()) {
     api.log?.("[citizens] director idle — set CITIZENS_ENABLED=1 to spawn the population");
     return;
   }
-  const director = (() => {
-    try {
-      console.log("[citizens-debug] calling getBaseRegistry()");
-      const reg = getBaseRegistry();
-      console.log("[citizens-debug] getBaseRegistry returned", { hasReg: !!reg });
-      const d = initDirector(api, reg);
-      console.log("[citizens-debug] initDirector returned", { hasDirector: !!d });
-      return d;
-    } catch (e) {
-      console.log("[citizens-debug] DIRECTOR INIT FAILED:", e?.message ?? e);
-      throw e;
-    }
-  })();
+  const director = initDirector(api, getBaseRegistry());
   director.boot();
   initMerchantShops(api);
   initPlayerShops(api);
