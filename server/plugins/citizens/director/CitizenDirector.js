@@ -515,15 +515,22 @@ class CitizenDirector {
     this.api.emitPlayerLogin({ player: bot, username: record.username });
     bot.moveTo?.(spawn.clone());
 
-    // TEMP DIAG: visibility gap investigation
+    // FIX: The World's add-player queue is not draining (bots stuck in queue).
+    // Add directly to World's player list via api.core, bypassing the queue.
     try {
       const World = this.api.core?.World;
-      const botPos = bot.getLocation?.() ?? bot.getPosition?.();
-      const inWorld = World ? !!World.getPlayerByName?.(record.username) : "no-World";
-      const queueLen = World?.getAddPlayerQueue?.()?.length ?? "?";
-      console.log(`[citizens-visibility] spawned ${record.username} at ${botPos?.x},${botPos?.y},${botPos?.z} inWorld=${inWorld} queueLen=${queueLen}`);
+      if (World && World.players && typeof World.players.add === "function") {
+        // Remove from queue first to avoid duplicates
+        const queue = World.getAddPlayerQueue?.();
+        if (queue) {
+          const idx = queue.indexOf(bot);
+          if (idx >= 0) queue.splice(idx, 1);
+        }
+        World.players.add(bot, true); // true = isBot, doesn't take human slot
+        console.log(`[citizens-visibility] DIRECT ADD ${record.username} to World.players`);
+      }
     } catch (e) {
-      console.log(`[citizens-visibility] diag failed: ${e?.message}`);
+      console.log(`[citizens-visibility] direct add failed: ${e?.message}`);
     }
 
     const activity =
