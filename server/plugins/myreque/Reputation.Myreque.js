@@ -27,10 +27,13 @@
  * better), but it can only sour you to -199.
  *
  * Out (custom events, AGENTS.md: plugins talk through events):
- *   myreque:vost-slain { participants: [username], captiveSaved }
- *     — emitted by SunkenHollow; standing for the Hollow's avengers.
+ *   (none — this module only listens)
  * In:
  *   kingdom:rumor { kingdomId, text }  (the realm hears tier crossings)
+ *   kingdom:task-completed { player, kingdomId, task }
+ *     — SunkenHollow's "sunken-hollow:vost" / "sunken-hollow:captive-saved"
+ *       tasks award standing for the Hollow's avengers. (A future
+ *       `myreque:vost-slain` emit is also honored, deduped by timestamp.)
  *
  * Data exports (Actors/Danger/SunkenHollow require this module):
  *   getStanding, addStanding, tierOf, TIERS, hasMetMyreque,
@@ -412,17 +415,63 @@ function standingProse(player) {
 }
 
 // --- Sunken Hollow tie-in -------------------------------------------------------
+// Vost's death is the Hollow's signature sabotage. SunkenHollow already
+// emits kingdom:task-completed per participant ("sunken-hollow:vost",
+// "sunken-hollow:captive-saved") — award standing on those. A future
+// myreque:vost-slain emit is honored too; a timestamp dedupes double awards.
+
+const VOST_AWARD_ATTRIBUTE = "myreque:vost-award-at";
+const VOST_AWARD_DEDUPE_MS = 60 * 1000;
+
+function awardVostKill(player, award, reason, message) {
+  if (!player || !isRealPlayer(player)) return;
+  const now = Date.now();
+  let last = 0;
+  try {
+    last = Number(player.getAttribute(VOST_AWARD_ATTRIBUTE)) || 0;
+  } catch {
+    // best-effort
+  }
+  if (now - last < VOST_AWARD_DEDUPE_MS) return; // already honored this kill
+  try {
+    player.setAttribute(VOST_AWARD_ATTRIBUTE, now);
+  } catch {
+    // best-effort
+  }
+  addStanding(player, award, reason);
+  player.sendMessage(message);
+}
+
+function onTaskCompleted(event) {
+  const { player, task } = event ?? {};
+  if (!player || !isRealPlayer(player)) return;
+  if (task === "sunken-hollow:vost") {
+    awardVostKill(
+      player,
+      100,
+      "vost-slain",
+      "[Myreque] Vost the Tithe-Taker is dead by your hand. The Hollow will remember this. (+100 standing)"
+    );
+  } else if (task === "sunken-hollow:captive-saved") {
+    awardVostKill(
+      player,
+      50,
+      "captive-saved",
+      "[Myreque] You saved the Hollow's captive. Debts like that are never forgotten. (+50 standing)"
+    );
+  }
+}
 
 function onVostSlain(event) {
-  const { participants, captiveSaved } = event ?? {};
-  const award = captiveSaved ? 150 : 100;
+  const { participants } = event ?? {};
   for (const name of participants ?? []) {
     try {
       const p = api?.core?.World?.getPlayerByName?.(name);
-      if (!p || !isRealPlayer(p)) continue;
-      addStanding(p, award, "vost-slain");
-      p.sendMessage(
-        `[Myreque] Vost the Tithe-Taker is dead by your hand. The Hollow will remember this. (+${award} standing)`
+      awardVostKill(
+        p,
+        100,
+        "vost-slain",
+        "[Myreque] Vost the Tithe-Taker is dead by your hand. The Hollow will remember this. (+100 standing)"
       );
     } catch {
       // best-effort per participant
@@ -435,6 +484,8 @@ function onVostSlain(event) {
 function registerReputation(pluginApi) {
   api = pluginApi;
   for (const key of PERSISTED) api.persistAttribute(key);
+  api.persistAttribute(VOST_AWARD_ATTRIBUTE);
+  api.onCustomEvent("kingdom:task-completed", onTaskCompleted);
   api.onCustomEvent("myreque:vost-slain", onVostSlain);
   console.info("[myreque] reputation track live — one needle, no fence-sitting");
 }
