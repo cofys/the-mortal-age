@@ -212,6 +212,11 @@ function spymasterTick(kingdom, warsHere) {
       `Word is the ${kingdom.name} watch has doubled — something moves in the dark.`,
       `A courier rode hard for the ${kingdom.capital ?? "capital"} at dawn. War news, they say.`,
       `They say ${foeName} pays sellswords in gold now. Times are desperate.`,
+      // Conscription: press gangs, levies, deserters.
+      `They say the press-gangs walk ${kingdom.name}'s streets at dusk — strong backs wanted for the levy.`,
+      `Word is ${foeName} deserters beg bread at the crossroads, speaking of empty bellies and emptier promises.`,
+      `They say the ${kingdom.name} levy-masters pay a bounty for every deserter dragged back in chains.`,
+      `They say the levy lists are nailed to the ${kingdom.capital ?? "capital"} gates — every third name a boy not yet shaving.`,
     ]);
   } else {
     text = pick([

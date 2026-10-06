@@ -287,6 +287,36 @@ function onWarDeclaredFear(event) {
       `They say the ${bName} dead already line the marches.`,
     ]
   );
+  speakDraft([a, b]);
+}
+
+// The draft: one guardsman per warring kingdom calls the muster out loud.
+// Throttled separately from the fear lines — conscription is its own beat.
+const DRAFT_COOLDOWN_MS = 30 * 60 * 1000;
+const lastDraftAt = new Map(); // kingdomId -> timestamp
+
+const DRAFT_LINES = [
+  "The draft is on! All able-bodied to the muster field!",
+  "Levy orders! If you're of age and breathing, the Marshal wants you.",
+  "Deserters hang. Volunteers eat. Choose quickly.",
+  "The levy lists are nailed to the gates — check your name, citizen.",
+];
+
+/** A guard of each warring kingdom proclaims the draft, throttled. */
+function speakDraft(kingdomIds) {
+  const now = Date.now();
+  for (const kingdomId of [...new Set(kingdomIds)].filter(Boolean)) {
+    if (now - (lastDraftAt.get(kingdomId) ?? 0) < DRAFT_COOLDOWN_MS) continue;
+    const guards = onlineBots(kingdomId, ROLE_GUARD);
+    if (guards.length === 0) continue;
+    lastDraftAt.set(kingdomId, now);
+    const speaker = pick(guards);
+    try {
+      speaker.forceChat?.(pick(DRAFT_LINES).slice(0, 120));
+    } catch {
+      // A silent guardsman still serves.
+    }
+  }
 }
 
 /** kingdom:war-ended — peace, and the rebuilding. */

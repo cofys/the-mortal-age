@@ -175,6 +175,29 @@
           }
         }
       ]
+    },
+    {
+      "actions": [
+        {
+          "chatterMaxMs": 180000,
+          "chatterMinMs": 45000,
+          "type": "refugeeFlight"
+        }
+      ],
+      "capacity": 32,
+      "failureCooldownSeconds": 10,
+      "id": "refugee_flight",
+      "mode": "citizen_social",
+      "repeat": true,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "refugee"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

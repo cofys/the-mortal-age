@@ -25,7 +25,7 @@ let state = null;
 let persist = true;
 
 function emptyState() {
-  return { version: STORE_VERSION, kingdoms: {}, wars: [], tension: {} };
+  return { version: STORE_VERSION, kingdoms: {}, wars: [], tension: {}, alliances: [] };
 }
 
 function load() {
@@ -38,6 +38,8 @@ function load() {
       // Worlds saved before the tension model have no tension map.
       if (!state.tension || typeof state.tension !== "object") state.tension = {};
       if (!Array.isArray(state.wars)) state.wars = [];
+      // Worlds saved before the diplomacy layer have no alliance registry.
+      if (!Array.isArray(state.alliances)) state.alliances = [];
     }
   } catch {
     // No save yet, or unreadable: the seed data will fill it at startup.
@@ -194,6 +196,76 @@ function getActiveWars() {
   return load().wars.filter((w) => w.active);
 }
 
+/**
+ * Alliances: persisted pact records. Each is
+ *   { a, b, formedAt, pactName, broker, strength, betrayalRisk }
+ * with a/b in canonical sorted order. Strength 1-5 (blood bonds grow);
+ * betrayalRisk 0-100 (spymaster schemes push it up; at 100 the pact shatters).
+ */
+function allianceKey(a, b) {
+  return [String(a), String(b)].sort();
+}
+
+function getAlliances() {
+  return load().alliances.map((r) => ({ ...r }));
+}
+
+function getAlliance(a, b) {
+  const [x, y] = allianceKey(a, b);
+  const rec = load().alliances.find((r) => r.a === x && r.b === y);
+  return rec ? { ...rec } : null;
+}
+
+function isAllied(a, b) {
+  return getAlliance(a, b) !== null;
+}
+
+function alliesOf(kingdomId) {
+  const id = String(kingdomId);
+  return load()
+    .alliances.filter((r) => r.a === id || r.b === id)
+    .map((r) => (r.a === id ? r.b : r.a));
+}
+
+/** Form a pact between two kingdoms. Idempotent — returns the record. */
+function formAlliance(a, b, { pactName = null, broker = null } = {}) {
+  if (a === b) return null;
+  const [x, y] = allianceKey(a, b);
+  const existing = getAlliance(x, y);
+  if (existing) return existing;
+  const record = {
+    a: x,
+    b: y,
+    formedAt: Date.now(),
+    pactName: pactName ?? `the ${x}-${y} accord`,
+    broker: broker ?? null,
+    strength: 1,
+    betrayalRisk: 0,
+  };
+  load().alliances.push(record);
+  return { ...record };
+}
+
+/** Dissolve a pact. Returns the removed record, or null. */
+function breakAlliance(a, b) {
+  const [x, y] = allianceKey(a, b);
+  const list = load().alliances;
+  const idx = list.findIndex((r) => r.a === x && r.b === y);
+  if (idx < 0) return null;
+  const [removed] = list.splice(idx, 1);
+  return { ...removed };
+}
+
+/** Nudge a pact's betrayal risk (0-100) or strength (1-5). Returns the record, or null. */
+function adjustAlliance(a, b, { betrayalRiskDelta = 0, strengthDelta = 0 } = {}) {
+  const [x, y] = allianceKey(a, b);
+  const rec = load().alliances.find((r) => r.a === x && r.b === y);
+  if (!rec) return null;
+  rec.betrayalRisk = Math.max(0, Math.min(100, (rec.betrayalRisk ?? 0) + betrayalRiskDelta));
+  rec.strength = Math.max(1, Math.min(5, (rec.strength ?? 1) + strengthDelta));
+  return { ...rec };
+}
+
 /** For tests: forget the world's kingdoms and keep them in memory only. */
 function resetForTests() {
   state = emptyState();
@@ -217,5 +289,12 @@ module.exports = {
   getRawTension,
   setRawTension,
   getTensionMap,
+  getAlliances,
+  getAlliance,
+  isAllied,
+  alliesOf,
+  formAlliance,
+  breakAlliance,
+  adjustAlliance,
   resetForTests,
 };

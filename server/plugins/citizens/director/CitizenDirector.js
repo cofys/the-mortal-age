@@ -64,9 +64,11 @@ const {
   ROLE_MERCHANT,
   ROLE_COMMONER,
   ROLE_COURTIER,
+  ROLE_REFUGEE,
   ROLE_ACTIVITY,
   ACTIVITY_TAVERN_SOCIAL,
   ACTIVITY_LEISURE_STROLL,
+  ACTIVITY_REFUGEE_FLIGHT,
   EVENT_RANK_GRANTED,
 } = require("../constants");
 
@@ -78,6 +80,7 @@ const ROLE_RANK = Object.freeze({
   [ROLE_MERCHANT]: "Subject",
   [ROLE_COMMONER]: "Subject",
   [ROLE_COURTIER]: "Lord",
+  [ROLE_REFUGEE]: "Subject",
 });
 
 const GUARD_PROMOTION_LADDER = Object.freeze([
@@ -187,8 +190,7 @@ function desiredPhase(record, hour) {
     case ROLE_COMMONER:
       // The routine action runs the day itself; the director only sleeps them.
       return { online: true, activityId: ROLE_ACTIVITY[ROLE_COMMONER] };
-    case ROLE_COURTIER:
-      // Morning court, lunch, an afternoon of leisure, then the tavern evening.
+    case ROLE_COURTIER:      // Morning court, lunch, an afternoon of leisure, then the tavern evening.
       if (hour >= 9 && hour < 12) {
         return { online: true, activityId: ROLE_ACTIVITY[ROLE_COURTIER] };
       }
@@ -202,11 +204,14 @@ function desiredPhase(record, hour) {
         return { online: true, activityId: ACTIVITY_TAVERN_SOCIAL };
       }
       return { online: false, activityId: null };
+    case ROLE_REFUGEE:
+      // Refugees keep no schedule — they flee until the war ends, when
+      // WarRefugees logs them out and drops their roster records.
+      return { online: true, activityId: ACTIVITY_REFUGEE_FLIGHT };
     default:
       return { online: false, activityId: null };
   }
 }
-
 class CitizenDirector {
   constructor({ api, registry }) {
     this.api = api;

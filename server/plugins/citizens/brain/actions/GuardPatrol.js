@@ -45,6 +45,8 @@ const CHALLENGE_LINES_WAR = Object.freeze([
   "HALT! War is on — no strangers pass this line.",
   "Turn back, traveller. The city is sealed.",
   "You! Name yourself, quickly. We're at war.",
+  "The levy's raised — every able blade to the walls. That may mean you, if it comes to it.",
+  "Press-gangs walk tonight. You look able-bodied... move along, citizen, and stay out of sight.",
 ]);
 
 const GREETING_LINES = Object.freeze([

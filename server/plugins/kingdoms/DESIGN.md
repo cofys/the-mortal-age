@@ -16,6 +16,47 @@ the data model, the event catalog, and the honest list of what's stubbed.
 | `Events.Kingdoms.js` | `kingdom:*` custom-event listeners (the cross-plugin API) |
 | `Membership.Kingdoms.js` | Player attributes, `::kingdom` / `::kingdomrank` commands, court helpers |
 | `Tension.Kingdoms.js` | The powder keg: pairwise tension, skirmishes, war starts/ends, story beats |
+| `Alliances.Kingdoms.js` | The pact registry: alliance-formed/broken listeners, tension pinning, trade bonus |
+| `Diplomacy.Kingdoms.js` | The political layer: steward negotiations, spymaster schemes, betrayals, mutual defense |
+| `Royals.Kingdoms.js` | The royal calendar: marriages, births, deaths, coronations |
+| `Succession.Kingdoms.js` | ARC-SEEDING: the heirless crown's whispers (planted only, never resolved) |
+
+## The political layer (alliances, betrayals, the royal calendar)
+
+Politics are no longer bilateral tension only. The diplomacy tick runs every
+~30 minutes (3000 game ticks) and kingdoms' held offices act on the board:
+
+| Driver | Numbers |
+| --- | --- |
+| Steward negotiation | both stewards held, tension < 40, no war, not allied: 8%/tick; 20% with a shared rival (both ≥60 tension with a third power) or a royal marriage bond |
+| Pact sealed | `kingdom:alliance-formed`; tension pinned at 10; announced realm-wide; `::alliances` shows pacts |
+| Ally tension damping | -3/tick for allied pairs at peace (envoys' quiet work) |
+| Trade bonus | peacetime tax collection with ≥1 ally earns +8% treasury bonus (open roads, full coffers) |
+| Shared rumors | allied courts trade cipher-keys: occasional pact-gossip rumors cross the border |
+| Spymaster sabotage | 12%/tick per held spymaster: poison a foreign pact (+15..30 betrayal risk), scheme against an own ally (+20..40), or counter-intel (-10) |
+| Betrayal | betrayalRisk ≥ 100 shatters the pact: +30 tension for the betrayed side, realm outrage announcement, street rumors, every other pact loses 1 strength |
+| War-demand flip | a wartime `kingdom:war-demand` makes the court demand supplies of an ally (24h cooldown): 60% honored (200-800c gift, bond +1) or refused — a refusal is betrayal |
+| Mutual defense | on a tension-declared war, each ally of the defender rolls loyalty: 55% base, +10% per bond strength, -20% if hot with the attacker, -15% if garrison < 20. Loyal: declares war on the attacker (`declaredBy: "alliance"`, no chaining) and bonds in blood (tension 5). Refusing: betrayal. Already at war: the pact dissolves in absence (+10 tension, no outrage) |
+| War between allies | voids the pact instantly — the pact is ash |
+
+The royal calendar ticks every ~60 minutes (6000 game ticks); each kingdom gets
+at most one royal event per 72h. Marriages bind kingdoms (-15 tension, a
+dynastic bond stewards respect); births are celebration; deaths are courtiers
+and royal kin — mourning calms every border (-3). Coronations crown consorts
+and lesser titles, never great thrones (-10 tension, new hope).
+
+**The great rulers never die in ambient events.** Roald III, Lathas,
+Lowerniel Drakan, Amik Varze and the Consortium are questline content — the
+world bible locks their fates. Misthalin births are kin of the court, never
+"a son for Roald."
+
+**Succession whispers are ARC-SEEDING for the phase 10 questline** (Roald's
+hidden bastard son). A whisper stage (0-4) on Misthalin advances roughly daily:
+tavern slip → redacted report → the sermon that stopped → the Riverlands
+merchant. Rare, deniable, never naming the son, never touching the
+`misthalin:bastard-son-hidden` story flag. A royal death anywhere can stir a
+surge whisper. This content is planted only — it resolves in custom quests,
+not in plugin logic.
 
 ## The tension model (live war states)
 
@@ -41,14 +82,19 @@ and recovers — war is an event, not the weather.
 | Morytania powder keg | seeded 68-74 at boot; Myreque sabotage 6%/tick and Drakan's tithe demands 5%/tick keep it hot |
 
 **What a player sees, first rumor to peace:** townsfolk repeat spymaster
-rumors as tension crosses 55/75/90; merchants charge 1.5× war prices for
-steel and food once a border passes 60; skirmishes are announced realm-wide
+rumors as tension crosses 55/75/90; merchants charge 25-50% war prices for
+steel and food once a border passes 60 (scaled by heat, decaying across the
+72h armistice after peace); skirmishes are announced realm-wide
 and citizens speak fear in the streets; at 100 war is declared with a
 casus-belli reason, patrols double, war taxes bite, quartermaster demands go
 URGENT, entering the kingdom warns you the roads are not safe, and the
 market closes; when the war burns out, peace terms are announced, both
 treasuries bleed, and `::war` shows the rebuilding. Citizens speak relief;
-the armistice holds the peace.
+the armistice holds the peace. Where patrols clashed the border keeps a
+scar — scorched earth, gravestones, carrion birds, and lootable debris, with
+a signpost telling the field's story until peace clears it. When war is
+declared the losing side's border towns empty: refugee columns flee for the
+capital, starving and speaking of what they saw.
 
 **`::war`** — open wars with reasons, the 5 hottest borders with heat
 labels (calm/grumbling/skirmishes/WAR FEVER), and garrison strengths.
@@ -135,6 +181,21 @@ they're the seam future LLM hooks (AI citizens, court agents) will read.
   — border patrols clashed below the threshold of war; citizens speak fear.
 - `kingdom:ruler-changed` `{ kingdomId, newRuler, newTitle?, flag?, flagValue? }`
   — succession, coup, or questline (e.g. Lathas falls → flag flip).
+- `kingdom:alliance-formed` `{ a, b, pactName?, broker? }`
+  — two kingdoms sealed a pact. The Alliances registry persists it, pins
+  their tension at 10, and announces it realm-wide.
+- `kingdom:alliance-broken` `{ a, b, pactName?, reason?: "treaty"|"war"|"absence"|"betrayal" }`
+  — a pact ended. "war" voids it instantly; "betrayal" travels with
+  `kingdom:betrayal` (outrage kept with the emitter).
+- `kingdom:betrayal` `{ betrayer, betrayed, via: "scheme"|"war-demand"|"war-refusal", pactName?, text }`
+  — an alliance shattered in treachery. The betrayed side's tension spikes
+  (+30); citizens react with outrage.
+- `kingdom:royal-event` `{ kingdomId, type: "marriage"|"birth"|"death"|"coronation", text, parties? }`
+  — the royal calendar. Marriages bind kingdoms (-15 tension, dynastic
+  bond); deaths mourn (-3); coronations bring hope (-10). The great rulers
+  never die in ambient events.
+- Succession whispers travel as `kingdom:rumor` to Misthalin — ARC-SEEDING
+  for the phase 10 bastard-son questline. Rare, deniable, never resolving.
 
 ## What's stubbed for later
 
@@ -157,8 +218,11 @@ they're the seam future LLM hooks (AI citizens, court agents) will read.
   nothing decays it; `keldagrim:red-axe-threat` starts at `"rising"` and nothing
   escalates it. These want slow tick content, not per-tick area work.
 - **The bastard son** — `misthalin:bastard-son-hidden` is a story flag for the
-  questline, not plugin logic. The Church, the gangs and the palace move when
-  the claim surfaces — that's custom quest content.
+  questline, not plugin logic. `Succession.Kingdoms.js` now plants the long
+  arc's seeds (rare, deniable whisper stages — tavern slip to Riverlands
+  merchant), but the flag itself and the reveal stay custom quest content
+  (phase 10). The Church, the gangs and the palace move when the claim
+  surfaces.
 - **Per-kingdom hierarchies** — one shared ladder for v1; the Consortium's
   company ranks and Lowerniel's blood court deserve their own.
 - **Area `process()`** — intentionally empty in v1. Kingdom law should be

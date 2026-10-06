@@ -30,6 +30,26 @@
  *   kingdom:challenge-decided { officeId, kingdomId, petitioner, holder,
  *     outcome: "granted"|"trial"|"rejected", influence, standing, reason? }
  *     // the court's ruling on a petition/challenge (Politics.Kingdoms.js)
+ *   kingdom:alliance-formed { a, b, pactName?, broker? }
+ *     // two kingdoms sealed a pact (Diplomacy's stewards, or a questline).
+ *     // The Alliances registry persists it, pins their tension, and tells
+ *     // the realm. a/b are unordered kingdom ids.
+ *   kingdom:alliance-broken { a, b, pactName?, reason?: "treaty"|"war"|"absence"|"betrayal" }
+ *     // a pact ended: mutual consent, war between the partners (the pact
+ *     // is ash), an ally's absence in wartime, or betrayal (which travels
+ *     // with kingdom:betrayal and its own outrage — the registry only records).
+ *   kingdom:betrayal { betrayer, betrayed, via: "scheme"|"war-demand"|"war-refusal",
+ *     pactName?, text }
+ *     // an alliance shattered in treachery (Diplomacy.Kingdoms). The
+ *     // betrayed side's tension spikes; citizens react with outrage.
+ *   kingdom:royal-event { kingdomId, type: "marriage"|"birth"|"death"|"coronation",
+ *     text, parties? }
+ *     // the royal calendar (Royals.Kingdoms): realm announcements that
+ *     // shift tension. Deaths are courtiers/kin only — the great rulers
+ *     // never die in ambient events (world bible: their fates are questlines).
+ *     // A death anywhere can stir Succession's whispers.
+ *     // Succession whispers themselves travel as kingdom:rumor to
+ *     // Misthalin — rare, deniable, arc-seeding (phase 10 questline).
  *
  * A player seated in an office is granted the office title as an honorific
  * (via kingdom:rank-granted with quiet: true — no influence farmed from the

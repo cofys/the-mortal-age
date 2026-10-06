@@ -19,6 +19,7 @@ const { createMerchantAction } = require("./actions/Merchant");
 const { createPrimeMerchantAction } = require("./actions/PrimeMerchant");
 const { createCitizenRoutineAction } = require("./actions/CitizenRoutine");
 const { createIdleSocialAction } = require("./actions/IdleSocial");
+const { createRefugeeFlightAction } = require("./actions/RefugeeFlight");
 const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE } = require("../constants");
 
 let registered = false;
@@ -78,6 +79,7 @@ function registerCitizenActionTypes() {
   registerBotActionType("primeMerchant", createPrimeMerchantAction);
   registerBotActionType("citizenRoutine", createCitizenRoutineAction);
   registerBotActionType("idleSocial", createIdleSocialAction);
+  registerBotActionType("refugeeFlight", createRefugeeFlightAction);
   registerBotConditionKind("citizen", createCitizenCondition);
 }
 

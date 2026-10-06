@@ -20,6 +20,7 @@ const Politics = require("./Politics.Kingdoms");
 const Store = require("./KingdomStore");
 const Simulation = require("./Simulation.Kingdoms");
 const Tension = require("./Tension.Kingdoms");
+const Alliances = require("./Alliances.Kingdoms");
 
 let pluginApi = null;
 
@@ -166,6 +167,38 @@ function onWarCommand(player, args) {
   player.sendMessage("[War] Usage: ::war");
 }
 
+/** ::alliances — the realm's pacts, and the royal calendar's recent news. */
+function showAlliances(player) {
+  const pacts = Alliances.pactSummary();
+  player.sendMessage("[Alliances] The realm's pacts:");
+  if (pacts.length === 0) {
+    player.sendMessage("  No pacts sealed — every crown stands alone.");
+  }
+  for (const p of pacts.slice(0, 8)) {
+    const risk = p.betrayalRisk >= 70 ? "— the court whispers of knives" :
+      p.betrayalRisk >= 40 ? "— strained" : "— firm";
+    player.sendMessage(
+      `  ${p.pactName}: ${p.aName} & ${p.bName} (bond ${p.strength}/5 ${risk})`
+    );
+  }
+  player.sendMessage("[Alliances] Recent royal news:");
+  let any = false;
+  for (const k of Store.getKingdoms().slice(0, 8)) {
+    const log = k.flags?.["royals:log"] ?? [];
+    for (const entry of log.slice(0, 2)) {
+      player.sendMessage(`  ${k.name} — ${entry.type}: ${entry.text.slice(0, 110)}`);
+      any = true;
+    }
+  }
+  if (!any) player.sendMessage("  The courts have been quiet.");
+}
+
+function onAlliancesCommand(player, args) {
+  const sub = (args[0] ?? "status").toLowerCase();
+  if (sub === "status") return showAlliances(player);
+  player.sendMessage("[Alliances] Usage: ::alliances");
+}
+
 module.exports = function attachCommands(api) {
   pluginApi = api;
   api.registerCommand(
@@ -185,5 +218,11 @@ module.exports = function attachCommands(api) {
     onWarCommand,
     api.core.PlayerRights.NONE,
     "War: ::war — open wars, hottest borders, levies"
+  );
+  api.registerCommand(
+    "alliances",
+    onAlliancesCommand,
+    api.core.PlayerRights.NONE,
+    "Alliances: ::alliances — the realm's pacts and recent royal news"
   );
 };

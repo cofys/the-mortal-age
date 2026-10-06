@@ -21,7 +21,12 @@ module.exports = {
     require("./Influence.Kingdoms")(api);
     require("./Politics.Kingdoms")(api);
     require("./Commands.Kingdoms")(api);
+    require("./Alliances.Kingdoms")(api);
+    require("./Diplomacy.Kingdoms")(api);
+    require("./Royals.Kingdoms")(api);
+    require("./Succession.Kingdoms")(api);
     require("./Simulation.Kingdoms")(api);
     require("./Tension.Kingdoms")(api);
+    require("./WarConsequences.Kingdoms")(api);
   },
 };

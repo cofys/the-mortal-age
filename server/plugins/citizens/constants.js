@@ -29,8 +29,12 @@ const ROLE_GUARD = "guard";
 const ROLE_MERCHANT = "merchant";
 const ROLE_COMMONER = "commoner";
 const ROLE_COURTIER = "courtier";
+// Refugees are event-spawned by WarRefugees (war declarations), never in the
+// standing plan. They stay in ROLES so personality cards name them truly;
+// the ::citizen spawn command keeps its own hardcoded role list.
+const ROLE_REFUGEE = "refugee";
 
-const ROLES = Object.freeze([ROLE_GUARD, ROLE_MERCHANT, ROLE_COMMONER, ROLE_COURTIER]);
+const ROLES = Object.freeze([ROLE_GUARD, ROLE_MERCHANT, ROLE_COMMONER, ROLE_COURTIER, ROLE_REFUGEE]);
 
 const MODE_GUARD = "citizen_guard";
 const MODE_MERCHANT = "citizen_merchant";
@@ -44,6 +48,11 @@ const ACTIVITY_COURTIER_ATTEND = "courtier_attend";
 const ACTIVITY_TAVERN_SOCIAL = "tavern_social";
 const ACTIVITY_LEISURE_STROLL = "leisure_stroll";
 const ACTIVITY_PRIME_MERCHANT = "prime_merchant";
+const ACTIVITY_REFUGEE_FLIGHT = "refugee_flight";
+// The flight route: waypoint tiles from the border town to the safe city,
+// set on the bot by WarRefugees at spawn. The war key owns cleanup.
+const ATTR_REFUGEE_ROUTE = "citizens:refugee-route";
+const ATTR_REFUGEE_WAR = "citizens:refugee-war";
 
 // Role -> default brain activity. The director overrides by time of day.
 const ROLE_ACTIVITY = Object.freeze({
@@ -51,6 +60,7 @@ const ROLE_ACTIVITY = Object.freeze({
   [ROLE_MERCHANT]: ACTIVITY_MERCHANT_TEND,
   [ROLE_COMMONER]: ACTIVITY_CITIZEN_ROUTINE,
   [ROLE_COURTIER]: ACTIVITY_COURTIER_ATTEND,
+  [ROLE_REFUGEE]: ACTIVITY_REFUGEE_FLIGHT,
 });
 
 // Kingdom events this plugin listens to (emitted by the kingdoms plugin).
@@ -85,6 +95,7 @@ module.exports = {
   ROLE_MERCHANT,
   ROLE_COMMONER,
   ROLE_COURTIER,
+  ROLE_REFUGEE,
   ROLES,
   MODE_GUARD,
   MODE_MERCHANT,
@@ -97,6 +108,9 @@ module.exports = {
   ACTIVITY_TAVERN_SOCIAL,
   ACTIVITY_LEISURE_STROLL,
   ACTIVITY_PRIME_MERCHANT,
+  ACTIVITY_REFUGEE_FLIGHT,
+  ATTR_REFUGEE_ROUTE,
+  ATTR_REFUGEE_WAR,
   ROLE_ACTIVITY,
   EVENT_WAR_DECLARED,
   EVENT_WAR_ENDED,

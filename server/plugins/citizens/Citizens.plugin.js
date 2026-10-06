@@ -31,6 +31,7 @@ const {
 const { initDirector, getDirector } = require("./director/CitizenDirector");
 const { initMerchantShops } = require("./shop/MerchantShops");
 const { initPlayerShops } = require("./shop/PlayerShops");
+const attachWarRefugees = require("./WarRefugees");
 const {
   getMemory,
   initCitizenMemory,
@@ -342,6 +343,7 @@ module.exports = {
   name: "Citizens",
   register(api) {
     initCitizens(api);
+    attachWarRefugees(api);
     api.onCustomEvent(EVENT_WAR_DECLARED, onKingdomWarDeclared);
     api.onCustomEvent(EVENT_WAR_ENDED, onKingdomWarEnded);
     api.onCustomEvent(EVENT_WAR_DECLARED, onKingdomWarDeclaredFear);
