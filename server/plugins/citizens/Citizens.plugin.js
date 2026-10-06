@@ -39,7 +39,6 @@ const {
 const CITIZENS_ENABLED = (process.env.CITIZENS_ENABLED ?? "0") === "1";
 
 function initCitizens(api) {
-  console.log("[DIAG] Citizens plugin loading, CITIZENS_ENABLED=" + process.env.CITIZENS_ENABLED);
   initCitizenChat(api);
   registerCitizenActionTypes();
   const added = registerCitizenActivities();
