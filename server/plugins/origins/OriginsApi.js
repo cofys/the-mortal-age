@@ -36,6 +36,7 @@ function statusPayload(player) {
 }
 
 function attach(api) {
+  console.info("[origins-api] registering origins-status endpoint");
   api.registerContentEndpoint("origins-status", (query) => {
     const username = (query.get("player") || "").trim();
     let player = null;
