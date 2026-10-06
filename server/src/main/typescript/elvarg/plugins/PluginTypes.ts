@@ -1189,6 +1189,7 @@ export interface PluginCoreApi {
   ObjectIdentifiers: any;
   ShopIdentifiers: any;
   Misc: any;
+  MOBILE_CLIENT_ATTRIBUTE: any;
   TimerKey: any;
   Sound: any;
   Sounds: any;
