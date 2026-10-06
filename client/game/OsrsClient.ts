@@ -6049,10 +6049,12 @@ export class OsrsClient {
         };
 
         this.clientTickTimer = setTimeout(step, 0);
+
+        // Graceful refocus: snap to now instead of simulating backlog on tab return.
+        this.setupVisibilityResync();
     }
 
-    stopClientTickLoop(): void {
-        this.clientTickLoopRunning = false;
+    stopClientTickLoop(): void {        this.clientTickLoopRunning = false;
         try {
             if (this.clientTickTimer) clearTimeout(this.clientTickTimer);
         } catch {}
@@ -6063,6 +6065,41 @@ export class OsrsClient {
         // Cleanup notification subscription
         try {
             this.unsubscribeNotifications?.();
+        } catch {}
+        // Cleanup visibility resync listener
+        try {
+            if (this.visibilityResyncHandler) {
+                document.removeEventListener("visibilitychange", this.visibilityResyncHandler);
+            }
+        } catch {}
+        this.visibilityResyncHandler = undefined;
+    }
+
+    private visibilityResyncHandler?: () => void;
+
+    /**
+     * Graceful refocus: when the tab returns from background, the browser has
+     * been throttling timers and the tick loop has accrued a stale backlog.
+     * Instead of simulating dozens of catch-up ticks (the visible "jank"),
+     * snap the clock to now and let the next server update bring fresh state.
+     * The server is authoritative; nothing is lost by discarding the backlog.
+     */
+    setupVisibilityResync(): void {
+        if (this.visibilityResyncHandler) return;
+        this.visibilityResyncHandler = () => {
+            if (document.visibilityState !== "visible") return;
+            if (!this.clientTickLoopRunning) return;
+            const perf = (globalThis as any)?.performance;
+            const now =
+                perf && typeof perf.now === "function"
+                    ? (perf.now.call(perf) as number)
+                    : Date.now();
+            // Discard the backlog — resync to now.
+            this.clientTickLastNowMs = now;
+            this.clientTickAccumulatedMs = 0;
+        };
+        try {
+            document.addEventListener("visibilitychange", this.visibilityResyncHandler);
         } catch {}
     }
 
