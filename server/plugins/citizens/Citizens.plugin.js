@@ -62,14 +62,14 @@ const {
 
 function citizensEnabled() {
   // Check at runtime, not module load — the module may be cached from a
-  // context where the env var wasn't set yet.
-  return (process.env.CITIZENS_ENABLED ?? "1") === "1";
+  // context where the env var wasn't set yet. Trim: batch `set VAR=1 &`
+  // leaves a trailing space in the value.
+  return (process.env.CITIZENS_ENABLED ?? "1").trim() === "1";
 }
 
 let pluginApi = null;
 
 function initCitizens(api) {
-  console.log(`[citizens-DIAG] initCitizens ENTER, CITIZENS_ENABLED=${process.env.CITIZENS_ENABLED}, check=${citizensEnabled()}`);
   pluginApi = api;
   initCitizenChat(api);
   initCitizenSocial(api);
@@ -85,9 +85,7 @@ function initCitizens(api) {
     return;
   }
   const director = initDirector(api, getBaseRegistry());
-  console.log(`[citizens-DIAG] director created, calling boot()`);
   director.boot();
-  console.log(`[citizens-DIAG] director.boot() returned, roster=${director.roster?.size ?? '?'}`);
   initMerchantShops(api);
   initPlayerShops(api);
   api.log?.("[citizens] director booted", director.status());
