@@ -21,5 +21,6 @@ module.exports = {
     require("./Influence.Kingdoms")(api);
     require("./Politics.Kingdoms")(api);
     require("./Commands.Kingdoms")(api);
+    require("./Simulation.Kingdoms")(api);
   },
 };

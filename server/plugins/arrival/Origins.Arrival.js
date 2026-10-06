@@ -110,6 +110,24 @@ const ORIGINS = {
 const ARRIVAL_TILE_RANGE = 40;
 const BEAT_AUDIBLE_RANGE = 15;
 
+/**
+ * The name of a kingdom this kingdom is currently at war with, or null.
+ * Live realm state from the war ledger — the welcome beat names the enemy.
+ */
+function warFoeName(kingdomId) {
+  try {
+    const Store = require("../kingdoms/KingdomStore");
+    const war = Store.getActiveWars().find(
+      (w) => w.attackerId === kingdomId || w.defenderId === kingdomId
+    );
+    if (!war) return null;
+    const foeId = war.attackerId === kingdomId ? war.defenderId : war.attackerId;
+    return Store.getKingdom(foeId)?.name ?? foeId;
+  } catch {
+    return null;
+  }
+}
+
 function onOriginsSelected(event) {
   const player = event?.player;
   const originId = event?.originId;
@@ -146,6 +164,13 @@ function onOriginsSelected(event) {
   // Beat, one line at a time. Walking away cancels the rest — the beat is
   // skippable by construction.
   Common.later(core, 2, () => say(greeter, def.greet(flags)));
+  // War changes the welcome: the guard names the enemy. Live realm state,
+  // not a flag — the sim tick may have started or ended wars since.
+  Common.later(core, 9, () => {
+    if (!stillHere()) return;
+    const foe = warFoeName(def.kingdomId);
+    if (foe) say(greeter, `We're at war with ${foe} — keep your blade loose and your eyes open.`);
+  });
   Common.later(core, 16, () => {
     if (stillHere()) say(pointer, def.point);
   });

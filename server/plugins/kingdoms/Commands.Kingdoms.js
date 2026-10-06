@@ -17,6 +17,8 @@
 
 const Offices = require("./Offices.Kingdoms");
 const Politics = require("./Politics.Kingdoms");
+const Store = require("./KingdomStore");
+const Simulation = require("./Simulation.Kingdoms");
 
 let pluginApi = null;
 
@@ -91,6 +93,35 @@ function onOfficeCommand(player, args) {
   return showList(player, sub === "list" ? rest : args);
 }
 
+/** ::kingdom status — the realm at a glance: treasury, stockpile, offices, wars. */
+function showKingdomStatus(player) {
+  const kingdoms = Store.getKingdoms();
+  if (kingdoms.length === 0) {
+    player.sendMessage("[Kingdom] No kingdoms yet.");
+    return;
+  }
+  const wars = Store.getActiveWars();
+  player.sendMessage("[Kingdom] The realm at a glance:");
+  for (const k of kingdoms.slice(0, 8)) {
+    const treasury = k.treasury ?? 0;
+    const stockpile = Simulation.stockpileOf(k.id);
+    const atWar = wars.some((w) => w.attackerId === k.id || w.defenderId === k.id);
+    const offices = Offices.getOffices(k.id);
+    const vacant = offices.filter((o) => !o.holder).map((o) => o.office);
+    player.sendMessage(
+      `  ${k.name}: ${treasury}c treasury, ${stockpile} stores` +
+        (atWar ? " — AT WAR" : "") +
+        (vacant.length > 0 ? ` — vacant: ${vacant.join(", ")}` : "")
+    );
+  }
+}
+
+function onKingdomCommand(player, args) {
+  const sub = (args[0] ?? "status").toLowerCase();
+  if (sub === "status") return showKingdomStatus(player);
+  player.sendMessage("[Kingdom] Usage: ::kingdom status");
+}
+
 module.exports = function attachCommands(api) {
   pluginApi = api;
   api.registerCommand(
@@ -98,5 +129,11 @@ module.exports = function attachCommands(api) {
     onOfficeCommand,
     api.core.PlayerRights.NONE,
     "Offices: ::office list [kingdom] | claim <id> | petition <id> | influence [kingdom] | vacate <id>"
+  );
+  api.registerCommand(
+    "kingdom",
+    onKingdomCommand,
+    api.core.PlayerRights.NONE,
+    "Kingdom: ::kingdom status"
   );
 };

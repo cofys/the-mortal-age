@@ -275,6 +275,22 @@ class CitizenDirector {
     return this.runtime()?.entriesByUsername?.get(record.username)?.player ?? null;
   }
 
+  /**
+   * Online citizen bot players for a kingdom (optionally one role).
+   * Used by realm-tick reactions: rumors, patrol orders, wage day.
+   */
+  onlineBotsForKingdom(kingdomId, role = null) {
+    const out = [];
+    for (const record of this.roster.values()) {
+      if (record.kingdomId !== kingdomId) continue;
+      if (role && record.role !== role) continue;
+      if (!this.isOnline(record)) continue;
+      const bot = this.getBot(record);
+      if (bot) out.push(bot);
+    }
+    return out;
+  }
+
   spawnCitizen(record) {
     const runtime = this.runtime();
     if (!runtime) {

@@ -21,6 +21,7 @@
 
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { onWarDeclared, onWarEnded, onOfficeAssigned, onOfficeVacated } = require("./CitizenEvents");
+const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { registerCitizenActionTypes } = require("./brain/CitizenActionTypes");
 const {
@@ -115,6 +116,22 @@ function onCitizenCommand({ player, parts }) {
   return true;
 }
 
+function onKingdomRumorHeard(event) {
+  onKingdomRumor(event);
+}
+
+function onKingdomPatrolOrdered(event) {
+  onPatrolOrdered(event);
+}
+
+function onKingdomWageDay(event) {
+  onWageDay(event);
+}
+
+function onArrivalPlayerArrived(event) {
+  onPlayerArrived(event);
+}
+
 module.exports = {
   name: "Citizens",
   register(api) {
@@ -124,6 +141,10 @@ module.exports = {
     api.onCustomEvent(EVENT_OFFICE_ASSIGNED, onKingdomOfficeAssigned);
     api.onCustomEvent(EVENT_OFFICE_VACATED, onKingdomOfficeVacated);
     api.onCustomEvent(EVENT_CITIZEN_CHAT_HEARD, onCitizenChatHeard);
+    api.onCustomEvent("kingdom:rumor", onKingdomRumorHeard);
+    api.onCustomEvent("kingdom:patrol-ordered", onKingdomPatrolOrdered);
+    api.onCustomEvent("kingdom:wage-day", onKingdomWageDay);
+    api.onCustomEvent("arrival:player-arrived", onArrivalPlayerArrived);
     api.onSocialPacket(onCitizenSocialPacket);
     api.registerCommand(
       "citizen",

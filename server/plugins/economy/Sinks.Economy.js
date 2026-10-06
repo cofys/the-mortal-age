@@ -34,6 +34,28 @@ let pluginApi = null;
 const stats = { destroyedStacks: 0, destroyedValue: 0, deathsTouched: 0 };
 let lastDeath = { victim: null, at: 0 }; // the per-item hook fires once per item of a death
 
+// Throttled sink logging: wilderness PK deaths are frequent, so we log at
+// most one summary line per minute (and only when something was destroyed).
+let lastSinkLogAt = 0;
+const SINK_LOG_INTERVAL_MS = 60000;
+const sinceLog = { destroyedStacks: 0, destroyedValue: 0, deathsTouched: 0 };
+
+function maybeLogSink() {
+  const nowMs = Date.now();
+  if (sinceLog.destroyedStacks === 0) return;
+  if (nowMs - lastSinkLogAt < SINK_LOG_INTERVAL_MS) return;
+  lastSinkLogAt = nowMs;
+  pluginApi?.log?.("[economy] wilderness-pvp sink", {
+    destroyedStacks: sinceLog.destroyedStacks,
+    destroyedValue: sinceLog.destroyedValue,
+    deathsTouched: sinceLog.deathsTouched,
+    lifetimeDestroyedValue: stats.destroyedValue,
+  });
+  sinceLog.destroyedStacks = 0;
+  sinceLog.destroyedValue = 0;
+  sinceLog.deathsTouched = 0;
+}
+
 function usernameOf(mobile) {
   try {
     return mobile?.getUsername?.() ?? null;
@@ -85,12 +107,16 @@ function onDeathItemDrop(event) {
   event.suppressDefaultDrop = true;
   stats.destroyedStacks += 1;
   stats.destroyedValue += referenceValue * amount;
+  sinceLog.destroyedStacks += 1;
+  sinceLog.destroyedValue += referenceValue * amount;
   const victimName = usernameOf(event.player);
   const nowMs = Date.now();
   if (lastDeath.victim !== victimName || nowMs - lastDeath.at > 5000) {
     stats.deathsTouched += 1;
+    sinceLog.deathsTouched += 1;
     lastDeath = { victim: victimName, at: nowMs };
   }
+  maybeLogSink();
 
   pluginApi.emitCustomEvent(EVENTS.ITEM_SINK, {
     itemId,
