@@ -91,6 +91,7 @@ function initCitizens(api) {
     console.log("[citizens-debug] INIT FAILED AT STEP:", e?.message ?? e);
     throw e;
   }
+  console.log("[citizens-debug] checking CITIZENS_ENABLED constant:", CITIZENS_ENABLED, "env:", process.env.CITIZENS_ENABLED);
   if (!CITIZENS_ENABLED) {
     api.log?.("[citizens] director idle — set CITIZENS_ENABLED=1 to spawn the population");
     return;
