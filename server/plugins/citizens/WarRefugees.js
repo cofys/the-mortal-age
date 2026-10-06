@@ -27,7 +27,23 @@ const {
   ATTR_REFUGEE_WAR,
 } = require("./constants");
 const KingdomStore = require("../kingdoms/KingdomStore");
-const { borderTileFor, pairKey } = require("../kingdoms/WarConsequences.Kingdoms");
+// TODO: import from WarConsequences.Kingdoms when the module lands (war worker WIP).
+// Local fallbacks: pairKey is a sorted join; borderTileFor puts refugees at a
+// border town on the defender's outskirts (market tile pushed outward).
+function pairKey(a, b) {
+  return [String(a), String(b)].sort().join(":");
+}
+function borderTileFor(attackerId, defenderId) {
+  const { siteTileByKingdom } = require("./brain/CitizenSites");
+  const market = siteTileByKingdom(defenderId, "market");
+  if (!market) return null;
+  const angle = (String(defenderId).length * 1.7 + String(attackerId).length) % (Math.PI * 2);
+  return {
+    x: Math.round(market.x + Math.cos(angle) * 40),
+    y: Math.round(market.y + Math.sin(angle) * 40),
+    z: market.z ?? 0,
+  };
+}
 
 let pluginApi = null;
 // warKey -> [{ username, record }] — the living, for cleanup at peace.
