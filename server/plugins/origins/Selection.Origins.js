@@ -18,8 +18,12 @@
  * Play button (same pattern TutorialIsland uses); mobile clients skip the
  * welcome screen, so they are prompted from a login microtask instead.
  *
- * Choice UI: the intro and lens text render as StatementDialogue, but option
- * lists go through api.sendMultiChatboxPrompt (the same mechanism NPC
+ * Choice UI: the graphical creation screen (Gui.Origins, custom interface
+ * 30010) is the primary UI on desktop. The chatbox flow below stays as the
+ * fallback: mobile clients use it, dismissing the GUI without choosing falls
+ * back to it, and any GUI open failure falls back to it — until the GUI is
+ * verified in-game. The intro and lens text render as StatementDialogue, but
+ * option lists go through api.sendMultiChatboxPrompt (the same mechanism NPC
  * dialogue menus use) — OptionDialogue is dead engine code whose interface
  * hangs the client on "Please wait...". The prompt caps at 5 options, so the
  * pick stays two pages: the four surface powers, then Keldagrim / Wanderer.
@@ -42,6 +46,9 @@ const ORIGIN_ID_ATTRIBUTE = "origin:id";
 
 // The welcome screen's Play button (plugins/interface/WelcomeScreen.plugin.js).
 const WELCOME_PLAY_BUTTON_UID = (378 << 16) | 72;
+// The appearance customizer (plugins/npcs/MakeOverMage.plugin.js). New
+// accounts go Play -> 679 -> creation GUI; the GUI opens when 679 closes.
+const MAKEOVER_INTERFACE_ID = 679;
 
 let pluginApi;
 let core;
@@ -64,6 +71,25 @@ const pending = new Set();
 const fallbackTimers = new Map();
 const LOGIN_FALLBACK_DELAY_MS = 8000;
 
+/**
+ * Creation-GUI coordination, wired by Origins.plugin.js (Gui.Origins owns the
+ * screen; this module owns the triggers). Null until wired.
+ */
+let guiHooks = null;
+function setGuiHooks(hooks) {
+  guiHooks = hooks;
+}
+
+/** Desktop -> graphical creation screen; mobile and failures -> chatbox. */
+function openCreationGui(player) {
+  if (!guiHooks || !player || player.getAttribute(MOBILE_CLIENT_ATTRIBUTE) === true) return false;
+  try {
+    return guiHooks.open(player) === true;
+  } catch {
+    return false;
+  }
+}
+
 function cancelFallback(player) {
   const timer = fallbackTimers.get(player);
   if (timer !== undefined) {
@@ -76,11 +102,19 @@ function scheduleFallback(player) {
   cancelFallback(player);
   const timer = setTimeout(() => {
     fallbackTimers.delete(player);
-    // The welcome-screen hook may have beaten us here; only fire if the
-    // choice is still owed.
-    if (pending.delete(player) && !hasOrigin(player)) {
-      openChoice(player);
+    pending.delete(player);
+    if (hasOrigin(player)) return;
+    if (
+      (player.getInterfaceId?.() | 0) === MAKEOVER_INTERFACE_ID ||
+      (guiHooks && guiHooks.isOpen(player))
+    ) {
+      // Appearance customizer or creation GUI still open — their close hands
+      // off to the GUI, so wait instead of opening the chatbox underneath.
+      scheduleFallback(player);
+      return;
     }
+    // Backstop: whatever should have opened the GUI didn't — chatbox fallback.
+    openChoice(player);
   }, LOGIN_FALLBACK_DELAY_MS);
   timer.unref?.();
   fallbackTimers.set(player, timer);
@@ -230,9 +264,32 @@ function onWelcomePlay({ player }) {
   cancelFallback(player);
   if (!pending.delete(player)) return false;
   queueMicrotask(() => {
-    if (!hasOrigin(player)) openChoice(player);
+    if (hasOrigin(player)) return;
+    if (!openCreationGui(player)) openChoice(player);
   });
   return false;
+}
+
+/**
+ * Interface-close handoff (core "interface:closed" event, which fires for
+ * every close route: confirm packets, ESC, sendInterfaceRemoval).
+ *  - 679 closing with no home  -> the new-account ceremony: open the GUI.
+ *  - GUI closing with no home  -> dismissed without choosing: chatbox fallback
+ *    keeps the choice reachable so nobody is ever stuck choiceless.
+ */
+function onInterfaceClosed({ player, interfaceId }) {
+  if (!player || player.isPlayerBot?.() === true || hasOrigin(player)) return;
+  const id = interfaceId | 0;
+  if (id === MAKEOVER_INTERFACE_ID) {
+    if (guiHooks && !guiHooks.isOpen(player) && !openCreationGui(player)) {
+      openChoice(player);
+    }
+    return;
+  }
+  if (guiHooks && id === guiHooks.groupId && guiHooks.isOpen(player)) {
+    guiHooks.noteClosed(player);
+    openChoice(player);
+  }
 }
 
 function clearPending({ player }) {
@@ -245,7 +302,7 @@ function clearPending({ player }) {
 function showOrigin({ player }) {
   const originId = player.getAttribute(ORIGIN_ID_ATTRIBUTE);
   if (!originId) {
-    openChoice(player);
+    if (!openCreationGui(player)) openChoice(player);
     return;
   }
   const origin = Data.BY_ID.get(originId);
@@ -293,6 +350,7 @@ function attachSelection(api) {
   api.persistAttribute(ORIGIN_ID_ATTRIBUTE);
   api.onPlayerLogin(onPlayerLogin);
   api.onInterfaceActionButton(WELCOME_PLAY_BUTTON_UID, onWelcomePlay);
+  api.onCustomEvent("interface:closed", onInterfaceClosed);
   api.onPlayerLogout(clearPending);
   api.onPlayerDisconnect(clearPending);
   api.registerCommand("origin", showOrigin, undefined, "Show your home, or choose one if you have none");
