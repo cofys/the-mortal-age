@@ -51,12 +51,16 @@ world bible locks their fates. Misthalin births are kin of the court, never
 "a son for Roald."
 
 **Succession whispers are ARC-SEEDING for the phase 10 questline** (Roald's
-hidden bastard son). A whisper stage (0-8) on Misthalin advances roughly daily:
+hidden bastard son). A whisper stage (0-12) on Misthalin advances roughly daily:
 tavern slip → redacted report → the sermon that stopped → the Riverlands
 merchant → the midwife's daughter takes a market stall (stage 5, who knows) →
 the Merciful Hand charity buys birth records (stage 6, who's hunting) →
 black-plate men asking questions in a border town (stage 7, the hunt) →
-the midwife's daughter goes quiet (stage 8, the squeeze). Rare, deniable,
+the midwife's daughter goes quiet (stage 8, the squeeze) →
+the Riverlands farm stands empty (stage 9, the hunted young man) →
+the Hand's charity auction, the palace bidding (stage 10, the backers) →
+a reward poster for the cut ledger page (stage 11, the page) →
+the grey men stop asking, start watching (stage 12, the warning). Rare, deniable,
 never naming the son, never touching the
 `misthalin:bastard-son-hidden` story flag. A royal death anywhere can stir a
 surge whisper. This content is planted only — it resolves in custom quests,
@@ -87,6 +91,17 @@ are just rain-spoiled litter. From stage 7, rare overheard street arguments
 about the Hand's prices and black-plate men on the south road. The hunt is
 visible — rumors, NPC presence, a paper trail — and nobody says "the king's
 bastard son" out loud. The truth stays one inference away.
+
+**Succession trail (`SuccessionTrail.Kingdoms.js`)** — the stages 9-12
+interactive layer, after the squeeze. From stage 9, the Varrock papers can hold
+a neighbor's letter about the empty Riverlands farm (cold hearth, a child's
+wooden sword, gone in the night) — `empty-farm` fragment once, +6 heat. From
+stage 10, rare tavern overheards about the Merciful Hand's charity auction and
+the palace man nobody bid against. From stage 11, the papers can hold a reward
+poster offering a fortune for "a single leaf of vellum, a birth record, corner
+torn" — `fence-posting` fragment once, +6 heat. At stage 12, players who dug
+deep (2+ fragments, heat 50+) get one grey-man visit: "Some stones are better
+left unturned." Dread, never damage. The arc coils for phase 10.
 
 ## The tension model (live war states)
 

@@ -29,6 +29,7 @@ module.exports = {
     require("./Succession.Kingdoms")(api);
     require("./SuccessionDeep.Kingdoms")(api);
     require("./SuccessionKeepers.Kingdoms")(api);
+    require("./SuccessionTrail.Kingdoms")(api);
     require("./Simulation.Kingdoms")(api);
     require("./Tension.Kingdoms")(api);
     require("./WarConsequences.Kingdoms")(api);

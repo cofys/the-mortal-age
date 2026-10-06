@@ -11,7 +11,7 @@
  * questline, not to ambient content).
  *
  * What it does: a whisper-stage counter (`succession:whisper-stage` on
- * Misthalin, 0-8) advances very slowly — days per stage. Each new stage
+ * Misthalin, 0-12) advances very slowly — days per stage. Each new stage
  * drops ONE rare, deniable rumor into Varrock's streets via kingdom:rumor:
  *
  *   stage 1 — a drunk courtier's slip in a tavern
@@ -22,6 +22,10 @@
  *   stage 6 — the Merciful Hand charity buys birth records (who's hunting)
  *   stage 7 — black-plate men asking questions in a border town (the hunt)
  *   stage 8 — the midwife's daughter goes quiet (the squeeze)
+ *   stage 9 — the Riverlands farm stands empty (the hunted young man)
+ *   stage 10 — the Hand's charity auction, the palace bidding (the backers)
+ *   stage 11 — a reward poster for the cut ledger page (the page)
+ *   stage 12 — the grey men stop asking, start watching (the warning)
  *
  * Stages 5-8 are the escalation beats; their interactive layer lives in
  * SuccessionKeepers.Kingdoms.js. The rule never changes: rare, deniable,
@@ -55,7 +59,7 @@ const DEATH_SURGE_CHANCE = 0.2;
 
 const WHISPER_STAGE_FLAG = "succession:whisper-stage";
 const LAST_ADVANCE_FLAG = "succession:last-advance-at";
-const MAX_STAGE = 8;
+const MAX_STAGE = 12;
 
 let pluginApi = null;
 
@@ -82,6 +86,20 @@ const STAGE_WHISPERS = {
     "man, thirty or so, farm-bred. They didn't say whose.",
   8: "The midwife's daughter hasn't held her stall in days. Her mother won't open " +
     "the door. The street says the grey men came calling.",
+  // Stages 9-12: the trail after the squeeze. Colder, more dangerous.
+  // The farm, the coin, the page, the warning.
+  9: "A farm out past the Riverlands — the one the merchant wouldn't name — " +
+    "stands empty. Cold hearth, door swinging. A child's wooden sword on the " +
+    "table, like someone left in a hurry.",
+  10: "The Merciful Hand held a charity auction — silver plate, old tapestries. " +
+    "Half the merchant houses bought tables. The palace sent a man, and nobody " +
+    "bid against him. What kind of charity has the palace bidding?",
+  11: "A reward poster in Varrock offers a fortune for 'a single leaf of vellum, " +
+    "a birth record, corner torn.' Someone knows what that page is worth. " +
+    "Someone else wants it first.",
+  12: "The grey men aren't asking questions anymore. They're just watching. " +
+    "A friend of a friend got a visit. 'Some stones are better left unturned,' " +
+    "they told him. He hasn't slept since.",
 };
 
 const DEATH_SURGE_WHISPERS = [
