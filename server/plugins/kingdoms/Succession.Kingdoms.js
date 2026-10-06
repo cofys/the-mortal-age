@@ -11,13 +11,21 @@
  * questline, not to ambient content).
  *
  * What it does: a whisper-stage counter (`succession:whisper-stage` on
- * Misthalin, 0-4) advances very slowly — days per stage. Each new stage
+ * Misthalin, 0-8) advances very slowly — days per stage. Each new stage
  * drops ONE rare, deniable rumor into Varrock's streets via kingdom:rumor:
  *
  *   stage 1 — a drunk courtier's slip in a tavern
  *   stage 2 — a spymaster's redacted report, half-burned in a gutter
  *   stage 3 — a sermon on "the king's line" that stops mid-sentence
  *   stage 4 — a Riverlands merchant who saw a boy with the king's eyes
+ *   stage 5 — the midwife's daughter takes a market stall (who knows)
+ *   stage 6 — the Merciful Hand charity buys birth records (who's hunting)
+ *   stage 7 — black-plate men asking questions in a border town (the hunt)
+ *   stage 8 — the midwife's daughter goes quiet (the squeeze)
+ *
+ * Stages 5-8 are the escalation beats; their interactive layer lives in
+ * SuccessionKeepers.Kingdoms.js. The rule never changes: rare, deniable,
+ * never naming the son.
  *
  * A royal death anywhere in the realm can also stir a surge whisper
  * ("they say Roald looked grey at the funeral") — grief makes people talk.
@@ -47,7 +55,7 @@ const DEATH_SURGE_CHANCE = 0.2;
 
 const WHISPER_STAGE_FLAG = "succession:whisper-stage";
 const LAST_ADVANCE_FLAG = "succession:last-advance-at";
-const MAX_STAGE = 4;
+const MAX_STAGE = 8;
 
 let pluginApi = null;
 
@@ -63,6 +71,17 @@ const STAGE_WHISPERS = {
     "and stopped mid-sentence, as if he'd said too much. The congregation noticed.",
   4: "A merchant from the Riverlands swears he saw a boy with the king's own eyes, " +
     "working a farm that pays no taxes. He won't say where. He won't say it twice.",
+  // Stages 5-8: the escalation. Who knows, who's hunting, and the squeeze.
+  // Still whispers — still deniable — but the world is closing in.
+  5: "They say the midwife's daughter has taken a stall at the market, selling " +
+    "her mother's old remedies. She won't meet anyone's eyes.",
+  6: "A charity calling itself the Merciful Hand is buying up old birth records — " +
+    "orphanage ledgers, parish rolls, anything with names on it. Paying silver " +
+    "for paper nobody else wants.",
+  7: "Men in black plate were asking questions in a border town — about a young " +
+    "man, thirty or so, farm-bred. They didn't say whose.",
+  8: "The midwife's daughter hasn't held her stall in days. Her mother won't open " +
+    "the door. The street says the grey men came calling.",
 };
 
 const DEATH_SURGE_WHISPERS = [
@@ -141,3 +160,5 @@ module.exports = attachSuccession;
 module.exports.attachSuccession = attachSuccession;
 module.exports.successionTick = successionTick;
 module.exports.SUCCESSION_TICK_TICKS = SUCCESSION_TICK_TICKS;
+/** Current whisper stage (0-8). The keepers layer gates its beats on this. */
+module.exports.whisperStage = stageOf;
