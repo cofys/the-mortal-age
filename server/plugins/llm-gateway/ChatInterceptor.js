@@ -1,15 +1,12 @@
 // ChatInterceptor -- the "ears". Routes player-initiated chat with a citizen bot
 // into the gateway as an `llm:chat-request` custom event.
 //
-// What we can intercept today (additive-only, no core changes):
-//   - private_message packets to a citizen bot, via api.onSocialPacket.
+// What we intercept (via api.onSocialPacket):
+//   - private_message packets to a citizen bot.
 //     (FriendsList.plugin.js handles delivery as normal; we only observe.)
-// What we CANNOT intercept today:
-//   - PUBLIC chat near a bot. Core's ChatPacketListener.handleText broadcasts
-//     without emitting a plugin hook, and AGENTS.md forbids feature logic in
-//     core. Until a generic hook exists, the citizens plugin (or a player
-//     client mod) emits `llm:chat-request` directly for nearby public chat.
-//     See DESIGN.md for the one-line core proposal.
+//   - public_chat packets: the citizens plugin emits `citizens:chat-heard`
+//     for bots near the speaker (see citizens/chat/CitizenChat.js), which
+//     forwards here as `llm:chat-request` with channel "public".
 //
 // Event contracts:
 //   llm:citizen-register { username, personalityCard, replyCooldownMs? }

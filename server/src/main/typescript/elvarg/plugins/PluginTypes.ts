@@ -40,7 +40,8 @@ export type PluginSocialPacketEvent = {
     | { type: "friends_chat_action"; action: FriendsChatAction }
     | { type: "private_message"; recipient: string; text: string }
     | { type: "chat_filter"; publicMode: number; privateMode: number; tradeMode: number }
-    | { type: "chat"; text: string; messageType: "friends_chat" };
+    | { type: "chat"; text: string; messageType: "friends_chat" }
+    | { type: "public_chat"; text: string };
 };
 
 export interface PluginServerLifecycleEvent {

@@ -9,6 +9,8 @@
  *
  * Wiring (plugins talk through custom events, never new core hooks):
  *   in:  kingdom:war-declared / kingdom:war-ended  (kingdoms plugin)
+ *   in:  kingdom:office-assigned / kingdom:office-vacated (kingdoms plugin;
+ *        player office-holders, so citizens address them by title)
  *   in:  citizens:chat-heard                       (stubbed — see chat/CitizenChat.js)
  *   out: llm:citizen-register                      (llm-gateway plugin)
  *   out: kingdom:rank-granted                       (kingdoms plugin)
@@ -18,8 +20,8 @@
  */
 
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
-const { onWarDeclared, onWarEnded } = require("./CitizenEvents");
-const { initCitizenChat, onCitizenChatHeard } = require("./chat/CitizenChat");
+const { onWarDeclared, onWarEnded, onOfficeAssigned, onOfficeVacated } = require("./CitizenEvents");
+const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { registerCitizenActionTypes } = require("./brain/CitizenActionTypes");
 const {
   registerCitizenActivities,
@@ -30,6 +32,8 @@ const {
   EVENT_WAR_DECLARED,
   EVENT_WAR_ENDED,
   EVENT_CITIZEN_CHAT_HEARD,
+  EVENT_OFFICE_ASSIGNED,
+  EVENT_OFFICE_VACATED,
   ROLE_GUARD,
   ROLE_MERCHANT,
   ROLE_COMMONER,
@@ -58,6 +62,18 @@ function onKingdomWarDeclared(event) {
 
 function onKingdomWarEnded(event) {
   onWarEnded(event);
+}
+
+function onKingdomOfficeAssigned(event) {
+  onOfficeAssigned(event);
+}
+
+function onKingdomOfficeVacated(event) {
+  onOfficeVacated(event);
+}
+
+function onCitizenSocialPacket(event) {
+  onSocialPacket(event);
 }
 
 function onCitizenCommand({ player, parts }) {
@@ -103,7 +119,10 @@ module.exports = {
     initCitizens(api);
     api.onCustomEvent(EVENT_WAR_DECLARED, onKingdomWarDeclared);
     api.onCustomEvent(EVENT_WAR_ENDED, onKingdomWarEnded);
+    api.onCustomEvent(EVENT_OFFICE_ASSIGNED, onKingdomOfficeAssigned);
+    api.onCustomEvent(EVENT_OFFICE_VACATED, onKingdomOfficeVacated);
     api.onCustomEvent(EVENT_CITIZEN_CHAT_HEARD, onCitizenChatHeard);
+    api.onSocialPacket(onCitizenSocialPacket);
     api.registerCommand(
       "citizen",
       onCitizenCommand,

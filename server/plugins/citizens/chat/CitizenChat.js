@@ -12,15 +12,14 @@
  *                                 -> spoken by llm-gateway's Mouth (forceChat + packets)
  *
  * Private messages to a citizen bot are already intercepted by llm-gateway's
- * ChatInterceptor (api.onSocialPacket). Public chat near a bot cannot be
- * intercepted today — core broadcasts it without a plugin hook (see
- * llm-gateway/ChatInterceptor.js). Until a generic hook exists, nearby public
- * chat reaches citizens through the stub below:
+ * ChatInterceptor (api.onSocialPacket). Public chat near a bot is intercepted
+ * through the core's public_chat social-packet hook (ChatPacketListener emits
+ * it after the chat filter passes): the handler below finds citizen bots in
+ * the speaker's local players and forwards each as:
  *
- *   citizens:chat-heard    (in)  { citizenUsername, speakerUsername, text }
+ *   citizens:chat-heard    (out) { citizenUsername, speakerUsername, text }
  *
- * Nothing emits it in v1 (stubbed by design); when the hook lands, the
- * handler forwards to llm:chat-request with channel "public".
+ * which onCitizenChatHeard forwards to llm:chat-request with channel "public".
  */
 
 const {
@@ -29,6 +28,12 @@ const {
   EVENT_CITIZEN_CHAT_HEARD,
 } = require("../constants");
 const { personalityCard } = require("../lib/personalities");
+
+const BOT_HOST_ADDRESS = "bot"; // set by bots/behaviours/spawn/BotPlayerFactory.js
+
+function isCitizenBot(player) {
+  return player?.getHostAddress?.() === BOT_HOST_ADDRESS;
+}
 
 let pluginApi = null;
 
@@ -50,8 +55,7 @@ function registerCitizenForChat(username, personality, kingdomName, kingdomSitua
 }
 
 /**
- * Stubbed v1: forwards heard public chat to the gateway. Wire the emitter
- * when core grows a public-chat hook; the payload shape is already fixed.
+ * Forwards heard public chat to the gateway.
  */
 function onCitizenChatHeard(event) {
   if (!pluginApi) {
@@ -69,6 +73,36 @@ function onCitizenChatHeard(event) {
   });
 }
 
+/**
+ * Social-packet hook: public chat near citizen bots. Finds citizens in the
+ * speaker's local players and emits citizens:chat-heard for each, which
+ * onCitizenChatHeard forwards to the LLM gateway.
+ */
+function onSocialPacket(event) {
+  const { player, packet } = event ?? {};
+  if (!packet || packet.type !== "public_chat") return;
+  if (!pluginApi || !player) return;
+  if (isCitizenBot(player)) return; // citizens don't trigger each other
+  const text = String(packet.text ?? "").trim();
+  if (!text) return;
+  let heard = 0;
+  for (const local of player.getLocalPlayers?.() ?? []) {
+    if (!isCitizenBot(local)) continue;
+    pluginApi.emitCustomEvent(EVENT_CITIZEN_CHAT_HEARD, {
+      citizenUsername: local.getUsername(),
+      speakerUsername: player.getUsername(),
+      text: text.slice(0, 320),
+    });
+    heard++;
+  }
+  if (heard > 0) {
+    pluginApi.log?.("[citizens] public chat heard", {
+      speaker: player.getUsername(),
+      citizens: heard,
+    });
+  }
+}
+
 function chatHeardEventName() {
   return EVENT_CITIZEN_CHAT_HEARD;
 }
@@ -77,5 +111,6 @@ module.exports = {
   initCitizenChat,
   registerCitizenForChat,
   onCitizenChatHeard,
+  onSocialPacket,
   chatHeardEventName,
 };
