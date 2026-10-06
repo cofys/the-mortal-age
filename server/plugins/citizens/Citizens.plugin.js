@@ -366,7 +366,6 @@ function onKingdomWarEndedRelief(event) {
 module.exports = {
   name: "Citizens",
   register(api) {
-    console.log(`[citizens-DIAG] register() called, CITIZENS_ENABLED="${process.env.CITIZENS_ENABLED}"`);
     initCitizens(api);
     attachWarRefugees(api);
     api.onCustomEvent(EVENT_WAR_DECLARED, onKingdomWarDeclared);
