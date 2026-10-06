@@ -1,8 +1,8 @@
 "use strict";
 
 /**
- * SuccessionTrail.Kingdoms — STAGES 9-12: the empty farm, the Hand's coin,
- * the ledger page, the warning.
+ * SuccessionTrail.Kingdoms — STAGES 9-12 + 15: the empty farm, the Hand's
+ * coin, the ledger page, the warning, the claimed page.
  *
  * The trail went cold at stage 8 (the squeeze — Mara silent, the grey men
  * came calling). These stages pick it back up, colder and more dangerous.
@@ -38,6 +38,12 @@
  *   visit: "Some stones are better left unturned." Dread, never damage.
  *   The arc coils. Phase 10 will uncoil it.
  *
+ *   STAGE 15 — THE CLAIMED PAGE (the hunt, SuccessionHunt.Kingdoms.js's
+ *   era). The reward poster from stage 11 is gone — claimed. What's pasted
+ *   over its ghost says "PAID AND COLLECTED," and a shakier hand says the
+ *   taker walked toward the palace quarter. The page moved. Someone paid.
+ *   Someone is owed.
+ *
  * In (custom events):
  *   citizens:chat-heard { citizenUsername, speakerUsername, text }
  * Out (custom events):
@@ -47,6 +53,7 @@
  *   empty-farm        — the neighbor's letter (papers, stage 9+)
  *   auction-whispers  — what the taverns say about the Hand's auction (overheard, stage 10+)
  *   fence-posting     — the reward poster for the ledger page (papers, stage 11+)
+ *   page-claimed      — the claimed poster (papers, stage 15+)
  *
  * Numbers live in DESIGN.md.
  */
@@ -65,10 +72,12 @@ const STAGE_FARM = 9; // the neighbor's letter appears in the papers
 const STAGE_COIN = 10; // auction gossip in the overhear pool
 const STAGE_PAGE = 11; // the reward poster appears in the papers
 const STAGE_WARNING = 12; // the grey men visit the diggers
+const STAGE_CLAIMED = 15; // the poster is claimed; the page moved
 
 const FRAGMENT_FARM = "empty-farm";
 const FRAGMENT_AUCTION = "auction-whispers";
 const FRAGMENT_POSTING = "fence-posting";
+const FRAGMENT_CLAIMED = "page-claimed";
 
 // Heat for digging: paper trails and tavern talk, like the earlier fragments.
 const HEAT_PAPER = 6;
@@ -106,6 +115,19 @@ const POSTING_LINES = [
 
 const POSTING_GONE_TEXT =
   "The reward poster is gone — torn down, or weather took it. You kept your copy.";
+
+const CLAIMED_LINES = [
+  "The reward poster is gone — but something new is pasted over its ghost, " +
+    "the paste still tacky:",
+  "\"PAID AND COLLECTED. The leaf of vellum is claimed. The Merciful Hand " +
+    "thanks the discreet. Inquire no further.\"",
+  "The old charcoal scrawl — \"it was here Tuesday. it isn't now.\" — has " +
+    "been scratched out. Beneath it, in a shakier hand: \"grey cloak. he " +
+    "took it toward the palace quarter. gods help the seller.\"",
+];
+
+const CLAIMED_GONE_TEXT =
+  "The claimed notice is weather-stained now. You kept your copy.";
 
 const AUCTION_OVERHEARD = [
   "Overheard in the Blue Moon, a merchant too deep in his cups: \"The Hand's " +
@@ -169,7 +191,8 @@ function fragmentCount(player) {
 /**
  * The discarded papers at Varrock market. From stage 9 they can hold the
  * neighbor's letter about the empty farm; from stage 11, the reward poster
- * for the ledger page. One fragment per player per document.
+ * for the ledger page; from stage 15, the claimed-poster notice that
+ * replaced it. One fragment per player per document.
  */
 function onObjectInteract(event) {
   const { player, objectId, location } = event ?? {};
@@ -187,6 +210,24 @@ function onObjectInteract(event) {
   }
 
   const stage = whisperStage();
+
+  // The claimed poster (stage 15+) takes precedence — the freshest paste.
+  if (stage >= STAGE_CLAIMED) {
+    if (hasFragment(player, FRAGMENT_CLAIMED)) {
+      player.sendMessage(CLAIMED_GONE_TEXT);
+      return true;
+    }
+    for (const line of CLAIMED_LINES) {
+      player.sendMessage(line);
+    }
+    grantSuccessionFragment(player, FRAGMENT_CLAIMED);
+    addSuccessionHeat(player, HEAT_PAPER);
+    console.info("[succession] trail: claimed-page fragment granted", {
+      player: player.getUsername(),
+      fragment: FRAGMENT_CLAIMED,
+    });
+    return true;
+  }
 
   // The reward poster (stage 11+) takes precedence — it's fresher paste.
   if (stage >= STAGE_PAGE) {
