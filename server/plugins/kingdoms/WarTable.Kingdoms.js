@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * WarTable — DIEGETIC ::kingdom / ::war / ::alliances replacement (Phase 3).
+ * WarTable — DIEGETIC ::kingdom / ::war / ::alliances / ::origin replacement (Phase 3).
  *
  * Jon's directive: no ::commands for players. Everything through the world.
  * A "War table" object stands in each capital's war room. Click "Study" and
@@ -9,17 +9,21 @@
  * origin GUI — same palette, typography, frames):
  *
  *   WAR TABLE
+ *   YOUR HOME              — name, epithet, lens, fealty (::origin)
  *   YOUR KINGDOM           — name, your rank, your titles (Membership)
  *   THE REALM              — treasury, stockpile, offices, wars (::kingdom status)
  *   OPEN WARS              — attacker vs defender, hottest borders (::war)
  *   ALLIANCES & ROYAL NEWS — pacts and recent royal events (::alliances)
  *
  * The interface reuses the refactored data functions in Commands.Kingdoms
- * (realmStatusLines, warSummary, allianceSummary) and Membership.Kingdoms
- * (membershipLines) — no logic is reimplemented here. The ::kingdom, ::war
- * and ::alliances commands stay registered until the table is verified
- * in-game, then they go. Migration rule: build the world path, verify it
- * works, remove the command. Never the reverse.
+ * (realmStatusLines, warSummary, allianceSummary), Membership.Kingdoms
+ * (membershipLines) and Selection.Origins (originLines) — no logic is
+ * reimplemented here. YOUR HOME gets the tall slot: the full lens paragraph
+ * runs to 9 wrapped lines, and the section shows it whole — name, epithet,
+ * lens, fealty, nothing truncated. The ::kingdom, ::war, ::alliances and
+ * ::origin commands stay registered until the table is verified in-game,
+ * then they go. Migration rule: build the world path, verify it works,
+ * remove the command. Never the reverse.
  *
  * Group 30015. (30010 citizen stall, 30011 DuelArena, 30012 origin GUI,
  * 30013 player stall, 30014 market board.)
@@ -32,6 +36,7 @@ const {
 } = require("../interface/widgetGroup");
 const Commands = require("./Commands.Kingdoms");
 const Membership = require("./Membership.Kingdoms");
+const Origins = require("../origins/Selection.Origins");
 
 const GROUP_ID = 30015;
 const MODAL_TARGET_UID = (161 << 16) | 16;
@@ -51,7 +56,7 @@ const FONT_LABEL = 496;
 const FONT_DISPLAY = 497;
 
 const MODAL_W = 620;
-const MODAL_H = 460;
+const MODAL_H = 616;
 
 const C = {
   ROOT: 0,
@@ -72,7 +77,10 @@ const C = {
   SEC4_HEAD: 40,
   SEC4_PANEL: 41,
   SEC4_BODY: 42,
-  FOOTNOTE: 50,
+  SEC5_HEAD: 50,
+  SEC5_PANEL: 51,
+  SEC5_BODY: 52,
+  FOOTNOTE: 60,
 };
 const uid = (component) => (GROUP_ID << 16) | component;
 
@@ -155,21 +163,27 @@ function buildTableInterface() {
   );
   rect(C.TITLE_RULE, root, 60, 64, MODAL_W - 120, 1, TMA.GOLD_DIM);
 
-  // Four sections: gold header, inner panel, parchment body.
+  // Five sections: gold header, inner panel, parchment body. YOUR HOME gets
+  // the tall slot (11 rows): name + epithet, the full lens paragraph (up to
+  // 9 wrapped lines at 54 chars — measured across all six origins), fealty.
+  // Body rows run ~14px; panel pads 8px, body insets 4px.
   const sections = [
-    { head: C.SEC1_HEAD, panel: C.SEC1_PANEL, body: C.SEC1_BODY, title: "YOUR KINGDOM", y: 76 },
-    { head: C.SEC2_HEAD, panel: C.SEC2_PANEL, body: C.SEC2_BODY, title: "THE REALM", y: 168 },
-    { head: C.SEC3_HEAD, panel: C.SEC3_PANEL, body: C.SEC3_BODY, title: "OPEN WARS", y: 260 },
-    { head: C.SEC4_HEAD, panel: C.SEC4_PANEL, body: C.SEC4_BODY, title: "ALLIANCES & ROYAL NEWS", y: 352 },
+    { head: C.SEC1_HEAD, panel: C.SEC1_PANEL, body: C.SEC1_BODY, title: "YOUR HOME", y: 72, rows: 11 },
+    { head: C.SEC2_HEAD, panel: C.SEC2_PANEL, body: C.SEC2_BODY, title: "YOUR KINGDOM", y: 262, rows: 3 },
+    { head: C.SEC3_HEAD, panel: C.SEC3_PANEL, body: C.SEC3_BODY, title: "THE REALM", y: 340, rows: 4 },
+    { head: C.SEC4_HEAD, panel: C.SEC4_PANEL, body: C.SEC4_BODY, title: "OPEN WARS", y: 432, rows: 3 },
+    { head: C.SEC5_HEAD, panel: C.SEC5_PANEL, body: C.SEC5_BODY, title: "ALLIANCES & ROYAL NEWS", y: 510, rows: 3 },
   ];
   for (const s of sections) {
+    const panelH = s.rows * 14 + 8;
+    const bodyH = s.rows * 14;
     label(s.head, root, 28, s.y, MODAL_W - 56, 18, s.title, FONT_LABEL, TMA.GOLD_TEXT);
-    rect(s.panel, root, 24, s.y + 20, MODAL_W - 48, 64, TMA.PANEL_INNER);
-    label(s.body, root, 34, s.y + 24, MODAL_W - 68, 56, "", FONT_BODY, TMA.PARCHMENT);
+    rect(s.panel, root, 24, s.y + 20, MODAL_W - 48, panelH, TMA.PANEL_INNER);
+    label(s.body, root, 34, s.y + 24, MODAL_W - 68, bodyH, "", FONT_BODY, TMA.PARCHMENT);
   }
 
   label(
-    C.FOOTNOTE, root, 0, 441, MODAL_W, 14,
+    C.FOOTNOTE, root, 0, 592, MODAL_W, 14,
     "Study often — crowns move while you sleep.",
     FONT_BODY, TMA.MUTED, true
   );
@@ -187,32 +201,39 @@ function sectionLines(getter, fallback) {
 function render(player) {
   const sender = player.getPacketSender();
 
+  // YOUR HOME: name, epithet, lens, fealty — the ::origin command's content
+  // (Selection.originLines), shown whole: 11 rows fit the longest lens.
+  sender.sendString(
+    bodyText(sectionLines(() => Origins.originLines(player), "You have no home yet — the road is still deciding."), 11, 54),
+    uid(C.SEC1_BODY)
+  );
+
   // YOUR KINGDOM: name, rank, titles (from Membership attributes).
   sender.sendString(
-    bodyText(sectionLines(() => Membership.membershipLines(player), "You swear fealty to no kingdom.")),
-    uid(C.SEC1_BODY)
+    bodyText(sectionLines(() => Membership.membershipLines(player), "You swear fealty to no kingdom."), 3),
+    uid(C.SEC2_BODY)
   );
 
   // THE REALM: treasury, stockpile, offices, wars (::kingdom status).
   sender.sendString(
-    bodyText(sectionLines(() => Commands.realmStatusLines(3), "No kingdoms yet.")),
-    uid(C.SEC2_BODY)
+    bodyText(sectionLines(() => Commands.realmStatusLines(3), "No kingdoms yet."), 4),
+    uid(C.SEC3_BODY)
   );
 
   // OPEN WARS: attacker vs defender, hottest borders (::war).
   const { wars, hot } = Commands.warSummary({ maxWars: 2, maxHot: 1, maxLevies: 0 });
   const warLines = [...wars, ...hot];
   sender.sendString(
-    bodyText(sectionLines(() => warLines, "No open wars — an uneasy peace.")),
-    uid(C.SEC3_BODY)
+    bodyText(sectionLines(() => warLines, "No open wars — an uneasy peace."), 3),
+    uid(C.SEC4_BODY)
   );
 
   // ALLIANCES & ROYAL NEWS: pacts and recent royal events (::alliances).
   const { pacts, news } = Commands.allianceSummary({ maxPacts: 2, maxNews: 1 });
   const allianceLines = [...pacts, ...news];
   sender.sendString(
-    bodyText(sectionLines(() => allianceLines, "No pacts sealed — every crown stands alone.")),
-    uid(C.SEC4_BODY)
+    bodyText(sectionLines(() => allianceLines, "No pacts sealed — every crown stands alone."), 3),
+    uid(C.SEC5_BODY)
   );
 }
 
@@ -246,5 +267,5 @@ module.exports = function attachWarTable(api) {
     studyTable({ player });
     return true;
   });
-  console.info("[war-table] diegetic ::kingdom/::war/::alliances replacement ready (group 30015)");
+  console.info("[war-table] diegetic ::kingdom/::war/::alliances/::origin replacement ready (group 30015)");
 };

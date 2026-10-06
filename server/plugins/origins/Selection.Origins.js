@@ -317,6 +317,23 @@ function showOrigin({ player }) {
   player.sendMessage(`You are ${origin.demonym}, of ${origin.city}.${kingdom}`);
 }
 
+/**
+ * Your home as war-table lines: name, epithet, lens, fealty.
+ * The ::origin command's content, refactored for reuse — the war table's
+ * YOUR HOME section renders these in-interface. The fealty line matches
+ * ::origin's phrasing exactly. Nothing here reimplements origin data; it all
+ * reads Data.BY_ID, the same source the command uses.
+ */
+function originLines(player) {
+  const originId = player?.getAttribute?.(ORIGIN_ID_ATTRIBUTE);
+  const origin = originId ? Data.BY_ID.get(originId) : null;
+  if (!origin) return ["You have no home yet — the road is still deciding."];
+  const fealty = origin.kingdomId
+    ? `Your kingdom: ${player.getAttribute(Membership.KINGDOM_ID_ATTRIBUTE) ?? origin.kingdomId}.`
+    : "You answer to no crown.";
+  return [`${origin.name} — ${origin.epithet}`, origin.lens, fealty];
+}
+
 /** Owner tool: clear a player's origin so the choice prompt returns on next login. */
 function resetOrigin({ player, parts }) {
   const targetName = parts[1];
@@ -366,6 +383,7 @@ function attachSelection(api) {
 module.exports = attachSelection;
 module.exports.ORIGIN_ID_ATTRIBUTE = ORIGIN_ID_ATTRIBUTE;
 module.exports.hasOrigin = hasOrigin;
+module.exports.originLines = originLines;
 module.exports.claimOrigin = claimOrigin;
 module.exports.openChatboxChoice = openChoice;
 module.exports.setGuiHooks = setGuiHooks;
