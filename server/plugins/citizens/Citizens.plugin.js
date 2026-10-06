@@ -66,6 +66,8 @@ let pluginApi = null;
 
 function initCitizens(api) {
   pluginApi = api;
+  // TEMP DEBUG: verify init runs (console.log always hits the log file).
+  console.log(`[citizens-debug] initCitizens called, CITIZENS_ENABLED=${process.env.CITIZENS_ENABLED}`);
   initCitizenChat(api);
   initCitizenSocial(api);
   initCitizenMemory(); // what citizens remember; loads data/saves/citizen-memory.json
