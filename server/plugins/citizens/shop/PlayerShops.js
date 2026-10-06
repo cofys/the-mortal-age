@@ -423,6 +423,9 @@ function buyFromStall(api, player, ware, amount) {
   playerInv.adds(ware.id, qty);
   if (tax > 0) {
     try {
+      // Grant before emitting: kingdom:tax-collected is a notification that
+      // the money already moved (the listener must not grant again).
+      KingdomStore.grantTax(stall.kingdomId, tax);
       api.emitCustomEvent("kingdom:tax-collected", {
         kingdomId: stall.kingdomId,
         amount: tax,

@@ -17,10 +17,19 @@
  */
 
 const { getDirector } = require("./director/CitizenDirector");
-const { ROLE_GUARD } = require("./constants");
+const { ROLE_GUARD, ROLE_MERCHANT } = require("./constants");
 const KingdomStore = require("../kingdoms/KingdomStore");
+const {
+  BREAD_ID,
+  buyFood,
+  eat,
+  addMood,
+  sellsFood,
+} = require("./brain/CitizenNeeds");
 
 const COINS_ID = 995;
+// A guard keeps at most this many loaves; the rest of the wage is savings.
+const GUARD_BREAD_HOARD = 4;
 // One citizen won't parrot rumors more often than this.
 const RUMOR_COOLDOWN_MS = 10 * 60 * 1000;
 const lastRumorAt = new Map(); // username -> timestamp
@@ -101,6 +110,11 @@ const GRUMBLE_LINES = [
  * Payday: every online guard gets perGuard coins from the treasury.
  * All-or-nothing — when the coffers can't cover the garrison, nobody
  * gets paid and the guards say so in the street.
+ *
+ * Wages cover food: after payday each guard buys up to two loaves from a
+ * bread-selling merchant of the kingdom (real coin and bread transfers)
+ * and eats one on the spot. A guard who can't afford bread goes hungry
+ * and the street hears about it.
  */
 function onWageDay(event) {
   const kingdomId = event?.kingdomId;
@@ -116,13 +130,37 @@ function onWageDay(event) {
     } catch {
       // Silent resentment.
     }
+    for (const guard of guards) {
+      addMood(guard, -10); // unpaid and unhappy
+    }
     return;
   }
+  const provisioners = onlineBots(kingdomId, ROLE_MERCHANT).filter((bot) => {
+    try {
+      return sellsFood(bot);
+    } catch {
+      return false;
+    }
+  });
   for (const guard of guards) {
     try {
       guard.getInventory?.()?.add?.(COINS_ID, perGuard);
     } catch {
       // One missed payday doesn't stop the rest.
+    }
+    addMood(guard, 6); // payday feels good
+    // Spend some of it on food: two loaves from a bread merchant, one
+    // eaten right away. Real transfers; the merchant's till grows.
+    try {
+      const loaves = guard.getInventory?.()?.getAmount?.(BREAD_ID) ?? 0;
+      if (provisioners.length > 0 && loaves < GUARD_BREAD_HOARD) {
+        const seller = provisioners[Math.floor(Math.random() * provisioners.length)];
+        buyFood(guard, seller);
+        buyFood(guard, seller);
+        eat(guard);
+      }
+    } catch {
+      // Dinner can wait; the wage itself landed.
     }
   }
 }

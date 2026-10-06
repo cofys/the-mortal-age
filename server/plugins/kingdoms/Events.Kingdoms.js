@@ -78,11 +78,10 @@ function onRankGranted(event) {
   Influence.onRankGranted(event);
 }
 
-/** Revenue arrived: it lands in the treasury. */
+/** Revenue arrived: notification only. Emitters grant the tax themselves
+ * before emitting (see header) — granting here would double-count. */
 function onTaxCollected(event) {
   if (!event?.kingdomId || !(event.amount > 0)) return;
-  Store.grantTax(event.kingdomId, Math.floor(event.amount));
-  Store.save();
 }
 
 /** A war opened between two kingdoms. */

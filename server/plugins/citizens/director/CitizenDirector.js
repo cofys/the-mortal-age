@@ -158,9 +158,23 @@ function desiredPhase(record, hour) {
         onDuty: onWatch,
       };
     }
-    case ROLE_MERCHANT:
-      // Shops open 08:00-19:00 with a lunch break at the tavern; otherwise
-      // the merchant is "home".
+    case ROLE_MERCHANT: {
+      if (record.merchantKind === "prime") {
+        // The prime: stall 08:00-19:00 with a lunch break, then the tavern
+        // after closing. Otherwise "home".
+        if (hour >= 12 && hour < 13) {
+          return { online: true, activityId: ACTIVITY_TAVERN_SOCIAL };
+        }
+        if (hour >= 8 && hour < 19) {
+          return { online: true, activityId: ACTIVITY_PRIME_MERCHANT };
+        }
+        if (hour >= 19 && hour < 22) {
+          return { online: true, activityId: ACTIVITY_TAVERN_SOCIAL };
+        }
+        return { online: false, activityId: null };
+      }
+      // Supplier + provisioner: stall 08:00-19:00 with a lunch break at the
+      // tavern; otherwise the merchant is "home".
       if (hour >= 12 && hour < 13) {
         return { online: true, activityId: ACTIVITY_TAVERN_SOCIAL };
       }
@@ -168,6 +182,7 @@ function desiredPhase(record, hour) {
         online: hour >= 8 && hour < 19,
         activityId: ROLE_ACTIVITY[ROLE_MERCHANT],
       };
+    }
     case ROLE_COMMONER:
       // The routine action runs the day itself; the director only sleeps them.
       return { online: true, activityId: ROLE_ACTIVITY[ROLE_COMMONER] };
@@ -253,11 +268,25 @@ class CitizenDirector {
     // manned; everyone else keeps a seeded night window.
     const sleepStart =
       role === ROLE_GUARD ? [23, 0, 8][watch] : [22, 23, 0][Math.floor(rng() * 3)];
+    // Merchant specialization, in roster order per kingdom: the prime runs the
+    // fully-real sword stall (restocks wholesale from the supplier), the
+    // supplier wholesales swords, the provisioner sells bread.
+    let merchantKind = null;
+    if (role === ROLE_MERCHANT) {
+      let merchantsSoFar = 0;
+      for (const other of this.roster.values()) {
+        if (other.kingdomId === kingdomId && other.role === ROLE_MERCHANT) {
+          merchantsSoFar += 1;
+        }
+      }
+      merchantKind = ["prime", "supplier", "provisioner"][merchantsSoFar % 3];
+    }
     const record = {
       username,
       personality,
       kingdomId,
       role,
+      merchantKind,
       home,
       seed: personality.seed,
       sleepStart,
@@ -356,6 +385,32 @@ class CitizenDirector {
       bot.setAttribute?.(ATTR_CITIZEN_NEEDS, needsSnapshot(needs));
     }
 
+    // Merchant specialization: the prime runs the fully-real sword stall,
+    // the supplier wholesales swords to the prime, the provisioner sells
+    // bread. Opening floats are real inventory, seeded once at spawn.
+    const ItemIds = this.api.core?.ItemIds ?? {};
+    const SWORD = ItemIds.BRONZE_SWORD ?? 1277;
+    const BREAD = ItemIds.BREAD ?? 2309;
+    const COINS = ItemIds.COINS ?? 995;
+    if (record.role === ROLE_MERCHANT) {
+      const inventory = bot.getInventory?.();
+      if (record.merchantKind === "prime") {
+        bot.setAttribute?.(ATTR_PRIME_MERCHANT, "1");
+        bot.setAttribute?.(ATTR_WARE_ITEM, SWORD);
+        bot.setAttribute?.(ATTR_WARE_PRICE, 78);
+        inventory?.adds?.(COINS, 800);
+        inventory?.adds?.(SWORD, 10);
+      } else if (record.merchantKind === "supplier") {
+        bot.setAttribute?.(ATTR_SUPPLIER_MERCHANT, "1");
+        bot.setAttribute?.(ATTR_WARE_ITEM, SWORD);
+        bot.setAttribute?.(ATTR_WARE_PRICE, 78);
+        inventory?.adds?.(SWORD, 60);
+        inventory?.adds?.(COINS, 300);
+      } else {
+        inventory?.adds?.(BREAD, 24);
+      }
+    }
+
     const state = createInitialState(
       { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 },
       { ROAMING: "roaming" }
@@ -374,7 +429,10 @@ class CitizenDirector {
     this.api.emitPlayerLogin({ player: bot, username: record.username });
     bot.moveTo?.(spawn.clone());
 
-    const activity = this.registry.byId.get(ROLE_ACTIVITY[record.role]);
+    const activity =
+      record.merchantKind === "prime"
+        ? this.registry.byId.get(ACTIVITY_PRIME_MERCHANT)
+        : this.registry.byId.get(ROLE_ACTIVITY[record.role]);
     if (activity) {
       attachBrain({
         runtime,

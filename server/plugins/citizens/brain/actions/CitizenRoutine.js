@@ -24,8 +24,15 @@ const { createBankAction } = require("../../../bots/brain/actions/Bank");
 const { createIdleSocialAction } = require("./IdleSocial");
 const { siteTile, workSite, dockSite, kingdomIdOf } = require("../CitizenSites");
 const { isKingdomAtWar } = require("../../CitizenEvents");
-const { ATTR_CITIZEN_PERSONALITY, ATTR_CITIZEN_ROLE, ROLE_MERCHANT } = require("../../constants");
-const { attemptFeed, sellsFood } = require("../CitizenNeeds");
+const {
+  ATTR_CITIZEN_PERSONALITY,
+  ATTR_CITIZEN_ROLE,
+  ATTR_SUPPLIER_MERCHANT,
+  ATTR_KINGDOM_ID,
+  ROLE_MERCHANT,
+} = require("../../constants");
+const { attemptFeed, sellsFood, addMood } = require("../CitizenNeeds");
+const { findLocalCitizen } = require("../findCitizen");
 const {
   agentRng,
   logNormalJitter,
@@ -45,6 +52,14 @@ const WORK_FISHING = "fishing";
 const DAY_MINUTES = 24 * 60;
 const RETRY_WORK_MS = 60000;
 const CASTS_PER_HAUL = 4;
+// What the supplier pays per work drop (logs, ore) — small, real coin.
+const WORK_DROP_PRICE = 4;
+// Don't stall the shift forever waiting on a supplier that never shows.
+const SELL_GIVE_UP_MS = 3 * 60 * 1000;
+// Abstract price for a fisher's haul, sold to the provisioner.
+const CATCH_PRICE = 4;
+const COINS_ID = 995;
+const BREAD_ID = 2309;
 
 const FISHING_LINES = Object.freeze([
   "Come on, bite...",
@@ -137,6 +152,56 @@ function walkTo(player, tile) {
     basicPather: true,
     z: tile.z ?? 0,
   });
+}
+
+/** Inventory snapshot: id -> amount, so the shift's output can be diffed. */
+function snapshotInventory(player) {
+  const snap = new Map();
+  try {
+    const items = player.getInventory?.()?.getItems?.() ?? [];
+    for (const item of items) {
+      const id = item?.getId?.();
+      const amount = item?.getAmount?.() ?? 0;
+      if (Number.isInteger(id) && amount > 0) {
+        snap.set(id, (snap.get(id) ?? 0) + amount);
+      }
+    }
+  } catch (error) {
+    // An unreadable inventory just means nothing to sell.
+  }
+  return snap;
+}
+
+/**
+ * What the shift produced since the snapshot: positive deltas only, minus
+ * coins and bread (wages and lunch, not work output).
+ */
+function gainedSince(player, snapshot) {
+  const gained = [];
+  const current = snapshotInventory(player);
+  for (const [id, amount] of current) {
+    if (id === COINS_ID || id === BREAD_ID) {
+      continue;
+    }
+    const delta = amount - (snapshot?.get(id) ?? 0);
+    if (delta > 0) {
+      gained.push({ id, qty: delta });
+    }
+  }
+  return gained;
+}
+
+function isSupplierFor(kingdomId) {
+  return (local) => {
+    if (!local?.getAttribute?.(ATTR_SUPPLIER_MERCHANT)) {
+      return false;
+    }
+    try {
+      return (local.getAttribute?.(ATTR_KINGDOM_ID) ?? null) === kingdomId;
+    } catch (error) {
+      return false;
+    }
+  };
 }
 
 function createCitizenRoutineAction(spec, world) {
@@ -254,6 +319,19 @@ function createCitizenRoutineAction(spec, world) {
         kingdom: kingdomIdOf(player),
         hauls: bucket.workCyclesBanked,
       });
+      // The catch goes to the provisioner: a few real coins, the same
+      // abstraction level as the merchants' passer-by sales.
+      try {
+        player.getInventory?.()?.adds?.(COINS_ID, CATCH_PRICE);
+      } catch (error) {
+        // The haul still counted toward the goal.
+      }
+      addMood(player, 3);
+      world?.log?.("citizen_routine_catch_sale", {
+        citizen: player.getUsername?.(),
+        kingdom: kingdomIdOf(player),
+        earned: CATCH_PRICE,
+      });
     }
     return "running";
   }
@@ -300,13 +378,69 @@ function createCitizenRoutineAction(spec, world) {
     return "running";
   }
 
+  /**
+   * Sell the shift's output to the supplier citizen: real transfers —
+   * drops move to the supplier, the supplier's own coin moves to the
+   * commoner (as much as the supplier can cover). Then the bank trip
+   * banks whatever is left, coins included.
+   */
+  function sellTick(ctx, state) {
+    const { player, nowMs } = ctx;
+    const market = siteTile(player, "market");
+    if (market && !atTile(player, market, 6)) {
+      walkTo(player, market);
+      return "running";
+    }
+    const supplier = findLocalCitizen(player, isSupplierFor(kingdomIdOf(player)));
+    if (supplier) {
+      const supplierInv = supplier.getInventory?.();
+      const inventory = player.getInventory?.();
+      let earned = 0;
+      if (supplierInv && inventory) {
+        for (const { id, qty } of state.sellMode.items) {
+          const held = inventory.getAmount?.(id) ?? 0;
+          const supplierCoins = supplierInv.getAmount?.(COINS_ID) ?? 0;
+          const afford = Math.floor(supplierCoins / WORK_DROP_PRICE);
+          const sellQty = Math.min(qty, held, afford);
+          if (sellQty <= 0) {
+            continue;
+          }
+          inventory.deleteNumber(id, sellQty);
+          supplierInv.adds(id, sellQty);
+          supplierInv.deleteNumber(COINS_ID, sellQty * WORK_DROP_PRICE);
+          inventory.adds(COINS_ID, sellQty * WORK_DROP_PRICE);
+          earned += sellQty * WORK_DROP_PRICE;
+        }
+      }
+      if (earned > 0) {
+        addMood(player, Math.min(12, 2 + Math.floor(earned / 8)));
+        world?.log?.("citizen_routine_drop_sale", {
+          citizen: player.getUsername?.(),
+          supplier: supplier.getUsername?.(),
+          earned,
+        });
+      }
+    } else if (nowMs < state.sellGiveUpAt) {
+      return "running"; // supplier's out — wait a beat at the market
+    }
+    // Sold, or nobody to sell to: bank the rest and get back to work.
+    state.sellMode = null;
+    state.workMode = "bank";
+    return "running";
+  }
+
   function enterPhase(ctx, state, kind) {
     state.phaseKind = kind;
     state.workMode = "work";
     state.workRetryAt = 0;
     state.lingerUntil = 0;
+    state.sellMode = null;
+    state.sellGiveUpAt = 0;
     const { player } = ctx;
     if (kind === KIND_WORK) {
+      // Snapshot the inventory: the shift's output is whatever appears
+      // on top of this. Tools carried in are excluded by construction.
+      state.invSnapshot = snapshotInventory(player);
       const tile = workTileFor(player, state);
       if (tile) {
         walkTo(player, tile);
@@ -358,6 +492,10 @@ function createCitizenRoutineAction(spec, world) {
         if (resolveWorkKind(player, state) === WORK_FISHING) {
           return fishWorkTick(ctx, state);
         }
+        // Mid-shift sale: the supplier buys the shift's output at the market.
+        if (state.sellMode) {
+          return sellTick(ctx, state);
+        }
         const { workDelegate, bankDelegate } = delegatesFor(player);
         const site = workSite(player);
         if (state.workMode === "bank") {
@@ -383,9 +521,20 @@ function createCitizenRoutineAction(spec, world) {
         }
         const result = workDelegate.update(ctx);
         if (result === "success") {
-          // Inventory full: bank, then back to work.
           workDelegate.stop?.(ctx);
-          state.workMode = "bank";
+          // Inventory full: sell the shift's output to the supplier first,
+          // then bank whatever is left (coins included).
+          const gained = gainedSince(player, state.invSnapshot);
+          if (gained.length > 0) {
+            state.sellMode = { items: gained };
+            state.sellGiveUpAt = nowMs + SELL_GIVE_UP_MS;
+            const market = siteTile(player, "market");
+            if (market) {
+              walkTo(player, market);
+            }
+          } else {
+            state.workMode = "bank";
+          }
         } else if (result === "failed") {
           workDelegate.stop?.(ctx);
           // No reachable resource right now — wait a beat, don't spin.

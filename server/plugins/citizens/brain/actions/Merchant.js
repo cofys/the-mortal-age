@@ -22,7 +22,12 @@ const { Item } = require("../../../../src/main/typescript/elvarg/game/model/Item
 const { ItemIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
 const { isKingdomAtWar } = require("../../CitizenEvents");
 const { siteTile, kingdomIdOf } = require("../CitizenSites");
-const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
+const {
+  ATTR_CITIZEN_PERSONALITY,
+  ATTR_WARE_ITEM,
+  ATTR_WARE_PRICE,
+} = require("../../constants");
+const { addMood } = require("../CitizenNeeds");
 const {
   agentRng,
   logNormalJitter,
@@ -48,6 +53,16 @@ const AD_LINES = Object.freeze([
   "Come see, come see — fresh loaves!",
   "Bread for the road, bread for the table!",
 ]);
+
+const SWORD_AD_LINES = Object.freeze([
+  "Bronze swords! Honest steel for honest coin!",
+  "Swords, swords — arm yourself today!",
+  "A blade for every belt, fairly priced!",
+]);
+
+function adLinesFor(wareId) {
+  return wareId === ItemIds.BRONZE_SWORD ? SWORD_AD_LINES : AD_LINES;
+}
 
 function resolveWareId(name) {
   if (Number.isInteger(name)) {
@@ -126,19 +141,48 @@ function restockFromBank(player, wareId, want) {
 }
 
 function createMerchantAction(spec, world) {
-  const wareId = resolveWareId(spec.wareItem ?? "BREAD");
-  const pricePerWare = Math.max(1, Math.floor(Number(spec.pricePerWare ?? 12)));
+  const baseWareId = resolveWareId(spec.wareItem ?? "BREAD");
+  const basePrice = Math.max(1, Math.floor(Number(spec.pricePerWare ?? 12)));
   const restockThreshold = Math.max(1, Math.floor(Number(spec.restockThreshold ?? 6)));
   const adMinMs = Math.max(1000, Number(spec.adIntervalMinMs ?? 180000));
   const adMaxMs = Math.max(adMinMs, Number(spec.adIntervalMaxMs ?? 420000));
 
+  /**
+   * Per-merchant ware override: the director tags specialist merchants
+   * (e.g. the sword supplier) with citizens:ware-item / citizens:ware-price;
+   * everyone else sells the spec's default ware.
+   */
+  function wareFor(player) {
+    let wareId = baseWareId;
+    let price = basePrice;
+    try {
+      const attrItem = player.getAttribute?.(ATTR_WARE_ITEM);
+      if (attrItem !== undefined && attrItem !== null && attrItem !== "") {
+        const id = resolveWareId(attrItem);
+        if (Number.isInteger(id)) {
+          wareId = id;
+        }
+      }
+      const attrPrice = player.getAttribute?.(ATTR_WARE_PRICE);
+      if (Number(attrPrice) > 0) {
+        price = Math.floor(Number(attrPrice));
+      }
+    } catch (error) {
+      // Spec defaults.
+    }
+    return { wareId, price };
+  }
+
   function botState(player) {
     return playerState(action, player, () => {
       const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+      const { wareId, price } = wareFor(player);
       return {
         rng: agentRng(`merchant:${player.getUsername?.() ?? "unknown"}`),
         human: humanizerProfile(personality),
         phase: PHASE_STALL,
+        wareId,
+        pricePerWare: price,
         nextAdAt: 0,
         nextSaleAt: 0,
         restockPauseUntil: 0,
@@ -167,6 +211,8 @@ function createMerchantAction(spec, world) {
     state.nextSaleAt =
       nowMs + logNormalJitter(state.rng, baseGap, state.human.tempoSigma);
     const inventory = player.getInventory();
+    const wareId = state.wareId;
+    const pricePerWare = state.pricePerWare;
     if (!inventory || inventory.getAmount(wareId) <= 0) {
       return;
     }
@@ -183,6 +229,7 @@ function createMerchantAction(spec, world) {
       });
       return;
     }
+    addMood(player, 1); // earning feels good
     world?.log?.("citizen_merchant_sale", {
       merchant: player.getUsername?.(),
       ware: wareId,
@@ -202,10 +249,11 @@ function createMerchantAction(spec, world) {
     if (!chance(state.rng, 0.75)) {
       return; // Sometimes they just tend the stall quietly.
     }
+    const pool = adLinesFor(state.wareId);
     say(
       player,
       state,
-      AD_LINES[Math.floor(state.rng() * AD_LINES.length)]
+      pool[Math.floor(state.rng() * pool.length)]
     );
   }
 
@@ -213,10 +261,11 @@ function createMerchantAction(spec, world) {
     id: "merchant",
     update(ctx) {
       const { player, nowMs } = ctx;
+      const state = botState(player);
+      const wareId = state.wareId;
       if (!Number.isInteger(wareId)) {
         return "failed";
       }
-      const state = botState(player);
       const kingdomId = kingdomIdOf(player);
       const atWar = isKingdomAtWar(kingdomId);
       const stall = siteTile(player, "market");

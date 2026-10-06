@@ -16,6 +16,7 @@ const {
 } = registryModule;
 const { createGuardPatrolAction } = require("./actions/GuardPatrol");
 const { createMerchantAction } = require("./actions/Merchant");
+const { createPrimeMerchantAction } = require("./actions/PrimeMerchant");
 const { createCitizenRoutineAction } = require("./actions/CitizenRoutine");
 const { createIdleSocialAction } = require("./actions/IdleSocial");
 const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE } = require("../constants");
@@ -74,6 +75,7 @@ function registerCitizenActionTypes() {
   registered = true;
   registerBotActionType("guardPatrol", createGuardPatrolAction);
   registerBotActionType("merchant", createMerchantAction);
+  registerBotActionType("primeMerchant", createPrimeMerchantAction);
   registerBotActionType("citizenRoutine", createCitizenRoutineAction);
   registerBotActionType("idleSocial", createIdleSocialAction);
   registerBotConditionKind("citizen", createCitizenCondition);
