@@ -100,10 +100,10 @@ function defaultPlan() {
   const plan = {};
   for (const kingdomId of KINGDOM_IDS) {
     plan[kingdomId] = {
-      [ROLE_GUARD]: 3,
-      [ROLE_MERCHANT]: 2,
-      [ROLE_COMMONER]: 6,
-      [ROLE_COURTIER]: 2,
+      [ROLE_GUARD]: 6,
+      [ROLE_MERCHANT]: 4,
+      [ROLE_COMMONER]: 20,
+      [ROLE_COURTIER]: 4,
     };
   }
   return plan;
