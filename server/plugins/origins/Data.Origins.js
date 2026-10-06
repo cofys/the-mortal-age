@@ -16,9 +16,14 @@
  *   lens       — one paragraph of "your lens": who you are and the word on
  *                the street, written from the world bible's great-power
  *                situations.
+ *   icon       — ItemIdentifiers key for the realm card's emblem on the
+ *                graphical creation screen (Gui.Origins). Thematic, from the
+ *                kit where possible.
+ *   epithet    — one short line under the city on the realm card.
  *
  * Item keys must exist on api.core.ItemIdentifiers; Selection.Origins resolves
  * them at grant time so a typo fails loudly at startup, not silently in-game.
+ * Icon keys are validated the same way when the creation GUI registers.
  */
 
 const BASE_KIT = [
@@ -45,6 +50,8 @@ const ORIGINS = [
     // server already uses.
     spawn: { x: 2964, y: 3378, z: 0 },
     kit: [...BASE_KIT, ["BRONZE_SWORD", 1], ["WOODEN_SHIELD", 1], ["RED_CAPE", 1], ["BREAD", 2]],
+    icon: "RED_CAPE",
+    epithet: "The kingdom with no king",
     welcome: "The white walls rise ahead of you. Make them proud.",
     lens:
       "You are Faladorian, raised in the shadow of the White Knights' walls — in the kingdom with no king. " +
@@ -62,6 +69,8 @@ const ORIGINS = [
     // plugins/interface/TeleportInterface.plugin.js.
     spawn: { x: 3213, y: 3424, z: 0 },
     kit: [...BASE_KIT, ["COINS", 25], ["BREAD", 2]],
+    icon: "COINS",
+    epithet: "The heirless crown",
     welcome: "The grand market hums. Everything here has a price — including crowns.",
     lens:
       "You are Varrockian, a child of the grand market and its grander politics — under the heirless crown. " +
@@ -80,6 +89,8 @@ const ORIGINS = [
     // plugins/interface/TeleportInterface.plugin.js (East Ardougne market).
     spawn: { x: 2661, y: 3301, z: 0 },
     kit: [...BASE_KIT, ["SILK", 2], ["COINS", 15], ["BREAD", 2]],
+    icon: "SILK",
+    epithet: "The market and the lie",
     welcome: "The market stalls are loud and the palace is quiet. Both are lying about something.",
     lens:
       "You are East Ardougnian, raised in the market city under King Lathas — and under the lie. West Ardougne " +
@@ -101,6 +112,8 @@ const ORIGINS = [
     // natives living under the vyre heel, and the lens says so plainly.
     spawn: { x: 3605, y: 3365, z: 0 },
     kit: [...BASE_KIT, ["GARLIC", 3], ["STAKE", 1]],
+    icon: "GARLIC",
+    epithet: "Under the vyre heel",
     welcome: "The vyres watch from the spires. Keep your garlic close and your head down.",
     lens:
       "You are of Darkmeyer — human, living under the vyre heel in the heart of the dark. Lowerniel Drakan's " +
@@ -121,6 +134,8 @@ const ORIGINS = [
     // (2816-2944, 10112-10272) from kingdoms/Areas.Kingdoms.js.
     spawn: { x: 2857, y: 10166, z: 0 },
     kit: [...BASE_KIT, ["BRONZE_WARHAMMER", 1], ["BEER", 3], ["COINS", 25]],
+    icon: "BEER",
+    epithet: "The mountain's forges",
     welcome: "The forges never cool. Mind the companies — they own the mountain, not you.",
     lens:
       "You are a dwarf of Keldagrim, born under the mountain where eight companies rule as kings in all but " +
@@ -138,6 +153,8 @@ const ORIGINS = [
     // tile every new account (tutorial disabled) appears on today.
     spawn: { x: 3089, y: 3524, z: 0 },
     kit: [...BASE_KIT, ["ROPE", 1], ["COOKED_MEAT", 2]],
+    icon: "ROPE",
+    epithet: "No walls. No crown.",
     welcome: "No walls raised you. The road is yours — make it count.",
     lens:
       "You are a wanderer — no walls raised you and no banner claims you. The road is your hearth and your " +
@@ -149,13 +166,16 @@ const ORIGINS = [
 
 const BY_ID = new Map(ORIGINS.map((origin) => [origin.id, origin]));
 
-/** Assert every kit key exists on ItemIdentifiers — fail fast at startup. */
+/** Assert every kit and GUI icon key exists on ItemIdentifiers — fail fast at startup. */
 function validateItemKeys(Items) {
   for (const origin of ORIGINS) {
     for (const [key] of origin.kit) {
       if (!Number.isInteger(Items[key])) {
         throw new Error(`[origins] unknown item key '${key}' in kit for origin '${origin.id}'`);
       }
+    }
+    if (!Number.isInteger(Items[origin.icon])) {
+      throw new Error(`[origins] unknown icon key '${origin.icon}' for origin '${origin.id}'`);
     }
   }
 }
