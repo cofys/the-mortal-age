@@ -25,8 +25,6 @@ export class ChatPacketListener {
 
   public static handleText(player: any, value: string): void {
     const text = String(value ?? "").replace(/[<>]/g, "").trim().slice(0, 80);
-    // TEMP DEBUG: trace public chat flow
-    console.log(`[chat-debug] handleText from ${player?.getUsername?.()}: "${text}"`);
     if (text.startsWith("::")) {
       CommandPacketListener.execute(player, text.slice(2));
       return;
