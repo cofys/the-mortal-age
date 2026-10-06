@@ -21,8 +21,6 @@ module.exports = {
     Selection(api);
     Gui.attach(api);
     OriginsApi.attach(api);
-    // TEMP DEBUG: confirm persistAttribute ran
-    console.info(`[origins-debug] Origins plugin registered, persistAttribute(origin:id) called`);
     // Triggers live in Selection; the screen lives in Gui. Wire them here so
     // neither module requires the other at load time.
     Selection.setGuiHooks(Gui.hooks());

@@ -83,23 +83,7 @@ class SqlitePlayerPersistence extends PlayerPersistence {
       return;
     }
 
-    // TEMP DEBUG: log BEFORE fromPlayer to catch throws
-    console.info(`[persistence-debug] save() called for ${player.getUsername()}, calling fromPlayer...`);
-    let save;
-    try {
-      save = PlayerSave.fromPlayer(player);
-    } catch (e) {
-      console.error(`[persistence-debug] fromPlayer THREW for ${player.getUsername()}:`, e?.message ?? e);
-      throw e;
-    }
-    // TEMP DEBUG: diagnose origin persistence (logging all saves temporarily)
-    {
-      const attrKeys = save.attributes ? Object.keys(save.attributes) : [];
-      const hasOriginKey = attrKeys.includes("origin:id");
-      const liveVal = player.getAttribute ? player.getAttribute("origin:id") : "N/A";
-      const isBot = player.isPlayerBot?.() ? "BOT" : "HUMAN";
-      console.info(`[persistence-debug] saving ${player.getUsername()} (${isBot}): origin:id in save=${hasOriginKey}, live value=${liveVal}, total attrs=${attrKeys.length}`);
-    }
+    const save = PlayerSave.fromPlayer(player);
     const serialized = JSON.stringify(save, this.replacer.bind(this), 2);
     this.validateSerializedSave(serialized, player.getUsername());
     this.savePlayer.run(
