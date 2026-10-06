@@ -687,3 +687,4 @@ module.exports.hottestPairs = hottestPairs;
 module.exports.garrisonOf = garrisonOf;
 module.exports.WAR_AT = WAR_AT;
 module.exports.TENSION_TICK_TICKS = TENSION_TICK_TICKS;
+module.exports.ARMISTICE_MS = ARMISTICE_MS;

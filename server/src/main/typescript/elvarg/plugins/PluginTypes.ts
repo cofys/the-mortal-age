@@ -1215,6 +1215,8 @@ export interface PluginCoreApi {
   LocModelType: any;
   MapObjects: any;
   ItemOnGroundManager: any;
+  ItemOnGround: any;
+  GroundItemState: any;
   ItemDefinition: any;
   CacheDefinitions: any;
   PathFinder: any;

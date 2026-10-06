@@ -269,20 +269,6 @@ function isWarGood(name) {
   return WAR_GOOD_KEYWORDS.some((kw) => upper.includes(kw));
 }
 
-/** 1.5x on war goods while the merchant's kingdom runs a hot border. */
-function warPriceMultiplier(merchant) {
-  try {
-    const kingdomId = kingdomIdOf(merchant);
-    if (isKingdomAtWar(kingdomId)) return 1; // market closed in wartime anyway
-    const Tension = require("../../kingdoms/Tension.Kingdoms");
-    return Tension.hottestTensionFor(kingdomId) >= WAR_PRICE_TENSION
-      ? WAR_PRICE_MULTIPLIER
-      : 1;
-  } catch {
-    return 1;
-  }
-}
-
 /** True when the stall currently charges war prices (for the warning). */
 function warPricesActive(merchant) {
   return warPriceMultiplier(merchant) > 1;

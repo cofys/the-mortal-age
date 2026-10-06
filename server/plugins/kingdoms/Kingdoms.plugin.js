@@ -27,6 +27,6 @@ module.exports = {
     require("./Succession.Kingdoms")(api);
     require("./Simulation.Kingdoms")(api);
     require("./Tension.Kingdoms")(api);
-    // require("./WarConsequences.Kingdoms")(api); // TODO: re-enable when the file lands
+    require("./WarConsequences.Kingdoms")(api);
   },
 };
