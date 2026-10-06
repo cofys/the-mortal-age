@@ -84,7 +84,9 @@ function initCitizens(api) {
     return;
   }
   const director = initDirector(api, getBaseRegistry());
+  console.log(`[citizens-debug] director created, registry=${!!director.registry}, calling boot...`);
   director.boot();
+  console.log(`[citizens-debug] boot complete, roster=${director.roster.size}`);
   initMerchantShops(api);
   initPlayerShops(api);
   api.log?.("[citizens] director booted", director.status());
