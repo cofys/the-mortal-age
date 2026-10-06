@@ -16,9 +16,11 @@
  *   lens       — one paragraph of "your lens": who you are and the word on
  *                the street, written from the world bible's great-power
  *                situations.
- *   icon       — ItemIdentifiers key for the realm card's emblem on the
- *                graphical creation screen (Gui.Origins). Thematic, from the
- *                kit where possible.
+ *   icon       — ItemIdentifiers key for the realm row's heraldic emblem on
+ *                the graphical creation screen (Gui.Origins): a banner, crown,
+ *                tree, star, shield, and paws — Jon's mockup iconography
+ *                (2026-10-06), chosen for what the sprite depicts, not from
+ *                the kit.
  *   epithet    — one short line under the city on the realm card.
  *
  * Item keys must exist on api.core.ItemIdentifiers; Selection.Origins resolves
@@ -50,7 +52,7 @@ const ORIGINS = [
     // server already uses.
     spawn: { x: 2964, y: 3378, z: 0 },
     kit: [...BASE_KIT, ["BRONZE_SWORD", 1], ["WOODEN_SHIELD", 1], ["RED_CAPE", 1], ["BREAD", 2]],
-    icon: "RED_CAPE",
+    icon: "SARADOMIN_BANNER",
     epithet: "The kingdom with no king",
     welcome: "The white walls rise ahead of you. Make them proud.",
     lens:
@@ -69,7 +71,7 @@ const ORIGINS = [
     // plugins/interface/TeleportInterface.plugin.js.
     spawn: { x: 3213, y: 3424, z: 0 },
     kit: [...BASE_KIT, ["COINS", 25], ["BREAD", 2]],
-    icon: "COINS",
+    icon: "ROYAL_CROWN",
     epithet: "The heirless crown",
     welcome: "The grand market hums. Everything here has a price — including crowns.",
     lens:
@@ -89,7 +91,7 @@ const ORIGINS = [
     // plugins/interface/TeleportInterface.plugin.js (East Ardougne market).
     spawn: { x: 2661, y: 3301, z: 0 },
     kit: [...BASE_KIT, ["SILK", 2], ["COINS", 15], ["BREAD", 2]],
-    icon: "SILK",
+    icon: "WHITE_TREE_SHOOT",
     epithet: "The market and the lie",
     welcome: "The market stalls are loud and the palace is quiet. Both are lying about something.",
     lens:
@@ -112,7 +114,7 @@ const ORIGINS = [
     // natives living under the vyre heel, and the lens says so plainly.
     spawn: { x: 3605, y: 3365, z: 0 },
     kit: [...BASE_KIT, ["GARLIC", 3], ["STAKE", 1]],
-    icon: "GARLIC",
+    icon: "STAR_BAUBLE",
     epithet: "Under the vyre heel",
     welcome: "The vyres watch from the spires. Keep your garlic close and your head down.",
     lens:
@@ -134,7 +136,7 @@ const ORIGINS = [
     // (2816-2944, 10112-10272) from kingdoms/Areas.Kingdoms.js.
     spawn: { x: 2857, y: 10166, z: 0 },
     kit: [...BASE_KIT, ["BRONZE_WARHAMMER", 1], ["BEER", 3], ["COINS", 25]],
-    icon: "BEER",
+    icon: "BRONZE_KITESHIELD",
     epithet: "The mountain's forges",
     welcome: "The forges never cool. Mind the companies — they own the mountain, not you.",
     lens:
@@ -153,7 +155,7 @@ const ORIGINS = [
     // tile every new account (tutorial disabled) appears on today.
     spawn: { x: 3089, y: 3524, z: 0 },
     kit: [...BASE_KIT, ["ROPE", 1], ["COOKED_MEAT", 2]],
-    icon: "ROPE",
+    icon: "BUNNY_PAWS",
     epithet: "No walls. No crown.",
     welcome: "No walls raised you. The road is yours — make it count.",
     lens:

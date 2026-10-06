@@ -15,8 +15,15 @@
  * (api.onInterfaceActionButton), text/highlights are pushed with sendString /
  * sendInterfaceDisplayState. No client change, no new packets, no new hooks.
  *
- * Sizing: deliberately conservative 540x420 on the 765x503 canvas (~112px
- * side margins, ~41px top/bottom). Smaller is better than cut off.
+ * Design (Jon's mockup, 2026-10-06): a TALL heraldic panel commanding the
+ * screen — six realm rows, each with a real thematic item-sprite icon
+ * (banner, crown, tree, star, shield, paws), gold-caps name, city + epithet,
+ * and a chevron. The selected realm gets a bright gold glowing border and a
+ * lit chevron; its full lens paragraph fills a dark inset detail box below.
+ * Ornate double-rule gold frame with corner brackets, a compass-star diamond
+ * on the top edge, and the claim button as a vow ("I CLAIM ASGARNIA AS MY
+ * HOME"). The game world behind is fully covered by a dark backdrop rect —
+ * this is the player's screen now, not a dialog over gameplay.
  *
  * Ceremony: the existing appearance customizer (interface 679) still runs
  * first for new accounts; Selection.Origins opens this screen when 679
@@ -56,14 +63,15 @@ const TMA = {
   PANEL_INNER: 0x1e1812, // inset panels (detail pane)
   CARD: 0x241c13, // realm card background
   CARD_HOVER: 0x2e2417, // realm card hover
-  GOLD_DIM: 0x6b5a3a, // borders, hairline rules
+  GOLD_DIM: 0x6b5a3a, // borders, hairline rules — aged bronze
   GOLD: 0xc9a227, // selection glow, bright borders
   GOLD_TEXT: 0xd9b45b, // headings
   PARCHMENT: 0xe8ded0, // body text
-  MUTED: 0x9a8f7d, // secondary text
+  MUTED: 0x9a8f7d, // secondary text (epithets, subtitles, footnotes)
   BUTTON: 0x3a2c1a, // button fill
   BUTTON_HOVER: 0x4a3a22, // button hover
   BUTTON_TEXT: 0xffd27f, // button label
+  BACKDROP: 0x0b0805, // fullscreen dim behind the panel — the world goes away
 };
 
 // Typography: q8_full (497) is the display face — the "fancy" quest font, the
@@ -71,63 +79,73 @@ const TMA = {
 // text shadowed; headings gold, body parchment, secondary muted.
 const FONT_BODY = 494;
 const FONT_LABEL = 496;
-const FONT_DISPLAY = 497;
 
 // --- layout ----------------------------------------------------------------
-// (MODAL_W/MODAL_H defined with the layout constants below.)
+// TALL panel: 440x486 on the 765x503 canvas — ~163px side margins, ~8px
+// top/bottom. It commands the screen vertically (Jon's mockup); the dark
+// backdrop rect covers the game world behind it, so the small top/bottom
+// margins are invisible. Never hardcode interface dimensions to the canvas —
+// the full-bleed transparent ROOT centers the PANEL via position modes.
+
+const PANEL_W = 440;
+const PANEL_H = 486;
 
 const C = {
   ROOT: 0,
-  PANEL: 1,
-  BORDER: 2,
-  BG: 3,
-  TITLE: 4,
-  SUBTITLE: 5,
-  TITLE_RULE: 6,
-  // Realm rows: CARD_BASE + i * CARD_STRIDE + offset, i = 0..5.
-  // Offsets: 0 highlight, 1 border, 2 face (clickable), 3 icon, 4 name, 5 epithet.
-  CARD_BASE: 10,
-  CARD_STRIDE: 10,
-  LENS_TEXT: 70,
-  LENS_KINGDOM: 71,
-  BTN_BORDER: 80,
-  BTN_BG: 81,
-  BTN_TEXT: 82,
-  FOOTNOTE: 83,
+  BACKDROP: 1,
+  PANEL: 2,
+  FRAME_OUTER: 3,
+  FRAME_BG: 4,
+  RULE_T: 5,
+  RULE_B: 6,
+  RULE_L: 7,
+  RULE_R: 8,
+  // Corner brackets: CORNER_BASE + c*2 (+0 horizontal, +1 vertical), c = 0..3
+  // (TL, TR, BL, BR).
+  CORNER_BASE: 9,
+  // Compass diamond on the top frame edge: COMPASS_BASE + 0 punch rect,
+  // +1..+7 the diamond rows, +8 the dark center.
+  COMPASS_BASE: 17,
+  HEADER: 26,
+  HEADER_RULE: 27,
+  // Realm rows: ROW_BASE + i * ROW_STRIDE + offset, i = 0..5.
+  // Offsets: 0 glow, 1 border, 2 face (clickable), 3 icon, 4 name, 5 sub,
+  // 6 chevron (dim), 7 chevron (lit, shown when selected).
+  ROW_BASE: 30,
+  ROW_STRIDE: 10,
+  DETAIL_BORDER: 90,
+  DETAIL_BG: 91,
+  DETAIL_TITLE: 92,
+  DETAIL_TEXT: 93,
+  BTN_BORDER: 94,
+  BTN_BG: 95,
+  BTN_TEXT: 96,
 };
-const CARD_FACE_OFFSETS = [0, 1, 2, 3, 4, 5]; // every visible row part is clickable
+const CARD_CLICK_OFFSETS = [0, 1, 2, 3, 4, 5, 6, 7]; // the whole row is one button
 
-// Conservative 540x482: fits the 765x503 canvas with ~112px side margins
-// and ~10px top/bottom. The lens gets 118px: the longest origin lens wraps
-// to 7 lines at 72 chars, and the p11 font renders taller than the 13px/line
-// originally assumed (Jon's screenshot showed overflow at 94px). 118px fits
-// 7 lines at up to ~16.8px/line. Measured from the bug report, not guessed.
-const MODAL_W = 540;
-const MODAL_H = 482;
+// Rows: 34px tall, 2px gaps. Icon 26px, name + city/epithet stacked.
+const ROW_X = 34;
+const ROW_W = PANEL_W - ROW_X * 2; // 372
+const ROW_Y = 66;
+const ROW_H = 34;
+const ROW_GAP = 2;
 
-// Realm rows: single-column list, 6 rows. Compact 32px rows (was 36) to give
-// the lens room without growing the panel.
-const ROW_W = 480;
-const ROW_H = 32;
-const ROW_X = 30;
-const ROW_Y = 70;
-const ROW_GAP = 3;
+// Detail box: dark inset pane with the selected realm's full lens. 152px:
+// title line (16) + up to 9 wrapped lines at ~14px/line. The longest lens
+// (Misthalin, 452 chars) wraps to 9 lines at 54 chars — measured, not guessed.
+const DETAIL_X = 34;
+const DETAIL_Y = 290;
+const DETAIL_W = PANEL_W - DETAIL_X * 2; // 372
+const DETAIL_H = 152;
 
-// Lens: the selected origin's description. 118px for 7 wrapped lines.
-// The kingdom line sits below it.
-const LENS_X = 30;
-const LENS_Y = 290;
-const LENS_W = 480;
-const LENS_H = 118;
-
-const BTN_X = 150;
-const BTN_Y = 434;
+const BTN_X = 100;
+const BTN_Y = 450;
 const BTN_W = 240;
 const BTN_H = 28;
 
 const uid = (component) => (GROUP_ID << 16) | component;
 const CARD_CLICK_UIDS = Data.ORIGINS.flatMap((_, i) =>
-  CARD_FACE_OFFSETS.map((off) => uid(C.CARD_BASE + i * C.CARD_STRIDE + off))
+  CARD_CLICK_OFFSETS.map((off) => uid(C.ROW_BASE + i * C.ROW_STRIDE + off))
 );
 const CLAIM_UIDS = [uid(C.BTN_BG), uid(C.BTN_TEXT)];
 
@@ -170,17 +188,12 @@ function wrap(text, maxChars) {
   return lines.join("<br>");
 }
 
-function capitalize(value) {
-  const s = String(value ?? "");
-  return s ? s[0].toUpperCase() + s.slice(1) : s;
-}
-
 function claimLabel(origin) {
-  return origin.id === "wanderer" ? "TAKE TO THE ROAD" : `CLAIM ${origin.name.toUpperCase()} AS MY HOME`;
+  return origin.id === "wanderer" ? "I TAKE TO THE ROAD" : `I CLAIM ${origin.name.toUpperCase()} AS MY HOME`;
 }
 
-function fealtyLine(origin) {
-  return origin.kingdomId ? `Sworn to ${capitalize(origin.kingdomId)}` : "You answer to no crown.";
+function detailTitle(origin) {
+  return `${origin.name.toUpperCase()} - ${origin.epithet}`;
 }
 
 // --- interface definition ---------------------------------------------------
@@ -208,73 +221,110 @@ function buildInterface(Items) {
       ...widgetExtra,
     });
 
-  // Resolution-aware layout (Jon's directive): the ROOT is full-bleed and
-  // transparent — it fills the maximum canvas (765x503) and absorbs viewport
-  // differences. The PANEL (the actual UI) centers within it via position
-  // modes. Never hardcode interface dimensions to the canvas again.
+  // ROOT: full-bleed, fills the maximum canvas (765x503) and absorbs viewport
+  // differences. The BACKDROP rect covers the game world — this screen owns
+  // the player's attention; nothing of the world shows through.
   const root = add(C.ROOT, -1, {
     rawWidth: 765, rawHeight: 503,
     width: 765, height: 503,
     xPositionMode: 1, yPositionMode: 1,
   });
-  // Transparent: no background rect on the root. The margin is invisible.
+  rect(C.BACKDROP, root, 0, 0, 765, 503, TMA.BACKDROP);
 
-  // The content panel, centered in the full-bleed root.
+  // The tall panel, centered in the root.
   const panel = add(C.PANEL, root, {
-    rawWidth: MODAL_W, rawHeight: MODAL_H,
-    width: MODAL_W, height: MODAL_H,
+    rawWidth: PANEL_W, rawHeight: PANEL_H,
+    width: PANEL_W, height: PANEL_H,
     xPositionMode: 1, yPositionMode: 1,
   });
 
-  // Double-rule frame: dim-gold border, panel inset by 2.
-  rect(C.BORDER, panel, 0, 0, MODAL_W, MODAL_H, TMA.GOLD_DIM);
-  rect(C.BG, panel, 2, 2, MODAL_W - 4, MODAL_H - 4, TMA.PANEL);
+  // Ornate double-rule frame: dim-gold outer, panel inset 3, bright inner
+  // rule at inset 9, corner brackets in bright gold.
+  rect(C.FRAME_OUTER, panel, 0, 0, PANEL_W, PANEL_H, TMA.GOLD_DIM);
+  rect(C.FRAME_BG, panel, 3, 3, PANEL_W - 6, PANEL_H - 6, TMA.PANEL);
+  rect(C.RULE_T, panel, 9, 9, PANEL_W - 18, 1, TMA.GOLD);
+  rect(C.RULE_B, panel, 9, PANEL_H - 10, PANEL_W - 18, 1, TMA.GOLD);
+  rect(C.RULE_L, panel, 9, 9, 1, PANEL_H - 18, TMA.GOLD);
+  rect(C.RULE_R, panel, PANEL_W - 10, 9, 1, PANEL_H - 18, TMA.GOLD);
 
-  label(C.TITLE, panel, 0, 14, MODAL_W, 26, "WHERE DO YOU CALL HOME?", FONT_DISPLAY, TMA.GOLD_TEXT, { center: true });
+  // Corner brackets: L-shaped, bright gold, inset 12, 26px arms. The
+  // horizontal arm sits at the corner; the vertical arm extends inward.
+  const corners = [
+    { x: 12, hy: 12, vy: 12 }, // TL
+    { x: PANEL_W - 38, hy: 12, vy: 12 }, // TR
+    { x: 12, hy: PANEL_H - 15, vy: PANEL_H - 38 }, // BL
+    { x: PANEL_W - 38, hy: PANEL_H - 15, vy: PANEL_H - 38 }, // BR
+  ];
+  corners.forEach(({ x, hy, vy }, c) => {
+    const base = C.CORNER_BASE + c * 2;
+    const vx = x < PANEL_W / 2 ? x : x + 23; // vertical arm at the outer end
+    rect(base, panel, x, hy, 26, 3, TMA.GOLD);
+    rect(base + 1, panel, vx, vy, 3, 26, TMA.GOLD);
+  });
+
+  // Compass star: a gold diamond straddling the top frame edge, centered.
+  // Built from stacked rects (the client has no rotated primitives); a dark
+  // punch rect behind it so it sits ON the frame, not under it.
+  const ccx = PANEL_W / 2;
+  rect(C.COMPASS_BASE, panel, ccx - 20, 0, 40, 20, TMA.PANEL);
+  const diamond = [4, 8, 12, 16, 12, 8, 4];
+  diamond.forEach((w, k) => {
+    rect(C.COMPASS_BASE + 1 + k, panel, ccx - w / 2, 2 + k * 2, w, 2, TMA.GOLD);
+  });
+  rect(C.COMPASS_BASE + 8, panel, ccx - 2, 8, 4, 4, TMA.PANEL);
+
+  // Header: Jon's words, small, centered, atmospheric.
   label(
-    C.SUBTITLE, panel, 0, 42, MODAL_W, 16,
+    C.HEADER, panel, 30, 26, PANEL_W - 60, 28,
     "The gods are silent. The great powers are stirring. Every traveller is asked the same question.",
     FONT_BODY, TMA.MUTED, { center: true }
   );
-  rect(C.TITLE_RULE, panel, 60, 64, MODAL_W - 120, 1, TMA.GOLD_DIM);
+  rect(C.HEADER_RULE, panel, 70, 60, PANEL_W - 140, 1, TMA.GOLD_DIM);
 
-  // Realm rows: single-column list. Every visible part of a row is clickable
-  // so the whole row feels like one button whichever widget the client hit-tests.
+  // Realm rows. The whole row is one button: every visible part carries the
+  // Choose action so whichever widget the client hit-tests, the row answers.
   Data.ORIGINS.forEach((origin, i) => {
     const rx = ROW_X;
     const ry = ROW_Y + i * (ROW_H + ROW_GAP);
-    const base = C.CARD_BASE + i * C.CARD_STRIDE;
+    const base = C.ROW_BASE + i * C.ROW_STRIDE;
     const iconId = Items[origin.icon];
     const click = { actions: ["Choose"], flags: FLAG_OP1 };
+    const selected = i === 0; // Asgarnia starts selected: the detail box is never empty.
 
-    // Selection glow (hidden until selected) sits behind the row.
-    // Asgarnia (i === 0) starts selected so the lens is populated on open.
-    const glowHidden = i !== 0;
+    // Selection signal: bright gold glow behind the row + lit chevron.
+    // Hidden until selected, toggled with sendInterfaceDisplayState.
     rect(base, panel, rx - 2, ry - 2, ROW_W + 4, ROW_H + 4, TMA.GOLD,
-      { hidden: glowHidden, isHidden: glowHidden, actions: ["Choose"], flags: FLAG_OP1 });
-    rect(base + 1, panel, rx, ry, ROW_W, ROW_H, TMA.GOLD_DIM, { actions: ["Choose"], flags: FLAG_OP1 });
+      { hidden: !selected, isHidden: !selected, actions: ["Choose"], flags: FLAG_OP1 });
+    rect(base + 1, panel, rx, ry, ROW_W, ROW_H, TMA.GOLD_DIM, click);
     add(base + 2, panel, {
       rawX: rx + 2, rawY: ry + 2, rawWidth: ROW_W - 4, rawHeight: ROW_H - 4,
       width: ROW_W - 4, height: ROW_H - 4,
       filled: true, color: TMA.CARD, mouseOverColor: TMA.CARD_HOVER,
       ...click,
     });
-    // Icon, name, epithet in a horizontal row.
+    // Heraldic icon, name in gold caps, city + epithet beneath, chevron right.
     add(base + 3, panel, {
       type: TYPE_GRAPHIC,
-      rawX: rx + 8, rawY: ry + 4, rawWidth: 24, rawHeight: 24,
-      width: 24, height: 24,
+      rawX: rx + 8, rawY: ry + 4, rawWidth: 26, rawHeight: 26,
+      width: 26, height: 26,
       itemId: iconId, itemQuantity: 1,
       ...click,
     });
-    label(base + 4, panel, rx + 40, ry + 2, 200, 15, origin.name.toUpperCase(), FONT_LABEL, TMA.GOLD_TEXT, { ...click });
-    label(base + 5, panel, rx + 40, ry + 17, ROW_W - 48, 13, `${origin.city} — ${origin.epithet}`, FONT_BODY, TMA.MUTED, { ...click });
+    label(base + 4, panel, rx + 42, ry + 2, 240, 15, origin.name.toUpperCase(), FONT_LABEL, TMA.GOLD_TEXT, click);
+    label(base + 5, panel, rx + 42, ry + 18, 300, 13, `${origin.city} - ${origin.epithet}`, FONT_BODY, TMA.MUTED, click);
+    label(base + 6, panel, rx + ROW_W - 28, ry + 7, 20, 20, ">", FONT_LABEL, TMA.GOLD_DIM, { center: true, vcenter: true, ...click });
+    label(base + 7, panel, rx + ROW_W - 28, ry + 7, 20, 20, ">", FONT_LABEL, TMA.GOLD,
+      { center: true, vcenter: true, hidden: !selected, isHidden: !selected, ...click });
   });
 
-  // Lens: the selected origin's description, compact.
-  label(C.LENS_TEXT, panel, LENS_X, LENS_Y, LENS_W, LENS_H, "", FONT_BODY, TMA.PARCHMENT);
-  label(C.LENS_KINGDOM, panel, LENS_X, LENS_Y + LENS_H + 4, LENS_W, 14, "", FONT_BODY, TMA.BUTTON_TEXT, { center: true });
-  // Claim button.
+  // Detail box: dark inset pane with the selected realm's full lens —
+  // title line, then the whole paragraph, breathing room, no clipping.
+  rect(C.DETAIL_BORDER, panel, DETAIL_X, DETAIL_Y, DETAIL_W, DETAIL_H, TMA.GOLD_DIM);
+  rect(C.DETAIL_BG, panel, DETAIL_X + 2, DETAIL_Y + 2, DETAIL_W - 4, DETAIL_H - 4, TMA.PANEL_INNER);
+  label(C.DETAIL_TITLE, panel, DETAIL_X + 10, DETAIL_Y + 8, DETAIL_W - 20, 16, "", FONT_LABEL, TMA.GOLD_TEXT, { center: true });
+  label(C.DETAIL_TEXT, panel, DETAIL_X + 10, DETAIL_Y + 28, DETAIL_W - 20, DETAIL_H - 36, "", FONT_BODY, TMA.PARCHMENT);
+
+  // The vow: a claim button that reads like an oath, not a form submit.
   rect(C.BTN_BORDER, panel, BTN_X, BTN_Y, BTN_W, BTN_H, TMA.GOLD);
   add(C.BTN_BG, panel, {
     rawX: BTN_X + 2, rawY: BTN_Y + 2, rawWidth: BTN_W - 4, rawHeight: BTN_H - 4,
@@ -290,16 +340,19 @@ function buildInterface(Items) {
 
 // --- server-driven rendering -------------------------------------------------
 
-/** Push the selection state to the client: glow, lens, claim label. */
+/** Push the selection state to the client: glow, chevron, detail, vow label. */
 function renderSelection(player, originId) {
   const sender = player.getPacketSender();
   Data.ORIGINS.forEach((origin, i) => {
-    sender.sendInterfaceDisplayState(uid(C.CARD_BASE + i * C.CARD_STRIDE), origin.id !== originId);
+    const base = C.ROW_BASE + i * C.ROW_STRIDE;
+    const selected = origin.id === originId;
+    sender.sendInterfaceDisplayState(uid(base), !selected); // gold glow
+    sender.sendInterfaceDisplayState(uid(base + 7), !selected); // lit chevron
   });
   const origin = Data.BY_ID.get(originId);
   if (!origin) return;
-  sender.sendString(wrap(origin.lens, 72), uid(C.LENS_TEXT));
-  sender.sendString(latin1Safe(fealtyLine(origin)), uid(C.LENS_KINGDOM));
+  sender.sendString(latin1Safe(detailTitle(origin)), uid(C.DETAIL_TITLE));
+  sender.sendString(wrap(origin.lens, 54), uid(C.DETAIL_TEXT));
   sender.sendString(latin1Safe(claimLabel(origin)), uid(C.BTN_TEXT));
 }
 
@@ -343,10 +396,10 @@ function open(player) {
 
 function onCardClick({ player, buttonId }) {
   if (!player || !openPlayers.has(player) || Selection.hasOrigin(player)) return;
-  const rel = ((buttonId | 0) & 0xffff) - C.CARD_BASE;
-  const index = Math.floor(rel / C.CARD_STRIDE);
-  const offset = rel % C.CARD_STRIDE;
-  if (index < 0 || index >= Data.ORIGINS.length || offset < 0 || offset > 5) return;
+  const rel = ((buttonId | 0) & 0xffff) - C.ROW_BASE;
+  const index = Math.floor(rel / C.ROW_STRIDE);
+  const offset = rel % C.ROW_STRIDE;
+  if (index < 0 || index >= Data.ORIGINS.length || offset < 0 || offset > 7) return;
   selectOrigin(player, Data.ORIGINS[index].id);
 }
 

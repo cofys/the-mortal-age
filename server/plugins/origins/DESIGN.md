@@ -13,9 +13,9 @@ starting-experience system hooks for footing + ambient rumor.
 | File | Role |
 | --- | --- |
 | `Origins.plugin.js` | Registration list (attach-only `register`); wires Selection's triggers to Gui's screen |
-| `Data.Origins.js` | The six origins: ids, spawns, kits, lens text; kit AND GUI icon keys validated against `ItemIdentifiers` at startup. Each origin also carries `icon` (realm-card emblem) and `epithet` (one-line card flavor) |
+| `Data.Origins.js` | The six origins: ids, spawns, kits, lens text; kit AND GUI icon keys validated against `ItemIdentifiers` at startup. Each origin also carries `icon` (heraldic row emblem — a real item sprite) and `epithet` (one-line row flavor) |
 | `Selection.Origins.js` | Login/Play-button/679-close triggers, the chatbox fallback flow, `claimOrigin`, `::origin` / `::originreset` |
-| `Gui.Origins.js` | The graphical creation screen: custom widget group 30012, server-driven selection state, click handling. Implements "The Mortal Age UI template" below |
+| `Gui.Origins.js` | The graphical creation screen: custom widget group 30012, server-driven selection state, click handling. Implements "The Mortal Age UI template" below. v2 (2026-10-06, Jon's mockup): TALL heraldic panel — six icon rows, ornate gold frame, compass ornament, inset lens box, vow button |
 
 One core touch (sanctioned by server/AGENTS.md rule 2): `MOBILE_CLIENT_ATTRIBUTE`
 added to `getCoreApi()` (`PluginManager.ts`) and the `PluginCoreApi` interface
@@ -139,6 +139,7 @@ implementation. Hold every future screen to these decisions.
 | `TMA_BUTTON` | `#3a2c1a` | Button fill |
 | `TMA_BUTTON_HOVER` | `#4a3a22` | Button hover |
 | `TMA_BUTTON_TEXT` | `#ffd27f` | Button label |
+| `TMA_BACKDROP` | `#0b0805` | Full-bleed dim behind a commanding screen — the world goes away |
 
 No pure black, no pure white, no saturated colors. Everything sits in the
 warm dark range; gold is the only accent and it means *importance* —
@@ -177,6 +178,15 @@ heading/body/muted roles.
   layer) with 2px inset. The *entire* card face is clickable — every visible
   part (icon, name, city, epithet) carries the action, so the card feels
   like one button.
+- **Ornate frame (v2, heraldic screens)**: for screens that command
+  attention — dim-gold outer border, bright-gold inner rule at 9px inset,
+  L-shaped bright-gold corner brackets, and a centered ornament (the compass
+  diamond, built from stacked rects — the client has no rotated primitives)
+  straddling the top frame edge.
+- **Heraldic rows (v2)**: a real item-sprite icon + gold-caps name + muted
+  sub-line + right-edge chevron; the whole row is one button; selection is
+  the gold glow + a lit chevron (bright-gold duplicate toggled with
+  `sendInterfaceDisplayState`, since widget color can't be pushed).
 - Spacing rhythm on the 700×460 creation modal: 24px outer margins,
   8px card gaps, content vertically centered in its band. Generous
   whitespace; the screen should breathe like a temple, not a spreadsheet.
@@ -186,8 +196,8 @@ heading/body/muted roles.
 Dark bronze fill (`TMA_BUTTON`), 2px bright-gold border (`TMA_GOLD`
 frame rect behind, button inset 2px), gold bold label (`TMA_BUTTON_TEXT`,
 `b12_full`, centered both axes), hover lightens the fill
-(`TMA_BUTTON_HOVER`). Labels are verbs of commitment: "CLAIM ASGARNIA AS
-MY HOME", "TAKE TO THE ROAD" — never "OK"/"Submit".
+(`TMA_BUTTON_HOVER`). Labels are verbs of commitment: "I CLAIM ASGARNIA AS
+MY HOME", "I TAKE TO THE ROAD" — never "OK"/"Submit".
 
 ### Copy voice
 
@@ -222,9 +232,9 @@ does the work.
   runtime extension — per `docs/agents/interfaces.md`, the missing
   capability belongs in the runtime as a declared option, not in this
   plugin).
-- **Realm card art.** Cards currently use thematic item sprites (red cape,
-  coins, silk, garlic, beer, rope). A proper sigil/banner sprite set per
-  origin would elevate them.
+- **Realm icon art, v2.** Done 2026-10-06 (Jon's mockup): the six heraldic
+  item sprites above. A proper custom sigil/banner sprite set per origin
+  would still elevate them beyond item sprites.
 - **Mobile verification.** Mobile clients keep the chatbox flow until the
   GUI is verified on the 601 toplevel.
 - **Sound.** A low drum or choir sting on open would sell the "moment";
@@ -232,14 +242,56 @@ does the work.
 - **Deeper background questions** (already stubbed in "What's stubbed for
   later" below).
 
-### The creation screen layout (reference)
+### The creation screen layout (reference) — v2 heraldic panel (2026-10-06, Jon's mockup)
 
-Resolution-aware: full-bleed transparent ROOT (765×503) + centered PANEL
-(540×420). Title (`q8_full`, gold) + subtitle (muted) + gold hairline rule.
-Below: single-column list of 6 realm rows (480×36: icon, name, city —
-epithet). Compact lens strip (selected origin's description + fealty line).
-Claim button (240×30) centered beneath. Default selection: Asgarnia, so the
-lens is never empty.
+Resolution-aware: full-bleed ROOT (765×503) carrying a dark BACKDROP rect
+(`#0b0805`) that covers the game world — this screen owns the player's
+attention. Centered TALL PANEL (440×486, ~163px side margins, ~8px
+top/bottom): it commands the vertical, like a banner.
+
+- **Ornate frame**: dim-gold outer border → panel inset 3px → bright-gold
+  inner rule at inset 9px → L-shaped bright-gold corner brackets (26px arms).
+- **Compass ornament**: a gold diamond (stacked rects — the client has no
+  rotated primitives) straddling the top frame edge, centered, with a dark
+  punch rect behind it so it sits ON the frame.
+- **Header**: Jon's words, small, centered, atmospheric (`p11_full`, muted):
+  "The gods are silent. The great powers are stirring. Every traveller is
+  asked the same question." Gold-dim hairline rule beneath.
+- **Six realm rows** (372×34, 2px gaps, starting y=66): heraldic icon
+  (26px item sprite) → name in GOLD CAPS (`b12_full`, gold) → city + epithet
+  below (`p11_full`, muted) → chevron `>` on the right edge (dim gold; a
+  second bright-gold chevron shows when selected). The whole row is one
+  button — every visible widget carries the Choose action.
+- **Selection signal**: bright-gold glow rect 2px larger behind the selected
+  row + lit chevron, toggled with `sendInterfaceDisplayState`. Default
+  selection: Asgarnia, so the detail box is never empty.
+- **Detail box**: dark inset pane (`TMA_PANEL_INNER`, 372×152) with the
+  selected realm's FULL lens — title line (`b12_full`, gold, centered:
+  "ASGARNIA - The kingdom with no king") then the whole paragraph
+  (`p11_full`, parchment, left-aligned), breathing room, no clipping.
+  Sized from measurement: the longest lens (Misthalin, 452 chars) wraps to 9
+  lines at 54 chars; the box holds title + 9 lines at ~14px/line.
+- **The vow**: claim button (240×28) beneath the detail box, bronze fill,
+  bright-gold border, gold bold label — the label is an oath, not a form
+  submit: "I CLAIM ASGARNIA AS MY HOME" / "I TAKE TO THE ROAD".
+
+### Realm heraldry (the six row icons)
+
+Real item sprites from the cache, chosen for what the sprite depicts —
+Jon's mockup iconography. No placeholders.
+
+| Origin | Icon key | Item | Why |
+| --- | --- | --- | --- |
+| Asgarnia | `SARADOMIN_BANNER` | Saradomin banner | The White Knights' banner |
+| Misthalin | `ROYAL_CROWN` | Royal crown | **Deviation:** Jon's mockup drew a fleur-de-lis; no such item exists in the cache. The crown is the lore-true substitute — Misthalin IS "the heirless crown" (its epithet and lens) |
+| Kandarin | `WHITE_TREE_SHOOT` | White tree shoot | A small tree — reads as a tree at 26px |
+| Morytania | `STAR_BAUBLE` | Star bauble | A star |
+| Keldagrim | `BRONZE_KITESHIELD` | Bronze kiteshield | A dwarven-forged shield |
+| Wanderer | `BUNNY_PAWS` | Bunny paws | White paws on the open road |
+
+Icon keys live on `Data.Origins.icon` and are validated against
+`ItemIdentifiers` at startup (`validateItemKeys`) — a wrong key fails loudly
+at boot, never silently in-game.
 
 ## Player state
 
