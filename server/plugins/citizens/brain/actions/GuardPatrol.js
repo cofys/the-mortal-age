@@ -15,7 +15,7 @@ const {
   requestMovement,
   clearMovementRequest,
 } = require("../../../bots/behaviours/navigation/BotNavigation");
-const { isKingdomAtWar } = require("../../CitizenEvents");
+const { isKingdomAtWar, officesHeldBy } = require("../../CitizenEvents");
 const { patrolCircuit, kingdomIdOf } = require("../CitizenSites");
 const { ATTR_KINGDOM_ID, ATTR_CITIZEN_PERSONALITY } = require("../../constants");
 const {
@@ -30,6 +30,7 @@ const ARRIVE_RADIUS = 2;
 const SCAN_RADIUS_TILES = 12;
 const STRANGER_CHALLENGE_COOLDOWN_MS = 60000;
 const GLOBAL_CHALLENGE_COOLDOWN_MS = 20000;
+const OFFICE_ACK_COOLDOWN_MS = 5 * 60 * 1000;
 
 const CHALLENGE_LINES = Object.freeze([
   "Halt! State your business here.",
@@ -93,6 +94,8 @@ function createGuardPatrolAction(spec, world) {
         nextScanAt: 0,
         nextChallengeAt: 0,
         challengedAt: new Map(), // username -> timestamp
+        nextAcknowledgeAt: 0,
+        acknowledgedAt: new Map(), // username -> timestamp
       };
     });
   }
@@ -154,6 +157,65 @@ function createGuardPatrolAction(spec, world) {
     }
   }
 
+  /**
+   * A player holding office in the guard's kingdom gets addressed by title —
+   * "Quartermaster." — not challenged. Same scan rhythm as challenges, with
+   * its own per-player cooldown so the watch doesn't fawn every pass.
+   */
+  function maybeAcknowledgeOffice(ctx, state, kingdomId, scanRadius) {
+    const { player, nowMs } = ctx;
+    if (nowMs < state.nextAcknowledgeAt) {
+      return;
+    }
+    const locals = player.getLocalPlayers?.() ?? [];
+    const selfLoc = player.getLocation();
+    for (const other of locals) {
+      if (isStranger(player, other)) {
+        continue;
+      }
+      const username = other.getUsername?.();
+      if (!username) {
+        continue;
+      }
+      const held = officesHeldBy(username, kingdomId);
+      if (held.length === 0) {
+        continue;
+      }
+      const otherLoc = other.getLocation?.();
+      if (!otherLoc) {
+        continue;
+      }
+      const dist = Math.max(
+        Math.abs(selfLoc.getX() - otherLoc.getX()),
+        Math.abs(selfLoc.getY() - otherLoc.getY())
+      );
+      if (dist > scanRadius) {
+        continue;
+      }
+      if (nowMs - (state.acknowledgedAt.get(username) ?? 0) < OFFICE_ACK_COOLDOWN_MS) {
+        continue;
+      }
+      state.acknowledgedAt.set(username, nowMs);
+      state.nextAcknowledgeAt =
+        nowMs + logNormalJitter(state.rng, 30000, state.human.tempoSigma);
+      try {
+        player.forceChat?.(pickOfficeAddressLine(state, held[0].title));
+      } catch (error) {
+        // Cosmetic; never break the patrol.
+      }
+      return;
+    }
+  }
+
+  function pickOfficeAddressLine(state, title) {
+    const pool = [
+      `${title}.`,
+      `My ${title.toLowerCase()}.`,
+      `${title} — all quiet on the walls.`,
+    ];
+    return pool[Math.floor(state.rng() * pool.length)];
+  }
+
   function advanceWaypoint(ctx, state, circuit) {
     const { player, nowMs } = ctx;
     state.waypointIndex = (state.waypointIndex + 1) % circuit.length;
@@ -189,6 +251,7 @@ function createGuardPatrolAction(spec, world) {
       const kingdomId = kingdomIdOf(player);
 
       maybeChallenge(ctx, state, kingdomId);
+      maybeAcknowledgeOffice(ctx, state, kingdomId, scanRadius);
 
       if (player.getForceMovement?.() != null) {
         return "running";

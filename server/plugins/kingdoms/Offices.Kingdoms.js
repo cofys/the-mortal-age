@@ -21,8 +21,12 @@
  * decree, or a player's ::office claim) answers with office-assigned.
  *
  * v1 scope: claim vacant offices, vacate your own, OWNER force-vacates.
- * Challenge/appointment mechanics (taking an AI-held office by politics,
- * not command) are the next step — the data model already supports them.
+ * Politics (Politics.Kingdoms.js): petitions for vacant offices, challenges
+ * against AI or player holders resolved by the court on influence, and
+ * trials of service. The registry stays dumb data; the court decides.
+ *
+ * The record also stamps holderSince (Date.now() at assignment) so the
+ * court can weigh an AI holder's tenure. It is informational only.
  */
 
 const STANDARD_OFFICES = Object.freeze([
@@ -90,6 +94,7 @@ function assignOffice(officeId, holder) {
   const record = offices.get(officeId);
   if (!record || !isValidHolder(holder)) return null;
   record.holder = { kind: holder.kind, ref: holder.ref };
+  record.holderSince = Date.now();
   return record;
 }
 
@@ -99,6 +104,7 @@ function vacateOffice(officeId) {
   if (!record) return null;
   const previous = record.holder;
   record.holder = null;
+  record.holderSince = null;
   return previous;
 }
 

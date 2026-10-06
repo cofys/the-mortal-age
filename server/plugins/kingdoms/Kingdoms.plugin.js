@@ -18,6 +18,8 @@ module.exports = {
     require("./Areas.Kingdoms")(api);
     require("./Events.Kingdoms")(api);
     require("./Membership.Kingdoms")(api);
+    require("./Influence.Kingdoms")(api);
+    require("./Politics.Kingdoms")(api);
     require("./Commands.Kingdoms")(api);
   },
 };

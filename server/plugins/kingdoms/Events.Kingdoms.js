@@ -17,9 +17,21 @@
  *   kingdom:war-declared     { attackerId, defenderId, declaredBy?, reason? }
  *   kingdom:war-ended        { attackerId, defenderId, outcome? }
  *   kingdom:ruler-changed    { kingdomId, newRuler, newTitle?, flag?, flagValue? }
- *   kingdom:office-assigned  { officeId, kingdomId, holder: { kind: "ai"|"player", ref } }
+ *   kingdom:office-assigned  { officeId, kingdomId, holder: { kind: "ai"|"player", ref }, title? }
  *   kingdom:office-vacated   { officeId, kingdomId, previousHolder? }
  *   kingdom:office-seeks-holder { officeId, kingdomId, title }
+ *   kingdom:donation-made    { player, kingdomId, amount }   // war-effort gift.
+ *     The emitter moves the funds (e.g. ::donate takes the coins and grants
+ *     them to the treasury); this listener ledgers influence and trial
+ *     progress. Never grantTax here — the money is already moved.
+ *   kingdom:task-completed   { player, kingdomId, task? }    // kingdom task done: influence
+ *   kingdom:challenge-decided { officeId, kingdomId, petitioner, holder,
+ *     outcome: "granted"|"trial"|"rejected", influence, standing, reason? }
+ *     // the court's ruling on a petition/challenge (Politics.Kingdoms.js)
+ *
+ * A player seated in an office is granted the office title as an honorific
+ * (via kingdom:rank-granted with quiet: true — no influence farmed from the
+ * honor itself) and announced realm-wide, so the realm knows its officers.
  *
  * territory-entered/left are emitted by the Areas for external consumers
  * (future AI-citizen and LLM hooks); core needs no listener for them yet.
@@ -31,6 +43,8 @@
 const Store = require("./KingdomStore");
 const Membership = require("./Membership.Kingdoms");
 const Offices = require("./Offices.Kingdoms");
+const Influence = require("./Influence.Kingdoms");
+const Politics = require("./Politics.Kingdoms");
 
 let pluginApi = null;
 
@@ -48,7 +62,7 @@ function onKingdomCreated(event) {
   Store.save();
 }
 
-/** A player joined or was promoted: write their membership attributes. */
+/** A player joined or was promoted: write their membership attributes, and ledger the service. */
 function onRankGranted(event) {
   const player = event?.player;
   if (!player?.setAttribute || !event?.kingdomId) return;
@@ -59,6 +73,7 @@ function onRankGranted(event) {
     if (!titles.includes(event.title)) titles.push(event.title);
     player.setAttribute(Membership.KINGDOM_TITLES_ATTRIBUTE, titles);
   }
+  Influence.onRankGranted(event);
 }
 
 /** Revenue arrived: it lands in the treasury. */
@@ -100,7 +115,56 @@ function onRulerChanged(event) {
 /** An office found its holder — AI citizen or player, the registry doesn't care. */
 function onOfficeAssigned(event) {
   if (!event?.officeId || !event?.kingdomId || !Offices.isValidHolder(event.holder)) return;
-  Offices.assignOffice(event.officeId, event.holder);
+  const record = Offices.assignOffice(event.officeId, event.holder);
+  if (!record || event.holder.kind !== "player") return;
+  const kingdom = Store.getKingdom(event.kingdomId);
+  const kingdomName = kingdom?.name ?? event.kingdomId;
+  announceToRealm(
+    `[Realm] Hear ye! ${event.holder.ref} has been named ${record.title} of ${kingdomName}.`
+  );
+  // The office title becomes an honorific (quiet: the honor itself earns no influence).
+  try {
+    const player = pluginApi.core.World.getPlayerByName(event.holder.ref);
+    if (player?.setAttribute) {
+      pluginApi.emitCustomEvent("kingdom:rank-granted", {
+        player,
+        kingdomId: event.kingdomId,
+        rank: player.getAttribute?.(Membership.KINGDOM_RANK_ATTRIBUTE) ?? "Subject",
+        title: record.title,
+        quiet: true,
+      });
+    }
+  } catch {
+    // Title grant is cosmetic; the seating already happened.
+  }
+}
+
+/** Send a message to every online player. Cosmetic; never throws. */
+function announceToRealm(message) {
+  try {
+    pluginApi.core.World.getPlayers()
+      .stream()
+      .filter(Boolean)
+      .forEach((p) => {
+        try {
+          p.sendMessage(message);
+        } catch {
+          // One deaf player doesn't silence the realm.
+        }
+      });
+  } catch {
+    // World not ready (e.g. seeding at startup): nothing to announce to.
+  }
+}
+
+/** A war-effort donation: influence for the gift, progress for an active trial. */
+function onDonationMade(event) {
+  Politics.onDonationMade(event);
+}
+
+/** A kingdom task completed: influence for the service. */
+function onTaskCompleted(event) {
+  Influence.onTaskCompleted(event);
 }
 
 /** An office went vacant — broadcast so the director or a claimant can answer. */
@@ -128,6 +192,8 @@ module.exports = function attachEvents(api) {
   api.onCustomEvent("kingdom:ruler-changed", onRulerChanged);
   api.onCustomEvent("kingdom:office-assigned", onOfficeAssigned);
   api.onCustomEvent("kingdom:office-vacated", onOfficeVacated);
+  api.onCustomEvent("kingdom:donation-made", onDonationMade);
+  api.onCustomEvent("kingdom:task-completed", onTaskCompleted);
 };
 
 module.exports.onOfficeAssigned = onOfficeAssigned;

@@ -28,6 +28,7 @@ const {
   getBaseRegistry,
 } = require("./brain/CitizenActivityRegistry");
 const { initDirector, getDirector } = require("./director/CitizenDirector");
+const { initMerchantShops } = require("./shop/MerchantShops");
 const {
   EVENT_WAR_DECLARED,
   EVENT_WAR_ENDED,
@@ -53,6 +54,7 @@ function initCitizens(api) {
   }
   const director = initDirector(api, getBaseRegistry());
   director.boot();
+  initMerchantShops(api);
   api.log?.("[citizens] director booted", director.status());
 }
 

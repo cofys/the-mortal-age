@@ -45,6 +45,8 @@ const ROLE_ACTIVITY = Object.freeze({
 const EVENT_WAR_DECLARED = "kingdom:war-declared";
 const EVENT_WAR_ENDED = "kingdom:war-ended";
 const EVENT_RANK_GRANTED = "kingdom:rank-granted";
+const EVENT_OFFICE_ASSIGNED = "kingdom:office-assigned";
+const EVENT_OFFICE_VACATED = "kingdom:office-vacated";
 
 // llm-gateway contract (see server/plugins/llm-gateway/LlmGateway.plugin.js).
 const EVENT_LLM_CITIZEN_REGISTER = "llm:citizen-register";
@@ -80,6 +82,8 @@ module.exports = {
   EVENT_WAR_DECLARED,
   EVENT_WAR_ENDED,
   EVENT_RANK_GRANTED,
+  EVENT_OFFICE_ASSIGNED,
+  EVENT_OFFICE_VACATED,
   EVENT_LLM_CITIZEN_REGISTER,
   EVENT_LLM_CHAT_REQUEST,
   EVENT_CITIZEN_CHAT_HEARD,

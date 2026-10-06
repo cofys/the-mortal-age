@@ -5,16 +5,18 @@
  *
  * Offices of the realm are holdable by AI citizens or players — the holder
  * is data, and this command is the player-facing half of the interchange.
- * v1: claim a vacant office, vacate one you hold, list who holds what.
- * Taking an AI-held office by politics (challenge, appointment, election)
- * is the next step; the registry already supports it.
+ * Vacant offices are petitioned for, held offices challenged, and the court
+ * (Politics.Kingdoms.js) rules on influence — never on command.
  *
  *   ::office list [kingdomId]  — offices and their holders
- *   ::office claim <officeId>  — claim a vacant office (officeId looks like asgarnia:quartermaster)
+ *   ::office claim <officeId>  — claim a vacant office (routes through petition)
+ *   ::office petition <officeId> — petition for a vacant office, or challenge its holder
+ *   ::office influence [kingdom] — where you stand with a court
  *   ::office vacate <officeId> — vacate an office you hold
  */
 
 const Offices = require("./Offices.Kingdoms");
+const Politics = require("./Politics.Kingdoms");
 
 let pluginApi = null;
 
@@ -49,18 +51,12 @@ function claimOffice(player, args) {
   if (office.holder) {
     player.sendMessage(
       `[Offices] ${office.title} of ${office.kingdomId} is held by ${Offices.holderName(office.holder)}. ` +
-        "Offices change hands by politics, not command — for now."
+        `Offices change hands by politics, not command — petition the court: ::office petition ${officeId}`
     );
     return;
   }
-  const username = usernameOf(player);
-  if (!username) return;
-  pluginApi.emitCustomEvent("kingdom:office-assigned", {
-    officeId,
-    kingdomId: office.kingdomId,
-    holder: { kind: "player", ref: username },
-  });
-  player.sendMessage(`[Offices] You now hold the office of ${office.title} (${office.kingdomId}). Rule well.`);
+  // A vacant office is still taken by politics: claim routes through petition.
+  Politics.petition(player, args);
 }
 
 function vacateOffice(player, args) {
@@ -89,6 +85,8 @@ function onOfficeCommand(player, args) {
   const sub = (args[0] ?? "list").toLowerCase();
   const rest = args.slice(1);
   if (sub === "claim") return claimOffice(player, rest);
+  if (sub === "petition") return Politics.petition(player, rest);
+  if (sub === "influence") return Politics.showInfluence(player, rest);
   if (sub === "vacate") return vacateOffice(player, rest);
   return showList(player, sub === "list" ? rest : args);
 }
@@ -99,6 +97,6 @@ module.exports = function attachCommands(api) {
     "office",
     onOfficeCommand,
     api.core.PlayerRights.NONE,
-    "Offices: ::office list [kingdom] | claim <id> | vacate <id>"
+    "Offices: ::office list [kingdom] | claim <id> | petition <id> | influence [kingdom] | vacate <id>"
   );
 };
