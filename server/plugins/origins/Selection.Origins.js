@@ -113,8 +113,9 @@ function scheduleFallback(player) {
       scheduleFallback(player);
       return;
     }
-    // Backstop: whatever should have opened the GUI didn't — chatbox fallback.
-    openChoice(player);
+    // Backstop: whatever should have opened the GUI didn't — try it, then the
+    // chatbox fallback (mobile always lands here).
+    if (!openCreationGui(player)) openChoice(player);
   }, LOGIN_FALLBACK_DELAY_MS);
   timer.unref?.();
   fallbackTimers.set(player, timer);

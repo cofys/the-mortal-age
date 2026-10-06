@@ -93,7 +93,7 @@ const C = {
   BTN_TEXT: 82,
   FOOTNOTE: 83,
 };
-const CARD_FACE_OFFSETS = [2, 3, 4, 5, 6]; // every visible card part is clickable
+const CARD_FACE_OFFSETS = [0, 1, 2, 3, 4, 5, 6]; // every visible card part is clickable
 
 const CARD_W = 138;
 const CARD_H = 132;
@@ -116,7 +116,7 @@ const uid = (component) => (GROUP_ID << 16) | component;
 const CARD_CLICK_UIDS = Data.ORIGINS.flatMap((_, i) =>
   CARD_FACE_OFFSETS.map((off) => uid(C.CARD_BASE + i * C.CARD_STRIDE + off))
 );
-const CLAIM_UID = uid(C.BTN_BG);
+const CLAIM_UIDS = [uid(C.BTN_BG), uid(C.BTN_TEXT)];
 
 /** Players with the creation screen open right now. */
 const openPlayers = new Set();
@@ -184,7 +184,7 @@ function buildInterface(Items) {
       ...extra,
     });
 
-  const label = (component, parent, x, y, w, h, text, fontId, color, { center = false, vcenter = false } = {}) =>
+  const label = (component, parent, x, y, w, h, text, fontId, color, { center = false, vcenter = false, ...widgetExtra } = {}) =>
     add(component, parent, {
       type: TYPE_TEXT,
       rawX: x, rawY: y, rawWidth: w, rawHeight: h,
@@ -192,6 +192,7 @@ function buildInterface(Items) {
       text, fontId, textColor: color, textShadowed: true,
       xTextAlignment: center ? 1 : 0,
       yTextAlignment: vcenter ? 1 : 0,
+      ...widgetExtra,
     });
 
   const root = add(C.ROOT, -1, {
@@ -225,8 +226,9 @@ function buildInterface(Items) {
     // Selection glow (hidden until selected) sits behind the card.
     // Asgarnia (i === 0) starts selected so the detail pane is populated on open.
     const glowHidden = i !== 0;
-    rect(base, root, cx - 2, cy - 2, CARD_W + 4, CARD_H + 4, TMA.GOLD, { hidden: glowHidden, isHidden: glowHidden });
-    rect(base + 1, root, cx, cy, CARD_W, CARD_H, TMA.GOLD_DIM);
+    rect(base, root, cx - 2, cy - 2, CARD_W + 4, CARD_H + 4, TMA.GOLD,
+      { hidden: glowHidden, isHidden: glowHidden, actions: ["Choose"], flags: FLAG_OP1 });
+    rect(base + 1, root, cx, cy, CARD_W, CARD_H, TMA.GOLD_DIM, { actions: ["Choose"], flags: FLAG_OP1 });
     add(base + 2, root, {
       rawX: cx + 2, rawY: cy + 2, rawWidth: CARD_W - 4, rawHeight: CARD_H - 4,
       width: CARD_W - 4, height: CARD_H - 4,
@@ -235,7 +237,7 @@ function buildInterface(Items) {
     });
     add(base + 3, root, {
       type: TYPE_GRAPHIC,
-      rawX: cx + (CARD_W - 36) / 2, rawY: cy + 10, rawWidth: 32, rawHeight: 32,
+      rawX: cx + 2 + (CARD_W - 4 - 32) / 2, rawY: cy + 10, rawWidth: 32, rawHeight: 32,
       width: 32, height: 32,
       itemId: iconId, itemQuantity: 1,
       ...click,
@@ -262,7 +264,8 @@ function buildInterface(Items) {
     filled: true, color: TMA.BUTTON, mouseOverColor: TMA.BUTTON_HOVER,
     actions: ["Claim"], flags: FLAG_OP1,
   });
-  label(C.BTN_TEXT, root, BTN_X + 2, BTN_Y + 2, BTN_W - 4, BTN_H - 4, "", FONT_LABEL, TMA.BUTTON_TEXT, { center: true, vcenter: true });
+  label(C.BTN_TEXT, root, BTN_X + 2, BTN_Y + 2, BTN_W - 4, BTN_H - 4, "", FONT_LABEL, TMA.BUTTON_TEXT,
+    { center: true, vcenter: true, actions: ["Claim"], flags: FLAG_OP1 });
 
   label(
     C.FOOTNOTE, root, 0, 420, MODAL_W, 14,
@@ -333,7 +336,7 @@ function onCardClick({ player, buttonId }) {
   const rel = ((buttonId | 0) & 0xffff) - C.CARD_BASE;
   const index = Math.floor(rel / C.CARD_STRIDE);
   const offset = rel % C.CARD_STRIDE;
-  if (index < 0 || index >= Data.ORIGINS.length || !CARD_FACE_OFFSETS.includes(offset)) return;
+  if (index < 0 || index >= Data.ORIGINS.length || offset < 0 || offset > 6) return;
   selectOrigin(player, Data.ORIGINS[index].id);
 }
 
@@ -352,7 +355,7 @@ function attach(api) {
   Data.validateItemKeys(Items);
   api.registerCustomInterface(buildInterface(Items));
   api.onInterfaceActionButton(CARD_CLICK_UIDS, onCardClick);
-  api.onInterfaceActionButton(CLAIM_UID, onClaimClick);
+  api.onInterfaceActionButton(CLAIM_UIDS, onClaimClick);
   api.onPlayerLogout(noteClosed);
   api.onPlayerDisconnect(noteClosed);
 }
