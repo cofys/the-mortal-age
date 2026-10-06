@@ -14,6 +14,11 @@ const InfernalAxe = require("./woodcutting/InfernalAxe.Woodcutting");
 const CrystalAxe = require("./woodcutting/CrystalAxe.Woodcutting");
 const EntTrunk = require("./woodcutting/EntTrunk.Woodcutting");
 const Shrine = require("./woodcutting/Shrine.Woodcutting");
+const Groves = require("./woodcutting/Groves.Woodcutting");
+const Weather = require("./woodcutting/Weather.Woodcutting");
+const Wilderness = require("./woodcutting/Wilderness.Woodcutting");
+const Mastery = require("./woodcutting/Mastery.Woodcutting");
+const Supply = require("./woodcutting/Supply.Woodcutting");
 
 const DEFAULT_TREE_STUMP_ID = ObjectIds.TREE_STUMP_2;
 // Older trees share models but not stumps, and some sit next to an unrelated stump id; key their
@@ -1172,6 +1177,13 @@ module.exports = {
     CrystalAxe.attach(api);
     EntTrunk.attach(api, { findBestUsableAxe, calculateCutChance, lumberjackXpMultiplier, maybeDropBirdNest });
     Shrine.attach(api);
+    // Woodcutting depth (./woodcutting/WOODCUTTING-DEPTH.md): attach order is listener order -
+    // Groves stamps event.grove/event.drive, Weather stamps event.conditions, then the rest.
+    Groves.attach(api);
+    Weather.attach(api);
+    Wilderness.attach(api);
+    Mastery.attach(api);
+    Supply.attach(api);
 
     api.onPlayerDisconnect(({ player }) => {
       stopWoodcutting(activeSessions, player, false);
