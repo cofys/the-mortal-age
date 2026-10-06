@@ -51,9 +51,13 @@ world bible locks their fates. Misthalin births are kin of the court, never
 "a son for Roald."
 
 **Succession whispers are ARC-SEEDING for the phase 10 questline** (Roald's
-hidden bastard son). A whisper stage (0-4) on Misthalin advances roughly daily:
+hidden bastard son). A whisper stage (0-8) on Misthalin advances roughly daily:
 tavern slip → redacted report → the sermon that stopped → the Riverlands
-merchant. Rare, deniable, never naming the son, never touching the
+merchant → the midwife's daughter takes a market stall (stage 5, who knows) →
+the Merciful Hand charity buys birth records (stage 6, who's hunting) →
+black-plate men asking questions in a border town (stage 7, the hunt) →
+the midwife's daughter goes quiet (stage 8, the squeeze). Rare, deniable,
+never naming the son, never touching the
 `misthalin:bastard-son-hidden` story flag. A royal death anywhere can stir a
 surge whisper. This content is planted only — it resolves in custom quests,
 not in plugin logic.
@@ -67,6 +71,22 @@ Thresholds: 25 "eyes on you", 40 keepers refuse, 55 grey-man rumor + possible
 whisper retraction, 70 fragments locked, 85 grey-man street meeting (dread,
 never damage). Ambient grey sightings while any heat runs hot. Nothing
 confirms anything; the arc pays off in phase 10.
+
+**Succession keepers (`SuccessionKeepers.Kingdoms.js`)** — the stages 5-8
+interactive layer. Mara Hartley, the midwife's daughter, joins Varrock's
+citizen roster as a named citizen (fixed name/personality/schedule via
+`CitizenDirector.addNamedCitizen`; her personality card carries her secret —
+the ledger, the cut page, the grey men — so the LLM mouth knows she deflects).
+From stage 5, offering her coin while asking about her mother's work grants
+the `mara-ledger` fragment privately, once — she takes half the coins and
+pushes half back (+10 heat; refused at heat 40+, frightened refusal at stage 8).
+From stage 6, the diegetic "papers" object (Paper 7108) at Varrock market holds
+the Merciful Hand's dropped letter (the east-end rolls, the missing pages, the
+cut page) — `charity-letter` fragment once, +6 heat; other capitals' papers
+are just rain-spoiled litter. From stage 7, rare overheard street arguments
+about the Hand's prices and black-plate men on the south road. The hunt is
+visible — rumors, NPC presence, a paper trail — and nobody says "the king's
+bastard son" out loud. The truth stays one inference away.
 
 ## The tension model (live war states)
 
@@ -233,10 +253,13 @@ they're the seam future LLM hooks (AI citizens, court agents) will read.
   escalates it. These want slow tick content, not per-tick area work.
 - **The bastard son** — `misthalin:bastard-son-hidden` is a story flag for the
   questline, not plugin logic. `Succession.Kingdoms.js` now plants the long
-  arc's seeds (rare, deniable whisper stages — tavern slip to Riverlands
-  merchant), but the flag itself and the reveal stay custom quest content
-  (phase 10). The Church, the gangs and the palace move when the claim
-  surfaces.
+  arc's seeds (rare, deniable whisper stages 0-8 — tavern slip to the squeeze),
+  `SuccessionDeep.Kingdoms.js` tracks what happens when players dig (heat,
+  keeper fragments, grey men), and `SuccessionKeepers.Kingdoms.js` stages the
+  escalation (Mara Hartley, the Merciful Hand's paper-buying, the dropped
+  letter, the frightened silence) — but the flag itself and the reveal stay
+  custom quest content (phase 10). The Church, the gangs and the palace move
+  when the claim surfaces.
 - **Per-kingdom hierarchies** — one shared ladder for v1; the Consortium's
   company ranks and Lowerniel's blood court deserve their own.
 - **Area `process()`** — intentionally empty in v1. Kingdom law should be
