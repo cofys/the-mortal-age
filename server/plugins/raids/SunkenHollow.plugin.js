@@ -39,6 +39,14 @@
  * kiting, the channel demands a DPS race while hounds chew the party. A
  * solo player with one friend can enter, but doing both jobs is the fight.
  *
+ * INSTANCING: every party gets its own hollow. The dungeon lives on the real
+ * map, so each party is handed a PrivateArea over the same coordinates
+ * (see ./PartyInstance.js): the engine then isolates players, NPCs and
+ * runtime objects per party automatically. Own boss, own adds, own loot —
+ * parties never collide. Instances die when the run ends (boss slain, wipe),
+ * when the last player leaves, or on the idle/lifetime sweep; a cap refuses
+ * entry instead of leaking instances.
+ *
  * Politics (kingdom tie-in):
  *   Kill:  Morytania tension +8 with its hottest rival (Lowerniel blames
  *          foreign meddlers for the Myreque's boldness); the rival court
@@ -48,23 +56,25 @@
  *
  * Loot feeds the economy, not just coin: vampyre dust (herblore), blood
  * runes, garlic and stakes (anti-vampyre supplies), swamp paste from the
- * crates.
+ * crates. Loot is per-instance and per-participant — no duping across runs.
  *
  * This is a SEED: one dungeon, one boss, working end-to-end. Stubbed for
  * later: lockouts, hard-mode, collection-log entry, a Myreque reputation
  * track, and the saved captive becoming a quest contact.
  *
  * In (plugin hooks): onObjectInteraction (Tunnel, Crate), onNpcInteraction
- * (Polmafi), onPlayerDealtDamage, onNpcBeforeDeath, Area process/postEnter/
- * postLeave/canTeleport/canAttack.
+ * (Polmafi), onPlayerDealtDamage, onNpcBeforeDeath, onPlayerLogin,
+ * per-instance Area process/postEnter/postLeave/canTeleport/canAttack.
  * Out (custom events): kingdom:rumor, kingdom:task-completed (influence).
  */
 
 const Store = require("../kingdoms/KingdomStore");
 const Tension = require("../kingdoms/Tension.Kingdoms");
+const PartyInstance = require("./PartyInstance");
 
 let api = null;
 let core = null;
+let instances = null;
 
 // --- tuning ---------------------------------------------------------------
 
@@ -90,6 +100,10 @@ const RESPAWN_COOLDOWN_MS = 45 * 1000;
 
 const PARTY_MIN = 2;
 const PARTY_RADIUS = 10;
+
+const MAX_INSTANCES = 8;
+const INSTANCE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const INSTANCE_MAX_LIFETIME_MS = 2 * 60 * 60 * 1000;
 
 // --- layout ---------------------------------------------------------------
 
@@ -121,27 +135,34 @@ const ROOM_MOBS = [
 const BOSS_SPAWN = { x: 3024, y: 10186, z: 0 }; // room D sanctum
 const CAPTIVE_SPAWN = { x: 3028, y: 10186, z: 0 };
 
-// --- run state (area-scoped, shared — one run at a time) -------------------
+// --- per-instance run state -------------------------------------------------
 
-const run = {
-  boss: null,
-  captive: null,
-  mobs: [],
-  phase: 1,
-  tick: 0,
-  participants: new Set(),
-  cratesSearched: new Set(), // usernames, reset each run
-  thrall: null,
-  thrallMarked: null,
-  nextThrallAt: 0,
-  channel: null, // { endsAt, dealt }
-  captiveSaved: false,
-  enraged: false,
-  novaAt: 0,
-  cooldownUntil: 0,
-};
+// One of these per party. `participants` is the manager's rejoin roster.
 
-let hollowArea = null;
+function createHollowState() {
+  return {
+    spawned: false,
+    over: false,
+    boss: null,
+    captive: null,
+    mobs: [],
+    phase: 1,
+    tick: 0,
+    participants: new Set(),
+    cratesSearched: new Set(), // usernames, reset each run
+    thrall: null,
+    thrallMarked: null,
+    nextThrallAt: 0,
+    channel: null, // { endsAt, dealt }
+    captiveSaved: false,
+    enraged: false,
+    novaAt: 0,
+  };
+}
+
+// Per-party wipe cooldowns (username -> timestamp): a wiped party can't
+// instantly re-enter; other parties are unaffected.
+const wipeCooldowns = new Map();
 
 // --- helpers --------------------------------------------------------------
 
@@ -184,23 +205,33 @@ function inDungeon(loc) {
   );
 }
 
-function playersInDungeon() {
+/** Real players claimed by this instance who are actually inside it. */
+function playersInInstance(inst) {
   const out = [];
   try {
-    api.core.World.getPlayers()
-      .stream()
-      .filter(Boolean)
-      .forEach((p) => {
-        if (isRealPlayer(p) && inDungeon(locOf(p))) out.push(p);
-      });
+    for (const p of inst.area.getPlayers()) {
+      if (isRealPlayer(p) && inDungeon(locOf(p))) out.push(p);
+    }
   } catch {
     // best-effort
   }
   return out;
 }
 
-function nearbyAllies(player) {
-  let count = 0;
+/** The instance whose Vost this npc is, or null. */
+function hollowOf(npc) {
+  if (!npc?.isNpc?.()) return null;
+  try {
+    const inst = instances.instanceForArea(npc.getPrivateArea?.());
+    if (!inst || inst.state.boss !== npc) return null;
+    return inst;
+  } catch {
+    return null;
+  }
+}
+
+function allyUsernames(player) {
+  const names = [];
   try {
     const pos = xy(locOf(player)) ?? { x: 0, y: 0 };
     api.core.World.getPlayers()
@@ -209,16 +240,20 @@ function nearbyAllies(player) {
       .forEach((p) => {
         if (!isRealPlayer(p) || p === player) return;
         const pp = xy(locOf(p)) ?? { x: 0, y: 0 };
-        if (Math.hypot(pp.x - pos.x, pp.y - pos.y) <= PARTY_RADIUS) count++;
+        if (Math.hypot(pp.x - pos.x, pp.y - pos.y) <= PARTY_RADIUS) names.push(username(p));
       });
   } catch {
     // best-effort
   }
-  return count;
+  return names;
 }
 
-function announce(message) {
-  for (const p of playersInDungeon()) {
+function nearbyAllies(player) {
+  return allyUsernames(player).length;
+}
+
+function announce(inst, message) {
+  for (const p of playersInInstance(inst)) {
     try {
       p.sendMessage(message);
     } catch {
@@ -273,21 +308,61 @@ function nearSwampEntrance(location) {
 function climbDown({ player, location }) {
   if (!isRealPlayer(player)) return;
   if (!nearSwampEntrance(location)) return; // not our tunnel
-  const allies = nearbyAllies(player);
-  if (allies < PARTY_MIN - 1) {
+  const name = username(player);
+
+  const cooldownUntil = wipeCooldowns.get(name) ?? 0;
+  if (Date.now() < cooldownUntil) {
+    const secs = Math.ceil((cooldownUntil - Date.now()) / 1000);
     player.sendMessage(
-      "A cold breath rises from the tunnel. Polmafi's voice hisses behind you: " +
-        "\"Not alone, friend. The Tithe-Taker eats lone wolves. Bring at least one ally. (2+ players)\""
+      `The hollow is still settling — the purge watches the tunnel. Try again in ${secs}s.`
     );
     return;
   }
-  player.sendMessage("You slip down into the dark, your ally close behind. The Myreque hollow swallows you.");
+
+  // Rejoining your party's run needs no ally check; a fresh run does.
+  // (rejoin covers both the tracked player and a late ally in the roster —
+  // the second blade through the tunnel finds no allies on the surface.)
+  let inst = instances.rejoin(player);
+  if (!inst) {
+    if (nearbyAllies(player) < PARTY_MIN - 1) {
+      player.sendMessage(
+        "A cold breath rises from the tunnel. Polmafi's voice hisses behind you: " +
+          "\"Not alone, friend. The Tithe-Taker eats lone wolves. Bring at least one ally. (2+ players)\""
+      );
+      return;
+    }
+    inst = instances.acquire(player, allyUsernames(player));
+    if (!inst) {
+      player.sendMessage(
+        "The hollow churns below — too many war-parties down there. Catch your breath and try again shortly."
+      );
+      return;
+    }
+  }
+
+  // Claim the player into their party's instance BEFORE moving them: the
+  // engine keeps an actor's area while its boundaries match, so the instance
+  // holds them without ever touching the shared boundary index.
+  try {
+    inst.area.enter(player);
+  } catch (err) {
+    console.warn("[sunken-hollow] instance enter failed", err?.message);
+    player.sendMessage("The dark rejects you — try the tunnel again.");
+    return;
+  }
   movePlayer(player, ENTRY_DEST);
+  player.sendMessage("You slip down into the dark, your ally close behind. The Myreque hollow swallows you.");
 }
 
 function climbUp({ player, location }) {
   if (!isRealPlayer(player)) return;
   if (!inDungeon(location)) return; // not our tunnel
+  // Leave the instance first so its postLeave sees the exit, then surface.
+  try {
+    instances.instanceForPlayer(player)?.area.leave(player, false);
+  } catch {
+    // best-effort
+  }
   movePlayer(player, EXIT_DEST);
   player.sendMessage("You climb out of the hollow, gasping swamp air.");
 }
@@ -298,6 +373,25 @@ function talkToPolmafi({ player }) {
   player.sendMessage("Polmafi Ferdygris: \"Then Lowerniel's Tithe-Taker found it. Vost. He bleeds our people for the tithe.\"");
   player.sendMessage("Polmafi Ferdygris: \"The tunnel is behind me. Go with a friend — two blades at least — and end him.\"");
   player.sendMessage("Polmafi Ferdygris: \"Save our captive in the sanctum if you can. The Myreque remembers its debts.\"");
+}
+
+/** Logged back in inside the hollow: rejoin the party's run, or surface. */
+function onLogin({ player }) {
+  if (!isRealPlayer(player)) return;
+  if (!inDungeon(locOf(player))) return;
+  const inst = instances.rejoin(player);
+  if (!inst) {
+    movePlayer(player, EXIT_DEST);
+    player.sendMessage("You wake at the tunnel mouth, the hollow's dark behind you. Your party's run is over.");
+    return;
+  }
+  try {
+    inst.area.enter(player);
+    player.sendMessage("You shake off the dark and find your party's hollow again.");
+  } catch {
+    movePlayer(player, EXIT_DEST);
+    player.sendMessage("You wake at the tunnel mouth, the hollow's dark behind you. Your party's run is over.");
+  }
 }
 
 // --- world setup ------------------------------------------------------------
@@ -313,16 +407,22 @@ function spawnWorldObject(id, x, y, z) {
   }
 }
 
+/** The exit tunnel and crates live per-instance (spawned in maybeStartRun). */
+function spawnInstanceObject(inst, id, x, y, z) {
+  try {
+    const obj = new core.GameObject(id, new core.Location(x, y, z), 10, 0, inst.area);
+    core.ObjectManager.register(obj, true);
+    return obj;
+  } catch (error) {
+    console.warn("[sunken-hollow] instance object spawn failed", { id, x, y, error: error?.message });
+    return null;
+  }
+}
+
 function buildWorld() {
   // The hidden entrance in the Mort Myre swamp. Same object id/options the
   // Red Axe stronghold proved work in production ("Tunnel"/"Enter").
   spawnWorldObject(core.ObjectIdentifiers.TUNNEL, ENTRY_TUNNEL.x, ENTRY_TUNNEL.y, ENTRY_TUNNEL.z);
-  // Exit inside room A.
-  spawnWorldObject(core.ObjectIdentifiers.TUNNEL, EXIT_TUNNEL.x, EXIT_TUNNEL.y, EXIT_TUNNEL.z);
-  // Supply crates in room B.
-  for (const c of CRATES) {
-    spawnWorldObject(core.ObjectIdentifiers.CRATE, c.x, c.y, 0);
-  }
   // The Myreque contact near the entrance.
   try {
     api.spawnNpc({
@@ -340,7 +440,7 @@ function buildWorld() {
 
 // --- run lifecycle ------------------------------------------------------------
 
-function spawnMob(idName, x, y, hp) {
+function spawnMob(inst, idName, x, y, hp) {
   try {
     const id = core.NpcIdentifiers[idName];
     if (!id) {
@@ -352,6 +452,15 @@ function spawnMob(idName, x, y, hp) {
       npc.setMaxHitpoints(hp);
       npc.setHitpoints(hp);
     }
+    // Claim the NPC into the party's instance: the engine then only shows it
+    // to that party (same pattern as Construction servants).
+    if (npc) {
+      try {
+        inst.area.enter(npc);
+      } catch (err) {
+        console.warn("[sunken-hollow] npc instance enter failed", err?.message);
+      }
+    }
     return npc;
   } catch (error) {
     console.warn("[sunken-hollow] mob spawn failed", { idName, error: error?.message });
@@ -359,28 +468,16 @@ function spawnMob(idName, x, y, hp) {
   }
 }
 
-function resetRunState() {
-  run.boss = null;
-  run.captive = null;
-  run.mobs = [];
-  run.phase = 1;
-  run.tick = 0;
-  run.participants = new Set();
-  run.cratesSearched = new Set();
-  run.thrall = null;
-  run.thrallMarked = null;
-  run.nextThrallAt = 0;
-  run.channel = null;
-  run.captiveSaved = false;
-  run.enraged = false;
-  run.novaAt = 0;
-}
-
-function despawn(npc) {
+function despawn(inst, npc) {
   if (!npc) return;
   // Never yank an NPC mid-death: onNpcBeforeDeath fires before the death
   // sequence, so the boss is left to die on its own.
   if (npc.isDying?.() === true || npc.isDead?.() === true) return;
+  try {
+    inst.area.leave(npc, false);
+  } catch {
+    // best-effort
+  }
   try {
     api.removeNpc?.(npc);
   } catch {
@@ -388,43 +485,55 @@ function despawn(npc) {
   }
 }
 
-function maybeStartRun() {
-  if (alive(run.boss)) return; // a run is already live
-  if (Date.now() < run.cooldownUntil) return;
-  resetRunState();
+function maybeStartRun(inst) {
+  const st = inst.state;
+  if (st.spawned || st.over) return; // a run is already live here
+  st.spawned = true;
+  // Per-instance scenery: only this party sees and uses it.
+  spawnInstanceObject(inst, core.ObjectIdentifiers.TUNNEL, EXIT_TUNNEL.x, EXIT_TUNNEL.y, EXIT_TUNNEL.z);
+  for (const c of CRATES) {
+    spawnInstanceObject(inst, core.ObjectIdentifiers.CRATE, c.x, c.y, 0);
+  }
   for (const m of ROOM_MOBS) {
-    const npc = spawnMob(m.id, m.x, m.y);
-    if (npc) run.mobs.push(npc);
+    const npc = spawnMob(inst, m.id, m.x, m.y);
+    if (npc) st.mobs.push(npc);
   }
   // The cell's captive fighter, bound in the sanctum — the stakes of phase 3.
-  run.captive = spawnMob("MAN", CAPTIVE_SPAWN.x, CAPTIVE_SPAWN.y);
+  st.captive = spawnMob(inst, "MAN", CAPTIVE_SPAWN.x, CAPTIVE_SPAWN.y);
   try {
-    run.captive?.forceChat?.("Help... please... don't let him take me...");
+    st.captive?.forceChat?.("Help... please... don't let him take me...");
   } catch {
     // best-effort
   }
-  const boss = spawnMob("FERAL_VAMPYRE", BOSS_SPAWN.x, BOSS_SPAWN.y, VOST_HP);
+  const boss = spawnMob(inst, "FERAL_VAMPYRE", BOSS_SPAWN.x, BOSS_SPAWN.y, VOST_HP);
   if (!boss) return;
-  run.boss = boss;
-  run.tick = 0;
-  console.info("[sunken-hollow] run started");
+  st.boss = boss;
+  st.tick = 0;
+  console.info("[sunken-hollow] run started", { instance: inst.id, party: [...inst.party] });
 }
 
-function resetRun(reason) {
-  despawn(run.boss);
-  despawn(run.captive);
-  despawn(run.thrall);
-  for (const m of run.mobs) despawn(m);
-  resetRunState();
-  run.cooldownUntil = Date.now() + RESPAWN_COOLDOWN_MS;
-  console.info("[sunken-hollow] run reset", { reason });
+function wipeInstance(inst, reason) {
+  const st = inst.state;
+  if (st.over) return;
+  st.over = true;
+  despawn(inst, st.boss);
+  despawn(inst, st.captive);
+  despawn(inst, st.thrall);
+  for (const m of st.mobs) despawn(inst, m);
+  st.boss = null;
+  st.captive = null;
+  st.thrall = null;
+  st.mobs = [];
+  // The wiped party sits out one cooldown; other parties are unaffected.
+  const until = Date.now() + RESPAWN_COOLDOWN_MS;
+  for (const u of inst.party) wipeCooldowns.set(u, until);
+  for (const u of st.participants) wipeCooldowns.set(u, until);
+  applyWipePolitics();
+  instances.release(inst, reason);
+  console.info("[sunken-hollow] run wiped", { reason, instance: inst.id });
 }
 
 // --- the fight ------------------------------------------------------------------
-
-function isVost(npc) {
-  return !!npc && npc?.isNpc?.() === true && run.boss === npc;
-}
 
 function bossHpFraction(npc) {
   try {
@@ -445,15 +554,16 @@ function heal(npc, amount) {
   }
 }
 
-function spawnThrall(boss) {
-  const party = playersInDungeon();
+function spawnThrall(inst, boss) {
+  const st = inst.state;
+  const party = playersInInstance(inst);
   if (party.length === 0) return;
   const marked = party[Math.floor(Math.random() * party.length)];
   const bp = xy(locOf(boss)) ?? BOSS_SPAWN;
-  const thrall = spawnMob("FERAL_VAMPYRE_2", bp.x - 2, bp.y, THRALL_HP);
+  const thrall = spawnMob(inst, "FERAL_VAMPYRE_2", bp.x - 2, bp.y, THRALL_HP);
   if (!thrall) return;
-  run.thrall = thrall;
-  run.thrallMarked = username(marked);
+  st.thrall = thrall;
+  st.thrallMarked = username(marked);
   try {
     thrall.getCombat?.().attack(marked);
     thrall.forceChat?.("Your blood for the Tithe!");
@@ -461,30 +571,31 @@ function spawnThrall(boss) {
     // best-effort
   }
   boss.forceChat("THE TITHE! Bring me their blood!");
-  announce("Vost looses a blood-thrall — it fixates " + (marked.getUsername?.() ?? "one of you") + "! Kite it, kill it, keep it off them!");
-  run.nextThrallAt = run.tick + THRALL_EVERY_TICKS;
-  console.info("[sunken-hollow] thrall spawned", { marked: run.thrallMarked });
+  announce(inst, "Vost looses a blood-thrall — it fixates " + (marked.getUsername?.() ?? "one of you") + "! Kite it, kill it, keep it off them!");
+  st.nextThrallAt = st.tick + THRALL_EVERY_TICKS;
+  console.info("[sunken-hollow] thrall spawned", { instance: inst.id, marked: st.thrallMarked });
 }
 
-function thrallTick() {
-  const thrall = run.thrall;
+function thrallTick(inst) {
+  const st = inst.state;
+  const thrall = st.thrall;
   if (!alive(thrall)) {
-    run.thrall = null;
-    run.thrallMarked = null;
+    st.thrall = null;
+    st.thrallMarked = null;
     return;
   }
-  // Marked player gone? Pick another victim from the party.
+  // Marked player gone (or out of this instance)? Pick another victim here.
   let marked = null;
   try {
-    marked = api.core.World.getPlayerByName?.(run.thrallMarked);
+    marked = api.core.World.getPlayerByName?.(st.thrallMarked);
   } catch {
     // best-effort
   }
-  if (!isRealPlayer(marked) || !inDungeon(locOf(marked))) {
-    const party = playersInDungeon();
+  if (!isRealPlayer(marked) || instances.instanceForPlayer(marked) !== inst || !inDungeon(locOf(marked))) {
+    const party = playersInInstance(inst);
     if (party.length === 0) return;
     marked = party[Math.floor(Math.random() * party.length)];
-    run.thrallMarked = username(marked);
+    st.thrallMarked = username(marked);
     try {
       thrall.getCombat?.().attack(marked);
     } catch {
@@ -496,35 +607,37 @@ function thrallTick() {
   if (!tp || !mp) return;
   if (Math.hypot(tp.x - mp.x, tp.y - mp.y) <= THRALL_LATCH_RANGE) {
     // Latched: the victim bleeds, Vost drinks.
-    despawn(thrall);
-    run.thrall = null;
-    run.thrallMarked = null;
+    despawn(inst, thrall);
+    st.thrall = null;
+    st.thrallMarked = null;
     environmentalHit(marked, 6 + Math.floor(Math.random() * 7), "The thrall latches on and drinks deep!");
-    heal(run.boss, THRALL_HEAL);
+    heal(st.boss, THRALL_HEAL);
     try {
-      run.boss?.forceChat?.("Ahhh. Sweet.");
+      st.boss?.forceChat?.("Ahhh. Sweet.");
     } catch {
       // best-effort
     }
-    announce("The blood-thrall drinks its fill — Vost is renewed!");
-    console.info("[sunken-hollow] thrall latched, Vost healed");
+    announce(inst, "The blood-thrall drinks its fill — Vost is renewed!");
+    console.info("[sunken-hollow] thrall latched, Vost healed", { instance: inst.id });
   }
 }
 
-function startChannel(boss) {
-  if (!alive(run.captive)) return; // nothing to threaten
-  run.channel = { endsAt: run.tick + CHANNEL_TICKS, dealt: 0 };
+function startChannel(inst, boss) {
+  const st = inst.state;
+  if (!alive(st.captive)) return; // nothing to threaten
+  st.channel = { endsAt: st.tick + CHANNEL_TICKS, dealt: 0 };
   boss.forceChat("Bring me their heart! BLEED THEM DRY!");
   announce(
+    inst,
     "Vost begins drawing the life from the captive Myreque fighter! " +
       `Deal ${CHANNEL_INTERRUPT_DAMAGE}+ damage to Vost to break the channel!`
   );
   // Purge hounds pour in — someone has to peel.
   const bp = xy(locOf(boss)) ?? BOSS_SPAWN;
   for (let i = 0; i < 2; i++) {
-    const hound = spawnMob("VAMPIRIC_HOUND", bp.x + (i === 0 ? -3 : 3), bp.y + 2);
+    const hound = spawnMob(inst, "VAMPIRIC_HOUND", bp.x + (i === 0 ? -3 : 3), bp.y + 2);
     if (hound) {
-      run.mobs.push(hound);
+      st.mobs.push(hound);
       try {
         hound.forceChat?.("For the Tithe!");
       } catch {
@@ -532,55 +645,57 @@ function startChannel(boss) {
       }
     }
   }
-  console.info("[sunken-hollow] channel started");
+  console.info("[sunken-hollow] channel started", { instance: inst.id });
 }
 
-function channelTick(boss) {
-  const ch = run.channel;
+function channelTick(inst, boss) {
+  const st = inst.state;
+  const ch = st.channel;
   if (!ch) return;
   // The captive suffers while the channel runs.
-  if (alive(run.captive) && run.tick % 3 === 0) {
+  if (alive(st.captive) && st.tick % 3 === 0) {
     try {
-      const cur = run.captive.getHitpoints?.() ?? 0;
-      run.captive.setHitpoints?.(Math.max(1, cur - 2));
-      if (run.tick % 9 === 0) run.captive.forceChat?.("No... not like this...");
+      const cur = st.captive.getHitpoints?.() ?? 0;
+      st.captive.setHitpoints?.(Math.max(1, cur - 2));
+      if (st.tick % 9 === 0) st.captive.forceChat?.("No... not like this...");
     } catch {
       // best-effort
     }
   }
-  if (run.tick < ch.endsAt) return;
+  if (st.tick < ch.endsAt) return;
   // Channel complete: the captive dies, Vost feasts and enrages.
-  run.channel = null;
-  if (alive(run.captive)) {
+  st.channel = null;
+  if (alive(st.captive)) {
     try {
-      run.captive.forceChat?.("Tell... the cell... I held...");
+      st.captive.forceChat?.("Tell... the cell... I held...");
     } catch {
       // best-effort
     }
-    despawn(run.captive);
-    run.captive = null;
+    despawn(inst, st.captive);
+    st.captive = null;
   }
   heal(boss, CHANNEL_COMPLETE_HEAL);
-  run.enraged = true;
-  run.novaAt = run.tick + NOVA_EVERY_TICKS;
+  st.enraged = true;
+  st.novaAt = st.tick + NOVA_EVERY_TICKS;
   boss.forceChat("THE HEART IS MINE! NOW BURN, ALL OF YOU!");
-  announce("Vost drains the captive's heart and ERUPTS — blood-novas incoming! Spread out!");
-  console.info("[sunken-hollow] channel completed — Vost enraged");
+  announce(inst, "Vost drains the captive's heart and ERUPTS — blood-novas incoming! Spread out!");
+  console.info("[sunken-hollow] channel completed — Vost enraged", { instance: inst.id });
 }
 
-function novaTick(boss) {
-  if (!run.enraged) return;
-  if (run.tick < run.novaAt - NOVA_WARN_TICKS) return;
-  if (run.tick < run.novaAt) {
-    if (run.tick === run.novaAt - NOVA_WARN_TICKS) {
+function novaTick(inst, boss) {
+  const st = inst.state;
+  if (!st.enraged) return;
+  if (st.tick < st.novaAt - NOVA_WARN_TICKS) return;
+  if (st.tick < st.novaAt) {
+    if (st.tick === st.novaAt - NOVA_WARN_TICKS) {
       boss.forceChat("BURN IN MY BLOOD!");
-      announce("Vost swells with stolen blood — a nova is coming! MOVE!");
+      announce(inst, "Vost swells with stolen blood — a nova is coming! MOVE!");
     }
     return;
   }
-  run.novaAt = run.tick + NOVA_EVERY_TICKS;
+  st.novaAt = st.tick + NOVA_EVERY_TICKS;
   const bp = xy(locOf(boss)) ?? BOSS_SPAWN;
-  for (const p of playersInDungeon()) {
+  for (const p of playersInInstance(inst)) {
     try {
       const pp = xy(locOf(p));
       if (!pp) continue;
@@ -594,60 +709,68 @@ function novaTick(boss) {
   }
 }
 
-function bossTick(boss) {
-  run.tick++;
-  const party = playersInDungeon();
+function bossTick(inst, boss) {
+  const st = inst.state;
+  if (st.over) return;
+  st.tick++;
+  const party = playersInInstance(inst);
   // Everyone left or died: the purge wins this round.
   if (party.length === 0) {
-    onWipe();
+    wipeInstance(inst, "wipe");
     return;
   }
-  for (const p of party) run.participants.add(username(p));
+  for (const p of party) st.participants.add(username(p));
 
   // Phase transitions are driven by damage (onDamage); the tick runs the machinery.
-  if (run.phase >= 2) {
-    if (alive(run.thrall)) thrallTick();
-    else if (run.tick >= run.nextThrallAt) spawnThrall(boss);
+  if (st.phase >= 2) {
+    if (alive(st.thrall)) thrallTick(inst);
+    else if (st.tick >= st.nextThrallAt) spawnThrall(inst, boss);
   }
-  if (run.channel) channelTick(boss);
-  novaTick(boss);
+  if (st.channel) channelTick(inst, boss);
+  novaTick(inst, boss);
 }
 
 function onDamage({ target, player, hit }) {
-  if (!isVost(target) || !isRealPlayer(player)) return;
-  run.participants.add(username(player));
+  const inst = hollowOf(target);
+  if (!inst || !isRealPlayer(player)) return;
+  // Only this instance's party drives its own fight.
+  if (instances.instanceForPlayer(player) !== inst) return;
+  const st = inst.state;
+  if (st.over) return;
+  inst.started = true; // the run is live: only fighters may rejoin from here
+  st.participants.add(username(player));
   const frac = bossHpFraction(target);
 
-  if (run.phase === 1 && frac <= PHASE2_AT) {
-    run.phase = 2;
-    run.nextThrallAt = run.tick + 5;
+  if (st.phase === 1 && frac <= PHASE2_AT) {
+    st.phase = 2;
+    st.nextThrallAt = st.tick + 5;
     target.forceChat("You bleed nicely. THE TITHE! Bring me their blood!");
-    announce("Vost howls — from here on, blood-thralls will hunt the party!");
-    console.info("[sunken-hollow] phase 2");
+    announce(inst, "Vost howls — from here on, blood-thralls will hunt the party!");
+    console.info("[sunken-hollow] phase 2", { instance: inst.id });
   }
 
-  if (run.phase === 2 && frac <= PHASE3_AT) {
-    run.phase = 3;
+  if (st.phase === 2 && frac <= PHASE3_AT) {
+    st.phase = 3;
     target.forceChat("Enough games. Bring me their HEART!");
-    announce("Vost turns on the captive — stop the channel or lose them!");
-    startChannel(target);
-    console.info("[sunken-hollow] phase 3");
+    announce(inst, "Vost turns on the captive — stop the channel or lose them!");
+    startChannel(inst, target);
+    console.info("[sunken-hollow] phase 3", { instance: inst.id });
   }
 
   // Breaking the channel: raw damage on Vost while he channels.
-  if (run.channel) {
-    run.channel.dealt += hitDamage(hit);
-    if (run.channel.dealt >= CHANNEL_INTERRUPT_DAMAGE) {
-      run.channel = null;
-      run.captiveSaved = true;
+  if (st.channel) {
+    st.channel.dealt += hitDamage(hit);
+    if (st.channel.dealt >= CHANNEL_INTERRUPT_DAMAGE) {
+      st.channel = null;
+      st.captiveSaved = true;
       target.forceChat("NO! You will NOT take them from me!");
-      announce(`${player.getUsername?.() ?? "A hero"} breaks the channel — the captive lives! The Myreque will remember this.`);
+      announce(inst, `${player.getUsername?.() ?? "A hero"} breaks the channel — the captive lives! The Myreque will remember this.`);
       try {
-        run.captive?.forceChat?.("I... I owe you my life. The cell owes you.");
+        st.captive?.forceChat?.("I... I owe you my life. The cell owes you.");
       } catch {
         // best-effort
       }
-      console.info("[sunken-hollow] channel interrupted — captive saved");
+      console.info("[sunken-hollow] channel interrupted — captive saved", { instance: inst.id });
     }
   }
 }
@@ -685,17 +808,20 @@ function bossLoot(captiveSaved) {
 
 function searchCrate({ player, location }) {
   if (!isRealPlayer(player)) return;
+  const inst = instances.instanceForPlayer(player);
+  if (!inst || inst.state.over) return;
   const p = xy(location);
   if (!p) return;
   const isOurs = CRATES.some((c) => Math.hypot(c.x - p.x, c.y - p.y) <= 2 && p.z === 0);
   if (!isOurs) return; // some other crate in the world
   if (!inDungeon(locOf(player))) return;
+  const st = inst.state;
   const name = username(player);
-  if (run.cratesSearched.has(name + "@" + p.x + "," + p.y)) {
+  if (st.cratesSearched.has(name + "@" + p.x + "," + p.y)) {
     player.sendMessage("You've already picked this crate clean.");
     return;
   }
-  run.cratesSearched.add(name + "@" + p.x + "," + p.y);
+  st.cratesSearched.add(name + "@" + p.x + "," + p.y);
   const ids = core.ItemIdentifiers;
   const loot = [
     [ids.BLOOD_RUNE, 5],
@@ -705,7 +831,7 @@ function searchCrate({ player, location }) {
   ];
   giveLoot(player, loot);
   player.sendMessage("You search the Myreque supply crate: blood runes, garlic, swamp paste — the cell's war-stock.");
-  console.info("[sunken-hollow] crate searched", { by: name });
+  console.info("[sunken-hollow] crate searched", { instance: inst.id, by: name });
 }
 
 // --- politics -------------------------------------------------------------------
@@ -804,12 +930,24 @@ function applyWipePolitics() {
 }
 
 function onBossDeath({ npc }) {
-  if (!isVost(npc)) return;
-  const participants = [...run.participants];
-  const captiveSaved = run.captiveSaved;
+  const inst = hollowOf(npc);
+  if (!inst) return;
+  const st = inst.state;
+  if (st.over) return;
+  st.over = true;
+  const participants = [...st.participants];
+  const captiveSaved = st.captiveSaved;
   const names = participants.join(", ");
-  resetRun("boss-slain");
-  // Loot for everyone who fought.
+  // Clear the field — the boss dies on its own. The instance itself stays
+  // alive until the party climbs out (the exit tunnel is per-instance).
+  despawn(inst, st.captive);
+  despawn(inst, st.thrall);
+  for (const m of st.mobs) despawn(inst, m);
+  st.boss = null;
+  st.captive = null;
+  st.thrall = null;
+  st.mobs = [];
+  // Loot for everyone who fought — per-instance, per-participant.
   for (const name of participants) {
     try {
       const p = api.core.World.getPlayerByName?.(name);
@@ -838,40 +976,58 @@ function onBossDeath({ npc }) {
   } catch {
     // best-effort
   }
-  console.info("[sunken-hollow] Vost slain", { participants, captiveSaved });
+  console.info("[sunken-hollow] Vost slain", { instance: inst.id, participants, captiveSaved });
 }
 
-function onWipe() {
-  resetRun("wipe");
-  applyWipePolitics();
-  console.info("[sunken-hollow] party wiped — the purge prevails");
-}
+// --- the instance area ----------------------------------------------------------
 
-// --- the area -------------------------------------------------------------------
+function createAreaClass() {
+  class HollowInstanceArea extends core.PrivateArea {
+    constructor(inst) {
+      super([new core.Boundary(AREA.x1, AREA.x2, AREA.y1, AREA.y2, AREA.z)]);
+      this.inst = inst;
+    }
 
-function createArea() {
-  class SunkenHollowArea extends core.Area {
     process(mobile) {
+      const inst = this.inst;
+      if (!inst || inst.destroyed || inst.state.over) return;
+      inst.touch();
       if (isRealPlayer(mobile)) {
-        if (alive(run.boss)) run.participants.add(username(mobile));
+        if (alive(inst.state.boss)) inst.state.participants.add(username(mobile));
         return;
       }
-      if (mobile?.isNpc?.() === true && run.boss && mobile === run.boss) {
-        bossTick(mobile);
+      if (mobile?.isNpc?.() === true && inst.state.boss && mobile === inst.state.boss) {
+        bossTick(inst, mobile);
       }
     }
 
     postEnter(mobile) {
-      if (isRealPlayer(mobile)) maybeStartRun();
+      super.postEnter(mobile);
+      const inst = this.inst;
+      if (!inst || inst.destroyed) return;
+      inst.touch();
+      if (isRealPlayer(mobile)) maybeStartRun(inst);
     }
 
     postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
       if (!isRealPlayer(mobile)) return;
+      const inst = this.inst;
+      instances.unassign(mobile);
+      if (!inst || inst.destroyed) return;
+      if (this.isDestroyed()) {
+        // The area emptied and cleaned itself. A live run still needs its
+        // wipe (politics, cooldowns); a finished run just needs the registry
+        // dropped — release is idempotent, so the wipe path is unaffected.
+        if (inst.state.over) instances.release(inst, "area-destroyed");
+        else wipeInstance(inst, "empty");
+        return;
+      }
+      if (inst.state.over) return;
       // Player already removed from the area map at this point: if nobody
       // real is left, the run collapses and the hollow goes quiet.
       const left = this.getPlayers().filter(isRealPlayer);
-      if (left.length === 0 && alive(run.boss)) onWipe();
-      else if (left.length === 0) resetRun("empty");
+      if (left.length === 0) wipeInstance(inst, "empty");
     }
 
     canTeleport() {
@@ -882,7 +1038,8 @@ function createArea() {
 
     canAttack(attacker, target) {
       // The captive is not a valid target.
-      if (target && run.captive && target === run.captive) return false;
+      const st = this.inst?.state;
+      if (target && st?.captive && target === st.captive) return false;
       return null;
     }
 
@@ -890,7 +1047,7 @@ function createArea() {
       return true;
     }
   }
-  return new SunkenHollowArea([new core.Boundary(AREA.x1, AREA.x2, AREA.y1, AREA.y2, AREA.z)]);
+  return HollowInstanceArea;
 }
 
 // --- wiring ---------------------------------------------------------------------
@@ -901,21 +1058,32 @@ module.exports = {
     api = pluginApi;
     core = pluginApi.core;
 
-    hollowArea = createArea();
-    api.registerArea(hollowArea);
+    instances = PartyInstance.createManager({
+      api,
+      core,
+      name: "sunken-hollow",
+      pluginName: "SunkenHollow",
+      AreaClass: createAreaClass(),
+      createState: createHollowState,
+      maxInstances: MAX_INSTANCES,
+      idleTimeoutMs: INSTANCE_IDLE_TIMEOUT_MS,
+      maxLifetimeMs: INSTANCE_MAX_LIFETIME_MS,
+      // The leak backstop: an abandoned instance wipes like an empty one.
+      onTimeout: (inst, reason) => wipeInstance(inst, `timeout-${reason}`),
+    });
 
     // Entry/exit through the world. Handlers scope by location so the other
     // Tunnel/Crate objects in the world are untouched.
     api.onObjectInteraction("Tunnel", { Enter: climbDown });
     api.onObjectInteraction("Tunnel", { "Climb-up": climbUp });
-    api.onObjectInteraction("Crate", { Search: searchCrate });
     api.onNpcInteraction("Polmafi Ferdygris", { "Talk-to": talkToPolmafi });
 
     api.onPlayerDealtDamage(onDamage);
     api.onNpcBeforeDeath(onBossDeath);
+    api.onPlayerLogin(onLogin);
 
     api.onServerStartup(buildWorld);
 
-    console.info("[sunken-hollow] seeded — a Myreque hollow waits under the Mort Myre");
+    console.info("[sunken-hollow] seeded — a Myreque hollow waits under the Mort Myre (instanced per party)");
   },
 };
