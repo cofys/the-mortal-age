@@ -305,7 +305,18 @@ function clearPending({ player }) {
 
 // --- commands ---------------------------------------------------------------
 
-function showOrigin({ player }) {
+function showOrigin({ player, parts }) {
+  // Overlay claim path: ::origin claim <id> — used by the web overlay's vow button.
+  // (Not a player-typed command; the overlay sends it programmatically.)
+  if (parts && parts[0] === "claim" && parts[1]) {
+    const id = String(parts[1]).toLowerCase();
+    if (Data.BY_ID.has(id)) {
+      claimOrigin(player, id);
+      return;
+    }
+    player.sendMessage(`Unknown home: ${parts[1]}.`);
+    return;
+  }
   const originId = player.getAttribute(ORIGIN_ID_ATTRIBUTE);
   if (!originId) {
     if (!openCreationGui(player)) openChoice(player);
