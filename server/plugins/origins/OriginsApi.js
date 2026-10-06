@@ -39,12 +39,21 @@ function attach(api) {
   console.info("[origins-api] registering origins-status endpoint");
   api.registerContentEndpoint("origins-status", (query) => {
     const username = (query.get("player") || "").trim();
+    const claimId = (query.get("claim") || "").trim().toLowerCase();
     let player = null;
     if (username) {
       try {
         player = api.core.World.getPlayerByName(username) || null;
       } catch {
         player = null;
+      }
+    }
+    // Claim via HTTP (the overlay's channel) — more reliable than websocket chat during creation.
+    if (player && claimId && Data.BY_ID.has(claimId) && !Selection.hasOrigin(player)) {
+      try {
+        Selection.claimOrigin(player, claimId);
+      } catch (e) {
+        console.warn("[origins-api] claim failed", e?.message ?? e);
       }
     }
     return statusPayload(player);

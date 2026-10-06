@@ -118,19 +118,20 @@ export function OriginOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.E
         };
     }, [poll]);
 
-    const handleClaim = useCallback(() => {
+    const handleClaim = useCallback(async () => {
         if (claiming) return;
         setClaiming(true);
         try {
-            // Programmatic command — the player never types this. The server's
-            // existing ::origin claim handler does the real work.
-            sendChat(`::origin claim ${selectedId}`);
+            // Claim via HTTP API — reliable during character creation when websocket chat may not be ready.
+            await fetchContent(
+                `/api/origins-status?player=${encodeURIComponent(username)}&claim=${encodeURIComponent(selectedId)}`
+            );
         } catch {
-            setClaiming(false);
+            // Fall through to poll; if the claim landed, needsChoice flips false.
         }
         // Re-poll soon: a successful claim flips needsChoice to false.
         window.setTimeout(poll, 1500);
-    }, [claiming, selectedId, poll]);
+    }, [claiming, selectedId, poll, username]);
 
     if (!status?.needsChoice || !status.realms.length) {
         return null;
