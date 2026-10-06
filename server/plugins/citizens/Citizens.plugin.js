@@ -82,9 +82,7 @@ function initCitizens(api) {
     return;
   }
   const director = initDirector(api, getBaseRegistry());
-  console.log("[citizens-debug] initDirector returned", { hasDirector: !!director, hasRegistry: !!getBaseRegistry() });
   director.boot();
-  console.log("[citizens-debug] director.boot() returned without throwing");
   initMerchantShops(api);
   initPlayerShops(api);
   api.log?.("[citizens] director booted", director.status());
