@@ -7,10 +7,10 @@
  * the seed of the Mortal Age UI template (palette, typography, borders,
  * buttons — documented in DESIGN.md under "The Mortal Age UI template").
  *
- * Implementation: a server-defined custom interface (group 30012) in the
+ * Implementation: a server-defined custom interface (group 30016) in the
  * established registerCustomInterface pattern (see
  * plugins/interface/Commands.plugin.js). The client fetches the definition
- * from /api/interfaces/30012 on first open; everything after that is the
+ * from /api/interfaces/30016 on first open; everything after that is the
  * usual socket traffic — clicks arrive as widget button presses
  * (api.onInterfaceActionButton), text/highlights are pushed with sendString /
  * sendInterfaceDisplayState. No client change, no new packets, no new hooks.
@@ -46,11 +46,14 @@ const {
 const Data = require("./Data.Origins");
 const Selection = require("./Selection.Origins");
 
-const GROUP_ID = 30012;
+const GROUP_ID = 30016;
 // NOTE: 30010 is the citizen merchant stall (MerchantShops.js), 30011 the
-// player stall (PlayerShops.js). CustomInterfaceRegistry silently lets the
-// last registration win, so every custom group ID must be unique — a
-// collision serves one plugin's widgets to the other's interface.
+// player stall (PlayerShops.js), 30014 the market board, 30015 the war table.
+// CustomInterfaceRegistry silently lets the last registration win, so every
+// custom group ID must be unique — a collision serves one plugin's widgets
+// to the other's interface.
+// Bumped from 30012 on 2026-10-06: browsers cache /api/interfaces/<id> and
+// Jon was seeing stale definitions. New ID forces a fresh fetch.
 // The main modal layer, same target the makeover mage and ::commands use.
 const MODAL_TARGET_UID = (161 << 16) | 16;
 

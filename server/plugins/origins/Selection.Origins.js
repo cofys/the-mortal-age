@@ -19,7 +19,7 @@
  * welcome screen, so they are prompted from a login microtask instead.
  *
  * Choice UI: the graphical creation screen (Gui.Origins, custom interface
- * 30012) is the primary UI on desktop. The chatbox flow below stays as the
+ * 30016) is the primary UI on desktop. The chatbox flow below stays as the
  * fallback: mobile clients use it, dismissing the GUI without choosing falls
  * back to it, and any GUI open failure falls back to it — until the GUI is
  * verified in-game. The intro and lens text render as StatementDialogue, but
