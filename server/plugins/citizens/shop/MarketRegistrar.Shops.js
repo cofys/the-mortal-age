@@ -33,7 +33,20 @@
  */
 
 const { NpcIds } = require("../../../src/main/typescript/elvarg/util/IdEnums");
-const { CAPITALS } = require("../../world/DiegeticObjects");
+// DiegeticObjects may fail to resolve during parallel plugin loading; fall
+// back to inline capitals so the citizens plugin never dies on this import.
+let CAPITALS;
+try {
+  CAPITALS = require("../../world/DiegeticObjects").CAPITALS;
+} catch {
+  CAPITALS = [
+    { id: "asgarnia", x: 2964, y: 3378, z: 0 },
+    { id: "misthalin", x: 3165, y: 3485, z: 0 },
+    { id: "kandarin", x: 2660, y: 3290, z: 0 },
+    { id: "morytania", x: 3495, y: 3235, z: 0 },
+    { id: "keldagrim", x: 2855, y: 10200, z: 0 },
+  ];
+}
 const PlayerShops = require("./PlayerShops");
 const KingdomStore = require("../../kingdoms/KingdomStore");
 

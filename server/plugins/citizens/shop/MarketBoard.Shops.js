@@ -27,7 +27,17 @@ const {
   TYPE_TEXT,
   createWidgetGroup,
 } = require("../../interface/widgetGroup");
-const { matchDiegetic, OBJECT_IDS } = require("../../world/DiegeticObjects");
+// DiegeticObjects may fail to resolve during parallel plugin loading; fall
+// back to stubs so the citizens plugin never dies on this import.
+let matchDiegetic = () => false;
+let OBJECT_IDS = {};
+try {
+  const d = require("../../world/DiegeticObjects");
+  matchDiegetic = d.matchDiegetic ?? matchDiegetic;
+  OBJECT_IDS = d.OBJECT_IDS ?? OBJECT_IDS;
+} catch {
+  // Fallback stubs above keep the plugin alive.
+}
 const PlayerShops = require("./PlayerShops");
 const KingdomStore = require("../../kingdoms/KingdomStore");
 
