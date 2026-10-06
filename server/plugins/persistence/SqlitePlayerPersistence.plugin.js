@@ -83,7 +83,15 @@ class SqlitePlayerPersistence extends PlayerPersistence {
       return;
     }
 
-    const save = PlayerSave.fromPlayer(player);
+    // TEMP DEBUG: log BEFORE fromPlayer to catch throws
+    console.info(`[persistence-debug] save() called for ${player.getUsername()}, calling fromPlayer...`);
+    let save;
+    try {
+      save = PlayerSave.fromPlayer(player);
+    } catch (e) {
+      console.error(`[persistence-debug] fromPlayer THREW for ${player.getUsername()}:`, e?.message ?? e);
+      throw e;
+    }
     // TEMP DEBUG: diagnose origin persistence (logging all saves temporarily)
     {
       const attrKeys = save.attributes ? Object.keys(save.attributes) : [];
