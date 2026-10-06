@@ -111,6 +111,9 @@ const GRUMBLE_LINES = [
  * All-or-nothing — when the coffers can't cover the garrison, nobody
  * gets paid and the guards say so in the street.
  *
+ * Returns the coins paid (0 when payday failed) so the steward's ledger
+ * can record it via kingdom:wages-paid.
+ *
  * Wages cover food: after payday each guard buys up to two loaves from a
  * bread-selling merchant of the kingdom (real coin and bread transfers)
  * and eats one on the spot. A guard who can't afford bread goes hungry
@@ -119,9 +122,9 @@ const GRUMBLE_LINES = [
 function onWageDay(event) {
   const kingdomId = event?.kingdomId;
   const perGuard = Math.floor(event?.perGuard ?? 0);
-  if (!kingdomId || perGuard <= 0) return;
+  if (!kingdomId || perGuard <= 0) return 0;
   const guards = onlineBots(kingdomId, ROLE_GUARD);
-  if (guards.length === 0) return;
+  if (guards.length === 0) return 0;
   const total = perGuard * guards.length;
   if (!KingdomStore.spendTax(kingdomId, total)) {
     const speaker = pick(guards);
@@ -133,7 +136,7 @@ function onWageDay(event) {
     for (const guard of guards) {
       addMood(guard, -10); // unpaid and unhappy
     }
-    return;
+    return 0;
   }
   const provisioners = onlineBots(kingdomId, ROLE_MERCHANT).filter((bot) => {
     try {
@@ -163,6 +166,7 @@ function onWageDay(event) {
       // Dinner can wait; the wage itself landed.
     }
   }
+  return total;
 }
 
 /**

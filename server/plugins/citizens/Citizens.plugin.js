@@ -326,7 +326,14 @@ function onKingdomPatrolOrdered(event) {
 }
 
 function onKingdomWageDay(event) {
-  onWageDay(event);
+  const total = onWageDay(event) ?? 0;
+  // The steward's ledger records real wages paid (kingdom:wages-paid).
+  if (total > 0) {
+    pluginApi?.emitCustomEvent("kingdom:wages-paid", {
+      kingdomId: event?.kingdomId,
+      total,
+    });
+  }
 }
 
 function onArrivalPlayerArrived(event) {
