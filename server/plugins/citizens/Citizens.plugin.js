@@ -60,7 +60,7 @@ const {
   ROLE_COURTIER,
 } = require("./constants");
 
-const CITIZENS_ENABLED = (process.env.CITIZENS_ENABLED ?? "0") === "1";
+const CITIZENS_ENABLED = (process.env.CITIZENS_ENABLED ?? "1") === "1";
 
 let pluginApi = null;
 
