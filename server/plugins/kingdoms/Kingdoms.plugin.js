@@ -21,6 +21,7 @@ module.exports = {
     require("./Influence.Kingdoms")(api);
     require("./Politics.Kingdoms")(api);
     require("./DonationChest.Kingdoms")(api);
+    require("./Steward.Kingdoms")(api);
     require("./Commands.Kingdoms")(api);
     require("./Alliances.Kingdoms")(api);
     require("./Diplomacy.Kingdoms")(api);

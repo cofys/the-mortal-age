@@ -58,7 +58,7 @@ Design: "Charter stone" in the wilderness → click "Proclaim" → name prompt �
 ## Tracking
 
 - [ ] Phase 1: Market Board built, needs in-game verification
-- [ ] Phase 2: Steward's audience
+- [x] Phase 2: Steward's audience built (server/plugins/kingdoms/Steward.Kingdoms.js), needs in-game verification
 - [x] Phase 3: War table built (group 30015), needs in-game verification
 - [x] Phase 4: Donation chest built (server/plugins/kingdoms/DonationChest.Kingdoms.js), needs in-game verification
 - [ ] Phase 5: Charter stone

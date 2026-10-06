@@ -32,16 +32,27 @@ function usernameOf(player) {
   }
 }
 
+/**
+ * ::office list data — every office (and its holder) in the realm, or in one
+ * kingdom. Returns plain lines; the command adds its own headers. The
+ * steward's audience renders the same lines in-dialogue.
+ */
+function officeListLines(kingdomId = null, max = 20) {
+  return Offices.getOffices(kingdomId)
+    .slice(0, max)
+    .map((o) => `${o.officeId} — ${o.title}: ${Offices.holderName(o.holder)}`);
+}
+
 function showList(player, args) {
   const kingdomId = args[0] ?? null;
-  const list = Offices.getOffices(kingdomId);
-  if (list.length === 0) {
+  const lines = officeListLines(kingdomId);
+  if (lines.length === 0) {
     player.sendMessage("[Offices] No offices found.");
     return;
   }
   player.sendMessage("[Offices] Offices of the realm:");
-  for (const o of list.slice(0, 20)) {
-    player.sendMessage(`  ${o.officeId} — ${o.title}: ${Offices.holderName(o.holder)}`);
+  for (const line of lines) {
+    player.sendMessage(`  ${line}`);
   }
 }
 
@@ -271,3 +282,7 @@ module.exports = attachCommands;
 module.exports.realmStatusLines = realmStatusLines;
 module.exports.warSummary = warSummary;
 module.exports.allianceSummary = allianceSummary;
+// The steward's audience (phase 2) drives the same office flows in-dialogue.
+module.exports.officeListLines = officeListLines;
+module.exports.showList = showList;
+module.exports.vacateOffice = vacateOffice;
