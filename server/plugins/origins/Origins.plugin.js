@@ -13,12 +13,14 @@
 
 const Selection = require("./Selection.Origins");
 const Gui = require("./Gui.Origins");
+const OriginsApi = require("./OriginsApi");
 
 module.exports = {
   name: "Origins",
   register(api) {
     Selection(api);
     Gui.attach(api);
+    OriginsApi.attach(api);
     // Triggers live in Selection; the screen lives in Gui. Wire them here so
     // neither module requires the other at load time.
     Selection.setGuiHooks(Gui.hooks());
