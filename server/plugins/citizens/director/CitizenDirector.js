@@ -207,6 +207,7 @@ class CitizenDirector {
       }
     }
     this.log("roster built", { citizens: this.roster.size });
+    console.log("[DIAG] Citizen roster built: " + this.roster.size + " citizens");
     this.startTask();
   }
 
