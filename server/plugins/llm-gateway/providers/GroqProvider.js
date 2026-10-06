@@ -1,15 +1,16 @@
-// Groq -- LAST in the chain (final fallback).
-// Free tier, OpenAI-compatible: https://api.groq.ai/openai/v1/chat/completions
+// Groq -- OpenAI-compatible chat completions.
+// Free tier models are separate quota buckets (see ProviderChain.js SLOT_DEFS).
 // STUBBED until GROQ_API_KEY is set and LLM_GATEWAY_LIVE=1.
 
 const { LlmProvider } = require("./BaseProvider");
 
-const ENDPOINT = "https://api.groq.ai/openai/v1/chat/completions";
+const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
 class GroqProvider extends LlmProvider {
-  constructor() {
+  constructor(model) {
     super({ name: "groq", apiKeyEnv: "GROQ_API_KEY", defaultRpm: 30 });
-    this.model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    // NOTE: llama-3.3-70b-versatile is GONE from Groq's free tier (2026-10-06).
+    this.model = model || process.env.GROQ_MODEL || "openai/gpt-oss-120b";
   }
 
   async callApi({ system, user, maxTokens }) {

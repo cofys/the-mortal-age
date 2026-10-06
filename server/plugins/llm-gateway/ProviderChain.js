@@ -1,33 +1,55 @@
-// ProviderChain -- Gemini -> Groq with automatic fallback.
+// ProviderChain -- quota-aware multi-model routing with automatic fallback.
 //
 // SAFETY MODEL (Jon's rule: never exceed free tier, never spend money):
-// Free-tier math per provider (2026-10-06 research):
-//   Gemini (AI Studio free): ~1,500 req/day, 1M tokens/day  -> call-bound at ~920 tok/call
-//   Groq   (free):           ~1,000 req/day, 200K tokens/day -> TOKEN-bound at ~200 tok/call
-// A chat call costs ~920 tokens (see DESIGN.md "Token budget math"), so the
-// chain-wide call budget alone is NOT enough: 1000 calls x 920 tokens = 920K
-// tokens, 4.6x over Groq's 200K/day token quota. We would hit Groq's 429 wall
-// instead of staying comfortably inside.
-// Therefore every provider carries BOTH a daily call cap AND a daily token cap,
-// each set at 80% of the free tier (env-overridable):
-//   Gemini: GEMINI_DAILY_CALL_CAP=1200  (free 1500), GEMINI_DAILY_TOKEN_CAP=800000  (free 1M)
-//   Groq:   GROQ_DAILY_CALL_CAP=800     (free 1000), GROQ_DAILY_TOKEN_CAP=150000    (free 200K)
-// Token counting is conservative: input ~= prompt chars/4, output ~= maxTokens
-// (the full allowance, though real replies are far shorter). When EITHER cap is
-// hit the provider is skipped for the rest of the UTC day and the chain falls
-// through; if every provider is capped the gateway stays silent. Caps reset on
-// UTC day rollover.
+// Free tiers are PER MODEL, not per provider. Groq gives ~1,000 req/day +
+// 200K tokens/day EACH for gpt-oss-120b, gpt-oss-20b and qwen3.8-27b; Gemini
+// gives ~1,500 req/day each for its flash models. Using every free model
+// multiplies our headroom ~3-5x -- but only if each model is capped on its own.
 //
-// - Per-provider RPM token bucket: we QUEUE and wait rather than bursting past
-//   the free-tier rate limits.
-// - Circuit breaker: a 429 opens the circuit immediately (explicit backpressure);
-//   other errors open it after 3 consecutive failures. Cooldown default 60s.
-// - Chain-wide daily call budget (default 1000 calls/day, env LLM_GATEWAY_DAILY_BUDGET)
-//   is an additional coarse guard on top of the per-provider caps.
+// Model inventory — GROUND TRUTH from Jon's Groq org limits screenshot (2026-10-06).
+// Groq (console.groq.com, his actual quotas):
+//   Model                          RPM  Req/day  Tok/min  Tok/day
+//   allam-2-7b                      30    7,000      6K     500K   <- dark horse
+//   openai/gpt-oss-120b             30    1,000      8K     200K
+//   openai/gpt-oss-20b              30    1,000      8K     200K
+//   openai/gpt-oss-safeguard-20b     3    1,000      2K     200K   <- trickle only
+//   qwen/qwen3.8-27b                30    1,000      8K     200K
+//   (llama-prompt-guard rows are safety models, not chat -- ignored)
+//   CONFIRMED: llama-3.3-70b-versatile is GONE from the free tier.
+//   Total Groq free headroom: ~11K req/day, ~1.3M tokens/day across chat models.
+// Gemini (AI Studio; Google publishes no fixed table, limits are per-project;
+// widely reported ~1,500 RPD for flash models; the 429 circuit breaker is the
+// backstop if a project turns out tighter):
+//   gemini-2.5-flash / gemini-2.5-flash-lite / gemini-2.0-flash
 //
-// NOTE: Cerebras was evaluated and dropped (2026-10-06) — it requires a payment
+// Slot caps below are exactly 80% of the free tier per model.
+//
+// Every slot carries BOTH a daily call cap AND a daily token cap at 80% of its
+// free tier (env-overridable, see below). Token counting is conservative:
+// input ~= prompt chars/4, output ~= maxTokens (the full allowance, though real
+// replies are far shorter). When EITHER cap is hit the slot is skipped for the
+// rest of the UTC day; if every slot is capped the gateway stays silent.
+// Caps reset on UTC day rollover.
+//
+// ROUTING (intelligent, quota-aware):
+//   score(slot) = remainingQuotaFraction(slot) * tierWeight(slot.tier, request.tier)
+//   - remainingQuotaFraction = min(1 - calls/callCap, 1 - tokens/tokenCap)
+//   - request.tier "flagship" (first contact, complex chats): flagship 1.0,
+//     standard 0.55, lite 0.3
+//   - request.tier "lite" or unset (routine chatter): flagship 0.75/0.3,
+//     standard 0.9/0.6, lite 1.0 -- spend cheap quota first, save flagship headroom
+// Slots are tried in score order. Per-slot RPM buckets and per-slot circuit
+// breakers: a 429 on gpt-oss-20b does NOT take down gpt-oss-120b.
+//
+// Env overrides (slot-specific, then provider-level legacy, then the default):
+//   <PROVIDER>_<SANITIZED_MODEL>_DAILY_CALL_CAP / _DAILY_TOKEN_CAP / _RPM
+//   e.g. GROQ_OPENAI_GPT_OSS_20B_DAILY_TOKEN_CAP=50000
+//   Legacy: GEMINI_DAILY_CALL_CAP, GROQ_DAILY_TOKEN_CAP, ... (applies to every
+//   slot of that provider)
+//
+// NOTE: Cerebras was evaluated and dropped (2026-10-06) -- it requires a payment
 // method on file. providers/CerebrasProvider.js is kept implemented but OUT of
-// the chain; re-add it to the providers array if that changes.
+// the chain; re-add it as slots if that changes.
 
 const { GeminiProvider } = require("./providers/GeminiProvider");
 const { GroqProvider } = require("./providers/GroqProvider");
@@ -36,16 +58,41 @@ const MAX_QUEUE_WAIT_MS = 30_000;
 const CIRCUIT_COOLDOWN_MS = 60_000;
 const CIRCUIT_FAILURE_THRESHOLD = 3;
 
-// 80% of each free tier -- the most we will ever spend in a UTC day.
-const DEFAULT_CAPS = {
-  gemini: { calls: 1200, tokens: 800_000 },
-  groq: { calls: 800, tokens: 150_000 },
+// Flat list of (provider, model) slots. Order is the tiebreak priority.
+// Caps are exactly 80% of each model's free tier (see inventory above).
+const SLOT_DEFS = [
+  { provider: "gemini", model: "gemini-2.5-flash",          tier: "flagship", rpm: 15, calls: 1200, tokens: 800_000 },
+  { provider: "groq",   model: "openai/gpt-oss-120b",       tier: "flagship", rpm: 24, calls: 800,  tokens: 160_000 },
+  { provider: "groq",   model: "qwen/qwen3.8-27b",          tier: "flagship", rpm: 24, calls: 800,  tokens: 160_000 },
+  { provider: "gemini", model: "gemini-2.0-flash",          tier: "standard", rpm: 15, calls: 1200, tokens: 800_000 },
+  { provider: "groq",   model: "openai/gpt-oss-20b",        tier: "standard", rpm: 24, calls: 800,  tokens: 160_000 },
+  { provider: "gemini", model: "gemini-2.5-flash-lite",     tier: "lite",     rpm: 30, calls: 1200, tokens: 800_000 },
+  { provider: "groq",   model: "allam-2-7b",                tier: "lite",     rpm: 24, calls: 5600, tokens: 400_000 },
+  { provider: "groq",   model: "openai/gpt-oss-safeguard-20b", tier: "drip", rpm: 2,  calls: 800,  tokens: 160_000 },
+];
+
+const PROVIDER_CLASSES = { gemini: GeminiProvider, groq: GroqProvider };
+
+// Quality-tier weights: [request tier][slot tier]. "drip" is the safeguard
+// model -- only ever used when everything else is exhausted or capped.
+const TIER_WEIGHTS = {
+  flagship: { flagship: 1.0, standard: 0.55, lite: 0.3,  drip: 0.1 },
+  standard: { flagship: 0.75, standard: 0.9,  lite: 1.0,  drip: 0.1 },
+  lite:     { flagship: 0.3,  standard: 0.6,  lite: 1.0,  drip: 0.1 },
 };
+
+function dailyKey() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function parseCap(envName, fallback) {
   const value = Number(process.env[envName]);
   if (!Number.isFinite(value)) return fallback;
   return Math.max(0, Math.floor(value));
+}
+
+function sanitizeModel(model) {
+  return model.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
 // Conservative per-call token estimate: input ~= prompt chars/4,
@@ -54,10 +101,6 @@ function estimateCallTokens(request = {}) {
   const promptChars = String(request.system ?? "").length + String(request.user ?? "").length;
   const maxTokens = Number.isFinite(request.maxTokens) ? Math.max(0, request.maxTokens) : 60;
   return Math.ceil(promptChars / 4) + maxTokens;
-}
-
-function dailyKey() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 // Token bucket: capacity = rpm, refills steadily. acquire() waits its turn.
@@ -139,65 +182,85 @@ class CircuitBreaker {
   }
 }
 
-// Per-provider daily spend caps. Both a call cap and a token cap; hitting
-// EITHER takes the provider out for the rest of the UTC day. Conservative by
-// design: we skip a call when it *would* reach the cap, not after it blows it.
+// Per-slot daily spend caps. Both a call cap and a token cap; hitting EITHER
+// takes the slot out for the rest of the UTC day. Conservative by design: we
+// skip a call when it *would* reach the cap, not after it blows it.
 class DailyCaps {
   constructor() {
     this.caps = new Map();
     this.day = dailyKey();
   }
 
-  entry(name) {
+  entry(slotKey, def) {
     if (this.day !== dailyKey()) {
       this.day = dailyKey();
       this.caps.clear();
     }
-    if (!this.caps.has(name)) {
-      const upper = name.toUpperCase();
-      const fallback = DEFAULT_CAPS[name] ?? { calls: 1000, tokens: 100_000 };
-      this.caps.set(name, {
+    if (!this.caps.has(slotKey)) {
+      this.caps.set(slotKey, {
         calls: 0,
         tokens: 0,
-        callCap: parseCap(`${upper}_DAILY_CALL_CAP`, fallback.calls),
-        tokenCap: parseCap(`${upper}_DAILY_TOKEN_CAP`, fallback.tokens),
+        callCap: resolveSlotNumber(def, "CALL_CAP", def.calls),
+        tokenCap: resolveSlotNumber(def, "TOKEN_CAP", def.tokens),
         warned: new Set(),
       });
     }
-    return this.caps.get(name);
+    return this.caps.get(slotKey);
   }
 
   // Returns null when the call fits, otherwise which dimension(s) blocked it.
-  blockedReason(name, estimateTokens) {
-    const e = this.entry(name);
+  blockedReason(slotKey, def, estimateTokens) {
+    const e = this.entry(slotKey, def);
     const reasons = [];
     if (e.calls + 1 > e.callCap) reasons.push("calls");
     if (e.tokens + estimateTokens > e.tokenCap) reasons.push("tokens");
     return reasons.length > 0 ? reasons.join("+") : null;
   }
 
-  record(name, estimateTokens) {
-    const e = this.entry(name);
+  record(slotKey, def, estimateTokens) {
+    const e = this.entry(slotKey, def);
     e.calls += 1;
     e.tokens += estimateTokens;
   }
 
-  warnOnce(name, reason) {
-    const e = this.entry(name);
-    const key = `${name}:${reason}`;
+  warnOnce(slotKey, def, reason) {
+    const e = this.entry(slotKey, def);
+    const key = `${slotKey}:${reason}`;
     if (e.warned.has(key)) return;
     e.warned.add(key);
-    console.warn(
-      `[llm-gateway] DAILY CAP reached for ${name} (${reason}) -- silent until reset`
-    );
+    console.warn(`[llm-gateway] DAILY CAP reached for ${slotKey} (${reason}) -- silent until reset`);
   }
+}
+
+// Slot-specific env var wins, then legacy provider-level, then the slot default.
+function resolveSlotNumber(def, kind, fallback) {
+  const slotVar = `${def.provider.toUpperCase()}_${sanitizeModel(def.model)}_DAILY_${kind}`;
+  const providerVar = `${def.provider.toUpperCase()}_DAILY_${kind}`;
+  const fromSlot = Number(process.env[slotVar]);
+  if (Number.isFinite(fromSlot)) return Math.max(0, Math.floor(fromSlot));
+  const fromProvider = Number(process.env[providerVar]);
+  if (Number.isFinite(fromProvider)) return Math.max(0, Math.floor(fromProvider));
+  return fallback;
+}
+
+function resolveSlotRpm(def, providerRpm) {
+  const slotVar = `${def.provider.toUpperCase()}_${sanitizeModel(def.model)}_RPM`;
+  const fromSlot = Number(process.env[slotVar]);
+  if (Number.isFinite(fromSlot)) return Math.max(1, Math.floor(fromSlot));
+  return Math.max(1, providerRpm);
 }
 
 class ProviderChain {
   constructor() {
-    this.providers = [new GeminiProvider(), new GroqProvider()];
-    this.limiters = new Map(this.providers.map((p) => [p.name, new RateLimiter(p.rpm)]));
-    this.circuits = new Map(this.providers.map((p) => [p.name, new CircuitBreaker(p.name)]));
+    this.slots = SLOT_DEFS.map((def) => {
+      const ProviderClass = PROVIDER_CLASSES[def.provider];
+      const provider = new ProviderClass(def.model);
+      const rpm = resolveSlotRpm(def, provider.rpm);
+      provider.rpm = rpm;
+      return { key: `${def.provider}/${def.model}`, def, provider, rpm };
+    });
+    this.limiters = new Map(this.slots.map((s) => [s.key, new RateLimiter(s.rpm)]));
+    this.circuits = new Map(this.slots.map((s) => [s.key, new CircuitBreaker(s.key)]));
     this.dailyCaps = new DailyCaps();
     const envBudget = Number(process.env.LLM_GATEWAY_DAILY_BUDGET);
     this.dailyBudget = Number.isFinite(envBudget) ? Math.max(0, Math.floor(envBudget)) : 1000;
@@ -213,59 +276,77 @@ class ProviderChain {
     return this.callsToday >= this.dailyBudget;
   }
 
+  // Rank slots by remaining quota x quality-tier weight. Stable: SLOT_DEFS
+  // order breaks ties, so provider priority is preserved when all is equal.
+  rankSlots(request) {
+    const weights = TIER_WEIGHTS[request.tier] || TIER_WEIGHTS.standard;
+    return this.slots
+      .map((slot, index) => {
+        const caps = this.dailyCaps.entry(slot.key, slot.def);
+        const remCalls = caps.callCap > 0 ? 1 - caps.calls / caps.callCap : 0;
+        const remTokens = caps.tokenCap > 0 ? 1 - caps.tokens / caps.tokenCap : 0;
+        const remaining = Math.max(0, Math.min(remCalls, remTokens));
+        const weight = weights[slot.def.tier] ?? 0.5;
+        return { slot, score: remaining * weight, index };
+      })
+      .sort((a, b) => b.score - a.score || a.index - b.index)
+      .map((x) => x.slot);
+  }
+
   async complete(request) {
     if (this.budgetExceeded()) {
       console.warn(`[llm-gateway] daily call budget (${this.dailyBudget}) exhausted -- staying silent`);
       return { ok: false, reason: "DAILY_BUDGET_EXHAUSTED", retryable: false };
     }
-    for (const provider of this.providers) {
-      const circuit = this.circuits.get(provider.name);
+    const estimate = estimateCallTokens(request);
+    for (const slot of this.rankSlots(request)) {
+      const circuit = this.circuits.get(slot.key);
       if (circuit.isOpen) continue;
-      if (!provider.configured) {
-        provider.needsApiKey(); // logs once
+      if (!slot.provider.configured) {
+        slot.provider.needsApiKey(); // logs once
         continue;
       }
-      // Free-tier safety: skip providers whose daily call or token cap is hit.
-      const estimate = estimateCallTokens(request);
-      const blocked = this.dailyCaps.blockedReason(provider.name, estimate);
+      // Free-tier safety: skip slots whose daily call or token cap is hit.
+      const blocked = this.dailyCaps.blockedReason(slot.key, slot.def, estimate);
       if (blocked) {
-        this.dailyCaps.warnOnce(provider.name, blocked);
+        this.dailyCaps.warnOnce(slot.key, slot.def, blocked);
         continue;
       }
-      const limiter = this.limiters.get(provider.name);
+      const limiter = this.limiters.get(slot.key);
       try {
         await limiter.acquire();
       } catch {
         circuit.recordFailure("RATE_LIMITED");
         continue;
       }
-      const result = await provider.complete(request);
+      const result = await slot.provider.complete(request);
       if (result.ok && result.text) {
         circuit.recordSuccess();
         this.callsToday += 1;
-        this.dailyCaps.record(provider.name, estimate);
-        return { ...result, provider: provider.name };
+        this.dailyCaps.record(slot.key, slot.def, estimate);
+        return { ...result, provider: slot.def.provider, model: slot.def.model };
       }
       circuit.recordFailure(result.reason);
       if (result.reason === "STUBBED") {
-        // Key exists but LIVE is off: don't burn the other providers, the whole
-        // chain is intentionally inert. The next provider would say the same.
+        // Key exists but LIVE is off: don't burn the other slots, the whole
+        // chain is intentionally inert. The next slot would say the same.
         continue;
       }
     }
-    return { ok: false, reason: "ALL_PROVIDERS_UNAVAILABLE", retryable: false };
+    return { ok: false, reason: "ALL_SLOTS_UNAVAILABLE", retryable: false };
   }
 
   status() {
     return {
-      order: this.providers.map((p) => p.name),
-      providers: this.providers.map((p) => {
-        const caps = this.dailyCaps.entry(p.name);
+      order: this.slots.map((s) => s.key),
+      slots: this.slots.map((s) => {
+        const caps = this.dailyCaps.entry(s.key, s.def);
         return {
-          name: p.name,
-          configured: p.configured,
-          rpm: p.rpm,
-          circuitOpen: this.circuits.get(p.name).isOpen,
+          key: s.key,
+          tier: s.def.tier,
+          configured: s.provider.configured,
+          rpm: s.rpm,
+          circuitOpen: this.circuits.get(s.key).isOpen,
           callsToday: caps.calls,
           callCap: caps.callCap,
           tokensToday: caps.tokens,
@@ -278,4 +359,4 @@ class ProviderChain {
   }
 }
 
-module.exports = { ProviderChain, RateLimiter, CircuitBreaker, DailyCaps, estimateCallTokens };
+module.exports = { ProviderChain, RateLimiter, CircuitBreaker, DailyCaps, estimateCallTokens, SLOT_DEFS };

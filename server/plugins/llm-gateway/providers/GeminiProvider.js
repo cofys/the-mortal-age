@@ -8,9 +8,9 @@
 const { LlmProvider } = require("./BaseProvider");
 
 class GeminiProvider extends LlmProvider {
-  constructor() {
+  constructor(model) {
     super({ name: "gemini", apiKeyEnv: "GEMINI_API_KEY", defaultRpm: 15 });
-    this.model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    this.model = model || process.env.GEMINI_MODEL || "gemini-2.5-flash";
   }
 
   async callApi({ system, user, maxTokens }) {

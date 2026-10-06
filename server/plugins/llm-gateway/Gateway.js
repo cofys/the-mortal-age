@@ -62,6 +62,9 @@ class Gateway {
       history,
       message: text,
     });
+    // First contact gets the flagship tier: first impressions shape whether a
+    // player keeps talking to citizens. Follow-ups ride cheaper slots.
+    if (history.length === 0) prompt.tier = "flagship";
 
     const result = await this.chain.complete(prompt);
     if (!result.ok || !result.text) {

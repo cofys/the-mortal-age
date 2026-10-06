@@ -36,26 +36,49 @@ through `bot.forceChat()` plus the same broadcast loop core's
 `ChatPacketListener.handleText` uses for public chat. Per-player reply cooldowns
 (default 8s) and a daily call budget keep one chatty player from farming calls.
 
-## Provider chain (all free tier, all STUBBED)
+## Provider chain: model slots (all free tier, all STUBBED)
 
-| Order | Provider | Env var | Free-tier shape |
-|---|---|---|---|
-| 1 | Gemini | `GEMINI_API_KEY` | AI Studio free tier: ~1,500 req/day, 10-15 RPM, `:generateContent`, model `gemini-2.5-flash` |
-| 2 | Groq | `GROQ_API_KEY` | ~1,000 req/day per model, 30 RPM, OpenAI-compatible `/openai/v1/chat/completions`, model `llama-3.3-70b-versatile` |
+Free tiers are PER MODEL, so the chain is a flat list of (provider, model)
+slots, each its own quota bucket: own RPM limiter, own circuit breaker, own
+daily call + token caps at 80% of free tier. Using every free model multiplies
+headroom ~3-5x.
+
+Model inventory (Groq numbers are ground truth from the org limits page,
+2026-10-06; Gemini numbers are widely-reported AI Studio free tier):
+
+| Provider | Model | Tier | Free tier | Slot caps (80%) |
+|---|---|---|---|---|
+| gemini | gemini-2.5-flash | flagship | ~1,500 req/day | 1,200 req / 800K tok |
+| groq | openai/gpt-oss-120b | flagship | 30 RPM, 1K req/d, 200K tok/d | 24 RPM, 800 req / 160K tok |
+| groq | qwen/qwen3.8-27b | flagship | 30 RPM, 1K req/d, 200K tok/d | 24 RPM, 800 req / 160K tok |
+| gemini | gemini-2.0-flash | standard | ~1,500 req/day | 1,200 req / 800K tok |
+| groq | openai/gpt-oss-20b | standard | 30 RPM, 1K req/d, 200K tok/d | 24 RPM, 800 req / 160K tok |
+| gemini | gemini-2.5-flash-lite | lite | ~1,500 req/day | 1,200 req / 800K tok |
+| groq | allam-2-7b | lite | 30 RPM, 7K req/d, 500K tok/d | 24 RPM, 5,600 req / 400K tok |
+| groq | openai/gpt-oss-safeguard-20b | drip | 3 RPM, 1K req/d, 200K tok/d | 2 RPM, 800 req / 160K tok |
+
+Combined free headroom: ~12K req/day, ~3.4M tokens/day across all slots.
+`llama-3.3-70b-versatile` is CONFIRMED gone from Groq's free tier -- do not use it.
 
 Cerebras was evaluated and dropped (2026-10-06): it requires a payment method
-on file. `providers/CerebrasProvider.js` is implemented but OUT of the chain;
-re-add it to `ProviderChain` if that changes.
+on file. `providers/CerebrasProvider.js` is implemented but OUT of the chain.
 
-- Same `complete({ system, user, maxTokens })` shape on all three; returns
-  `{ ok, text, tokensUsed }` or `{ ok: false, reason }`.
+Routing (quota-aware, in `ProviderChain.rankSlots`):
+score = remainingQuotaFraction x tierWeight. First contact (`history` empty)
+goes out with `tier: "flagship"`; routine chatter spends cheap lite quota first
+and saves flagship headroom. A 429 on one model never affects its siblings.
+
+- Same `complete({ system, user, maxTokens, tier? })` shape on all slots; returns
+  `{ ok, text, tokensUsed, provider, model }` or `{ ok: false, reason }`.
 - No key -> no-op with a one-time `NEEDS_API_KEY` log. Nothing ever logs or
   prints key material.
-- RPM is a per-provider token bucket: calls QUEUE and wait rather than bursting.
-- Circuit breaker: a 429 opens the circuit immediately; other errors open it
+- RPM is a per-slot token bucket: calls QUEUE and wait rather than bursting.
+- Circuit breaker is per slot: a 429 opens it immediately; other errors open it
   after 3 consecutive failures. 60s cooldown, then a half-open probe.
-- Daily call budget (env `LLM_GATEWAY_DAILY_BUDGET`, default 1000): when
-  exhausted the gateway stays silent instead of spending money that doesn't exist.
+- Daily caps: when a slot's call OR token cap is hit it is skipped for the rest
+  of the UTC day (`[llm-gateway] DAILY CAP reached for <slot> (...)`); every slot
+  capped means silence. Chain-wide `LLM_GATEWAY_DAILY_BUDGET` (default 1000)
+  guards on top.
 
 ## Token budget math (free-tier request limits)
 
@@ -76,16 +99,18 @@ Input hard cap: 2000 tokens (history is truncated to fit). Prompts stay lean
 regardless of provider context windows — free-tier *request* limits are the
 binding constraint now, not context size.
 
-Calls per day on the free tier: Gemini allows ~1,500 requests/day, Groq ~1,000.
-Request limits are NOT the binding constraint for Groq: at ~920 tokens/call,
-1,000 calls = 920K tokens, 4.6x over Groq's 200K/day token quota. So every
-provider carries BOTH a daily call cap and a daily token cap at 80% of free
-tier (see the SAFETY MODEL comment at the top of ProviderChain.js):
-Gemini 1,200 calls / 800K tokens, Groq 800 calls / 150K tokens. Token counting
-is conservative (prompt chars/4 + full maxTokens). When either cap is hit the
-provider is skipped for the rest of the UTC day; all capped means silence.
-Jon's rule: we never exceed free tier, never spend money. All four numbers are
-env-overridable (`<PROVIDER>_DAILY_CALL_CAP`, `<PROVIDER>_DAILY_TOKEN_CAP`).
+Calls per day on the free tier: Gemini ~1,500 requests/day per flash model;
+Groq 1,000/day per model (7,000/day for allam-2-7b). Request limits are NOT the
+binding constraint: at ~920 tokens/call, 1,000 calls = 920K tokens, 4.6x over a
+200K/day token quota. So every model slot carries BOTH a daily call cap and a
+daily token cap at 80% of its free tier (see the SAFETY MODEL comment at the top
+of ProviderChain.js and the slot inventory above). Token counting is
+conservative (prompt chars/4 + full maxTokens). When either cap is hit the slot
+is skipped for the rest of the UTC day; every slot capped means silence.
+Jon's rule: we never exceed free tier, never spend money. Caps are
+env-overridable per slot (`<PROVIDER>_<MODEL>_DAILY_CALL_CAP`,
+`<PROVIDER>_<MODEL>_DAILY_TOKEN_CAP`, `<PROVIDER>_<MODEL>_RPM`) with the legacy
+provider-level vars as fallback.
 
 ## What's STUBBED (awaiting keys)
 
@@ -126,7 +151,7 @@ env-overridable (`<PROVIDER>_DAILY_CALL_CAP`, `<PROVIDER>_DAILY_TOKEN_CAP`).
 - `Gateway.js` — request -> prompt -> chain -> typing delay -> response event
 - `ChatInterceptor.js` — ears: onSocialPacket PM interception + citizen registry
 - `Mouth.js` — mouth: forceChat/broadcast and PM delivery of replies
-- `ProviderChain.js` — fallback chain, RPM token buckets, circuit breakers, daily budget
+- `ProviderChain.js` — model-slot chain: quota-aware routing, per-slot RPM buckets, circuit breakers, daily caps
 - `providers/BaseProvider.js` — stubbed base (NEEDS_API_KEY gate, never logs keys)
 - `providers/CerebrasProvider.js` — implemented but OUT of the chain (payment method required); `GeminiProvider.js` / `GroqProvider.js`
 - `PromptBuilder.js` — personality card + notes + truncated history, 2000-token input cap

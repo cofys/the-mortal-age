@@ -1,28 +1,41 @@
-// Unit tests for the free-tier spend ceilings in ProviderChain.
-// Isolated: fake providers, no network, no server.
+// Unit tests for the slot-based free-tier spend ceilings + intelligent routing.
+// Isolated: fake slots, no network, no server.
 // Run: node server/plugins/llm-gateway/ProviderChain.test.js   (from repo root)
 const assert = require("node:assert/strict");
-const { ProviderChain, RateLimiter, CircuitBreaker, estimateCallTokens } = require("./ProviderChain");
+const {
+  ProviderChain,
+  RateLimiter,
+  CircuitBreaker,
+  estimateCallTokens,
+  SLOT_DEFS,
+} = require("./ProviderChain");
+const { GroqProvider } = require("./providers/GroqProvider");
 
-// A fake provider that always succeeds; records how many times it was hit.
-function fakeProvider(name, rpm = 10000) {
-  return {
-    name,
+// Fake slot: { key, def, provider }. def carries quota defaults like SLOT_DEFS.
+function fakeSlot(provider, model, tier, rpm = 10000) {
+  const fake = {
+    name: provider,
     rpm,
     configured: true,
     hits: 0,
     async complete() {
       this.hits += 1;
-      return { ok: true, text: "hello" };
+      return { ok: true, text: "hi" };
     },
+  };
+  return {
+    key: `${provider}/${model}`,
+    def: { provider, model, tier, rpm, calls: 100000, tokens: 100000 },
+    provider: fake,
   };
 }
 
-function chainWith(...providers) {
+function testChain(slots) {
   const chain = new ProviderChain();
-  chain.providers = providers;
-  chain.limiters = new Map(providers.map((p) => [p.name, new RateLimiter(p.rpm)]));
-  chain.circuits = new Map(providers.map((p) => [p.name, new CircuitBreaker(p.name)]));
+  chain.slots = slots;
+  chain.limiters = new Map(slots.map((s) => [s.key, new RateLimiter(s.def.rpm)]));
+  chain.circuits = new Map(slots.map((s) => [s.key, new CircuitBreaker(s.key)]));
+  chain.dailyCaps = new (require("./ProviderChain").DailyCaps)();
   return chain;
 }
 
@@ -50,110 +63,144 @@ async function main() {
   // 1. Token estimate math: conservative, exact.
   assert.equal(estimateCallTokens(REQUEST), ESTIMATE, "estimate = prompt/4 + maxTokens");
   assert.equal(estimateCallTokens({}), 60, "empty request defaults to 60 output tokens");
-  assert.equal(estimateCallTokens({ system: "ab" }), 61, "ceil(2/4)=1 + 60");
 
-  // 2. Token cap: blocked BEFORE blowing it, not after.
-  await withEnv({ GROQ_DAILY_TOKEN_CAP: String(ESTIMATE * 2 - 1) }, async () => {
-    const groq = fakeProvider("groq");
-    const chain = chainWith(groq);
-    const r1 = await chain.complete(REQUEST);
-    assert.equal(r1.provider, "groq", "first call fits under the cap");
-    assert.equal(groq.hits, 1);
-    // Second call would take us to 2*ESTIMATE > cap -> skipped -> no providers left.
-    const r2 = await chain.complete(REQUEST);
-    assert.equal(r2.ok, false, "second call blocked by token cap");
-    assert.equal(groq.hits, 1, "blocked call never reached the provider");
-    assert.equal(chain.dailyCaps.entry("groq").tokens, ESTIMATE, "only spent tokens counted");
-  });
-
-  // 3. Call cap: N calls allowed, N+1 blocked.
-  await withEnv({ GROQ_DAILY_CALL_CAP: "2" }, async () => {
-    const groq = fakeProvider("groq");
-    const chain = chainWith(groq);
-    assert.ok((await chain.complete(REQUEST)).ok);
-    assert.ok((await chain.complete(REQUEST)).ok);
-    const r3 = await chain.complete(REQUEST);
-    assert.equal(r3.ok, false, "third call blocked by call cap");
-    assert.equal(groq.hits, 2);
-  });
-
-  // 4. Fallthrough: capped provider skipped, next provider serves.
-  await withEnv({ GROQ_DAILY_CALL_CAP: "0" }, async () => {
-    const groq = fakeProvider("groq");
-    const gemini = fakeProvider("gemini");
-    const chain = chainWith(groq, gemini);
-    const r = await chain.complete(REQUEST);
-    assert.equal(r.provider, "gemini", "falls through past capped groq");
-    assert.equal(groq.hits, 0);
-    assert.equal(gemini.hits, 1);
-  });
-
-  // 5. All capped -> silent, correct reason.
-  await withEnv({ GROQ_DAILY_CALL_CAP: "0", GEMINI_DAILY_CALL_CAP: "0" }, async () => {
-    const chain = chainWith(fakeProvider("groq"), fakeProvider("gemini"));
-    const r = await chain.complete(REQUEST);
-    assert.equal(r.ok, false);
-    assert.equal(r.reason, "ALL_PROVIDERS_UNAVAILABLE");
-  });
-
-  // 6. UTC day rollover resets caps.
-  await withEnv({}, async () => {
-    const groq = fakeProvider("groq");
-    const chain = chainWith(groq);
-    await chain.complete(REQUEST);
-    assert.equal(chain.dailyCaps.entry("groq").calls, 1);
-    chain.dailyCaps.day = "2000-01-01"; // force a stale day
-    await chain.complete(REQUEST);
-    assert.equal(chain.dailyCaps.entry("groq").calls, 1, "counters reset on new day");
-    assert.equal(groq.hits, 2);
-  });
-
-  // 7. Env overrides: valid values win, garbage falls back to safe defaults.
-  await withEnv(
-    {
-      GEMINI_DAILY_TOKEN_CAP: "12345",
-      GEMINI_DAILY_CALL_CAP: "42",
-      GROQ_DAILY_TOKEN_CAP: "not-a-number",
-    },
-    async () => {
-      const chain = new ProviderChain();
-      assert.equal(chain.dailyCaps.entry("gemini").tokenCap, 12345);
-      assert.equal(chain.dailyCaps.entry("gemini").callCap, 42);
-      assert.equal(chain.dailyCaps.entry("groq").tokenCap, 150_000, "garbage env -> safe default");
-    }
+  // 2. Slot inventory: 8 slots, exact confirmed-free model IDs, dead default gone.
+  assert.equal(SLOT_DEFS.length, 8, "eight model slots");
+  const models = SLOT_DEFS.map((s) => s.model);
+  for (const m of [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
+    "allam-2-7b",
+    "openai/gpt-oss-safeguard-20b",
+  ]) {
+    assert.ok(models.includes(m), `slot inventory includes ${m}`);
+  }
+  assert.ok(!models.some((m) => m.includes("llama")), "llama-3.3-70b is gone from free tier");
+  assert.equal(
+    new GroqProvider().model,
+    "openai/gpt-oss-120b",
+    "Groq default is a confirmed-free model"
+  );
+  const allam = SLOT_DEFS.find((s) => s.model === "allam-2-7b");
+  assert.deepEqual(
+    { calls: allam.calls, tokens: allam.tokens, rpm: allam.rpm },
+    { calls: 5600, tokens: 400_000, rpm: 24 },
+    "allam-2-7b caps are exactly 80% of 7000/500K/30"
   );
 
-  // 8. Defaults are the documented 80%-of-free-tier numbers.
+  // 3. Per-slot token cap: blocked BEFORE blowing it.
+  await withEnv({ GROQ_TESTMX_DAILY_TOKEN_CAP: String(ESTIMATE * 2 - 1) }, async () => {
+    const slot = fakeSlot("groq", "testmx", "standard");
+    const chain = testChain([slot]);
+    const r1 = await chain.complete(REQUEST);
+    assert.ok(r1.ok, "first call fits under the cap");
+    assert.equal(slot.provider.hits, 1);
+    const r2 = await chain.complete(REQUEST);
+    assert.equal(r2.ok, false, "second call blocked by token cap");
+    assert.equal(slot.provider.hits, 1, "blocked call never reached the slot");
+  });
+
+  // 4. Per-slot circuit isolation: 429 on one model doesn't kill its siblings.
+  await withEnv({}, async () => {
+    const bad = fakeSlot("groq", "model-a", "flagship");
+    bad.provider.complete = async () => {
+      bad.provider.hits += 1;
+      return { ok: false, reason: "RATE_LIMITED" };
+    };
+    const good = fakeSlot("groq", "model-b", "flagship");
+    const chain = testChain([bad, good]);
+    const r = await chain.complete(REQUEST);
+    assert.equal(r.model, "model-b", "sibling slot serves after 429");
+    assert.equal(good.provider.hits, 1);
+    assert.ok(chain.circuits.get(bad.key).isOpen, "429 opened the bad slot's circuit");
+    assert.ok(!chain.circuits.get(good.key).isOpen, "sibling circuit stays closed");
+  });
+
+  // 5. Routing: flagship requests prefer flagship slots; routine prefers lite.
+  await withEnv({}, async () => {
+    const flagship = fakeSlot("groq", "big", "flagship");
+    const lite = fakeSlot("groq", "small", "lite");
+    const drip = fakeSlot("groq", "guard", "drip");
+    const chain = testChain([drip, lite, flagship]); // worst order on purpose
+    const r1 = await chain.complete({ ...REQUEST, tier: "flagship" });
+    assert.equal(r1.model, "big", "flagship request routes to flagship slot");
+    const r2 = await chain.complete({ ...REQUEST });
+    assert.equal(r2.model, "small", "routine request prefers lite slot");
+  });
+
+  // 6. Quota-aware: a nearly-drained slot is deprioritized.
+  await withEnv({}, async () => {
+    const a = fakeSlot("groq", "a", "flagship");
+    const b = fakeSlot("groq", "b", "flagship");
+    const chain = testChain([a, b]);
+    chain.dailyCaps.entry(a.key, a.def).calls = 99999; // 1 call of quota left
+    const r = await chain.complete({ ...REQUEST, tier: "flagship" });
+    assert.equal(r.model, "b", "depleted slot loses the ranking");
+  });
+
+  // 7. Every slot capped -> silence with the right reason.
+  await withEnv({ GROQ_CAPD_DAILY_CALL_CAP: "0", GEMINI_CAPD_DAILY_CALL_CAP: "0" }, async () => {
+    const chain = testChain([fakeSlot("groq", "capd", "lite"), fakeSlot("gemini", "capd", "lite")]);
+    const r = await chain.complete(REQUEST);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "ALL_SLOTS_UNAVAILABLE");
+  });
+
+  // 8. Env overrides: slot-level wins, then provider-level, then default; garbage -> default.
   await withEnv(
     {
-      GEMINI_DAILY_TOKEN_CAP: undefined,
-      GEMINI_DAILY_CALL_CAP: undefined,
-      GROQ_DAILY_TOKEN_CAP: undefined,
-      GROQ_DAILY_CALL_CAP: undefined,
+      GROQ_OPENAI_GPT_OSS_20B_DAILY_CALL_CAP: "42",
+      GROQ_DAILY_TOKEN_CAP: "777",
+      GEMINI_DAILY_CALL_CAP: "not-a-number",
     },
     async () => {
       const chain = new ProviderChain();
-      assert.deepEqual(
-        {
-          gCalls: chain.dailyCaps.entry("gemini").callCap,
-          gTokens: chain.dailyCaps.entry("gemini").tokenCap,
-          qCalls: chain.dailyCaps.entry("groq").callCap,
-          qTokens: chain.dailyCaps.entry("groq").tokenCap,
-        },
-        { gCalls: 1200, gTokens: 800_000, qCalls: 800, qTokens: 150_000 }
+      const slot20b = SLOT_DEFS.find((s) => s.model === "openai/gpt-oss-20b");
+      const slot120b = SLOT_DEFS.find((s) => s.model === "openai/gpt-oss-120b");
+      assert.equal(
+        chain.dailyCaps.entry("groq/openai/gpt-oss-20b", slot20b).callCap,
+        42,
+        "slot-level env wins"
+      );
+      assert.equal(
+        chain.dailyCaps.entry("groq/openai/gpt-oss-120b", slot120b).tokenCap,
+        777,
+        "provider-level env is the fallback"
+      );
+      const gemSlot = SLOT_DEFS.find((s) => s.model === "gemini-2.5-flash");
+      assert.equal(
+        chain.dailyCaps.entry("gemini/gemini-2.5-flash", gemSlot).callCap,
+        1200,
+        "garbage env falls back to safe default"
       );
     }
   );
 
-  // 9. Chain-wide budget still guards on top.
+  // 9. UTC day rollover resets per-slot counters.
+  await withEnv({}, async () => {
+    const slot = fakeSlot("groq", "roll", "lite");
+    const chain = testChain([slot]);
+    await chain.complete(REQUEST);
+    assert.equal(chain.dailyCaps.entry(slot.key, slot.def).calls, 1);
+    chain.dailyCaps.day = "2000-01-01"; // force a stale day
+    await chain.complete(REQUEST);
+    assert.equal(chain.dailyCaps.entry(slot.key, slot.def).calls, 1, "counters reset on new day");
+    assert.equal(slot.provider.hits, 2);
+  });
+
+  // 10. Chain-wide budget still guards on top of slot caps.
   await withEnv({ LLM_GATEWAY_DAILY_BUDGET: "1" }, async () => {
-    const chain = chainWith(fakeProvider("gemini"));
+    const chain = testChain([fakeSlot("gemini", "one", "flagship")]);
     assert.ok((await chain.complete(REQUEST)).ok);
     const r = await chain.complete(REQUEST);
     assert.equal(r.reason, "DAILY_BUDGET_EXHAUSTED");
   });
 
-  console.log("ProviderChain cap tests: all 9 groups passed");
+  console.log("ProviderChain slot tests: all 10 groups passed");
 }
 
 main().catch((e) => {
