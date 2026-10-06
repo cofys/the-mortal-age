@@ -84,14 +84,13 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     }
 
     const save = PlayerSave.fromPlayer(player);
-    // TEMP DEBUG: diagnose origin persistence
-    if (!player.isPlayerBot?.()) {
+    // TEMP DEBUG: diagnose origin persistence (logging all saves temporarily)
+    {
       const attrKeys = save.attributes ? Object.keys(save.attributes) : [];
       const hasOriginKey = attrKeys.includes("origin:id");
       const liveVal = player.getAttribute ? player.getAttribute("origin:id") : "N/A";
-      // Check if origin:id is in the persistent keys set at all
-      const persistentKeys = PlayerSave.persistentAttributeKeys ? [...PlayerSave.persistentAttributeKeys].filter(k => k.includes("origin")) : "N/A";
-      console.info(`[persistence-debug] saving ${player.getUsername()}: origin:id in save=${hasOriginKey}, live value=${liveVal}, total attrs=${attrKeys.length}, origin keys in persistent set=${JSON.stringify(persistentKeys)}`);
+      const isBot = player.isPlayerBot?.() ? "BOT" : "HUMAN";
+      console.info(`[persistence-debug] saving ${player.getUsername()} (${isBot}): origin:id in save=${hasOriginKey}, live value=${liveVal}, total attrs=${attrKeys.length}`);
     }
     const serialized = JSON.stringify(save, this.replacer.bind(this), 2);
     this.validateSerializedSave(serialized, player.getUsername());
