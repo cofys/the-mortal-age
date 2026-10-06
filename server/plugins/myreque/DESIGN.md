@@ -40,7 +40,8 @@ know better) but it caps at -199.
   If caught: rumor + tension.
 - *Sabotage* — burn the tithe records (chest by the officer, needs a
   tinderbox) → +120, 2h world cooldown, Sarev accuses. Killing Vost the
-  Tithe-Taker in the Sunken Hollow → +100 (+150 if the captive is saved).
+  Tithe-Taker in the Sunken Hollow → +100, +50 more if the captive is
+  saved (via the existing `kingdom:task-completed` events).
 - *Spread word* — at Hollow-Trusted, the fence gives you a sealed note to
   carry to Polmafi → +60. 15-min cooldown.
 
@@ -77,13 +78,20 @@ know better) but it caps at -199.
 
 ## Integration
 
+- `kingdom:task-completed` (`sunken-hollow:vost` / `sunken-hollow:captive-saved`)
+  awards standing — no SunkenHollow edits needed. The tunnel entry and
+  Polmafi are gated from this side: named hooks registered first
+  (`myreque` < `raids` alphabetically) set `handled`, so SunkenHollow's
+  handlers never fire for refused players. (A future `myreque:vost-slain`
+  emit is also honored, deduped by timestamp.)
 - `kingdom:rumor` on crossings and deeds; new `Rumors.Arrival` pool lines
   gated on `morytania:myreque-sworn-walks` /
   `morytania:drakan-oathbound-walks` (headcounts in KingdomStore).
 - Tension +2 on reaching Sworn/Oathbound (the regime blames foreign
   meddlers / the purge is emboldened); +1 when a runner is caught.
-- SunkenHollow emits `myreque:vost-slain`; its tunnel and Polmafi honor
-  the locks.
+- Citizens: tier crossings seed citizen gossip through the memory system,
+  so Canifis reacts with fear/hostility; the patrol zone makes high
+  Myreque standing physically dangerous in town.
 
 ## Files
 
