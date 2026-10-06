@@ -670,8 +670,6 @@ class CitizenDirector {
   tick() {
     const hour = hourNow();
     const nowMs = Date.now();
-    // TEMP DEBUG
-    console.log(`[citizens-debug] tick: roster=${this.roster.size}, hour=${hour}`);
     for (const record of this.roster.values()) {      const online = this.isOnline(record);
       const bot = online ? this.getBot(record) : null;
       // Background tier (Jon's two-tier sim): every citizen lives as data

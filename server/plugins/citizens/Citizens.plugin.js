@@ -66,39 +66,23 @@ let pluginApi = null;
 
 function initCitizens(api) {
   pluginApi = api;
-  // TEMP DEBUG: verify init runs (console.log always hits the log file).
-  console.log(`[citizens-debug] initCitizens called, CITIZENS_ENABLED=${process.env.CITIZENS_ENABLED}`);
   initCitizenChat(api);
   initCitizenSocial(api);
   initCitizenMemory(); // what citizens remember; loads data/saves/citizen-memory.json
   initCitizenJournal(); // what citizens have been up to; loads data/saves/citizen-journal.json
   registerCitizenActionTypes();
-  console.log(`[citizens-debug] action types registered`);
   const added = registerCitizenActivities();
-  console.log(`[citizens-debug] activities registered: ${added.length}`);
   api.log?.("[citizens] activities registered", { added });
   // The market board is a world object, not a citizen — it works regardless.
   initMarketBoard(api);
-  console.log(`[citizens-debug] market board done`);
   // The market registrar is a market fixture, not a citizen — it works regardless.
   initMarketRegistrar(api);
-  console.log(`[citizens-debug] market registrar done`);
   if (!CITIZENS_ENABLED) {
     api.log?.("[citizens] director idle — set CITIZENS_ENABLED=1 to spawn the population");
     return;
   }
-  let director = null;
-  try {
-    const reg = getBaseRegistry();
-    console.log(`[citizens-debug] got registry: ${!!reg}`);
-    director = initDirector(api, reg);
-    console.log(`[citizens-debug] director created, calling boot...`);
-    director.boot();
-    console.log(`[citizens-debug] boot complete, roster=${director.roster.size}`);
-  } catch (e) {
-    console.log(`[citizens-debug] DIRECTOR FAILED: ${e.message}`);
-  }
-  if (!director) return;
+  const director = initDirector(api, getBaseRegistry());
+  director.boot();
   initMerchantShops(api);
   initPlayerShops(api);
   api.log?.("[citizens] director booted", director.status());

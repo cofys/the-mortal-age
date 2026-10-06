@@ -25,6 +25,9 @@ function baseRegistry() {
 }
 
 /** Compiles citizen activities into the shared registry. Returns the ids added. */
+/** The registry captured during registration (avoids redundant lookups). */
+let capturedRegistry = null;
+
 function registerCitizenActivities() {
   if (registered) {
     return [];
@@ -35,6 +38,7 @@ function registerCitizenActivities() {
       "[citizens] no bot activity registry exists yet — the PlayerBots plugin must register first"
     );
   }
+  capturedRegistry = registry;
   const raw = JSON.parse(fs.readFileSync(DEFINITIONS_PATH, "utf8"));
   const added = appendActivityDefinitions(registry, raw);
   registered = true;
@@ -42,7 +46,9 @@ function registerCitizenActivities() {
 }
 
 function getBaseRegistry() {
-  return baseRegistry();
+  // Prefer the captured registry (from successful registration) — avoids
+  // redundant lookups that can behave unexpectedly during plugin init.
+  return capturedRegistry ?? baseRegistry();
 }
 
 module.exports = {
