@@ -207,7 +207,6 @@ class CitizenDirector {
       }
     }
     this.log("roster built", { citizens: this.roster.size });
-    console.log("[DIAG] Citizen roster built: " + this.roster.size + " citizens");
     this.startTask();
   }
 
@@ -455,6 +454,8 @@ class CitizenDirector {
   }
 
   tick() {
+    this._tickCount = (this._tickCount || 0) + 1;
+    if (this._tickCount === 1 || this._tickCount % 100 === 0) console.log("[DIAG] Citizen tick #" + this._tickCount + ", runtime=" + (this.runtime() ? "yes" : "NO"));
     const hour = hourNow();
     for (const record of this.roster.values()) {
       const phase = desiredPhase(record, hour);
