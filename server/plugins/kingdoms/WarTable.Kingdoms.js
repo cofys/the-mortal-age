@@ -14,6 +14,12 @@
  *   THE REALM              — treasury, stockpile, offices, wars (::kingdom status)
  *   OPEN WARS & LEVIES       — attacker vs defender, hottest borders, garrison (::war)
  *   ALLIANCES & ROYAL NEWS — pacts and recent royal events (::alliances)
+ *   YOUR SEALS             — the offices you personally hold, and the policy
+ *                            you have set (OfficeTools.Kingdoms). Only the
+ *                            current player holder sees their office's tools:
+ *                            studying the table offers each held office's
+ *                            console (treasury, stockpiles, patrols, whispers)
+ *                            through a chatbox prompt — diegetic, no commands.
  *
  * The interface reuses the refactored data functions in Commands.Kingdoms
  * (realmStatusLines, warSummary, allianceSummary), Membership.Kingdoms
@@ -37,6 +43,7 @@ const {
 const Commands = require("./Commands.Kingdoms");
 const Membership = require("./Membership.Kingdoms");
 const Origins = require("../origins/Selection.Origins");
+const OfficeTools = require("./OfficeTools.Kingdoms");
 
 const GROUP_ID = 30015;
 const MODAL_TARGET_UID = (161 << 16) | 16;
@@ -56,7 +63,7 @@ const FONT_LABEL = 496;
 const FONT_DISPLAY = 497;
 
 const MODAL_W = 620;
-const MODAL_H = 440;
+const MODAL_H = 484;
 
 const C = {
   ROOT: 0,
@@ -80,6 +87,9 @@ const C = {
   SEC5_HEAD: 50,
   SEC5_PANEL: 51,
   SEC5_BODY: 52,
+  SEC6_HEAD: 70,
+  SEC6_PANEL: 71,
+  SEC6_BODY: 72,
   FOOTNOTE: 60,
 };
 const uid = (component) => (GROUP_ID << 16) | component;
@@ -174,6 +184,9 @@ function buildTableInterface() {
     { head: C.SEC3_HEAD, panel: C.SEC3_PANEL, body: C.SEC3_BODY, title: "THE REALM", x: 318, w: 278, y: 240, rows: 4 },
     { head: C.SEC4_HEAD, panel: C.SEC4_PANEL, body: C.SEC4_BODY, title: "WARS & LEVIES", x: 24, w: 278, y: 318, rows: 4 },
     { head: C.SEC5_HEAD, panel: C.SEC5_PANEL, body: C.SEC5_BODY, title: "ALLIANCES & ROYAL NEWS", x: 318, w: 278, y: 332, rows: 3 },
+    // YOUR SEALS: the full-width strip. Only the offices this player
+    // personally holds appear; the consoles open from the study prompt.
+    { head: C.SEC6_HEAD, panel: C.SEC6_PANEL, body: C.SEC6_BODY, title: "YOUR SEALS", x: 24, w: 572, y: 404, rows: 2 },
   ];
   for (const s of sections) {
     const panelH = s.rows * 14 + 8;
@@ -184,7 +197,7 @@ function buildTableInterface() {
   }
 
   label(
-    C.FOOTNOTE, root, 0, 416, MODAL_W, 14,
+    C.FOOTNOTE, root, 0, 464, MODAL_W, 14,
     "Study often — crowns move while you sleep.",
     FONT_BODY, TMA.MUTED, true
   );
@@ -236,6 +249,14 @@ function render(player) {
     bodyText(sectionLines(() => allianceLines, "No pacts sealed — every crown stands alone."), 3),
     uid(C.SEC5_BODY)
   );
+
+  // YOUR SEALS: offices this player personally holds, with the policy they
+  // have set. Holders of nothing see one quiet line; AI-held offices show
+  // nothing at all.
+  sender.sendString(
+    bodyText(sectionLines(() => OfficeTools.sealsLines(player), "You hold no seals of office."), 2, 88),
+    uid(C.SEC6_BODY)
+  );
 }
 
 function openTable(player) {
@@ -246,6 +267,9 @@ function openTable(player) {
     player.setInterfaceId?.(GROUP_ID);
     sender.sendSubInterface(MODAL_TARGET_UID, GROUP_ID, 0);
     render(player);
+    // The seals: a holder studies the table and may take up their office.
+    // No seals, no prompt — the table is only a map to other eyes.
+    OfficeTools.offerConsoles(player);
   } catch (error) {
     console.warn("[war-table] open failed", error?.message ?? error);
   }
@@ -270,3 +294,7 @@ module.exports = function attachWarTable(api) {
   });
   console.info("[war-table] diegetic ::kingdom/::war/::alliances/::origin replacement ready (group 30015)");
 };
+
+// Test seam (see Commands.plugin.js _test): lets smoke tests build the
+// widget group and assert component ids without opening it in a client.
+module.exports._test = { GROUP_ID, buildTableInterface, uid };
