@@ -287,7 +287,7 @@ function onInterfaceClosed({ player, interfaceId }) {
     return;
   }
   if (guiHooks && id === guiHooks.groupId && guiHooks.isOpen(player)) {
-    guiHooks.noteClosed(player);
+    guiHooks.noteClosed({ player });
     openChoice(player);
   }
 }
