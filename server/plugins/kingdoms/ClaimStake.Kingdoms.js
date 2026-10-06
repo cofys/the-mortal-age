@@ -238,7 +238,48 @@ function readClaim(event) {
     return true;
   }
   for (const line of Founding.claimStatusLines(kingdom)) player.sendMessage(line);
+  offerStakeMenu(player, kingdom);
   return true;
+}
+
+/**
+ * The rest of the ::found verbs, diegetic: swear to the banner
+ * (::found join), fill the war chest (::found chest), or — for the founder
+ * alone, behind a confirmation — lower the banner (::found abandon). Every
+ * option hands straight to Founding; nothing is reimplemented here.
+ */
+function offerStakeMenu(player, kingdom) {
+  const username = player.getUsername?.()?.toLowerCase?.() ?? "";
+  const isFounder = String(kingdom.ruler ?? "").toLowerCase() === username && username.length > 0;
+  const pairs = [
+    "Swear to this banner.",
+    () => Founding.joinKingdom(player, [kingdom.name]),
+    "Fill the war chest.",
+    () =>
+      promptAmount(player, "How many coins for the war chest?", (amount) => {
+        if (Number(amount) > 0) Founding.fillChest(player, [String(amount)]);
+      }),
+  ];
+  if (isFounder) {
+    pairs.push("Lower the banner.", () => confirmAbandon(player, kingdom));
+  }
+  pairs.push("Walk away.", () => {});
+  showPrompt(player, `The claim of ${kingdom.name}`, pairs);
+}
+
+/** Lowering the banner ends the kingdom — confirm, like resigning an office. */
+function confirmAbandon(player, kingdom) {
+  const pairs = [
+    "Yes. Lower it.",
+    () => Founding.abandonKingdom(player),
+    "No — the banner stands.",
+    () => {},
+  ];
+  showPrompt(
+    player,
+    `Lower the banner of ${kingdom.name}? The claim ends here.`,
+    pairs
+  );
 }
 
 function attachClaimStake(api) {

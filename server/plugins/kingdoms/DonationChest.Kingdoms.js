@@ -5,7 +5,8 @@
  *
  * Jon's directive: no ::commands for players. Everything through the world.
  * A "Donation chest" stands in each capital. Click "Donate" and a chatbox
- * prompt offers preset amounts (1k / 10k / 100k / 1M); the coins move through
+ * prompt offers preset amounts (1k / 10k / 100k / 1M) or a named gift of any
+ * size; the coins move through
  * the same donateToKingdom() the ::donate command uses, so the war treasury,
  * trial-of-service progress, and the kingdom:donation-made event all behave
  * identically no matter which path the player took.
@@ -71,6 +72,25 @@ function formatCoins(n) {
   return n.toLocaleString("en-US");
 }
 
+/** Numeric prompt that resumes into onInput (the market-registrar pattern). */
+function promptAmount(player, title, onInput) {
+  try {
+    player.setEnteredAmountAction({
+      execute: (amount) => {
+        try {
+          player.setEnteredAmountAction(null);
+        } catch {
+          // Clearing is cosmetic.
+        }
+        onInput(amount);
+      },
+    });
+    player.getPacketSender().sendEnterAmountPrompt(title);
+  } catch {
+    onInput(null);
+  }
+}
+
 function openDonationPrompt({ player }) {
   if (!player || player.isPlayerBot?.() === true) return;
   const kingdomId = kingdomAt(player);
@@ -85,6 +105,14 @@ function openDonationPrompt({ player }) {
       Politics.donateToKingdom(player, kingdomId, amount);
     });
   }
+  // ::donate takes any amount — the trial of service asks for 5,000, which
+  // is no preset — so the chest does too.
+  options.push("Name your own gift.", () =>
+    promptAmount(player, "How many coins do you give?", (amount) => {
+      if (Number(amount) > 0) Politics.donateToKingdom(player, kingdomId, amount);
+      else openDonationPrompt({ player });
+    })
+  );
   options.push("Never mind.", () => {});
   try {
     pluginApi.sendMultiChatboxPrompt(

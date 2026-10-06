@@ -615,3 +615,8 @@ module.exports.foundKingdom = foundKingdom;
 module.exports.isUnclaimed = isUnclaimed;
 module.exports.claimStatusLines = claimStatusLines;
 module.exports.contestedClaims = contestedClaims;
+// Diegetic exports for the claim stake (no-commands migration): the stake's
+// menu drives these instead of ::found join / chest / abandon.
+module.exports.joinKingdom = joinKingdom;
+module.exports.fillChest = fillChest;
+module.exports.abandonKingdom = abandonKingdom;

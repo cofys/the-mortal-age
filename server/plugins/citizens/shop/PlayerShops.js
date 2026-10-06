@@ -958,6 +958,35 @@ function browseStall(api, player, ownerArg) {
   openStall(api, player, target);
 }
 
+/**
+ * Diegetic ::shop browse — the Market Board's "Browse the market" lists the
+ * stalls (listStalls, unchanged) then offers a chatbox choice: pick a trader
+ * and their stall opens, the same browseStall ::shop browse calls. Nothing
+ * reimplemented; the choice just supplies the owner name diegetically.
+ */
+function promptBrowseStall(api, player, kingdomArg) {
+  const arg = String(kingdomArg ?? "").trim().toLowerCase();
+  const stalls = Store.getAllStalls().filter(
+    (s) => !arg || s.kingdomId === arg || kingdomName(s.kingdomId).toLowerCase() === arg
+  );
+  listStalls(api, player, kingdomArg);
+  if (stalls.length === 0 || player.isPlayerBot?.() === true) return;
+  const pairs = [];
+  for (const stall of stalls.slice(0, 20)) {
+    const wares = Object.keys(stall.stock ?? {}).length;
+    const owner = stall.owner;
+    pairs.push(`${owner} — ${wares} ware${wares === 1 ? "" : "s"}`, () => {
+      browseStall(api, player, owner);
+    });
+  }
+  pairs.push("Never mind.", () => {});
+  try {
+    pluginApi.sendMultiChatboxPrompt(player, "Browse whose stall?", ...pairs);
+  } catch (error) {
+    console.warn("[player-shops] browse prompt failed", error?.message ?? error);
+  }
+}
+
 function closeOwnStall(api, player) {
   const stall = requireStall(player);
   if (!stall) return;
@@ -1107,6 +1136,8 @@ module.exports = {
   buyStall,
   openStall,
   listStalls,
+  browseStall,
+  promptBrowseStall,
   requireStall,
   // Exported for the Market Registrar (diegetic ::shop replacement, phase 2).
   // The registrar drives these with chatbox prompts instead of command args;

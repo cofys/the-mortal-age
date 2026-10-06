@@ -12,7 +12,7 @@
  *   YOUR HOME              — name, epithet, lens, fealty (::origin)
  *   YOUR KINGDOM           — name, your rank, your titles (Membership)
  *   THE REALM              — treasury, stockpile, offices, wars (::kingdom status)
- *   OPEN WARS              — attacker vs defender, hottest borders (::war)
+ *   OPEN WARS & LEVIES       — attacker vs defender, hottest borders, garrison (::war)
  *   ALLIANCES & ROYAL NEWS — pacts and recent royal events (::alliances)
  *
  * The interface reuses the refactored data functions in Commands.Kingdoms
@@ -172,7 +172,7 @@ function buildTableInterface() {
     { head: C.SEC1_HEAD, panel: C.SEC1_PANEL, body: C.SEC1_BODY, title: "YOUR HOME", x: 24, w: 572, y: 72, rows: 9 },
     { head: C.SEC2_HEAD, panel: C.SEC2_PANEL, body: C.SEC2_BODY, title: "YOUR KINGDOM", x: 24, w: 278, y: 240, rows: 3 },
     { head: C.SEC3_HEAD, panel: C.SEC3_PANEL, body: C.SEC3_BODY, title: "THE REALM", x: 318, w: 278, y: 240, rows: 4 },
-    { head: C.SEC4_HEAD, panel: C.SEC4_PANEL, body: C.SEC4_BODY, title: "OPEN WARS", x: 24, w: 278, y: 318, rows: 3 },
+    { head: C.SEC4_HEAD, panel: C.SEC4_PANEL, body: C.SEC4_BODY, title: "WARS & LEVIES", x: 24, w: 278, y: 318, rows: 4 },
     { head: C.SEC5_HEAD, panel: C.SEC5_PANEL, body: C.SEC5_BODY, title: "ALLIANCES & ROYAL NEWS", x: 318, w: 278, y: 332, rows: 3 },
   ];
   for (const s of sections) {
@@ -221,9 +221,9 @@ function render(player) {
     uid(C.SEC3_BODY)
   );
 
-  // OPEN WARS: attacker vs defender, hottest borders (::war).
-  const { wars, hot } = Commands.warSummary({ maxWars: 2, maxHot: 1, maxLevies: 0 });
-  const warLines = [...wars, ...hot];
+  // WARS & LEVIES: attacker vs defender, hottest borders, garrison (::war).
+  const { wars, hot, levies } = Commands.warSummary({ maxWars: 2, maxHot: 1, maxLevies: 1 });
+  const warLines = [...wars, ...hot, ...levies.map((l) => `Levies: ${l}`)];
   sender.sendString(
     bodyText(sectionLines(() => warLines, "No open wars — an uneasy peace."), 3),
     uid(C.SEC4_BODY)

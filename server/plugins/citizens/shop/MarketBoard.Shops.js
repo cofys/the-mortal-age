@@ -11,7 +11,7 @@
  *   MARKET BOARD
  *   [ Lease a stall ]   — buyStall in this market's kingdom
  *   [ Manage my stall ] — openStall (the existing stall interface)
- *   [ Browse stalls ]   — listStalls
+ *   [ Browse stalls ]   — promptBrowseStall (listStalls + choose whose to open)
  *
  * The ::shop command stays registered until the board is verified in-game,
  * then it goes. Migration rule: build the world path, verify it works,
@@ -212,7 +212,7 @@ function onBoardButton(event) {
     } else if (button === uid(C.BTN_BROWSE_BG)) {
       closeBoard(player);
       const kingdomId = kingdomAt(player);
-      PlayerShops.listStalls(api, player, kingdomId ?? "");
+      PlayerShops.promptBrowseStall(api, player, kingdomId ?? "");
     }
   } catch (error) {
     console.warn("[market-board] button failed", error?.message ?? error);
