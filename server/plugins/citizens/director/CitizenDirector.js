@@ -677,7 +677,20 @@ class CitizenDirector {
   tick() {
     const hour = hourNow();
     const nowMs = Date.now();
-    for (const record of this.roster.values()) {      const online = this.isOnline(record);
+    // TEMP DEBUG — citizen spawn diagnosis (remove after).
+    console.log(`[citizens-DIAG] tick start: roster=${this.roster.size}, hour=${hour}`);
+    let diagN = 0;
+    let diagShouldOnline = 0;
+    let diagSpawnCalls = 0;
+    let diagSpawnOk = 0;
+    for (const record of this.roster.values()) {
+      const diagPhase = desiredPhase(record, hour);
+      if (diagPhase.online) diagShouldOnline++;
+      if (diagN < 5) {
+        console.log(`[citizens-DIAG] sample: ${record.username} role=${record.role} sleep=${record.sleepStart}+${record.sleepHours}h desiredPhase.online=${diagPhase.online} isOnline=${this.isOnline(record)}`);
+      }
+      diagN++;
+      const online = this.isOnline(record);
       const bot = online ? this.getBot(record) : null;
       // Background tier (Jon's two-tier sim): every citizen lives as data
       // every tick, online or off. Zero LLM — just the journal advancing.
@@ -731,7 +744,15 @@ class CitizenDirector {
         continue;
       }
       if (!online) {
-        this.spawnCitizen(record);
+        diagSpawnCalls++;
+        console.log(`[citizens-DIAG] spawnCitizen called for ${record.username} (phase.online=${diagPhase.online})`);
+        try {
+          const ok = this.spawnCitizen(record);
+          console.log(`[citizens-DIAG] spawnCitizen returned ${ok} for ${record.username}`);
+          if (ok) diagSpawnOk++;
+        } catch (error) {
+          console.log(`[citizens-DIAG] spawnCitizen THREW for ${record.username}: ${String(error?.message ?? error)}`);
+        }
         continue;
       }
       if (!bot) {
@@ -751,6 +772,8 @@ class CitizenDirector {
         attemptFeed(bot, this.foodSellersNear(record, bot));
       }
     }
+    // TEMP DEBUG — citizen spawn diagnosis summary (remove after).
+    console.log(`[citizens-DIAG] tick end: roster=${this.roster.size} shouldOnline=${diagShouldOnline} spawnCalls=${diagSpawnCalls} spawnOk=${diagSpawnOk} runtimeEntries=${this.runtime()?.entries?.length ?? "n/a"}`);
     this.tickMemory(nowMs);
     // Foreground social: citizen-to-citizen LLM dialogue, ONLY when a real
     // player is nearby to overhear (Jon's two-tier rule). Otherwise the
