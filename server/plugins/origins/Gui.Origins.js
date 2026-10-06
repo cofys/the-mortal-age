@@ -98,24 +98,27 @@ const C = {
 const CARD_FACE_OFFSETS = [0, 1, 2, 3, 4, 5]; // every visible row part is clickable
 
 // Conservative 540x482: fits the 765x503 canvas with ~112px side margins
-// and ~10px top/bottom. The lens needs 94px: the longest origin lens wraps
-// to 7 lines at 72 chars, ~13px per line on the p11 font. Measured, not guessed.
+// and ~10px top/bottom. The lens gets 118px: the longest origin lens wraps
+// to 7 lines at 72 chars, and the p11 font renders taller than the 13px/line
+// originally assumed (Jon's screenshot showed overflow at 94px). 118px fits
+// 7 lines at up to ~16.8px/line. Measured from the bug report, not guessed.
 const MODAL_W = 540;
 const MODAL_H = 482;
 
-// Realm rows: single-column list, 6 rows.
+// Realm rows: single-column list, 6 rows. Compact 32px rows (was 36) to give
+// the lens room without growing the panel.
 const ROW_W = 480;
-const ROW_H = 36;
+const ROW_H = 32;
 const ROW_X = 30;
 const ROW_Y = 70;
-const ROW_GAP = 4;
+const ROW_GAP = 3;
 
-// Lens: the selected origin's description. 94px fits the longest lens
-// (7 wrapped lines at ~13px/line on p11). The kingdom line sits below it.
+// Lens: the selected origin's description. 118px for 7 wrapped lines.
+// The kingdom line sits below it.
 const LENS_X = 30;
-const LENS_Y = 314;
+const LENS_Y = 290;
 const LENS_W = 480;
-const LENS_H = 94;
+const LENS_H = 118;
 
 const BTN_X = 150;
 const BTN_Y = 434;
@@ -259,13 +262,13 @@ function buildInterface(Items) {
     // Icon, name, epithet in a horizontal row.
     add(base + 3, panel, {
       type: TYPE_GRAPHIC,
-      rawX: rx + 8, rawY: ry + 6, rawWidth: 24, rawHeight: 24,
+      rawX: rx + 8, rawY: ry + 4, rawWidth: 24, rawHeight: 24,
       width: 24, height: 24,
       itemId: iconId, itemQuantity: 1,
       ...click,
     });
-    label(base + 4, panel, rx + 40, ry + 3, 200, 16, origin.name.toUpperCase(), FONT_LABEL, TMA.GOLD_TEXT, { ...click });
-    label(base + 5, panel, rx + 40, ry + 19, ROW_W - 48, 14, `${origin.city} — ${origin.epithet}`, FONT_BODY, TMA.MUTED, { ...click });
+    label(base + 4, panel, rx + 40, ry + 2, 200, 15, origin.name.toUpperCase(), FONT_LABEL, TMA.GOLD_TEXT, { ...click });
+    label(base + 5, panel, rx + 40, ry + 17, ROW_W - 48, 13, `${origin.city} — ${origin.epithet}`, FONT_BODY, TMA.MUTED, { ...click });
   });
 
   // Lens: the selected origin's description, compact.
