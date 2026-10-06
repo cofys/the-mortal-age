@@ -33,6 +33,7 @@ module.exports = {
     require("./Tension.Kingdoms")(api);
     require("./WarConsequences.Kingdoms")(api);
     require("./Founding.Kingdoms")(api);
+    require("./ClaimStake.Kingdoms")(api);
     require("./WarTable.Kingdoms")(api);
   },
 };
