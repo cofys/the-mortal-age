@@ -31,6 +31,7 @@ const {
 const { initDirector, getDirector } = require("./director/CitizenDirector");
 const { initMerchantShops } = require("./shop/MerchantShops");
 const { initPlayerShops } = require("./shop/PlayerShops");
+const { initMarketBoard } = require("./shop/MarketBoard.Shops");
 const attachWarRefugees = require("./WarRefugees");
 const {
   getMemory,
@@ -67,6 +68,8 @@ function initCitizens(api) {
   registerCitizenActionTypes();
   const added = registerCitizenActivities();
   api.log?.("[citizens] activities registered", { added });
+  // The market board is a world object, not a citizen — it works regardless.
+  initMarketBoard(api);
   if (!CITIZENS_ENABLED) {
     api.log?.("[citizens] director idle — set CITIZENS_ENABLED=1 to spawn the population");
     return;

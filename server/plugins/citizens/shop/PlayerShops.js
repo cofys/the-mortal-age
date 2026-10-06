@@ -1103,4 +1103,9 @@ module.exports = {
   ATTR_STALL_OWNER,
   ATTR_STALL_EMPLOYEE,
   SHOP_USAGE,
+  // Exported for the Market Board (diegetic ::shop replacement).
+  buyStall,
+  openStall,
+  listStalls,
+  requireStall,
 };
