@@ -92,10 +92,19 @@ export class PlayerSave {
         [70, 77], // legs
         [79, 80], // feet
     ];
+    /**
+     * Valid color index ranges per palette, derived from the real OSRS client
+     * palettes (see client/rs/config/player/PlayerDesignColors.ts
+     * PLAYER_BODY_RECOLOR_TO_1 lengths: 30/29/29/6/13). Skin is clamped to 0-7
+     * because the client's makeup interface only offers the first 8 skin
+     * colors (PlayerDesignController restricts skin to < 8). Clamping these to
+     * narrower ranges silently rewrote players' shirt/pants colors on save,
+     * so they came back wrong after relogging.
+     */
     private static readonly COLOR_RANGES: Array<[number, number]> = [
-        [0, 11], // hair
-        [0, 15], // torso
-        [0, 15], // legs
+        [0, 29], // hair
+        [0, 28], // torso
+        [0, 28], // legs
         [0, 5],  // feet
         [0, 7],  // skin
     ];
