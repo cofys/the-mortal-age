@@ -17,7 +17,9 @@
  * and levies bleed while the war grinds (garrison attrition). A side whose
  * garrison breaks loses outright. Peace drains both treasuries, pins
  * tension at 15, and buys a 72h armistice during which tension cannot
- * re-trigger.
+ * re-trigger. Pacification wars (declaredBy "founding") are owned by the
+ * founding tick — the tension model never resolves them and never declares
+ * formal war on a fledgling claim or minor power.
  *
  * The Morytania powder keg is scripted pressure, not a forced outcome:
  * Lowerniel Drakan's tithe demands and Myreque sabotage keep Morytania's
@@ -47,6 +49,7 @@ const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const Store = require("./KingdomStore");
 const Influence = require("./Influence.Kingdoms");
 const Membership = require("./Membership.Kingdoms");
+const Founding = require("./Founding.Kingdoms");
 const { ATTR_CITIZEN_ROLE, ROLE_GUARD } = require("../citizens/constants");
 
 // ~2 minutes at 600ms/tick. Faster than the realm tick: the keg should feel
@@ -291,6 +294,10 @@ const WAR_REASONS = (aName, bName) => [
 /** Tension snapped: the war is real. */
 function declareWarByTension(a, b) {
   if (!Store.getKingdom(a) || !Store.getKingdom(b)) return;
+  // Great powers don't formally declare war on fledgling claims or minor
+  // powers — they send the marshal, or raiders. The founding flow owns
+  // those conflicts outright.
+  if (Founding.isFoundingKingdom(a) || Founding.isFoundingKingdom(b)) return;
   // Lowerniel's Morytania is the aggressor in its own feuds; otherwise the
   // hotter-headed side strikes first.
   const attacker = a === "morytania" ? a : b === "morytania" ? b : Math.random() < 0.5 ? a : b;
@@ -436,6 +443,9 @@ function endWarWithTerms(a, b, brokenLoser) {
 
 /** Wars burn out (resolveAt) or collapse (a side's levies break). */
 function checkWarResolution(war) {
+  // Pacification wars (declaredBy "founding") belong to the founding tick —
+  // the marshal's battle resolves them, not the generic war machine.
+  if (war.declaredBy === "founding") return;
   const a = war.attackerId;
   const b = war.defenderId;
   const timeUp = Number.isFinite(war.resolveAt) && Date.now() >= war.resolveAt;

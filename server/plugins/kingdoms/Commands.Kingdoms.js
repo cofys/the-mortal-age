@@ -21,6 +21,7 @@ const Store = require("./KingdomStore");
 const Simulation = require("./Simulation.Kingdoms");
 const Tension = require("./Tension.Kingdoms");
 const Alliances = require("./Alliances.Kingdoms");
+const Founding = require("./Founding.Kingdoms");
 
 let pluginApi = null;
 
@@ -116,6 +117,9 @@ function realmStatusLines(maxKingdoms = 8) {
   if (kingdoms.length === 0) return [];
   const wars = Store.getActiveWars();
   return kingdoms.slice(0, maxKingdoms).map((k) => {
+    // Founding kingdoms read as what they are — claims and fragile minor
+    // powers — never as ordinary kingdoms.
+    if (Founding.isFoundingKingdom(k.id)) return Founding.foundingStatusLine(k);
     const treasury = k.treasury ?? 0;
     const stockpile = Simulation.stockpileOf(k.id);
     const atWar = wars.some((w) => w.attackerId === k.id || w.defenderId === k.id);
@@ -175,6 +179,7 @@ function warSummary({ maxWars = 5, maxHot = 5, maxLevies = 8 } = {}) {
     (h) => `${h.aName} / ${h.bName}: tension ${h.tension} (${tensionWord(h.tension)})`
   );
   const levies = Store.getKingdoms()
+    .filter((k) => !Founding.isFoundingKingdom(k.id)) // claims muster hosts, not levies
     .slice(0, maxLevies)
     .map((k) => `${k.name}: ${Tension.garrisonOf(k.id)}/60`);
   return { wars, hot, levies };
