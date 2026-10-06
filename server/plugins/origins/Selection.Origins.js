@@ -7,9 +7,9 @@
  * are created at login), and Tutorial Island is disabled in world.json, so a
  * brand-new account lands at the Edgeville world spawn with an empty
  * inventory. This module intercepts that moment: any login by a player with
- * no `origin:id` attribute is offered the six homes. The 5-option chatbox
- * dialogue is a hard engine limit (OptionDialogue's interface list), so the
- * pick is two pages: the four surface powers, then Keldagrim / Wanderer.
+ * no `origin:id` attribute is offered the six homes. The prompt caps at 5
+ * options per page (a sendMultiChatboxPrompt engine limit), so the pick is
+ * two pages: the four surface powers, then Keldagrim / Wanderer.
  *
  * Trigger timing: desktop logins land on the welcome screen first (the
  * gameframe bootstrap only arrives when Play is clicked), so starting a
@@ -17,6 +17,12 @@
  * root swap. Desktop players are therefore prompted from the welcome screen's
  * Play button (same pattern TutorialIsland uses); mobile clients skip the
  * welcome screen, so they are prompted from a login microtask instead.
+ *
+ * Choice UI: the intro and lens text render as StatementDialogue, but option
+ * lists go through api.sendMultiChatboxPrompt (the same mechanism NPC
+ * dialogue menus use) — OptionDialogue is dead engine code whose interface
+ * hangs the client on "Please wait...". The prompt caps at 5 options, so the
+ * pick stays two pages: the four surface powers, then Keldagrim / Wanderer.
  *
  * Skip behaviour: the Wanderer option IS the skip — "no home, just let me
  * go". Closing the dialogue by other means leaves the choice unmade and the
@@ -41,7 +47,7 @@ let pluginApi;
 let core;
 let Items;
 let Location;
-let OptionDialogue;
+let ActionDialogue;
 let StatementDialogue;
 let DialogueChainBuilder;
 let MOBILE_CLIENT_ATTRIBUTE;
@@ -92,51 +98,62 @@ function openChoice(player) {
   player
     .getDialogueManager()
     .startDialogues(
-      new DialogueChainBuilder().add(new StatementDialogue(0, intro), pageOneDialogue(player, 1))
+      new DialogueChainBuilder().add(
+        new StatementDialogue(0, intro),
+        new ActionDialogue(1, { execute: () => showPageOnePrompt(player) })
+      )
     );
 }
 
-function pageOneDialogue(player, index) {
+/**
+ * Show an option prompt. Mirrors the NPC dialogue menu pattern
+ * (manager.reset() first, then sendMultiChatboxPrompt). If the client can't
+ * render it, the choice is re-queued so the prompt returns on next login.
+ */
+function showPrompt(player, title, pairs) {
+  if (!player || hasOrigin(player)) return false;
+  player.getDialogueManager().reset();
+  if (!pluginApi.sendMultiChatboxPrompt(player, title, ...pairs)) {
+    console.warn(
+      `[origins] sendMultiChatboxPrompt failed for ${player.getUsername?.() ?? "unknown"} — re-queuing choice`
+    );
+    pending.add(player);
+    return false;
+  }
+  return true;
+}
+
+function showPageOnePrompt(player) {
+  if (!player || hasOrigin(player)) return;
   const labels = ["Asgarnia — Falador", "Misthalin — Varrock", "Kandarin — Ardougne", "Morytania — Darkmeyer"];
-  return new OptionDialogue(
-    index,
-    {
-      executeOption(option) {
-        const i = Number(option);
-        if (i >= 0 && i < labels.length) showLens(player, Data.ORIGINS[i].id);
-        else if (i === labels.length) showPageTwo(player);
-      },
+  const pairs = [];
+  labels.forEach((label, i) => {
+    pairs.push(label, (p) => {
+      if (!hasOrigin(p)) showLens(p, Data.ORIGINS[i].id);
+    });
+  });
+  pairs.push("More homes...", (p) => {
+    if (!hasOrigin(p)) showPageTwoPrompt(p);
+  });
+  showPrompt(player, "Where do you call home?", pairs);
+}
+
+function showPageTwoPrompt(player) {
+  if (!player || hasOrigin(player)) return;
+  showPrompt(player, "More homes…", [
+    "Keldagrim — city of the dwarves",
+    (p) => {
+      if (!hasOrigin(p)) showLens(p, "keldagrim");
     },
-    ...labels,
-    "More homes..."
-  );
-}
-
-function showPageTwo(player) {
-  if (!player || hasOrigin(player)) return;
-  player.getDialogueManager().startDialogues(
-    new DialogueChainBuilder().add(
-      new OptionDialogue(
-        0,
-        {
-          executeOption(option) {
-            const i = Number(option);
-            if (i === 0) showLens(player, "keldagrim");
-            else if (i === 1) showLens(player, "wanderer");
-            else showPageOne(player);
-          },
-        },
-        "Keldagrim — city of the dwarves",
-        "Wanderer — no home",
-        "Go back"
-      )
-    )
-  );
-}
-
-function showPageOne(player) {
-  if (!player || hasOrigin(player)) return;
-  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(pageOneDialogue(player, 0)));
+    "Wanderer — no home",
+    (p) => {
+      if (!hasOrigin(p)) showLens(p, "wanderer");
+    },
+    "Go back",
+    (p) => {
+      if (!hasOrigin(p)) showPageOnePrompt(p);
+    },
+  ]);
 }
 
 /** Show the origin's lens, then let the player claim it or go back. */
@@ -144,25 +161,27 @@ function showLens(player, originId) {
   if (!player || hasOrigin(player)) return;
   const origin = Data.BY_ID.get(originId);
   if (!origin) {
-    showPageOne(player);
+    showPageOnePrompt(player);
     return;
   }
   player.getDialogueManager().startDialogues(
     new DialogueChainBuilder().add(
       new StatementDialogue(0, origin.lens),
-      new OptionDialogue(
-        1,
-        {
-          executeOption(option) {
-            if (Number(option) === 0) claimOrigin(player, originId);
-            else showPageOne(player);
-          },
-        },
-        `Claim ${origin.name} as my home`,
-        "Choose again"
-      )
+      new ActionDialogue(1, { execute: () => showClaimPrompt(player, origin) })
     )
   );
+}
+
+function showClaimPrompt(player, origin) {
+  if (!player || hasOrigin(player)) return;
+  showPrompt(player, `Claim ${origin.name}?`, [
+    `Claim ${origin.name} as my home`,
+    (p) => claimOrigin(p, origin.id),
+    "Choose again",
+    (p) => {
+      if (!hasOrigin(p)) showPageOnePrompt(p);
+    },
+  ]);
 }
 
 /** Apply the choice: attributes, kingdom membership, kit, spawn, event. */
@@ -264,7 +283,7 @@ function attachSelection(api) {
   ({
     ItemIdentifiers: Items,
     Location,
-    OptionDialogue,
+    ActionDialogue,
     StatementDialogue,
     DialogueChainBuilder,
     MOBILE_CLIENT_ATTRIBUTE,
