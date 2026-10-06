@@ -33,7 +33,7 @@
  */
 
 const { NpcIds } = require("../../../src/main/typescript/elvarg/util/IdEnums");
-const { CAPITALS } = require("../../../world/DiegeticObjects");
+const { CAPITALS } = require("../../world/DiegeticObjects");
 const PlayerShops = require("./PlayerShops");
 const KingdomStore = require("../../kingdoms/KingdomStore");
 
@@ -222,7 +222,9 @@ function doPrice(player) {
     return;
   }
   const pairs = [];
-  for (const key of ids.slice(0, 4)) {
+  // Every ware on the shelves, not just the first four — ::shop price has
+  // no such cap, and neither should the registrar.
+  for (const key of ids) {
     const id = Number(key);
     const label = `${PlayerShops.wareName(api, id)} — ${stall.prices?.[key] ?? "?"} each`;
     pairs.push(label, () =>
