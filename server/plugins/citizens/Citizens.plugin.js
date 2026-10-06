@@ -81,7 +81,19 @@ function initCitizens(api) {
     api.log?.("[citizens] director idle — set CITIZENS_ENABLED=1 to spawn the population");
     return;
   }
-  const director = initDirector(api, getBaseRegistry());
+  const director = (() => {
+    try {
+      console.log("[citizens-debug] calling getBaseRegistry()");
+      const reg = getBaseRegistry();
+      console.log("[citizens-debug] getBaseRegistry returned", { hasReg: !!reg });
+      const d = initDirector(api, reg);
+      console.log("[citizens-debug] initDirector returned", { hasDirector: !!d });
+      return d;
+    } catch (e) {
+      console.log("[citizens-debug] DIRECTOR INIT FAILED:", e?.message ?? e);
+      throw e;
+    }
+  })();
   director.boot();
   initMerchantShops(api);
   initPlayerShops(api);
