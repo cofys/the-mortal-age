@@ -515,6 +515,17 @@ class CitizenDirector {
     this.api.emitPlayerLogin({ player: bot, username: record.username });
     bot.moveTo?.(spawn.clone());
 
+    // TEMP DIAG: visibility gap investigation
+    try {
+      const World = this.api.core?.World;
+      const botPos = bot.getLocation?.() ?? bot.getPosition?.();
+      const inWorld = World ? !!World.getPlayerByName?.(record.username) : "no-World";
+      const queueLen = World?.getAddPlayerQueue?.()?.length ?? "?";
+      console.log(`[citizens-visibility] spawned ${record.username} at ${botPos?.x},${botPos?.y},${botPos?.z} inWorld=${inWorld} queueLen=${queueLen}`);
+    } catch (e) {
+      console.log(`[citizens-visibility] diag failed: ${e?.message}`);
+    }
+
     const activity =
       record.merchantKind === "prime"
         ? this.registry.byId.get(ACTIVITY_PRIME_MERCHANT)
