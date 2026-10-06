@@ -209,10 +209,14 @@ they're the seam future LLM hooks (AI citizens, court agents) will read.
 
 ## What's stubbed for later
 
-- **Player-founded kingdoms** — "you can try, you will probably die." The
-  `kingdom:created` listener already accepts new kingdoms idempotently, but
-  there is no founding flow: no charter cost, no territory claim, no army
-  muster, and no existing-power retaliation. All of that is content to build.
+- **Player-founded kingdoms** — "you can try, you will probably die."
+  `Founding.Kingdoms.js` implements the full flow: `::found <name>` charters a
+  kingdom in unclaimed land for 10M coins; followers join (`::found join`) and
+  feed the war chest (`::found chest`). The nearest great power marches after
+  60-120 min; the pacification battle resolves 30 min later with deliberately
+  tiny survival odds (founder strength vs. 2000 + treasury/100k). The crushed
+  lose everything (chest plundered); the miraculous survivors pay 500k/week
+  upkeep. See module header for the math.
 - **War mechanics** — declaration and resolution are now simulated by the
   tension model (Tension.Kingdoms.js): wars start at 100 tension, burn 6-18h
   or until a garrison breaks, and end with peace terms, drained treasuries,
