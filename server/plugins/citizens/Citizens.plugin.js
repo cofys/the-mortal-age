@@ -65,6 +65,7 @@ const CITIZENS_ENABLED = (process.env.CITIZENS_ENABLED ?? "1") === "1";
 let pluginApi = null;
 
 function initCitizens(api) {
+  console.log("[citizens-debug] initCitizens START, CITIZENS_ENABLED=" + process.env.CITIZENS_ENABLED);
   pluginApi = api;
   initCitizenChat(api);
   initCitizenSocial(api);
