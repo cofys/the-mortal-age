@@ -648,9 +648,26 @@ function calculateCutChance(level, tree, axe) {
   return Math.min(1, Math.max(0, successes / 256));
 }
 
-function rollLog(player, tree, axe) {
+/**
+ * Woodcutting depth seam (./woodcutting/WOODCUTTING-DEPTH.md): every chop roll emits
+ * "woodcutting:cut-chance" so depth modules can scale the cut. Listeners multiply
+ * event.multiplier; a multiplier <= 0 fails the roll. Additive only.
+ */
+function rollLog(player, tree, axe, context = null) {
   const level = getWoodcuttingLevel(player) + Guild.invisibleBoost(player);
-  return Math.random() < calculateCutChance(level, tree, axe);
+  const chance = calculateCutChance(level, tree, axe);
+  const event = {
+    player,
+    tree,
+    axe,
+    level,
+    chance,
+    multiplier: 1,
+    location: context?.location ?? null,
+  };
+  pluginApi.emitCustomEvent("woodcutting:cut-chance", event);
+  if (!(event.multiplier > 0)) return false;
+  return Math.random() < chance * event.multiplier;
 }
 
 // OSRS Wiki: hat 0.4%, top 0.8%, legs 0.6%, boots 0.2%, plus 0.5% for all four; forestry pieces count.
@@ -749,14 +766,21 @@ function rollBirdNestId(player) {
   ]).id;
 }
 
-function maybeDropBirdNest(player) {
+/**
+ * Woodcutting depth seam: "woodcutting:nest-roll" lets depth modules scale the bird-nest
+ * drop chance (storms shake nests loose, dawn wakes the birds). Additive only.
+ */
+function maybeDropBirdNest(player, nestMultiplier = 1) {
   if (!player) {
     return;
   }
-  const chance = isWearing(player, Equipment.CAPE_SLOT, WOODCUTTING_CAPE_IDS)
+  const event = { player, multiplier: nestMultiplier };
+  pluginApi.emitCustomEvent("woodcutting:nest-roll", event);
+  const multiplier = event.multiplier > 0 ? event.multiplier : 0;
+  const baseChance = isWearing(player, Equipment.CAPE_SLOT, WOODCUTTING_CAPE_IDS)
     ? WOODCUTTING_CAPE_NEST_MULTIPLIER / BIRD_NEST_DROP_CHANCE
     : 1 / BIRD_NEST_DROP_CHANCE;
-  if (Math.random() >= chance) {
+  if (Math.random() >= baseChance * multiplier) {
     return;
   }
 
@@ -1038,7 +1062,15 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       continue;
     }
     state.nextActionTick = currentTick + WOODCUTTING_ACTION_INTERVAL_TICKS;
-    if (!rollLog(player, state.tree, state.axe)) {
+    if (
+      !rollLog(player, state.tree, state.axe, {
+        location: {
+          x: state.location.getX(),
+          y: state.location.getY(),
+          z: state.location.getZ(),
+        },
+      })
+    ) {
       continue;
     }
 
@@ -1056,6 +1088,14 @@ function processWoodcuttingTick(activeSessions, currentTick) {
         skill: Skill.WOODCUTTING,
         petBase: state.tree.petBase,
         logId: state.tree.logId,
+        treeName: state.tree.name,
+        axeId: state.axe.id,
+        xpReward: state.tree.xpReward,
+        location: {
+          x: state.location.getX(),
+          y: state.location.getY(),
+          z: state.location.getZ(),
+        },
       });
       maybeDropBirdNest(player);
       ClueNests.rollClueNests(player, state.tree);
@@ -1169,4 +1209,6 @@ module.exports = {
   findBestUsableAxe,
   findBestUsableAxeByLevel,
   isWoodcuttingActive,
+  rollLog,
+  maybeDropBirdNest,
 };

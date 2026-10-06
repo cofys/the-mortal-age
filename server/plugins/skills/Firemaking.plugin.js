@@ -160,7 +160,13 @@ function campfireCheckMessage(remainingTicks) {
 function grantFiremakingLogXp(player, log) {
   const xp = log.xpReward * firemakingXpMultiplier(player);
   player.getSkillManager().addExperiences(Skill.FIREMAKING, xp);
-  pluginApi.emitCustomEvent("firemaking:success", { player, skill: Skill.FIREMAKING });
+  // Woodcutting depth seam (../woodcutting/WOODCUTTING-DEPTH.md): the log's item id
+  // rides along so the economy feed can sink exactly what burned. Additive only.
+  pluginApi.emitCustomEvent("firemaking:success", {
+    player,
+    skill: Skill.FIREMAKING,
+    itemId: log.itemId,
+  });
 }
 
 function dropAshes(player, location) {

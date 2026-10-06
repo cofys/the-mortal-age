@@ -112,6 +112,52 @@ function stopMining(activeSessions, player, resetAnim = true) {
   }
 }
 
+/**
+ * Mining depth seam (./mining/MINING-DEPTH.md): every ore yield emits
+ * "mining:ore-yield" before the ore is awarded. Listeners add bonusOre (rich
+ * veins, prime strikes) or scale the XP via multiplier; both are honored here.
+ * Returns what the yield granted, for tests. Additive only.
+ */
+function awardOre(player, state) {
+  const event = {
+    player,
+    rock: state.rock,
+    pickaxe: state.pickaxe,
+    multiplier: 1,
+    bonusOre: 0,
+    location: {
+      x: state.location.getX(),
+      y: state.location.getY(),
+      z: state.location.getZ(),
+    },
+  };
+  pluginApi.emitCustomEvent("mining:ore-yield", event);
+  const bonusOre = Math.max(0, Math.floor(event.bonusOre));
+  const xpMultiplier = event.multiplier > 0 ? event.multiplier : 0;
+
+  if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, state.rock.oreId)) {
+    player.sendMessage("The infernal pickaxe smelts the ore as you mine it.");
+  } else {
+    player.getInventory().adds(state.rock.oreId, 1 + bonusOre);
+    player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
+    if (bonusOre > 0) {
+      player.sendMessage(`A rich seam — ${bonusOre} extra ore!`);
+    }
+  }
+  CrystalPickaxe.tryUseCharge(player);
+  player.getSkillManager().addExperiences(Skill.MINING, state.rock.xp * xpMultiplier);
+  pluginApi.emitCustomEvent("mining:success", {
+    player,
+    skill: Skill.MINING,
+    petBase: state.rock.petBase,
+    oreId: state.rock.oreId,
+    rockName: state.rock.objectName,
+    bonusOre,
+    location: event.location,
+  });
+  return { bonusOre, xpMultiplier };
+}
+
 function depleteRock(rockObject, rock) {
   const depleted = new GameObject(
     DEPLETED_ROCK_ID,
@@ -231,15 +277,7 @@ class MiningTask extends Task {
         continue;
       }
 
-      if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, state.rock.oreId)) {
-        player.sendMessage("The infernal pickaxe smelts the ore as you mine it.");
-      } else {
-        player.getInventory().adds(state.rock.oreId, 1);
-        player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
-      }
-      CrystalPickaxe.tryUseCharge(player);
-      player.getSkillManager().addExperiences(Skill.MINING, state.rock.xp);
-      pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING, petBase: state.rock.petBase });
+      awardOre(player, state);
       if (state.rock.infinite) {
         if (player.getInventory().isFull()) {
           player.getInventory().full();
@@ -280,6 +318,7 @@ module.exports = {
   isMiningActive(player) {
     return ACTIVE_MINERS.has(player);
   },
+  awardOre,
   register(api) {
     pluginApi = api;
     TaskManager = api.getTaskManager();
