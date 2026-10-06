@@ -20,7 +20,7 @@ the data model, the event catalog, and the honest list of what's stubbed.
 | `Diplomacy.Kingdoms.js` | The political layer: steward negotiations, spymaster schemes, betrayals, mutual defense |
 | `Royals.Kingdoms.js` | The royal calendar: marriages, births, deaths, coronations |
 | `Succession.Kingdoms.js` | ARC-SEEDING: the heirless crown's whispers (planted only, never resolved) |
-| `SuccessionHunt.Kingdoms.js` | Stages 13-17 interactive layer: the surfacing, the trace, the disappearance, the second player |
+| `SuccessionHunt.Kingdoms.js` | Stages 13-22 interactive layer: the surfacing, the trace, the disappearance, the second player, the confrontation, the flight, the struck name, the bidding war, the quay |
 
 ## The political layer (alliances, betrayals, the royal calendar)
 
@@ -52,7 +52,7 @@ world bible locks their fates. Misthalin births are kin of the court, never
 "a son for Roald."
 
 **Succession whispers are ARC-SEEDING for the phase 10 questline** (Roald's
-hidden bastard son). A whisper stage (0-17) on Misthalin advances roughly daily:
+hidden bastard son). A whisper stage (0-22) on Misthalin advances roughly daily:
 tavern slip → redacted report → the sermon that stopped → the Riverlands
 merchant → the midwife's daughter takes a market stall (stage 5, who knows) →
 the Merciful Hand charity buys birth records (stage 6, who's hunting) →
@@ -66,7 +66,12 @@ a lad with a farm accent on the Port Sarim docks (stage 13, the young man surfac
 the Hand's auction donors, one name struck through in palace-green ink (stage 14, the backers' trace) →
 the reward poster claimed by a grey cloak (stage 15, the page moves) →
 the drunk courtier disappears (stage 16, someone knew too much) →
-a second buyer for old paper, gold not silver (stage 17, the second player).
+a second buyer for old paper, gold not silver (stage 17, the second player) →
+the two buyers' men come to blows over one dock clerk, who vanishes (stage 18, the confrontation) →
+the farm lad's bunk is empty, a midnight ship, double fare (stage 19, the flight) →
+the donor list reprinted, the struck name erased, "the palace thanks its LOYAL friends" — the Fustian Guild pulled out (stage 20, the struck name) →
+gold doubled, paper triple, a scribe flees (stage 21, the bidding war) →
+the lad seen clasping hands with a grey man on the midnight quay, then the street goes quiet (stage 22, the quay).
 Rare, deniable,
 never naming the son, never touching the
 `misthalin:bastard-son-hidden` story flag. A royal death anywhere can stir a
@@ -112,7 +117,7 @@ left unturned." Dread, never damage. At stage 15 the poster is claimed — "PAID
 AND COLLECTED," a grey cloak walking toward the palace quarter — `page-claimed`
 fragment once, +6 heat. The arc coils for phase 10.
 
-**Succession hunt (`SuccessionHunt.Kingdoms.js`)** — the stages 13-17
+**Succession hunt (`SuccessionHunt.Kingdoms.js`)** — the stages 13-22
 interactive layer, the world keeps moving after the coil. Stage 13: rare
 tavern overheards of a lad with a farm accent working the Port Sarim docks,
 looking over his shoulder. Stage 14: Varrock's market board (Bank notice
@@ -123,8 +128,22 @@ that the drunk courtier from stage 1 hasn't been seen in a fortnight, his
 lodgings let to a quiet man in grey. Stage 17: rare overheards of a second
 buyer for old paper — gold, not silver, no charity, no questions — plus an
 unsigned notice on the market board that only players with 2+ fragments
-recognize; `second-buyer` fragment once, +8 heat. Board notices are
-Varrock-only; other capitals' boards are just bills of fare. Nothing names
+recognize; `second-buyer` fragment once, +8 heat. Stage 18: rare overheards
+of a near-brawl in the Rusty Anchor — a grey man and a plain-dressed man,
+both flashing coin at the same dock clerk, who is gone by morning. Stage 19:
+rare overheards that the lad's bunk is empty, a midnight ship, double fare.
+Stage 20: the donor list re-pinned and reprinted — the struck name simply
+gone, "the palace thanks its LOYAL friends" — overheards name the leaver
+(the Fustian Guild, the week the palace leaned on the auction; their factor's
+son just took a palace post); `struck-donor` fragment once, +8 heat. Stage 21:
+the board holds a fresh paste — GOLD DOUBLED, neither buyer blinking, one
+scribe fled Varrock — only diggers (2+ fragments) read it with understanding;
+`bidding-war` fragment once, +8 heat. Stage 22: a rare overheard of the lad
+clasping hands with a grey man on the midnight quay — bought, or taken? —
+and then the street goes quiet: the sweep runs half as often and half of
+what slips through is the silence itself. Board notices are
+Varrock-only; other capitals' boards are just bills of fare. The board always
+shows the freshest paste for the current stage (21 > 20 > 17 > 14). Nothing names
 the son; the arc stays one inference away.
 
 ## The tension model (live war states)

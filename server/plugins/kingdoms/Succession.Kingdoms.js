@@ -11,7 +11,7 @@
  * questline, not to ambient content).
  *
  * What it does: a whisper-stage counter (`succession:whisper-stage` on
- * Misthalin, 0-17) advances very slowly — days per stage. Each new stage
+ * Misthalin, 0-22) advances very slowly — days per stage. Each new stage
  * drops ONE rare, deniable rumor into Varrock's streets via kingdom:rumor:
  *
  *   stage 1 — a drunk courtier's slip in a tavern
@@ -31,6 +31,11 @@
  *   stage 15 — the reward poster, claimed by a grey cloak (the page, gone again)
  *   stage 16 — the drunk courtier disappears (someone knew too much)
  *   stage 17 — a second buyer for old paper, gold not silver (the second player)
+ *   stage 18 — the two buyers' men come to blows over one informant (the confrontation)
+ *   stage 19 — the young man flees Port Sarim on a midnight ship (the flight)
+ *   stage 20 — the struck donor named: the Fustian Guild, pulled out, "loyal friends" (the struck name)
+ *   stage 21 — the bidding war: gold doubled, paper triple, clerks getting rich and scared (the bidding war)
+ *   stage 22 — the lad seen clasping hands with a grey man on the midnight quay (the quay)
  *
  * Stages 5-8 are the escalation beats; their interactive layer lives in
  * SuccessionKeepers.Kingdoms.js. Stages 9-12 are the trail; their interactive
@@ -66,7 +71,7 @@ const DEATH_SURGE_CHANCE = 0.2;
 
 const WHISPER_STAGE_FLAG = "succession:whisper-stage";
 const LAST_ADVANCE_FLAG = "succession:last-advance-at";
-const MAX_STAGE = 17;
+const MAX_STAGE = 22;
 
 let pluginApi = null;
 
@@ -127,6 +132,27 @@ const STAGE_WHISPERS = {
     "plain clothes, paying in gold where the Hand pays silver. No charity, no " +
     "questions, no face anyone remembers. What he buys, he buys for a fortune. " +
     "What he wants it for, nobody knows.",
+  // Stages 18-22: the hunt escalates. The two buyers cross paths, the young
+  // man runs, a backer is named, the bidding war burns, and the quay goes
+  // quiet. Stakes rise; the truth stays one inference away.
+  18: "Two men near came to blows in the Rusty Anchor last night — one grey, " +
+    "one plain-dressed, both flashing coin at the same dock clerk, both after " +
+    "the same paper. The clerk took neither. He's gone this morning. Vanished.",
+  19: "The farm lad's bunk at Port Sarim is empty. The harbormaster took double " +
+    "fare off a young man at midnight — no name, no cargo, no questions. Ran " +
+    "like the tide was after him. Somebody warned that boy.",
+  20: "The Hand's donor list is re-pinned, reprinted — and the struck name is " +
+    "simply gone, like it was never there. The fresh hand below reads: 'the " +
+    "palace thanks its LOYAL friends.' The street says the Fustian Guild pulled " +
+    "its gold the week the palace man leaned on the auction — and their factor's " +
+    "son just took a palace post.",
+  21: "Old paper's worth triple what it was. The gold buyer doubled his offer, " +
+    "and the Hand is matching coin for coin. Parish clerks are getting rich and " +
+    "getting frightened in equal measure. One Varrock scribe quit his post and " +
+    "took the first cart south. Wouldn't say why.",
+  22: "A sailor swears he saw the farm lad on the midnight quay — clasping hands " +
+    "with a man in grey. Bought, or taken? He wouldn't say, and he's not saying " +
+    "it twice. Nobody talks about the docks anymore.",
 };
 
 const DEATH_SURGE_WHISPERS = [
@@ -205,5 +231,5 @@ module.exports = attachSuccession;
 module.exports.attachSuccession = attachSuccession;
 module.exports.successionTick = successionTick;
 module.exports.SUCCESSION_TICK_TICKS = SUCCESSION_TICK_TICKS;
-/** Current whisper stage (0-17). The keepers/trail/hunt layers gate their beats on this. */
+/** Current whisper stage (0-22). The keepers/trail/hunt layers gate their beats on this. */
 module.exports.whisperStage = stageOf;
