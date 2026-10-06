@@ -61,6 +61,13 @@
  *   ::found chest <amount>  add coins to the war chest
  *   ::found status          your kingdom's standing
  *   ::found abandon         dissolve your fledgling kingdom
+ *
+ * Diegetic (ClaimStake.Kingdoms): dropping a Stake in unclaimed land offers
+ * to drive it as a claim stake — confirm, speak the kingdom's name, and the
+ * same foundKingdom below runs: same 10M charter, same grace timers, same
+ * violent response from the great powers. The stake stands visible in the
+ * world while the claim is contested. The ::found command stays registered
+ * until the stake path is verified in-game.
  */
 
 const Store = require("./KingdomStore");
@@ -359,16 +366,19 @@ function foundingTick() {
 
 // --- commands -------------------------------------------------------------
 
+/** Charter a kingdom. Returns the kingdom id on success, null on failure
+ *  (the player is always told why). The diegetic claim-stake path calls this
+ *  directly — same costs, same timers, same violent response. */
 function foundKingdom(player, args) {
   const name = args.join(" ").trim();
-  if (!isRealPlayer(player)) return;
+  if (!isRealPlayer(player)) return null;
   if (!name || name.length < 3 || name.length > 20 || !/^[A-Za-z ]+$/.test(name)) {
     player.sendMessage("[Found] Name your kingdom: 3-20 letters and spaces. ::found <name>");
-    return;
+    return null;
   }
   if (playerFledgling(player)) {
     player.sendMessage("[Found] You already lead a fledgling kingdom. See ::found status");
-    return;
+    return null;
   }
   const pos = playerPos(player);
   if (!isUnclaimed(pos)) {
@@ -376,23 +386,23 @@ function foundKingdom(player, args) {
       "[Found] This land is claimed. Found your kingdom in unclaimed territory — " +
         "the wilds between the great powers. No one will give you land; take it."
     );
-    return;
+    return null;
   }
   if (coinsInInventory(player) < CHARTER_COST) {
     player.sendMessage(
       `[Found] A charter costs ${CHARTER_COST.toLocaleString()} coins. ` +
         `You carry ${coinsInInventory(player).toLocaleString()}.`
     );
-    return;
+    return null;
   }
   const id = slugify(name);
   if (Store.getKingdom(id)) {
     player.sendMessage("[Found] That name is taken. Choose another.");
-    return;
+    return null;
   }
   if (!takeCoins(player, CHARTER_COST)) {
     player.sendMessage("[Found] The coins slipped through your fingers. Try again.");
-    return;
+    return null;
   }
 
   const gpId = nearestGreatPower(pos);
@@ -432,6 +442,7 @@ function foundKingdom(player, args) {
       `The great powers have taken notice.`
   );
   console.info("[founding] kingdom chartered", { id, name, founder: player.getUsername(), gpId });
+  return id;
 }
 
 function joinKingdom(player, args) {
@@ -510,20 +521,43 @@ function foundStatus(player) {
     player.sendMessage("[Found] You belong to no fledgling kingdom.");
     return;
   }
+  for (const line of claimStatusLines(kingdom)) player.sendMessage(line);
+}
+
+/**
+ * A fledgling kingdom's standing as plain lines — the ::found status
+ * content, refactored for reuse. Claim stakes show these when read, so any
+ * traveller can see how the claim fares against the coming marshal.
+ */
+function claimStatusLines(kingdom) {
   const flags = kingdom.flags ?? {};
   const followers = flags[FLAG_FOLLOWERS] ?? [];
   const chest = flags[FLAG_WAR_CHEST] ?? 0;
   const survived = flags["founding:survived"] === true;
-  player.sendMessage(`[Found] ${kingdom.name} — ruled by ${kingdom.ruler}`);
-  player.sendMessage(`  Followers: ${followers.length} | War chest: ${chest.toLocaleString()} coins`);
+  const lines = [
+    `[Found] ${kingdom.name} — ruled by ${kingdom.ruler}`,
+    `  Followers: ${followers.length} | War chest: ${chest.toLocaleString()} coins`,
+  ];
   if (survived) {
-    player.sendMessage(`  It stands. A miracle. Weekly upkeep: ${WEEKLY_UPKEEP.toLocaleString()} coins.`);
+    lines.push(`  It stands. A miracle. Weekly upkeep: ${WEEKLY_UPKEEP.toLocaleString()} coins.`);
   } else if (flags[FLAG_WARNED]) {
-    player.sendMessage(`  THE MARSHAL MARCHES. Steel yourself.`);
+    lines.push(`  THE MARSHAL MARCHES. Steel yourself.`);
   } else {
     const mins = Math.max(0, Math.round(((flags[FLAG_RESPOND_AT] ?? 0) - Date.now()) / 60000));
-    player.sendMessage(`  The great powers have noticed. Expect steel within ~${mins} minutes.`);
+    lines.push(`  The great powers have noticed. Expect steel within ~${mins} minutes.`);
   }
+  return lines;
+}
+
+/**
+ * Fledgling kingdoms whose claim is still contested — not yet crushed by
+ * the marshal, not yet standing as a recognized minor power. These are the
+ * claims that need a stake standing in the wild earth.
+ */
+function contestedClaims() {
+  return fledglingKingdoms()
+    .filter((k) => k?.flags?.["founding:survived"] !== true)
+    .map((k) => ({ id: k.id, name: k.name, claim: k.flags?.["founding:claim"] ?? null }));
 }
 
 function abandonKingdom(player) {
@@ -577,3 +611,7 @@ function attachFounding(api) {
 
 module.exports = attachFounding;
 module.exports.attachFounding = attachFounding;
+module.exports.foundKingdom = foundKingdom;
+module.exports.isUnclaimed = isUnclaimed;
+module.exports.claimStatusLines = claimStatusLines;
+module.exports.contestedClaims = contestedClaims;
