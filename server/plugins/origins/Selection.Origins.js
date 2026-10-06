@@ -49,6 +49,37 @@ let MOBILE_CLIENT_ATTRIBUTE;
 /** Players who still owe the choice a click (cleared on choose/logout). */
 const pending = new Set();
 
+/**
+ * Backstop timers for players whose login never reaches the welcome screen
+ * (brand-new accounts go through the appearance customizer instead, so
+ * onWelcomePlay never fires). Each timer opens the choice after a short
+ * delay unless the player already chose, logged out, or was prompted.
+ */
+const fallbackTimers = new Map();
+const LOGIN_FALLBACK_DELAY_MS = 8000;
+
+function cancelFallback(player) {
+  const timer = fallbackTimers.get(player);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    fallbackTimers.delete(player);
+  }
+}
+
+function scheduleFallback(player) {
+  cancelFallback(player);
+  const timer = setTimeout(() => {
+    fallbackTimers.delete(player);
+    // The welcome-screen hook may have beaten us here; only fire if the
+    // choice is still owed.
+    if (pending.delete(player) && !hasOrigin(player)) {
+      openChoice(player);
+    }
+  }, LOGIN_FALLBACK_DELAY_MS);
+  timer.unref?.();
+  fallbackTimers.set(player, timer);
+}
+
 function hasOrigin(player) {
   return Boolean(player?.getAttribute?.(ORIGIN_ID_ATTRIBUTE));
 }
@@ -149,6 +180,7 @@ function claimOrigin(player, originId) {
   player.getPacketSender().sendInterfaceRemoval();
   pluginApi.emitCustomEvent("origins:selected", { player, originId: origin.id });
   player.sendMessage(origin.welcome);
+  cancelFallback(player);
   pending.delete(player);
 }
 
@@ -164,6 +196,9 @@ function onPlayerLogin(event) {
   const player = event?.player;
   if (!player || player.isPlayerBot?.() === true || hasOrigin(player)) return;
   pending.add(player);
+  // Backstop: new accounts skip the welcome screen (appearance customizer),
+  // so guarantee the choice opens even if onWelcomePlay never fires.
+  scheduleFallback(player);
   if (player.getAttribute(MOBILE_CLIENT_ATTRIBUTE) === true) {
     // No welcome screen on mobile: the gameframe is already up.
     queueMicrotask(() => {
@@ -173,6 +208,7 @@ function onPlayerLogin(event) {
 }
 
 function onWelcomePlay({ player }) {
+  cancelFallback(player);
   if (!pending.delete(player)) return false;
   queueMicrotask(() => {
     if (!hasOrigin(player)) openChoice(player);
@@ -181,6 +217,7 @@ function onWelcomePlay({ player }) {
 }
 
 function clearPending({ player }) {
+  cancelFallback(player);
   pending.delete(player);
 }
 
@@ -216,6 +253,7 @@ function resetOrigin({ player, parts }) {
     return;
   }
   target.setAttribute(ORIGIN_ID_ATTRIBUTE, null);
+  cancelFallback(target);
   pending.delete(target);
   player.sendMessage(`${target.getUsername?.() ?? targetName} will choose a home on next login.`);
 }
