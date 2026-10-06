@@ -27,7 +27,7 @@ const {
   TYPE_TEXT,
   createWidgetGroup,
 } = require("../../interface/widgetGroup");
-const { matchDiegetic, OBJECT_IDS } = require("../../../world/DiegeticObjects");
+const { matchDiegetic, OBJECT_IDS } = require("../../world/DiegeticObjects");
 const PlayerShops = require("./PlayerShops");
 const KingdomStore = require("../../kingdoms/KingdomStore");
 
