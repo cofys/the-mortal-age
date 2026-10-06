@@ -17,13 +17,22 @@
  *   kingdom:war-declared     { attackerId, defenderId, declaredBy?, reason? }
  *   kingdom:war-ended        { attackerId, defenderId, outcome? }
  *   kingdom:ruler-changed    { kingdomId, newRuler, newTitle?, flag?, flagValue? }
+ *   kingdom:office-assigned  { officeId, kingdomId, holder: { kind: "ai"|"player", ref } }
+ *   kingdom:office-vacated   { officeId, kingdomId, previousHolder? }
+ *   kingdom:office-seeks-holder { officeId, kingdomId, title }
  *
  * territory-entered/left are emitted by the Areas for external consumers
  * (future AI-citizen and LLM hooks); core needs no listener for them yet.
+ * office-seeks-holder is emitted whenever an office goes vacant; the
+ * citizens director (AI holder) or a ruler's decree/player claim answers
+ * with office-assigned.
  */
 
 const Store = require("./KingdomStore");
 const Membership = require("./Membership.Kingdoms");
+const Offices = require("./Offices.Kingdoms");
+
+let pluginApi = null;
 
 /** A kingdom announced itself — record it if we do not know it yet. */
 function onKingdomCreated(event) {
@@ -88,11 +97,38 @@ function onRulerChanged(event) {
   Store.save();
 }
 
+/** An office found its holder — AI citizen or player, the registry doesn't care. */
+function onOfficeAssigned(event) {
+  if (!event?.officeId || !event?.kingdomId || !Offices.isValidHolder(event.holder)) return;
+  Offices.assignOffice(event.officeId, event.holder);
+}
+
+/** An office went vacant — broadcast so the director or a claimant can answer. */
+function onOfficeVacated(event) {
+  if (!event?.officeId) return;
+  const record = Offices.getOffice(event.officeId);
+  const previousHolder = Offices.vacateOffice(event.officeId);
+  if (record) {
+    pluginApi.emitCustomEvent("kingdom:office-seeks-holder", {
+      officeId: event.officeId,
+      kingdomId: record.kingdomId,
+      title: record.title,
+      previousHolder: previousHolder ? { ...previousHolder } : null,
+    });
+  }
+}
+
 module.exports = function attachEvents(api) {
+  pluginApi = api;
   api.onCustomEvent("kingdom:created", onKingdomCreated);
   api.onCustomEvent("kingdom:rank-granted", onRankGranted);
   api.onCustomEvent("kingdom:tax-collected", onTaxCollected);
   api.onCustomEvent("kingdom:war-declared", onWarDeclared);
   api.onCustomEvent("kingdom:war-ended", onWarEnded);
   api.onCustomEvent("kingdom:ruler-changed", onRulerChanged);
+  api.onCustomEvent("kingdom:office-assigned", onOfficeAssigned);
+  api.onCustomEvent("kingdom:office-vacated", onOfficeVacated);
 };
+
+module.exports.onOfficeAssigned = onOfficeAssigned;
+module.exports.onOfficeVacated = onOfficeVacated;

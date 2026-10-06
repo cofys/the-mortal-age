@@ -38,18 +38,20 @@ const WILDERNESS_SURFACE = { x1: 2930, x2: 3430, y1: 3520, y2: 4000, z: 0 };
 
 /**
  * Wilderness PvP death-destruction tuning (ECONOMY.md §3, sink 1).
- * Junk dies, treasure survives: the furnace drains the flood (arrows, food,
- * cheap gear) while the jackpot loot that makes the Wilderness worth
- * entering still drops for the killer.
+ * Flat rate, no value ceiling (Jon 2026-10-06): loss scales with what the
+ * victim carried — a 50m kit hurts fifty times more than a 1m kit, and no
+ * treasure is exempt. The furnace drains the flood at every tier, which is
+ * what keeps crafter demand alive across the whole price curve.
  */
 const SINK_TUNING = {
-  /** Items under this reference value: destruction chance per dropped item. */
-  lowValueCap: 100000,
-  lowValueChance: 0.35,
-  /** Items under this reference value (and over the low cap). */
-  midValueCap: 5000000,
-  midValueChance: 0.1,
-  /** Above midValueCap: never destroyed (stakes preserved). */
+  /** Flat destruction chance per dropped item in contested Wilderness PvP deaths. Tune here. */
+  destructionChance: 0.35,
+};
+
+/** Grand Exchange completion-fee tuning (ECONOMY.md §5). */
+const FEE_TUNING = {
+  /** Fraction of a completed SELL offer's coin output sunk as a market fee. Quiet gold drain. */
+  geCompletionFee: 0.01,
 };
 
 /** Reference-price feed tuning (ECONOMY.md §6). */
@@ -72,5 +74,6 @@ module.exports = {
   COINS_ID,
   WILDERNESS_SURFACE,
   SINK_TUNING,
+  FEE_TUNING,
   PRICE_TUNING,
 };

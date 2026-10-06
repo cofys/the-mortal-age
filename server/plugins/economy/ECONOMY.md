@@ -122,20 +122,34 @@ Every PK death in the contested Wilderness destroys a share of what would
 have dropped, instead of dropping it. Implementation: `Sinks.Economy.js`
 listens to the existing `onPlayerDeathItemDrop` hook (per-item granularity,
 fires for players *and* the wilderness PK bots), checks the death tile
-against the contested-Wilderness rect and that the killer is a player, then:
+against the contested-Wilderness rect and that the killer is a player, then
+rolls destruction per dropped item at a **flat rate** (`SINK_TUNING.destructionChance`,
+currently 0.35) — **no value ceiling**. Coins are never destroyed.
 
-- rolls destruction per dropped item, **scaled by value**: junk dies, treasure
-  survives. Roughly: <100k → ~35% destroyed; 100k–5m → ~10%; >5m → survives
-  (the killer's loot, the stakes — untouched). Coins are never destroyed.
-- destroyed items set `suppressDefaultDrop` (no floor spawn) and emit
-  `economy:item-sink { itemId, amount, sink: "wilderness-pvp-death", ... }`.
+Why flat, not value-scaled (Jon 2026-10-06): loss should scale with what the
+victim carried — a 50m kit hurts fifty times more than a 1m kit, and no
+treasure is exempt. The Wilderness must stay dangerous at every tier, or
+endgame gear never needs replacing and the crafter economy flatlines at the
+top. The surviving (1 − rate) still drops for the killer, so the jackpot
+motive survives: the sink taxes the victim, not the thrill. Tune in
+`constants.js`; 35% is the floor.
 
-Why value-scaled, not flat: a flat 30%-of-everything would feel like theft
-and punish risk-takers carrying real stakes. The design intent is to drain
-the *flood* — arrows, food, rune sets, cheap gear — the thousands of items
-PK bots and PKers cycle daily — while leaving the jackpot loot that makes
-the Wilderness worth entering. This is a deliberate divergence from OSRS
-death behavior, and it's the point: the Wilderness is the server's furnace.
+**Simulation** (`server/plugins/economy/sim/sink-rates.js`; 200 PKers × 3
+deaths/day; kit mix 60% budget / 30% mid / 10% whale):
+
+| Rate | Destroyed / day | Crafter demand / day | Expected loss per death (budget / mid / whale) |
+| ---- | --------------- | -------------------- | ---------------------------------------------- |
+| 35%  | 856.8m          | 856.8m               | 105k / 1.1m / 10.5m                            |
+| 50%  | 1.22b           | 1.22b                | 150k / 1.5m / 15.0m                            |
+| 65%  | 1.59b           | 1.59b                | 195k / 1.9m / 19.5m                            |
+
+Demand scales linearly — no cliff, tuning is smooth. These are ceilings:
+behavioral dampening (players risking cheaper kits as rates rise) softens
+real-world demand, and small kits have high per-death variance even though
+the mean holds.
+
+Destroyed items set `suppressDefaultDrop` (no floor spawn) and emit
+`economy:item-sink { itemId, amount, sink: "wilderness-pvp-death", ... }`.
 
 **Hook point (documented):** `api.onPlayerDeathItemDrop(event)` —
 `event.location` (tile with `getX()/getY()/getZ()`), `event.killer`
@@ -208,7 +222,7 @@ economy.
 | NPC shop purchases | exists (shops.json); the classic drain. |
 | Repair costs (§3 sink 2) | gold + materials to smiths; the maintenance-economy drain. |
 | Kingdom taxes | **stubbed in kingdoms** (`kingdom:tax-collected` has no emitters yet): market tolls, shop taxes, war levies. The design intent: small, visible, earmarked ("2% market toll → the war chest"). |
-| GE tax | check whether `GrandExchange.plugin.js` takes a cut; if not, a 1% listing/completion fee is the obvious v2 drain. |
+| GE completion fee | ✅ **wired** (`Fees.Economy.js`): 1% of every completed SELL offer's coin payout is sunk on collection. Silent by design; lifetime totals in `::economy`. Tuned in `FEE_TUNING.geCompletionFee`. |
 | Item sinks (§3) | destroy *value*, which is deflationary pressure on goods — the counterpart to gold drains. |
 
 **The sanity rule:** faucets are tuned so a new player's first 100k is
@@ -321,7 +335,9 @@ and collection boxes. v1 market work is three small things around it:
 | `economy:item-sink` event | ✅ defined + emitted (constants, Events, Sinks) |
 | `economy:demand` event + ledger | ✅ defined, recorded, readable (`Demand.Economy.js`) |
 | `economy:price` feed + reference service | ✅ defined, served (`Prices.Economy.js`) |
-| Wilderness PvP death-destruction sink | ✅ **wired and live** (`Sinks.Economy.js`) |
+| Wilderness PvP death-destruction sink | ✅ **wired and live** (`Sinks.Economy.js`) — flat 35%, no ceiling |
+| GE completion fee (1% gold drain) | ✅ **wired and live** (`Fees.Economy.js`) |
+| Offices (AI/player interchangeable) | ✅ **registry wired** (`kingdoms/Offices.Kingdoms.js`): quartermaster/marshal/spymaster/steward per great power, AI-held at seed; `::office` claim/vacate/list. Challenge/appointment mechanics are next. |
 | Crafting quality tiers | 📝 design only (§2) — needs smithing-action hooks + item variants |
 | Gear wear/repair economy | 📝 design only (§3 sink 2) — Barrows pattern to generalize |
 | War consumption | 📝 design only — waits on the kingdoms war sim |
@@ -332,20 +348,17 @@ and collection boxes. v1 market work is three small things around it:
 
 ## Open questions for Jon
 
-1. **Sink aggression.** v1 destroys ~35% of sub-100k drops on Wilderness PvP
-   death. Too hot? The furnace only works if it's felt — but the first time a
-   player watches their rune scimitar vanish instead of dropping, that's a
-   story we want told *right*. Numbers are constants in `constants.js`.
+1. **Sink aggression — DECIDED 2026-10-06.** Flat rate, no value ceiling, 35% minimum. Tune in `SINK_TUNING.destructionChance`; sim at `sim/sink-rates.js`.
 2. **Mint floors yes/no?** A crown mint that always buys iron at a fixed
    price guarantees gatherers a living — and caps how far prices can crash.
    It's also a gold faucet that needs watching. Worth v2, or let the market
    find the floor?
-3. **Who posts war demands?** When wars go live, is the quartermaster an AI
-   citizen with a treasury budget (my vote — it's a *character*), a
-   background tick, or a player-held office? This decides a lot of
-   `economy:demand` traffic shape.
-4. **GE tax.** 1% on completion as the quiet gold drain — acceptable
-   divergence from OSRS, or hands off the GE?
+3. **Who posts war demands? — DECIDED 2026-10-06.** Offices interchange
+   between AI and players: the quartermaster is AI-held at seed (a
+   *character*), a player can take the office when it's vacated. Both paths
+   post `economy:demand` the same way.
+4. **GE tax — DECIDED 2026-10-06.** 1% completion fee on sell offers, sunk,
+   silent. Wired (`Fees.Economy.js`).
 5. **Regional starting gear.** Should a new character's origin city
    (Mount & Blade style) come with that region's surplus in their starter
    kit — Kandarin kid gets a yew shortbow, Keldagrim kid gets a steel

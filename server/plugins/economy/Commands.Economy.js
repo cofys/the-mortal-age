@@ -15,6 +15,7 @@
 const Demand = require("./Demand.Economy");
 const Prices = require("./Prices.Economy");
 const Sinks = require("./Sinks.Economy");
+const Fees = require("./Fees.Economy");
 
 function fmt(n) {
   return Number(n).toLocaleString("en-US");
@@ -22,9 +23,13 @@ function fmt(n) {
 
 function showSummary(player) {
   const s = Sinks.getStats();
+  const f = Fees.getStats();
   player.sendMessage("[Economy] Sink furnace (wilderness PvP deaths):");
   player.sendMessage(
     `  destroyed ${fmt(s.destroyedStacks)} item stacks (~${fmt(s.destroyedValue)} gp reference value) across ${fmt(s.deathsTouched)} deaths`
+  );
+  player.sendMessage(
+    `[Economy] Market fee: ${fmt(f.feesValue)} gp sunk across ${fmt(f.feesCollected)} completed sales (1%).`
   );
   player.sendMessage(
     `[Economy] Demand board: ${Demand.openCount()} open orders; ${Prices.pressuredCount()} items under price pressure.`

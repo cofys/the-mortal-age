@@ -17,6 +17,10 @@
  * e.g. the looting bag) are left alone. Safe deaths (shouldDropItems false)
  * and items core wouldn't drop (dropEligible false) are skipped.
  *
+ * Destruction is a FLAT rate (SINK_TUNING.destructionChance), no value
+ * ceiling: every dropped item rolls the same chance whether it's arrows or
+ * a twisted bow. Loss scales with what the victim carried.
+ *
  * Sinks 2–4 (gear wear/repair, war consumption, upkeep) are design-only —
  * see ECONOMY.md §3 and the SINKS names in constants.js.
  */
@@ -57,11 +61,9 @@ function isContestedWilderness(location) {
   );
 }
 
-/** Junk dies, treasure survives: destruction chance from the reference value. */
-function destructionChance(referenceValue) {
-  if (referenceValue < SINK_TUNING.lowValueCap) return SINK_TUNING.lowValueChance;
-  if (referenceValue < SINK_TUNING.midValueCap) return SINK_TUNING.midValueChance;
-  return 0;
+/** Flat rate: every dropped item rolls the same chance, whatever it's worth. */
+function destructionChance(/* referenceValue — kept for the test seam; value no longer matters */) {
+  return SINK_TUNING.destructionChance;
 }
 
 function onDeathItemDrop(event) {

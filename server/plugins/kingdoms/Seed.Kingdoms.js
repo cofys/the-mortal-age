@@ -8,6 +8,7 @@
  */
 
 const Store = require("./KingdomStore");
+const Offices = require("./Offices.Kingdoms");
 
 let pluginApi;
 
@@ -111,6 +112,33 @@ function seedKingdoms() {
     }
   }
   Store.save();
+  seedOffices();
+}
+
+/**
+ * Every great power gets the standard offices, held by AI identities from
+ * day one (Jon 2026-10-06: offices interchange between AI and players).
+ * The holder ref is an office identity — the citizens director binds a
+ * living citizen to it; a player takes it with ::office claim after the
+ * office is vacated. Idempotent: existing holders are never clobbered.
+ */
+function seedOffices() {
+  for (const def of GREAT_POWERS) {
+    for (const std of Offices.STANDARD_OFFICES) {
+      const record = Offices.defineOffice({
+        kingdomId: def.id,
+        office: std.office,
+        title: std.title,
+        description: std.description,
+      });
+      if (record && !record.holder) {
+        Offices.assignOffice(record.officeId, {
+          kind: "ai",
+          ref: `${def.id}:${std.office}`,
+        });
+      }
+    }
+  }
 }
 
 module.exports = function attachSeed(api) {
