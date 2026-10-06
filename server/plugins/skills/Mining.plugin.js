@@ -7,6 +7,11 @@ const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/imp
 const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const InfernalPickaxe = require("./mining/InfernalPickaxe.Mining");
 const CrystalPickaxe = require("./mining/CrystalPickaxe.Mining");
+const Mines = require("./mining/Mines.Mining");
+const Hazards = require("./mining/Hazards.Mining");
+const Wilderness = require("./mining/Wilderness.Mining");
+const Mastery = require("./mining/Mastery.Mining");
+const Supply = require("./mining/Supply.Mining");
 
 const DEPLETED_ROCK_ID = 2704;
 const MINING_ANIMATION_INTERVAL_TICKS = 4;
@@ -116,7 +121,9 @@ function stopMining(activeSessions, player, resetAnim = true) {
  * Mining depth seam (./mining/MINING-DEPTH.md): every ore yield emits
  * "mining:ore-yield" before the ore is awarded. Listeners add bonusOre (rich
  * veins, prime strikes) or scale the XP via multiplier; both are honored here.
- * Returns what the yield granted, for tests. Additive only.
+ * "mining:success" carries stop:false - a listener (cave-ins) may set
+ * event.stop to end the session after this yield. Returns what the yield
+ * granted, for tests. Additive only.
  */
 function awardOre(player, state) {
   const event = {
@@ -145,17 +152,21 @@ function awardOre(player, state) {
     }
   }
   CrystalPickaxe.tryUseCharge(player);
-  player.getSkillManager().addExperiences(Skill.MINING, state.rock.xp * xpMultiplier);
-  pluginApi.emitCustomEvent("mining:success", {
+  const xpGranted = state.rock.xp * xpMultiplier;
+  player.getSkillManager().addExperiences(Skill.MINING, xpGranted);
+  const success = {
     player,
     skill: Skill.MINING,
     petBase: state.rock.petBase,
     oreId: state.rock.oreId,
     rockName: state.rock.objectName,
     bonusOre,
+    xp: xpGranted,
     location: event.location,
-  });
-  return { bonusOre, xpMultiplier };
+    stop: false,
+  };
+  pluginApi.emitCustomEvent("mining:success", success);
+  return { bonusOre, xpMultiplier, stop: success.stop === true };
 }
 
 function depleteRock(rockObject, rock) {
@@ -277,7 +288,11 @@ class MiningTask extends Task {
         continue;
       }
 
-      awardOre(player, state);
+      const result = awardOre(player, state);
+      if (result.stop) {
+        stopMining(this.activeSessions, player);
+        continue;
+      }
       if (state.rock.infinite) {
         if (player.getInventory().isFull()) {
           player.getInventory().full();
@@ -339,6 +354,13 @@ module.exports = {
 
     InfernalPickaxe.attach(api);
     CrystalPickaxe.attach(api);
+    // Mining depth (./mining/MINING-DEPTH.md): attach order is listener order -
+    // Mines stamps event.mine/event.vein, then Hazards/Wilderness/Mastery/Supply.
+    Mines.attach(api);
+    Hazards.attach(api);
+    Wilderness.attach(api);
+    Mastery.attach(api);
+    Supply.attach(api);
 
     api.log("registered", {
       rocks: ROCKS.length,
