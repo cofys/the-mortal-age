@@ -28,14 +28,15 @@
  *      claim nailed to the post: name, ruler, followers, war chest, and
  *      how long until the marshal marches (Founding.claimStatusLines).
  *
- * Lifecycle: contested claims are reconciled on a slow task (same ~5 min
- * cadence as the founding tick) — stakes respawn for contested claims
- * missing one (e.g. after a restart; the claim position persists on the
- * kingdom record's founding:claim flag), and stakes are pulled when the
- * claim resolves: crushed, abandoned, or standing as a recognized minor
- * power. The ::found command stays registered until the stake is verified
- * in-game, then it goes. Migration rule: build the world path, verify it
- * works, remove the command. Never the reverse.
+ * Lifecycle: claims are reconciled on a slow task (same ~5 min cadence as
+ * the founding tick) — stakes respawn for claims missing one (e.g. after a
+ * restart; the claim position persists on the kingdom record's
+ * founding:claim flag), and stakes are pulled when the claim resolves into
+ * nothing: crushed or abandoned. A claim that SURVIVES keeps its stake as
+ * a banner post — upkeep is paid there, the coffers filled there, and
+ * raiders come there. The ::found command stays registered until the stake
+ * is verified in-game, then it goes. Migration rule: build the world path,
+ * verify it works, remove the command. Never the reverse.
  *
  * Stakes: the General Store stocks them (shops.json), and every Morytanian
  * starts with one in their origin kit.
@@ -75,6 +76,41 @@ const STAKE_RECONCILE_TICKS = 500;
 
 function isRealPlayer(player) {
   return player?.isPlayer?.() === true && player?.isPlayerBot?.() !== true;
+}
+
+/**
+ * Chatbox option prompt: flat [text, callback] pairs, the
+ * sendMultiChatboxPrompt shape. Never throws — the stake must always answer.
+ */
+function showPrompt(player, title, pairs) {
+  try {
+    const sent = pluginApi.sendMultiChatboxPrompt(player, title, ...pairs);
+    if (!sent) player.sendMessage("The moment passes. The stake says nothing.");
+    return sent;
+  } catch (error) {
+    console.warn("[claim-stake] prompt failed", error?.message ?? error);
+    player.sendMessage("The stake says nothing. Try again.");
+    return false;
+  }
+}
+
+/** Numeric prompt that resumes into onInput (the donation-chest pattern). */
+function promptAmount(player, title, onInput) {
+  try {
+    player.setEnteredAmountAction({
+      execute: (amount) => {
+        try {
+          player.setEnteredAmountAction(null);
+        } catch {
+          // Clearing is cosmetic.
+        }
+        onInput(amount);
+      },
+    });
+    player.getPacketSender().sendEnterAmountPrompt(title);
+  } catch {
+    onInput(null);
+  }
 }
 
 function playerPos(player) {
@@ -194,20 +230,24 @@ function removeStake(kingdomId) {
 }
 
 /**
- * Stakes stand only while the claim is contested. Respawn stakes for
- * contested claims missing one; pull stakes whose claim resolved.
+ * Stakes stand while the claim is contested — and stand on as banner posts
+ * for the rare claim that survives the marshal. Respawn stakes for claims
+ * missing one; pull stakes whose claim resolved into nothing.
  */
 function reconcileStakes() {
   try {
-    const contested = new Map();
+    const live = new Map();
     for (const c of Founding.contestedClaims()) {
-      if (c?.claim) contested.set(c.id, c.claim);
+      if (c?.claim) live.set(c.id, c.claim);
     }
-    for (const [id, claim] of contested) {
+    for (const c of Founding.survivedKingdoms()) {
+      if (c?.claim) live.set(c.id, c.claim);
+    }
+    for (const [id, claim] of live) {
       if (!stakes.has(id)) spawnStake(id, claim.x, claim.y, claim.z);
     }
     for (const id of [...stakes.keys()]) {
-      if (!contested.has(id)) removeStake(id);
+      if (!live.has(id)) removeStake(id);
     }
   } catch (error) {
     console.warn("[claim-stake] reconcile failed", error?.message ?? error);
@@ -243,14 +283,26 @@ function readClaim(event) {
 }
 
 /**
- * The rest of the ::found verbs, diegetic: swear to the banner
- * (::found join), fill the war chest (::found chest), or — for the founder
- * alone, behind a confirmation — lower the banner (::found abandon). Every
- * option hands straight to Founding; nothing is reimplemented here.
+ * The rest of the founding verbs, diegetic: swear to the banner, fill the
+ * war chest, raid a rival claim, or — for the founder alone, behind a
+ * confirmation — lower the banner. Survived claims stand on as banner
+ * posts: the founder pays upkeep and fills the coffers there, and anyone
+ * else may raid the stores. Every option hands straight to Founding;
+ * nothing is reimplemented here.
  */
 function offerStakeMenu(player, kingdom) {
   const username = player.getUsername?.()?.toLowerCase?.() ?? "";
-  const isFounder = String(kingdom.ruler ?? "").toLowerCase() === username && username.length > 0;
+  const isFounder =
+    String(kingdom.ruler ?? "").toLowerCase() === username && username.length > 0;
+  const followers = kingdom.flags?.["founding:followers"] ?? [];
+  const isSworn = isFounder || followers.includes(username);
+  const survived = kingdom.flags?.["founding:survived"] === true;
+
+  if (survived) {
+    offerBannerPostMenu(player, kingdom, isFounder, isSworn);
+    return;
+  }
+
   const pairs = [
     "Swear to this banner.",
     () => Founding.joinKingdom(player, [kingdom.name]),
@@ -260,11 +312,39 @@ function offerStakeMenu(player, kingdom) {
         if (Number(amount) > 0) Founding.fillChest(player, [String(amount)]);
       }),
   ];
+  if (!isSworn) {
+    pairs.push("Raid the war chest.", () => Founding.raidClaim(player, kingdom.id));
+  }
   if (isFounder) {
     pairs.push("Lower the banner.", () => confirmAbandon(player, kingdom));
   }
   pairs.push("Walk away.", () => {});
   showPrompt(player, `The claim of ${kingdom.name}`, pairs);
+}
+
+/** A survived claim's banner post: upkeep, coffers, and raiders. */
+function offerBannerPostMenu(player, kingdom, isFounder, isSworn) {
+  const pairs = [
+    "Fill the coffers.",
+    () =>
+      promptAmount(player, "How many coins for the coffers?", (amount) => {
+        if (Number(amount) > 0) Founding.fillChest(player, [String(amount)]);
+      }),
+  ];
+  if (isFounder) {
+    pairs.unshift(
+      "Pay the weekly upkeep.",
+      () =>
+        promptAmount(player, "How many coins toward upkeep?", (amount) => {
+          if (Number(amount) > 0) Founding.fillChest(player, [String(amount)]);
+        })
+    );
+  }
+  if (!isSworn) {
+    pairs.push("Raid the stores.", () => Founding.raidClaim(player, kingdom.id));
+  }
+  pairs.push("Walk away.", () => {});
+  showPrompt(player, `The banner post of ${kingdom.name} — it stands, barely`, pairs);
 }
 
 /** Lowering the banner ends the kingdom — confirm, like resigning an office. */
