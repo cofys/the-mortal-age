@@ -23,6 +23,35 @@ const DEFAULT_DEFINITIONS_PATH = path.join(
   "bot-activities.json"
 );
 
+/**
+ * Extension seam for the activity catalogue (used by the citizens plugin).
+ * Other plugins register new action types / condition kinds here instead of
+ * editing this file's dispatch tables. Registrations are consulted before the
+ * built-in types, so an extension can also override a built-in if needed.
+ */
+const EXTENDED_ACTION_TYPES = new Map();
+const EXTENDED_CONDITION_KINDS = new Map();
+const TRACKED_REGISTRIES = [];
+
+function registerBotActionType(type, factory) {
+  if (typeof type !== "string" || typeof factory !== "function") {
+    throw new Error("[bot activities] registerBotActionType needs (type, factory)");
+  }
+  EXTENDED_ACTION_TYPES.set(type, factory);
+}
+
+function registerBotConditionKind(kind, factory) {
+  if (typeof kind !== "string" || typeof factory !== "function") {
+    throw new Error("[bot activities] registerBotConditionKind needs (kind, factory)");
+  }
+  EXTENDED_CONDITION_KINDS.set(kind, factory);
+}
+
+/** Every registry created by this module, oldest first (bots boot first). */
+function getBotActivityRegistries() {
+  return TRACKED_REGISTRIES.slice();
+}
+
 function applyFields(value, fields) {
   if (typeof value === "string") {
     if (value.startsWith("$") && Object.prototype.hasOwnProperty.call(fields, value.slice(1))) {
@@ -59,6 +88,12 @@ function resolveSkill(name) {
 }
 
 function createCondition(spec) {
+  if (spec && typeof spec === "object") {
+    const keys = Object.keys(spec);
+    if (keys.length === 1 && EXTENDED_CONDITION_KINDS.has(keys[0])) {
+      return EXTENDED_CONDITION_KINDS.get(keys[0])(spec[keys[0]]);
+    }
+  }
   if (spec.skill) {
     const skill = resolveSkill(spec.skill.id);
     const min = Number(spec.skill.min ?? 1);
@@ -112,6 +147,10 @@ function createCondition(spec) {
 }
 
 function createAction(spec, world) {
+  const extended = EXTENDED_ACTION_TYPES.get(spec.type);
+  if (extended) {
+    return extended(spec, world);
+  }
   if (spec.type === "interactObject") {
     return createInteractObjectAction(spec, world);
   }
@@ -257,7 +296,7 @@ function createBotActivityRegistry(options = {}) {
     );
   }
 
-  return {
+  const registryApi = {
     activities,
     resolvers,
     byId,
@@ -303,9 +342,59 @@ function createBotActivityRegistry(options = {}) {
     getSite(siteId) {
       return sites.find((site) => site.id === siteId) ?? null;
     },
+    // The brain world this registry's actions were compiled against (ditch
+    // config, objectSearch, pvpController...). Extension plugins that append
+    // activities need it for attachBrain and director wiring.
+    world,
   };
+  TRACKED_REGISTRIES.push(registryApi);
+  return registryApi;
+}
+
+/**
+ * Compiles a raw definitions object ({ templates?, activities?, resolvers? })
+ * and appends it to a live registry. Id collisions throw, like the boot load.
+ * Lets extension plugins (citizens) add activities without touching the base
+ * definitions file. `world` defaults to the registry's own brain world.
+ */
+function appendActivityDefinitions(registry, raw, worldOverride = null) {
+  if (!registry || typeof registry !== "object" || !(registry.byId instanceof Map)) {
+    throw new Error("[bot activities] appendActivityDefinitions needs a registry");
+  }
+  if (!raw || typeof raw !== "object") {
+    throw new Error("[bot activities] definitions must be an object");
+  }
+  const world = worldOverride ?? registry.world ?? {};
+  const templates = raw.templates ?? {};
+  const added = [];
+  for (const definition of raw.activities ?? []) {
+    if (!definition?.id || registry.byId.has(definition.id)) {
+      throw new Error(`[bot activities] activity id '${definition?.id}' is not unique`);
+    }
+    const activity = compileActivity(definition, templates, world);
+    registry.activities.push(activity);
+    registry.byId.set(activity.id, activity);
+    added.push(activity.id);
+  }
+  for (const definition of raw.resolvers ?? []) {
+    if (!definition?.id || registry.byId.has(definition.id)) {
+      throw new Error(`[bot activities] resolver id '${definition?.id}' is not unique`);
+    }
+    const resolver = compileActivity(definition, templates, world, { resolver: true });
+    if (!resolver.resolves) {
+      throw new Error(`[bot activities] resolver '${resolver.id}' needs a resolves key`);
+    }
+    registry.resolvers.push(resolver);
+    registry.byId.set(resolver.id, resolver);
+    added.push(resolver.id);
+  }
+  return added;
 }
 
 module.exports = {
   createBotActivityRegistry,
+  appendActivityDefinitions,
+  registerBotActionType,
+  registerBotConditionKind,
+  getBotActivityRegistries,
 };

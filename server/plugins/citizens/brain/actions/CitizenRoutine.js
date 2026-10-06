@@ -1,0 +1,372 @@
+"use strict";
+
+/**
+ * CitizenRoutine — the commoner's day. Home -> work (real skilling via the
+ * shared interactObject action at the kingdom work site) -> tavern -> home,
+ * driven by the wall clock with per-citizen variation: seeded phase offsets,
+ * occasional swapped shifts, rare days off.
+ *
+ * Work output is real: logs/ore land in the inventory and get banked, feeding
+ * the master_trade goal. When the inventory fills mid-shift the routine runs
+ * an internal bank trip, then goes back to work.
+ */
+
+const { playerState } = require("../../../bots/brain/ActionState");
+const {
+  requestMovement,
+  clearMovementRequest,
+} = require("../../../bots/behaviours/navigation/BotNavigation");
+const {
+  createInteractObjectAction,
+} = require("../../../bots/brain/actions/InteractObject");
+const { createBankAction } = require("../../../bots/brain/actions/Bank");
+const { createIdleSocialAction } = require("./IdleSocial");
+const { siteTile, workSite, dockSite, kingdomIdOf } = require("../CitizenSites");
+const { isKingdomAtWar } = require("../../CitizenEvents");
+const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
+const {
+  agentRng,
+  logNormalJitter,
+  noisyTile,
+  chance,
+  humanizerProfile,
+} = require("../../lib/humanizer");
+
+const KIND_HOME = "home";
+const KIND_WORK = "work";
+const KIND_SOCIAL = "social";
+
+const WORK_FISHING = "fishing";
+
+const DAY_MINUTES = 24 * 60;
+const RETRY_WORK_MS = 60000;
+const CASTS_PER_HAUL = 4;
+
+const FISHING_LINES = Object.freeze([
+  "Come on, bite...",
+  "The river's generous today.",
+  "Caught a boot last week. A BOOT.",
+  "Quiet water, full net. That's the way.",
+  "My father fished this same spot.",
+  "Shh — you'll scare them off.",
+]);
+
+function minutesNow() {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function dayStamp() {
+  const now = new Date();
+  return now.getFullYear() * 1000 + dayOfYear(now);
+}
+
+function dayOfYear(date) {
+  const start = new Date(date.getFullYear(), 0, 0);
+  return Math.floor((date - start) / 86400000);
+}
+
+/**
+ * Build today's phase plan. Seeded per citizen per day so the routine varies
+ * without drifting: offsets shift boundaries, some days swap the shifts,
+ * rare days are "days off" (tavern all day — everyone needs one).
+ */
+function buildDayPlan(rng) {
+  const offset = () => Math.round((rng() - 0.5) * 90); // ±45 min
+  const swap = chance(rng, 0.18);
+  const dayOff = chance(rng, 0.06);
+  const workA = { kind: KIND_WORK, start: 7 * 60 + offset(), end: 12 * 60 + offset() };
+  const workB = { kind: KIND_WORK, start: 13 * 60 + offset(), end: 17 * 60 + offset() };
+  const plan = [
+    { kind: KIND_HOME, start: 0, end: 6 * 60 + offset() },
+    swap ? workB : workA,
+    { kind: KIND_SOCIAL, start: 12 * 60 + offset(), end: 13 * 60 + offset() },
+    swap ? workA : workB,
+    { kind: KIND_SOCIAL, start: 17 * 60 + offset(), end: 22 * 60 + offset() },
+    { kind: KIND_HOME, start: 22 * 60 + offset(), end: DAY_MINUTES },
+  ];
+  if (dayOff) {
+    return plan.map((phase) =>
+      phase.kind === KIND_WORK ? { ...phase, kind: KIND_SOCIAL } : phase
+    );
+  }
+  return plan;
+}
+
+function phaseFor(plan, minute) {
+  for (const phase of plan) {
+    if (minute >= phase.start && minute < phase.end) {
+      return phase;
+    }
+  }
+  return plan[plan.length - 1];
+}
+
+function atTile(player, tile, radius = 3) {
+  if (!tile) {
+    return true;
+  }
+  const loc = player.getLocation();
+  return (
+    loc.getZ() === (tile.z ?? 0) &&
+    Math.max(Math.abs(loc.getX() - tile.x), Math.abs(loc.getY() - tile.y)) <= radius
+  );
+}
+
+function walkTo(player, tile) {
+  const noisy = noisyTile(tile.x, tile.y, 3, null);
+  requestMovement(player, noisy.x, noisy.y, {
+    reason: "citizen_routine",
+    basicPather: true,
+    z: tile.z ?? 0,
+  });
+}
+
+function createCitizenRoutineAction(spec, world) {
+  // Internal delegates, created once so their per-player state stays keyed.
+  const socialDelegate = createIdleSocialAction(
+    { anchorKind: "tavern", chatterMinMs: 120000, chatterMaxMs: 420000 },
+    world
+  );
+  let workDelegate = null;
+  let bankDelegate = null;
+
+  function delegatesFor(player) {
+    if (!workDelegate) {
+      const site = workSite(player) ?? { catalog: "tree", tier: "normal", option: "Chop down" };
+      workDelegate = createInteractObjectAction(
+        {
+          catalog: site.catalog ?? "tree",
+          tier: site.tier ?? "normal",
+          option: site.option ?? "Chop down",
+          until: { inventoryFull: true },
+          stallSeconds: 120,
+        },
+        world
+      );
+      bankDelegate = createBankAction({}, world);
+    }
+    return { workDelegate, bankDelegate };
+  }
+
+  function botState(player) {
+    return playerState(action, player, () => {
+      const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+      return {
+        rng: agentRng(`routine:${player.getUsername?.() ?? "unknown"}`),
+        human: humanizerProfile(personality),
+        day: -1,
+        plan: null,
+        phaseKind: null,
+        workMode: "work", // work | bank
+        workRetryAt: 0,
+        lingerUntil: 0,
+        workKind: null, // resolved lazily: 'fishing' | 'tree' | 'rock'
+        nextCastAt: 0,
+        casts: 0,
+      };
+    });
+  }
+
+  /**
+   * What this commoner does for a living, resolved once per citizen (stable
+   * across days). Capitals with a dock get fishers; everyone else works the
+   * kingdom's tree/rock site. Believable mix, not identical mix.
+   */
+  function resolveWorkKind(player, state) {
+    if (state.workKind) {
+      return state.workKind;
+    }
+    const dock = dockSite(player);
+    if (dock && chance(state.rng, 0.4)) {
+      state.workKind = WORK_FISHING;
+    } else {
+      state.workKind = workSite(player)?.catalog ?? "tree";
+    }
+    return state.workKind;
+  }
+
+  function workTileFor(player, state) {
+    if (resolveWorkKind(player, state) === WORK_FISHING) {
+      return dockSite(player);
+    }
+    return workSite(player);
+  }
+
+  /**
+   * Fisher's shift: walk to the dock, then cast on a human rhythm with
+   * fishing chatter. Catches are the stubbed part (real fishing needs a
+   * brain NPC-interaction path that doesn't exist yet — see DESIGN.md); the
+   * visible behavior and the work rhythm are real, and completed hauls feed
+   * the master_trade goal like banked loads do for gatherers.
+   */
+  function fishWorkTick(ctx, state) {
+    const { player, nowMs } = ctx;
+    const dock = dockSite(player);
+    if (!dock) {
+      return "failed";
+    }
+    if (!atTile(player, dock, 8)) {
+      walkTo(player, dock);
+      return "running";
+    }
+    if (nowMs < state.nextCastAt) {
+      return "running";
+    }
+    state.nextCastAt =
+      nowMs + logNormalJitter(state.rng, 45000, state.human.tempoSigma);
+    state.casts += 1;
+    if (chance(state.rng, 0.5 * state.human.chatRate)) {
+      try {
+        player.forceChat?.(
+          FISHING_LINES[Math.floor(state.rng() * FISHING_LINES.length)]
+        );
+      } catch (error) {
+        // Cosmetic only.
+      }
+    }
+    if (state.casts % CASTS_PER_HAUL === 0) {
+      const bucket = (ctx.state.citizens ??= {});
+      bucket.workCyclesBanked = (bucket.workCyclesBanked ?? 0) + 1;
+      world?.log?.("citizen_routine_haul", {
+        citizen: player.getUsername?.(),
+        kingdom: kingdomIdOf(player),
+        hauls: bucket.workCyclesBanked,
+      });
+    }
+    return "running";
+  }
+
+  function ensurePlan(state) {
+    const today = dayStamp();
+    if (state.day !== today) {
+      state.day = today;
+      state.plan = buildDayPlan(state.rng);
+      state.phaseKind = null; // force phase re-entry
+    }
+  }
+
+  function enterPhase(ctx, state, kind) {
+    state.phaseKind = kind;
+    state.workMode = "work";
+    state.workRetryAt = 0;
+    state.lingerUntil = 0;
+    const { player } = ctx;
+    if (kind === KIND_WORK) {
+      const tile = workTileFor(player, state);
+      if (tile) {
+        walkTo(player, tile);
+      }
+    } else if (kind === KIND_SOCIAL) {
+      const tavern = siteTile(player, "tavern");
+      if (tavern) {
+        walkTo(player, tavern);
+      }
+    } else {
+      const home = ctx.state?.home;
+      if (home) {
+        walkTo(player, home);
+      }
+    }
+  }
+
+  const action = {
+    id: "citizenRoutine",
+    update(ctx) {
+      const { player, nowMs } = ctx;
+      const state = botState(player);
+      ensurePlan(state);
+      const phase = phaseFor(state.plan, minutesNow());
+      if (phase.kind !== state.phaseKind) {
+        enterPhase(ctx, state, phase.kind);
+      }
+
+      if (player.getForceMovement?.() != null) {
+        return "running";
+      }
+      if (player.getMovementQueue?.()?.size?.() > 0) {
+        return "running";
+      }
+
+      // War alert: commoners stay home. (Guards handle the walls.)
+      if (isKingdomAtWar(kingdomIdOf(player)) && state.phaseKind !== KIND_HOME) {
+        enterPhase(ctx, state, KIND_HOME);
+        return "running";
+      }
+
+      if (state.phaseKind === KIND_WORK) {
+        if (resolveWorkKind(player, state) === WORK_FISHING) {
+          return fishWorkTick(ctx, state);
+        }
+        const { workDelegate, bankDelegate } = delegatesFor(player);
+        const site = workSite(player);
+        if (state.workMode === "bank") {
+          const result = bankDelegate.update(ctx);
+          if (result === "success") {
+            bankDelegate.stop?.(ctx);
+            state.workMode = "work";
+            // Real output banked — the director's master_trade goal samples this.
+            const bucket = (ctx.state.citizens ??= {});
+            bucket.workCyclesBanked = (bucket.workCyclesBanked ?? 0) + 1;
+          } else if (result === "failed") {
+            bankDelegate.stop?.(ctx);
+            state.workMode = "work"; // try work again; inventory may have room
+          }
+          return "running";
+        }
+        if (nowMs < state.workRetryAt) {
+          return "running";
+        }
+        if (site && !atTile(player, site, 12)) {
+          walkTo(player, site);
+          return "running";
+        }
+        const result = workDelegate.update(ctx);
+        if (result === "success") {
+          // Inventory full: bank, then back to work.
+          workDelegate.stop?.(ctx);
+          state.workMode = "bank";
+        } else if (result === "failed") {
+          workDelegate.stop?.(ctx);
+          // No reachable resource right now — wait a beat, don't spin.
+          state.workRetryAt =
+            nowMs + logNormalJitter(state.rng, RETRY_WORK_MS, state.human.tempoSigma);
+          world?.log?.("citizen_routine_work_stalled", {
+            citizen: player.getUsername?.(),
+            kingdom: kingdomIdOf(player),
+          });
+        }
+        return "running";
+      }
+
+      if (state.phaseKind === KIND_SOCIAL) {
+        // Delegate the tavern evening to the social action.
+        return socialDelegate.update(ctx);
+      }
+
+      // Home: linger with human timing, occasionally step out for air.
+      if (nowMs < state.lingerUntil) {
+        return "running";
+      }
+      const home = ctx.state?.home;
+      if (home && !atTile(player, home, 4)) {
+        walkTo(player, home);
+        return "running";
+      }
+      state.lingerUntil =
+        nowMs + logNormalJitter(state.rng, 90000, state.human.tempoSigma);
+      return "running";
+    },
+    stop(ctx) {
+      if (ctx?.player) {
+        clearMovementRequest(ctx.player);
+      }
+    },
+  };
+
+  return action;
+}
+
+module.exports = {
+  createCitizenRoutineAction,
+};

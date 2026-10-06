@@ -1,0 +1,84 @@
+"use strict";
+
+/**
+ * CitizenActionTypes — the citizens plugin's registry extension.
+ *
+ * Registers the citizen brain action types and the `citizen` requires-condition
+ * kind with the bot activity catalogue's extension seam (see
+ * bots/brain/BotActivityRegistry.js: registerBotActionType /
+ * registerBotConditionKind). No existing bot brain files are edited.
+ */
+
+const registryModule = require("../../bots/brain/BotActivityRegistry");
+const {
+  registerBotActionType,
+  registerBotConditionKind,
+} = registryModule;
+const { createGuardPatrolAction } = require("./actions/GuardPatrol");
+const { createMerchantAction } = require("./actions/Merchant");
+const { createCitizenRoutineAction } = require("./actions/CitizenRoutine");
+const { createIdleSocialAction } = require("./actions/IdleSocial");
+const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE } = require("../constants");
+
+let registered = false;
+
+/**
+ * Condition: { citizen: { roles?: string[], kingdoms?: string[] } }.
+ * True only for bots carrying the citizens:* attributes — base bots
+ * (wilderness roamers, skillers) never match, so they never pick citizen
+ * activities out of the shared registry.
+ */
+function createCitizenCondition(config) {
+  const roles = Array.isArray(config?.roles) ? config.roles : null;
+  const kingdoms = Array.isArray(config?.kingdoms) ? config.kingdoms : null;
+  const id = `citizen:${(roles ?? []).join("+") || "*"}:${(kingdoms ?? []).join("+") || "*"}`;
+  return {
+    id,
+    check(ctx) {
+      const player = ctx?.player;
+      if (!player) {
+        return false;
+      }
+      const role = player.getAttribute?.(ATTR_CITIZEN_ROLE);
+      if (typeof role !== "string" || role.length === 0) {
+        return false;
+      }
+      if (roles && !roles.includes(role)) {
+        return false;
+      }
+      if (kingdoms) {
+        const kingdomId = player.getAttribute?.(ATTR_KINGDOM_ID);
+        if (!kingdoms.includes(kingdomId)) {
+          return false;
+        }
+      }
+      return true;
+    },
+  };
+}
+
+function registerCitizenActionTypes() {
+  if (registered) {
+    return;
+  }
+  if (
+    typeof registerBotActionType !== "function" ||
+    typeof registerBotConditionKind !== "function"
+  ) {
+    throw new Error(
+      "[citizens] the bot activity catalogue's extension seam is missing " +
+        "(registerBotActionType/registerBotConditionKind) — the bots plugin's " +
+        "BotActivityRegistry.js must include the catalogue extension functions"
+    );
+  }
+  registered = true;
+  registerBotActionType("guardPatrol", createGuardPatrolAction);
+  registerBotActionType("merchant", createMerchantAction);
+  registerBotActionType("citizenRoutine", createCitizenRoutineAction);
+  registerBotActionType("idleSocial", createIdleSocialAction);
+  registerBotConditionKind("citizen", createCitizenCondition);
+}
+
+module.exports = {
+  registerCitizenActionTypes,
+};

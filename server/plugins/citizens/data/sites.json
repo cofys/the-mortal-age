@@ -1,0 +1,298 @@
+{
+  "_note": "Physical anchor tiles for AI citizens, keyed by kingdom id from the kingdoms plugin. Coordinates are approximate OSRS tiles for the named landmarks \u2014 tune in-game, keep z honest. Waypoints form a closed patrol circuit. 'dock' is the fishing spot for commoner fishers; keldagrim has no dock (underground) \u2014 its commoners work the rock site instead.",
+  "asgarnia": {
+    "bank": {
+      "x": 3012,
+      "y": 3355,
+      "z": 0
+    },
+    "court": {
+      "x": 2960,
+      "y": 3339,
+      "z": 0
+    },
+    "market": {
+      "x": 2945,
+      "y": 3369,
+      "z": 0
+    },
+    "patrol": [
+      {
+        "x": 2967,
+        "y": 3378,
+        "z": 0
+      },
+      {
+        "x": 2945,
+        "y": 3378,
+        "z": 0
+      },
+      {
+        "x": 2945,
+        "y": 3355,
+        "z": 0
+      },
+      {
+        "x": 2967,
+        "y": 3355,
+        "z": 0
+      },
+      {
+        "x": 2985,
+        "y": 3365,
+        "z": 0
+      },
+      {
+        "x": 2985,
+        "y": 3385,
+        "z": 0
+      }
+    ],
+    "tavern": {
+      "x": 2961,
+      "y": 3374,
+      "z": 0
+    },
+    "work": {
+      "catalog": "tree",
+      "option": "Chop down",
+      "tier": "normal",
+      "x": 2975,
+      "y": 3318,
+      "z": 0
+    },
+    "dock": {
+      "x": 3043,
+      "y": 3237,
+      "z": 0
+    }
+  },
+  "kandarin": {
+    "bank": {
+      "x": 2612,
+      "y": 3332,
+      "z": 0
+    },
+    "court": {
+      "x": 2570,
+      "y": 3290,
+      "z": 0
+    },
+    "market": {
+      "x": 2655,
+      "y": 3285,
+      "z": 0
+    },
+    "patrol": [
+      {
+        "x": 2660,
+        "y": 3305,
+        "z": 0
+      },
+      {
+        "x": 2640,
+        "y": 3305,
+        "z": 0
+      },
+      {
+        "x": 2640,
+        "y": 3285,
+        "z": 0
+      },
+      {
+        "x": 2660,
+        "y": 3285,
+        "z": 0
+      }
+    ],
+    "tavern": {
+      "x": 2667,
+      "y": 3290,
+      "z": 0
+    },
+    "work": {
+      "catalog": "tree",
+      "option": "Chop down",
+      "tier": "normal",
+      "x": 2615,
+      "y": 3315,
+      "z": 0
+    },
+    "dock": {
+      "x": 2663,
+      "y": 3150,
+      "z": 0
+    }
+  },
+  "keldagrim": {
+    "bank": {
+      "x": 2838,
+      "y": 10202,
+      "z": 0
+    },
+    "court": {
+      "x": 2865,
+      "y": 10185,
+      "z": 0
+    },
+    "market": {
+      "x": 2855,
+      "y": 10200,
+      "z": 0
+    },
+    "patrol": [
+      {
+        "x": 2848,
+        "y": 10196,
+        "z": 0
+      },
+      {
+        "x": 2860,
+        "y": 10196,
+        "z": 0
+      },
+      {
+        "x": 2860,
+        "y": 10205,
+        "z": 0
+      },
+      {
+        "x": 2848,
+        "y": 10205,
+        "z": 0
+      }
+    ],
+    "tavern": {
+      "x": 2845,
+      "y": 10210,
+      "z": 0
+    },
+    "work": {
+      "catalog": "rock",
+      "option": "Mine",
+      "tier": "copper",
+      "x": 2850,
+      "y": 10215,
+      "z": 0
+    }
+  },
+  "misthalin": {
+    "bank": {
+      "x": 3185,
+      "y": 3436,
+      "z": 0
+    },
+    "court": {
+      "x": 3222,
+      "y": 3474,
+      "z": 0
+    },
+    "market": {
+      "x": 3165,
+      "y": 3485,
+      "z": 0
+    },
+    "patrol": [
+      {
+        "x": 3210,
+        "y": 3420,
+        "z": 0
+      },
+      {
+        "x": 3230,
+        "y": 3420,
+        "z": 0
+      },
+      {
+        "x": 3230,
+        "y": 3445,
+        "z": 0
+      },
+      {
+        "x": 3210,
+        "y": 3445,
+        "z": 0
+      },
+      {
+        "x": 3190,
+        "y": 3430,
+        "z": 0
+      }
+    ],
+    "tavern": {
+      "x": 3235,
+      "y": 3395,
+      "z": 0
+    },
+    "work": {
+      "catalog": "tree",
+      "option": "Chop down",
+      "tier": "normal",
+      "x": 3220,
+      "y": 3380,
+      "z": 0
+    },
+    "dock": {
+      "x": 3091,
+      "y": 3244,
+      "z": 0
+    }
+  },
+  "morytania": {
+    "court": {
+      "x": 3780,
+      "y": 3245,
+      "z": 0
+    },
+    "market": {
+      "x": 3770,
+      "y": 3235,
+      "z": 0
+    },
+    "tavern": {
+      "x": 3765,
+      "y": 3240,
+      "z": 0
+    },
+    "bank": {
+      "x": 3768,
+      "y": 3230,
+      "z": 0
+    },
+    "patrol": [
+      {
+        "x": 3765,
+        "y": 3235,
+        "z": 0
+      },
+      {
+        "x": 3778,
+        "y": 3235,
+        "z": 0
+      },
+      {
+        "x": 3778,
+        "y": 3248,
+        "z": 0
+      },
+      {
+        "x": 3765,
+        "y": 3248,
+        "z": 0
+      }
+    ],
+    "work": {
+      "catalog": "tree",
+      "option": "Chop down",
+      "tier": "dead",
+      "x": 3755,
+      "y": 3225,
+      "z": 0
+    },
+    "dock": {
+      "x": 3488,
+      "y": 3212,
+      "z": 0
+    }
+  }
+}
