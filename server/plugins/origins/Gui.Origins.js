@@ -7,10 +7,10 @@
  * the seed of the Mortal Age UI template (palette, typography, borders,
  * buttons — documented in DESIGN.md under "The Mortal Age UI template").
  *
- * Implementation: a server-defined custom interface (group 30016) in the
+ * Implementation: a server-defined custom interface (group 30017) in the
  * established registerCustomInterface pattern (see
  * plugins/interface/Commands.plugin.js). The client fetches the definition
- * from /api/interfaces/30016 on first open; everything after that is the
+ * from /api/interfaces/30017 on first open; everything after that is the
  * usual socket traffic — clicks arrive as widget button presses
  * (api.onInterfaceActionButton), text/highlights are pushed with sendString /
  * sendInterfaceDisplayState. No client change, no new packets, no new hooks.
@@ -46,7 +46,7 @@ const {
 const Data = require("./Data.Origins");
 const Selection = require("./Selection.Origins");
 
-const GROUP_ID = 30016;
+const GROUP_ID = 30017;
 // NOTE: 30010 is the citizen merchant stall (MerchantShops.js), 30011 the
 // player stall (PlayerShops.js), 30014 the market board, 30015 the war table.
 // CustomInterfaceRegistry silently lets the last registration win, so every
@@ -54,6 +54,7 @@ const GROUP_ID = 30016;
 // to the other's interface.
 // Bumped from 30012 on 2026-10-06: browsers cache /api/interfaces/<id> and
 // Jon was seeing stale definitions. New ID forces a fresh fetch.
+// Bumped to 30017 for the red-frame diagnostic (2026-10-06).
 // The main modal layer, same target the makeover mage and ::commands use.
 const MODAL_TARGET_UID = (161 << 16) | 16;
 
@@ -243,12 +244,13 @@ function buildInterface(Items) {
 
   // Ornate double-rule frame: dim-gold outer, panel inset 3, bright inner
   // rule at inset 9, corner brackets in bright gold.
-  rect(C.FRAME_OUTER, panel, 0, 0, PANEL_W, PANEL_H, TMA.GOLD_DIM);
-  rect(C.FRAME_BG, panel, 3, 3, PANEL_W - 6, PANEL_H - 6, TMA.PANEL);
-  rect(C.RULE_T, panel, 9, 9, PANEL_W - 18, 1, TMA.GOLD);
-  rect(C.RULE_B, panel, 9, PANEL_H - 10, PANEL_W - 18, 1, TMA.GOLD);
-  rect(C.RULE_L, panel, 9, 9, 1, PANEL_H - 18, TMA.GOLD);
-  rect(C.RULE_R, panel, PANEL_W - 10, 9, 1, PANEL_H - 18, TMA.GOLD);
+  // DIAGNOSTIC: bright red frame to test widget rendering (revert after Jon confirms)
+  rect(C.FRAME_OUTER, panel, 0, 0, PANEL_W, PANEL_H, 0xff0000);
+  rect(C.FRAME_BG, panel, 3, 3, PANEL_W - 6, PANEL_H - 6, 0xff0000);
+  rect(C.RULE_T, panel, 9, 9, PANEL_W - 18, 1, 0xff0000);
+  rect(C.RULE_B, panel, 9, PANEL_H - 10, PANEL_W - 18, 1, 0xff0000);
+  rect(C.RULE_L, panel, 9, 9, 1, PANEL_H - 18, 0xff0000);
+  rect(C.RULE_R, panel, PANEL_W - 10, 9, 1, PANEL_H - 18, 0xff0000);
 
   // Corner brackets: L-shaped, bright gold, inset 12, 26px arms. The
   // horizontal arm sits at the corner; the vertical arm extends inward.
@@ -261,20 +263,20 @@ function buildInterface(Items) {
   corners.forEach(({ x, hy, vy }, c) => {
     const base = C.CORNER_BASE + c * 2;
     const vx = x < PANEL_W / 2 ? x : x + 23; // vertical arm at the outer end
-    rect(base, panel, x, hy, 26, 3, TMA.GOLD);
-    rect(base + 1, panel, vx, vy, 3, 26, TMA.GOLD);
+    rect(base, panel, x, hy, 26, 3, 0xff0000);
+    rect(base + 1, panel, vx, vy, 3, 26, 0xff0000);
   });
 
   // Compass star: a gold diamond straddling the top frame edge, centered.
   // Built from stacked rects (the client has no rotated primitives); a dark
   // punch rect behind it so it sits ON the frame, not under it.
   const ccx = PANEL_W / 2;
-  rect(C.COMPASS_BASE, panel, ccx - 20, 0, 40, 20, TMA.PANEL);
+  rect(C.COMPASS_BASE, panel, ccx - 20, 0, 40, 20, 0xff0000);
   const diamond = [4, 8, 12, 16, 12, 8, 4];
   diamond.forEach((w, k) => {
-    rect(C.COMPASS_BASE + 1 + k, panel, ccx - w / 2, 2 + k * 2, w, 2, TMA.GOLD);
+    rect(C.COMPASS_BASE + 1 + k, panel, ccx - w / 2, 2 + k * 2, w, 2, 0xff0000);
   });
-  rect(C.COMPASS_BASE + 8, panel, ccx - 2, 8, 4, 4, TMA.PANEL);
+  rect(C.COMPASS_BASE + 8, panel, ccx - 2, 8, 4, 4, 0xff0000);
 
   // Header: Jon's words, small, centered, atmospheric.
   label(
