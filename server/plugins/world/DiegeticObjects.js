@@ -13,6 +13,7 @@
  *   War table     -> Table (593)
  *   Donation chest -> Closed chest (103)
  *   Steward's desk -> Desk (2910)
+ *   Discarded papers -> Paper (7108)
  *
  * The feature modules use the GLOBAL api.onObjectInteraction(handler) and
  * check (objectId, location) against the spawned positions. This helper
@@ -38,6 +39,7 @@ const OBJECT_IDS = {
   table: 593, // Table
   chest: 103, // Closed chest
   desk: 2910, // Desk
+  papers: 7108, // Paper
 };
 
 // Offset each object from the capital center so they're not on the spawn tile.
@@ -46,6 +48,7 @@ const OFFSETS = {
   table: { dx: -3, dy: 2 },
   chest: { dx: 0, dy: 3 },
   desk: { dx: 2, dy: -2 },
+  papers: { dx: -2, dy: -1 },
 };
 
 let pluginApi = null;
