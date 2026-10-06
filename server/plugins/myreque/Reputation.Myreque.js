@@ -57,6 +57,7 @@ const PERSISTED = [
   TURNCOAT_ATTRIBUTE,
   "myreque:tithe-at",
   "myreque:inform-at",
+  "myreque:informed-once",
   "myreque:word-at",
   "myreque:carrying-word",
   "myreque:courier-kill-at",
