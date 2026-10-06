@@ -36,5 +36,27 @@
       "1000000": "dragonic-katana/drop.dat",
       "1000001": "dragonic-katana/equip.dat"
     }
+  },
+  {
+    "id": 50001,
+    "baseItemId": 2961,
+    "objType": {
+      "name": "Worn silver sickle",
+      "examine": "A silver sickle, worn smooth by a friend of the Hollow.",
+      "inventoryActions": ["Read", null, null, null, "Drop"],
+      "isTradable": false
+    },
+    "itemDef": { "tradeable": false }
+  },
+  {
+    "id": 50002,
+    "baseItemId": 87,
+    "objType": {
+      "name": "Tithe brand",
+      "examine": "A dark brand, still warm from the tithe-fire.",
+      "inventoryActions": ["Wear", "Read", null, null, "Drop"],
+      "isTradable": false
+    },
+    "itemDef": { "tradeable": false }
   }
 ]
