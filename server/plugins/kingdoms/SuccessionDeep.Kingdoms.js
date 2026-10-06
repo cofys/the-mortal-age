@@ -311,8 +311,12 @@ function onHeirQuestion({ player, citizenUsername }) {
   }
 
   // A keeper shares their fragment — once per keeper per player.
+  // Prefer keepers whose fragment this player hasn't collected yet, so the
+  // trader's fragment (also a merchant) stays reachable after the midwife's.
   const role = citizenRole(citizenUsername);
-  const keeper = Object.values(KEEPERS).find((k) => k.role === role);
+  const keepers = Object.values(KEEPERS).filter((k) => k.role === role);
+  const keeper =
+    keepers.find((k) => !hasFragment(player, k.fragmentId)) ?? keepers[0];
   if (keeper && grantFragment(player, keeper.fragmentId)) {
     // A beat before the fragment lands — deniable, private.
     player.sendMessage(keeper.text);
