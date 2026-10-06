@@ -16,7 +16,7 @@ All new interfaces use the Mortal Age UI template from `server/plugins/origins/G
 - Nested panels for depth. Gold-glow selection.
 - Document any new interface in its module header.
 
-Custom group IDs (must be unique): 30010 citizen stall, 30011 DuelArena, 30012 origin GUI, 30013 player stall, 30014 market board, 30015+ free.
+Custom group IDs (must be unique): 30010 citizen stall, 30011 DuelArena, 30012 origin GUI, 30013 player stall, 30014 market board, 30015 war table, 30016+ free.
 
 ## Phases
 
@@ -59,7 +59,7 @@ Design: "Charter stone" in the wilderness → click "Proclaim" → name prompt �
 
 - [ ] Phase 1: Market Board built, needs in-game verification
 - [ ] Phase 2: Steward's audience
-- [ ] Phase 3: War table
+- [x] Phase 3: War table built (group 30015), needs in-game verification
 - [x] Phase 4: Donation chest built (server/plugins/kingdoms/DonationChest.Kingdoms.js), needs in-game verification
 - [ ] Phase 5: Charter stone
 - [ ] Remove `::shop` after Phase 1 verified
