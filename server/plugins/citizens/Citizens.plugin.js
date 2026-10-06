@@ -23,6 +23,7 @@ const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/ri
 const { onWarDeclared, onWarEnded, onOfficeAssigned, onOfficeVacated } = require("./CitizenEvents");
 const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
+const { initCitizenSocial, onSocialChatResponse } = require("./chat/CitizenSocial");
 const { registerCitizenActionTypes } = require("./brain/CitizenActionTypes");
 const {
   registerCitizenActivities,
@@ -43,6 +44,7 @@ const {
   GOSSIP_THEFT,
   GOSSIP_OFFICE,
 } = require("./lib/CitizenMemory");
+const { initCitizenJournal } = require("./lib/CitizenJournal");
 const KingdomStore = require("../kingdoms/KingdomStore");
 const {
   EVENT_WAR_DECLARED,
@@ -65,7 +67,9 @@ let pluginApi = null;
 function initCitizens(api) {
   pluginApi = api;
   initCitizenChat(api);
+  initCitizenSocial(api);
   initCitizenMemory(); // what citizens remember; loads data/saves/citizen-memory.json
+  initCitizenJournal(); // what citizens have been up to; loads data/saves/citizen-journal.json
   registerCitizenActionTypes();
   const added = registerCitizenActivities();
   api.log?.("[citizens] activities registered", { added });
@@ -251,6 +255,10 @@ function onCitizenSocialPacket(event) {
   onSocialPacket(event);
 }
 
+function onSocialThreadResponse(payload) {
+  onSocialChatResponse(payload);
+}
+
 function onCitizenCommand({ player, parts }) {
   const director = getDirector();
   const sub = (parts[1] ?? "status").toLowerCase();
@@ -365,6 +373,7 @@ module.exports = {
     api.onCustomEvent(EVENT_OFFICE_ASSIGNED, onKingdomOfficeAssigned);
     api.onCustomEvent(EVENT_OFFICE_VACATED, onKingdomOfficeVacated);
     api.onCustomEvent(EVENT_CITIZEN_CHAT_HEARD, onCitizenChatHeard);
+    api.onCustomEvent("llm:chat-response", onSocialThreadResponse);
     api.onCustomEvent("kingdom:rumor", onKingdomRumorHeard);
     api.onCustomEvent("kingdom:patrol-ordered", onKingdomPatrolOrdered);
     api.onCustomEvent("kingdom:wage-day", onKingdomWageDay);

@@ -6,7 +6,9 @@
 //
 // Events (plugins talk to each other through custom events, never new core hooks):
 //   llm:citizen-register  (in)  { username, personalityCard, replyCooldownMs? }
-//   llm:chat-request      (in)  { citizenUsername, requesterUsername, text, channel }
+//   llm:speak-request     (in)  { citizenUsername, toUsername, toRole?, toMemory?,
+//                                 context?, threadId? } — citizen speaks first
+//                                 (citizen-to-citizen openers, lite tier only)
 //   llm:chat-response     (out) { citizenUsername, requesterUsername, text, channel,
 //                                 provider, tokensUsed, latencyMs }
 // Chat to a citizen bot arrives via api.onSocialPacket (private_message); the
@@ -30,6 +32,13 @@ function onGatewayChatRequest(payload) {
   // Fire-and-forget: do the async work, the response event lands later.
   gateway?.handleChatRequest(payload).catch((error) =>
     console.warn("[llm-gateway] chat request failed", error?.message ?? error)
+  );
+}
+
+function onGatewaySpeakRequest(payload) {
+  // Citizen-to-citizen opener. Fire-and-forget like chat requests.
+  gateway?.handleSpeakRequest(payload).catch((error) =>
+    console.warn("[llm-gateway] speak request failed", error?.message ?? error)
   );
 }
 
@@ -57,6 +66,7 @@ module.exports = {
     initGateway(api);
     api.onSocialPacket(onGatewaySocialPacket);
     api.onCustomEvent("llm:chat-request", onGatewayChatRequest);
+    api.onCustomEvent("llm:speak-request", onGatewaySpeakRequest);
     api.onCustomEvent("llm:chat-response", onGatewayChatResponse);
     api.onCustomEvent("llm:citizen-register", onGatewayCitizenRegister);
     api.onServerShutdown(shutdownGateway);

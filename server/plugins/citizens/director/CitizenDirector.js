@@ -42,6 +42,9 @@ const {
 } = require("../lib/goals");
 const { registerCitizenForChat } = require("../chat/CitizenChat");
 const { getMemory } = require("../lib/CitizenMemory");
+const { getJournal } = require("../lib/CitizenJournal");
+const { backgroundStep } = require("../lib/CitizenBackground");
+const { maybeSocialize } = require("../chat/CitizenSocial");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
   ensureNeeds,
@@ -669,6 +672,17 @@ class CitizenDirector {
     const nowMs = Date.now();
     for (const record of this.roster.values()) {      const online = this.isOnline(record);
       const bot = online ? this.getBot(record) : null;
+      // Background tier (Jon's two-tier sim): every citizen lives as data
+      // every tick, online or off. Zero LLM — just the journal advancing.
+      // The foreground LLM reads this when a player actually interacts.
+      try {
+        backgroundStep(record, this, online);
+      } catch (error) {
+        this.log("background step failed", {
+          citizen: record.username,
+          error: String(error?.message ?? error),
+        });
+      }
       // Needs decay for everyone (the logged-out are asleep and recover);
       // the visible threshold lines only fire for online citizens.
       const needs = tickNeeds(record.username, bot, nowMs);
@@ -701,6 +715,23 @@ class CitizenDirector {
       }
     }
     this.tickMemory(nowMs);
+    // Foreground social: citizen-to-citizen LLM dialogue, ONLY when a real
+    // player is nearby to overhear (Jon's two-tier rule). Otherwise the
+    // background journal already recorded that they talked — zero tokens.
+    try {
+      maybeSocialize(this, nowMs);
+    } catch (error) {
+      this.log("socialize failed", { error: String(error?.message ?? error) });
+    }
+    try {
+      if (getJournal().saveIfDirty()) {
+        this.log("citizen journal saved");
+      }
+    } catch (error) {
+      this.log("citizen journal save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
   }
 
   /**

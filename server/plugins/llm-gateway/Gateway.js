@@ -16,7 +16,7 @@
 
 const { ProviderChain } = require("./ProviderChain");
 const { InMemoryMemoryStore, SqliteMemoryStore } = require("./MemoryStore");
-const { buildPrompt } = require("./PromptBuilder");
+const { buildPrompt, buildSpeakPrompt } = require("./PromptBuilder");
 const { TypingScheduler } = require("./TypingScheduler");
 const { ChatInterceptor } = require("./ChatInterceptor");
 const { onChatResponse } = require("./Mouth");
@@ -38,7 +38,7 @@ class Gateway {
   }
 
   async handleChatRequest(payload) {
-    const { citizenUsername, requesterUsername, text, channel } = payload ?? {};
+    const { citizenUsername, requesterUsername, text, channel, context } = payload ?? {};
     if (!citizenUsername || !requesterUsername || !text) return;
 
     const startedAt = Date.now();
@@ -61,10 +61,14 @@ class Gateway {
       notes,
       history,
       message: text,
+      context: context ?? null,
     });
     // First contact gets the flagship tier: first impressions shape whether a
     // player keeps talking to citizens. Follow-ups ride cheaper slots.
-    if (history.length === 0) prompt.tier = "flagship";
+    // A caller-specified tier (e.g. "lite" for citizen-to-citizen threads)
+    // always wins — foreground player chat never subsidizes background chatter.
+    if (payload?.tier) prompt.tier = payload.tier;
+    else if (history.length === 0) prompt.tier = "flagship";
 
     const result = await this.chain.complete(prompt);
     if (!result.ok || !result.text) {
@@ -85,6 +89,7 @@ class Gateway {
         requesterUsername,
         text: reply,
         channel,
+        threadId: payload?.threadId ?? null,
         provider: result.provider,
         tokensUsed: result.tokensUsed ?? prompt.totalBudgetTokens,
         latencyMs,
@@ -98,6 +103,54 @@ class Gateway {
     if (payload?.username && card) {
       this.memory.setCard(payload.username, card).catch(() => {});
     }
+  }
+
+  /**
+   * handleSpeakRequest — a citizen speaks FIRST (no incoming message).
+   * Citizen-to-citizen conversation openers. ALWAYS lite tier — this never
+   * burns flagship/standard quota. The caller (CitizenSocial) is responsible
+   * for only invoking this when a real player is nearby to overhear;
+   * otherwise the background journal already recorded that they talked.
+   */
+  async handleSpeakRequest(payload) {
+    const { citizenUsername, toUsername, toRole, toMemory, context, threadId } = payload ?? {};
+    if (!citizenUsername || !toUsername) return;
+
+    const startedAt = Date.now();
+    const citizen = this.interceptor.getCitizen(citizenUsername);
+    const [card, history] = await Promise.all([
+      this.memory.getCard(citizenUsername),
+      this.memory.getHistory(citizenUsername, toUsername),
+    ]);
+    if (!citizen && !card) return; // unregistered stays silent
+
+    const prompt = buildSpeakPrompt({
+      card: card ?? citizen?.personalityCard ?? null,
+      context: context ?? null,
+      toName: toUsername,
+      toRole: toRole ?? "a fellow citizen",
+      toMemory: toMemory ?? null,
+    });
+
+    const result = await this.chain.complete(prompt);
+    if (!result.ok || !result.text) return; // silent on failure/quota
+
+    const reply = result.text.slice(0, 480);
+    await this.memory.pushExchange(citizenUsername, toUsername, "(opener)", reply);
+
+    const latencyMs = Date.now() - startedAt;
+    this.scheduler.schedule(citizenUsername, toUsername, reply, () => {
+      this.api.emitCustomEvent("llm:chat-response", {
+        citizenUsername,
+        requesterUsername: toUsername,
+        text: reply,
+        channel: "public",
+        threadId: threadId ?? null,
+        provider: result.provider,
+        tokensUsed: result.tokensUsed ?? prompt.totalBudgetTokens,
+        latencyMs,
+      });
+    });
   }
 
   handleSocialPacket(event) {

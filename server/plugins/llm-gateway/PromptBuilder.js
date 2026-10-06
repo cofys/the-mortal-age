@@ -41,12 +41,58 @@ function renderHistory(history) {
   );
 }
 
-function buildPrompt({ card, notes = [], history = [], message, worldContext }) {
+/**
+ * buildSpeakPrompt — the citizen speaks FIRST (no incoming message).
+ * Used for citizen-to-citizen conversation openers: one citizen notices
+ * another nearby and says something unprompted, like a real player would.
+ *
+ * { card, context, toName, toRole, toMemory }
+ *   toMemory: what this citizen remembers about the other (standing, past
+ *   meetings) — strangers get a stranger's greeting, old friends get warmth.
+ */
+function buildSpeakPrompt({ card, context, toName, toRole, toMemory, worldContext }) {
   const systemParts = [
     worldContext || WORLD_GROUNDING,
     `Who you are: ${clampCard(card)}`,
     STYLE_LINE,
   ];
+  const liveContext = String(context ?? "").trim().slice(0, 400);
+  if (liveContext) {
+    systemParts.push(`Right now: ${liveContext}`);
+  }
+  const system = systemParts.join("\n\n");
+
+  let user =
+    `You notice ${toName}, ${toRole ?? "a fellow citizen"}, nearby. ` +
+    (toMemory ? `${toMemory} ` : "") +
+    `Say something to them — a greeting, an observation, a question, a joke, ` +
+    `a complaint, whatever fits your mood. 1-2 short sentences, like a real ` +
+    `player typing. Speak directly, no narration, no asterisks.`;
+
+  const inputTokens = estimateTokens(system) + estimateTokens(user);
+  return {
+    system,
+    user,
+    maxTokens: MAX_OUTPUT_TOKENS,
+    inputTokens,
+    outputTokens: MAX_OUTPUT_TOKENS,
+    totalBudgetTokens: inputTokens + MAX_OUTPUT_TOKENS,
+    tier: "lite", // citizen-to-citizen never burns flagship/standard quota
+  };
+}
+
+function buildPrompt({ card, notes = [], history = [], message, worldContext, context }) {
+  const systemParts = [
+    worldContext || WORLD_GROUNDING,
+    `Who you are: ${clampCard(card)}`,
+    STYLE_LINE,
+  ];
+  // The citizen's live moment: mood, activity, goal, relationship. This is
+  // what makes a reply sound like a person living a life, not a chatbot.
+  const liveContext = String(context ?? "").trim().slice(0, 400);
+  if (liveContext) {
+    systemParts.push(`Right now: ${liveContext}`);
+  }
   const noteLines = (notes ?? []).slice(0, MAX_NOTES_IN_PROMPT);
   if (noteLines.length > 0) {
     systemParts.push(`What you remember about this player:\n- ${noteLines.join("\n- ")}`);
@@ -83,6 +129,7 @@ function buildPrompt({ card, notes = [], history = [], message, worldContext }) 
 
 module.exports = {
   buildPrompt,
+  buildSpeakPrompt,
   estimateTokens,
   WORLD_GROUNDING,
   INPUT_BUDGET_TOKENS,

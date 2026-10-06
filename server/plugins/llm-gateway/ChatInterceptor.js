@@ -36,12 +36,17 @@ class ChatInterceptor {
     return this.api.core.World;
   }
 
-  registerCitizen({ username, personalityCard, replyCooldownMs }) {
+  registerCitizen({ username, personalityCard, replyCooldownMs, buildContext }) {
     if (!username) return;
     this.citizens.set(String(username).toLowerCase(), {
       username: String(username),
       personalityCard: String(personalityCard ?? DEFAULT_CARD).slice(0, 2000),
       replyCooldownMs: Number(replyCooldownMs) || 8000,
+      // Optional: the owning plugin's live-context builder (citizenUsername,
+      // speakerUsername) => string. Grounds private-message replies in the
+      // citizen's current mood/activity/goal without the gateway reaching
+      // into plugin state.
+      buildContext: typeof buildContext === "function" ? buildContext : null,
     });
   }
 
@@ -65,11 +70,22 @@ class ChatInterceptor {
     const clean = String(text ?? "").trim().slice(0, 320);
     if (!clean || !citizenUsername || !requesterUsername) return;
     if (!this.checkCooldown(citizenUsername)) return; // silence is free
+    // Live context for the reply (private messages don't pass through the
+    // citizens plugin's chat module, so the gateway asks the registered
+    // builder). Failures fall back to no context, never break the path.
+    let context = null;
+    try {
+      const builder = this.getCitizen(citizenUsername)?.buildContext;
+      if (builder) context = builder(requesterUsername) || null;
+    } catch {
+      context = null;
+    }
     this.api.emitCustomEvent("llm:chat-request", {
       citizenUsername: String(citizenUsername),
       requesterUsername: String(requesterUsername),
       text: clean,
       channel,
+      context,
     });
   }
 

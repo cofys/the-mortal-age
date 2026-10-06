@@ -28,6 +28,7 @@ const {
   EVENT_CITIZEN_CHAT_HEARD,
 } = require("../constants");
 const { personalityCard } = require("../lib/personalities");
+const { buildContext } = require("./CitizenContext");
 const {
   getMemory,
   scoreTone,
@@ -57,6 +58,9 @@ function registerCitizenForChat(username, personality, kingdomName, kingdomSitua
     personalityCard: personalityCard(personality, kingdomName, kingdomSituation),
     // Chatty citizens answer faster; taciturn ones let messages sit.
     replyCooldownMs: (personality?.traits ?? []).includes("chatty") ? 5000 : 12000,
+    // The gateway calls this to ground each reply in the citizen's live moment.
+    // (Functions cross the in-process event boundary fine.)
+    buildContext: (speakerUsername) => buildContext(username, speakerUsername),
   });
 }
 
@@ -105,6 +109,10 @@ function onCitizenChatHeard(event) {
     requesterUsername: speakerUsername,
     text: String(text).slice(0, 320),
     channel: "public",
+    // Ground the reply in the citizen's live moment (mood, activity, goal,
+    // relationship with this speaker). Built here, not in the gateway, so
+    // the gateway never reaches into the citizens plugin's state.
+    context: buildContext(citizenUsername, speakerUsername),
   });
 }
 
