@@ -25,6 +25,13 @@
  *   kingdom:patrol-ordered { kingdomId, level: "routine"|"doubled"|"war" }
  *   kingdom:war-demand     { kingdomId, need }                 (quartermaster)
  *
+ * In (custom events):
+ *   kingdom:supply-donated { kingdomId, kind: "timber"|"ore", amount, itemId? }
+ *     War-effort supplies from the realm's workers (the woodcutting timber
+ *     drive, the mining rich vein). The quartermaster's stockpile grows from
+ *     real axes and picks, capped at the current peace/war target - the realm
+ *     can only store so much.
+ *
  * State: the war stockpile persists on the kingdom record via
  * KingdomStore flags (sim:stockpile). Office policy set by player office
  * holders through the war table (OfficeTools.Kingdoms) lives on the same
@@ -90,6 +97,56 @@ function stockpileOf(kingdomId) {
 
 function setStockpile(kingdomId, value) {
   Store.setFlag(kingdomId, "sim:stockpile", Math.max(0, Math.floor(value)));
+}
+
+// What one donated unit is worth to the war stockpile. Ore is denser than timber.
+const SUPPLY_VALUES = Object.freeze({ timber: 2, ore: 3 });
+
+/**
+ * War-effort supplies: timber and ore donated by the realm's workers.
+ * The stockpile grows from real axes and picks, capped at the current
+ * peace/war target - past that the stores are full and the gift is turned
+ * away (the donors hear about it from the quartermaster, not from us).
+ */
+function onSupplyDonated(event) {
+  const kingdomId = event?.kingdomId;
+  const kind = event?.kind;
+  const amount = Math.max(0, Math.floor(event?.amount ?? 0));
+  if (!kingdomId || !SUPPLY_VALUES[kind] || amount <= 0) return;
+  let kingdom;
+  try {
+    kingdom = Store.getKingdom(kingdomId);
+  } catch {
+    return;
+  }
+  if (!kingdom) return;
+  let wars = [];
+  try {
+    wars = Store.getActiveWars();
+  } catch {
+    // best-effort: assume peace
+  }
+  const wartime = atWarWith(kingdomId, wars).length > 0;
+  let target;
+  try {
+    target = OfficeTools.stockpileTarget(kingdomId, wartime);
+  } catch {
+    target = wartime ? STOCKPILE_WAR_TARGET : STOCKPILE_PEACE_TARGET;
+  }
+  const before = stockpileOf(kingdomId);
+  const after = Math.min(target, before + amount * SUPPLY_VALUES[kind]);
+  if (after === before) return;
+  setStockpile(kingdomId, after);
+  if (noticeDue(kingdomId, "supply")) {
+    announceToRealm(
+      `[Realm] Supplies for the war effort arrive in ${kingdom.name} - ` +
+        (kind === "ore" ? "ore for the armory" : "timber for the palisades") +
+        " - and the quartermaster's stores grow."
+    );
+  }
+  pluginApi?.log?.("[kingdoms] war-effort supply", {
+    kingdom: kingdomId, kind, amount, stockpile: after,
+  });
 }
 
 function holderKind(kingdomId, office) {
@@ -342,9 +399,11 @@ function startSimTask(api) {
 
 module.exports = function attachSimulation(api) {
   pluginApi = api;
+  api.onCustomEvent("kingdom:supply-donated", onSupplyDonated);
   startSimTask(api);
 };
 
 // Test seams.
 module.exports.simTick = simTick;
 module.exports.stockpileOf = stockpileOf;
+module.exports.onSupplyDonated = onSupplyDonated;
