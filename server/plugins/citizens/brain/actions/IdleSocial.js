@@ -51,9 +51,20 @@ const COURT_LINES_WAR = Object.freeze([
   "They're mustering the guard. Stay close to the walls.",
 ]);
 
+const MARKET_LINES = Object.freeze([
+  "Just looking today.",
+  "Prices are up again, I swear.",
+  "Smell that bread...",
+  "Mind the pickpockets, friend.",
+  "Good crowd today.",
+]);
+
 function linesFor(anchorKind, atWar) {
   if (anchorKind === "court") {
     return atWar ? COURT_LINES_WAR : COURT_LINES;
+  }
+  if (anchorKind === "market") {
+    return MARKET_LINES;
   }
   return TAVERN_LINES;
 }
@@ -67,7 +78,9 @@ function atTile(player, tile, radius = ARRIVE_RADIUS) {
 }
 
 function createIdleSocialAction(spec, world) {
-  const anchorKind = spec.anchorKind === "court" ? "court" : "tavern";
+  const anchorKind = ["court", "tavern", "market"].includes(spec.anchorKind)
+    ? spec.anchorKind
+    : "tavern";
   const chatterMinMs = Math.max(1000, Number(spec.chatterMinMs ?? 60000));
   const chatterMaxMs = Math.max(chatterMinMs, Number(spec.chatterMaxMs ?? 240000));
 

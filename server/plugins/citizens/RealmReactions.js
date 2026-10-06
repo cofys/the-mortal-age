@@ -24,6 +24,9 @@ const COINS_ID = 995;
 // One citizen won't parrot rumors more often than this.
 const RUMOR_COOLDOWN_MS = 10 * 60 * 1000;
 const lastRumorAt = new Map(); // username -> timestamp
+// War news is rarer than gossip: one fearful outburst per border per while.
+const FEAR_COOLDOWN_MS = 20 * 60 * 1000;
+const lastFearAt = new Map(); // sorted "a:b" -> timestamp
 
 function pick(array) {
   return array[Math.floor(Math.random() * array.length)];
@@ -178,4 +181,90 @@ module.exports = {
   onPatrolOrdered,
   onWageDay,
   onPlayerArrived,
+  onSkirmish,
+  onWarDeclaredFear,
+  onWarEndedRelief,
 };
+
+/**
+ * The powder keg hisses: border skirmishes, declarations, and peace all
+ * play out in the streets. Citizens speak fear (and relief) out loud via
+ * forceChat, throttled per border so one clash doesn't chain.
+ */
+
+function kingdomName(kingdomId) {
+  return KingdomStore.getKingdom(kingdomId)?.name ?? kingdomId;
+}
+
+/** One citizen of the involved kingdoms speaks a fear line, throttled. */
+function speakFear(kingdomIds, lines) {
+  const ids = [...new Set(kingdomIds)].filter(Boolean);
+  if (ids.length === 0 || lines.length === 0) return;
+  const now = Date.now();
+  const key = ids.slice().sort().join(":");
+  if (now - (lastFearAt.get(key) ?? 0) < FEAR_COOLDOWN_MS) return;
+  const candidates = ids.flatMap((id) => onlineBots(id));
+  if (candidates.length === 0) return;
+  lastFearAt.set(key, now);
+  const speaker = pick(candidates);
+  try {
+    speaker.forceChat?.(pick(lines).slice(0, 120));
+  } catch {
+    // A silent citizen is fine; the fear still happened.
+  }
+}
+
+/** kingdom:skirmish — patrols clashed below the threshold of war. */
+function onSkirmish(event) {
+  const a = event?.attackerId;
+  const b = event?.defenderId;
+  if (!a || !b) return;
+  const location = event?.location ?? "the border marches";
+  const aName = kingdomName(a);
+  const bName = kingdomName(b);
+  speakFear(
+    [a, b],
+    [
+      `Blood on ${location}! ${aName} and ${bName} patrols clashed!`,
+      `Did you hear? Steel at ${location}. It's starting, I tell you.`,
+      `Keep your head down — the border's gone hot.`,
+      `Not war. Please, not war. Not again.`,
+    ]
+  );
+}
+
+/** kingdom:war-declared — the levy is raised and the streets know. */
+function onWarDeclaredFear(event) {
+  const a = event?.attackerId;
+  const b = event?.defenderId;
+  if (!a || !b) return;
+  const aName = kingdomName(a);
+  const bName = kingdomName(b);
+  speakFear(
+    [a, b],
+    [
+      `War! ${aName} marches on ${bName}!`,
+      `The levy is raised — war with ${bName}! To the walls!`,
+      `War with ${aName}. Hide the grain, hide the children.`,
+      `They say the ${bName} dead already line the marches.`,
+    ]
+  );
+}
+
+/** kingdom:war-ended — peace, and the rebuilding. */
+function onWarEndedRelief(event) {
+  const a = event?.attackerId;
+  const b = event?.defenderId;
+  if (!a || !b) return;
+  const aName = kingdomName(a);
+  const bName = kingdomName(b);
+  speakFear(
+    [a, b],
+    [
+      `Peace! The war between ${aName} and ${bName} is over!`,
+      `It's over. The levy stands down. We rebuild.`,
+      `Peace at last — but the taxes won't unpay themselves.`,
+      `The war's done. Now we count what it cost us.`,
+    ]
+  );
+}

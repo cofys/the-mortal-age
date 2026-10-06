@@ -7,10 +7,10 @@
  * the seed of the Mortal Age UI template (palette, typography, borders,
  * buttons — documented in DESIGN.md under "The Mortal Age UI template").
  *
- * Implementation: a server-defined custom interface (group 30010) in the
+ * Implementation: a server-defined custom interface (group 30012) in the
  * established registerCustomInterface pattern (see
  * plugins/interface/Commands.plugin.js). The client fetches the definition
- * from /api/interfaces/30010 on first open; everything after that is the
+ * from /api/interfaces/30012 on first open; everything after that is the
  * usual socket traffic — clicks arrive as widget button presses
  * (api.onInterfaceActionButton), text/highlights are pushed with sendString /
  * sendInterfaceDisplayState. No client change, no new packets, no new hooks.
@@ -36,7 +36,11 @@ const {
 const Data = require("./Data.Origins");
 const Selection = require("./Selection.Origins");
 
-const GROUP_ID = 30010;
+const GROUP_ID = 30012;
+// NOTE: 30010 is the citizen merchant stall (MerchantShops.js), 30011 the
+// player stall (PlayerShops.js). CustomInterfaceRegistry silently lets the
+// last registration win, so every custom group ID must be unique — a
+// collision serves one plugin's widgets to the other's interface.
 // The main modal layer, same target the makeover mage and ::commands use.
 const MODAL_TARGET_UID = (161 << 16) | 16;
 
@@ -195,9 +199,13 @@ function buildInterface(Items) {
       ...widgetExtra,
     });
 
+  // Fixed-size centered modal (700x460 on the 765x503 canvas). widthMode 0
+  // means "rawWidth is the width" — widthMode 1 would size this as
+  // parent-minus-raw, which is for fill containers, not fixed modals.
   const root = add(C.ROOT, -1, {
-    rawWidth: 18, rawHeight: 18, widthMode: 1, heightMode: 1,
-    width: MODAL_W, height: MODAL_H, xPositionMode: 1, yPositionMode: 1,
+    rawWidth: MODAL_W, rawHeight: MODAL_H,
+    width: MODAL_W, height: MODAL_H,
+    xPositionMode: 1, yPositionMode: 1,
   });
 
   // Double-rule frame: dim-gold border, panel inset by 2.

@@ -2,9 +2,10 @@
 
 /**
  * CitizenRoutine — the commoner's day. Home -> work (real skilling via the
- * shared interactObject action at the kingdom work site) -> tavern -> home,
- * driven by the wall clock with per-citizen variation: seeded phase offsets,
- * occasional swapped shifts, rare days off.
+ * shared interactObject action at the kingdom work site) -> a midday market
+ * trip -> a meal break (buys and eats bread at the market) -> work ->
+ * tavern -> home, driven by the wall clock with per-citizen variation:
+ * seeded phase offsets, occasional swapped shifts, rare days off.
  *
  * Work output is real: logs/ore land in the inventory and get banked, feeding
  * the master_trade goal. When the inventory fills mid-shift the routine runs
@@ -23,7 +24,8 @@ const { createBankAction } = require("../../../bots/brain/actions/Bank");
 const { createIdleSocialAction } = require("./IdleSocial");
 const { siteTile, workSite, dockSite, kingdomIdOf } = require("../CitizenSites");
 const { isKingdomAtWar } = require("../../CitizenEvents");
-const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
+const { ATTR_CITIZEN_PERSONALITY, ATTR_CITIZEN_ROLE, ROLE_MERCHANT } = require("../../constants");
+const { attemptFeed, sellsFood } = require("../CitizenNeeds");
 const {
   agentRng,
   logNormalJitter,
@@ -34,6 +36,8 @@ const {
 
 const KIND_HOME = "home";
 const KIND_WORK = "work";
+const KIND_MARKET = "market";
+const KIND_MEAL = "meal";
 const KIND_SOCIAL = "social";
 
 const WORK_FISHING = "fishing";
@@ -71,19 +75,32 @@ function dayOfYear(date) {
  * without drifting: offsets shift boundaries, some days swap the shifts,
  * rare days are "days off" (tavern all day — everyone needs one).
  */
+/**
+ * Build today's phase plan. Seeded per citizen per day so the routine varies
+ * without drifting. Boundaries share one jittered value each (then forced
+ * monotonic) so adjacent phases always meet — no gaps, no overlaps.
+ * Some days are "late days" (the whole day slides ~90 min — a lie-in),
+ * rare days are "days off" (tavern all day — everyone needs one).
+ */
 function buildDayPlan(rng) {
   const offset = () => Math.round((rng() - 0.5) * 90); // ±45 min
-  const swap = chance(rng, 0.18);
+  const lateDay = chance(rng, 0.18);
   const dayOff = chance(rng, 0.06);
-  const workA = { kind: KIND_WORK, start: 7 * 60 + offset(), end: 12 * 60 + offset() };
-  const workB = { kind: KIND_WORK, start: 13 * 60 + offset(), end: 17 * 60 + offset() };
+  const slide = lateDay ? 90 : 0;
+  const t = (hours, minutes = 0) => hours * 60 + minutes + slide + offset();
+  const bounds = [t(6, 30), t(11), t(12), t(13), t(17), t(22)];
+  for (let i = 1; i < bounds.length; i += 1) {
+    bounds[i] = Math.max(bounds[i], bounds[i - 1] + 15); // keep phases ordered, >=15 min
+  }
+  const [b630, b11, b12, b13, b17, b22] = bounds;
   const plan = [
-    { kind: KIND_HOME, start: 0, end: 6 * 60 + offset() },
-    swap ? workB : workA,
-    { kind: KIND_SOCIAL, start: 12 * 60 + offset(), end: 13 * 60 + offset() },
-    swap ? workA : workB,
-    { kind: KIND_SOCIAL, start: 17 * 60 + offset(), end: 22 * 60 + offset() },
-    { kind: KIND_HOME, start: 22 * 60 + offset(), end: DAY_MINUTES },
+    { kind: KIND_HOME, start: 0, end: b630 },
+    { kind: KIND_WORK, start: b630, end: b11 },
+    { kind: KIND_MARKET, start: b11, end: b12 },
+    { kind: KIND_MEAL, start: b12, end: b13 },
+    { kind: KIND_WORK, start: b13, end: b17 },
+    { kind: KIND_SOCIAL, start: b17, end: b22 },
+    { kind: KIND_HOME, start: b22, end: DAY_MINUTES },
   ];
   if (dayOff) {
     return plan.map((phase) =>
@@ -126,6 +143,10 @@ function createCitizenRoutineAction(spec, world) {
   // Internal delegates, created once so their per-player state stays keyed.
   const socialDelegate = createIdleSocialAction(
     { anchorKind: "tavern", chatterMinMs: 120000, chatterMaxMs: 420000 },
+    world
+  );
+  const marketDelegate = createIdleSocialAction(
+    { anchorKind: "market", chatterMinMs: 180000, chatterMaxMs: 480000 },
     world
   );
   let workDelegate = null;
@@ -246,6 +267,39 @@ function createCitizenRoutineAction(spec, world) {
     }
   }
 
+  /** Bread-selling merchants in view — the meal break's food source. */
+  function localProvisioners(player) {
+    const out = [];
+    for (const local of player.getLocalPlayers?.() ?? []) {
+      if (local === player || local?.isPlayerBot?.() !== true) {
+        continue;
+      }
+      try {
+        if (
+          local.getAttribute?.(ATTR_CITIZEN_ROLE) === ROLE_MERCHANT &&
+          sellsFood(local)
+        ) {
+          out.push(local);
+        }
+      } catch (error) {
+        // A broken read skips one candidate, not the meal.
+      }
+    }
+    return out;
+  }
+
+  /** Meal break: at the market, eat own bread or buy a loaf from a stall. */
+  function mealTick(ctx, state) {
+    const { player } = ctx;
+    const market = siteTile(player, "market");
+    if (market && !atTile(player, market, 6)) {
+      walkTo(player, market);
+      return "running";
+    }
+    attemptFeed(player, localProvisioners(player));
+    return "running";
+  }
+
   function enterPhase(ctx, state, kind) {
     state.phaseKind = kind;
     state.workMode = "work";
@@ -261,6 +315,12 @@ function createCitizenRoutineAction(spec, world) {
       const tavern = siteTile(player, "tavern");
       if (tavern) {
         walkTo(player, tavern);
+      }
+    } else if (kind === KIND_MARKET || kind === KIND_MEAL) {
+      // Midday market trip, then the meal break right there among the stalls.
+      const market = siteTile(player, "market");
+      if (market) {
+        walkTo(player, market);
       }
     } else {
       const home = ctx.state?.home;
@@ -337,6 +397,15 @@ function createCitizenRoutineAction(spec, world) {
           });
         }
         return "running";
+      }
+
+      if (state.phaseKind === KIND_MARKET) {
+        // Midday market trip: browse the stalls with the market crowd.
+        return marketDelegate.update(ctx);
+      }
+
+      if (state.phaseKind === KIND_MEAL) {
+        return mealTick(ctx, state);
       }
 
       if (state.phaseKind === KIND_SOCIAL) {

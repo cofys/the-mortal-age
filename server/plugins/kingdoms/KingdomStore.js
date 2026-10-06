@@ -25,7 +25,7 @@ let state = null;
 let persist = true;
 
 function emptyState() {
-  return { version: STORE_VERSION, kingdoms: {}, wars: [] };
+  return { version: STORE_VERSION, kingdoms: {}, wars: [], tension: {} };
 }
 
 function load() {
@@ -35,6 +35,9 @@ function load() {
     const parsed = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8"));
     if (parsed && parsed.version === STORE_VERSION && parsed.kingdoms) {
       state = parsed;
+      // Worlds saved before the tension model have no tension map.
+      if (!state.tension || typeof state.tension !== "object") state.tension = {};
+      if (!Array.isArray(state.wars)) state.wars = [];
     }
   } catch {
     // No save yet, or unreadable: the seed data will fill it at startup.
@@ -123,7 +126,7 @@ function spendTax(id, amount) {
   return true;
 }
 
-function declareWar({ attackerId, defenderId, declaredBy = null, reason = null }) {
+function declareWar({ attackerId, defenderId, declaredBy = null, reason = null, resolveAt = null }) {
   const wars = load().wars;
   const open = wars.find(
     (w) => w.active && w.attackerId === attackerId && w.defenderId === defenderId
@@ -138,9 +141,42 @@ function declareWar({ attackerId, defenderId, declaredBy = null, reason = null }
     declaredAt: Date.now(),
     endedAt: null,
     outcome: null,
+    // Timestamp (ms) when the war burns itself out if nothing ends it sooner.
+    resolveAt: Number.isFinite(resolveAt) ? resolveAt : null,
   };
   wars.push(war);
   return war;
+}
+
+/**
+ * Pairwise tension lives here (canonical "a:b" keys, a < b) so every plugin
+ * reads one persisted map. 0 = calm, 100 = war. New pairs default to
+ * TENSION_DEFAULT (see Tension.Kingdoms.js) on first read.
+ */
+function tensionKey(a, b) {
+  return [String(a), String(b)].sort().join(":");
+}
+
+/** Raw stored tension, or null when the pair has never been scored. */
+function getRawTension(a, b) {
+  const v = load().tension?.[tensionKey(a, b)];
+  return Number.isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : null;
+}
+
+function setRawTension(a, b, score) {
+  const tension = load().tension ?? (load().tension = {});
+  tension[tensionKey(a, b)] = Math.max(0, Math.min(100, Math.round(score)));
+  // No save: callers save (same convention as setFlag/grantTax).
+}
+
+/** All pairs that have ever been scored: { "a:b": score }. */
+function getTensionMap() {
+  return { ...(load().tension ?? {}) };
+}
+
+/** Wars that have ended — the tension engine reads these for armistice windows. */
+function getEndedWars() {
+  return load().wars.filter((w) => !w.active);
 }
 
 function endWar(attackerId, defenderId, outcome = "unknown") {
@@ -177,5 +213,9 @@ module.exports = {
   declareWar,
   endWar,
   getActiveWars,
+  getEndedWars,
+  getRawTension,
+  setRawTension,
+  getTensionMap,
   resetForTests,
 };

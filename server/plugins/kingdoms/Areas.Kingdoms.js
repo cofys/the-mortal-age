@@ -14,6 +14,7 @@
  */
 
 const Membership = require("./Membership.Kingdoms");
+const Store = require("./KingdomStore");
 
 const KINGDOM_TERRITORIES = [
   {
@@ -67,6 +68,19 @@ function boundariesOf(api, def) {
   return list;
 }
 
+function warFoeOf(kingdomId) {
+  try {
+    const war = Store.getActiveWars().find(
+      (w) => w.attackerId === kingdomId || w.defenderId === kingdomId
+    );
+    if (!war) return null;
+    const foeId = war.attackerId === kingdomId ? war.defenderId : war.attackerId;
+    return Store.getKingdom(foeId)?.name ?? foeId;
+  } catch {
+    return null;
+  }
+}
+
 function enterKingdom(api, def, player) {
   api.emitCustomEvent("kingdom:territory-entered", {
     player,
@@ -77,6 +91,12 @@ function enterKingdom(api, def, player) {
   player.sendMessage(
     home ? `Welcome home to ${def.name}.` : `You enter ${def.name} — ${def.blurb}.`
   );
+  const foe = warFoeOf(def.id);
+  if (foe) {
+    player.sendMessage(
+      `[Warning] ${def.name} is at war with ${foe}. The roads are not safe — travel armed, or not at all.`
+    );
+  }
 }
 
 function leaveKingdom(api, def, player) {

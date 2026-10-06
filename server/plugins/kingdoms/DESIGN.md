@@ -15,6 +15,43 @@ the data model, the event catalog, and the honest list of what's stubbed.
 | `Areas.Kingdoms.js` | One `Area` subclass per great power; emits territory edges |
 | `Events.Kingdoms.js` | `kingdom:*` custom-event listeners (the cross-plugin API) |
 | `Membership.Kingdoms.js` | Player attributes, `::kingdom` / `::kingdomrank` commands, court helpers |
+| `Tension.Kingdoms.js` | The powder keg: pairwise tension, skirmishes, war starts/ends, story beats |
+
+## The tension model (live war states)
+
+Every pair of great powers carries a **tension** score (0-100, persisted in
+`KingdomStore.tension` under canonical `"a:b"` keys). A tension tick runs
+every ~2 minutes (200 game ticks). Tension breathes: it builds, releases,
+and recovers — war is an event, not the weather.
+
+| Driver | Numbers |
+| --- | --- |
+| Peace decay | -1/tick (100 → 0 in ~3.3h of quiet) |
+| Border incidents | chance 2% + 15% × (tension/100) per tick; +6..14 tension; 30% become street rumors |
+| Skirmishes | at tension ≥ 70, 20%/tick: patrols clash at a named border, 1-4 guards dead per side, +6..12 tension |
+| Street rumors | thresholds 55 (grumbling) / 75 (mobilizing) / 90 (war fever + realm announcement), with hysteresis |
+| War declaration | at 100: `kingdom:war-declared`; Morytania is the aggressor in its own feuds |
+| War duration | 6-18h (`resolveAt` on the war record), or until a side's garrison breaks |
+| War attrition | 20%/tick per belligerent loses 1 garrison |
+| Peace terms | treasuries drained 15% both sides; tension pinned at 15; garrisons reset to 30; outcome by levies + treasury weight |
+| Armistice | 72h after a war: tension capped at 40, decays 2/tick |
+| Garrisons | `war:garrison` flag, 60 max; peace rebuilds +1/tick; skirmishes floor at 1; war can zero it (defeat) |
+| Scapegoating | a quartermaster's `kingdom:war-demand` makes the court blame its hottest rival (≥30): +4 tension, 1h cooldown |
+| Player PK | cross-kingdom kill: +5 tension (+8 for slaying a foreign guardsman); killer earns +15 influence (+25 in wartime) |
+| Morytania powder keg | seeded 68-74 at boot; Myreque sabotage 6%/tick and Drakan's tithe demands 5%/tick keep it hot |
+
+**What a player sees, first rumor to peace:** townsfolk repeat spymaster
+rumors as tension crosses 55/75/90; merchants charge 1.5× war prices for
+steel and food once a border passes 60; skirmishes are announced realm-wide
+and citizens speak fear in the streets; at 100 war is declared with a
+casus-belli reason, patrols double, war taxes bite, quartermaster demands go
+URGENT, entering the kingdom warns you the roads are not safe, and the
+market closes; when the war burns out, peace terms are announced, both
+treasuries bleed, and `::war` shows the rebuilding. Citizens speak relief;
+the armistice holds the peace.
+
+**`::war`** — open wars with reasons, the 5 hottest borders with heat
+labels (calm/grumbling/skirmishes/WAR FEVER), and garrison strengths.
 
 ## Data model
 
@@ -89,8 +126,13 @@ they're the seam future LLM hooks (AI citizens, court agents) will read.
   promotion; writes `kingdom:id` / `kingdom:rank`, appends to `kingdom:titles`.
 - `kingdom:tax-collected` `{ kingdomId, amount, source? }` — revenue lands in
   the treasury. (Nothing collects tax yet — see stubs.)
-- `kingdom:war-declared` `{ attackerId, defenderId, declaredBy?, reason? }`
+- `kingdom:war-declared` `{ attackerId, defenderId, declaredBy?, reason?, resolveAt? }`
+  — the tension engine declares wars at 100 tension (`declaredBy: "tension"`);
+  `resolveAt` is the ms timestamp when the war burns out if nothing ends it sooner.
 - `kingdom:war-ended` `{ attackerId, defenderId, outcome? }`
+  — the tension engine ends wars (burnout, broken levies) with peace terms.
+- `kingdom:skirmish` `{ attackerId, defenderId, location, casualtiesA, casualtiesB }`
+  — border patrols clashed below the threshold of war; citizens speak fear.
 - `kingdom:ruler-changed` `{ kingdomId, newRuler, newTitle?, flag?, flagValue? }`
   — succession, coup, or questline (e.g. Lathas falls → flag flip).
 
@@ -100,10 +142,13 @@ they're the seam future LLM hooks (AI citizens, court agents) will read.
   `kingdom:created` listener already accepts new kingdoms idempotently, but
   there is no founding flow: no charter cost, no territory claim, no army
   muster, and no existing-power retaliation. All of that is content to build.
-- **War mechanics** — declaration and resolution are recorded, not simulated.
-  No battles, no territory flipping on outcome, no war weariness, no peace
-  treaties. Area rule overrides (`canAttack` wartime PvP law, Morytania guard
-  aggression, Keldagrim company checkpoints) are stubbed to `null`.
+- **War mechanics** — declaration and resolution are now simulated by the
+  tension model (Tension.Kingdoms.js): wars start at 100 tension, burn 6-18h
+  or until a garrison breaks, and end with peace terms, drained treasuries,
+  and a 72h armistice. Still stubbed: no battles, no territory flipping on
+  outcome, no war weariness beyond garrison attrition. Area rule overrides
+  (`canAttack` wartime PvP law, Morytania guard aggression, Keldagrim company
+  checkpoints) are stubbed to `null`.
 - **Tax collection** — the treasury has a door but no foot traffic. Shop taxes,
   market tolls, and war levies need emitters in the economy/skilling content.
 - **Courts and AI rulers** — `tagCourtier` is ready; spawning kings, generals

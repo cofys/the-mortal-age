@@ -206,3 +206,59 @@ Only existing file touched: `server/plugins/bots/brain/BotActivityRegistry.js`
 (extension seam: `registerBotActionType`, `registerBotConditionKind`,
 `appendActivityDefinitions`, `getBotActivityRegistries`, `world` on the
 registry object).
+
+## Player-owned market stalls
+
+Citizen merchants run stalls from their live inventories (shop/MerchantShops.js);
+players can now own one too. A stall is a market pitch in a kingdom's market:
+the owner stocks it from their own inventory, sets prices, and other players
+browse and buy through the same stall-widget pattern (group 30011, same 4-row
+layout, same session shape — the seller is just a player). Stock lives in
+`data/saves/player-shops.json`, not an inventory, so the stall keeps trading
+while the owner is offline — as long as a hired hand minds it.
+
+Files: `shop/PlayerShops.js` (commands, widget, task), `shop/PlayerShopStore.js`
+(persistence + the economy tuning), `shop/PlayerShopUpkeep.js` (the slow clock,
+unit-testable with plain node), `shop/PlayerShopStore.test.js`
+(`node plugins/citizens/shop/PlayerShopStore.test.js` from `server/`).
+
+Player commands (`::shop ...`): `buy <kingdom>`, `stock <item> [n]`,
+`unstock <item> [n]`, `price <item> <n>`, `hire [name]`, `fire`, `collect [n]`,
+`claim`, `info`, `list [kingdom]`, `browse <owner>`, `manage`, `close`.
+
+### The numbers (single source of truth: PlayerShopStore.js)
+
+| Kingdom | Market | Upfront | Weekly rent |
+|---|---|---|---|
+| Misthalin | Varrock — prime | 10,000 | 1,000 |
+| Asgarnia | Falador | 7,500 | 750 |
+| Kandarin | East Ardougne | 6,000 | 600 |
+| Keldagrim | the dwarven city | 5,000 | 500 |
+| Morytania | Burgh de Rott — cheap | 3,000 | 300 |
+
+- **One stall per player**, 4 ware types max (one per widget row).
+- **Employee wage:** 75 coins/day, one hand per stall, hired from unemployed
+  commoners of the stall's kingdom (`::shop hire`). Paid from the till daily;
+  a till that can't cover wages loses the hand — they complain out loud
+  (`forceChat`) when their citizen bot is online.
+- **Market tax:** 5% of every sale goes to the kingdom treasury via the
+  existing `kingdom:tax-collected` event (`source: "player-stall"`) — the same
+  door the steward's taxes walk through.
+- **Price bounds:** player-set prices must sit within 10%–1000% of the
+  reference price (`economy:price-query` first, the item's base value as the
+  fallback). New wares default to the reference price.
+- **Rent:** swept weekly from the till; the shortfall becomes rent debt. Arrears
+  beyond 2 weeks repossess the stall — stock and till are queued for
+  `::shop claim` (survives the owner being offline), the hand is released.
+- **Open hours:** a stall trades when its owner is online, or when a hired hand
+  minds it. Closed while its kingdom is at war (same rule as citizen stalls).
+
+### Deliberate simplifications (v1)
+
+- No physical stall object in the world — browsing is `::shop browse <owner>`
+  / `::shop list`; the hired hand "stands at the stall" by keeping it open.
+- No sell-back: customers buy only; the owner restocks from their inventory.
+- The upkeep sweep runs every ~6 minutes on wall-clock math, so restarts and
+  missed ticks settle correctly on the next pass.
+- Player shops boot with the citizen population (`CITIZENS_ENABLED=1`), like
+  the merchant stalls — hiring needs the director.

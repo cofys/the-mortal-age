@@ -161,8 +161,11 @@ function quartermasterTick(kingdom, warsHere, taxRevenue) {
     pluginApi.emitCustomEvent("kingdom:war-demand", { kingdomId: kingdom.id, need });
     if (noticeDue(kingdom.id, "war-demand")) {
       announceToRealm(
-        `[Realm] The Quartermaster of ${kingdom.name} posts a war demand: ` +
-          `the stores run low — suppliers and sellswords wanted.`
+        wartime
+          ? `[Realm] The Quartermaster of ${kingdom.name} posts an URGENT war demand: ` +
+            `the stores run low and the war eats everything — suppliers and sellswords wanted NOW.`
+          : `[Realm] The Quartermaster of ${kingdom.name} posts a war demand: ` +
+            `the stores run low — suppliers and sellswords wanted.`
       );
     }
   }

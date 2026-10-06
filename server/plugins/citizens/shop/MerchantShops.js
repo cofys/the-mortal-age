@@ -27,7 +27,12 @@
  * shape ({ merchant, wares }) already treats the seller as a Player.
  */
 
-const { ATTR_CITIZEN_ROLE, ROLE_MERCHANT } = require("../constants");
+const {
+  ATTR_CITIZEN_ROLE,
+  ATTR_WARE_ITEM,
+  ATTR_WARE_PRICE,
+  ROLE_MERCHANT,
+} = require("../constants");
 const { isKingdomAtWar } = require("../CitizenEvents");
 const { kingdomIdOf } = require("../brain/CitizenSites");
 const {
@@ -150,17 +155,87 @@ function queryReferencePrice(api, itemId) {
   return Number.isFinite(price) && price > 0 ? Math.floor(price) : null;
 }
 
-function merchantWares(api) {
+function merchantWares(api, merchant) {
   const spec = loadMerchantSpec();
-  const wareId = resolveWareId(api.core.ItemIds, spec.wareItem);
+  // Per-merchant ware override: specialist merchants (the sword supplier,
+  // the prime) carry citizens:ware-item / citizens:ware-price attributes
+  // that win over the shared spec, so the stall shows what they sell.
+  let wareItem = spec.wareItem;
+  let pricePerWare = spec.pricePerWare;
+  try {
+    const attrItem = merchant?.getAttribute?.(ATTR_WARE_ITEM);
+    if (attrItem !== undefined && attrItem !== null && attrItem !== "") {
+      wareItem = attrItem;
+    }
+    const attrPrice = merchant?.getAttribute?.(ATTR_WARE_PRICE);
+    if (Number(attrPrice) > 0) {
+      pricePerWare = Math.floor(Number(attrPrice));
+    }
+  } catch (error) {
+    // Spec defaults.
+  }
+  const wareId = resolveWareId(api.core.ItemIds, wareItem);
   if (!Number.isInteger(wareId)) {
     return [];
   }
-  const price =
-    queryReferencePrice(api, wareId) ?? Math.max(1, Math.floor(spec.pricePerWare));
+  const base =
+    queryReferencePrice(api, wareId) ?? Math.max(1, Math.floor(pricePerWare));
   const name =
-    api.core.ItemDefinition.forId(wareId)?.getName?.() ?? String(spec.wareItem);
+    api.core.ItemDefinition.forId(wareId)?.getName?.() ?? String(wareItem);
+  // War economy: when the kingdom's borders run hot, merchants charge war
+  // prices for war goods (steel, bows, shields, food). The market closes
+  // outright once the war itself starts (see openStall).
+  const price = isWarGood(name)
+    ? Math.ceil(base * warPriceMultiplier(merchant))
+    : base;
   return [{ id: wareId, name, price }];
+}
+
+// War goods: weapons and food — what an army (or a frightened town) buys.
+const WAR_GOOD_KEYWORDS = [
+  "SWORD",
+  "BOW",
+  "ARROW",
+  "SHIELD",
+  "DAGGER",
+  "BATTLEAXE",
+  "MACE",
+  "BREAD",
+  "MEAT",
+  "FISH",
+  "TUNA",
+  "LOBSTER",
+  "PIKE",
+  "CAKE",
+  "POTATO",
+  "STEW",
+];
+const WAR_PRICE_MULTIPLIER = 1.5;
+// Borders this hot smell of war; merchants price it in.
+const WAR_PRICE_TENSION = 60;
+
+function isWarGood(name) {
+  const upper = String(name ?? "").toUpperCase();
+  return WAR_GOOD_KEYWORDS.some((kw) => upper.includes(kw));
+}
+
+/** 1.5x on war goods while the merchant's kingdom runs a hot border. */
+function warPriceMultiplier(merchant) {
+  try {
+    const kingdomId = kingdomIdOf(merchant);
+    if (isKingdomAtWar(kingdomId)) return 1; // market closed in wartime anyway
+    const Tension = require("../../kingdoms/Tension.Kingdoms");
+    return Tension.hottestTensionFor(kingdomId) >= WAR_PRICE_TENSION
+      ? WAR_PRICE_MULTIPLIER
+      : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** True when the stall currently charges war prices (for the warning). */
+function warPricesActive(merchant) {
+  return warPriceMultiplier(merchant) > 1;
 }
 
 function buildStallInterface() {
@@ -332,10 +407,13 @@ function openStall(api, player, merchant) {
     player.sendMessage("The market is closed while the kingdom is at war.");
     return;
   }
-  const wares = merchantWares(api);
+  const wares = merchantWares(api, merchant);
   if (wares.length === 0) {
     player.sendMessage("The merchant has nothing to sell right now.");
     return;
+  }
+  if (warPricesActive(merchant)) {
+    player.sendMessage("War looms — steel and bread cost war prices at this stall.");
   }
   const session = { merchant, wares };
   sessions.set(player, session);

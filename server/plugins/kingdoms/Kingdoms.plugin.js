@@ -22,5 +22,6 @@ module.exports = {
     require("./Politics.Kingdoms")(api);
     require("./Commands.Kingdoms")(api);
     require("./Simulation.Kingdoms")(api);
+    require("./Tension.Kingdoms")(api);
   },
 };

@@ -21,7 +21,7 @@
 
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { onWarDeclared, onWarEnded, onOfficeAssigned, onOfficeVacated } = require("./CitizenEvents");
-const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived } = require("./RealmReactions");
+const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { registerCitizenActionTypes } = require("./brain/CitizenActionTypes");
 const {
@@ -30,6 +30,7 @@ const {
 } = require("./brain/CitizenActivityRegistry");
 const { initDirector, getDirector } = require("./director/CitizenDirector");
 const { initMerchantShops } = require("./shop/MerchantShops");
+const { initPlayerShops } = require("./shop/PlayerShops");
 const {
   EVENT_WAR_DECLARED,
   EVENT_WAR_ENDED,
@@ -56,6 +57,7 @@ function initCitizens(api) {
   const director = initDirector(api, getBaseRegistry());
   director.boot();
   initMerchantShops(api);
+  initPlayerShops(api);
   api.log?.("[citizens] director booted", director.status());
 }
 
@@ -132,12 +134,27 @@ function onArrivalPlayerArrived(event) {
   onPlayerArrived(event);
 }
 
+function onKingdomSkirmish(event) {
+  onSkirmish(event);
+}
+
+function onKingdomWarDeclaredFear(event) {
+  onWarDeclaredFear(event);
+}
+
+function onKingdomWarEndedRelief(event) {
+  onWarEndedRelief(event);
+}
+
 module.exports = {
   name: "Citizens",
   register(api) {
     initCitizens(api);
     api.onCustomEvent(EVENT_WAR_DECLARED, onKingdomWarDeclared);
     api.onCustomEvent(EVENT_WAR_ENDED, onKingdomWarEnded);
+    api.onCustomEvent(EVENT_WAR_DECLARED, onKingdomWarDeclaredFear);
+    api.onCustomEvent(EVENT_WAR_ENDED, onKingdomWarEndedRelief);
+    api.onCustomEvent("kingdom:skirmish", onKingdomSkirmish);
     api.onCustomEvent(EVENT_OFFICE_ASSIGNED, onKingdomOfficeAssigned);
     api.onCustomEvent(EVENT_OFFICE_VACATED, onKingdomOfficeVacated);
     api.onCustomEvent(EVENT_CITIZEN_CHAT_HEARD, onCitizenChatHeard);

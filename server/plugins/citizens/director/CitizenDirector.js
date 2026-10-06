@@ -42,6 +42,14 @@ const {
 } = require("../lib/goals");
 const { registerCitizenForChat } = require("../chat/CitizenChat");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
+const {
+  ensureNeeds,
+  needsSnapshot,
+  tickNeeds,
+  attemptFeed,
+  sellsFood,
+  HUNGRY_AT,
+} = require("../brain/CitizenNeeds");
 const KingdomStore = require("../../kingdoms/KingdomStore");
 const {
   ATTR_KINGDOM_ID,
@@ -50,12 +58,14 @@ const {
   ATTR_CITIZEN_PERSONALITY,
   ATTR_CITIZEN_GOAL,
   ATTR_CITIZEN_SEED,
+  ATTR_CITIZEN_NEEDS,
   ROLE_GUARD,
   ROLE_MERCHANT,
   ROLE_COMMONER,
   ROLE_COURTIER,
   ROLE_ACTIVITY,
   ACTIVITY_TAVERN_SOCIAL,
+  ACTIVITY_LEISURE_STROLL,
   EVENT_RANK_GRANTED,
 } = require("../constants");
 
@@ -130,6 +140,10 @@ function desiredPhase(record, hour) {
   }
   switch (record.role) {
     case ROLE_GUARD: {
+      // Meal breaks: the watch eats at noon and at supper, duty resumes after.
+      if ((hour >= 12 && hour < 13) || (hour >= 19 && hour < 20)) {
+        return { online: true, activityId: ACTIVITY_TAVERN_SOCIAL, onDuty: false };
+      }
       // Three watches; off-watch guards drink, sleep is handled above.
       const watch = record.watch; // 0: 06-14, 1: 14-22, 2: 22-06
       const watchStart = [6, 14, 22][watch];
@@ -145,7 +159,11 @@ function desiredPhase(record, hour) {
       };
     }
     case ROLE_MERCHANT:
-      // Shops open 08:00-19:00; otherwise the merchant is "home".
+      // Shops open 08:00-19:00 with a lunch break at the tavern; otherwise
+      // the merchant is "home".
+      if (hour >= 12 && hour < 13) {
+        return { online: true, activityId: ACTIVITY_TAVERN_SOCIAL };
+      }
       return {
         online: hour >= 8 && hour < 19,
         activityId: ROLE_ACTIVITY[ROLE_MERCHANT],
@@ -154,8 +172,15 @@ function desiredPhase(record, hour) {
       // The routine action runs the day itself; the director only sleeps them.
       return { online: true, activityId: ROLE_ACTIVITY[ROLE_COMMONER] };
     case ROLE_COURTIER:
-      if (hour >= 9 && hour < 17) {
+      // Morning court, lunch, an afternoon of leisure, then the tavern evening.
+      if (hour >= 9 && hour < 12) {
         return { online: true, activityId: ROLE_ACTIVITY[ROLE_COURTIER] };
+      }
+      if (hour >= 12 && hour < 13) {
+        return { online: true, activityId: ACTIVITY_TAVERN_SOCIAL };
+      }
+      if (hour >= 13 && hour < 17) {
+        return { online: true, activityId: ACTIVITY_LEISURE_STROLL };
       }
       if (hour >= 17 && hour < 23) {
         return { online: true, activityId: ACTIVITY_TAVERN_SOCIAL };
@@ -245,6 +270,7 @@ class CitizenDirector {
       lastTickAt: Date.now(),
     };
     this.roster.set(username, record);
+    ensureNeeds(username); // needs survive logout; the director ticks them offline too
     return record;
   }
 
@@ -325,6 +351,10 @@ class CitizenDirector {
     bot.setAttribute?.(ATTR_CITIZEN_PERSONALITY, record.personality);
     bot.setAttribute?.(ATTR_CITIZEN_SEED, record.seed);
     bot.setAttribute?.(ATTR_CITIZEN_GOAL, record.goal);
+    const needs = ensureNeeds(record.username);
+    if (needs) {
+      bot.setAttribute?.(ATTR_CITIZEN_NEEDS, needsSnapshot(needs));
+    }
 
     const state = createInitialState(
       { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 },
@@ -469,11 +499,47 @@ class CitizenDirector {
     }
   }
 
+  /**
+   * Bread-selling merchants of this kingdom near the citizen — the food
+   * sellers a hungry citizen can actually walk up to.
+   */
+  foodSellersNear(record, bot) {
+    if (!bot) {
+      return [];
+    }
+    let botLoc = null;
+    try {
+      botLoc = bot.getLocation?.();
+    } catch (error) {
+      return [];
+    }
+    if (!botLoc) {
+      return [];
+    }
+    return this.onlineBotsForKingdom(record.kingdomId, ROLE_MERCHANT).filter(
+      (merchant) => {
+        if (merchant === bot || !sellsFood(merchant)) {
+          return false;
+        }
+        try {
+          return merchant.getLocation?.()?.getDistance?.(botLoc) <= 15;
+        } catch (error) {
+          return false;
+        }
+      }
+    );
+  }
+
   tick() {
     const hour = hourNow();
+    const nowMs = Date.now();
     for (const record of this.roster.values()) {
-      const phase = desiredPhase(record, hour);
       const online = this.isOnline(record);
+      const bot = online ? this.getBot(record) : null;
+      // Needs decay for everyone (the logged-out are asleep and recover);
+      // the visible threshold lines only fire for online citizens.
+      const needs = tickNeeds(record.username, bot, nowMs);
+      const phase = desiredPhase(record, hour);
       if (!phase.online) {
         if (online) {
           this.logoutCitizen(record);
@@ -484,7 +550,6 @@ class CitizenDirector {
         this.spawnCitizen(record);
         continue;
       }
-      const bot = this.getBot(record);
       if (!bot) {
         continue;
       }
@@ -496,6 +561,11 @@ class CitizenDirector {
         bot.setAttribute?.(ATTR_KINGDOM_ID, record.kingdomId);
       }
       this.tickGoals(record, bot, phase);
+      // Hungry citizens feed themselves: own bread first, then buy a loaf
+      // from a nearby bread merchant. The broke go visibly hungry.
+      if (needs && needs.hunger < HUNGRY_AT) {
+        attemptFeed(bot, this.foodSellersNear(record, bot));
+      }
     }
   }
 

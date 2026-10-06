@@ -19,6 +19,7 @@ const Offices = require("./Offices.Kingdoms");
 const Politics = require("./Politics.Kingdoms");
 const Store = require("./KingdomStore");
 const Simulation = require("./Simulation.Kingdoms");
+const Tension = require("./Tension.Kingdoms");
 
 let pluginApi = null;
 
@@ -122,6 +123,49 @@ function onKingdomCommand(player, args) {
   player.sendMessage("[Kingdom] Usage: ::kingdom status");
 }
 
+function ago(timestamp) {
+  const mins = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  return hours < 48 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
+}
+
+/** ::war — the state of the realm's wars, hottest borders, and levies. */
+function showWarStatus(player) {
+  const wars = Store.getActiveWars();
+  player.sendMessage("[War] The state of the realm's wars:");
+  if (wars.length === 0) {
+    player.sendMessage("  No open wars — an uneasy peace.");
+  }
+  for (const w of wars.slice(0, 5)) {
+    const a = Store.getKingdom(w.attackerId)?.name ?? w.attackerId;
+    const d = Store.getKingdom(w.defenderId)?.name ?? w.defenderId;
+    player.sendMessage(
+      `  ${a} vs ${d} — declared ${ago(w.declaredAt)}` +
+        (w.reason ? `: ${w.reason}` : "")
+    );
+  }
+  player.sendMessage("[War] Hottest borders:");
+  const hot = Tension.hottestPairs(5);
+  if (hot.length === 0) {
+    player.sendMessage("  The borders are quiet.");
+  }
+  for (const h of hot) {
+    const heat = h.tension >= 90 ? "WAR FEVER" : h.tension >= 70 ? "skirmishes" : h.tension >= 55 ? "grumbling" : "calm";
+    player.sendMessage(`  ${h.aName} / ${h.bName}: tension ${h.tension} (${heat})`);
+  }
+  player.sendMessage("[War] Levies (garrison strength):");
+  for (const k of Store.getKingdoms().slice(0, 8)) {
+    player.sendMessage(`  ${k.name}: ${Tension.garrisonOf(k.id)}/60`);
+  }
+}
+
+function onWarCommand(player, args) {
+  const sub = (args[0] ?? "status").toLowerCase();
+  if (sub === "status") return showWarStatus(player);
+  player.sendMessage("[War] Usage: ::war");
+}
+
 module.exports = function attachCommands(api) {
   pluginApi = api;
   api.registerCommand(
@@ -135,5 +179,11 @@ module.exports = function attachCommands(api) {
     onKingdomCommand,
     api.core.PlayerRights.NONE,
     "Kingdom: ::kingdom status"
+  );
+  api.registerCommand(
+    "war",
+    onWarCommand,
+    api.core.PlayerRights.NONE,
+    "War: ::war — open wars, hottest borders, levies"
   );
 };

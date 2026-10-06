@@ -14,6 +14,16 @@ const ATTR_CITIZEN_ROLE = "citizens:role";
 const ATTR_CITIZEN_PERSONALITY = "citizens:personality";
 const ATTR_CITIZEN_GOAL = "citizens:goal";
 const ATTR_CITIZEN_SEED = "citizens:seed";
+const ATTR_CITIZEN_NEEDS = "citizens:needs";
+// Per-merchant stall overrides. Unset means the default bread stall
+// (see the merchant_tend spec in data/citizen-activities.json).
+const ATTR_WARE_ITEM = "citizens:ware-item";
+const ATTR_WARE_PRICE = "citizens:ware-price";
+// Merchant specializations. Per capital: one prime (fully-real stall,
+// restocks wholesale from the supplier), one supplier (wholesaler), one
+// provisioner (default bread stall).
+const ATTR_PRIME_MERCHANT = "citizens:prime-merchant";
+const ATTR_SUPPLIER_MERCHANT = "citizens:supplier-merchant";
 
 const ROLE_GUARD = "guard";
 const ROLE_MERCHANT = "merchant";
@@ -32,6 +42,8 @@ const ACTIVITY_MERCHANT_TEND = "merchant_tend";
 const ACTIVITY_CITIZEN_ROUTINE = "citizen_routine";
 const ACTIVITY_COURTIER_ATTEND = "courtier_attend";
 const ACTIVITY_TAVERN_SOCIAL = "tavern_social";
+const ACTIVITY_LEISURE_STROLL = "leisure_stroll";
+const ACTIVITY_PRIME_MERCHANT = "prime_merchant";
 
 // Role -> default brain activity. The director overrides by time of day.
 const ROLE_ACTIVITY = Object.freeze({
@@ -64,6 +76,11 @@ module.exports = {
   ATTR_CITIZEN_PERSONALITY,
   ATTR_CITIZEN_GOAL,
   ATTR_CITIZEN_SEED,
+  ATTR_CITIZEN_NEEDS,
+  ATTR_WARE_ITEM,
+  ATTR_WARE_PRICE,
+  ATTR_PRIME_MERCHANT,
+  ATTR_SUPPLIER_MERCHANT,
   ROLE_GUARD,
   ROLE_MERCHANT,
   ROLE_COMMONER,
@@ -78,6 +95,8 @@ module.exports = {
   ACTIVITY_CITIZEN_ROUTINE,
   ACTIVITY_COURTIER_ATTEND,
   ACTIVITY_TAVERN_SOCIAL,
+  ACTIVITY_LEISURE_STROLL,
+  ACTIVITY_PRIME_MERCHANT,
   ROLE_ACTIVITY,
   EVENT_WAR_DECLARED,
   EVENT_WAR_ENDED,

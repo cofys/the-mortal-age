@@ -14,8 +14,10 @@
  *   kingdom:territory-left   { player, kingdomId, name }            // no core listener in v1
  *   kingdom:rank-granted     { player, kingdomId, rank?, title? }
  *   kingdom:tax-collected    { kingdomId, amount, source? }
- *   kingdom:war-declared     { attackerId, defenderId, declaredBy?, reason? }
+ *   kingdom:war-declared     { attackerId, defenderId, declaredBy?, reason?, resolveAt? }
  *   kingdom:war-ended        { attackerId, defenderId, outcome? }
+ *   kingdom:skirmish         { attackerId, defenderId, location, casualtiesA, casualtiesB }
+ *     // border patrols clashed below the threshold of war (Tension.Kingdoms)
  *   kingdom:ruler-changed    { kingdomId, newRuler, newTitle?, flag?, flagValue? }
  *   kingdom:office-assigned  { officeId, kingdomId, holder: { kind: "ai"|"player", ref }, title? }
  *   kingdom:office-vacated   { officeId, kingdomId, previousHolder? }
@@ -91,6 +93,7 @@ function onWarDeclared(event) {
     defenderId: event.defenderId,
     declaredBy: event.declaredBy ?? null,
     reason: event.reason ?? null,
+    resolveAt: event.resolveAt ?? null,
   });
   Store.save();
 }

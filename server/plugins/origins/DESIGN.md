@@ -15,7 +15,7 @@ starting-experience system hooks for footing + ambient rumor.
 | `Origins.plugin.js` | Registration list (attach-only `register`); wires Selection's triggers to Gui's screen |
 | `Data.Origins.js` | The six origins: ids, spawns, kits, lens text; kit AND GUI icon keys validated against `ItemIdentifiers` at startup. Each origin also carries `icon` (realm-card emblem) and `epithet` (one-line card flavor) |
 | `Selection.Origins.js` | Login/Play-button/679-close triggers, the chatbox fallback flow, `claimOrigin`, `::origin` / `::originreset` |
-| `Gui.Origins.js` | The graphical creation screen: custom widget group 30010, server-driven selection state, click handling. Implements "The Mortal Age UI template" below |
+| `Gui.Origins.js` | The graphical creation screen: custom widget group 30012, server-driven selection state, click handling. Implements "The Mortal Age UI template" below |
 
 One core touch (sanctioned by server/AGENTS.md rule 2): `MOBILE_CLIENT_ATTRIBUTE`
 added to `getCoreApi()` (`PluginManager.ts`) and the `PluginCoreApi` interface
@@ -68,7 +68,7 @@ The choice is now a graphical ceremony, one screen, in this order:
 
 1. **Appearance** — the existing makeover-style customizer (interface 679)
    for new accounts, unchanged.
-2. **Home** — the new creation GUI (custom widget group 30010, `Gui.Origins.js`),
+2. **Home** — the new creation GUI (custom widget group 30012, `Gui.Origins.js`),
    opened when 679 closes. One screen: six realm cards + the selected origin's
    lens + a claim button. Claiming reuses the exact same `claimOrigin` path
    (attributes, kingdom, kit, spawn, `origins:selected`).
@@ -120,7 +120,7 @@ silent, the great powers are stirring, every life begins somewhere. Somber,
 mythic, grounded. Not generic fantasy chrome, not default OSRS skin, not
 modern-minimalist web UI.
 
-The creation GUI (`Gui.Origins.js`, group 30010) is the reference
+The creation GUI (`Gui.Origins.js`, group 30012) is the reference
 implementation. Hold every future screen to these decisions.
 
 ### Palette
