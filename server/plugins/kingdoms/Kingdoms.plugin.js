@@ -20,6 +20,7 @@ module.exports = {
     require("./Membership.Kingdoms")(api);
     require("./Influence.Kingdoms")(api);
     require("./Politics.Kingdoms")(api);
+    require("./DonationChest.Kingdoms")(api);
     require("./Commands.Kingdoms")(api);
     require("./Alliances.Kingdoms")(api);
     require("./Diplomacy.Kingdoms")(api);
@@ -30,5 +31,6 @@ module.exports = {
     require("./Tension.Kingdoms")(api);
     require("./WarConsequences.Kingdoms")(api);
     require("./Founding.Kingdoms")(api);
+    require("./WarTable.Kingdoms")(api);
   },
 };

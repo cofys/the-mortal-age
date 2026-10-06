@@ -348,28 +348,31 @@ function completeTrial(player, username, trial) {
   );
 }
 
-/** ::donate <kingdom> <amount> — coins from your purse to the war effort. */
-function donateCommand(player, args) {
-  const kingdomId = (args[0] ?? "").toLowerCase();
-  const amount = Math.floor(Number(args[1] ?? 0));
+/**
+ * The donation itself: coins from the player's purse to a kingdom's war
+ * effort. Shared by ::donate and the Donation chest (no-commands migration,
+ * phase 4) — one path, one behaviour: the coins move, the treasury grows,
+ * the trial-of-service progress and the kingdom:donation-made event fire.
+ * Returns true when the coins moved.
+ */
+function donateToKingdom(player, kingdomId, amount) {
   const kingdom = Store.getKingdom(kingdomId);
-  if (!kingdom) {
-    player.sendMessage("Usage: ::donate <kingdom> <amount>  (e.g. ::donate asgarnia 1000)");
-    return;
-  }
+  if (!kingdom) return false;
   if ((player.getAttribute?.(Membership.KINGDOM_ID_ATTRIBUTE) ?? null) !== kingdomId) {
     player.sendMessage(`[War effort] You must serve ${kingdom.name} to fund its war.`);
-    return;
+    return false;
   }
   if (!(amount > 0)) {
+    // Unreachable from the chest (presets are all positive); kept so the
+    // ::donate path's messages stay byte-identical to before the refactor.
     player.sendMessage("Usage: ::donate <kingdom> <amount>  (e.g. ::donate asgarnia 1000)");
-    return;
+    return false;
   }
   const inventory = player.getInventory?.();
   const have = inventory?.getAmount?.(COINS_ID) ?? 0;
   if (have < amount) {
     player.sendMessage(`[War effort] You carry ${have} coins — the realm asks for ${amount}.`);
-    return;
+    return false;
   }
   inventory.delete(COINS_ID, amount);
   inventory.refreshItems?.();
@@ -379,6 +382,18 @@ function donateCommand(player, args) {
   player.sendMessage(
     `[War effort] You deliver ${amount} coins to the ${kingdom.name} war chest. The court notes your generosity.`
   );
+  return true;
+}
+
+/** ::donate <kingdom> <amount> — coins from your purse to the war effort. */
+function donateCommand(player, args) {
+  const kingdomId = (args[0] ?? "").toLowerCase();
+  const amount = Math.floor(Number(args[1] ?? 0));
+  if (!Store.getKingdom(kingdomId)) {
+    player.sendMessage("Usage: ::donate <kingdom> <amount>  (e.g. ::donate asgarnia 1000)");
+    return;
+  }
+  donateToKingdom(player, kingdomId, amount);
 }
 
 /** ::office influence [kingdom] — where you stand with a court. */
@@ -420,5 +435,6 @@ module.exports = attachPolitics;
 module.exports.petition = petition;
 module.exports.showInfluence = showInfluence;
 module.exports.onDonationMade = onDonationMade;
+module.exports.donateToKingdom = donateToKingdom;
 module.exports.holderStanding = holderStanding;
 module.exports.TRIAL_TARGET_COINS = TRIAL_TARGET_COINS;

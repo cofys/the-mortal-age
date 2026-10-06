@@ -46,7 +46,7 @@ Reuse the existing `onKingdomCommand`, `onWarCommand`, `onAlliancesCommand` logi
 ### Phase 4: Donation chest (war effort)
 Replaces: `::donate <kingdom> <amount>`
 Design: "Donation chest" object in each capital → click "Donate" → amount prompt (chatbox input or preset buttons: 1k / 10k / 100k) → moves coins, emits `kingdom:donation-made`.
-Note: `::donate` is currently registered TWICE (PlayerCommands opens a store URL, Politics does kingdom donation). The migration fixes this collision — the chest does kingdom donations, the store URL moves to a button somewhere sane or is dropped.
+Note: `::donate` was registered TWICE (PlayerCommands opened a store URL, Politics did kingdom donation). Collision resolved 2026-10-06: the PlayerCommands copy (dead link to the tsps fork's deadlypkers.net — no store exists in The Mortal Age) was removed; the chest does kingdom donations via the same donateToKingdom() the Politics `::donate` uses.
 
 ### Phase 5: Charter stone (founding)
 Replaces: `::found ...`
@@ -60,10 +60,10 @@ Design: "Charter stone" in the wilderness → click "Proclaim" → name prompt �
 - [ ] Phase 1: Market Board built, needs in-game verification
 - [ ] Phase 2: Steward's audience
 - [ ] Phase 3: War table
-- [ ] Phase 4: Donation chest
+- [x] Phase 4: Donation chest built (server/plugins/kingdoms/DonationChest.Kingdoms.js), needs in-game verification
 - [ ] Phase 5: Charter stone
 - [ ] Remove `::shop` after Phase 1 verified
 - [ ] Remove `::office` etc. after Phase 2 verified
 - [ ] Remove `::kingdom`, `::war`, `::alliances` after Phase 3 verified
-- [ ] Remove `::donate` (Politics) after Phase 4 verified, resolve collision
+- [ ] Remove `::donate` (Politics) after Phase 4 verified. Collision already resolved 2026-10-06: the duplicate `::donate` in PlayerCommands.plugin.js (opened the dead tsps-fork store URL deadlypkers.net) was removed — it shadowed the kingdom-donation command depending on plugin load order. `::store` left untouched (separate command, out of scope).
 - [ ] Remove `::found` after Phase 5 verified

@@ -129,10 +129,11 @@ module.exports = {
       return true;
     }, undefined, "Open the store");
 
-    api.registerCommand("donate", ({ player }) => {
-      player.getPacketSender().sendURL("http://www.deadlypkers.net");
-      return true;
-    }, undefined, "Open the store");
+    // NOTE (no-commands migration, phase 4): the duplicate ::donate that opened
+    // the old upstream store URL lived here and shadowed the kingdom-donation
+    // ::donate depending on plugin load order. Removed 2026-10-06 — the URL is
+    // the tsps fork's site, not The Mortal Age's (no store exists); kingdom
+    // donations now go through Politics' ::donate and the Donation chest.
 
     api.registerCommand("timeplayed", ({ player }) => {
       player.forceChat(`I've been playing for ${Misc.getFormattedPlayTime(player)}.`);
