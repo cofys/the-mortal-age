@@ -78,11 +78,12 @@ const FONT_DISPLAY = 497;
 
 const C = {
   ROOT: 0,
-  BORDER: 1,
-  BG: 2,
-  TITLE: 3,
-  SUBTITLE: 4,
-  TITLE_RULE: 5,
+  PANEL: 1,
+  BORDER: 2,
+  BG: 3,
+  TITLE: 4,
+  SUBTITLE: 5,
+  TITLE_RULE: 6,
   // Realm rows: CARD_BASE + i * CARD_STRIDE + offset, i = 0..5.
   // Offsets: 0 highlight, 1 border, 2 face (clickable), 3 icon, 4 name, 5 epithet.
   CARD_BASE: 10,
@@ -202,26 +203,35 @@ function buildInterface(Items) {
       ...widgetExtra,
     });
 
-  // Fixed-size centered modal (700x460 on the 765x503 canvas). widthMode 0
-  // means "rawWidth is the width" — widthMode 1 would size this as
-  // parent-minus-raw, which is for fill containers, not fixed modals.
+  // Resolution-aware layout (Jon's directive): the ROOT is full-bleed and
+  // transparent — it fills the maximum canvas (765x503) and absorbs viewport
+  // differences. The PANEL (the actual UI) centers within it via position
+  // modes. Never hardcode interface dimensions to the canvas again.
   const root = add(C.ROOT, -1, {
+    rawWidth: 765, rawHeight: 503,
+    width: 765, height: 503,
+    xPositionMode: 1, yPositionMode: 1,
+  });
+  // Transparent: no background rect on the root. The margin is invisible.
+
+  // The content panel, centered in the full-bleed root.
+  const panel = add(C.PANEL, root, {
     rawWidth: MODAL_W, rawHeight: MODAL_H,
     width: MODAL_W, height: MODAL_H,
     xPositionMode: 1, yPositionMode: 1,
   });
 
   // Double-rule frame: dim-gold border, panel inset by 2.
-  rect(C.BORDER, root, 0, 0, MODAL_W, MODAL_H, TMA.GOLD_DIM);
-  rect(C.BG, root, 2, 2, MODAL_W - 4, MODAL_H - 4, TMA.PANEL);
+  rect(C.BORDER, panel, 0, 0, MODAL_W, MODAL_H, TMA.GOLD_DIM);
+  rect(C.BG, panel, 2, 2, MODAL_W - 4, MODAL_H - 4, TMA.PANEL);
 
-  label(C.TITLE, root, 0, 14, MODAL_W, 26, "WHERE DO YOU CALL HOME?", FONT_DISPLAY, TMA.GOLD_TEXT, { center: true });
+  label(C.TITLE, panel, 0, 14, MODAL_W, 26, "WHERE DO YOU CALL HOME?", FONT_DISPLAY, TMA.GOLD_TEXT, { center: true });
   label(
-    C.SUBTITLE, root, 0, 42, MODAL_W, 16,
+    C.SUBTITLE, panel, 0, 42, MODAL_W, 16,
     "The gods are silent. The great powers are stirring. Every traveller is asked the same question.",
     FONT_BODY, TMA.MUTED, { center: true }
   );
-  rect(C.TITLE_RULE, root, 60, 64, MODAL_W - 120, 1, TMA.GOLD_DIM);
+  rect(C.TITLE_RULE, panel, 60, 64, MODAL_W - 120, 1, TMA.GOLD_DIM);
 
   // Realm rows: single-column list. Every visible part of a row is clickable
   // so the whole row feels like one button whichever widget the client hit-tests.
@@ -235,39 +245,39 @@ function buildInterface(Items) {
     // Selection glow (hidden until selected) sits behind the row.
     // Asgarnia (i === 0) starts selected so the lens is populated on open.
     const glowHidden = i !== 0;
-    rect(base, root, rx - 2, ry - 2, ROW_W + 4, ROW_H + 4, TMA.GOLD,
+    rect(base, panel, rx - 2, ry - 2, ROW_W + 4, ROW_H + 4, TMA.GOLD,
       { hidden: glowHidden, isHidden: glowHidden, actions: ["Choose"], flags: FLAG_OP1 });
-    rect(base + 1, root, rx, ry, ROW_W, ROW_H, TMA.GOLD_DIM, { actions: ["Choose"], flags: FLAG_OP1 });
-    add(base + 2, root, {
+    rect(base + 1, panel, rx, ry, ROW_W, ROW_H, TMA.GOLD_DIM, { actions: ["Choose"], flags: FLAG_OP1 });
+    add(base + 2, panel, {
       rawX: rx + 2, rawY: ry + 2, rawWidth: ROW_W - 4, rawHeight: ROW_H - 4,
       width: ROW_W - 4, height: ROW_H - 4,
       filled: true, color: TMA.CARD, mouseOverColor: TMA.CARD_HOVER,
       ...click,
     });
     // Icon, name, epithet in a horizontal row.
-    add(base + 3, root, {
+    add(base + 3, panel, {
       type: TYPE_GRAPHIC,
       rawX: rx + 8, rawY: ry + 6, rawWidth: 24, rawHeight: 24,
       width: 24, height: 24,
       itemId: iconId, itemQuantity: 1,
       ...click,
     });
-    label(base + 4, root, rx + 40, ry + 3, 200, 16, origin.name.toUpperCase(), FONT_LABEL, TMA.GOLD_TEXT, { ...click });
-    label(base + 5, root, rx + 40, ry + 19, ROW_W - 48, 14, `${origin.city} — ${origin.epithet}`, FONT_BODY, TMA.MUTED, { ...click });
+    label(base + 4, panel, rx + 40, ry + 3, 200, 16, origin.name.toUpperCase(), FONT_LABEL, TMA.GOLD_TEXT, { ...click });
+    label(base + 5, panel, rx + 40, ry + 19, ROW_W - 48, 14, `${origin.city} — ${origin.epithet}`, FONT_BODY, TMA.MUTED, { ...click });
   });
 
   // Lens: the selected origin's description, compact.
-  label(C.LENS_TEXT, root, LENS_X, LENS_Y, LENS_W, LENS_H, "", FONT_BODY, TMA.PARCHMENT);
-  label(C.LENS_KINGDOM, root, LENS_X, LENS_Y + 34, LENS_W, 14, "", FONT_BODY, TMA.BUTTON_TEXT, { center: true });
+  label(C.LENS_TEXT, panel, LENS_X, LENS_Y, LENS_W, LENS_H, "", FONT_BODY, TMA.PARCHMENT);
+  label(C.LENS_KINGDOM, panel, LENS_X, LENS_Y + 34, LENS_W, 14, "", FONT_BODY, TMA.BUTTON_TEXT, { center: true });
   // Claim button.
-  rect(C.BTN_BORDER, root, BTN_X, BTN_Y, BTN_W, BTN_H, TMA.GOLD);
-  add(C.BTN_BG, root, {
+  rect(C.BTN_BORDER, panel, BTN_X, BTN_Y, BTN_W, BTN_H, TMA.GOLD);
+  add(C.BTN_BG, panel, {
     rawX: BTN_X + 2, rawY: BTN_Y + 2, rawWidth: BTN_W - 4, rawHeight: BTN_H - 4,
     width: BTN_W - 4, height: BTN_H - 4,
     filled: true, color: TMA.BUTTON, mouseOverColor: TMA.BUTTON_HOVER,
     actions: ["Claim"], flags: FLAG_OP1,
   });
-  label(C.BTN_TEXT, root, BTN_X + 2, BTN_Y + 2, BTN_W - 4, BTN_H - 4, "", FONT_LABEL, TMA.BUTTON_TEXT,
+  label(C.BTN_TEXT, panel, BTN_X + 2, BTN_Y + 2, BTN_W - 4, BTN_H - 4, "", FONT_LABEL, TMA.BUTTON_TEXT,
     { center: true, vcenter: true, actions: ["Claim"], flags: FLAG_OP1 });
 
   return { groupId: GROUP_ID, widgets };

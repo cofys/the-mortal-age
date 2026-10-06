@@ -195,6 +195,26 @@ Second person, present tense. The world is old and tired; the player is new.
 Rumor is always attributed ("Word on the street: …"). The Wanderer is never
 a lesser choice — "no home" is framed as freedom, not absence.
 
+### Resolution-aware layout (Jon's directive — the standard for ALL custom interfaces)
+
+**Never hardcode interface dimensions to the canvas.** The web client's
+viewport varies; a fixed-size modal centered on 765×503 *will* overflow on
+some screens. The pattern:
+
+1. **ROOT: full-bleed transparent.** `rawWidth: 765, rawHeight: 503`,
+   `xPositionMode: 1, yPositionMode: 1`. No background rect — the margin is
+   invisible. It fills the maximum canvas and absorbs viewport differences.
+2. **PANEL: the actual UI, centered in ROOT.** Fixed size (e.g. 540×420),
+   `xPositionMode: 1, yPositionMode: 1` as a child of ROOT. All content is
+   positioned relative to PANEL, not ROOT.
+3. **Be conservative.** A 540×420 panel that fits is better than a 700×460
+   that bleeds. Leave generous margins (~100px sides, ~40px top/bottom).
+
+The transparent ROOT means: if the viewport is larger, you get invisible
+margin; if smaller, the PANEL stays centered and visible as long as the
+viewport exceeds the panel. Never guess at magic numbers — the centering
+does the work.
+
 ### What this template does NOT cover (phase 2)
 
 - **Appearance step rebuild.** The 679 customizer is still the default OSRS
@@ -214,11 +234,12 @@ a lesser choice — "no home" is framed as freedom, not absence.
 
 ### The creation screen layout (reference)
 
-700×460 modal, centered. Title (`q8_full`, gold) + subtitle (muted) +
-gold hairline rule. Below: 3×2 realm cards (138×132, icon/name/city/epithet)
-left, detail pane (210×272: name, demonym·city, rule, wrapped lens,
-fealty line) right. Claim button (280×36) centered beneath, footnote muted
-at the bottom. Default selection: Asgarnia, so the lens pane is never empty.
+Resolution-aware: full-bleed transparent ROOT (765×503) + centered PANEL
+(540×420). Title (`q8_full`, gold) + subtitle (muted) + gold hairline rule.
+Below: single-column list of 6 realm rows (480×36: icon, name, city —
+epithet). Compact lens strip (selected origin's description + fealty line).
+Claim button (240×30) centered beneath. Default selection: Asgarnia, so the
+lens is never empty.
 
 ## Player state
 
