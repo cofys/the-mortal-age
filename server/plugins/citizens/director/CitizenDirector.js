@@ -309,6 +309,76 @@ class CitizenDirector {
     return record;
   }
 
+  /**
+   * A bespoke citizen: fixed name, fixed personality, fixed schedule. The
+   * record has exactly the shape addCitizen builds, so the tick (spawn,
+   * logout, activity switching, goals) treats them like anyone else. The
+   * personality may carry an optional `secret` — folded into the
+   * personality card so the LLM mouth knows what they hide and that they
+   * deflect questions about it. Name collisions fall back to addCitizen's
+   * generated pool.
+   */
+  addNamedCitizen({
+    name,
+    kingdomId,
+    role,
+    traits,
+    quirk,
+    secret,
+    homeTile,
+    sleepStart = 23,
+    sleepHours = 7,
+  }) {
+    if (!name || !kingdomId || !role) {
+      this.log("named citizen rejected (missing name/kingdom/role)", { name });
+      return null;
+    }
+    let username = String(name);
+    if (this.roster.has(username) || this.usedNames.has(username)) {
+      this.log("named citizen rejected (name taken)", { name });
+      return null;
+    }
+    this.usedNames.add(username);
+    const rng = agentRng(`director:named:${username}`);
+    const market = siteTileByKingdom(kingdomId, "market") ?? { x: 3200, y: 3200, z: 0 };
+    const home = homeTile
+      ? { x: homeTile.x, y: homeTile.y, z: homeTile.z ?? 0 }
+      : noisyTile(market.x, market.y, 12, rng);
+    const personality = {
+      name: username,
+      role,
+      kingdomId,
+      traits: Array.isArray(traits) && traits.length > 0 ? traits.slice(0, 3) : ["dutiful", "suspicious"],
+      quirk: quirk ?? "keeps their own counsel",
+      seed: Math.floor(rng() * 1_000_000_000),
+    };
+    if (secret) {
+      personality.secret = String(secret);
+    }
+    const record = {
+      username,
+      personality,
+      kingdomId,
+      role,
+      merchantKind: null,
+      home,
+      seed: personality.seed,
+      sleepStart,
+      sleepHours,
+      watch: 0,
+      goal: nextGoalForRole(role, 0),
+      goalTier: 0,
+      online: false,
+      currentActivityId: null,
+      lastTickAt: Date.now(),
+      named: true,
+    };
+    this.roster.set(username, record);
+    ensureNeeds(username);
+    this.log("named citizen added", { citizen: username, role, kingdom: kingdomId });
+    return record;
+  }
+
   startTask() {
     if (this.taskStarted) {
       return;
