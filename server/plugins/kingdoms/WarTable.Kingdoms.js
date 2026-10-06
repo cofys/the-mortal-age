@@ -235,6 +235,16 @@ function studyTable({ player }) {
 
 module.exports = function attachWarTable(api) {
   api.registerCustomInterface(buildTableInterface());
-  api.onObjectInteraction("War table", { "Study": studyTable });
+  // Diegetic: the table is a spawned Table (DiegeticObjects).
+  // Global handler + location gate; the "War table" name doesn't exist
+  // in the cache.
+  const { matchDiegetic } = require("../world/DiegeticObjects");
+  api.onObjectInteraction((event) => {
+    const { player, objectId, location } = event ?? {};
+    if (!player || player.isPlayerBot?.() === true) return false;
+    if (!matchDiegetic(objectId, location, "table")) return false;
+    studyTable({ player });
+    return true;
+  });
   console.info("[war-table] diegetic ::kingdom/::war/::alliances replacement ready (group 30015)");
 };

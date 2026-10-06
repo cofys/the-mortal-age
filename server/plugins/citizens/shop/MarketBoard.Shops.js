@@ -27,6 +27,7 @@ const {
   TYPE_TEXT,
   createWidgetGroup,
 } = require("../../interface/widgetGroup");
+const { matchDiegetic, OBJECT_IDS } = require("../../../world/DiegeticObjects");
 const PlayerShops = require("./PlayerShops");
 const KingdomStore = require("../../kingdoms/KingdomStore");
 
@@ -224,11 +225,24 @@ function readBoard({ player }) {
   openBoard(player);
 }
 
+/** Global handler: any click on our spawned market boards opens the board. */
+function onBoardObject(event) {
+  const { player, objectId, location } = event ?? {};
+  if (!player || player.isPlayerBot?.() === true) return false;
+  const match = matchDiegetic(objectId, location, "board");
+  if (!match) return false;
+  readBoard({ player });
+  return true;
+}
+
 function initMarketBoard(api) {
   pluginApi = api;
   api.registerCustomInterface(buildBoardInterface());
   api.onInterfaceActionButton(buttonIds(), onBoardButton);
-  api.onObjectInteraction("Market board", { "Read": readBoard });
+  // Diegetic: the board is a spawned Bank notice board (DiegeticObjects).
+  // Global handler + location gate; the "Market board" name doesn't exist
+  // in the cache.
+  api.onObjectInteraction(onBoardObject);
   console.info("[market-board] diegetic ::shop replacement ready (group 30014)");
 }
 

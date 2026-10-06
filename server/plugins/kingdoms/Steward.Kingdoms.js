@@ -206,19 +206,30 @@ function showVacateConfirm(player, kingdomId, officeId) {
   );
 }
 
-function openAudience({ player }) {
+function openAudience({ player, kingdomId }) {
   if (!player || player.isPlayerBot?.() === true) return;
-  const kingdomId = kingdomAt(player);
-  if (!kingdomId) {
+  const kid = kingdomId ?? kingdomAt(player);
+  if (!kid) {
     player.sendMessage("This desk serves no court I know. The steward's audience is held in the capitals.");
     return;
   }
-  showAudience(player, kingdomId);
+  showAudience(player, kid);
 }
 
 function attachSteward(api) {
   pluginApi = api;
-  api.onObjectInteraction(DESK_OBJECT_NAME, { [DESK_ACTION]: openAudience });
+  // Diegetic: the desk is a spawned Desk (DiegeticObjects).
+  // Global handler + location gate; the "Steward's desk" name doesn't
+  // exist in the cache.
+  const { matchDiegetic } = require("../world/DiegeticObjects");
+  api.onObjectInteraction((event) => {
+    const { player, objectId, location } = event ?? {};
+    if (!player || player.isPlayerBot?.() === true) return false;
+    const match = matchDiegetic(objectId, location, "desk");
+    if (!match) return false;
+    openAudience({ player, kingdomId: match.capitalId });
+    return true;
+  });
   console.info("[steward] diegetic ::office replacement ready (phase 2)");
 }
 

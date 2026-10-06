@@ -100,7 +100,17 @@ function openDonationPrompt({ player }) {
 
 function attachDonationChest(api) {
   pluginApi = api;
-  api.onObjectInteraction(CHEST_OBJECT_NAME, { "Donate": openDonationPrompt });
+  // Diegetic: the chest is a spawned Closed chest (DiegeticObjects).
+  // Global handler + location gate; the "Donation chest" name doesn't
+  // exist in the cache.
+  const { matchDiegetic } = require("../world/DiegeticObjects");
+  api.onObjectInteraction((event) => {
+    const { player, objectId, location } = event ?? {};
+    if (!player || player.isPlayerBot?.() === true) return false;
+    if (!matchDiegetic(objectId, location, "chest")) return false;
+    openDonationPrompt({ player });
+    return true;
+  });
   console.info("[donation-chest] diegetic ::donate replacement ready (phase 4)");
 }
 
