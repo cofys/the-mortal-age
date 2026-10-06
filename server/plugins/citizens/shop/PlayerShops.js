@@ -1108,4 +1108,17 @@ module.exports = {
   openStall,
   listStalls,
   requireStall,
+  // Exported for the Market Registrar (diegetic ::shop replacement, phase 2).
+  // The registrar drives these with chatbox prompts instead of command args;
+  // the shop logic itself lives here, not in the registrar.
+  stockStall,
+  unstockStall,
+  priceStall,
+  hireEmployee,
+  fireEmployee,
+  collectTill,
+  claimReturns,
+  showInfo,
+  closeOwnStall,
+  wareName: itemName,
 };
