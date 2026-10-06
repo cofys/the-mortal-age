@@ -10,6 +10,11 @@ const CrystalHarpoon = require("./fishing/CrystalHarpoon.Fishing");
 const Guild = require("./fishing/Guild.Fishing");
 const AnglerOutfit = require("./fishing/AnglerOutfit.Fishing");
 const MinnowPlatform = require("./fishing/MinnowPlatform.Fishing");
+const Conditions = require("./fishing/Conditions.Fishing");
+const ShoalRun = require("./fishing/ShoalRun.Fishing");
+const Wilderness = require("./fishing/Wilderness.Fishing");
+const Mastery = require("./fishing/Mastery.Fishing");
+const Supply = require("./fishing/Supply.Fishing");
 
 const FISHING_ACTION_INTERVAL_TICKS = 5;
 const FISHING_ANIMATION_INTERVAL_TICKS = 5;
@@ -375,8 +380,12 @@ function catchChance(level, fish, bonus = 100, roll = 0) {
   return Math.min(1, (1 + value) / 256);
 }
 
-/** One attempt: what it lands, highest fish first. Empty on a miss. */
-function rollCatch(player, tool, random = Math.random, bonus = 100) {
+/**
+ * One attempt: what it lands, highest fish first. Empty on a miss.
+ * context is an optional { x, y, npcId } for the spot being fished; depth modules
+ * (./fishing/) listen on "fishing:catch-chance" and scale event.multiplier.
+ */
+function rollCatch(player, tool, random = Math.random, bonus = 100, context = null) {
   const level = catchLevel(player);
   const caught = [];
   for (const fish of tool.fish) {
@@ -384,7 +393,12 @@ function rollCatch(player, tool, random = Math.random, bonus = 100) {
       continue;
     }
     for (let roll = 0; roll < fish.rolls.length; roll++) {
-      if (random() < catchChance(level, fish, bonus, roll)) {
+      const event = {
+        player, tool, fish, roll, level, bonus, multiplier: 1,
+        spot: context ? { x: context.x, y: context.y, npcId: context.npcId } : null,
+      };
+      pluginApi.emitCustomEvent("fishing:catch-chance", event);
+      if (random() < catchChance(level, fish, bonus, roll) * event.multiplier) {
         caught.push(fish);
         if (!tool.multi) {
           return caught;
@@ -420,15 +434,21 @@ function landCatch(player, tool, variant, caught) {
   }
   // Wiki (Heron): a big net catch rolls the pet once per kind of fish in it.
   // A listener may take over the session (the tutorial stops after one catch).
+  // Depth modules (./fishing/) read the extra fields; emitters that omit them
+  // (e.g. aerial fishing) are skipped gracefully by those modules.
+  const bait = findBait(player, tool);
   let stop = false;
   for (const fish of new Set(landed)) {
-    const event = { player, skill: Skill.FISHING, petBase: fish.petBase, stop: false };
+    const event = {
+      player, skill: Skill.FISHING, petBase: fish.petBase, stop: false,
+      fishId: fish.id, toolId: tool.id, variantBonus: variant.bonus, baitId: bait ?? null,
+      fish: { id: fish.id, experience: fish.experience, name: fish.caught },
+    };
     pluginApi.emitCustomEvent("fishing:success", event);
     if (event.stop) stop = true;
   }
 
   // Bait and feathers are only used up by a catch, one per cast.
-  const bait = findBait(player, tool);
   if (bait !== undefined) {
     player.getInventory().deleteNumber(bait, 1);
   }
@@ -521,7 +541,9 @@ class FishingTask extends Task {
       }
       session.nextCatchTick = this.cycle + session.tool.interval;
 
-      const caught = rollCatch(player, session.tool, Math.random, variant.bonus);
+      const caught = rollCatch(player, session.tool, Math.random, variant.bonus, {
+        x: npc.getLocation().getX(), y: npc.getLocation().getY(), npcId: npc.getId(),
+      });
       if (caught.length === 0) {
         continue;
       }
@@ -556,6 +578,13 @@ module.exports = {
     Guild.attach(api);
     AnglerOutfit.attach(api);
     MinnowPlatform.attach(api);
+    // Fishing depth (./fishing/FISHING-DEPTH.md): attach order is listener order -
+    // Conditions enriches the shared events first, Mastery reads the flags last.
+    Conditions.attach(api);
+    ShoalRun.attach(api);
+    Wilderness.attach(api);
+    Mastery.attach(api);
+    Supply.attach(api);
 
     api.onPlayerDisconnect(({ player }) => {
       stopFishing(activeSessions, player, false);
