@@ -94,6 +94,18 @@ const RUMOR_POOLS = {
     },
     { text: "The Myreque are recruiting. Desperate folk, brave folk. Talk to them if you've a conscience and a death wish." },
     { text: "Don't bleed where the vyres can smell it. And don't go out after dark. Ever." },
+    {
+      text: "Word in the swamp: the Hollow's caches hunger — bread, swamp paste, planks. Leave them by the old tunnel and the Myreque remembers.",
+      when: { flag: "morytania:myreque-resurgent", equals: true },
+    },
+    {
+      text: "They say one of our own walks with the Myreque now — Sworn of the Hollow. Lowerniel will have their head for it.",
+      when: { flag: "morytania:myreque-sworn-walks", equals: true },
+    },
+    {
+      text: "The tithe-officer's got a new hound — one of ours, selling Myreque names for coin. Watch your tongue in Canifis.",
+      when: { flag: "morytania:drakan-oathbound-walks", equals: true },
+    },
   ],
   keldagrim: [
     {
