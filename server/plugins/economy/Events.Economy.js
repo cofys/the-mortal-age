@@ -18,6 +18,10 @@
  *   economy:price     { itemId, price, previous, reason? }
  *     — emitted BY this plugin when a reference price moves; consumed by
  *       citizen merchants (stall repricing), war boards, and players.
+ *   economy:price-query { itemId, respond(price|null) }
+ *     — synchronous lookup: the handler calls respond() with the current
+ *       reference price (or null when unanswerable) before returning.
+ *       Used by citizen merchant stalls to price wares.
  */
 
 const { EVENTS } = require("./constants");
@@ -46,10 +50,23 @@ function onDemand(event) {
   }
 }
 
+/** A price query arrived: answer synchronously through the reply callback. */
+function onPriceQuery(event) {
+  const respond = event?.respond;
+  if (typeof respond !== "function") return;
+  const itemId = Math.floor(Number(event?.itemId));
+  if (!Number.isFinite(itemId) || itemId <= 0) {
+    respond(null);
+    return;
+  }
+  respond(Prices.getReferencePrice(itemId));
+}
+
 module.exports = function attachEvents(api) {
   pluginApi = api;
   api.onCustomEvent(EVENTS.ITEM_SINK, onItemSink);
   api.onCustomEvent(EVENTS.DEMAND, onDemand);
+  api.onCustomEvent(EVENTS.PRICE_QUERY, onPriceQuery);
 };
 
 module.exports.onItemSink = onItemSink;

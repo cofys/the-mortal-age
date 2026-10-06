@@ -15,6 +15,8 @@ const EVENTS = {
   DEMAND: "economy:demand",
   /** { itemId, price, previous, reason? } — reference price moved; merchants reprice. */
   PRICE: "economy:price",
+  /** { itemId, respond(price|null) } — synchronous reference-price lookup (e.g. citizen merchant stalls). */
+  PRICE_QUERY: "economy:price-query",
 };
 
 const SINKS = {

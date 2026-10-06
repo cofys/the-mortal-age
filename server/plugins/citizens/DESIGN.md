@@ -158,7 +158,10 @@ scripted speech (guard challenges, merchant ads, tavern lines) uses
 - Citizen death respawn (no persistent respawn resolver; cities are safe, but
   a killed citizen currently stays dead until its next scheduled wake).
 - Merchant customer side is abstract (sales tick, no real trade windows);
-  a shop-front interface can replace `sellTick` later.
+  a shop-front interface can replace `sellTick` later. (Done 2026-10-06:
+  `shop/MerchantShops.js` — Trade player-option opens a stall backed by the
+  merchant's live inventory; the abstract `sellTick` still runs for
+  passers-by alongside real player trades.)
 - `KingdomStore.getKingdom` is required directly (read-only) for personality
   cards — a `kingdom:describe` query event would remove the last cross-plugin
   reach-in; proposed, not blocking.
@@ -192,6 +195,7 @@ server/plugins/citizens/
   brain/CitizenActivityRegistry.js  compiles citizen activities into the registry
   brain/actions/GuardPatrol.js
   brain/actions/Merchant.js
+  shop/MerchantShops.js         Trade option + stall UI on the merchant's live inventory
   brain/actions/CitizenRoutine.js
   brain/actions/IdleSocial.js
   chat/CitizenChat.js           llm:citizen-register + chat-heard stub
