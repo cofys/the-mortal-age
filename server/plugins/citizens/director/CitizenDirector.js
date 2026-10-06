@@ -454,8 +454,6 @@ class CitizenDirector {
   }
 
   tick() {
-    this._tickCount = (this._tickCount || 0) + 1;
-    if (this._tickCount === 1 || this._tickCount % 100 === 0) console.log("[DIAG] Citizen tick #" + this._tickCount + ", runtime=" + (this.runtime() ? "yes" : "NO"));
     const hour = hourNow();
     for (const record of this.roster.values()) {
       const phase = desiredPhase(record, hour);
@@ -467,6 +465,8 @@ class CitizenDirector {
         continue;
       }
       if (!online) {
+        if (this._spawnDiagCount === undefined) this._spawnDiagCount = 0;
+        if (this._spawnDiagCount < 5) { this._spawnDiagCount++; console.log("[DIAG] Spawning " + record.username + " role=" + record.role + " hour=" + hour); }
         this.spawnCitizen(record);
         continue;
       }
