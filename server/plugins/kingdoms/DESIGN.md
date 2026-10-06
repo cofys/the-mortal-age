@@ -20,6 +20,7 @@ the data model, the event catalog, and the honest list of what's stubbed.
 | `Diplomacy.Kingdoms.js` | The political layer: steward negotiations, spymaster schemes, betrayals, mutual defense |
 | `Royals.Kingdoms.js` | The royal calendar: marriages, births, deaths, coronations |
 | `Succession.Kingdoms.js` | ARC-SEEDING: the heirless crown's whispers (planted only, never resolved) |
+| `SuccessionHunt.Kingdoms.js` | Stages 13-17 interactive layer: the surfacing, the trace, the disappearance, the second player |
 
 ## The political layer (alliances, betrayals, the royal calendar)
 
@@ -51,7 +52,7 @@ world bible locks their fates. Misthalin births are kin of the court, never
 "a son for Roald."
 
 **Succession whispers are ARC-SEEDING for the phase 10 questline** (Roald's
-hidden bastard son). A whisper stage (0-12) on Misthalin advances roughly daily:
+hidden bastard son). A whisper stage (0-17) on Misthalin advances roughly daily:
 tavern slip → redacted report → the sermon that stopped → the Riverlands
 merchant → the midwife's daughter takes a market stall (stage 5, who knows) →
 the Merciful Hand charity buys birth records (stage 6, who's hunting) →
@@ -60,7 +61,13 @@ the midwife's daughter goes quiet (stage 8, the squeeze) →
 the Riverlands farm stands empty (stage 9, the hunted young man) →
 the Hand's charity auction, the palace bidding (stage 10, the backers) →
 a reward poster for the cut ledger page (stage 11, the page) →
-the grey men stop asking, start watching (stage 12, the warning). Rare, deniable,
+the grey men stop asking, start watching (stage 12, the warning) →
+a lad with a farm accent on the Port Sarim docks (stage 13, the young man surfaces) →
+the Hand's auction donors, one name struck through in palace-green ink (stage 14, the backers' trace) →
+the reward poster claimed by a grey cloak (stage 15, the page moves) →
+the drunk courtier disappears (stage 16, someone knew too much) →
+a second buyer for old paper, gold not silver (stage 17, the second player).
+Rare, deniable,
 never naming the son, never touching the
 `misthalin:bastard-son-hidden` story flag. A royal death anywhere can stir a
 surge whisper. This content is planted only — it resolves in custom quests,
@@ -101,7 +108,24 @@ the palace man nobody bid against. From stage 11, the papers can hold a reward
 poster offering a fortune for "a single leaf of vellum, a birth record, corner
 torn" — `fence-posting` fragment once, +6 heat. At stage 12, players who dug
 deep (2+ fragments, heat 50+) get one grey-man visit: "Some stones are better
-left unturned." Dread, never damage. The arc coils for phase 10.
+left unturned." Dread, never damage. At stage 15 the poster is claimed — "PAID
+AND COLLECTED," a grey cloak walking toward the palace quarter — `page-claimed`
+fragment once, +6 heat. The arc coils for phase 10.
+
+**Succession hunt (`SuccessionHunt.Kingdoms.js`)** — the stages 13-17
+interactive layer, the world keeps moving after the coil. Stage 13: rare
+tavern overheards of a lad with a farm accent working the Port Sarim docks,
+looking over his shoulder. Stage 14: Varrock's market board (Bank notice
+board 961, matched by location) holds the Merciful Hand's auction donor list
+— one name struck through in palace-green ink, "the palace thanks its
+friends" — `auction-ledger` fragment once, +6 heat. Stage 16: rare overheards
+that the drunk courtier from stage 1 hasn't been seen in a fortnight, his
+lodgings let to a quiet man in grey. Stage 17: rare overheards of a second
+buyer for old paper — gold, not silver, no charity, no questions — plus an
+unsigned notice on the market board that only players with 2+ fragments
+recognize; `second-buyer` fragment once, +8 heat. Board notices are
+Varrock-only; other capitals' boards are just bills of fare. Nothing names
+the son; the arc stays one inference away.
 
 ## The tension model (live war states)
 
