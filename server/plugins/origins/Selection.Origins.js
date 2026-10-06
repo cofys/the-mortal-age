@@ -122,7 +122,12 @@ function scheduleFallback(player) {
 }
 
 function hasOrigin(player) {
-  return Boolean(player?.getAttribute?.(ORIGIN_ID_ATTRIBUTE));
+  const val = player?.getAttribute?.(ORIGIN_ID_ATTRIBUTE);
+  // TEMP DEBUG - remove after diagnosing relog issue
+  if (player && !player.isPlayerBot?.()) {
+    console.info(`[origins-debug] hasOrigin check for ${player.getUsername?.()}: ${val}`);
+  }
+  return Boolean(val);
 }
 
 function openChoice(player) {

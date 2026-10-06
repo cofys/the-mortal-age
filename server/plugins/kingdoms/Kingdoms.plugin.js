@@ -14,6 +14,21 @@
 module.exports = {
   name: "Kingdoms",
   register(api) {
+    // All player progression must survive logout. Without these, kingdom
+    // membership, rank, influence, and succession state reset on every relog.
+    for (const key of [
+      "kingdom:id",
+      "kingdom:rank",
+      "kingdom:influence",
+      "kingdom:titles",
+      "kingdom:court-role",
+      "kingdom:challenge-cooldown",
+      "kingdom:trial",
+      "succession:fragments",
+      "succession:heat",
+      "succession:heat-at",
+      "succession:grey-met",
+    ]) api.persistAttribute(key);
     require("./Seed.Kingdoms")(api);
     require("./Areas.Kingdoms")(api);
     require("./Events.Kingdoms")(api);
