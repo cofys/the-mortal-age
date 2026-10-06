@@ -15,6 +15,9 @@
  * (api.onInterfaceActionButton), text/highlights are pushed with sendString /
  * sendInterfaceDisplayState. No client change, no new packets, no new hooks.
  *
+ * Sizing: deliberately conservative 540x420 on the 765x503 canvas (~112px
+ * side margins, ~41px top/bottom). Smaller is better than cut off.
+ *
  * Ceremony: the existing appearance customizer (interface 679) still runs
  * first for new accounts; Selection.Origins opens this screen when 679
  * closes, from the welcome-screen Play button for existing players without a
@@ -71,8 +74,7 @@ const FONT_LABEL = 496;
 const FONT_DISPLAY = 497;
 
 // --- layout ----------------------------------------------------------------
-const MODAL_W = 700;
-const MODAL_H = 460;
+// (MODAL_W/MODAL_H defined with the layout constants below.)
 
 const C = {
   ROOT: 0,
@@ -81,40 +83,41 @@ const C = {
   TITLE: 3,
   SUBTITLE: 4,
   TITLE_RULE: 5,
-  // Realm cards: CARD_BASE + i * CARD_STRIDE + offset, i = 0..5.
-  // Offsets: 0 highlight, 1 border, 2 face (clickable), 3 icon, 4 name, 5 city, 6 epithet.
+  // Realm rows: CARD_BASE + i * CARD_STRIDE + offset, i = 0..5.
+  // Offsets: 0 highlight, 1 border, 2 face (clickable), 3 icon, 4 name, 5 epithet.
   CARD_BASE: 10,
   CARD_STRIDE: 10,
-  DETAIL_BORDER: 70,
-  DETAIL_BG: 71,
-  DETAIL_NAME: 72,
-  DETAIL_SUB: 73,
-  DETAIL_RULE: 74,
-  DETAIL_LENS: 75,
-  DETAIL_KINGDOM: 76,
+  LENS_TEXT: 70,
+  LENS_KINGDOM: 71,
   BTN_BORDER: 80,
   BTN_BG: 81,
   BTN_TEXT: 82,
   FOOTNOTE: 83,
 };
-const CARD_FACE_OFFSETS = [0, 1, 2, 3, 4, 5, 6]; // every visible card part is clickable
+const CARD_FACE_OFFSETS = [0, 1, 2, 3, 4, 5]; // every visible row part is clickable
 
-const CARD_W = 138;
-const CARD_H = 132;
-const GRID_X = 24;
-const GRID_Y = 84;
-const COL_GAP = 8;
-const ROW_GAP = 8;
+// Conservative 540x420: fits the 765x503 canvas with ~112px side margins
+// and ~41px top/bottom. Smaller is better than cut off.
+const MODAL_W = 540;
+const MODAL_H = 420;
 
-const DETAIL_X = 466;
-const DETAIL_Y = 84;
-const DETAIL_W = 210;
-const DETAIL_H = 272;
+// Realm rows: single-column list, 6 rows.
+const ROW_W = 480;
+const ROW_H = 36;
+const ROW_X = 30;
+const ROW_Y = 70;
+const ROW_GAP = 4;
 
-const BTN_X = 210;
-const BTN_Y = 376;
-const BTN_W = 280;
-const BTN_H = 36;
+// Lens: the selected origin's description, compact.
+const LENS_X = 30;
+const LENS_Y = 316;
+const LENS_W = 480;
+const LENS_H = 48;
+
+const BTN_X = 150;
+const BTN_Y = 370;
+const BTN_W = 240;
+const BTN_H = 30;
 
 const uid = (component) => (GROUP_ID << 16) | component;
 const CARD_CLICK_UIDS = Data.ORIGINS.flatMap((_, i) =>
@@ -220,50 +223,42 @@ function buildInterface(Items) {
   );
   rect(C.TITLE_RULE, root, 60, 64, MODAL_W - 120, 1, TMA.GOLD_DIM);
 
-  // Realm cards, 3 x 2. Every visible part of a card is clickable so the
-  // whole card feels like one button whichever widget the client hit-tests.
+  // Realm rows: single-column list. Every visible part of a row is clickable
+  // so the whole row feels like one button whichever widget the client hit-tests.
   Data.ORIGINS.forEach((origin, i) => {
-    const col = i % 3;
-    const row = (i / 3) | 0;
-    const cx = GRID_X + col * (CARD_W + COL_GAP);
-    const cy = GRID_Y + row * (CARD_H + ROW_GAP);
+    const rx = ROW_X;
+    const ry = ROW_Y + i * (ROW_H + ROW_GAP);
     const base = C.CARD_BASE + i * C.CARD_STRIDE;
     const iconId = Items[origin.icon];
     const click = { actions: ["Choose"], flags: FLAG_OP1 };
 
-    // Selection glow (hidden until selected) sits behind the card.
-    // Asgarnia (i === 0) starts selected so the detail pane is populated on open.
+    // Selection glow (hidden until selected) sits behind the row.
+    // Asgarnia (i === 0) starts selected so the lens is populated on open.
     const glowHidden = i !== 0;
-    rect(base, root, cx - 2, cy - 2, CARD_W + 4, CARD_H + 4, TMA.GOLD,
+    rect(base, root, rx - 2, ry - 2, ROW_W + 4, ROW_H + 4, TMA.GOLD,
       { hidden: glowHidden, isHidden: glowHidden, actions: ["Choose"], flags: FLAG_OP1 });
-    rect(base + 1, root, cx, cy, CARD_W, CARD_H, TMA.GOLD_DIM, { actions: ["Choose"], flags: FLAG_OP1 });
+    rect(base + 1, root, rx, ry, ROW_W, ROW_H, TMA.GOLD_DIM, { actions: ["Choose"], flags: FLAG_OP1 });
     add(base + 2, root, {
-      rawX: cx + 2, rawY: cy + 2, rawWidth: CARD_W - 4, rawHeight: CARD_H - 4,
-      width: CARD_W - 4, height: CARD_H - 4,
+      rawX: rx + 2, rawY: ry + 2, rawWidth: ROW_W - 4, rawHeight: ROW_H - 4,
+      width: ROW_W - 4, height: ROW_H - 4,
       filled: true, color: TMA.CARD, mouseOverColor: TMA.CARD_HOVER,
       ...click,
     });
+    // Icon, name, epithet in a horizontal row.
     add(base + 3, root, {
       type: TYPE_GRAPHIC,
-      rawX: cx + 2 + (CARD_W - 4 - 32) / 2, rawY: cy + 10, rawWidth: 32, rawHeight: 32,
-      width: 32, height: 32,
+      rawX: rx + 8, rawY: ry + 6, rawWidth: 24, rawHeight: 24,
+      width: 24, height: 24,
       itemId: iconId, itemQuantity: 1,
       ...click,
     });
-    label(base + 4, root, cx + 2, cy + 48, CARD_W - 4, 16, origin.name.toUpperCase(), FONT_LABEL, TMA.GOLD_TEXT, { center: true, ...click });
-    label(base + 5, root, cx + 2, cy + 66, CARD_W - 4, 14, origin.city, FONT_BODY, TMA.PARCHMENT, { center: true, ...click });
-    label(base + 6, root, cx + 2, cy + 82, CARD_W - 4, 14, origin.epithet, FONT_BODY, TMA.MUTED, { center: true, ...click });
+    label(base + 4, root, rx + 40, ry + 3, 200, 16, origin.name.toUpperCase(), FONT_LABEL, TMA.GOLD_TEXT, { ...click });
+    label(base + 5, root, rx + 40, ry + 19, ROW_W - 48, 14, `${origin.city} — ${origin.epithet}`, FONT_BODY, TMA.MUTED, { ...click });
   });
 
-  // Detail pane: the selected origin's lens.
-  rect(C.DETAIL_BORDER, root, DETAIL_X, DETAIL_Y, DETAIL_W, DETAIL_H, TMA.GOLD_DIM);
-  rect(C.DETAIL_BG, root, DETAIL_X + 2, DETAIL_Y + 2, DETAIL_W - 4, DETAIL_H - 4, TMA.PANEL_INNER);
-  label(C.DETAIL_NAME, root, DETAIL_X + 10, DETAIL_Y + 12, DETAIL_W - 20, 18, "", FONT_LABEL, TMA.GOLD_TEXT, { center: true });
-  label(C.DETAIL_SUB, root, DETAIL_X + 10, DETAIL_Y + 32, DETAIL_W - 20, 14, "", FONT_BODY, TMA.MUTED, { center: true });
-  rect(C.DETAIL_RULE, root, DETAIL_X + 20, DETAIL_Y + 50, DETAIL_W - 40, 1, TMA.GOLD_DIM);
-  label(C.DETAIL_LENS, root, DETAIL_X + 12, DETAIL_Y + 58, DETAIL_W - 24, 190, "", FONT_BODY, TMA.PARCHMENT);
-  label(C.DETAIL_KINGDOM, root, DETAIL_X + 10, DETAIL_Y + 252, DETAIL_W - 20, 16, "", FONT_BODY, TMA.BUTTON_TEXT, { center: true });
-
+  // Lens: the selected origin's description, compact.
+  label(C.LENS_TEXT, root, LENS_X, LENS_Y, LENS_W, LENS_H, "", FONT_BODY, TMA.PARCHMENT);
+  label(C.LENS_KINGDOM, root, LENS_X, LENS_Y + 34, LENS_W, 14, "", FONT_BODY, TMA.BUTTON_TEXT, { center: true });
   // Claim button.
   rect(C.BTN_BORDER, root, BTN_X, BTN_Y, BTN_W, BTN_H, TMA.GOLD);
   add(C.BTN_BG, root, {
@@ -274,12 +269,6 @@ function buildInterface(Items) {
   });
   label(C.BTN_TEXT, root, BTN_X + 2, BTN_Y + 2, BTN_W - 4, BTN_H - 4, "", FONT_LABEL, TMA.BUTTON_TEXT,
     { center: true, vcenter: true, actions: ["Claim"], flags: FLAG_OP1 });
-
-  label(
-    C.FOOTNOTE, root, 0, 420, MODAL_W, 14,
-    "Your home sets your starting city, your kit, and the crown you answer to.",
-    FONT_BODY, TMA.MUTED, { center: true }
-  );
 
   return { groupId: GROUP_ID, widgets };
 }
@@ -294,10 +283,8 @@ function renderSelection(player, originId) {
   });
   const origin = Data.BY_ID.get(originId);
   if (!origin) return;
-  sender.sendString(latin1Safe(origin.name.toUpperCase()), uid(C.DETAIL_NAME));
-  sender.sendString(latin1Safe(`${origin.demonym} · ${origin.city}`), uid(C.DETAIL_SUB));
-  sender.sendString(wrap(origin.lens, 33), uid(C.DETAIL_LENS));
-  sender.sendString(latin1Safe(fealtyLine(origin)), uid(C.DETAIL_KINGDOM));
+  sender.sendString(wrap(origin.lens, 72), uid(C.LENS_TEXT));
+  sender.sendString(latin1Safe(fealtyLine(origin)), uid(C.LENS_KINGDOM));
   sender.sendString(latin1Safe(claimLabel(origin)), uid(C.BTN_TEXT));
 }
 
@@ -344,7 +331,7 @@ function onCardClick({ player, buttonId }) {
   const rel = ((buttonId | 0) & 0xffff) - C.CARD_BASE;
   const index = Math.floor(rel / C.CARD_STRIDE);
   const offset = rel % C.CARD_STRIDE;
-  if (index < 0 || index >= Data.ORIGINS.length || offset < 0 || offset > 6) return;
+  if (index < 0 || index >= Data.ORIGINS.length || offset < 0 || offset > 5) return;
   selectOrigin(player, Data.ORIGINS[index].id);
 }
 
