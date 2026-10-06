@@ -306,3 +306,7 @@ function attachSelection(api) {
 
 module.exports = attachSelection;
 module.exports.ORIGIN_ID_ATTRIBUTE = ORIGIN_ID_ATTRIBUTE;
+module.exports.hasOrigin = hasOrigin;
+module.exports.claimOrigin = claimOrigin;
+module.exports.openChatboxChoice = openChoice;
+module.exports.setGuiHooks = setGuiHooks;
