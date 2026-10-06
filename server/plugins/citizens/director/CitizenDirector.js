@@ -41,6 +41,7 @@ const {
   GOAL_RANK_UP,
 } = require("../lib/goals");
 const { registerCitizenForChat } = require("../chat/CitizenChat");
+const { getMemory } = require("../lib/CitizenMemory");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
   ensureNeeds,
@@ -591,8 +592,7 @@ class CitizenDirector {
   tick() {
     const hour = hourNow();
     const nowMs = Date.now();
-    for (const record of this.roster.values()) {
-      const online = this.isOnline(record);
+    for (const record of this.roster.values()) {      const online = this.isOnline(record);
       const bot = online ? this.getBot(record) : null;
       // Needs decay for everyone (the logged-out are asleep and recover);
       // the visible threshold lines only fire for online citizens.
@@ -624,6 +624,55 @@ class CitizenDirector {
       if (needs && needs.hunger < HUNGRY_AT) {
         attemptFeed(bot, this.foodSellersNear(record, bot));
       }
+    }
+    this.tickMemory(nowMs);
+  }
+
+  /**
+   * Citizen memory housekeeping on the slow tick: gossip walks the social
+   * links (one hop per rumor per while), and the store autosaves when dirty.
+   */
+  tickMemory(nowMs) {
+    let memory;
+    try {
+      memory = getMemory();
+    } catch (error) {
+      return;
+    }
+    const director = this;
+    const kingdomMembers = new Map();
+    for (const record of this.roster.values()) {
+      if (!kingdomMembers.has(record.kingdomId)) {
+        kingdomMembers.set(record.kingdomId, []);
+      }
+      kingdomMembers.get(record.kingdomId).push(record.username);
+    }
+    try {
+      memory.spreadGossipTick(
+        {
+          kingdomMembers,
+          isOnline: (username) => {
+            const record = director.roster.get(username);
+            return record ? director.isOnline(record) : false;
+          },
+          botFor: (username) => {
+            const record = director.roster.get(username);
+            return record ? director.getBot(record) : null;
+          },
+        },
+        nowMs
+      );
+    } catch (error) {
+      this.log("gossip tick failed", { error: String(error?.message ?? error) });
+    }
+    try {
+      if (memory.saveIfDirty()) {
+        this.log("citizen memory saved");
+      }
+    } catch (error) {
+      this.log("citizen memory save failed", {
+        error: String(error?.message ?? error),
+      });
     }
   }
 

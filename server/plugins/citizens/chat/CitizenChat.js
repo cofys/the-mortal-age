@@ -28,6 +28,12 @@ const {
   EVENT_CITIZEN_CHAT_HEARD,
 } = require("../constants");
 const { personalityCard } = require("../lib/personalities");
+const {
+  getMemory,
+  scoreTone,
+  GRUDGE_INSULT,
+  GOSSIP_INSULT,
+} = require("../lib/CitizenMemory");
 
 const BOT_HOST_ADDRESS = "bot"; // set by bots/behaviours/spawn/BotPlayerFactory.js
 
@@ -55,7 +61,9 @@ function registerCitizenForChat(username, personality, kingdomName, kingdomSitua
 }
 
 /**
- * Forwards heard public chat to the gateway.
+ * Forwards heard public chat to the gateway — and remembers it. Every heard
+ * line counts as a meeting; the heuristic tone feeds the citizen's lasting
+ * impression (friendly chatter warms, outright insults make a grudge).
  */
 function onCitizenChatHeard(event) {
   if (!pluginApi) {
@@ -65,12 +73,49 @@ function onCitizenChatHeard(event) {
   if (!citizenUsername || !speakerUsername || !text) {
     return;
   }
+  try {
+    const memory = getMemory();
+    const said = String(text).slice(0, 320);
+    memory.recordMeeting(citizenUsername, speakerUsername);
+    const tone = scoreTone(said);
+    if (tone !== 0) {
+      memory.recordTone(citizenUsername, speakerUsername, tone);
+    }
+    if (tone <= -2) {
+      // Insulted to their face: remembered, and the street hears about it.
+      memory.addGrudge(citizenUsername, speakerUsername, GRUDGE_INSULT, "insult");
+      const kingdomId = getDirectorKingdom(citizenUsername);
+      memory.seedGossip({
+        kingdomId,
+        kind: GOSSIP_INSULT,
+        subject: speakerUsername,
+        text: `insulted ${citizenUsername} to their face.`,
+        holder: citizenUsername,
+      });
+      pluginApi.log?.("[citizens] citizen insulted", {
+        citizen: citizenUsername,
+        speaker: speakerUsername,
+      });
+    }
+  } catch (error) {
+    // Memory must never break the chat path.
+  }
   pluginApi.emitCustomEvent(EVENT_LLM_CHAT_REQUEST, {
     citizenUsername,
     requesterUsername: speakerUsername,
     text: String(text).slice(0, 320),
     channel: "public",
   });
+}
+
+/** Lazy require — the director requires this module at boot. */
+function getDirectorKingdom(citizenUsername) {
+  try {
+    const { getDirector } = require("../director/CitizenDirector");
+    return getDirector()?.roster.get(citizenUsername)?.kingdomId ?? null;
+  } catch (error) {
+    return null;
+  }
 }
 
 /**

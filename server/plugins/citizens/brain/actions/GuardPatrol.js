@@ -25,6 +25,7 @@ const {
   chance,
   humanizerProfile,
 } = require("../../lib/humanizer");
+const { getMemory } = require("../../lib/CitizenMemory");
 
 const ARRIVE_RADIUS = 2;
 const SCAN_RADIUS_TILES = 12;
@@ -51,6 +52,19 @@ const GREETING_LINES = Object.freeze([
   "All quiet on the walls.",
   "Mind the pickpockets near the market.",
 ]);
+
+const WARNED_LINES = Object.freeze([
+  "You again, {name}. The watch has been warned about you — move along, carefully.",
+  "Hold it, {name}. We remember what you did here. One wrong move.",
+  "I've heard your name, {name}, and not in a good way. Keep walking.",
+]);
+
+function pickWarnedLine(state, username) {
+  return WARNED_LINES[Math.floor(state.rng() * WARNED_LINES.length)].replaceAll(
+    "{name}",
+    username
+  );
+}
 
 function distanceTo(player, tile) {
   const loc = player.getLocation();
@@ -137,13 +151,24 @@ function createGuardPatrolAction(spec, world) {
       if (nowMs - (state.challengedAt.get(username) ?? 0) < challengeCooldownMs) {
         continue;
       }
-      if (!chance(state.rng, atWar ? 1 : state.human.challengeRate * 0.6)) {
+      // Grudges travel: if any citizen holds a grudge against this stranger
+      // (or the street has been warned about them), the guard always
+      // challenges and says so — no friendly pass.
+      let warned = false;
+      try {
+        warned = getMemory().notoriety(username, nowMs) >= 0.5;
+      } catch (error) {
+        // Memory must never break the patrol.
+      }
+      if (!warned && !chance(state.rng, atWar ? 1 : state.human.challengeRate * 0.6)) {
         continue;
       }
       state.challengedAt.set(username, nowMs);
       state.nextChallengeAt = nowMs + GLOBAL_CHALLENGE_COOLDOWN_MS;
       try {
-        player.forceChat?.(pickChallengeLine(state, atWar));
+        player.forceChat?.(
+          warned ? pickWarnedLine(state, username) : pickChallengeLine(state, atWar)
+        );
       } catch (error) {
         // Cosmetic; never break the patrol.
       }
@@ -152,6 +177,7 @@ function createGuardPatrolAction(spec, world) {
         stranger: username,
         kingdom: kingdomId,
         atWar,
+        warned,
       });
       return;
     }

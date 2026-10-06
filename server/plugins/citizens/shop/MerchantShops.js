@@ -43,6 +43,10 @@ const {
   TYPE_TEXT,
   createWidgetGroup,
 } = require("../../interface/widgetGroup");
+const {
+  getMemory,
+  GOSSIP_GENEROSITY,
+} = require("../lib/CitizenMemory");
 
 const GROUP_ID = 30010;
 const OVERLAY_HOST_UID = (161 << 16) | 34;
@@ -210,9 +214,55 @@ const WAR_GOOD_KEYWORDS = [
   "POTATO",
   "STEW",
 ];
-const WAR_PRICE_MULTIPLIER = 1.5;
 // Borders this hot smell of war; merchants price it in.
 const WAR_PRICE_TENSION = 60;
+
+/** Ms until the kingdom's latest post-war armistice expires (0 when none). */
+function armisticeRemainingMs(kingdomId) {
+  try {
+    const Store = require("../../kingdoms/KingdomStore");
+    const Tension = require("../../kingdoms/Tension.Kingdoms");
+    const armisticeMs = Tension.ARMISTICE_MS ?? 0;
+    if (!armisticeMs) return 0;
+    const now = Date.now();
+    let best = 0;
+    for (const war of Store.getEndedWars()) {
+      if (war?.attackerId !== kingdomId && war?.defenderId !== kingdomId) continue;
+      if (!Number.isFinite(war?.endedAt)) continue;
+      const remaining = armisticeMs - (now - war.endedAt);
+      if (remaining > best) best = remaining;
+    }
+    return best;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * War-economy markup on war goods (steel, bows, shields, food).
+ * 25% when the border first smells of war (tension 60), scaling to 50% on
+ * the brink — and after peace the spike decays across the 72h armistice
+ * instead of snapping off. 1 in peacetime; the market closes outright once
+ * the war itself starts (see openStall), so wartime returns 1.
+ */
+function warPriceMultiplier(merchant) {
+  try {
+    const kingdomId = kingdomIdOf(merchant);
+    if (isKingdomAtWar(kingdomId)) return 1; // market closed in wartime anyway
+    const Tension = require("../../kingdoms/Tension.Kingdoms");
+    const heat = Tension.hottestTensionFor(kingdomId) / 100;
+    if (heat * 100 >= WAR_PRICE_TENSION) {
+      return 1.25 + 0.25 * heat;
+    }
+    const remaining = armisticeRemainingMs(kingdomId);
+    if (remaining > 0 && Tension.ARMISTICE_MS > 0) {
+      return 1 + 0.5 * (remaining / Tension.ARMISTICE_MS);
+    }
+    return 1;
+  } catch {
+    return 1;
+  }
+}
 
 function isWarGood(name) {
   const upper = String(name ?? "").toUpperCase();
@@ -236,6 +286,19 @@ function warPriceMultiplier(merchant) {
 /** True when the stall currently charges war prices (for the warning). */
 function warPricesActive(merchant) {
   return warPriceMultiplier(merchant) > 1;
+}
+
+/** Looming war or its aftermath — the warning names the reason. */
+function warPriceWarning(merchant) {
+  try {
+    const Tension = require("../../kingdoms/Tension.Kingdoms");
+    if (Tension.hottestTensionFor(kingdomIdOf(merchant)) >= WAR_PRICE_TENSION) {
+      return "War looms — steel and bread cost war prices at this stall.";
+    }
+    return "The war is over but prices haven't settled — steel and bread still cost war prices.";
+  } catch {
+    return "Steel and bread cost war prices at this stall.";
+  }
 }
 
 function buildStallInterface() {
@@ -379,13 +442,33 @@ function renderStall(api, player, session) {
   const merchant = session.merchant;
   const merchantName = merchant.getUsername?.() ?? "Merchant";
   sender.sendString(`${merchantName}'s Stall`, uid(COMPONENT.TITLE));
+  // Favorites get first pick of the new stock — said on the stall itself.
+  const memory = getMemory();
+  const standing = memory.standing(
+    merchantName,
+    player.getUsername?.() ?? "?"
+  );
+  if (standing === "favorite") {
+    sender.sendString(
+      "First pick of today's new stock, friend.",
+      uid(COMPONENT.SUBTITLE)
+    );
+  } else {
+    sender.sendString(
+      "Citizen merchant — wares for coins",
+      uid(COMPONENT.SUBTITLE)
+    );
+  }
   session.wares.forEach((ware, row) => {
     const stock = merchant.getInventory?.()?.getAmount?.(ware.id) ?? 0;
+    const note = ware.priceNote
+      ? ` · <col=${ware.priceNote === "loyalty discount" ? "7fd27f" : "ff7f7f"}>${ware.priceNote}</col>`
+      : "";
     sender
       .sendItemOnInterface(rowUid(row, 0), ware.id, 0, Math.max(0, stock))
       .sendString(ware.name, rowUid(row, 1))
       .sendString(
-        `${ware.price} coins each · ${stock > 0 ? `${stock} in stock` : "<col=ff0000>SOLD OUT</col>"}`,
+        `${ware.price} coins each${note} · ${stock > 0 ? `${stock} in stock` : "<col=ff0000>SOLD OUT</col>"}`,
         rowUid(row, 2)
       );
     for (let part = 0; part <= 4; part++) {
@@ -413,16 +496,39 @@ function openStall(api, player, merchant) {
     return;
   }
   if (warPricesActive(merchant)) {
-    player.sendMessage("War looms — steel and bread cost war prices at this stall.");
+    player.sendMessage(warPriceWarning(merchant));
   }
-  const session = { merchant, wares };
+  // Citizen memory: regulars are greeted by name and get a loyalty
+  // discount; grudges pay cold prices. Every opening counts as a meeting.
+  const memory = getMemory();
+  const merchantName = merchant.getUsername?.() ?? "?";
+  const playerName = player.getUsername?.() ?? "?";
+  memory.recordMeeting(merchantName, playerName);
+  const multiplier = memory.priceMultiplier(merchantName, playerName);
+  const priceNote =
+    multiplier < 1 ? "loyalty discount" : multiplier > 1 ? "cold prices" : null;
+  const pricedWares = wares.map((ware) => ({
+    ...ware,
+    price: Math.max(1, Math.round(ware.price * multiplier)),
+    priceNote,
+  }));
+  const greeting = memory.greetingFor(merchantName, playerName);
+  if (greeting) {
+    try {
+      merchant.forceChat?.(greeting);
+    } catch (error) {
+      // Cosmetic.
+    }
+  }
+  const session = { merchant, wares: pricedWares };
   sessions.set(player, session);
   player.getPacketSender().sendSubInterface(OVERLAY_HOST_UID, GROUP_ID, 0);
   renderStall(api, player, session);
   api.log?.("[citizens] stall opened", {
-    player: player.getUsername?.(),
-    merchant: merchant.getUsername?.(),
-    wares: wares.map((w) => `${w.name}@${w.price}`),
+    player: playerName,
+    merchant: merchantName,
+    wares: pricedWares.map((w) => `${w.name}@${w.price}`),
+    priceMultiplier: multiplier,
   });
 }
 
@@ -502,6 +608,29 @@ function buyFromMerchant(api, player, ware, amount) {
   playerInv.deleteNumber(COINS, cost);
   merchantInv.adds(COINS, cost);
   playerInv.adds(ware.id, qty);
+  // Big spenders become known: generosity gossip, once per tier.
+  try {
+    const memory = getMemory();
+    const crossed = memory.recordSpend(
+      merchant.getUsername?.() ?? "?",
+      player.getUsername?.() ?? "?",
+      cost
+    );
+    if (crossed.length > 0) {
+      memory.seedGossip({
+        kingdomId: kingdomIdOf(merchant),
+        kind: GOSSIP_GENEROSITY,
+        subject: player.getUsername?.() ?? "?",
+        text: `spends like a lord at ${merchant.getUsername?.() ?? "the"}'s stall — a generous patron!`,
+        holder: merchant.getUsername?.() ?? "",
+      });
+      merchant.forceChat?.(
+        `${player.getUsername?.() ?? "Friend"}! Generous as ever — the street will hear of it!`
+      );
+    }
+  } catch (error) {
+    // Cosmetic.
+  }
   api.log?.("[citizens] stall sale", {
     merchant: merchant.getUsername?.(),
     buyer: player.getUsername?.(),

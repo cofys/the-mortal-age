@@ -143,6 +143,39 @@ channel `public`) are defined and wired; nothing emits it in v1. Ambient
 scripted speech (guard challenges, merchant ads, tavern lines) uses
 `forceChat` directly and needs no LLM.
 
+## Citizen memory (2026-10-06)
+
+Citizens remember the players they've met (`lib/CitizenMemory.js`,
+`data/saves/citizen-memory.json`). Per citizen, per player, a bounded record
+(max 40 players per citizen, LRU eviction with grudges protected):
+
+- **Meetings & tone** — every heard chat line, stall opening, and trade counts
+  as a meeting; chat sentiment comes from a heuristic word list
+  (`scoreTone`: friendly words +1, rude words −2). Private/public chat heard
+  via `citizens:chat-heard` feeds it before the gateway reply goes out.
+- **Repeat customers** — merchants greet regulars (3+ meetings or 500+ coins
+  spent) by name via forceChat, favorites (10+ / 5000+) get 10% off, regulars
+  5% off, and favorites see "first pick of today's new stock" on the stall UI.
+  Big spenders trigger one-per-tier "generous patron" gossip.
+- **Grudges** — insults (rude chat), witnessed theft (`thieving:success` with
+  citizen witnesses), and attacks (`api.onPlayerAttack` on a citizen) add
+  severity 1–3 grudges: cold greetings, 1.25x/1.5x prices, guards warned.
+  Grudges decay linearly to zero over 3 days; re-offending refreshes the clock
+  and can escalate.
+- **Gossip** — notable actions (theft, attack, insult, generosity, player
+  office wins) seed rumors that hop along deterministic per-citizen social
+  links (up to 5 same-kingdom citizens) on the director's ~60s tick — news
+  travels the network, not instantly global. Spreaders with the player nearby
+  say it aloud ("Did you hear what X did? ..."), throttled 10 min per
+  citizen; seeds also emit `kingdom:rumor` for the existing street-talk path.
+- **Guards warned** — `GuardPatrol` checks `notoriety()` (max grudge across
+  citizens, gossip at half weight): warned strangers are always challenged
+  with a "we've been warned about you" line instead of the friendly pass.
+
+`::citizen memory <player>` (ADMINISTRATOR) shows what the population thinks
+of a player. Unit checks: `node lib/CitizenMemory.test.js` from
+`server/plugins/citizens`.
+
 ## What's stubbed / deferred
 
 - **Fishing catches.** Fishers do the full visible behavior (dock shifts, cast

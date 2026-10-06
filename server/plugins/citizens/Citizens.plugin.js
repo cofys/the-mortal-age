@@ -32,11 +32,23 @@ const { initDirector, getDirector } = require("./director/CitizenDirector");
 const { initMerchantShops } = require("./shop/MerchantShops");
 const { initPlayerShops } = require("./shop/PlayerShops");
 const {
+  getMemory,
+  initCitizenMemory,
+  GRUDGE_ATTACK,
+  GRUDGE_THEFT,
+  GOSSIP_ATTACK,
+  GOSSIP_THEFT,
+  GOSSIP_OFFICE,
+} = require("./lib/CitizenMemory");
+const KingdomStore = require("../kingdoms/KingdomStore");
+const {
   EVENT_WAR_DECLARED,
   EVENT_WAR_ENDED,
   EVENT_CITIZEN_CHAT_HEARD,
   EVENT_OFFICE_ASSIGNED,
   EVENT_OFFICE_VACATED,
+  ATTR_CITIZEN_ROLE,
+  ATTR_KINGDOM_ID,
   ROLE_GUARD,
   ROLE_MERCHANT,
   ROLE_COMMONER,
@@ -45,8 +57,12 @@ const {
 
 const CITIZENS_ENABLED = (process.env.CITIZENS_ENABLED ?? "0") === "1";
 
+let pluginApi = null;
+
 function initCitizens(api) {
+  pluginApi = api;
   initCitizenChat(api);
+  initCitizenMemory(); // what citizens remember; loads data/saves/citizen-memory.json
   registerCitizenActionTypes();
   const added = registerCitizenActivities();
   api.log?.("[citizens] activities registered", { added });
@@ -71,6 +87,153 @@ function onKingdomWarEnded(event) {
 
 function onKingdomOfficeAssigned(event) {
   onOfficeAssigned(event);
+  // Office wins travel: "Did you hear? X took the Steward's seals!"
+  const holder = event?.holder;
+  const kingdomId = event?.kingdomId;
+  if (holder?.kind !== "player" || !holder.ref || !kingdomId) {
+    return;
+  }
+  const memory = getMemory();
+  const title =
+    event.title ?? String(event.officeId ?? "office").split(":").pop();
+  const kingdomName = KingdomStore.getKingdom(kingdomId)?.name ?? kingdomId;
+  const seed = kingdomGossipSeed(kingdomId);
+  memory.seedGossip({
+    kingdomId,
+    kind: GOSSIP_OFFICE,
+    subject: holder.ref,
+    text: `took the ${title} of ${kingdomName}!`,
+    holder: seed,
+  });
+  pluginApi?.emitCustomEvent("kingdom:rumor", {
+    kingdomId,
+    text: `Did you hear? ${holder.ref} took the ${title} of ${kingdomName}!`,
+  });
+}
+
+/** Any citizen username of the kingdom to seed a rumor with (online first). */
+function kingdomGossipSeed(kingdomId) {
+  const director = getDirector();
+  if (!director) {
+    return "";
+  }
+  const online = director.onlineBotsForKingdom(kingdomId);
+  if (online.length > 0) {
+    return online[0].getUsername?.() ?? "";
+  }
+  for (const record of director.roster.values()) {
+    if (record.kingdomId === kingdomId) {
+      return record.username;
+    }
+  }
+  return "";
+}
+
+function isCitizenBot(player) {
+  return player?.getAttribute?.(ATTR_CITIZEN_ROLE) != null;
+}
+
+/** Citizen bots in the player's local players (excluding `exclude`). */
+function nearbyCitizens(player, exclude = null) {
+  const out = [];
+  for (const local of player.getLocalPlayers?.() ?? []) {
+    if (local === exclude || !isCitizenBot(local)) {
+      continue;
+    }
+    out.push(local);
+  }
+  return out;
+}
+
+const ATTACK_OUTCRY = [
+  "Guards! I'm attacked!",
+  "Help! Murder in the street!",
+  "You'll pay for that, villain!",
+];
+
+/** A real player attacked a citizen: grudge, outcry, witnesses, gossip. */
+function onCitizenAttackedByPlayer({ player, target }) {
+  if (!player || !target) {
+    return;
+  }
+  if (player.isPlayerBot?.() === true) {
+    return; // citizen-on-citizen scraps don't make grudges
+  }
+  if (!isCitizenBot(target)) {
+    return;
+  }
+  const memory = getMemory();
+  const attackerName = player.getUsername?.() ?? "?";
+  const victimName = target.getUsername?.() ?? "?";
+  memory.addGrudge(victimName, attackerName, GRUDGE_ATTACK, "attack");
+  try {
+    target.forceChat?.(
+      ATTACK_OUTCRY[Math.floor(Math.random() * ATTACK_OUTCRY.length)]
+    );
+  } catch (error) {
+    // Cosmetic.
+  }
+  const kingdomId = target.getAttribute?.(ATTR_KINGDOM_ID);
+  for (const witness of nearbyCitizens(player, target)) {
+    memory.heardAbout(
+      witness.getUsername?.() ?? "?",
+      attackerName,
+      GOSSIP_ATTACK,
+      1
+    );
+  }
+  memory.seedGossip({
+    kingdomId,
+    kind: GOSSIP_ATTACK,
+    subject: attackerName,
+    text: `attacked ${victimName} in the street!`,
+    holder: victimName,
+  });
+  pluginApi?.log?.("[citizens] citizen attacked", {
+    victim: victimName,
+    attacker: attackerName,
+    kingdom: kingdomId,
+  });
+}
+
+/**
+ * A player stole something with citizens watching (market stalls,
+ * pickpocketing): witnesses remember the thief — cold shoulders, gossip.
+ */
+function onThievingWitnessed(event) {
+  const player = event?.player;
+  if (!player || player.isPlayerBot?.() === true) {
+    return;
+  }
+  const witnesses = nearbyCitizens(player);
+  if (witnesses.length === 0) {
+    return;
+  }
+  const memory = getMemory();
+  const thiefName = player.getUsername?.() ?? "?";
+  let kingdomId = null;
+  for (const witness of witnesses) {
+    const witnessName = witness.getUsername?.() ?? "?";
+    kingdomId = kingdomId ?? witness.getAttribute?.(ATTR_KINGDOM_ID);
+    memory.recordTone(witnessName, thiefName, -2);
+    memory.addGrudge(witnessName, thiefName, GRUDGE_THEFT, "theft-witnessed");
+  }
+  memory.seedGossip({
+    kingdomId,
+    kind: GOSSIP_THEFT,
+    subject: thiefName,
+    text: "caught stealing, bold as brass!",
+    holder: witnesses[0].getUsername?.() ?? "",
+  });
+  pluginApi?.emitCustomEvent("kingdom:rumor", {
+    kingdomId,
+    text: `Did you hear what ${thiefName} did? Caught stealing at the market!`,
+  });
+  pluginApi?.log?.("[citizens] theft witnessed", {
+    thief: thiefName,
+    witnesses: witnesses.length,
+    kingdom: kingdomId,
+  });
 }
 
 function onKingdomOfficeVacated(event) {
@@ -114,7 +277,36 @@ function onCitizenCommand({ player, parts }) {
     );
     return true;
   }
-  player.sendMessage("Usage: ::citizen [status|spawn]");
+  if (sub === "memory") {
+    const target = (parts[2] ?? "").trim();
+    if (!target) {
+      player.sendMessage("Usage: ::citizen memory <player>");
+      return true;
+    }
+    const memory = getMemory();
+    const rows = [];
+    for (const [key, record] of memory.citizens) {
+      const held = record.players.get(target.toLowerCase());
+      if (!held) {
+        continue;
+      }
+      const standing = memory.standing(record.display, target);
+      const mult = memory.priceMultiplier(record.display, target);
+      rows.push(
+        `${record.display}: ${standing} (met ${held.entry.met}x, spent ${held.entry.spent}, x${mult})`
+      );
+      if (rows.length >= 8) {
+        break;
+      }
+    }
+    player.sendMessage(
+      rows.length > 0
+        ? `Memory of ${target}: ${rows.join(" | ")}`
+        : `No citizen remembers ${target} yet.`
+    );
+    return true;
+  }
+  player.sendMessage("Usage: ::citizen [status|spawn|memory <player>]");
   return true;
 }
 
@@ -162,6 +354,8 @@ module.exports = {
     api.onCustomEvent("kingdom:patrol-ordered", onKingdomPatrolOrdered);
     api.onCustomEvent("kingdom:wage-day", onKingdomWageDay);
     api.onCustomEvent("arrival:player-arrived", onArrivalPlayerArrived);
+    api.onPlayerAttack(onCitizenAttackedByPlayer);
+    api.onCustomEvent("thieving:success", onThievingWitnessed);
     api.onSocialPacket(onCitizenSocialPacket);
     api.registerCommand(
       "citizen",
