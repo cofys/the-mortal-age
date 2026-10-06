@@ -227,8 +227,12 @@ function showClaimPrompt(player, origin) {
 /** Apply the choice: attributes, kingdom membership, kit, spawn, event. */
 function claimOrigin(player, originId) {
   const origin = Data.BY_ID.get(originId);
+  // TEMP DEBUG: diagnose origin persistence
+  console.info(`[origins-debug] claimOrigin called for ${player?.getUsername?.() ?? "?"}: originId=${originId}, hasOrigin=${hasOrigin(player)}`);
   if (!player || !origin || hasOrigin(player)) return;
   player.setAttribute(ORIGIN_ID_ATTRIBUTE, origin.id);
+  // TEMP DEBUG: verify the set worked
+  console.info(`[origins-debug] after setAttribute: ${player.getUsername()} origin:id=${player.getAttribute(ORIGIN_ID_ATTRIBUTE)}`);
   if (origin.kingdomId) {
     // Home is initial citizenship: the kingdoms plugin's own join helper
     // writes kingdom:id + kingdom:rank ("Subject") via kingdom:rank-granted.

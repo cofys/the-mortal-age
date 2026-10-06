@@ -84,6 +84,13 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     }
 
     const save = PlayerSave.fromPlayer(player);
+    // TEMP DEBUG: diagnose origin persistence
+    if (!player.isPlayerBot?.()) {
+      const attrKeys = save.attributes ? Object.keys(save.attributes) : [];
+      const hasOriginKey = attrKeys.includes("origin:id");
+      const liveVal = player.getAttribute ? player.getAttribute("origin:id") : "N/A";
+      console.info(`[persistence-debug] saving ${player.getUsername()}: origin:id in save=${hasOriginKey}, live value=${liveVal}, total attrs=${attrKeys.length}`);
+    }
     const serialized = JSON.stringify(save, this.replacer.bind(this), 2);
     this.validateSerializedSave(serialized, player.getUsername());
     this.savePlayer.run(
