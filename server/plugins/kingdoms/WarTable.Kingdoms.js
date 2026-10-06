@@ -56,7 +56,7 @@ const FONT_LABEL = 496;
 const FONT_DISPLAY = 497;
 
 const MODAL_W = 620;
-const MODAL_H = 616;
+const MODAL_H = 440;
 
 const C = {
   ROOT: 0,
@@ -164,26 +164,27 @@ function buildTableInterface() {
   rect(C.TITLE_RULE, root, 60, 64, MODAL_W - 120, 1, TMA.GOLD_DIM);
 
   // Five sections: gold header, inner panel, parchment body. YOUR HOME gets
-  // the tall slot (11 rows): name + epithet, the full lens paragraph (up to
-  // 9 wrapped lines at 54 chars — measured across all six origins), fealty.
-  // Body rows run ~14px; panel pads 8px, body insets 4px.
+  // the full-width slot (9 rows): name + epithet, the lens paragraph (up to
+  // 9 wrapped lines — measured across all six origins), fealty. Body rows run
+  // ~14px; panel pads 8px, body insets 4px. The four realm sections sit in
+  // two columns below to keep the modal inside the 503px canvas.
   const sections = [
-    { head: C.SEC1_HEAD, panel: C.SEC1_PANEL, body: C.SEC1_BODY, title: "YOUR HOME", y: 72, rows: 11 },
-    { head: C.SEC2_HEAD, panel: C.SEC2_PANEL, body: C.SEC2_BODY, title: "YOUR KINGDOM", y: 262, rows: 3 },
-    { head: C.SEC3_HEAD, panel: C.SEC3_PANEL, body: C.SEC3_BODY, title: "THE REALM", y: 340, rows: 4 },
-    { head: C.SEC4_HEAD, panel: C.SEC4_PANEL, body: C.SEC4_BODY, title: "OPEN WARS", y: 432, rows: 3 },
-    { head: C.SEC5_HEAD, panel: C.SEC5_PANEL, body: C.SEC5_BODY, title: "ALLIANCES & ROYAL NEWS", y: 510, rows: 3 },
+    { head: C.SEC1_HEAD, panel: C.SEC1_PANEL, body: C.SEC1_BODY, title: "YOUR HOME", x: 24, w: 572, y: 72, rows: 9 },
+    { head: C.SEC2_HEAD, panel: C.SEC2_PANEL, body: C.SEC2_BODY, title: "YOUR KINGDOM", x: 24, w: 278, y: 240, rows: 3 },
+    { head: C.SEC3_HEAD, panel: C.SEC3_PANEL, body: C.SEC3_BODY, title: "THE REALM", x: 318, w: 278, y: 240, rows: 4 },
+    { head: C.SEC4_HEAD, panel: C.SEC4_PANEL, body: C.SEC4_BODY, title: "OPEN WARS", x: 24, w: 278, y: 318, rows: 3 },
+    { head: C.SEC5_HEAD, panel: C.SEC5_PANEL, body: C.SEC5_BODY, title: "ALLIANCES & ROYAL NEWS", x: 318, w: 278, y: 332, rows: 3 },
   ];
   for (const s of sections) {
     const panelH = s.rows * 14 + 8;
     const bodyH = s.rows * 14;
-    label(s.head, root, 28, s.y, MODAL_W - 56, 18, s.title, FONT_LABEL, TMA.GOLD_TEXT);
-    rect(s.panel, root, 24, s.y + 20, MODAL_W - 48, panelH, TMA.PANEL_INNER);
-    label(s.body, root, 34, s.y + 24, MODAL_W - 68, bodyH, "", FONT_BODY, TMA.PARCHMENT);
+    label(s.head, root, s.x + 4, s.y, s.w - 8, 18, s.title, FONT_LABEL, TMA.GOLD_TEXT);
+    rect(s.panel, root, s.x, s.y + 20, s.w, panelH, TMA.PANEL_INNER);
+    label(s.body, root, s.x + 10, s.y + 24, s.w - 20, bodyH, "", FONT_BODY, TMA.PARCHMENT);
   }
 
   label(
-    C.FOOTNOTE, root, 0, 592, MODAL_W, 14,
+    C.FOOTNOTE, root, 0, 416, MODAL_W, 14,
     "Study often — crowns move while you sleep.",
     FONT_BODY, TMA.MUTED, true
   );
@@ -202,9 +203,9 @@ function render(player) {
   const sender = player.getPacketSender();
 
   // YOUR HOME: name, epithet, lens, fealty — the ::origin command's content
-  // (Selection.originLines), shown whole: 11 rows fit the longest lens.
+  // (Selection.originLines), shown whole: 9 rows fit the longest lens.
   sender.sendString(
-    bodyText(sectionLines(() => Origins.originLines(player), "You have no home yet — the road is still deciding."), 11, 54),
+    bodyText(sectionLines(() => Origins.originLines(player), "You have no home yet — the road is still deciding."), 9, 54),
     uid(C.SEC1_BODY)
   );
 
