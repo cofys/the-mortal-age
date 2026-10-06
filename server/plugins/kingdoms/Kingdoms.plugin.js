@@ -37,5 +37,6 @@ module.exports = {
     require("./Founding.Kingdoms")(api);
     require("./ClaimStake.Kingdoms")(api);
     require("./WarTable.Kingdoms")(api);
+    require("./OfficeTools.Kingdoms")(api);
   },
 };
