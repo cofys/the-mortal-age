@@ -406,6 +406,8 @@ export class ClientConnection {
           continue;
         case "chat":
           if (this.player) {
+            // TEMP DEBUG: trace chat messageType routing
+            console.log(`[chat-debug] chat packet from ${this.player?.getUsername?.()}: messageType=${packet.messageType}, text="${packet.text}"`);
             if (packet.messageType === "public") {
               ChatPacketListener.handleText(this.player, packet.text);
             } else if (packet.messageType === "friends_chat") {
