@@ -58,7 +58,10 @@ const {
 const ATTR_STALL_OWNER = "shop:stall-owner";
 const ATTR_STALL_EMPLOYEE = "shop:stall-employee";
 
-const GROUP_ID = 30011;
+const GROUP_ID = 30013;
+// NOTE: 30010 = citizen merchant stall, 30011 = DuelArena options (core),
+// 30012 = origins creation GUI. CustomInterfaceRegistry lets the last
+// registration win, so every custom group ID must be unique.
 const OVERLAY_HOST_UID = (161 << 16) | 34;
 const COINS = 995;
 const MAX_ACTION_AMOUNT = 5000;
