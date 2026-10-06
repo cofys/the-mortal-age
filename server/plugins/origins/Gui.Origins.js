@@ -97,10 +97,11 @@ const C = {
 };
 const CARD_FACE_OFFSETS = [0, 1, 2, 3, 4, 5]; // every visible row part is clickable
 
-// Conservative 540x420: fits the 765x503 canvas with ~112px side margins
-// and ~41px top/bottom. Smaller is better than cut off.
+// Conservative 540x482: fits the 765x503 canvas with ~112px side margins
+// and ~10px top/bottom. The lens needs 94px: the longest origin lens wraps
+// to 7 lines at 72 chars, ~13px per line on the p11 font. Measured, not guessed.
 const MODAL_W = 540;
-const MODAL_H = 420;
+const MODAL_H = 482;
 
 // Realm rows: single-column list, 6 rows.
 const ROW_W = 480;
@@ -109,16 +110,17 @@ const ROW_X = 30;
 const ROW_Y = 70;
 const ROW_GAP = 4;
 
-// Lens: the selected origin's description, compact.
+// Lens: the selected origin's description. 94px fits the longest lens
+// (7 wrapped lines at ~13px/line on p11). The kingdom line sits below it.
 const LENS_X = 30;
-const LENS_Y = 316;
+const LENS_Y = 314;
 const LENS_W = 480;
-const LENS_H = 48;
+const LENS_H = 94;
 
 const BTN_X = 150;
-const BTN_Y = 370;
+const BTN_Y = 434;
 const BTN_W = 240;
-const BTN_H = 30;
+const BTN_H = 28;
 
 const uid = (component) => (GROUP_ID << 16) | component;
 const CARD_CLICK_UIDS = Data.ORIGINS.flatMap((_, i) =>
@@ -268,7 +270,7 @@ function buildInterface(Items) {
 
   // Lens: the selected origin's description, compact.
   label(C.LENS_TEXT, panel, LENS_X, LENS_Y, LENS_W, LENS_H, "", FONT_BODY, TMA.PARCHMENT);
-  label(C.LENS_KINGDOM, panel, LENS_X, LENS_Y + 34, LENS_W, 14, "", FONT_BODY, TMA.BUTTON_TEXT, { center: true });
+  label(C.LENS_KINGDOM, panel, LENS_X, LENS_Y + LENS_H + 4, LENS_W, 14, "", FONT_BODY, TMA.BUTTON_TEXT, { center: true });
   // Claim button.
   rect(C.BTN_BORDER, panel, BTN_X, BTN_Y, BTN_W, BTN_H, TMA.GOLD);
   add(C.BTN_BG, panel, {
