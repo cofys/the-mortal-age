@@ -1,0 +1,133 @@
+# LLM Chat Gateway — DESIGN.md
+
+The "mouth" of the AI citizens. Scripted bodies play the game; the LLM only wakes
+up when a real player talks to a citizen bot. Silence is the default.
+
+## Architecture
+
+```
+real player PMs a citizen bot
+        |
+        v
+ChatInterceptor (api.onSocialPacket, "private_message")
+        |  emits
+        v
+llm:chat-request { citizenUsername, requesterUsername, text, channel }
+        |
+        v
+Gateway.handleChatRequest
+  - citizen registry + MemoryStore (card, notes, history)
+  - PromptBuilder (token-lean prompt, ~920 tokens/call typical)
+  - ProviderChain.complete  (Cerebras -> Gemini -> Groq)
+  - record exchange in memory
+  - TypingScheduler (human typing delay, latest-wins)
+        |  emits
+        v
+llm:chat-response { ..., text, provider, tokensUsed, latencyMs }
+        |
+        v
+Mouth (forceChat bubble + sendPublicChat to nearby players,
+       or a real PM back to the requester for private chat)
+```
+
+Bots are full Player entities but have no ClientConnection, so MCP-style
+injection (`core.dispatchClientMessages`) cannot drive them — the mouth speaks
+through `bot.forceChat()` plus the same broadcast loop core's
+`ChatPacketListener.handleText` uses for public chat. Per-player reply cooldowns
+(default 8s) and a daily call budget keep one chatty player from farming calls.
+
+## Provider chain (all free tier, all STUBBED)
+
+| Order | Provider | Env var | Free-tier shape |
+|---|---|---|---|
+| 1 | Cerebras | `CEREBRAS_API_KEY` | 1M tokens/day, **8K context cap**, ~30 RPM. OpenAI-compatible `/v1/chat/completions`, model `llama-3.3-70b` |
+| 2 | Gemini | `GEMINI_API_KEY` | AI Studio free tier, `:generateContent`, model `gemini-2.5-flash` |
+| 3 | Groq | `GROQ_API_KEY` | OpenAI-compatible `/openai/v1/chat/completions`, model `llama-3.3-70b-versatile` |
+
+- Same `complete({ system, user, maxTokens })` shape on all three; returns
+  `{ ok, text, tokensUsed }` or `{ ok: false, reason }`.
+- No key -> no-op with a one-time `NEEDS_API_KEY` log. Nothing ever logs or
+  prints key material.
+- RPM is a per-provider token bucket: calls QUEUE and wait rather than bursting.
+- Circuit breaker: a 429 opens the circuit immediately; other errors open it
+  after 3 consecutive failures. 60s cooldown, then a half-open probe.
+- Daily call budget (env `LLM_GATEWAY_DAILY_BUDGET`, default 1000): when
+  exhausted the gateway stays silent instead of spending money that doesn't exist.
+
+## Token budget math (Cerebras 8K context cap)
+
+Estimate: tokens ~= chars / 4. Per chat call:
+
+| Component | Tokens |
+|---|---|
+| World grounding (fixed, all citizens share it) | ~160 |
+| Personality card (hard cap 480 chars) | ~120 |
+| Player notes (top 5) | ~150 |
+| History (last 6 exchanges, truncated oldest-first) | ~300 |
+| Current player line | ~100 |
+| Reply output cap (60 tokens; public chat lines are 80 chars anyway) | 60 |
+| Overhead | ~30 |
+| **Total per call** | **~920** |
+
+Input hard cap: 2000 tokens (history is truncated to fit). Context cap is 8000 —
+we use roughly a quarter of it.
+
+Calls per day on the free tier: 1,000,000 / 920 ≈ **~1,080 calls/day**. The daily
+budget default of 1000 leaves headroom.
+
+## What's STUBBED (awaiting keys)
+
+1. **Providers** — all three no-op with `NEEDS_API_KEY` until their env var is
+   set. Real HTTP request bodies are written and ready; they only fire when
+   `LLM_GATEWAY_LIVE=1` AND the key exists. Boot and run fine with zero keys:
+   bots stay silent.
+2. **SQLite memory store** — no sqlite driver on the game host, so
+   `SqliteMemoryStore` logs a marker and delegates to the in-memory store.
+   Cards/notes/history do not survive a restart. Same interface; swap when a
+   driver lands. Set `LLM_GATEWAY_DB=/path/to/db.sqlite` to select it.
+3. **Public-chat interception** — `ChatPacketListener.handleText` broadcasts
+   public chat without emitting a plugin hook, so the gateway currently
+   intercepts only private messages to citizen bots. Options when Jon wants it:
+   (a) the citizens plugin emits `llm:chat-request` for nearby public chat, or
+   (b) a one-line generic core addition in `handleText`:
+   `PluginManager.emitSocialPacket({ player, packet: { type: "chat", text, messageType: "public" }, handled: false })`
+   (generic hook = core-legal per AGENTS.md; the packet union type would also
+   need "public" added). Neither is implemented here — additive-only.
+
+## What Jon needs to do
+
+1. Create 3 free API keys: Cerebras (cerebras.ai), Gemini (Google AI Studio),
+   Groq (console.groq.com).
+2. Set `CEREBRAS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY` in the server env.
+3. Set `LLM_GATEWAY_LIVE=1` to actually make calls.
+4. Optional tuning: `CEREBRAS_MODEL` / `GEMINI_MODEL` / `GROQ_MODEL`,
+   `CEREBRAS_RPM` / `GEMINI_RPM` / `GROQ_RPM`, `LLM_GATEWAY_DAILY_BUDGET`,
+   `LLM_GATEWAY_MOUTH=0` (disable default mouth if the citizens plugin speaks
+   replies itself), `LLM_GATEWAY_DB` (SQLite path when a driver exists).
+5. The citizens plugin registers each citizen's personality via
+   `llm:citizen-register` { username, personalityCard, replyCooldownMs? } —
+   until a bot is registered it stays silent even with keys configured.
+
+## Files
+
+- `LlmGateway.plugin.js` — the plugin; `register` is attach-only, one line per hook
+- `Gateway.js` — request -> prompt -> chain -> typing delay -> response event
+- `ChatInterceptor.js` — ears: onSocialPacket PM interception + citizen registry
+- `Mouth.js` — mouth: forceChat/broadcast and PM delivery of replies
+- `ProviderChain.js` — fallback chain, RPM token buckets, circuit breakers, daily budget
+- `providers/BaseProvider.js` — stubbed base (NEEDS_API_KEY gate, never logs keys)
+- `providers/CerebrasProvider.js` / `GeminiProvider.js` / `GroqProvider.js`
+- `PromptBuilder.js` — personality card + notes + truncated history, 2000-token input cap
+- `MemoryStore.js` — card/notes/history interface; in-memory v1, SQLite stubbed
+- `TypingScheduler.js` — 40-60 wpm simulated typing + jitter, never instant, latest-wins
+
+## Verification
+
+- `node --check` on all 12 files: pass.
+- Functional smoke (ephemeral, /tmp): prompt fits 2000-token cap (1279 on a fat
+  20-exchange stress), memory round-trip OK (caught and fixed a case-sensitivity
+  bug in card keys), typing delays 900-10,000ms, chain returns
+  `ALL_PROVIDERS_UNAVAILABLE` gracefully with no keys, PM-to-bot emits
+  `llm:chat-request` while PM-to-real-player emits nothing, circuit breaker
+  opens on 429 / 3 errors and half-opens after cooldown, daily budget guard
+  verified (caught and fixed `Number("0") || 1000` fallback swallowing a 0 budget).
