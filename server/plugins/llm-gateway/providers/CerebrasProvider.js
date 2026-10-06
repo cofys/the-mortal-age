@@ -1,5 +1,7 @@
-// Cerebras -- PRIMARY provider in the chain.
-// Free tier: 1M tokens/day, 8K context cap, ~30 RPM.
+// Cerebras -- IMPLEMENTED BUT OUT OF THE CHAIN (2026-10-06).
+// Dropped because it requires a payment method on file. Kept for easy
+// re-enable: add `new CerebrasProvider()` back to ProviderChain's providers.
+// Free tier (for reference): 1M tokens/day, 8K context cap, ~30 RPM.
 // API is OpenAI-compatible: https://api.cerebras.ai/v1/chat/completions
 // STUBBED until CEREBRAS_API_KEY is set and LLM_GATEWAY_LIVE=1.
 

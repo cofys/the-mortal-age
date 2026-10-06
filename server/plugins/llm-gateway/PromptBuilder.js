@@ -1,6 +1,6 @@
 // PromptBuilder -- assembles the LLM prompt for one chat reply, token-lean.
 //
-// Budget (well under Cerebras's 8K context cap):
+// Budget: kept lean for free-tier request/token budgets.
 //   - INPUT hard cap: 2000 tokens (history is truncated oldest-first to fit).
 //   - OUTPUT cap: 60 tokens (~240 chars; public chat lines are capped at 80
 //     chars by the client anyway, see Mouth.js).

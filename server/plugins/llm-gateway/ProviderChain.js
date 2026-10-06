@@ -1,13 +1,16 @@
-// ProviderChain -- Cerebras -> Gemini -> Groq with automatic fallback.
+// ProviderChain -- Gemini -> Groq with automatic fallback.
 //
 // - Per-provider RPM token bucket: we QUEUE and wait rather than bursting past
-//   the free-tier rate limits (Cerebras/Groq both enforce RPM).
+//   the free-tier rate limits.
 // - Circuit breaker: a 429 opens the circuit immediately (explicit backpressure);
 //   other errors open it after 3 consecutive failures. Cooldown default 60s.
 // - Daily call budget guard (default 1000 calls/day, env LLM_GATEWAY_DAILY_BUDGET)
-//   keeps us well under Cerebras's 1M free tokens/day.
+//   keeps us well under the free-tier request limits.
+//
+// NOTE: Cerebras was evaluated and dropped (2026-10-06) — it requires a payment
+// method on file. providers/CerebrasProvider.js is kept implemented but OUT of
+// the chain; re-add it to the providers array if that changes.
 
-const { CerebrasProvider } = require("./providers/CerebrasProvider");
 const { GeminiProvider } = require("./providers/GeminiProvider");
 const { GroqProvider } = require("./providers/GroqProvider");
 
@@ -100,7 +103,7 @@ class CircuitBreaker {
 
 class ProviderChain {
   constructor() {
-    this.providers = [new CerebrasProvider(), new GeminiProvider(), new GroqProvider()];
+    this.providers = [new GeminiProvider(), new GroqProvider()];
     this.limiters = new Map(this.providers.map((p) => [p.name, new RateLimiter(p.rpm)]));
     this.circuits = new Map(this.providers.map((p) => [p.name, new CircuitBreaker(p.name)]));
     const envBudget = Number(process.env.LLM_GATEWAY_DAILY_BUDGET);

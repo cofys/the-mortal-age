@@ -18,7 +18,7 @@ llm:chat-request { citizenUsername, requesterUsername, text, channel }
 Gateway.handleChatRequest
   - citizen registry + MemoryStore (card, notes, history)
   - PromptBuilder (token-lean prompt, ~920 tokens/call typical)
-  - ProviderChain.complete  (Cerebras -> Gemini -> Groq)
+  - ProviderChain.complete  (Gemini -> Groq)
   - record exchange in memory
   - TypingScheduler (human typing delay, latest-wins)
         |  emits
@@ -40,9 +40,12 @@ through `bot.forceChat()` plus the same broadcast loop core's
 
 | Order | Provider | Env var | Free-tier shape |
 |---|---|---|---|
-| 1 | Cerebras | `CEREBRAS_API_KEY` | 1M tokens/day, **8K context cap**, ~30 RPM. OpenAI-compatible `/v1/chat/completions`, model `llama-3.3-70b` |
-| 2 | Gemini | `GEMINI_API_KEY` | AI Studio free tier, `:generateContent`, model `gemini-2.5-flash` |
-| 3 | Groq | `GROQ_API_KEY` | OpenAI-compatible `/openai/v1/chat/completions`, model `llama-3.3-70b-versatile` |
+| 1 | Gemini | `GEMINI_API_KEY` | AI Studio free tier: ~1,500 req/day, 10-15 RPM, `:generateContent`, model `gemini-2.5-flash` |
+| 2 | Groq | `GROQ_API_KEY` | ~1,000 req/day per model, 30 RPM, OpenAI-compatible `/openai/v1/chat/completions`, model `llama-3.3-70b-versatile` |
+
+Cerebras was evaluated and dropped (2026-10-06): it requires a payment method
+on file. `providers/CerebrasProvider.js` is implemented but OUT of the chain;
+re-add it to `ProviderChain` if that changes.
 
 - Same `complete({ system, user, maxTokens })` shape on all three; returns
   `{ ok, text, tokensUsed }` or `{ ok: false, reason }`.
@@ -54,7 +57,7 @@ through `bot.forceChat()` plus the same broadcast loop core's
 - Daily call budget (env `LLM_GATEWAY_DAILY_BUDGET`, default 1000): when
   exhausted the gateway stays silent instead of spending money that doesn't exist.
 
-## Token budget math (Cerebras 8K context cap)
+## Token budget math (free-tier request limits)
 
 Estimate: tokens ~= chars / 4. Per chat call:
 
@@ -69,11 +72,12 @@ Estimate: tokens ~= chars / 4. Per chat call:
 | Overhead | ~30 |
 | **Total per call** | **~920** |
 
-Input hard cap: 2000 tokens (history is truncated to fit). Context cap is 8000 —
-we use roughly a quarter of it.
+Input hard cap: 2000 tokens (history is truncated to fit). Prompts stay lean
+regardless of provider context windows — free-tier *request* limits are the
+binding constraint now, not context size.
 
-Calls per day on the free tier: 1,000,000 / 920 ≈ **~1,080 calls/day**. The daily
-budget default of 1000 leaves headroom.
+Calls per day on the free tier: Gemini allows ~1,500 requests/day, Groq ~1,000.
+The daily budget default of 1000 stays under both.
 
 ## What's STUBBED (awaiting keys)
 
@@ -96,12 +100,12 @@ budget default of 1000 leaves headroom.
 
 ## What Jon needs to do
 
-1. Create 3 free API keys: Cerebras (cerebras.ai), Gemini (Google AI Studio),
-   Groq (console.groq.com).
-2. Set `CEREBRAS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY` in the server env.
+1. Create 2 free API keys: Gemini (Google AI Studio), Groq (console.groq.com).
+   No credit card on either.
+2. Set `GEMINI_API_KEY`, `GROQ_API_KEY` in the server env.
 3. Set `LLM_GATEWAY_LIVE=1` to actually make calls.
-4. Optional tuning: `CEREBRAS_MODEL` / `GEMINI_MODEL` / `GROQ_MODEL`,
-   `CEREBRAS_RPM` / `GEMINI_RPM` / `GROQ_RPM`, `LLM_GATEWAY_DAILY_BUDGET`,
+4. Optional tuning: `GEMINI_MODEL` / `GROQ_MODEL`,
+   `GEMINI_RPM` / `GROQ_RPM`, `LLM_GATEWAY_DAILY_BUDGET`,
    `LLM_GATEWAY_MOUTH=0` (disable default mouth if the citizens plugin speaks
    replies itself), `LLM_GATEWAY_DB` (SQLite path when a driver exists).
 5. The citizens plugin registers each citizen's personality via
@@ -116,7 +120,7 @@ budget default of 1000 leaves headroom.
 - `Mouth.js` — mouth: forceChat/broadcast and PM delivery of replies
 - `ProviderChain.js` — fallback chain, RPM token buckets, circuit breakers, daily budget
 - `providers/BaseProvider.js` — stubbed base (NEEDS_API_KEY gate, never logs keys)
-- `providers/CerebrasProvider.js` / `GeminiProvider.js` / `GroqProvider.js`
+- `providers/CerebrasProvider.js` — implemented but OUT of the chain (payment method required); `GeminiProvider.js` / `GroqProvider.js`
 - `PromptBuilder.js` — personality card + notes + truncated history, 2000-token input cap
 - `MemoryStore.js` — card/notes/history interface; in-memory v1, SQLite stubbed
 - `TypingScheduler.js` — 40-60 wpm simulated typing + jitter, never instant, latest-wins

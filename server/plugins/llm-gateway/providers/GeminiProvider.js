@@ -1,4 +1,5 @@
-// Gemini -- SECOND in the chain (fallback when Cerebras is unconfigured / down).
+// Gemini -- PRIMARY provider in the chain.
+// Free tier: AI Studio, ~1500 requests/day, 10-15 RPM.
 // Free tier via AI Studio key; text API:
 // https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent?key=...
 // The key travels as a query param per Google's API (never logged -- see BaseProvider).

@@ -3,7 +3,7 @@
 // Flow: llm:chat-request { citizenUsername, requesterUsername, text, channel }
 //   1. look up citizen (interceptor registry) + memory (card, notes, history)
 //   2. build token-lean prompt (PromptBuilder)
-//   3. run the provider chain (Cerebras -> Gemini -> Groq); on total failure,
+//   3. run the provider chain (Gemini -> Groq); on total failure,
 //      stay silent -- silence is free and human
 //   4. record the exchange in memory
 //   5. TypingScheduler waits out a human typing delay, then emitCustomEvent
