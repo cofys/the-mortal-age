@@ -239,10 +239,13 @@ class CitizenDirector {
 
   /** Build the roster from the plan; spawn happens lazily on the first tick. */
   boot() {
+    console.log("[citizens-debug] boot() called");
     if (!this.registry) {
+      console.log("[citizens-debug] boot FAILED: no registry");
       throw new Error("[citizens] director needs the bot activity registry");
     }
     const plan = loadPlan();
+    console.log("[citizens-debug] plan loaded", JSON.stringify(plan));
     for (const [kingdomId, roles] of Object.entries(plan)) {
       if (!KINGDOM_IDS.includes(kingdomId)) {
         this.log("unknown kingdom in CITIZEN_PLAN, skipped", { kingdomId });
@@ -255,8 +258,10 @@ class CitizenDirector {
         }
       }
     }
+    console.log("[citizens-debug] roster built", { citizens: this.roster.size });
     this.log("roster built", { citizens: this.roster.size });
     this.startTask();
+    console.log("[citizens-debug] boot() complete, task started");
   }
 
   addCitizen(kingdomId, role) {
@@ -387,6 +392,7 @@ class CitizenDirector {
       return;
     }
     this.taskStarted = true;
+    console.log("[citizens-debug] startTask: submitting DirectorTask");
     const director = this;
     class DirectorTask extends Task {
       execute() {
@@ -397,7 +403,10 @@ class CitizenDirector {
         }
       }
     }
-    this.api.getTaskManager()?.submit(new DirectorTask(DIRECTOR_TICK_TICKS));
+    const tm = this.api.getTaskManager?.();
+    console.log("[citizens-debug] taskManager available:", !!tm);
+    tm?.submit(new DirectorTask(DIRECTOR_TICK_TICKS));
+    console.log("[citizens-debug] DirectorTask submitted");
   }
 
   isOnline(record) {
@@ -428,16 +437,19 @@ class CitizenDirector {
   spawnCitizen(record) {
     const runtime = this.runtime();
     if (!runtime) {
+      console.log("[citizens-debug] spawn deferred: no bot runtime yet", { citizen: record.username });
       this.log("no bot runtime yet, deferring spawn", { citizen: record.username });
       return false;
     }
     const spawn = new Location(record.home.x, record.home.y, record.home.z ?? 0);
+    console.log("[citizens-debug] spawning", { citizen: record.username, at: `${spawn.getX()},${spawn.getY()},${spawn.getZ()}` });
     const bot = createBotPlayer(record.username, spawn, {
       api: this.api,
       loadPersistence: false,
       saveRandomizedAppearance: false,
     });
     if (!bot) {
+      console.log("[citizens-debug] spawn FAILED (name taken?)", { citizen: record.username });
       this.log("spawn failed (name taken?)", { citizen: record.username });
       return false;
     }
@@ -537,6 +549,12 @@ class CitizenDirector {
 
     record.online = true;
     record.lastTickAt = Date.now();
+    console.log("[citizens-debug] citizen spawned OK", {
+      citizen: record.username,
+      role: record.role,
+      kingdom: record.kingdomId,
+      activity: record.currentActivityId,
+    });
     this.log("citizen spawned", {
       citizen: record.username,
       role: record.role,
@@ -670,6 +688,9 @@ class CitizenDirector {
   tick() {
     const hour = hourNow();
     const nowMs = Date.now();
+    let spawnedCount = 0;
+    let onlineCount = 0;
+    let wantOnline = 0;
     for (const record of this.roster.values()) {      const online = this.isOnline(record);
       const bot = online ? this.getBot(record) : null;
       // Background tier (Jon's two-tier sim): every citizen lives as data
@@ -693,10 +714,12 @@ class CitizenDirector {
         }
         continue;
       }
+      wantOnline++;
       if (!online) {
-        this.spawnCitizen(record);
+        if (this.spawnCitizen(record)) spawnedCount++;
         continue;
       }
+      onlineCount++;
       if (!bot) {
         continue;
       }
@@ -732,6 +755,7 @@ class CitizenDirector {
         error: String(error?.message ?? error),
       });
     }
+    console.log("[citizens-debug] tick done", { hour, roster: this.roster.size, wantOnline, onlineCount, spawnedCount });
   }
 
   /**
