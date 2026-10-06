@@ -58,6 +58,16 @@ merchant. Rare, deniable, never naming the son, never touching the
 surge whisper. This content is planted only — it resolves in custom quests,
 not in plugin logic.
 
+**Succession deepening (`SuccessionDeep.Kingdoms.js`)** — the interactive
+layer: what happens when players dig. Four keeper archetypes in Varrock
+(commoner/courtier/merchant roles) each hold one oblique fragment, granted
+once per player via private message. Asking about the heir near a Misthalin
+citizen raises per-player `succession:heat` (+12, 30s cooldown, decays 5/hr).
+Thresholds: 25 "eyes on you", 40 keepers refuse, 55 grey-man rumor + possible
+whisper retraction, 70 fragments locked, 85 grey-man street meeting (dread,
+never damage). Ambient grey sightings while any heat runs hot. Nothing
+confirms anything; the arc pays off in phase 10.
+
 ## The tension model (live war states)
 
 Every pair of great powers carries a **tension** score (0-100, persisted in

@@ -25,6 +25,7 @@ module.exports = {
     require("./Diplomacy.Kingdoms")(api);
     require("./Royals.Kingdoms")(api);
     require("./Succession.Kingdoms")(api);
+    require("./SuccessionDeep.Kingdoms")(api);
     require("./Simulation.Kingdoms")(api);
     require("./Tension.Kingdoms")(api);
     require("./WarConsequences.Kingdoms")(api);
