@@ -30,19 +30,24 @@ function kingdomOf(player) {
   return Store.getKingdom(player?.getAttribute?.(KINGDOM_ID_ATTRIBUTE));
 }
 
-function showKingdom({ player }) {
+/**
+ * Your standing with your crown: kingdom name, rank, ruler, titles.
+ * Returns plain lines; the ::kingdom command sends them, and the war table
+ * renders them in-interface.
+ */
+function membershipLines(player) {
   const kingdom = kingdomOf(player);
-  if (!kingdom) {
-    player.sendMessage("You swear fealty to no kingdom.");
-    return;
-  }
+  if (!kingdom) return ["You swear fealty to no kingdom."];
   const rank = player.getAttribute(KINGDOM_RANK_ATTRIBUTE) ?? BASE_RANK;
   const titles = player.getAttribute(KINGDOM_TITLES_ATTRIBUTE) ?? [];
-  const ruler = kingdom.ruler ? ` Ruled by ${kingdom.ruler}.` : "";
-  player.sendMessage(
-    `You serve ${kingdom.name} as ${rank}.${ruler}` +
-      (titles.length ? ` Titles: ${titles.join(", ")}.` : "")
-  );
+  const lines = [`You serve ${kingdom.name} as ${rank}.`];
+  if (kingdom.ruler) lines.push(`Ruled by ${kingdom.ruler}.`);
+  if (titles.length) lines.push(`Titles: ${titles.join(", ")}.`);
+  return lines;
+}
+
+function showKingdom({ player }) {
+  for (const line of membershipLines(player)) player.sendMessage(line);
 }
 
 /** Emit a rank grant after validating kingdom and rank. */
@@ -133,3 +138,4 @@ module.exports.KINGDOM_COURT_ROLE_ATTRIBUTE = KINGDOM_COURT_ROLE_ATTRIBUTE;
 module.exports.joinKingdom = joinKingdom;
 module.exports.grantTitle = grantTitle;
 module.exports.tagCourtier = tagCourtier;
+module.exports.membershipLines = membershipLines;

@@ -95,27 +95,37 @@ function onOfficeCommand(player, args) {
   return showList(player, sub === "list" ? rest : args);
 }
 
-/** ::kingdom status — the realm at a glance: treasury, stockpile, offices, wars. */
-function showKingdomStatus(player) {
+/**
+ * ::kingdom status data — the realm at a glance: treasury, stockpile,
+ * offices, wars. Returns plain lines; the command adds its own headers.
+ * The war table renders the same lines in-interface.
+ */
+function realmStatusLines(maxKingdoms = 8) {
   const kingdoms = Store.getKingdoms();
-  if (kingdoms.length === 0) {
-    player.sendMessage("[Kingdom] No kingdoms yet.");
-    return;
-  }
+  if (kingdoms.length === 0) return [];
   const wars = Store.getActiveWars();
-  player.sendMessage("[Kingdom] The realm at a glance:");
-  for (const k of kingdoms.slice(0, 8)) {
+  return kingdoms.slice(0, maxKingdoms).map((k) => {
     const treasury = k.treasury ?? 0;
     const stockpile = Simulation.stockpileOf(k.id);
     const atWar = wars.some((w) => w.attackerId === k.id || w.defenderId === k.id);
     const offices = Offices.getOffices(k.id);
     const vacant = offices.filter((o) => !o.holder).map((o) => o.office);
-    player.sendMessage(
-      `  ${k.name}: ${treasury}c treasury, ${stockpile} stores` +
-        (atWar ? " — AT WAR" : "") +
-        (vacant.length > 0 ? ` — vacant: ${vacant.join(", ")}` : "")
+    return (
+      `${k.name}: ${treasury}c treasury, ${stockpile} stores` +
+      (atWar ? " — AT WAR" : "") +
+      (vacant.length > 0 ? ` — vacant: ${vacant.join(", ")}` : "")
     );
+  });
+}
+
+function showKingdomStatus(player) {
+  const lines = realmStatusLines();
+  if (lines.length === 0) {
+    player.sendMessage("[Kingdom] No kingdoms yet.");
+    return;
   }
+  player.sendMessage("[Kingdom] The realm at a glance:");
+  for (const line of lines) player.sendMessage(`  ${line}`);
 }
 
 function onKingdomCommand(player, args) {
@@ -131,34 +141,49 @@ function ago(timestamp) {
   return hours < 48 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
 }
 
+function tensionWord(tension) {
+  return tension >= 90 ? "WAR FEVER" : tension >= 70 ? "skirmishes" : tension >= 55 ? "grumbling" : "calm";
+}
+
+/**
+ * ::war data — open wars, hottest borders, levies. The command adds its own
+ * headers; the war table renders wars + hot borders in-interface.
+ */
+function warSummary({ maxWars = 5, maxHot = 5, maxLevies = 8 } = {}) {
+  const wars = Store.getActiveWars()
+    .slice(0, maxWars)
+    .map((w) => {
+      const a = Store.getKingdom(w.attackerId)?.name ?? w.attackerId;
+      const d = Store.getKingdom(w.defenderId)?.name ?? w.defenderId;
+      return (
+        `${a} vs ${d} — declared ${ago(w.declaredAt)}` +
+        (w.reason ? `: ${w.reason}` : "")
+      );
+    });
+  const hot = Tension.hottestPairs(maxHot).map(
+    (h) => `${h.aName} / ${h.bName}: tension ${h.tension} (${tensionWord(h.tension)})`
+  );
+  const levies = Store.getKingdoms()
+    .slice(0, maxLevies)
+    .map((k) => `${k.name}: ${Tension.garrisonOf(k.id)}/60`);
+  return { wars, hot, levies };
+}
+
 /** ::war — the state of the realm's wars, hottest borders, and levies. */
 function showWarStatus(player) {
-  const wars = Store.getActiveWars();
+  const { wars, hot, levies } = warSummary();
   player.sendMessage("[War] The state of the realm's wars:");
   if (wars.length === 0) {
     player.sendMessage("  No open wars — an uneasy peace.");
   }
-  for (const w of wars.slice(0, 5)) {
-    const a = Store.getKingdom(w.attackerId)?.name ?? w.attackerId;
-    const d = Store.getKingdom(w.defenderId)?.name ?? w.defenderId;
-    player.sendMessage(
-      `  ${a} vs ${d} — declared ${ago(w.declaredAt)}` +
-        (w.reason ? `: ${w.reason}` : "")
-    );
-  }
+  for (const w of wars) player.sendMessage(`  ${w}`);
   player.sendMessage("[War] Hottest borders:");
-  const hot = Tension.hottestPairs(5);
   if (hot.length === 0) {
     player.sendMessage("  The borders are quiet.");
   }
-  for (const h of hot) {
-    const heat = h.tension >= 90 ? "WAR FEVER" : h.tension >= 70 ? "skirmishes" : h.tension >= 55 ? "grumbling" : "calm";
-    player.sendMessage(`  ${h.aName} / ${h.bName}: tension ${h.tension} (${heat})`);
-  }
+  for (const h of hot) player.sendMessage(`  ${h}`);
   player.sendMessage("[War] Levies (garrison strength):");
-  for (const k of Store.getKingdoms().slice(0, 8)) {
-    player.sendMessage(`  ${k.name}: ${Tension.garrisonOf(k.id)}/60`);
-  }
+  for (const l of levies) player.sendMessage(`  ${l}`);
 }
 
 function onWarCommand(player, args) {
@@ -167,30 +192,43 @@ function onWarCommand(player, args) {
   player.sendMessage("[War] Usage: ::war");
 }
 
+/**
+ * ::alliances data — the realm's pacts and the royal calendar's recent news.
+ * The command adds its own headers; the war table renders both in-interface.
+ */
+function allianceSummary({ maxPacts = 8, maxNews = 16 } = {}) {
+  const pacts = Alliances.pactSummary()
+    .slice(0, maxPacts)
+    .map((p) => {
+      const risk = p.betrayalRisk >= 70 ? "— the court whispers of knives" :
+        p.betrayalRisk >= 40 ? "— strained" : "— firm";
+      return `${p.pactName}: ${p.aName} & ${p.bName} (bond ${p.strength}/5 ${risk})`;
+    });
+  const news = [];
+  for (const k of Store.getKingdoms().slice(0, 8)) {
+    const log = k.flags?.["royals:log"] ?? [];
+    for (const entry of log.slice(0, 2)) {
+      news.push(`${k.name} — ${entry.type}: ${entry.text.slice(0, 110)}`);
+      if (news.length >= maxNews) break;
+    }
+    if (news.length >= maxNews) break;
+  }
+  return { pacts, news };
+}
+
 /** ::alliances — the realm's pacts, and the royal calendar's recent news. */
 function showAlliances(player) {
-  const pacts = Alliances.pactSummary();
+  const { pacts, news } = allianceSummary();
   player.sendMessage("[Alliances] The realm's pacts:");
   if (pacts.length === 0) {
     player.sendMessage("  No pacts sealed — every crown stands alone.");
   }
-  for (const p of pacts.slice(0, 8)) {
-    const risk = p.betrayalRisk >= 70 ? "— the court whispers of knives" :
-      p.betrayalRisk >= 40 ? "— strained" : "— firm";
-    player.sendMessage(
-      `  ${p.pactName}: ${p.aName} & ${p.bName} (bond ${p.strength}/5 ${risk})`
-    );
-  }
+  for (const p of pacts) player.sendMessage(`  ${p}`);
   player.sendMessage("[Alliances] Recent royal news:");
-  let any = false;
-  for (const k of Store.getKingdoms().slice(0, 8)) {
-    const log = k.flags?.["royals:log"] ?? [];
-    for (const entry of log.slice(0, 2)) {
-      player.sendMessage(`  ${k.name} — ${entry.type}: ${entry.text.slice(0, 110)}`);
-      any = true;
-    }
+  if (news.length === 0) {
+    player.sendMessage("  The courts have been quiet.");
   }
-  if (!any) player.sendMessage("  The courts have been quiet.");
+  for (const n of news) player.sendMessage(`  ${n}`);
 }
 
 function onAlliancesCommand(player, args) {
@@ -199,7 +237,7 @@ function onAlliancesCommand(player, args) {
   player.sendMessage("[Alliances] Usage: ::alliances");
 }
 
-module.exports = function attachCommands(api) {
+function attachCommands(api) {
   pluginApi = api;
   api.registerCommand(
     "office",
@@ -225,4 +263,11 @@ module.exports = function attachCommands(api) {
     api.core.PlayerRights.NONE,
     "Alliances: ::alliances — the realm's pacts and recent royal news"
   );
-};
+}
+
+// Data exports for diegetic renderers (the war table reuses these; the
+// ::commands above keep working during the no-commands migration).
+module.exports = attachCommands;
+module.exports.realmStatusLines = realmStatusLines;
+module.exports.warSummary = warSummary;
+module.exports.allianceSummary = allianceSummary;
