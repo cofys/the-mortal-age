@@ -11,9 +11,16 @@
  * Content units live in sibling files; this file is a registration list only.
  */
 
+const Selection = require("./Selection.Origins");
+const Gui = require("./Gui.Origins");
+
 module.exports = {
   name: "Origins",
   register(api) {
-    require("./Selection.Origins")(api);
+    Selection(api);
+    Gui.attach(api);
+    // Triggers live in Selection; the screen lives in Gui. Wire them here so
+    // neither module requires the other at load time.
+    Selection.setGuiHooks(Gui.hooks());
   },
 };
