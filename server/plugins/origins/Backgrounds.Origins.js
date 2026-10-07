@@ -184,10 +184,11 @@ function showClaimPrompt(player, bg) {
   ]);
 }
 
-/** Apply the choice: attributes, skills, kit, contact, hook — then names. */
-function claimBackground(player, bgId) {
+/** Apply the choice: attributes, skills, kit, contact, hook — no UI prompts.
+ * Returns the background object on success, null if invalid/already set. */
+function applyBackground(player, bgId) {
   const bg = Data.BY_ID.get(bgId);
-  if (!player || !bg || hasBackground(player)) return;
+  if (!player || !bg || hasBackground(player)) return null;
   player.setAttribute(BACKGROUND_ID_ATTRIBUTE, bg.id);
   applySkills(player, bg);
   grantKit(player, bg);
@@ -197,6 +198,13 @@ function claimBackground(player, bgId) {
     player.sendMessage(`You know ${contact} in the city — ${bg.contactBlurb}. Look them up.`);
   }
   player.sendMessage(bg.hook);
+  return bg;
+}
+
+/** Apply the choice: attributes, skills, kit, contact, hook — then names. */
+function claimBackground(player, bgId) {
+  const bg = applyBackground(player, bgId);
+  if (!bg) return;
   player.getPacketSender().sendInterfaceRemoval();
   promptFirstName(player);
 }
@@ -285,17 +293,31 @@ function promptLastName(player) {
   });
 }
 
-function finishCharacter(player, first, last) {
-  pendingFirst.delete(player);
-  pendingFirstName.delete(player);
+/** Validate and set names without UI prompts. Returns { first, last } or { error }.
+ * Does NOT emit character:created — the caller does that after origin is set. */
+function setNames(player, firstInput, lastInput) {
+  if (!player || hasFullName(player)) return { error: "Names already set." };
+  const first = cleanNamePart(firstInput);
+  const last = cleanNamePart(lastInput);
+  if (!first || !last) {
+    return { error: "That name won't do — letters only, 2 to 16 characters each." };
+  }
   player.setAttribute(CHARACTER_FIRST_ATTRIBUTE, first);
   player.setAttribute(CHARACTER_LAST_ATTRIBUTE, last);
   player.setAttribute(CHARACTER_DISPLAY_ATTRIBUTE, `${first} ${last}`);
-  player.sendMessage(`From this day, you are ${first} ${last}. Make the name mean something.`);
+  return { first, last };
+}
+
+function finishCharacter(player, first, last) {
+  pendingFirst.delete(player);
+  pendingFirstName.delete(player);
+  const result = setNames(player, first, last);
+  if (result.error) return;
+  player.sendMessage(`From this day, you are ${result.first} ${result.last}. Make the name mean something.`);
   pluginApi.emitCustomEvent("character:created", {
     player,
-    firstName: first,
-    lastName: last,
+    firstName: result.first,
+    lastName: result.last,
     backgroundId: player.getAttribute(BACKGROUND_ID_ATTRIBUTE),
   });
 }
@@ -452,5 +474,10 @@ module.exports = register;
 module.exports.displayName = displayName;
 module.exports.getBackground = getBackground;
 module.exports.hasCharacter = hasCharacter;
+module.exports.hasBackground = hasBackground;
+module.exports.hasFullName = hasFullName;
+module.exports.applyBackground = applyBackground;
+module.exports.setNames = setNames;
+module.exports.cleanNamePart = cleanNamePart;
 module.exports.BACKGROUND_ID_ATTRIBUTE = BACKGROUND_ID_ATTRIBUTE;
 module.exports.CHARACTER_DISPLAY_ATTRIBUTE = CHARACTER_DISPLAY_ATTRIBUTE;

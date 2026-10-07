@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { OsrsClient } from "../../OsrsClient";
 import { fetchContent } from "../../../network/serverConnection/contentApi";
 import { state as connectionState } from "../../../network/serverConnection/state";
-import { sendChat } from "../../../network/serverConnection/outgoing/inventoryChat";
 import "./OriginOverlay.css";
 
 interface Realm {
@@ -16,10 +15,23 @@ interface Realm {
     welcome: string;
 }
 
+interface Background {
+    id: string;
+    name: string;
+    epithet: string;
+    lens: string;
+}
+
 interface OriginsStatus {
     needsChoice: boolean;
+    hasOrigin: boolean;
+    hasBackground: boolean;
+    hasName: boolean;
     realms: Realm[];
+    backgrounds: Background[];
 }
+
+type Step = "kingdom" | "background" | "name";
 
 /** Heraldic SVG icons for the six realms — Jon's mockup iconography. */
 function RealmIcon({ id }: { id: string }): JSX.Element {
@@ -78,16 +90,33 @@ function RealmIcon({ id }: { id: string }): JSX.Element {
     }
 }
 
-function claimLabel(realm: Realm): string {
-    return realm.id === "wanderer"
-        ? "I TAKE TO THE ROAD"
-        : `I CLAIM ${realm.name.toUpperCase()} AS MY HOME`;
+/** Validate a name part client-side: letters/apostrophe/hyphen/space, 2-16 chars. */
+function cleanNamePart(input: string): string | null {
+    let s = input
+        .replace(/[^A-Za-z'\- ]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    if (s.length < 2 || s.length > 16) return null;
+    if (s.replace(/[^a-z]/g, "").length < 2) return null;
+    return s.replace(/(^|[\s'\-])[a-z]/g, (m) => m.toUpperCase());
 }
+
+const STEP_TITLES: Record<Step, string> = {
+    kingdom: "Where do you call home?",
+    background: "What was your life before?",
+    name: "Who are you?",
+};
 
 export function OriginOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element | null {
     const [status, setStatus] = useState<OriginsStatus | null>(null);
-    const [selectedId, setSelectedId] = useState<string>("asgarnia");
-    const [claiming, setClaiming] = useState(false);
+    const [step, setStep] = useState<Step>("kingdom");
+    const [selectedRealmId, setSelectedRealmId] = useState<string>("asgarnia");
+    const [selectedBgId, setSelectedBgId] = useState<string | null>(null);
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
+    const [nameError, setNameError] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState(false);
     const pollRef = useRef<number | undefined>(undefined);
 
     const username = connectionState.sessionUsername;
@@ -103,7 +132,12 @@ export function OriginOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.E
             )) as OriginsStatus;
             setStatus(data);
             if (!data.needsChoice) {
-                setClaiming(false);
+                setSubmitting(false);
+            } else {
+                // Jump to the first incomplete step.
+                if (!data.hasOrigin) setStep("kingdom");
+                else if (!data.hasBackground) setStep("background");
+                else if (!data.hasName) setStep("name");
             }
         } catch {
             // Server unreachable or endpoint missing — stay hidden, retry next poll.
@@ -118,26 +152,45 @@ export function OriginOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.E
         };
     }, [poll]);
 
-    const handleClaim = useCallback(async () => {
-        if (claiming) return;
-        setClaiming(true);
+    const handleBegin = useCallback(async () => {
+        if (submitting) return;
+        const first = cleanNamePart(firstName);
+        const last = cleanNamePart(lastName);
+        if (!first || !last) {
+            setNameError("That name won't do — letters only, 2 to 16 characters each.");
+            return;
+        }
+        if (!selectedBgId) {
+            setNameError("Choose a past first.");
+            setStep("background");
+            return;
+        }
+        setNameError(null);
+        setSubmitting(true);
         try {
-            // Claim via HTTP API — reliable during character creation when websocket chat may not be ready.
-            await fetchContent(
-                `/api/origins-status?player=${encodeURIComponent(username)}&claim=${encodeURIComponent(selectedId)}`
-            );
+            // Single unified claim: origin + background + names.
+            const params = new URLSearchParams({
+                player: username,
+                origin: selectedRealmId,
+                background: selectedBgId,
+                firstname: first,
+                lastname: last,
+            });
+            await fetchContent(`/api/origins-status?${params.toString()}`);
         } catch {
             // Fall through to poll; if the claim landed, needsChoice flips false.
         }
-        // Re-poll soon: a successful claim flips needsChoice to false.
         window.setTimeout(poll, 1500);
-    }, [claiming, selectedId, poll, username]);
+    }, [submitting, firstName, lastName, selectedBgId, selectedRealmId, username, poll]);
 
     if (!status?.needsChoice || !status.realms.length) {
         return null;
     }
 
-    const selected = status.realms.find((r) => r.id === selectedId) ?? status.realms[0];
+    const selectedRealm =
+        status.realms.find((r) => r.id === selectedRealmId) ?? status.realms[0];
+    const selectedBg =
+        status.backgrounds.find((b) => b.id === selectedBgId) ?? null;
 
     return (
         <div className="tma-origin-backdrop">
@@ -155,46 +208,169 @@ export function OriginOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.E
                 </p>
                 <div className="tma-origin-header-rule" />
 
-                <div className="tma-origin-realms">
-                    {status.realms.map((realm) => {
-                        const isSelected = realm.id === selected.id;
-                        return (
+                {/* Step indicator */}
+                <div className="tma-origin-steps" aria-hidden="true">
+                    {(["kingdom", "background", "name"] as Step[]).map((s, i) => (
+                        <span
+                            key={s}
+                            className={`tma-origin-step${step === s ? " active" : ""}${
+                                ["kingdom", "background", "name"].indexOf(step) > i ? " done" : ""
+                            }`}
+                        >
+                            {i + 1}
+                        </span>
+                    ))}
+                </div>
+
+                <div className="tma-origin-step-title">{STEP_TITLES[step]}</div>
+
+                {step === "kingdom" && (
+                    <>
+                        <div className="tma-origin-realms">
+                            {status.realms.map((realm) => {
+                                const isSelected = realm.id === selectedRealm.id;
+                                return (
+                                    <button
+                                        key={realm.id}
+                                        className={`tma-origin-realm${isSelected ? " selected" : ""}`}
+                                        onClick={() => setSelectedRealmId(realm.id)}
+                                    >
+                                        <span className="tma-origin-icon">
+                                            <RealmIcon id={realm.id} />
+                                        </span>
+                                        <span className="tma-origin-realm-text">
+                                            <span className="tma-origin-realm-name">{realm.name}</span>
+                                            <span className="tma-origin-realm-sub">
+                                                {realm.city} · {realm.epithet}
+                                            </span>
+                                        </span>
+                                        <span className="tma-origin-chevron" aria-hidden="true">
+                                            ›
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div className="tma-origin-detail">
+                            <div className="tma-origin-detail-title">
+                                {selectedRealm.name} — {selectedRealm.epithet}
+                            </div>
+                            <p className="tma-origin-detail-lens">{selectedRealm.lens}</p>
+                        </div>
+
+                        <button
+                            className="tma-origin-claim"
+                            onClick={() => setStep("background")}
+                        >
+                            CONTINUE →
+                        </button>
+                    </>
+                )}
+
+                {step === "background" && (
+                    <>
+                        <div className="tma-origin-realms">
+                            {status.backgrounds.map((bg) => {
+                                const isSelected = bg.id === selectedBgId;
+                                return (
+                                    <button
+                                        key={bg.id}
+                                        className={`tma-origin-realm${isSelected ? " selected" : ""}`}
+                                        onClick={() => setSelectedBgId(bg.id)}
+                                    >
+                                        <span className="tma-origin-realm-text">
+                                            <span className="tma-origin-realm-name">{bg.name}</span>
+                                            <span className="tma-origin-realm-sub">{bg.epithet}</span>
+                                        </span>
+                                        <span className="tma-origin-chevron" aria-hidden="true">
+                                            ›
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {selectedBg && (
+                            <div className="tma-origin-detail">
+                                <div className="tma-origin-detail-title">
+                                    {selectedBg.name} — {selectedBg.epithet}
+                                </div>
+                                <p className="tma-origin-detail-lens">{selectedBg.lens}</p>
+                            </div>
+                        )}
+
+                        <div className="tma-origin-nav">
                             <button
-                                key={realm.id}
-                                className={`tma-origin-realm${isSelected ? " selected" : ""}`}
-                                onClick={() => setSelectedId(realm.id)}
+                                className="tma-origin-back"
+                                onClick={() => setStep("kingdom")}
                             >
-                                <span className="tma-origin-icon">
-                                    <RealmIcon id={realm.id} />
-                                </span>
-                                <span className="tma-origin-realm-text">
-                                    <span className="tma-origin-realm-name">{realm.name}</span>
-                                    <span className="tma-origin-realm-sub">
-                                        {realm.city} · {realm.epithet}
-                                    </span>
-                                </span>
-                                <span className="tma-origin-chevron" aria-hidden="true">
-                                    ›
-                                </span>
+                                ← BACK
                             </button>
-                        );
-                    })}
-                </div>
+                            <button
+                                className="tma-origin-claim tma-origin-claim-half"
+                                onClick={() => selectedBgId && setStep("name")}
+                                disabled={!selectedBgId}
+                            >
+                                CONTINUE →
+                            </button>
+                        </div>
+                    </>
+                )}
 
-                <div className="tma-origin-detail">
-                    <div className="tma-origin-detail-title">
-                        {selected.name} — {selected.epithet}
-                    </div>
-                    <p className="tma-origin-detail-lens">{selected.lens}</p>
-                </div>
+                {step === "name" && (
+                    <>
+                        <div className="tma-origin-name-fields">
+                            <label className="tma-origin-name-label">
+                                First name
+                                <input
+                                    className="tma-origin-name-input"
+                                    type="text"
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    maxLength={16}
+                                    placeholder="Aldric"
+                                    autoComplete="off"
+                                />
+                            </label>
+                            <label className="tma-origin-name-label">
+                                Family name
+                                <input
+                                    className="tma-origin-name-input"
+                                    type="text"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    maxLength={16}
+                                    placeholder="Stonehand"
+                                    autoComplete="off"
+                                />
+                            </label>
+                        </div>
+                        {nameError && <p className="tma-origin-name-error">{nameError}</p>}
+                        <p className="tma-origin-name-hint">
+                            {selectedBg
+                                ? `A ${selectedBg.name.toLowerCase()} of ${selectedRealm.name}. `
+                                : ""}
+                            From this day, this is who the world will know.
+                        </p>
 
-                <button
-                    className="tma-origin-claim"
-                    onClick={handleClaim}
-                    disabled={claiming}
-                >
-                    {claiming ? "…" : claimLabel(selected)}
-                </button>
+                        <div className="tma-origin-nav">
+                            <button
+                                className="tma-origin-back"
+                                onClick={() => setStep("background")}
+                            >
+                                ← BACK
+                            </button>
+                            <button
+                                className="tma-origin-claim tma-origin-claim-half"
+                                onClick={handleBegin}
+                                disabled={submitting}
+                            >
+                                {submitting ? "…" : "BEGIN YOUR LIFE"}
+                            </button>
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );

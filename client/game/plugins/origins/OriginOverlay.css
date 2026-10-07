@@ -232,6 +232,140 @@
     cursor: wait;
 }
 
+/* --- Multi-step creation: step indicator, nav, name fields --- */
+
+.tma-origin-steps {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.tma-origin-step {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid #3a2f22;
+    background: #1e1812;
+    color: #6b5a3a;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.tma-origin-step.active {
+    border-color: #c9a227;
+    color: #ffd27f;
+    box-shadow: 0 0 10px rgba(201, 162, 39, 0.35);
+}
+
+.tma-origin-step.done {
+    border-color: #6b5a3a;
+    color: #9a8f7d;
+}
+
+.tma-origin-step-title {
+    flex: 0 0 auto;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #d9b45b;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+}
+
+.tma-origin-nav {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 10px;
+}
+
+.tma-origin-back {
+    flex: 0 0 auto;
+    padding: 12px 16px;
+    background: #241c13;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    color: #9a8f7d;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.tma-origin-back:hover {
+    border-color: #6b5a3a;
+    color: #d9b45b;
+}
+
+.tma-origin-claim-half {
+    flex: 1 1 auto;
+}
+
+.tma-origin-name-fields {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.tma-origin-name-label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+}
+
+.tma-origin-name-input {
+    padding: 10px 12px;
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    color: #e8ded0;
+    font-size: 16px;
+    letter-spacing: 0.02em;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tma-origin-name-input:focus {
+    border-color: #c9a227;
+    box-shadow: 0 0 10px rgba(201, 162, 39, 0.25);
+}
+
+.tma-origin-name-input::placeholder {
+    color: #5a4f3d;
+    font-style: italic;
+}
+
+.tma-origin-name-error {
+    flex: 0 0 auto;
+    margin: 0 0 8px;
+    text-align: center;
+    font-size: 13px;
+    color: #d46a5a;
+}
+
+.tma-origin-name-hint {
+    flex: 1 1 auto;
+    margin: 0 0 14px;
+    text-align: center;
+    font-size: 13px;
+    font-style: italic;
+    line-height: 1.5;
+    color: #9a8f7d;
+}
+
 /* Themed scrollbars for internal scroll areas */
 .tma-origin-realms::-webkit-scrollbar,
 .tma-origin-detail::-webkit-scrollbar {
