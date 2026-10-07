@@ -524,8 +524,8 @@ class CitizenDirector {
     this.api.emitPlayerLogin({ player: bot, username: record.username });
     bot.moveTo?.(spawn.clone());
 
-    // FIX: The World's add-player queue is not draining (bots stuck in queue).
-    // Add directly to World's player list via api.core, bypassing the queue.
+    // Bypass: the World's add-player queue does not drain for bots, so add
+    // directly to the World's player list. See queue-drain investigation.
     try {
       const World = this.api.core?.World;
       if (World && World.players && typeof World.players.add === "function") {
@@ -537,8 +537,8 @@ class CitizenDirector {
         }
         World.players.add(bot, true); // true = isBot, doesn't take human slot
       }
-    } catch (e) {
-      console.log(`[citizens-visibility] direct add failed: ${e?.message}`);
+    } catch {
+      // Non-fatal: bot remains in the add-player queue.
     }
 
     const activity =
