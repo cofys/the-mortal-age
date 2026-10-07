@@ -118,6 +118,10 @@ export function OriginOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.E
     const [nameError, setNameError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const pollRef = useRef<number | undefined>(undefined);
+    // Last step implied by the server's progress flags. The poll must only move
+    // the step when this CHANGES (initial load or real server-side progress) —
+    // never every poll, or it would snap the user back to kingdom mid-flow.
+    const lastServerStep = useRef<Step | null>(null);
 
     const username = connectionState.sessionUsername;
 
@@ -133,11 +137,21 @@ export function OriginOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.E
             setStatus(data);
             if (!data.needsChoice) {
                 setSubmitting(false);
+                lastServerStep.current = null;
             } else {
-                // Jump to the first incomplete step.
-                if (!data.hasOrigin) setStep("kingdom");
-                else if (!data.hasBackground) setStep("background");
-                else if (!data.hasName) setStep("name");
+                // Jump to the first incomplete step — but only when the
+                // server's progress actually changed. The unified claim sets
+                // nothing server-side until the final submit, so an
+                // unconditional setStep("kingdom") here would yank the user
+                // back from background/name on every 2s poll.
+                let serverStep: Step;
+                if (!data.hasOrigin) serverStep = "kingdom";
+                else if (!data.hasBackground) serverStep = "background";
+                else serverStep = "name";
+                if (serverStep !== lastServerStep.current) {
+                    lastServerStep.current = serverStep;
+                    setStep(serverStep);
+                }
             }
         } catch {
             // Server unreachable or endpoint missing — stay hidden, retry next poll.
