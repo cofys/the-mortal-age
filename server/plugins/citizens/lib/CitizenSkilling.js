@@ -513,12 +513,11 @@ function startSession(director, leader, companions, skillId) {
     items: 0,
   };
 
-  let party = null;
-  if (companions.length > 0) {
-    party = createParty(leader.username, companions);
-    party.activity = `skill:${skillId}`;
-    for (const m of companions) setFollow(m, leader.username, "skilling");
-  }
+  // A party exists even for solo sessions, so a real player can always join
+  // via an activity invite (joinParty needs a party object).
+  const party = createParty(leader.username, companions);
+  party.activity = `skill:${skillId}`;
+  for (const m of companions) setFollow(m, leader.username, "skilling");
   sessions.set(normalizeName(leader.username), session);
 
   const leaderDisplay = leader.displayName ?? leader.username;
@@ -527,7 +526,17 @@ function startSession(director, leader, companions, skillId) {
   for (const c of companions) {
     journalEvent(c, `Joined ${leaderDisplay}'s ${def.label.toLowerCase()} outing.`, "work");
   }
-  shoutIfWatched(director, leader, pickOne(rng, def.formLines));
+  // Shout + activity invites for nearby real players (data-tier).
+  try {
+    const { offerActivityToPlayers } = require("./CitizenPlayerActivities");
+    offerActivityToPlayers(director, leader, party, {
+      activityId: `skill:${skillId}`,
+      label: `${def.label.toLowerCase()} outing`,
+      formLines: def.formLines,
+    });
+  } catch {
+    // Non-fatal.
+  }
   return true;
 }
 
@@ -664,6 +673,23 @@ function sessionSummary(session, def) {
 }
 
 function endSession(director, key, session, note) {
+  const def = SKILLS[session.skill];
+  // Player crew members get their share of the yield, and the shared
+  // session warms every citizen member toward them — before the disband.
+  try {
+    const {
+      awardSkillingShare,
+      bondAfterActivity,
+    } = require("./CitizenPlayerActivities");
+    awardSkillingShare(director, session, def);
+    bondAfterActivity(
+      director,
+      getParty(session.leader),
+      `${def.label.toLowerCase()} outing`
+    );
+  } catch {
+    // Non-fatal.
+  }
   for (const m of session.members) {
     try { clearFollow(m); } catch { /* non-fatal */ }
   }

@@ -273,14 +273,20 @@ function tryFormParty(record, director, hour) {
   }
 
   // Visible to nearby real players: the leader calls out (data-tier shout,
-  // no LLM — the LLM can riff on it later if asked).
+  // no LLM — the LLM can riff on it later if asked) and nearby players get
+  // an activity invite they can accept with "yes".
   try {
-    const bot = director.getBot(record);
-    if (bot && realPlayersNear(bot).length > 0) {
-      const line = pickOne(rng, def.formLines);
-      try { bot.forceChat?.(line); } catch { /* non-fatal */ }
-    }
-  } catch { /* non-fatal */ }
+    const {
+      offerActivityToPlayers,
+    } = require("./CitizenPlayerActivities");
+    offerActivityToPlayers(director, record, party, {
+      activityId,
+      label: activityLabel(activityId),
+      formLines: def.formLines,
+    });
+  } catch {
+    // Non-fatal.
+  }
   return true;
 }
 
@@ -333,11 +339,21 @@ function maintainParty(director, party, leader, hour) {
     return;
   }
 
-  // Drop offline members.
+  // Drop offline members. Real players are kept while they're online —
+  // they're party members too once they accept an activity invite.
+  let PlayerActivities = null;
+  try {
+    PlayerActivities = require("./CitizenPlayerActivities");
+  } catch {
+    // Non-fatal.
+  }
   for (const m of [...(party.members ?? [])]) {
     if (normalizeName(m) === normalizeName(leaderName)) continue;
     const rec = director.roster.get(normalizeName(m));
-    if (!rec || !director.isOnline(rec)) {
+    const online =
+      (rec && director.isOnline(rec)) ||
+      (PlayerActivities ? !!PlayerActivities.isOnlinePlayer(director, m) : false);
+    if (!online) {
       try { leaveParty(m); } catch { /* non-fatal */ }
       try { clearFollow(m); } catch { /* non-fatal */ }
     }
@@ -415,10 +431,26 @@ function splitLoot(director, party, def) {
     }
     journalEvent(m, `Split the catch: ${n} raw shrimps.`, "work");
   }
+
+  // Real-player members share the catch too.
+  try {
+    const { grantActivityLootToPlayers } = require("./CitizenPlayerActivities");
+    grantActivityLootToPlayers(director, party, itemId, def.loot.min, def.loot.max);
+  } catch {
+    // Non-fatal.
+  }
 }
 
 function endParty(director, party, leader, note) {
   const leaderName = leader.username;
+  // The shared outing warms every citizen member toward player members —
+  // regular activity buddies drift into friendship.
+  try {
+    const { bondAfterActivity } = require("./CitizenPlayerActivities");
+    bondAfterActivity(director, party, activityLabel(party.activity));
+  } catch {
+    // Non-fatal.
+  }
   for (const m of [...(party.members ?? [])]) {
     try { clearFollow(m); } catch { /* non-fatal */ }
   }

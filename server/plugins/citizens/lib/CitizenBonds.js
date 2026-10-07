@@ -12,7 +12,7 @@
  *   enemies: [username] — grudge-3 relationships with real consequences
  *   party: { id, leader, members } — current adventuring party, if any
  *   pendingInvites: [{ id, kind, from, to, createdAt, expiresAt, data }]
- *     kinds: friend_request, clan_invite, boss_trip, party_invite
+ *     kinds: friend_request, clan_invite, boss_trip, party_invite, activity_invite
  *
  * Persisted to data/saves/citizen-bonds.json. Bounded: max friends/enemies
  * per citizen, invites expire.
@@ -32,6 +32,7 @@ const INVITE_FRIEND = "friend_request";
 const INVITE_CLAN = "clan_invite";
 const INVITE_BOSS = "boss_trip";
 const INVITE_PARTY = "party_invite";
+const INVITE_ACTIVITY = "activity_invite";
 
 function normalizeName(name) {
   return String(name ?? "").trim().toLowerCase();
@@ -241,6 +242,7 @@ module.exports = {
   INVITE_CLAN,
   INVITE_BOSS,
   INVITE_PARTY,
+  INVITE_ACTIVITY,
   INVITE_TTL_MS,
   bonds,
   isFriend,

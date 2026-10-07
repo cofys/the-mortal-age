@@ -51,6 +51,7 @@ const {
   INVITE_CLAN,
   INVITE_BOSS,
   INVITE_PARTY,
+  INVITE_ACTIVITY,
   normalizeName,
 } = require("./CitizenBonds");
 const { getMemory } = require("./CitizenMemory");
@@ -397,6 +398,16 @@ function acceptInvite(playerName, citizenName, kind) {
     journalEvent(citizenName, `Joined a party with ${playerName}.`, "social");
   } else if (invite.kind === INVITE_CLAN) {
     journalEvent(citizenName, `${playerName} joined my clan chat.`, "social");
+  } else if (invite.kind === INVITE_ACTIVITY) {
+    // Activity invite accepted: the player joins the citizen's activity
+    // party (fishing trip, skilling session, boss run). Lazy require —
+    // CitizenPlayerActivities also lazily requires this module.
+    try {
+      const PlayerActivities = require("./CitizenPlayerActivities");
+      PlayerActivities.acceptActivityInvite(playerName, citizenName, invite);
+    } catch {
+      // Non-fatal — the invite is still resolved.
+    }
   } else {
     journalEvent(citizenName, `Became friends with ${playerName}.`, "social");
   }

@@ -398,6 +398,7 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
       party_create: `${display}: A party! I'm in. Where to?`,
       clan_invite: `${display}: Join my clan chat — we'd be glad to have you.`,
       boss_trip: `${display}: A boss trip? I'm in. Let's go.`,
+      activity_invite: `${display}: We've got company — ${speakerUsername}'s coming with us!`,
       follow_start: `${display}: Right behind you.`,
       follow_stop: `${display}: I'll wait here then.`,
     };

@@ -216,8 +216,17 @@ function tryFormBossRun(record, director) {
   }
 
   // Visible to nearby real players: the leader calls out (data-tier shout,
-  // no LLM — the LLM can riff on it later if asked).
-  shoutIfWatched(director, record, pickOne(rng, BOSS.formLines));
+  // no LLM) and nearby players get an activity invite ("yes" to join).
+  try {
+    const { offerActivityToPlayers } = require("./CitizenPlayerActivities");
+    offerActivityToPlayers(director, record, party, {
+      activityId: BOSS.id,
+      label: `${BOSS.label} run`,
+      formLines: BOSS.formLines,
+    });
+  } catch {
+    // Non-fatal.
+  }
   return true;
 }
 
@@ -268,11 +277,21 @@ function maintainBossRun(director, party, leader, hour) {
     return;
   }
 
-  // Drop offline members.
+  // Drop offline members — but keep online real players; they're in the
+  // party too once they accept the activity invite.
+  let PlayerActivities = null;
+  try {
+    PlayerActivities = require("./CitizenPlayerActivities");
+  } catch {
+    // Non-fatal.
+  }
   for (const m of [...(party.members ?? [])]) {
     if (normalizeName(m) === normalizeName(leaderName)) continue;
     const rec = director.roster.get(normalizeName(m));
-    if (!rec || !director.isOnline(rec)) {
+    const online =
+      (rec && director.isOnline(rec)) ||
+      (PlayerActivities ? !!PlayerActivities.isOnlinePlayer(director, m) : false);
+    if (!online) {
       try { leaveParty(m); } catch { /* non-fatal */ }
       try { clearFollow(m); } catch { /* non-fatal */ }
     }
@@ -307,6 +326,7 @@ function maintainTravel(director, party, leader, leaderBot, rng) {
   }
 
   // At the mole hill — descend into the lair (data-tier; the bots "dig in").
+  // Player members descend with the party.
   const lairLoc = makeLocation(director, BOSS.lair.x, BOSS.lair.y, BOSS.lair.z);
   for (const m of party.members ?? []) {
     const rec = director.roster.get(normalizeName(m));
@@ -314,6 +334,12 @@ function maintainTravel(director, party, leader, leaderBot, rng) {
     const bot = director.getBot(rec);
     if (!bot || !lairLoc) continue;
     try { bot.moveTo?.(lairLoc); } catch { /* non-fatal */ }
+  }
+  try {
+    const { movePlayerMembersTo } = require("./CitizenPlayerActivities");
+    movePlayerMembersTo(director, party, BOSS.lair.x, BOSS.lair.y, BOSS.lair.z);
+  } catch {
+    // Non-fatal.
   }
   party.phase = "fight";
   party.fightStartedAt = Date.now();
@@ -341,7 +367,18 @@ function maintainFight(director, party, leader, leaderBot, rng) {
 
   // Data-tier combat: the party chips the boss down; the boss occasionally
   // lands a journaled hit on a random member (no real damage — data tier).
-  party.bossHp = Math.max(0, (party.bossHp ?? BOSS.hp) - members.length * DAMAGE_PER_MEMBER);
+  // Player members swing too — they're in the fight.
+  let playerCount = 0;
+  try {
+    const { playerMembers } = require("./CitizenPlayerActivities");
+    playerCount = playerMembers(director, party).length;
+  } catch {
+    // Non-fatal.
+  }
+  party.bossHp = Math.max(
+    0,
+    (party.bossHp ?? BOSS.hp) - (members.length + playerCount) * DAMAGE_PER_MEMBER
+  );
 
   if (chance(rng, BOSS_HITBACK_CHANCE)) {
     const victim = pickOne(rng, members);
@@ -380,6 +417,13 @@ function splitLoot(director, party, members, rng) {
     }
     journalEvent(m, `Loot from ${BOSS.label}: a mole claw and ${skins} mole skins.`, "work");
   }
+  // Player members loot too.
+  try {
+    const { grantBossLootToPlayers } = require("./CitizenPlayerActivities");
+    grantBossLootToPlayers(director, party, rng);
+  } catch {
+    // Non-fatal.
+  }
 }
 
 function sendHome(director, party, leader) {
@@ -396,10 +440,24 @@ function sendHome(director, party, leader) {
     if (!bot) continue;
     try { bot.moveTo?.(homeLoc); } catch { /* non-fatal */ }
   }
+  // Player members head home with the party.
+  try {
+    const { movePlayerMembersTo } = require("./CitizenPlayerActivities");
+    movePlayerMembersTo(director, party, home.x, home.y, home.z ?? 0);
+  } catch {
+    // Non-fatal.
+  }
 }
 
 function endRun(director, party, leader, note) {
   const leaderName = leader.username;
+  // The shared run warms every citizen member toward player members.
+  try {
+    const { bondAfterActivity } = require("./CitizenPlayerActivities");
+    bondAfterActivity(director, party, `${BOSS.label} run`);
+  } catch {
+    // Non-fatal.
+  }
   for (const m of [...(party.members ?? [])]) {
     try { clearFollow(m); } catch { /* non-fatal */ }
   }
