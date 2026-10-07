@@ -2,7 +2,19 @@
  * PlayerExamine.test — verify the examine interface builds and data functions work.
  */
 
-const { _test } = require("./PlayerExamine.plugin");
+const Module = require("module");
+const path = require("path");
+const pluginPath = path.resolve(__dirname, "PlayerExamine.plugin.js");
+
+// Stub the widgetGroup dependency before requiring the plugin.
+const widgetGroupPath = path.resolve(__dirname, "widgetGroup.js");
+const widgetGroupSrc = require("fs").readFileSync(widgetGroupPath, "utf8");
+const widgetGroupModule = new Module(widgetGroupPath, module);
+widgetGroupModule._compile(widgetGroupSrc, widgetGroupPath);
+require.cache[widgetGroupPath] = widgetGroupModule;
+
+const plugin = require(pluginPath);
+const { _test } = plugin;
 const { GROUP_ID, COMPONENT, uid, DESCRIPTION_ATTRIBUTE, EXAMINE_OPTION_SLOT } = _test;
 
 // Mock player
@@ -57,19 +69,19 @@ function runTests() {
   });
 
   test("uid generates correct component UIDs", () => {
-    const expected = (30010 << 16) | 2;
+    const expected = (30010 << 16) | 3;
     assert(uid(COMPONENT.TITLE) === expected, `uid mismatch`);
   });
 
   test("DESCRIPTION_ATTRIBUTE is namespaced kebab-case", () => {
     assert(DESCRIPTION_ATTRIBUTE === "examine:description", `got ${DESCRIPTION_ATTRIBUTE}`);
     assert(DESCRIPTION_ATTRIBUTE.includes(":"), "should be namespaced");
-    assert(!DESCRIPTION_ATTRIBUTE.includes("_") || DESCRIPTION_ATTRIBUTE === "examine:description", "should be kebab-case");
   });
 
   test("All required components defined", () => {
-    const required = ["ROOT", "FRAME", "TITLE", "DESCRIPTION", "REPUTATION",
-      "ACCOMPLISHMENTS", "GUILD", "SKILLS", "CLOSE_BUTTON"];
+    const required = ["ROOT", "BORDER", "BG", "TITLE", "SUBTITLE", "SUBSUB",
+      "DESCRIPTION", "REPUTATION", "ACCOMPLISHMENTS", "GUILD", "SKILLS",
+      "CLOSE_BUTTON", "FOOTNOTE"];
     for (const comp of required) {
       assert(COMPONENT[comp] !== undefined, `missing component ${comp}`);
     }
@@ -79,6 +91,21 @@ function runTests() {
     const ids = Object.values(COMPONENT);
     const unique = new Set(ids);
     assert(ids.length === unique.size, "duplicate component IDs");
+  });
+
+  test("Section panels exist for every body", () => {
+    const pairs = [
+      ["PERSON_HEAD", "PERSON_PANEL", "DESCRIPTION"],
+      ["REP_HEAD", "REP_PANEL", "REPUTATION"],
+      ["DEEDS_HEAD", "DEEDS_PANEL", "ACCOMPLISHMENTS"],
+      ["GUILD_HEAD", "GUILD_PANEL", "GUILD"],
+      ["SKILLS_HEAD", "SKILLS_PANEL", "SKILLS"],
+    ];
+    for (const [head, panel, body] of pairs) {
+      assert(COMPONENT[head] !== undefined, `missing ${head}`);
+      assert(COMPONENT[panel] !== undefined, `missing ${panel}`);
+      assert(COMPONENT[body] !== undefined, `missing ${body}`);
+    }
   });
 
   console.log(`\n${passed} passed, ${failed} failed`);
