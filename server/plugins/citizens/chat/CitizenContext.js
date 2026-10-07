@@ -145,6 +145,17 @@ function buildContext(citizenUsername, speakerUsername) {
     // Memory must never break the chat path.
   }
 
+  // Kinship: spouses, sweethearts, close friends, feuds. Real people talk
+  // about their own lives — the citizen's words stay consistent with the
+  // relationships the background tier simulated.
+  try {
+    const { kinSummary } = require("../lib/CitizenKinship");
+    const kin = kinSummary(citizenUsername, director?.roster);
+    if (kin) parts.push(kin);
+  } catch {
+    // Kinship must never break the chat path.
+  }
+
   parts.push(`It is ${timeWord()}.`);
 
   // Lately: the background tier's journal. This is what makes "what have

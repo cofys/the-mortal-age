@@ -67,6 +67,8 @@ const GOSSIP_ATTACK = "attack";
 const GOSSIP_INSULT = "insult";
 const GOSSIP_GENEROSITY = "generosity";
 const GOSSIP_OFFICE = "office";
+const GOSSIP_WEDDING = "wedding";
+const GOSSIP_FEUD = "feud";
 
 const GOSSIP_HOPS = 4; // how many social links a rumor travels
 const GOSSIP_HOP_MIN_MS = 90 * 1000; // min time between hops
@@ -634,4 +636,6 @@ module.exports = {
   GOSSIP_INSULT,
   GOSSIP_GENEROSITY,
   GOSSIP_OFFICE,
+  GOSSIP_WEDDING,
+  GOSSIP_FEUD,
 };

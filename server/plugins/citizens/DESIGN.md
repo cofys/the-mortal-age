@@ -176,6 +176,38 @@ Citizens remember the players they've met (`lib/CitizenMemory.js`,
 of a player. Unit checks: `node lib/CitizenMemory.test.js` from
 `server/plugins/citizens`.
 
+## Citizen kinship (2026-10-07)
+
+Citizens have real relationships with *each other*, not just with the
+player (`lib/CitizenKinship.js`, `data/saves/citizen-kin.json`). Pair-keyed
+bonds, one romance per citizen (married is for life), max 12 bonds each:
+
+- **Friends** — same-kingdom citizens who share the city become friends,
+  weighted by trait chemistry (warm traits bond easily, cold ones slowly)
+  with a same-role bonus for shared routines. Old friendships deepen to
+  "close".
+- **Romance** — single citizens start courting, go serious, then marry.
+  Weddings are real events: an announcement phase (gossip + journal), then
+  a ceremony at the kingdom square — the couple and up to 6 guests gather
+  (data-tier move, same precedent as boss-run teleports), vows and cheers
+  through forceChat across ~4 director ticks, then journal + gossip. Love
+  waits out war; if a partner is away too long they marry quietly.
+- **Feuds** — clashing personalities spark feuds (cold → bitter → open).
+  Open feuds mean public shouting matches when both are near (30-min
+  cooldown), cold shoulders in citizen-to-citizen chatter, and gossip.
+  Feuds reconcile over time — stubborn traits (proud, gruff) make it
+  slower; making peace is journaled and gossiped.
+- **Foreground** — the chat context names spouses, sweethearts, close
+  friends and open feuds, so citizens talk about their own lives; wedding
+  and feud gossip (`GOSSIP_WEDDING`, `GOSSIP_FEUD`) travels the existing
+  rumor network to players.
+
+Runs on the director tick, data tier, zero LLM. Unit checks:
+`node lib/CitizenKinship.test.js` from `server/plugins/citizens` —
+store constraints, chemistry scoring, the full wedding machine
+(announced → gather → vows → cheers → married), quiet marriages, feud
+arguments with cooldown, bond pruning, and same-kingdom formation.
+
 ## What's stubbed / deferred
 
 - **Fishing catches.** Fishers do the full visible behavior (dock shifts, cast

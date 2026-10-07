@@ -53,6 +53,7 @@ const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenBonds = require("../lib/CitizenBonds");
+const CitizenKinship = require("../lib/CitizenKinship");
 const { normalizeName } = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
@@ -801,6 +802,14 @@ class CitizenDirector {
       }
     }
     this.tickMemory(nowMs);
+    // Citizen kinship: friendships, romances, weddings and feuds between
+    // citizens — the social fabric that makes them read as real people.
+    // Data tier, zero LLM.
+    try {
+      CitizenKinship.tickKinship(this, hour, nowMs);
+    } catch (error) {
+      this.log("kinship failed", { error: String(error?.message ?? error) });
+    }
     // Foreground social: citizen-to-citizen LLM dialogue, ONLY when a real
     // player is nearby to overhear (Jon's two-tier rule). Otherwise the
     // background journal already recorded that they talked — zero tokens.
@@ -875,6 +884,13 @@ class CitizenDirector {
       CitizenBonds.save();
     } catch (error) {
       this.log("citizen bonds save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      CitizenKinship.getKinship().saveIfDirty();
+    } catch (error) {
+      this.log("citizen kinship save failed", {
         error: String(error?.message ?? error),
       });
     }

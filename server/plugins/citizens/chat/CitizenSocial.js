@@ -148,6 +148,13 @@ function maybeSocialize(director, nowMs = Date.now()) {
         const { normalizeName } = require("../lib/CitizenBonds");
         const rec = username ? director.roster.get(normalizeName(username)) : null;
         if (!rec || !director.isOnline(rec)) continue;
+        // Open feuds get the cold shoulder: they don't chat, they glare.
+        try {
+          const { isOpenFeud } = require("../lib/CitizenKinship");
+          if (isOpenFeud(record.username, rec.username)) continue;
+        } catch {
+          // Kinship must never break social.
+        }
         botB = local;
         recordB = rec;
         break;
