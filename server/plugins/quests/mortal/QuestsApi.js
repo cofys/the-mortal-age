@@ -278,6 +278,7 @@ function handleAction(player, quest, action, query) {
     // blindly advancing to stageIndex + 1 (which would fall through into a
     // sibling branch's stages after a choice).
     if (stage.next === "complete") {
+      QuestState.completeQuest(player, quest.id); // persist completion; completeQuestNow only runs side-effects
       completeQuestNow(player, quest, stage, stageIndex);
       return;
     }
