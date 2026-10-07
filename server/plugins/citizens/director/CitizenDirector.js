@@ -52,6 +52,7 @@ const CitizenWarfare = require("../lib/CitizenWarfare");
 const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
+const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenBonds = require("../lib/CitizenBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
 const { normalizeName } = require("../lib/CitizenBonds");
@@ -870,6 +871,14 @@ class CitizenDirector {
       CitizenSkilling.tickSkilling(this, hour);
     } catch (error) {
       this.log("skilling failed", { error: String(error?.message ?? error) });
+    }
+    // Visible daily routines: merchants open stalls, crafters work visible
+    // forge shifts, guards patrol — phase transitions journaled and
+    // announced, followers acknowledged. Data tier, zero LLM.
+    try {
+      CitizenDailyRoutines.tickRoutines(this, hour);
+    } catch (error) {
+      this.log("daily routines failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {
