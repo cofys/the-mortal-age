@@ -345,8 +345,10 @@ function onGuildSocialPacket(event) {
 module.exports = {
   name: "Guilds",
   register(api) {
-    console.info("[guilds] MINIMAL register hit");
     pluginApi = api;
+    // BISECT: GuildsApi.attach(api);
+    api.onSocialPacket(onGuildSocialPacket);
+    api.log?.("[guilds] player guilds with citizen members enabled");
   },
   // Exported for smoke tests.
   handleGuildKeyword,
