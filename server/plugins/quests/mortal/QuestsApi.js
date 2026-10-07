@@ -219,12 +219,17 @@ function buildPayload(player) {
     return buildPayload(player);
   }
 
+  // choices must be null (not []) when the stage has none: the client
+  // treats a truthy choices value as "render choice buttons instead of the
+  // Continue button", and [] is truthy in JS. An empty array here used to
+  // strand players on the last dialogue line with no way to advance.
+  const choiceList = (stage.dialogue.choices || []).map((c) => ({ text: substitute(c.text, vars) }));
   const dialogue = arrived && stage.dialogue
     ? {
         speaker: substitute(stage.dialogue.speaker, vars),
         title: substitute(stage.dialogue.title || "", vars),
         lines: (stage.dialogue.lines || []).map((l) => substitute(l, vars)),
-        choices: (stage.dialogue.choices || []).map((c) => ({ text: substitute(c.text, vars) })),
+        choices: choiceList.length ? choiceList : null,
       }
     : null;
 

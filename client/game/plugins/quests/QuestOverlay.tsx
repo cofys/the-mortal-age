@@ -167,7 +167,7 @@ export function QuestOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.El
                         <p className="tma-quest-line">
                             {dialogue.lines[Math.min(lineIndex, dialogue.lines.length - 1)]}
                         </p>
-                        {dialogue.choices && lineIndex >= dialogue.lines.length - 1 ? (
+                        {dialogue.choices && dialogue.choices.length > 0 && lineIndex >= dialogue.lines.length - 1 ? (
                             <div className="tma-quest-choices">
                                 {dialogue.choices.map((c, i) => (
                                     <button
