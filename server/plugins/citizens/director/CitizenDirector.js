@@ -275,10 +275,14 @@ class CitizenDirector {
       usedNames: this.usedNames,
     });
     const username = personality.name;
-    // Citizens live near the market of their kingdom's capital.
-    const market = siteTileByKingdom(kingdomId, "market") ?? { x: 3200, y: 3200, z: 0 };
-    const home = noisyTile(market.x, market.y, 12, rng);
-    home.z = market.z ?? 0;
+    // Citizens live near the market or square of their kingdom's capital.
+    // Commoners split between market and square so cities feel populated
+    // in multiple areas, not just clustered at one spot.
+    const useSquare = role === "commoner" && rng() < 0.4;
+    const anchor = siteTileByKingdom(kingdomId, useSquare ? "square" : "market")
+      ?? { x: 3200, y: 3200, z: 0 };
+    const home = noisyTile(anchor.x, anchor.y, 12, rng);
+    home.z = anchor.z ?? 0;
     const watch = role === ROLE_GUARD ? Math.floor(rng() * 3) : 0;
     // Guards sleep inside their off-watch hours so the night watch is actually
     // manned; everyone else keeps a seeded night window.
@@ -527,7 +531,6 @@ class CitizenDirector {
           if (idx >= 0) queue.splice(idx, 1);
         }
         World.players.add(bot, true); // true = isBot, doesn't take human slot
-        console.log(`[citizens-visibility] DIRECT ADD ${record.username} to World.players at ${spawn.x},${spawn.y},${spawn.z}`);
       }
     } catch (e) {
       console.log(`[citizens-visibility] direct add failed: ${e?.message}`);
