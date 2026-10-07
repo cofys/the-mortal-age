@@ -265,17 +265,34 @@ function grantActivityLootToPlayers(director, party, itemId, min, max) {
   }
 }
 
-/** Boss-kill loot share for player members. */
-function grantBossLootToPlayers(director, party, rng) {
+/** Boss-kill loot share for player members. items/bonus/note are optional: when
+ *  omitted the Giant Mole loot is used (backward compatible). */
+function grantBossLootToPlayers(director, party, rng, items, bonus, note) {
   const players = playerMembers(director, party);
+  const spec = items ?? [[7416, 1], [7418, [1, 2]]]; // mole claw + skins (npc-drops.json)
+  const noteOf =
+    note ??
+    ((picked) => {
+      const skins = (picked.find((p) => p.id === 7418) ?? { qty: 0 }).qty;
+      return `You loot a mole claw and ${skins} mole skins from the Giant Mole.`;
+    });
   for (const pn of players) {
-    const skins = 1 + Math.floor(rng() * 2);
-    givePlayerItem(director, pn, 7416, 1); // mole claw (verified in npc-drops.json)
-    givePlayerItem(director, pn, 7418, skins); // mole skin
-    notifyPlayerEntity(
-      isOnlinePlayer(director, pn),
-      `You loot a mole claw and ${skins} mole skins from the Giant Mole.`
-    );
+    const picked = [];
+    for (const [id, qty] of spec) {
+      const n = Array.isArray(qty) ? qty[0] + Math.floor(rng() * (qty[1] - qty[0] + 1)) : qty;
+      if (n > 0) {
+        picked.push({ id, qty: n });
+        givePlayerItem(director, pn, id, n);
+      }
+    }
+    let bonusName = null;
+    if (bonus && rng() < bonus.chance) {
+      const [bid, bname] = bonus.items[Math.floor(rng() * bonus.items.length)];
+      givePlayerItem(director, pn, bid, 1);
+      picked.push({ id: bid, qty: 1 });
+      bonusName = bname;
+    }
+    notifyPlayerEntity(isOnlinePlayer(director, pn), noteOf(picked, bonusName));
   }
 }
 
