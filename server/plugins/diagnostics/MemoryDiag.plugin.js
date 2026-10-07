@@ -89,10 +89,10 @@ function runDiagnosis() {
       report.memoryError = String(e?.message ?? e).slice(0, 100);
     }
 
-    pluginApi.log?.("[memory-diag] " + JSON.stringify(report));
+    console.log("[memory-diag] " + JSON.stringify(report));
   } catch (error) {
     try {
-      pluginApi.log?.("[memory-diag] failed: " + String(error?.message ?? error));
+      console.log("[memory-diag] failed: " + String(error?.message ?? error));
     } catch {
       // Ignore.
     }
@@ -103,7 +103,7 @@ function startDiagnostics() {
   setTimeout(runDiagnosis, 30000);
   intervalId = setInterval(runDiagnosis, 5 * 60 * 1000);
   if (intervalId.unref) intervalId.unref();
-  pluginApi.log?.("[memory-diag] diagnostic started (5-min interval)");
+  console.log("[memory-diag] diagnostic started (5-min interval)");
 }
 
 function stopDiagnostics() {
