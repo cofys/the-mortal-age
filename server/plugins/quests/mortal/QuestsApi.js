@@ -304,7 +304,11 @@ function attach(api) {
 
     const quest = QuestState.activeQuest(player);
     const action = (query.get("action") || "").trim().toLowerCase();
-    if (quest && action) {
+    // Dismiss must work without an active quest: the completion overlay shows
+    // exactly when there is no active quest, so gating on `quest` would make
+    // its Continue button a dead button. handleAction no-ops other actions
+    // when quest is null.
+    if (action && (quest || action === "dismiss")) {
       try {
         handleAction(player, quest, action, query);
       } catch (e) {

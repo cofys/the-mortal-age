@@ -201,7 +201,7 @@ export function QuestOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.El
 
             {/* Travel hint when the player hasn't reached the stage location */}
             {!quest.arrived && !quest.task && (
-                <div className="tma-quest-travel-hint">Make your way to the marked location…</div>
+                <div className="tma-quest-travel-hint">Not there yet — follow the objective above…</div>
             )}
 
             {/* Task progress */}
