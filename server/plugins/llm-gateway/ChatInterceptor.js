@@ -30,6 +30,7 @@ class ChatInterceptor {
     this.api = api;
     this.citizens = new Map(); // lowercased username -> { username, personalityCard, replyCooldownMs }
     this.lastReplyAt = new Map(); // lowercased username -> timestamp
+    this.lastPublicReplyAt = new Map(); // lowercased username -> timestamp (public-path cap)
   }
 
   get World() {
@@ -64,6 +65,7 @@ class ChatInterceptor {
     if (!key) return;
     this.citizens.delete(key);
     this.lastReplyAt.delete(key);
+    this.lastPublicReplyAt.delete(key);
   }
 
   // True when the bot may answer (cooldown keeps one chatty player from
@@ -75,6 +77,23 @@ class ChatInterceptor {
     const last = this.lastReplyAt.get(key) ?? 0;
     if (Date.now() - last < cooldown) return false;
     this.lastReplyAt.set(key, Date.now());
+    return true;
+  }
+
+  // Public-chat cap: the public path (citizens:chat-heard -> llm:chat-request,
+  // emitted directly by the citizens plugin) bypasses requestChat's
+  // checkCooldown, so without this a player spamming public chat in a crowd
+  // could trigger up to 2 LLM calls per utterance with no bound — on a free
+  // tier, spam burns quota. Per-citizen minimum gap between public replies.
+  // Private-message requests already passed checkCooldown, so the gateway
+  // only calls this for channel === "public". Updates the timestamp when
+  // allowed. Silence is free.
+  checkPublicCooldown(username) {
+    const cooldown = Number(process.env.LLM_GATEWAY_PUBLIC_CHAT_COOLDOWN_MS) || 30_000;
+    const key = String(username).toLowerCase();
+    const last = this.lastPublicReplyAt.get(key) ?? 0;
+    if (Date.now() - last < cooldown) return false;
+    this.lastPublicReplyAt.set(key, Date.now());
     return true;
   }
 
