@@ -51,6 +51,7 @@ const BossRuns = require("../lib/CitizenBossRuns");
 const CitizenWarfare = require("../lib/CitizenWarfare");
 const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
+const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenBonds = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
@@ -848,6 +849,14 @@ class CitizenDirector {
       CitizenCrafting.tickCrafting(this, nowMs);
     } catch (error) {
       this.log("crafting failed", { error: String(error?.message ?? error) });
+    }
+    // Visible citizen skilling: persistent XP/levels, skilling sessions and
+    // parties with real animations at work sites, docks, quarries, taverns.
+    // Data tier, zero LLM.
+    try {
+      CitizenSkilling.tickSkilling(this, hour);
+    } catch (error) {
+      this.log("skilling failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {
