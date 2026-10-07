@@ -1,0 +1,261 @@
+/* The Mortal Age — examine character sheet overlay.
+ * Built on the origin-selection heraldic template: tall dark-bronze panel,
+ * ornate gold frame, corner brackets, gold section headers, parchment body. */
+
+.tma-examine-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(11, 8, 5, 0.72) 0%, rgba(11, 8, 5, 0.9) 100%);
+    animation: tma-examine-fadein 0.35s ease-out;
+}
+
+@keyframes tma-examine-fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tma-examine-panel {
+    position: relative;
+    width: min(480px, 92vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+    border: 1px solid #6b5a3a;
+    outline: 3px solid #14100b;
+    box-shadow:
+        0 0 0 4px #6b5a3a,
+        0 0 40px rgba(201, 162, 39, 0.15),
+        0 20px 60px rgba(0, 0, 0, 0.8);
+    padding: 28px 24px 16px;
+    animation: tma-examine-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes tma-examine-rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Corner brackets — L-shaped bright gold */
+.tma-examine-panel::before,
+.tma-examine-panel::after {
+    content: "";
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid #c9a227;
+    pointer-events: none;
+}
+.tma-examine-panel::before {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+}
+.tma-examine-panel::after {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+}
+
+.tma-examine-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #9a8f7d;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.15s ease;
+    z-index: 1;
+}
+
+.tma-examine-close:hover {
+    color: #d9b45b;
+}
+
+.tma-examine-kicker {
+    margin: 0 0 2px;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+}
+
+.tma-examine-name {
+    margin: 0;
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #d9b45b;
+}
+
+.tma-examine-byline {
+    margin: 4px 0 0;
+    text-align: center;
+    font-size: 13px;
+    font-style: italic;
+    color: #9a8f7d;
+}
+
+.tma-examine-header-rule {
+    flex: 0 0 auto;
+    height: 1px;
+    margin: 12px 40px 14px;
+    background: linear-gradient(90deg, transparent, #6b5a3a, transparent);
+}
+
+.tma-examine-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-right: 2px;
+}
+
+.tma-examine-section {
+    flex: 0 0 auto;
+}
+
+.tma-examine-section-title {
+    margin: 0 0 6px 2px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #d9b45b;
+}
+
+.tma-examine-inset {
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    padding: 12px 14px;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.tma-examine-description {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.65;
+    color: #e8ded0;
+    font-style: italic;
+}
+
+.tma-examine-empty {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #9a8f7d;
+    font-style: italic;
+}
+
+.tma-examine-rep-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 14px;
+}
+
+.tma-examine-rep-kingdom {
+    flex: 1 1 auto;
+    color: #e8ded0;
+}
+
+.tma-examine-rep-tier {
+    font-weight: 700;
+}
+
+.tma-examine-rep-points {
+    color: #9a8f7d;
+    font-size: 12px;
+}
+
+.tma-examine-deed {
+    margin: 0;
+    padding: 4px 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #e8ded0;
+}
+
+.tma-examine-deed-bullet {
+    color: #d9b45b;
+    font-size: 11px;
+    margin-right: 6px;
+}
+
+.tma-examine-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.tma-examine-guild-name {
+    margin: 0 0 2px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #e8ded0;
+}
+
+.tma-examine-guild-rank {
+    margin: 0;
+    font-size: 12px;
+    color: #9a8f7d;
+    font-style: italic;
+}
+
+.tma-examine-skill-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 14px;
+}
+
+.tma-examine-skill-name {
+    color: #e8ded0;
+}
+
+.tma-examine-skill-level {
+    color: #d9b45b;
+    font-weight: 700;
+}
+
+.tma-examine-footnote {
+    flex: 0 0 auto;
+    margin: 14px 0 0;
+    text-align: center;
+    font-size: 12px;
+    font-style: italic;
+    color: #9a8f7d;
+}
+
+/* Themed scrollbar */
+.tma-examine-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+.tma-examine-scroll::-webkit-scrollbar-track {
+    background: #14100b;
+    border-radius: 4px;
+}
+.tma-examine-scroll::-webkit-scrollbar-thumb {
+    background: #3a2f22;
+    border-radius: 4px;
+}
+.tma-examine-scroll::-webkit-scrollbar-thumb:hover {
+    background: #6b5a3a;
+}

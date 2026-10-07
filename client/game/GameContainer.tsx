@@ -18,6 +18,7 @@ import { FreezeTimerOverlay, PoisonTimerOverlay } from "./plugins/statustimer/St
 import { OriginOverlay } from "./plugins/origins/OriginOverlay";
 import { QuestOverlay } from "./plugins/quests/QuestOverlay";
 import { WarTableOverlay } from "./plugins/wartable/WarTableOverlay";
+import { ExamineOverlay } from "./plugins/examine/ExamineOverlay";
 import { SidebarShell } from "./sidebar/SidebarShell";
 
 interface OsrsContainerProps {
@@ -383,6 +384,8 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                         <QuestOverlay osrsClient={osrsClient} />
 
                         <WarTableOverlay osrsClient={osrsClient} />
+
+                        <ExamineOverlay osrsClient={osrsClient} />
 
                         <div className="hud right-top">
                             <div className="fps-counter content-text">{fps}</div>

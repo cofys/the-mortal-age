@@ -349,25 +349,17 @@ function getTopSkills(player) {
   }
 }
 
+const EXAMINE_OPEN_ATTRIBUTE = "examine:open";
+
 function openExamine({ player, target }) {
   if (!player || !target) return;
-  const sender = player.getPacketSender();
-
-  const name = getDisplayName(target);
-  const byline = getByline(target);
-
-  sender.sendString(name, uid(COMPONENT.SUBTITLE));
-  sender.sendString(byline, uid(COMPONENT.SUBSUB));
-  sender.sendString(getDescription(target), uid(COMPONENT.DESCRIPTION));
-  sender.sendString(getReputation(target), uid(COMPONENT.REPUTATION));
-  sender.sendString(getAccomplishments(target), uid(COMPONENT.ACCOMPLISHMENTS));
-  sender.sendString(getGuildInfo(target), uid(COMPONENT.GUILD));
-  sender.sendString(getTopSkills(target), uid(COMPONENT.SKILLS));
-
-  player.setInterfaceId(GROUP_ID);
-  sender.sendSubInterface(MAIN_MODAL_UID, GROUP_ID, 0, {
-    postScripts: [{ scriptId: 227, args: [uid(COMPONENT.BG), `Examining ${name}`] }],
-  });
+  // The React examine overlay renders from this flag (see ExamineApi).
+  // The engine widget stays registered as a fallback, but no longer opens.
+  try {
+    player.setAttribute(EXAMINE_OPEN_ATTRIBUTE, target.getUsername());
+  } catch (error) {
+    console.warn("[examine] open failed", error?.message ?? error);
+  }
 }
 
 function closeExamine({ player }) {
@@ -431,6 +423,8 @@ function onCloseButton({ player }) {
 function attachPlugin(api) {
   pluginApi = api;
   api.registerCustomInterface(buildInterface());
+  // Web overlay data layer (see ExamineApi.js).
+  require("./ExamineApi").attach(api);
   api.registerCommand("desc", setDescription, undefined, "Set your character description (::desc <text>)");
   api.persistAttribute(DESCRIPTION_ATTRIBUTE);
   api.onPlayerLogin(onLoginSyncOption);

@@ -17,6 +17,11 @@ const plugin = require(pluginPath);
 const { _test } = plugin;
 const { GROUP_ID, COMPONENT, uid, DESCRIPTION_ATTRIBUTE, EXAMINE_OPTION_SLOT } = _test;
 
+// Load the API module (no widget dependency — pure data + endpoint).
+const apiPath = path.resolve(__dirname, "ExamineApi.js");
+const examineApi = require(apiPath);
+const { EXAMINE_OPEN_ATTRIBUTE } = examineApi;
+
 // Mock player
 function mockPlayer(overrides = {}) {
   const attrs = new Map(Object.entries(overrides.attributes || {}));
@@ -106,6 +111,125 @@ function runTests() {
       assert(COMPONENT[panel] !== undefined, `missing ${panel}`);
       assert(COMPONENT[body] !== undefined, `missing ${body}`);
     }
+  });
+
+  test("EXAMINE_OPEN_ATTRIBUTE is namespaced kebab-case", () => {
+    assert(EXAMINE_OPEN_ATTRIBUTE === "examine:open", `got ${EXAMINE_OPEN_ATTRIBUTE}`);
+    assert(EXAMINE_OPEN_ATTRIBUTE.includes(":"), "should be namespaced");
+  });
+
+  test("ExamineApi exposes attach", () => {
+    assert(typeof examineApi.attach === "function", "attach should be a function");
+  });
+
+  test("ExamineApi registers the examine-status endpoint", () => {
+    let registered = null;
+    const fakeApi = {
+      registerContentEndpoint: (name, handler) => { registered = { name, handler }; },
+      core: { World: { getPlayerByName: () => null }, Skill: { values: () => [] } },
+    };
+    // Silence the console.info in attach.
+    const origInfo = console.info;
+    console.info = () => {};
+    try {
+      examineApi.attach(fakeApi);
+    } finally {
+      console.info = origInfo;
+    }
+    assert(registered && registered.name === "examine-status", "endpoint name should be examine-status");
+    assert(typeof registered.handler === "function", "handler should be a function");
+  });
+
+  test("examine-status returns closed when no player", () => {
+    let handler = null;
+    const fakeApi = {
+      registerContentEndpoint: (name, h) => { handler = h; },
+      core: { World: { getPlayerByName: () => null }, Skill: { values: () => [] } },
+    };
+    const origInfo = console.info;
+    console.info = () => {};
+    try { examineApi.attach(fakeApi); } finally { console.info = origInfo; }
+    const query = new Map();
+    const result = handler({ get: (k) => query.get(k) });
+    assert(result.open === false, "should be closed with no player");
+  });
+
+  test("examine-status close action clears the flag", () => {
+    let handler = null;
+    const attrs = new Map([[EXAMINE_OPEN_ATTRIBUTE, "SomeTarget"]]);
+    const fakePlayer = {
+      getAttribute: (k) => attrs.get(k),
+      setAttribute: (k, v) => attrs.set(k, v),
+    };
+    const fakeApi = {
+      registerContentEndpoint: (name, h) => { handler = h; },
+      core: { World: { getPlayerByName: () => fakePlayer }, Skill: { values: () => [] } },
+    };
+    const origInfo = console.info;
+    console.info = () => {};
+    try { examineApi.attach(fakeApi); } finally { console.info = origInfo; }
+    const query = new Map([["player", "Me"], ["action", "close"]]);
+    const result = handler({ get: (k) => query.get(k) });
+    assert(result.open === false, "should be closed after close action");
+    assert(attrs.get(EXAMINE_OPEN_ATTRIBUTE) === "", "flag should be cleared");
+  });
+
+  test("examine-status returns a sheet when open", () => {
+    let handler = null;
+    const targetAttrs = new Map([
+      ["character:display-name", "Aldric Stonehand"],
+      ["examine:description", "A weathered smith."],
+    ]);
+    const fakeTarget = {
+      getUsername: () => "aldric",
+      getAttribute: (k) => targetAttrs.get(k),
+      getSkillManager: () => ({ getCurrentLevel: () => 1 }),
+    };
+    const viewerAttrs = new Map([[EXAMINE_OPEN_ATTRIBUTE, "aldric"]]);
+    const fakeViewer = {
+      getAttribute: (k) => viewerAttrs.get(k),
+      setAttribute: (k, v) => viewerAttrs.set(k, v),
+    };
+    const fakeApi = {
+      registerContentEndpoint: (name, h) => { handler = h; },
+      core: {
+        World: { getPlayerByName: (n) => (n === "aldric" ? fakeTarget : fakeViewer) },
+        Skill: { values: () => [] },
+      },
+    };
+    const origInfo = console.info;
+    console.info = () => {};
+    try { examineApi.attach(fakeApi); } finally { console.info = origInfo; }
+    const query = new Map([["player", "viewer"]]);
+    const result = handler({ get: (k) => query.get(k) });
+    assert(result.open === true, "should be open");
+    assert(result.sheet && result.sheet.name === "Aldric Stonehand", "sheet should carry display name");
+    assert(result.sheet.description === "A weathered smith.", "sheet should carry description");
+    assert(Array.isArray(result.sheet.reputation), "reputation should be an array");
+    assert(Array.isArray(result.sheet.skills), "skills should be an array");
+  });
+
+  test("examine-status closes when target logged out", () => {
+    let handler = null;
+    const viewerAttrs = new Map([[EXAMINE_OPEN_ATTRIBUTE, "ghost"]]);
+    const fakeViewer = {
+      getAttribute: (k) => viewerAttrs.get(k),
+      setAttribute: (k, v) => viewerAttrs.set(k, v),
+    };
+    const fakeApi = {
+      registerContentEndpoint: (name, h) => { handler = h; },
+      core: {
+        World: { getPlayerByName: (n) => (n === "viewer" ? fakeViewer : null) },
+        Skill: { values: () => [] },
+      },
+    };
+    const origInfo = console.info;
+    console.info = () => {};
+    try { examineApi.attach(fakeApi); } finally { console.info = origInfo; }
+    const query = new Map([["player", "viewer"]]);
+    const result = handler({ get: (k) => query.get(k) });
+    assert(result.open === false, "should close when target is gone");
+    assert(viewerAttrs.get(EXAMINE_OPEN_ATTRIBUTE) === "", "flag should be cleared");
   });
 
   console.log(`\n${passed} passed, ${failed} failed`);
