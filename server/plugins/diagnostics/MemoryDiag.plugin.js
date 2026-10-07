@@ -118,6 +118,7 @@ module.exports = {
   name: "MemoryDiag",
   register(api) {
     pluginApi = api;
+    console.log("[memory-diag] plugin registered");
     api.onServerStartup(startDiagnostics);
     api.onServerShutdown(stopDiagnostics);
   },
