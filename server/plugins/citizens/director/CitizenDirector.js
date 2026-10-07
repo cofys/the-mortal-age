@@ -886,6 +886,7 @@ class CitizenDirector {
       state.citizens.workCyclesBanked = 0; // consumed by this sample
     }
     const { progress, complete } = sampleGoalProgress(record.goal, bot, {
+      citizenName: record.username,
       dutyHoursAccrued: phase.onDuty === true ? elapsedHours : 0,
       workCyclesBanked: workCycles,
     });

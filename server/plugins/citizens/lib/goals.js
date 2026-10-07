@@ -12,6 +12,8 @@
 const GOAL_SAVE_GOLD = "save_gold";
 const GOAL_RANK_UP = "rank_up";
 const GOAL_MASTER_TRADE = "master_trade";
+const GOAL_BOSS_SLAYER = "boss_slayer";
+const GOAL_MAKE_FRIENDS = "make_friends";
 
 function coinWealth(player) {
   let total = 0;
@@ -27,9 +29,47 @@ function coinWealth(player) {
   return total;
 }
 
+/**
+ * Count boss-run participations from the journal (boss kind events).
+ * Read-only; never throws.
+ */
+function bossRunCount(citizenName) {
+  try {
+    const { getJournal } = require("./CitizenJournal");
+    const events = getJournal().recent(citizenName, 200) ?? [];
+    return events.filter((e) => {
+      const kind = String(e?.kind ?? "").toLowerCase();
+      const text = String(e?.text ?? "").toLowerCase();
+      return kind === "boss" || text.includes("boss run") || text.includes("giant mole") ||
+        text.includes("scurrius") || text.includes("obor");
+    }).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Count friends (players and citizens) from the bonds graph. Read-only. */
+function friendCount(citizenName) {
+  try {
+    const { bonds } = require("./CitizenBonds");
+    return (bonds(citizenName).friends ?? []).length;
+  } catch {
+    return 0;
+  }
+}
+
 /** Fresh goal for a role; targets escalate with `tier` (0-based). */
 function nextGoalForRole(role, tier = 0) {
   if (role === "guard") {
+    // Guards rotate between promotion and proving themselves in boss hunts.
+    if (tier % 2 === 1) {
+      return {
+        type: GOAL_BOSS_SLAYER,
+        target: 3 + tier, // boss runs joined
+        progress: 0,
+        startedAt: Date.now(),
+      };
+    }
     return {
       type: GOAL_RANK_UP,
       target: 8 + tier * 8, // duty-hours before the next promotion review
@@ -41,6 +81,15 @@ function nextGoalForRole(role, tier = 0) {
     return {
       type: GOAL_SAVE_GOLD,
       target: 10000 * (tier + 1),
+      progress: 0,
+      startedAt: Date.now(),
+    };
+  }
+  // Commoners want connection as much as coin: alternate craft and friends.
+  if (tier % 3 === 2) {
+    return {
+      type: GOAL_MAKE_FRIENDS,
+      target: 5 + tier * 2,
       progress: 0,
       startedAt: Date.now(),
     };
@@ -68,6 +117,10 @@ function sampleGoalProgress(goal, player, directorState = {}) {
     progress = (goal.progress ?? 0) + (directorState.dutyHoursAccrued ?? 0);
   } else if (goal.type === GOAL_MASTER_TRADE) {
     progress = (goal.progress ?? 0) + (directorState.workCyclesBanked ?? 0);
+  } else if (goal.type === GOAL_BOSS_SLAYER) {
+    progress = bossRunCount(directorState.citizenName ?? "");
+  } else if (goal.type === GOAL_MAKE_FRIENDS) {
+    progress = friendCount(directorState.citizenName ?? "");
   }
   return { progress, complete: progress >= (goal.target ?? Infinity) };
 }
@@ -80,8 +133,12 @@ module.exports = {
   GOAL_SAVE_GOLD,
   GOAL_RANK_UP,
   GOAL_MASTER_TRADE,
+  GOAL_BOSS_SLAYER,
+  GOAL_MAKE_FRIENDS,
   coinWealth,
   nextGoalForRole,
   sampleGoalProgress,
   isComplete,
+  bossRunCount,
+  friendCount,
 };

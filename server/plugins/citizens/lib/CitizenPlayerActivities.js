@@ -138,10 +138,25 @@ function offerActivityToPlayers(director, record, party, opts) {
     const bot = director.getBot(record);
     if (!bot || !party) return invited;
     const rng = agentRng(`pact:${record.username}:${Date.now() >> 16}`);
-    const players = realPlayersNear(bot).filter((p) => {
-      const pn = playerNameOf(p);
-      return pn && !isEnemy(record.username, pn);
-    });
+    const players = realPlayersNear(bot)
+      .filter((p) => {
+        const pn = playerNameOf(p);
+        return pn && !isEnemy(record.username, pn);
+      })
+      // Relationships matter: friends get invited first, strangers after.
+      // A citizen leader thinks of their favorite fishing buddy before a
+      // random passerby. Sort is stable — neutrals keep arrival order.
+      .sort((pa, pb) => {
+        try {
+          const memory = getMemory();
+          const rank = { favorite: 0, regular: 1, warm: 2, neutral: 3, cold: 4 };
+          const sa = rank[memory.standing(record.username, playerNameOf(pa)) ?? "neutral"] ?? 3;
+          const sb = rank[memory.standing(record.username, playerNameOf(pb)) ?? "neutral"] ?? 3;
+          return sa - sb;
+        } catch {
+          return 0;
+        }
+      });
     if (players.length > 0) {
       const line = pickOne(rng, opts.formLines ?? ["We're heading out — anyone's welcome!"]);
       try {

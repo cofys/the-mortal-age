@@ -68,9 +68,47 @@ function goalWords(goal) {
       return "working toward a promotion";
     case "master_trade":
       return "honing your craft";
+    case "boss_slayer":
+      return `proving yourself against the great beasts (${goal.progress ?? 0} of ${goal.target ?? "?"} hunts)`;
+    case "make_friends":
+      return `trying to make friends in this strange land (${goal.progress ?? 0} of ${goal.target ?? "?"} so far)`;
     default:
       return null;
   }
+}
+
+/**
+ * One line of world news for the prompt, or null when nothing is happening.
+ * Reads the kingdoms plugin's active wars — a citizen whose home is at war
+ * talks like it. Token-lean: a single short sentence.
+ */
+function worldNewsLine(record) {
+  const kingdomId = record?.kingdom;
+  if (!kingdomId) return null;
+  let wars = [];
+  try {
+    const KingdomStore = require("../../kingdoms/KingdomStore");
+    wars = KingdomStore.getActiveWars?.() ?? [];
+  } catch {
+    return null;
+  }
+  const mine = wars.find(
+    (w) => w.attackerId === kingdomId || w.defenderId === kingdomId
+  );
+  if (!mine) return null;
+  const otherId =
+    mine.attackerId === kingdomId ? mine.defenderId : mine.attackerId;
+  let other = otherId;
+  try {
+    const KingdomStore = require("../../kingdoms/KingdomStore");
+    other = KingdomStore.getKingdom?.(otherId)?.name ?? otherId;
+  } catch {
+    // Fall back to the raw id.
+  }
+  const attacking = mine.attackerId === kingdomId;
+  return attacking
+    ? `There is a war on — your kingdom marches against ${other}. Spirits are high but tense.`
+    : `${other} has declared war on your kingdom. Everyone is on edge.`;
 }
 
 /** Lazy require — the director requires chat modules at boot. */
@@ -121,6 +159,15 @@ function buildContext(citizenUsername, speakerUsername) {
     if (feeling) parts.push(feeling);
   } catch {
     // Emotions must never break the chat path.
+  }
+
+  // World news: an active war involving your kingdom shapes everything —
+  // what you talk about, what you worry about, what you hope for.
+  try {
+    const news = worldNewsLine(record);
+    if (news) parts.push(news);
+  } catch {
+    // World news must never break the chat path.
   }
 
   // What they're working toward.
