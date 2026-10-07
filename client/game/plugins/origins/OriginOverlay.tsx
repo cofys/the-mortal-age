@@ -190,7 +190,12 @@ export function OriginOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.E
                 firstname: first,
                 lastname: last,
             });
-            await fetchContent(`/api/origins-status?${params.toString()}`);
+            const res = (await fetchContent(
+                `/api/origins-status?${params.toString()}`
+            )) as OriginsStatus & { claimError?: string };
+            // The server returns the claim failure reason (if any) so the
+            // player sees it instead of nothing happening on click.
+            if (res.claimError) setNameError(res.claimError);
         } catch {
             // The claim may still have landed server-side; the poll below
             // will close the overlay if needsChoice flipped. If it failed,
