@@ -44,6 +44,9 @@ const {
   getParty,
   setParty,
   clearParty,
+  getFollow,
+  setFollow,
+  clearFollow,
   INVITE_FRIEND,
   INVITE_CLAN,
   INVITE_BOSS,
@@ -169,6 +172,10 @@ function tickCitizen(record, getBot, nearbyPlayers) {
 
   // --- outgoing friend requests (only when the player is nearby to respond) ---
   if (bot && Array.isArray(nearbyPlayers)) {
+    // Clan channel creation: leader-material citizens start their own channel.
+    if (!record.hasClanChannel && chance(rng, CLAN_CHANNEL_CHANCE)) {
+      ensureClanChannel(record, getBot);
+    }
     for (const player of nearbyPlayers) {
       const playerName = player?.getUsername?.();
       if (!playerName) continue;
@@ -221,6 +228,147 @@ function tickCitizen(record, getBot, nearbyPlayers) {
   }
 }
 
+// --- citizen-owned clan channels -------------------------------------------
+// Citizens with leadership traits and enough friends create their own
+// friends-chat channel. Sets record.hasClanChannel so tickCitizen can invite
+// players. Bot-safe: UI sync calls are wrapped; the channel itself is data.
+
+const CLAN_CHANNEL_CHANCE = 0.02; // 2% per tick for eligible citizens
+
+function isClanLeaderMaterial(record) {
+  const traits = record.personality?.traits ?? [];
+  const hasTrait = traits.includes("outgoing") || traits.includes("ambitious") ||
+    traits.includes("charismatic") || traits.includes("leader");
+  const isLeaderRole = record.role === "courtier" || record.merchantKind === "prime";
+  if (!hasTrait && !isLeaderRole) return false;
+  const friends = bonds(record.username).friends;
+  return (friends?.length ?? 0) >= 5;
+}
+
+function ensureClanChannel(record, getBot) {
+  if (record.hasClanChannel) return true;
+  if (!isClanLeaderMaterial(record)) return false;
+  const bot = getBot ? getBot(record) : null;
+  if (!bot) return false;
+  try {
+    const FriendsChatManager = require("../../interface/FriendsChatManager");
+    // Channel name: 1-12 valid chars. Use a shortened display name.
+    const rawName = String(record.displayName ?? record.username ?? "Clan").replace(/[^A-Za-z0-9 ]/g, "").trim();
+    const chanName = (rawName.split(" ")[0] ?? "Clan").slice(0, 12) || "Clan";
+    // Bot-safe channel setup: set relations name, create channel entry,
+    // join own channel. Skip gameMessage/syncSetupText (player UI).
+    try {
+      bot.getRelations?.().setFriendsChatChannelName?.(chanName);
+    } catch { /* non-fatal */ }
+    const ownerKey = String(bot.getUsername?.() ?? record.username).toLowerCase();
+    try {
+      const profile = FriendsChatManager.profileFromPlayer?.(bot, { key: ownerKey }) ??
+        { channelName: chanName };
+      profile.channelName = chanName;
+      const existing = FriendsChatManager.channels?.get?.(ownerKey);
+      if (existing) {
+        existing.profile = profile;
+      } else {
+        FriendsChatManager.channels?.set?.(ownerKey, {
+          ownerKey, profile, members: new Map(),
+        });
+      }
+    } catch { /* non-fatal */ }
+    try {
+      FriendsChatManager.join?.(bot, bot.getUsername?.() ?? record.username, false);
+    } catch { /* non-fatal */ }
+    record.hasClanChannel = true;
+    journalEvent(record.username, `Started a clan chat channel '${chanName}'.`, "social");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// --- follow behavior ---------------------------------------------------------
+// Applied every tick for online citizens. Re-applies setFollowing so the
+// brain's activity changes don't permanently break follow. Data tier drives,
+// engine executes.
+
+function tickFollow(record, getBot) {
+  const name = record.username;
+  const bot = getBot ? getBot(record) : null;
+  if (!bot) return;
+
+  // Priority 1: explicit follow (boss trip, "follow me").
+  const follow = getFollow(name);
+  // Priority 2: party follow (non-leader members follow the leader).
+  const party = getParty(name);
+  let targetName = null;
+  let reason = null;
+  if (follow?.target) {
+    targetName = follow.target;
+    reason = follow.reason;
+  } else if (party && normalizeName(party.leader) !== normalizeName(name)) {
+    targetName = party.leader;
+    reason = "party";
+  }
+  if (!targetName) {
+    // No follow target — make sure we're not stuck following.
+    try {
+      const current = bot.getFollowing?.();
+      if (current) bot.setFollowing?.(null);
+    } catch { /* non-fatal */ }
+    return;
+  }
+  // Resolve the target entity (player or citizen bot).
+  let target = null;
+  try {
+    target = findPlayer(targetName);
+    if (!target && getBot) {
+      // Maybe the target is another citizen bot.
+      const director = require("../director/CitizenDirector").getDirector?.();
+      const targetRecord = director?.roster?.get?.(targetName);
+      if (targetRecord) target = getBot(targetRecord);
+    }
+  } catch { /* non-fatal */ }
+  if (!target) {
+    // Target gone (logged out) — clear explicit follow, keep party.
+    if (follow?.target) clearFollow(name);
+    try { bot.setFollowing?.(null); } catch { /* non-fatal */ }
+    return;
+  }
+  // Apply follow if not already following this target.
+  try {
+    const current = bot.getFollowing?.();
+    const currentName = current?.getUsername?.();
+    if (normalizeName(currentName) !== normalizeName(targetName)) {
+      bot.setFollowing?.(target);
+      if (reason && reason !== "party") {
+        journalEvent(name, `Following ${targetName} (${reason}).`, "social");
+      }
+    }
+  } catch { /* non-fatal */ }
+}
+
+/** Player says "follow me" — citizen starts following the player. */
+function requestFollow(citizenName, playerName) {
+  if (isEnemy(citizenName, playerName)) return false;
+  // Only friends or party members get followed.
+  const party = getParty(citizenName);
+  const inParty = party && (party.members ?? []).map(normalizeName).includes(normalizeName(playerName));
+  if (!isFriend(citizenName, playerName) && !inParty) return false;
+  setFollow(citizenName, playerName, "follow_me");
+  journalEvent(citizenName, `Started following ${playerName}.`, "social");
+  return true;
+}
+
+/** Player says "stop following" — citizen stops. */
+function requestStopFollow(citizenName, playerName) {
+  const follow = getFollow(citizenName);
+  if (follow && normalizeName(follow.target) === normalizeName(playerName)) {
+    clearFollow(citizenName);
+    journalEvent(citizenName, `Stopped following ${playerName}.`, "social");
+    return true;
+  }
+  return false;
+}
+
 // --- player-initiated actions (via chat keywords or commands) ----------------
 
 /** Player accepts a pending invite from a citizen. */
@@ -232,7 +380,26 @@ function acceptInvite(playerName, citizenName, kind) {
   if (!invite) return null;
   const result = resolveInvite(playerName, invite.id, true);
   if (!result) return null;
-  journalEvent(citizenName, `Became friends with ${playerName}.`, "social");
+  // Apply invite effects.
+  if (invite.kind === INVITE_BOSS) {
+    // Boss trip accepted: citizen travels with the player.
+    setFollow(citizenName, playerName, "boss_trip");
+    journalEvent(citizenName, `Joining ${playerName} on a boss trip.`, "social");
+  } else if (invite.kind === INVITE_PARTY) {
+    // Party invite accepted: join the citizen's party (or create one).
+    const party = getParty(citizenName);
+    if (party) {
+      joinParty(playerName, party);
+    } else {
+      createParty(citizenName, [playerName]);
+    }
+    setFollow(citizenName, playerName, "party");
+    journalEvent(citizenName, `Joined a party with ${playerName}.`, "social");
+  } else if (invite.kind === INVITE_CLAN) {
+    journalEvent(citizenName, `${playerName} joined my clan chat.`, "social");
+  } else {
+    journalEvent(citizenName, `Became friends with ${playerName}.`, "social");
+  }
   return result.invite;
 }
 
@@ -369,12 +536,16 @@ module.exports = {
   init,
   tickCitizen,
   tickAgency,
+  tickFollow,
+  ensureClanChannel,
   isBefriendable,
   shouldUnfriend,
   shouldBeEnemy,
   acceptInvite,
   requestFriend,
   citizenAcceptFriend,
+  requestFollow,
+  requestStopFollow,
   createParty,
   joinParty,
   leaveParty,

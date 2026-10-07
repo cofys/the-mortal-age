@@ -219,6 +219,22 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "follow me" / "come with me" — player asks citizen to follow.
+  if (/\b(follow me|come with me|walk with me|stay with me)\b/.test(said)) {
+    if (SocialMechanics.requestFollow(citizenUsername, speakerUsername)) {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "follow_start");
+    }
+    return true;
+  }
+
+  // "stop following" / "stay here" — player dismisses the follower.
+  if (/\b(stop following|stay here|wait here|stop follow)\b/.test(said)) {
+    if (SocialMechanics.requestStopFollow(citizenUsername, speakerUsername)) {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "follow_stop");
+    }
+    return true;
+  }
+
   return false;
 }
 
@@ -242,6 +258,8 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
       party_create: `${display}: A party! I'm in. Where to?`,
       clan_invite: `${display}: Join my clan chat — we'd be glad to have you.`,
       boss_trip: `${display}: A boss trip? I'm in. Let's go.`,
+      follow_start: `${display}: Right behind you.`,
+      follow_stop: `${display}: I'll wait here then.`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM

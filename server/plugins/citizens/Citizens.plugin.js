@@ -203,11 +203,81 @@ function onCitizenAttackedByPlayer({ player, target }) {
     text: `attacked ${victimName} in the street!`,
     holder: victimName,
   });
+  // Guard intervention: nearby guard citizens converge on the attacker.
+  // They follow to intervene; if the attacker keeps fighting, combat engages.
+  try {
+    guardIntervention(player, target, kingdomId);
+  } catch {
+    // Non-fatal — the grudge above is the important part.
+  }
   pluginApi?.log?.("[citizens] citizen attacked", {
     victim: victimName,
     attacker: attackerName,
     kingdom: kingdomId,
   });
+}
+
+/**
+ * When a player attacks a citizen, nearby guards respond. They converge on
+ * the attacker (follow), shout a warning, and engage in combat. This makes
+ * attacking citizens have real consequences — the city fights back.
+ */
+const GUARD_INTERVENE_WARNINGS = [
+  "Stand down! The guard is here!",
+  "You dare draw steel in these streets?!",
+  "Drop your weapon, criminal!",
+  "The city does not tolerate violence!",
+];
+
+function guardIntervention(attacker, victim, kingdomId) {
+  if (!attacker || !victim) return;
+  const { getDirector } = require("./director/CitizenDirector");
+  const director = getDirector?.();
+  if (!director?.roster) return;
+  const attackerPos = attacker.getPosition?.();
+  let intervened = 0;
+  for (const record of director.roster.values()) {
+    if (intervened >= 3) break; // max 3 guards respond
+    if (record.role !== "guard") continue;
+    if (record.kingdomId !== kingdomId) continue;
+    const guardBot = director.getBot?.(record);
+    if (!guardBot) continue; // guard is offline
+    // Only guards reasonably nearby intervene.
+    try {
+      const guardPos = guardBot.getPosition?.();
+      if (!guardPos || !attackerPos) continue;
+      const dx = Math.abs((guardPos.getX?.() ?? guardPos.x ?? 0) - (attackerPos.getX?.() ?? attackerPos.x ?? 0));
+      const dy = Math.abs((guardPos.getY?.() ?? guardPos.y ?? 0) - (attackerPos.getY?.() ?? attackerPos.y ?? 0));
+      if (dx > 20 || dy > 20) continue;
+    } catch {
+      continue;
+    }
+    // Converge on the attacker.
+    try {
+      guardBot.setFollowing?.(attacker);
+    } catch { /* non-fatal */ }
+    // Shout a warning.
+    try {
+      guardBot.forceChat?.(GUARD_INTERVENE_WARNINGS[Math.floor(Math.random() * GUARD_INTERVENE_WARNINGS.length)]);
+    } catch { /* non-fatal */ }
+    // Engage in combat — the guard defends the city.
+    try {
+      guardBot.getCombat?.().attack?.(attacker);
+    } catch { /* non-fatal: follow + warning still happened */ }
+    // Guards remember the criminal.
+    try {
+      const { getMemory } = require("./lib/CitizenMemory");
+      getMemory().addGrudge?.(record.username, attacker.getUsername?.() ?? "?", 3, "attack");
+    } catch { /* non-fatal */ }
+    intervened++;
+  }
+  if (intervened > 0) {
+    try {
+      const { getJournal } = require("./lib/CitizenJournal");
+      getJournal().log?.(victim.getUsername?.() ?? "?", "combat",
+        `Guards intervened against ${attacker.getUsername?.() ?? "?"} (${intervened} responded).`);
+    } catch { /* non-fatal */ }
+  }
 }
 
 /**

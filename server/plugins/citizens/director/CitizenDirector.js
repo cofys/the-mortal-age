@@ -314,6 +314,9 @@ class CitizenDirector {
       watch,
       goal: nextGoalForRole(role, 0),
       goalTier: 0,
+      // Emotional weather (see lib/emotions.js): how they FEEL right now.
+      // Shifted by background events, decays toward calm each tick.
+      emotion: { state: "calm", intensity: 0, cause: null, updatedAt: 0 },
       online: false,
       currentActivityId: null,
       lastTickAt: Date.now(),
@@ -735,6 +738,9 @@ class CitizenDirector {
             // Non-fatal.
           }
           SocialMechanics.tickCitizen(record, (r) => this.getBot(r), nearby);
+          // Follow behavior: party members follow the leader, boss-trip
+          // partners travel together. Re-applied each tick (data tier drives).
+          SocialMechanics.tickFollow(record, (r) => this.getBot(r));
         } catch (error) {
           this.log("social mechanics failed", {
             citizen: record.username,

@@ -78,13 +78,15 @@ function bonds(citizenName) {
   const key = normalizeName(citizenName);
   const d = data();
   if (!d[key]) {
-    d[key] = { friends: [], enemies: [], party: null, pendingInvites: [] };
+    d[key] = { friends: [], enemies: [], party: null, pendingInvites: [], following: null };
     dirty = true;
   }
   const b = d[key];
   if (!Array.isArray(b.friends)) b.friends = [];
   if (!Array.isArray(b.enemies)) b.enemies = [];
   if (!Array.isArray(b.pendingInvites)) b.pendingInvites = [];
+  // following: { target, reason, since } | null — who this citizen is
+  // physically following (party leader, boss-trip partner, etc.)
   return b;
 }
 
@@ -192,6 +194,31 @@ function resolveInvite(name, inviteId, accepted) {
   return { invite, accepted };
 }
 
+// --- follow -----------------------------------------------------------------
+// Physical following: party members follow the leader, boss-trip partners
+// travel together. Data tier — the director tick applies it via setFollowing.
+
+function getFollow(citizenName) {
+  return bonds(citizenName).following ?? null;
+}
+
+function setFollow(citizenName, targetName, reason) {
+  const b = bonds(citizenName);
+  const t = normalizeName(targetName);
+  if (!t) return false;
+  b.following = { target: t, reason: reason ?? "follow", since: Date.now() };
+  dirty = true;
+  return true;
+}
+
+function clearFollow(citizenName) {
+  const b = bonds(citizenName);
+  if (!b.following) return false;
+  b.following = null;
+  dirty = true;
+  return true;
+}
+
 // --- party ------------------------------------------------------------------
 
 function getParty(citizenName) {
@@ -228,6 +255,9 @@ module.exports = {
   getParty,
   setParty,
   clearParty,
+  getFollow,
+  setFollow,
+  clearFollow,
   save,
   normalizeName,
 };
