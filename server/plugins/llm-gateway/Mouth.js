@@ -43,7 +43,10 @@ function recipientsFor(bot, World) {
 
 function speakPublic(api, bot, text) {
   const World = api.core.World;
-  for (const line of chunk(text, PUBLIC_CHAT_MAX_CHARS)) {
+  // Defense in depth: no line breaks, one flowing message (chunking below
+  // handles the 80-char OSRS limit).
+  const clean = String(text ?? "").replace(/\s+/g, " ").trim();
+  for (const line of chunk(clean, PUBLIC_CHAT_MAX_CHARS)) {
     bot.forceChat(line);
     const username = bot.getUsername();
     const index = bot.getIndex();
@@ -57,7 +60,7 @@ function speakPublic(api, bot, text) {
 
 function speakPrivate(api, bot, requester, text) {
   const Misc = api.core.Misc;
-  const clean = String(text ?? "").trim().slice(0, 160); // PM cap, like the client
+  const clean = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, 160); // PM cap, like the client
   const packed = Misc.textPack(clean);
   requester.getPacketSender().sendPrivateMessage(bot, packed, packed.length);
 }

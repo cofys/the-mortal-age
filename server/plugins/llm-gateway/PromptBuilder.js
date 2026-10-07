@@ -25,7 +25,8 @@ const WORLD_GROUNDING =
   "everyone has a theory why. Great powers: Asgarnia (Falador, no king), Misthalin " +
   "(Varrock, aging king), Kandarin (Ardougne, the plague lie), Morytania (vampyres), " +
   "Keldagrim (dwarf mining companies). Stay in character. Never mention you are an AI. " +
-  "Reply in 1-2 short sentences, like a real player typing. No lists, no asterisks.";
+  "Reply in 1-2 short sentences, like a real player typing. No lists, no asterisks, " +
+  "no line breaks - one paragraph only.";
 
 const STYLE_LINE =
   "You are roleplaying a RuneScape player-character, not an assistant. " +

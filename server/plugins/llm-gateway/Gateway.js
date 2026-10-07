@@ -79,7 +79,13 @@ class Gateway {
       return;
     }
 
-    const reply = result.text.slice(0, 480);
+    // Collapse paragraph breaks / stray whitespace: one clean message, no
+    // orphan lines in the chatbox. The 80-char chunking in Mouth.js handles
+    // length; this handles shape.
+    const reply = result.text
+      .slice(0, 480)
+      .replace(/\s+/g, " ")
+      .trim();
     await this.memory.pushExchange(citizenUsername, requesterUsername, text, reply);
 
     const latencyMs = Date.now() - startedAt;
@@ -135,7 +141,10 @@ class Gateway {
     const result = await this.chain.complete(prompt);
     if (!result.ok || !result.text) return; // silent on failure/quota
 
-    const reply = result.text.slice(0, 480);
+    const reply = result.text
+      .slice(0, 480)
+      .replace(/\s+/g, " ")
+      .trim();
     await this.memory.pushExchange(citizenUsername, toUsername, "(opener)", reply);
 
     const latencyMs = Date.now() - startedAt;

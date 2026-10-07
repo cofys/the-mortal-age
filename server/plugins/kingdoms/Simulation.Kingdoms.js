@@ -301,7 +301,7 @@ function marshalTick(kingdom, warsHere) {
   } else if (level === "doubled" && noticeDue(kingdom.id, "patrol")) {
     announceToRealm(
       `[Realm] The Marshal of ${kingdom.name} has ordered doubled patrols. ` +
-        `The roads will be safer — and watched.`
+        `The roads will be safer, and watched.`
     );
   }
 }
