@@ -327,6 +327,14 @@ class BotBehaviorTask extends Task {
       e?.state?.isCitizen === true
         ? this.lodConfig.citizenFarStride
         : this.lodConfig.farStride;
+    // Director-stamped proximity: the citizen director's own proximity task
+    // proved a real player is within range (it spawns on that basis). The
+    // LOD session scan can miss web-client sessions, so trust the stamp —
+    // a citizen Jon just walked up to must run at full brain speed.
+    const humanNearbyAt = Number(entry?.state?.humanNearbyAt ?? 0);
+    if (humanNearbyAt > 0 && nowMs - humanNearbyAt < 60000) {
+      return this.lodConfig.nearStride;
+    }
     if (!entry?.player || this._humanObserverCount === 0) {
       return farStrideFor(entry);
     }

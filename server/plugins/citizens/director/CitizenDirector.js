@@ -265,6 +265,43 @@ class CitizenDirector {
     }
   }
 
+  /**
+   * Pick a home tile near the anchor that isn't inside a wall/mountain.
+   * noisyTile alone can land inside blocked terrain (Keldagrim's mountains);
+   * we probe the noisy pick plus a small ring and fall back to the anchor.
+   */
+  findWalkableHome(anchor, rng) {
+    const z = anchor.z ?? 0;
+    const candidates = [noisyTile(anchor.x, anchor.y, 12, rng)];
+    // Ring of fallbacks at increasing distance, in case the first pick is blocked.
+    for (const [dx, dy] of [[3, 0], [-3, 0], [0, 3], [0, -3], [6, 6], [-6, -6]]) {
+      candidates.push({ x: anchor.x + dx, y: anchor.y + dy });
+    }
+    candidates.push({ x: anchor.x, y: anchor.y }); // anchor itself, last resort
+    let regionManager = null;
+    try {
+      regionManager = this.api?.getRegionManager?.() ?? null;
+    } catch {
+      regionManager = null;
+    }
+    for (const c of candidates) {
+      const x = Math.round(c.x);
+      const y = Math.round(c.y);
+      if (regionManager) {
+        try {
+          const loc = new Location(x, y, z);
+          if (regionManager.blocked(loc, null)) {
+            continue; // inside a wall/mountain — try next
+          }
+        } catch {
+          // If the check itself fails, accept the tile (don't strand citizens).
+        }
+      }
+      return { x, y };
+    }
+    return { x: anchor.x, y: anchor.y };
+  }
+
   /** Build the roster from the plan; spawn happens lazily on the first tick. */
   boot() {
     if (!this.registry) {
@@ -313,7 +350,7 @@ class CitizenDirector {
     }
     const anchor = siteTileByKingdom(kingdomId, anchorKind)
       ?? { x: 3200, y: 3200, z: 0 };
-    const home = noisyTile(anchor.x, anchor.y, 12, rng);
+    const home = this.findWalkableHome(anchor, rng);
     home.z = anchor.z ?? 0;
     const watch = role === ROLE_GUARD ? Math.floor(rng() * 3) : 0;
     // Guards sleep inside their off-watch hours so the night watch is actually
@@ -395,7 +432,7 @@ class CitizenDirector {
     const market = siteTileByKingdom(kingdomId, "market") ?? { x: 3200, y: 3200, z: 0 };
     const home = homeTile
       ? { x: homeTile.x, y: homeTile.y, z: homeTile.z ?? 0 }
-      : noisyTile(market.x, market.y, 12, rng);
+      : this.findWalkableHome(market, rng);
     const personality = {
       name: username,
       role,
@@ -576,6 +613,11 @@ class CitizenDirector {
           this.log("citizen despawned (no players near)", {
             citizen: record.username,
           });
+        } else {
+          // A real player is close enough to keep this citizen materialized.
+          // Stamp it so the brain LOD treats them as observed even if the
+          // LOD's own session scan misses the player (web-client sessions).
+          this.markHumanNearby(record);
         }
       } catch (error) {
         this.log("proximity check failed", {
@@ -593,6 +635,23 @@ class CitizenDirector {
 
   getBot(record) {
     return this.runtime()?.entriesByUsername?.get(record.username)?.player ?? null;
+  }
+
+  /**
+   * Stamp the citizen's brain state so the LOD treats them as human-observed.
+   * The proximity task already proved a real player is within range; the
+   * BotBehaviorTask's own session scan can miss web-client sessions, which
+   * left citizens on the 1/10th far stride while Jon stood next to them.
+   */
+  markHumanNearby(record) {
+    try {
+      const state = this.runtime()?.botStatesByName?.get(record.username);
+      if (state) {
+        state.humanNearbyAt = Date.now();
+      }
+    } catch {
+      // Never break the proximity tick.
+    }
   }
 
   /**
@@ -693,6 +752,8 @@ class CitizenDirector {
     // LOD marker: the bot brain throttles citizens harder than other bots
     // when no real player is near (see BotBehaviorTask.resolveEntryStride).
     state.isCitizen = true;
+    // Spawned because a real player is within range — start active, not throttled.
+    state.humanNearbyAt = Date.now();
 
     // Wire into the shared bot runtime (mirrors BotRegistry.addEntry).
     const entry = { player: bot, state };
