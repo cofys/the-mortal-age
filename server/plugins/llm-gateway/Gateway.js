@@ -23,6 +23,25 @@ const { onChatResponse } = require("./Mouth");
 
 const SQLITE_DB_PATH = process.env.LLM_GATEWAY_DB ?? "";
 
+// Foreground latency budget (ms): a real player is waiting on this reply.
+// Worst case through the chain is a 25s per-slot abort plus up to 30s in the
+// rate-limiter queue. Past this budget we stay silent — answering a question
+// the player already gave up on is worse than silence, and silence is free.
+const FOREGROUND_TIMEOUT_MS =
+  Number(process.env.LLM_GATEWAY_FOREGROUND_TIMEOUT_MS) || 12_000;
+
+// Race a promise against a timeout. The loser keeps running in the
+// background (its own 25s fetch abort bounds it); its result is discarded.
+// A late provider success may still count against daily caps — acceptable:
+// it happens only on the timeout path, at most once per request.
+function withTimeout(promise, ms, reason) {
+  let timer = null;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false, reason, retryable: false }), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function createMemoryStore() {
   if (SQLITE_DB_PATH) return new SqliteMemoryStore(SQLITE_DB_PATH);
   return new InMemoryMemoryStore();
@@ -40,6 +59,13 @@ class Gateway {
   async handleChatRequest(payload) {
     const { citizenUsername, requesterUsername, text, channel, context } = payload ?? {};
     if (!citizenUsername || !requesterUsername || !text) return;
+
+    // Public-path rate limit: onCitizenChatHeard emits llm:chat-request
+    // directly, bypassing ChatInterceptor.checkCooldown (which only guards
+    // the private-message path via requestChat). Without this cap, one
+    // player spamming public chat in a crowd triggers up to 2 LLM calls
+    // per utterance, unbounded — free-tier quota is precious.
+    if (channel === "public" && !this.interceptor.checkPublicCooldown(citizenUsername)) return;
 
     const startedAt = Date.now();
     const citizen = this.interceptor.getCitizen(citizenUsername);
@@ -71,7 +97,10 @@ class Gateway {
     if (payload?.tier) prompt.tier = payload.tier;
     else if (history.length === 0) prompt.tier = "flagship";
 
-    const result = await this.chain.complete(prompt);
+    // Foreground budget: never make a waiting player eat the full 25s abort
+    // + 30s queue worst case. Past the budget, stay silent (handled below
+    // like any other failed request).
+    const result = await withTimeout(this.chain.complete(prompt), FOREGROUND_TIMEOUT_MS, "FOREGROUND_TIMEOUT");
     if (!result.ok || !result.text) {
       // Everyone is down or unconfigured: stay silent. No retry storm.
       console.info(

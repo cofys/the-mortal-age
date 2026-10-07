@@ -225,6 +225,12 @@ function claimFullCharacter(player, originId, backgroundId, firstName, lastName,
     if (!first || !last) {
       return { ok: false, error: "That name won't do — letters only, 2 to 16 characters each." };
     }
+  } else {
+    // Resumable path: the name was set by an earlier attempt, so first/last
+    // are still null above. Read the existing names for the success message
+    // (guaranteed present — needsName is false exactly when hasFullName).
+    first = player.getAttribute?.("character:first-name") ?? null;
+    last = player.getAttribute?.("character:last-name") ?? null;
   }
 
   // Apply background (no UI) — sets attribute, skills, kit, contact.
