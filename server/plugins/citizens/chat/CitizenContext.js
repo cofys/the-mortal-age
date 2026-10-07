@@ -203,6 +203,29 @@ function buildContext(citizenUsername, speakerUsername) {
     // Kinship must never break the chat path.
   }
 
+  // Offices: a seated citizen speaks as the office; everyone else knows
+  // who holds the seals in their kingdom.
+  try {
+    const CitizenOffices = require("../lib/CitizenOffices");
+    const held = CitizenOffices.officeOfCitizen(citizenUsername);
+    if (held) {
+      parts.push(`You hold the office of ${held.title} of your kingdom. Speak with its authority and its burdens.`);
+    } else if (record.kingdomId) {
+      const others = CitizenOffices.officesOfKingdom(record.kingdomId)
+        .filter((o) => o.citizenName)
+        .slice(0, 3);
+      if (others.length > 0) {
+        parts.push(
+          "Your kingdom's officers: " +
+            others.map((o) => `${o.citizenName} is the ${o.title}`).join("; ") +
+            "."
+        );
+      }
+    }
+  } catch {
+    // Offices must never break the chat path.
+  }
+
   // Guild: player-founded guilds with citizen members. A member speaks as
   // one — loyalty, pride, and the hall are part of their identity now.
   try {

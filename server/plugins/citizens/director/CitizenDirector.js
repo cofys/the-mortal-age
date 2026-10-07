@@ -54,6 +54,7 @@ const CitizenWarfare = require("../lib/CitizenWarfare");
 const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
+const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -1201,6 +1202,14 @@ class CitizenDirector {
       GuildActivities.tickOutings(this, hour);
     } catch (error) {
       this.log("guild outings failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen offices: bind living citizens to AI-held kingdom offices and
+    // let the holders perform their duties (musters, supply orders, ledgers,
+    // spymaster rumors). Data tier, zero LLM.
+    try {
+      CitizenOffices.tickOffices(this, hour);
+    } catch (error) {
+      this.log("offices failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {

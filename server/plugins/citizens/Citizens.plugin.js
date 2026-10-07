@@ -46,6 +46,7 @@ const {
   GOSSIP_OFFICE,
 } = require("./lib/CitizenMemory");
 const { initCitizenJournal } = require("./lib/CitizenJournal");
+const CitizenOffices = require("./lib/CitizenOffices");
 const KingdomStore = require("../kingdoms/KingdomStore");
 const {
   EVENT_WAR_DECLARED,
@@ -323,6 +324,34 @@ function onThievingWitnessed(event) {
 
 function onKingdomOfficeVacated(event) {
   onOfficeVacated(event);
+  // Release the seated citizen so the vacancy is filled fresh.
+  CitizenOffices.unbindOffice(event?.officeId);
+}
+
+/**
+ * The realm calls for an office-holder: seat a living citizen of the
+ * kingdom and answer with an AI holder (kind "ai", ref the office
+ * identity — the contract Politics.Kingdoms challenges resolve against).
+ */
+function onKingdomOfficeSeeksHolder(event) {
+  const director = getDirector();
+  if (!director) {
+    return;
+  }
+  const binding = CitizenOffices.fillVacancy(director, {
+    officeId: event?.officeId,
+    kingdomId: event?.kingdomId,
+    title: event?.title,
+  });
+  if (!binding) {
+    return;
+  }
+  pluginApi?.emitCustomEvent("kingdom:office-assigned", {
+    officeId: event.officeId,
+    kingdomId: event.kingdomId,
+    title: binding.title,
+    holder: { kind: "ai", ref: event.officeId },
+  });
 }
 
 function onCitizenSocialPacket(event) {
@@ -454,6 +483,7 @@ module.exports = {
     api.onCustomEvent("kingdom:skirmish", onKingdomSkirmish);
     api.onCustomEvent(EVENT_OFFICE_ASSIGNED, onKingdomOfficeAssigned);
     api.onCustomEvent(EVENT_OFFICE_VACATED, onKingdomOfficeVacated);
+    api.onCustomEvent("kingdom:office-seeks-holder", onKingdomOfficeSeeksHolder);
     api.onCustomEvent(EVENT_CITIZEN_CHAT_HEARD, onCitizenChatHeard);
     api.onCustomEvent("llm:chat-response", onSocialThreadResponse);
     api.onCustomEvent("kingdom:rumor", onKingdomRumorHeard);
