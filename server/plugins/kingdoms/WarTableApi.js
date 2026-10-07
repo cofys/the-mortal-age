@@ -133,4 +133,6 @@ function attach(api) {
   });
 }
 
-module.exports = { attach, WARTABLE_OPEN_ATTRIBUTE };
+module.exports = attach;
+module.exports.attach = attach;
+module.exports.WARTABLE_OPEN_ATTRIBUTE = WARTABLE_OPEN_ATTRIBUTE;
