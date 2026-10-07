@@ -289,6 +289,26 @@ class CitizenKinshipStore {
     return ok;
   }
 
+  /**
+   * Drop every bond involving a citizen who no longer exists (refugee
+   * column stood down, war casualty). Prevents orphaned pair-keys from
+   * accumulating across wars. Memory-leak plug, 2026-10-07.
+   */
+  forgetCitizen(name) {
+    this._loaded();
+    const key = normalizeName(name);
+    if (!key) return 0;
+    let removed = 0;
+    for (const [pair, rec] of this.bonds) {
+      if (rec.a === key || rec.b === key) {
+        this.bonds.delete(pair);
+        removed += 1;
+      }
+    }
+    if (removed > 0) this.dirty = true;
+    return removed;
+  }
+
   setStage(a, b, stage, now = Date.now()) {
     this._loaded();
     const rec = this.bonds.get(pairKey(a, b));

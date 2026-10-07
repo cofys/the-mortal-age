@@ -53,6 +53,18 @@ const GREET_CITIZEN_COOLDOWN_MS = 20 * 60 * 1000; // a citizen greets at most ev
 const GREET_PLAYER_COOLDOWN_MS = 5 * 60 * 1000; // a player is greeted at most every 5 min
 const MAX_GREETS_PER_TICK = 2;
 const lastGreetAt = new Map(); // citizen username -> timestamp
+
+// Cooldown entries for removed citizens would linger forever. Prune
+// hourly. Memory-leak plug, 2026-10-07.
+let lastGreetPruneAt = 0;
+function pruneGreetCooldowns(nowMs) {
+  if (nowMs - lastGreetPruneAt < 3600 * 1000) return;
+  lastGreetPruneAt = nowMs;
+  const cutoff = nowMs - 24 * 3600 * 1000;
+  for (const [k, at] of lastGreetAt) {
+    if (at < cutoff) lastGreetAt.delete(k);
+  }
+}
 const lastGreetedPlayerAt = new Map(); // player name -> timestamp
 
 let pluginApi = null;
@@ -302,6 +314,7 @@ function gearNote(player) {
  */
 function maybeGreetPlayer(director, nowMs = Date.now()) {
   if (!pluginApi || !director) return;
+  pruneGreetCooldowns(nowMs);
   const rng = agentRng(`greet:${Math.floor(nowMs / 60000)}`);
   let greets = 0;
 

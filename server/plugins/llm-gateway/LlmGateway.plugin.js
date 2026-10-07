@@ -50,6 +50,10 @@ function onGatewayCitizenRegister(payload) {
   gateway?.handleCitizenRegister(payload);
 }
 
+function onGatewayCitizenUnregister(payload) {
+  gateway?.handleCitizenUnregister(payload);
+}
+
 function shutdownGateway() {
   gateway?.shutdown();
   gateway = null;
@@ -69,6 +73,7 @@ module.exports = {
     api.onCustomEvent("llm:speak-request", onGatewaySpeakRequest);
     api.onCustomEvent("llm:chat-response", onGatewayChatResponse);
     api.onCustomEvent("llm:citizen-register", onGatewayCitizenRegister);
+    api.onCustomEvent("llm:citizen-unregister", onGatewayCitizenUnregister);
     api.onServerShutdown(shutdownGateway);
   },
 };

@@ -44,6 +44,25 @@ const lastCongratulatedPlayer = new Map(); // player name -> timestamp
 const lastSympathyByCitizen = new Map(); // username -> timestamp
 const lastSympathizedPlayer = new Map(); // player name -> timestamp
 
+// Player-name-keyed cooldowns would grow with player churn. Prune
+// entries older than a day, at most hourly. Memory-leak plug, 2026-10-07.
+let lastNoticePruneAt = 0;
+function pruneNoticeCooldowns(nowMs) {
+  if (nowMs - lastNoticePruneAt < 3600 * 1000) return;
+  lastNoticePruneAt = nowMs;
+  const cutoff = nowMs - 24 * 3600 * 1000;
+  for (const m of [
+    lastCongratsByCitizen,
+    lastCongratulatedPlayer,
+    lastSympathyByCitizen,
+    lastSympathizedPlayer,
+  ]) {
+    for (const [k, at] of m) {
+      if (at < cutoff) m.delete(k);
+    }
+  }
+}
+
 function pick(array) {
   return array[Math.floor(Math.random() * array.length)];
 }
@@ -212,6 +231,7 @@ function nearbyCitizens(player, radius, nowMs = Date.now()) {
 function onPlayerLevelUpNotice(event, nowMs = Date.now()) {
   const { player, skill, oldLevel, newLevel } = event ?? {};
   if (!isRealPlayer(player)) return;
+  pruneNoticeCooldowns(nowMs);
   if (!Number.isInteger(newLevel) || newLevel <= (oldLevel ?? 0)) return;
 
   const playerName = player.getUsername?.() ?? "traveller";
@@ -277,6 +297,7 @@ function onPlayerLevelUpNotice(event, nowMs = Date.now()) {
 function onPlayerDeathNotice(event, nowMs = Date.now()) {
   const { player } = event ?? {};
   if (!isRealPlayer(player)) return;
+  pruneNoticeCooldowns(nowMs);
 
   const playerName = player.getUsername?.() ?? "traveller";
   if (nowMs - (lastSympathizedPlayer.get(playerName) ?? 0) < SYMPATHY_PLAYER_COOLDOWN_MS) return;

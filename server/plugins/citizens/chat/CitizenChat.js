@@ -24,6 +24,7 @@
 
 const {
   EVENT_LLM_CITIZEN_REGISTER,
+  EVENT_LLM_CITIZEN_UNREGISTER,
   EVENT_LLM_CHAT_REQUEST,
   EVENT_CITIZEN_CHAT_HEARD,
   ROLE_MERCHANT,
@@ -49,6 +50,14 @@ let pluginApi = null;
 
 function initCitizenChat(api) {
   pluginApi = api;
+}
+
+/** Called by the director when a citizen is permanently removed. */
+function unregisterCitizenForChat(username) {
+  if (!pluginApi || !username) {
+    return;
+  }
+  pluginApi.emitCustomEvent(EVENT_LLM_CITIZEN_UNREGISTER, { username });
 }
 
 /** Called by the director right after a citizen spawns. */
@@ -431,6 +440,7 @@ function findPlayerByName(username) {
 module.exports = {
   initCitizenChat,
   registerCitizenForChat,
+  unregisterCitizenForChat,
   onCitizenChatHeard,
   onSocialPacket,
   chatHeardEventName,

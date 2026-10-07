@@ -57,6 +57,22 @@ function warKey(war) {
   return `${war.attackerId}:${war.defenderId}`;
 }
 
+// War throttle maps are keyed by warKey:kingdomId. Wars end; the keys
+// don't. Prune entries older than a day so dead wars stop accumulating.
+// Memory-leak plug, 2026-10-07.
+const THROTTLE_TTL_MS = 24 * 3600 * 1000;
+let lastThrottlePruneAt = 0;
+function pruneThrottleMaps(now) {
+  if (now - lastThrottlePruneAt < 3600 * 1000) return;
+  lastThrottlePruneAt = now;
+  for (const [k, at] of lastNewsAt) {
+    if (now - at > THROTTLE_TTL_MS) lastNewsAt.delete(k);
+  }
+  for (const [k, at] of lastDemandAt) {
+    if (now - at > THROTTLE_TTL_MS) lastDemandAt.delete(k);
+  }
+}
+
 function kingdomName(kingdomId) {
   try {
     return KingdomStore.getKingdom(kingdomId)?.name ?? kingdomId;
@@ -374,6 +390,7 @@ const WAR_TALK_DEFENDER = [
 function spreadWarNews(director, war) {
   const now = Date.now();
   const key = warKey(war);
+  pruneThrottleMaps(now);
   const rng = agentRng(`warnews:${key}:${now >> 20}`);
   const attackerName = kingdomName(war.attackerId);
   const defenderName = kingdomName(war.defenderId);

@@ -435,8 +435,9 @@ function recordCasualty(director, record, party, fieldName, rng) {
   // which would rewind battleTicks/phase on the authoritative copy.
   try { clearParty(name); } catch { /* non-fatal */ }
   try { clearFollow(name); } catch { /* non-fatal */ }
-  try { director.logoutCitizen(record); } catch { /* non-fatal */ }
-  try { director.roster.delete(normalizeName(record.username)); } catch { /* non-fatal */ }
+  // Full cleanup (journal, memory, needs, kinship, chat registration)
+  // goes through the director's single choke point.
+  try { director.removeCitizen(record); } catch { /* non-fatal */ }
   // Keep the authoritative party copy honest, then push it to all survivors.
   if (Array.isArray(party.members)) {
     party.members = party.members.filter((m) => normalizeName(m) !== normalizeName(name));

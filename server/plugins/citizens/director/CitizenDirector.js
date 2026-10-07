@@ -40,9 +40,10 @@ const {
   sampleGoalProgress,
   GOAL_RANK_UP,
 } = require("../lib/goals");
-const { registerCitizenForChat } = require("../chat/CitizenChat");
+const { registerCitizenForChat, unregisterCitizenForChat } = require("../chat/CitizenChat");
 const { getMemory } = require("../lib/CitizenMemory");
 const { getJournal } = require("../lib/CitizenJournal");
+const { dropNeeds } = require("../brain/CitizenNeeds");
 const { backgroundStep } = require("../lib/CitizenBackground");
 const { maybeSocialize, maybeGreetPlayer } = require("../chat/CitizenSocial");
 const SocialMechanics = require("../lib/CitizenSocialMechanics");
@@ -619,6 +620,63 @@ class CitizenDirector {
     record.online = false;
     record.currentActivityId = null;
     this.log("citizen logged out", { citizen: record.username, reason: "schedule" });
+  }
+
+  /**
+   * Permanently remove a citizen (refugee column stood down at peace, war
+   * casualty). Roster removal alone left orphaned data in every subsystem —
+   * journal, memory, needs, kinship bonds, chat registration — which
+   * accumulated across wars. This is the single choke point for full
+   * cleanup. Memory-leak plug, 2026-10-07.
+   */
+  removeCitizen(record) {
+    if (!record) return false;
+    const username = record.username;
+    const key = normalizeName(username);
+    try {
+      this.logoutCitizen(record);
+    } catch {
+      // Non-fatal — continue cleanup.
+    }
+    try {
+      CitizenBonds.clearParty(username);
+    } catch {
+      // Non-fatal.
+    }
+    try {
+      CitizenBonds.clearFollow(username);
+    } catch {
+      // Non-fatal.
+    }
+    try {
+      getJournal().forget(username);
+    } catch {
+      // Non-fatal.
+    }
+    try {
+      getMemory().forget(username);
+    } catch {
+      // Non-fatal.
+    }
+    try {
+      dropNeeds(username);
+    } catch {
+      // Non-fatal.
+    }
+    try {
+      CitizenKinship.getKinship().forgetCitizen(username);
+    } catch {
+      // Non-fatal.
+    }
+    try {
+      unregisterCitizenForChat(username);
+    } catch {
+      // Non-fatal.
+    }
+    this.roster.delete(key);
+    this.usedNames.delete(username);
+    this.log("citizen removed", { citizen: username });
+    return true;
   }
 
   switchActivity(record, activityId) {

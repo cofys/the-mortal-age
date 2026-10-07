@@ -72,6 +72,7 @@ const EVENT_OFFICE_VACATED = "kingdom:office-vacated";
 
 // llm-gateway contract (see server/plugins/llm-gateway/LlmGateway.plugin.js).
 const EVENT_LLM_CITIZEN_REGISTER = "llm:citizen-register";
+const EVENT_LLM_CITIZEN_UNREGISTER = "llm:citizen-unregister";
 const EVENT_LLM_CHAT_REQUEST = "llm:chat-request";
 
 // Citizens-side chat-heard interface. The llm-gateway owns LLM replies; this
@@ -118,6 +119,7 @@ module.exports = {
   EVENT_OFFICE_ASSIGNED,
   EVENT_OFFICE_VACATED,
   EVENT_LLM_CITIZEN_REGISTER,
+  EVENT_LLM_CITIZEN_UNREGISTER,
   EVENT_LLM_CHAT_REQUEST,
   EVENT_CITIZEN_CHAT_HEARD,
 };

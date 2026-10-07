@@ -37,6 +37,20 @@ const lastRumorAt = new Map(); // username -> timestamp
 const FEAR_COOLDOWN_MS = 20 * 60 * 1000;
 const lastFearAt = new Map(); // sorted "a:b" -> timestamp
 
+// Cooldown entries for removed citizens would linger forever. Prune
+// entries older than a day, at most hourly. Memory-leak plug, 2026-10-07.
+let lastReactionPruneAt = 0;
+function pruneReactionCooldowns(now) {
+  if (now - lastReactionPruneAt < 3600 * 1000) return;
+  lastReactionPruneAt = now;
+  const cutoff = now - 24 * 3600 * 1000;
+  for (const m of [lastRumorAt, lastFearAt, lastDraftAt]) {
+    for (const [k, at] of m) {
+      if (at < cutoff) m.delete(k);
+    }
+  }
+}
+
 function pick(array) {
   return array[Math.floor(Math.random() * array.length)];
 }
@@ -86,6 +100,7 @@ function onKingdomRumor(event) {
   const text = event?.text;
   if (!kingdomId || !text) return;
   const now = Date.now();
+  pruneReactionCooldowns(now);
   const candidates = onlineBots(kingdomId).filter((bot) => {
     const name = bot.getUsername?.() ?? "";
     return now - (lastRumorAt.get(name) ?? 0) >= RUMOR_COOLDOWN_MS;

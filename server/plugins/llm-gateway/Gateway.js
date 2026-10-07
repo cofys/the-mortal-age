@@ -111,6 +111,13 @@ class Gateway {
     }
   }
 
+  handleCitizenUnregister(payload) {
+    this.interceptor.unregisterCitizen(payload?.username);
+    if (payload?.username) {
+      this.memory.deleteCard(payload.username).catch(() => {});
+    }
+  }
+
   /**
    * handleSpeakRequest — a citizen speaks FIRST (no incoming message).
    * Citizen-to-citizen conversation openers. ALWAYS lite tier — this never

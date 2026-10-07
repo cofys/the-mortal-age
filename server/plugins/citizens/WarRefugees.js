@@ -159,9 +159,7 @@ function onWarEnded(event) {
   for (const { username, record } of fled) {
     try {
       if (director) {
-        director.logoutCitizen(record);
-        const { normalizeName } = require("./lib/CitizenBonds");
-        director.roster.delete(normalizeName(username));
+        director.removeCitizen(record);
       }
     } catch {
       // One stranded refugee doesn't stop the peace.

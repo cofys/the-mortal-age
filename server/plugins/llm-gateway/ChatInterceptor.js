@@ -54,6 +54,18 @@ class ChatInterceptor {
     return this.citizens.get(String(username ?? "").toLowerCase()) ?? null;
   }
 
+  /**
+   * Drop a citizen who no longer exists (refugee column stood down, war
+   * casualty). Prevents the registration/cooldown maps from growing across
+   * wars. Memory-leak plug, 2026-10-07.
+   */
+  unregisterCitizen(username) {
+    const key = String(username ?? "").toLowerCase();
+    if (!key) return;
+    this.citizens.delete(key);
+    this.lastReplyAt.delete(key);
+  }
+
   // True when the bot may answer (cooldown keeps one chatty player from
   // farming LLM calls). Updates the timestamp when allowed.
   checkCooldown(username) {

@@ -587,6 +587,16 @@ class CitizenMemoryStore {
     while (this.gossip.length > MAX_GOSSIP) this.gossip.shift();
   }
 
+  /**
+   * Drop all memory data for a citizen who no longer exists (refugee
+   * column stood down, war casualty). Prevents orphaned records from
+   * accumulating across wars. Memory-leak plug, 2026-10-07.
+   */
+  forget(citizenName) {
+    const key = normalizeName(citizenName);
+    if (this.citizens.delete(key)) this.dirty = true;
+  }
+
   saveIfDirty() {
     if (!this.dirty || !this._savePath) return false;
     try {

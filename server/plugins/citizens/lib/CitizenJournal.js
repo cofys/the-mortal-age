@@ -118,6 +118,16 @@ class CitizenJournal {
     }
   }
 
+  /**
+   * Drop all journal data for a citizen who no longer exists (refugee
+   * column stood down, war casualty). Prevents orphaned records from
+   * accumulating across wars. Memory-leak plug, 2026-10-07.
+   */
+  forget(citizenName) {
+    const key = normalizeName(citizenName);
+    if (this.entries.delete(key)) this.dirty = true;
+  }
+
   toJSON() {
     const citizens = {};
     for (const [key, record] of this.entries) {

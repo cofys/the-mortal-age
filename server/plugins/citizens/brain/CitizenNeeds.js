@@ -119,6 +119,16 @@ function needsFor(playerOrName) {
   return (username && registry.get(username)) || null;
 }
 
+/**
+ * Drop needs data for a citizen who no longer exists (refugee column
+ * stood down, war casualty). The registry is keyed by username and
+ * never evicted otherwise. Memory-leak plug, 2026-10-07.
+ */
+function dropNeeds(playerOrName) {
+  const username = usernameOf(playerOrName);
+  if (username) registry.delete(username);
+}
+
 function clampNeeds(needs) {
   needs.hunger = Math.min(NEED_MAX, Math.max(0, needs.hunger));
   needs.energy = Math.min(NEED_MAX, Math.max(0, needs.energy));
@@ -317,6 +327,7 @@ module.exports = {
   GRUMPY_AT,
   ensureNeeds,
   needsFor,
+  dropNeeds,
   needsSnapshot,
   tickNeeds,
   eat,

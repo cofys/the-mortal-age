@@ -18,6 +18,7 @@ const MAX_HISTORY_PER_PLAYER = 6;
 class MemoryStore {
   async getCard(_agentId) { throw new Error("not implemented"); }
   async setCard(_agentId, _card) { throw new Error("not implemented"); }
+  async deleteCard(_agentId) { throw new Error("not implemented"); }
   async getNotes(_agentId, _playerName) { throw new Error("not implemented"); }
   async addNote(_agentId, _playerName, _note) { throw new Error("not implemented"); }
   async getHistory(_agentId, _playerName, _limit = MAX_HISTORY_PER_PLAYER) { throw new Error("not implemented"); }
@@ -40,6 +41,20 @@ class InMemoryMemoryStore extends MemoryStore {
 
   async setCard(agentId, card) {
     this.cards.set(normalize(agentId), String(card ?? "").slice(0, 2000));
+  }
+
+  /**
+   * Drop a citizen's card/notes/history when they no longer exist.
+   * Memory-leak plug, 2026-10-07.
+   */
+  async deleteCard(agentId) {
+    const key = normalize(agentId);
+    this.cards.delete(key);
+    for (const map of [this.notes, this.history]) {
+      for (const k of map.keys()) {
+        if (k === key || k.startsWith(`${key}|`)) map.delete(k);
+      }
+    }
   }
 
   async getNotes(agentId, playerName) {
@@ -89,6 +104,7 @@ class SqliteMemoryStore extends MemoryStore {
   }
   getCard(...a) { return this.fallback.getCard(...a); }
   setCard(...a) { return this.fallback.setCard(...a); }
+  deleteCard(...a) { return this.fallback.deleteCard(...a); }
   getNotes(...a) { return this.fallback.getNotes(...a); }
   addNote(...a) { return this.fallback.addNote(...a); }
   getHistory(...a) { return this.fallback.getHistory(...a); }
