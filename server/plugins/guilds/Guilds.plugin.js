@@ -347,7 +347,7 @@ module.exports = {
   register(api) {
     pluginApi = api;
     GuildsApi.attach(api);
-    // BISECT2: api.onSocialPacket(onGuildSocialPacket);
+    api.onSocialPacket(onGuildSocialPacket);
     api.log?.("[guilds] player guilds with citizen members enabled");
   },
   // Exported for smoke tests.
