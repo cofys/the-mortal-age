@@ -187,13 +187,22 @@ function merchantWares(api, merchant) {
     queryReferencePrice(api, wareId) ?? Math.max(1, Math.floor(pricePerWare));
   const name =
     api.core.ItemDefinition.forId(wareId)?.getName?.() ?? String(wareItem);
-  // War economy: when the kingdom's borders run hot, merchants charge war
-  // prices for war goods (steel, bows, shields, food). The market closes
-  // outright once the war itself starts (see openStall).
-  const price = isWarGood(name)
-    ? Math.ceil(base * warPriceMultiplier(merchant))
-    : base;
-  return [{ id: wareId, name, price }];
+  // Layered market pricing, all data-tier:
+  //   war — steel and bread cost war prices when the borders run hot
+  //         (the market closes outright once the war itself starts);
+  //   scarcity — nearly sold out costs more, overstock gets a markdown;
+  //   demand — open economy:demand orders for this ware price desperation in;
+  //   season — food breathes with the harvest year.
+  const warMult = isWarGood(name) ? warPriceMultiplier(merchant) : 1;
+  const scarce = scarcityPricing(merchant, wareId);
+  const demand = demandPricing(wareId);
+  const season = seasonalPricing(name);
+  const marketMult = warMult * scarce.mult * demand.mult * season.mult;
+  const marketBase = Math.max(1, Math.ceil(base * marketMult));
+  const priceNote =
+    scarce.note ?? demand.note ?? season.note ?? (warMult > 1 ? "war prices" : null);
+  journalPriceMove(merchant, name, marketBase);
+  return [{ id: wareId, name, price: marketBase, marketNote: priceNote }];
 }
 
 // War goods: weapons and food — what an army (or a frightened town) buys.
@@ -285,6 +294,98 @@ function warPriceWarning(merchant) {
     return "The war is over but prices haven't settled — steel and bread still cost war prices.";
   } catch {
     return "Steel and bread cost war prices at this stall.";
+  }
+}
+
+// Scarcity pricing: nearly sold out costs more, overstock gets a markdown.
+// The merchant's stock IS their live inventory, so the price always tells
+// the truth about the shelf.
+function scarcityPricing(merchant, wareId) {
+  let stock = 0;
+  try {
+    stock = merchant.getInventory?.()?.getAmount?.(wareId) ?? 0;
+  } catch {
+    stock = 0;
+  }
+  if (stock <= 2) return { mult: 1.25, note: "scarce — nearly sold out" };
+  if (stock <= 8) return { mult: 1.1, note: null };
+  if (stock >= 50) return { mult: 0.9, note: "surplus — priced to move" };
+  return { mult: 1.0, note: null };
+}
+
+// Demand-board pricing: open economy:demand orders for this ware mean
+// buyers are desperate — the stall prices it in (capped, never gouging).
+function demandPricing(wareId) {
+  try {
+    const Demand = require("../../economy/Demand.Economy");
+    const open = Demand.getOpen({ itemId: wareId }).length;
+    if (open > 0) {
+      return {
+        mult: Math.min(1.3, 1 + 0.1 * open),
+        note: open === 1 ? "high demand" : `high demand (${open} open orders)`,
+      };
+    }
+  } catch {
+    // Economy plugin absent — no demand pressure.
+  }
+  return { mult: 1.0, note: null };
+}
+
+// Food words for the seasonal table.
+const FOOD_KEYWORDS = [
+  "BREAD",
+  "MEAT",
+  "FISH",
+  "TUNA",
+  "LOBSTER",
+  "SHRIMP",
+  "PIKE",
+  "CAKE",
+  "POTATO",
+  "STEW",
+  "APPLE",
+  "CABBAGE",
+];
+
+/**
+ * Seasonal food prices, by real-world month (northern-hemisphere harvest
+ * rhythm, the way a medieval market thinks): harvest glut in autumn,
+ * lean winter stores, spring planting hunger, summer plenty. Small —
+// food should breathe with the year, not swing with it.
+ */
+function seasonalPricing(name) {
+  const upper = String(name ?? "").toUpperCase();
+  if (!FOOD_KEYWORDS.some((kw) => upper.includes(kw))) {
+    return { mult: 1.0, note: null };
+  }
+  const month = new Date().getMonth(); // 0-11
+  if (month >= 8 && month <= 10) return { mult: 0.9, note: "harvest plenty" }; // Sep-Nov
+  if (month >= 11 || month <= 1) return { mult: 1.1, note: "winter stores" }; // Dec-Feb
+  if (month >= 2 && month <= 4) return { mult: 1.05, note: null }; // Mar-May
+  return { mult: 1.0, note: null }; // Jun-Aug: summer plenty
+}
+
+/** Journal a price move, but only when it actually moved (avoids spam). */
+function journalPriceMove(merchant, wareName, newBase) {
+  try {
+    const { getJournal } = require("../lib/CitizenJournal");
+    const key = "citizens:base-price";
+    const old = Number(merchant.getAttribute?.(key));
+    merchant.setAttribute?.(key, String(newBase));
+    if (Number.isFinite(old) && old > 0 && old !== newBase) {
+      const move = (newBase - old) / old;
+      if (Math.abs(move) >= 0.15) {
+        const dir = move > 0 ? "Raised" : "Lowered";
+        getJournal().log(
+          merchant.getUsername?.() ?? "?",
+          "price",
+          `${dir} the price of ${wareName} to ${newBase} coins — ${move > 0 ? "the market tightened" : "stock is moving slowly"}.`,
+          { data: { ware: wareName, from: old, to: newBase } }
+        );
+      }
+    }
+  } catch {
+    // Journaling must never break the stall.
   }
 }
 
@@ -449,7 +550,7 @@ function renderStall(api, player, session) {
   session.wares.forEach((ware, row) => {
     const stock = merchant.getInventory?.()?.getAmount?.(ware.id) ?? 0;
     const note = ware.priceNote
-      ? ` · <col=${ware.priceNote === "loyalty discount" ? "7fd27f" : "ff7f7f"}>${ware.priceNote}</col>`
+      ? ` · <col=${/loyalty discount|haggled|surplus|harvest plenty/.test(ware.priceNote) ? "7fd27f" : "ff7f7f"}>${ware.priceNote}</col>`
       : "";
     sender
       .sendItemOnInterface(rowUid(row, 0), ware.id, 0, Math.max(0, stock))
@@ -522,13 +623,29 @@ function openStall(api, player, merchant) {
   } catch {
     // Fall through with no markup.
   }
-  const priceNote =
-    multiplier < 1 ? "loyalty discount" : multiplier > 1 ? "cold prices" : haggleNote;
-  const pricedWares = wares.map((ware) => ({
-    ...ware,
-    price: Math.max(1, Math.round(ware.price * multiplier * haggleEdge)),
-    priceNote,
-  }));
+  // Haggled one-time discount (granted in chat, voiced by the LLM, decided
+  // data-tier). Consumed here — the next opening pays list again.
+  let haggledPct = 0;
+  try {
+    haggledPct = memory.consumeHaggle?.(merchantName, playerName) ?? 0;
+  } catch {
+    haggledPct = 0;
+  }
+  const haggleMult = haggledPct > 0 ? 1 - haggledPct / 100 : 1;
+  const loyaltyNote =
+    multiplier < 1 ? "loyalty discount" : multiplier > 1 ? "cold prices" : null;
+  const pricedWares = wares.map((ware) => {
+    const notes = [ware.marketNote, loyaltyNote, haggleNote];
+    if (haggledPct > 0) notes.push(`haggled ${haggledPct}% off`);
+    return {
+      ...ware,
+      price: Math.max(
+        1,
+        Math.round(ware.price * multiplier * haggleEdge * haggleMult)
+      ),
+      priceNote: notes.filter(Boolean).join(" · ") || null,
+    };
+  });
   const greeting = memory.greetingFor(merchantName, playerName);
   if (greeting) {
     try {
@@ -656,6 +773,21 @@ function buyFromMerchant(api, player, ware, amount) {
     cost,
     merchantCoins: merchantInv.getAmount(COINS),
   });
+  // Economic journaling: the merchant remembers real transactions, so the
+  // foreground LLM talks about business truthfully.
+  try {
+    const { getJournal } = require("../lib/CitizenJournal");
+    const mName = merchant.getUsername?.() ?? "?";
+    const pName = player.getUsername?.() ?? "?";
+    getJournal().log(
+      mName,
+      "trade",
+      `Sold ${qty} x ${ware.name} to ${pName} for ${cost} coins.`,
+      { with: pName, data: { itemId: ware.id, qty, cost, side: "sell" } }
+    );
+  } catch {
+    // Non-fatal.
+  }
   player.sendMessage(`You buy ${qty} x ${ware.name} for ${cost} coins.`);
   renderStall(api, player, session);
 }
@@ -710,6 +842,19 @@ function sellToMerchant(api, player, ware, amount) {
     qty,
     payout,
   });
+  try {
+    const { getJournal } = require("../lib/CitizenJournal");
+    const mName = merchant.getUsername?.() ?? "?";
+    const pName = player.getUsername?.() ?? "?";
+    getJournal().log(
+      mName,
+      "trade",
+      `Bought ${qty} x ${ware.name} from ${pName} for ${payout} coins.`,
+      { with: pName, data: { itemId: ware.id, qty, cost: payout, side: "buy" } }
+    );
+  } catch {
+    // Non-fatal.
+  }
   player.sendMessage(`You sell ${qty} x ${ware.name} for ${payout} coins.`);
   renderStall(api, player, session);
 }

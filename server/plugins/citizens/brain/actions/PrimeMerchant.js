@@ -252,6 +252,28 @@ function createPrimeMerchantAction(spec, world) {
       qty,
       cost,
     });
+    // Economic journaling, both sides — the deal is part of each
+    // merchant's story when the LLM talks business.
+    try {
+      const { getJournal } = require("../../lib/CitizenJournal");
+      const primeName = player.getUsername?.() ?? "?";
+      const supplierName = supplier.getUsername?.() ?? "?";
+      const wareName = "bronze swords"; // the prime's wholesale ware
+      getJournal().log(
+        primeName,
+        "trade",
+        `Bought ${qty} x ${wareName} wholesale from ${supplierName} for ${cost} coins.`,
+        { with: supplierName, data: { itemId: wareId, qty, cost, side: "wholesale-buy" } }
+      );
+      getJournal().log(
+        supplierName,
+        "trade",
+        `Sold ${qty} x ${wareName} wholesale to ${primeName} for ${cost} coins.`,
+        { with: primeName, data: { itemId: wareId, qty, cost, side: "wholesale-sell" } }
+      );
+    } catch {
+      // Non-fatal.
+    }
     return true;
   }
 

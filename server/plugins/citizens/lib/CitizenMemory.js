@@ -48,6 +48,13 @@ const FAVORITE_MIN_SPENT = 5000;
 // Generosity gossip fires once per tier of lifetime spend.
 const GENEROSITY_TIERS = [1000, 10000, 100000];
 
+// Haggling: a granted discount is one-time (consumed at the next stall
+// opening) and a haggle attempt — granted or refused — starts a cooldown
+// so players can't farm the stallkeeper for a better price every minute.
+const HAGGLE_WINDOW_MS = 30 * 60 * 1000; // granted discount stays valid this long
+const HAGGLE_COOLDOWN_MS = 2 * 3600 * 1000; // then the answer stays "no" for this long
+const HAGGLE_MAX_PCT = 25;
+
 // Grudge severity by offense.
 const GRUDGE_INSULT = 1;
 const GRUDGE_THEFT = 1;
@@ -297,6 +304,61 @@ class CitizenMemoryStore {
     if (standing === "favorite") return 0.9;
     if (standing === "regular") return 0.95;
     return 1.0;
+  }
+
+  /**
+   * Haggling, decided data-tier in CitizenChat and voiced by the LLM.
+   * A grant is a one-time discount: recordHaggle stores it, haggleDiscount
+   * reads it, consumeHaggle spends it (called when the stall opens).
+   * Every attempt — granted or refused — stamps haggleAt, which starts the
+   * cooldown during which further haggling is refused outright.
+   */
+  recordHaggle(citizenName, playerName, discountPct, now = Date.now()) {
+    const entry = this._entry(citizenName, playerName, now);
+    entry.haggle = {
+      pct: clamp(Math.floor(discountPct), 1, HAGGLE_MAX_PCT),
+      at: now,
+    };
+    entry.haggleAt = now;
+    entry.lastSeen = now;
+    this.dirty = true;
+    return entry;
+  }
+
+  /** Stamp a refused (or decided) haggle attempt — starts the cooldown. */
+  recordHaggleAttempt(citizenName, playerName, now = Date.now()) {
+    const entry = this._entry(citizenName, playerName, now);
+    entry.haggleAt = now;
+    entry.lastSeen = now;
+    this.dirty = true;
+    return entry;
+  }
+
+  /** Pending one-time discount pct (0 when none or expired). */
+  haggleDiscount(citizenName, playerName, now = Date.now()) {
+    const entry = this.getEntry(citizenName, playerName);
+    const h = entry?.haggle;
+    if (!h || !Number.isFinite(h.pct) || h.pct <= 0) return 0;
+    if (now - h.at > HAGGLE_WINDOW_MS) return 0;
+    return h.pct;
+  }
+
+  /** Spend the pending discount. Returns the pct that was applied (0 if none). */
+  consumeHaggle(citizenName, playerName, now = Date.now()) {
+    const pct = this.haggleDiscount(citizenName, playerName, now);
+    const entry = this.getEntry(citizenName, playerName);
+    if (entry && entry.haggle) {
+      entry.haggle = null;
+      this.dirty = true;
+    }
+    return pct;
+  }
+
+  /** True while the haggle cooldown is running (attempts refused). */
+  hasHaggledRecently(citizenName, playerName, now = Date.now()) {
+    const entry = this.getEntry(citizenName, playerName);
+    if (!entry?.haggleAt) return false;
+    return now - entry.haggleAt < HAGGLE_COOLDOWN_MS;
   }
 
   /**

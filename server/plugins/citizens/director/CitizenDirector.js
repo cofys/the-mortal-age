@@ -50,6 +50,7 @@ const ActivityParties = require("../lib/CitizenActivityParties");
 const BossRuns = require("../lib/CitizenBossRuns");
 const CitizenWarfare = require("../lib/CitizenWarfare");
 const CitizenCampaigns = require("../lib/CitizenCampaigns");
+const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenBonds = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
@@ -509,6 +510,15 @@ class CitizenDirector {
         inventory?.adds?.(BREAD, 24);
       }
     }
+    // Crafted goods accrued while offline come out of the stockpile.
+    try {
+      CitizenCrafting.claimStockpile(record, bot);
+    } catch (error) {
+      this.log?.("craft stockpile claim failed", {
+        citizen: record.username,
+        error: String(error?.message ?? error),
+      });
+    }
 
     const state = createInitialState(
       { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 },
@@ -830,6 +840,14 @@ class CitizenDirector {
       CitizenCampaigns.tickCampaigns(this, hour);
     } catch (error) {
       this.log("campaigns failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen crafting: suppliers forge swords, provisioners bake bread —
+    // the supply chain's root, producing on wall-clock time online or off.
+    // Data tier, zero LLM.
+    try {
+      CitizenCrafting.tickCrafting(this, nowMs);
+    } catch (error) {
+      this.log("crafting failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {

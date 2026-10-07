@@ -26,6 +26,8 @@ const {
   EVENT_LLM_CITIZEN_REGISTER,
   EVENT_LLM_CHAT_REQUEST,
   EVENT_CITIZEN_CHAT_HEARD,
+  ROLE_MERCHANT,
+  ATTR_CITIZEN_PERSONALITY,
 } = require("../constants");
 const { personalityCard } = require("../lib/personalities");
 const { buildContext } = require("./CitizenContext");
@@ -35,6 +37,7 @@ const {
   GRUDGE_INSULT,
   GOSSIP_INSULT,
 } = require("../lib/CitizenMemory");
+const { getJournal } = require("../lib/CitizenJournal");
 
 const BOT_HOST_ADDRESS = "bot"; // set by bots/behaviours/spawn/BotPlayerFactory.js
 
@@ -88,6 +91,15 @@ function onCitizenChatHeard(event) {
   } catch {
     // Non-fatal — fall through to normal handling.
   }
+  // Haggling: decided data-tier by the merchant's personality, voiced by
+  // the LLM. Unlike social keywords this does NOT swallow the reply — the
+  // decision rides along as prompt context and the LLM speaks it in voice.
+  let haggleLine = "";
+  try {
+    haggleLine = handleHaggle(citizenUsername, speakerUsername, text) ?? "";
+  } catch {
+    haggleLine = "";
+  }
   // Social keywords: player-initiated friend/party/invite actions. Handled
   // as data (zero LLM); the citizen's next LLM reply will reflect the new
   // relationship via context.
@@ -133,7 +145,8 @@ function onCitizenChatHeard(event) {
     // Ground the reply in the citizen's live moment (mood, activity, goal,
     // relationship with this speaker). Built here, not in the gateway, so
     // the gateway never reaches into the citizens plugin's state.
-    context: buildContext(citizenUsername, speakerUsername),
+    // A haggle decision (if any) rides along as an extra prompt line.
+    context: buildContext(citizenUsername, speakerUsername) + haggleLine,
   });
 }
 
@@ -179,6 +192,111 @@ function onSocialPacket(event) {
 
 function chatHeardEventName() {
   return EVENT_CITIZEN_CHAT_HEARD;
+}
+
+/**
+ * Haggling: a player asks a merchant citizen for a better price.
+ * Decided data-tier (personality rules), voiced by the LLM.
+ *
+ * Returns a context line for the LLM prompt ("" when not a haggle or not
+ * a merchant). The data-tier decision is recorded in memory + journal;
+ * the stall consumes the granted discount at the next opening.
+ *
+ * Personality rules:
+ *   greedy merchants refuse outright (haggleEdge > 1);
+ *   timid / easygoing souls fold for 15%;
+ *   bold merchants counter with a token 5%;
+ *   everyone else meets in the middle at 10%.
+ * A haggle attempt — granted or refused — starts a cooldown; repeat
+ * asks inside it are refused without a new decision.
+ */
+const HAGGLE_KEYWORDS =
+  /\b(haggle|discount|cheaper|lower (the )?price|better price|best price|cut me a deal|do (it|that) for less|knock .* off)\b/;
+
+function handleHaggle(citizenUsername, speakerUsername, text) {
+  const said = String(text ?? "").toLowerCase();
+  if (!HAGGLE_KEYWORDS.test(said)) return "";
+  let record = null;
+  let director = null;
+  try {
+    const { getDirector } = require("../director/CitizenDirector");
+    director = getDirector();
+    record = director?.roster?.get?.(citizenUsername) ?? null;
+  } catch {
+    return "";
+  }
+  if (!record || record.role !== ROLE_MERCHANT) return "";
+  const memory = getMemory();
+  const now = Date.now();
+  if (memory.hasHaggledRecently?.(citizenUsername, speakerUsername, now)) {
+    try {
+      getJournal().log(
+        citizenUsername,
+        "haggle",
+        `${speakerUsername} pressed for another discount — refused, already had their chance.`,
+        { with: speakerUsername }
+      );
+    } catch {
+      // Non-fatal.
+    }
+    return " They already asked you for a better price recently. Hold firm and say so briefly, in your own voice.";
+  }
+  let pct = 10;
+  try {
+    const { humanizerProfile } = require("../lib/humanizer");
+    const bot = director?.getBot?.(record);
+    const personality =
+      bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? record.personality ?? {};
+    const profile = humanizerProfile(personality);
+    const demeanor = String(personality.demeanor ?? "");
+    const traits = new Set(personality.traits ?? []);
+    const timid =
+      demeanor.includes("nervous") ||
+      demeanor.includes("soft-spoken") ||
+      traits.has("timid") ||
+      traits.has("easygoing") ||
+      traits.has("cheerful");
+    const bold = demeanor.includes("bold") || demeanor.includes("brash");
+    if ((profile.haggleEdge ?? 1) > 1.01) {
+      pct = 0; // greedy: prices are prices
+    } else if (timid) {
+      pct = 15;
+    } else if (bold) {
+      pct = 5;
+    }
+  } catch {
+    pct = 10;
+  }
+  memory.recordHaggleAttempt?.(citizenUsername, speakerUsername, now);
+  if (pct > 0) {
+    try {
+      memory.recordHaggle?.(citizenUsername, speakerUsername, pct, now);
+    } catch {
+      // Non-fatal.
+    }
+    try {
+      getJournal().log(
+        citizenUsername,
+        "haggle",
+        `Haggled ${pct}% off for ${speakerUsername} — they asked, and it felt right.`,
+        { with: speakerUsername, data: { pct } }
+      );
+    } catch {
+      // Non-fatal.
+    }
+    return ` They just asked you for a better price and you agreed to ${pct}% off, one time only. Tell them the deal in your own voice — warm if you like them, grudging if you don't. Speak like a stallkeeper, not a system.`;
+  }
+  try {
+    getJournal().log(
+      citizenUsername,
+      "haggle",
+      `Refused ${speakerUsername}'s haggling — the prices are fair and that's final.`,
+      { with: speakerUsername }
+    );
+  } catch {
+    // Non-fatal.
+  }
+  return " They just asked you for a discount and you refused — your prices are fair and you know it. Say so briefly, in your own voice.";
 }
 
 /**
