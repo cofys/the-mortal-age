@@ -383,6 +383,7 @@ function tryRaiseArmy(director, war, kingdomId) {
   party.phase = "rally";
   party.rallyTicks = 0;
   party.legs = legs;
+  party.homeSquare = homeSquare;
   party.legIdx = 0;
   party.battleTicks = 0;
   party.fieldName = borderName(kingdomId, enemyId);
@@ -514,7 +515,9 @@ function teleportParty(director, party, tile, note) {
 
 function maintainRally(director, party, leader, rng) {
   party.rallyTicks = (party.rallyTicks ?? 0) + 1;
-  const homeSquare = party.legs?.[0];
+  // Rally AT the square — not at legs[0], which is a third of the way to
+  // the field. (party.legs holds march waypoints only.)
+  const homeSquare = party.homeSquare ?? party.legs?.[0];
   const leaderBot = director.getBot(leader);
   const tile = leaderBot ? botTile(leaderBot) : null;
   if (homeSquare && tile && chebyshev(tile, homeSquare) > ARRIVE_RADIUS) {
@@ -699,8 +702,10 @@ function beginRetreat(director, party, leader, rng, kind) {
   if (party.phase === "retreat") return;
   party.phase = "retreat";
   const legs = party.legs ?? [];
-  // Walk the legs home in reverse.
+  // Walk the legs home in reverse, ending at the square — the host
+  // disbands there, not at the first march waypoint.
   party.retreatLegs = [...legs].reverse();
+  if (party.homeSquare) party.retreatLegs.push(party.homeSquare);
   party.retreatIdx = 0;
   const fieldName = party.fieldName ?? "the field";
   if (kind === "victorious") {
