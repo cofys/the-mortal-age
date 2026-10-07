@@ -2,8 +2,10 @@
 //
 // Budget: kept lean for free-tier request/token budgets.
 //   - INPUT hard cap: 2000 tokens (history is truncated oldest-first to fit).
-//   - OUTPUT cap: 60 tokens (~240 chars; public chat lines are capped at 80
-//     chars by the client anyway, see Mouth.js).
+//   - OUTPUT cap: 40 tokens (~160 chars = 2x the 80-char public-chat line).
+//     Citizens talk like real players: short. Mouth.js paces multi-line
+//     replies with natural pauses between lines.
+// Token estimate: chars / 4 (rough, English-heavy, errs on the safe side).
 // Token estimate: chars / 4 (rough, English-heavy, errs on the safe side).
 //
 // Typical call math (see DESIGN.md):
@@ -14,7 +16,7 @@ const TOKEN_CHARS = 4;
 const estimateTokens = (text) => Math.ceil(String(text ?? "").length / TOKEN_CHARS);
 
 const INPUT_BUDGET_TOKENS = 2000;
-const MAX_OUTPUT_TOKENS = 60;
+const MAX_OUTPUT_TOKENS = 40;
 const MAX_CARD_CHARS = 480; // short personality cards, not long system prompts
 const MAX_NOTES_IN_PROMPT = 5;
 const MAX_HISTORY_EXCHANGES = 6;
@@ -25,7 +27,8 @@ const WORLD_GROUNDING =
   "everyone has a theory why. Great powers: Asgarnia (Falador, no king), Misthalin " +
   "(Varrock, aging king), Kandarin (Ardougne, the plague lie), Morytania (vampyres), " +
   "Keldagrim (dwarf mining companies). Stay in character. Never mention you are an AI. " +
-  "Reply in 1-2 short sentences, like a real player typing. No lists, no asterisks, " +
+  "Reply in 1-2 short sentences, like a real player typing. Keep it under " +
+  "160 characters total. No lists, no asterisks, " +
   "no line breaks - one paragraph only.";
 
 const STYLE_LINE =

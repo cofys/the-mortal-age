@@ -15,6 +15,12 @@
 
 const PUBLIC_CHAT_MAX_CHARS = 80;
 
+// Pacing between multi-line replies: a real player types one message, sends
+// it, pauses, then types the next. Citizens do the same. Without this, a
+// 2-line reply arrives as an instant burst that feels robotic.
+const INTER_CHUNK_MIN_MS = 2000;
+const INTER_CHUNK_MAX_MS = 5000;
+
 const MOUTH_ENABLED = (process.env.LLM_GATEWAY_MOUTH ?? "1") === "1";
 
 function chunk(text, size) {
@@ -46,15 +52,45 @@ function speakPublic(api, bot, text) {
   // Defense in depth: no line breaks, one flowing message (chunking below
   // handles the 80-char OSRS limit).
   const clean = String(text ?? "").replace(/\s+/g, " ").trim();
-  for (const line of chunk(clean, PUBLIC_CHAT_MAX_CHARS)) {
-    bot.forceChat(line);
+  const lines = chunk(clean, PUBLIC_CHAT_MAX_CHARS);
+  if (lines.length === 0) return;
+
+  // First line goes out now (the TypingScheduler already applied a human
+  // typing delay before this was called).
+  speakPublicLine(api, bot, lines[0]);
+
+  // Later lines get natural pauses between them — like a player hitting
+  // enter, thinking, then typing the next line. Never a 3-line burst.
+  let delayMs = 0;
+  for (let i = 1; i < lines.length; i++) {
+    delayMs += INTER_CHUNK_MIN_MS + Math.random() * (INTER_CHUNK_MAX_MS - INTER_CHUNK_MIN_MS);
+    const line = lines[i];
     const username = bot.getUsername();
-    const index = bot.getIndex();
-    for (const recipient of recipientsFor(bot, World)) {
-      if (recipient === bot) continue;
-      if (recipient?.getRelations?.().canReceivePublicChatFrom?.(bot) === false) continue;
-      recipient?.getPacketSender?.().sendPublicChat?.(line, username, index);
-    }
+    const timeout = setTimeout(() => {
+      try {
+        // Re-lookup: the bot may have despawned (proximity lifecycle) or the
+        // player walked away. A missing bot just means nobody hears the rest.
+        const liveBot = World?.getPlayerByName?.(username);
+        if (!liveBot) return;
+        speakPublicLine(api, liveBot, line);
+      } catch (error) {
+        console.warn(`[llm-gateway] delayed chunk failed for ${username}`, error?.message ?? error);
+      }
+    }, Math.round(delayMs));
+    // Don't keep the process alive for a pending chat line on shutdown.
+    timeout.unref?.();
+  }
+}
+
+function speakPublicLine(api, bot, line) {
+  const World = api.core.World;
+  bot.forceChat(line);
+  const username = bot.getUsername();
+  const index = bot.getIndex();
+  for (const recipient of recipientsFor(bot, World)) {
+    if (recipient === bot) continue;
+    if (recipient?.getRelations?.().canReceivePublicChatFrom?.(bot) === false) continue;
+    recipient?.getPacketSender?.().sendPublicChat?.(line, username, index);
   }
 }
 
