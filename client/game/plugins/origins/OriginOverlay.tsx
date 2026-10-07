@@ -192,7 +192,12 @@ export function OriginOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.E
             });
             await fetchContent(`/api/origins-status?${params.toString()}`);
         } catch {
-            // Fall through to poll; if the claim landed, needsChoice flips false.
+            // The claim may still have landed server-side; the poll below
+            // will close the overlay if needsChoice flipped. If it failed,
+            // reset so the player can retry instead of sticking on "…".
+            setNameError("The claim didn't go through — try again.");
+        } finally {
+            setSubmitting(false);
         }
         window.setTimeout(poll, 1500);
     }, [submitting, firstName, lastName, selectedBgId, selectedRealmId, username, poll]);
