@@ -54,12 +54,16 @@ function renderHistory(history) {
  *   toMemory: what this citizen remembers about the other (standing, past
  *   meetings) — strangers get a stranger's greeting, old friends get warmth.
  */
-function buildSpeakPrompt({ card, context, toName, toRole, toMemory, toKind, playerNote, worldContext }) {
+function buildSpeakPrompt({ card, context, toName, toRole, toMemory, toKind, playerNote, worldContext, citizenName }) {
   const systemParts = [
     worldContext || WORLD_GROUNDING,
     `Who you are: ${clampCard(card)}`,
     STYLE_LINE,
   ];
+  const displayName = String(citizenName ?? "").trim();
+  if (displayName) {
+    systemParts.push(`Your name is "${displayName}". If anyone asks your name or who you are, say "${displayName}" — that is who you are, no other name.`);
+  }
   const liveContext = String(context ?? "").trim().slice(0, 400);
   if (liveContext) {
     systemParts.push(`Right now: ${liveContext}`);
@@ -99,12 +103,19 @@ function buildSpeakPrompt({ card, context, toName, toRole, toMemory, toKind, pla
   };
 }
 
-function buildPrompt({ card, notes = [], history = [], message, worldContext, context }) {
+function buildPrompt({ card, notes = [], history = [], message, worldContext, context, citizenName }) {
   const systemParts = [
     worldContext || WORLD_GROUNDING,
     `Who you are: ${clampCard(card)}`,
     STYLE_LINE,
   ];
+  // Explicit identity: the model must know its own name cold. If asked
+  // "what's your name" or "who are you", it answers with this — no hedging,
+  // no "I'm an AI", no making one up.
+  const displayName = String(citizenName ?? "").trim();
+  if (displayName) {
+    systemParts.push(`Your name is "${displayName}". If anyone asks your name or who you are, say "${displayName}" — that is who you are, no other name.`);
+  }
   // The citizen's live moment: mood, activity, goal, relationship. This is
   // what makes a reply sound like a person living a life, not a chatbot.
   const liveContext = String(context ?? "").trim().slice(0, 400);

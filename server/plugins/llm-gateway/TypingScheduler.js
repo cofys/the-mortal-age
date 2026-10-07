@@ -1,17 +1,19 @@
 // TypingScheduler -- citizen bots never reply instantly.
 //
-// Delay = simulated typing at 40-60 words/minute over the reply length, plus a
+// Delay = simulated typing at 60-90 words/minute over the reply length, plus a
 // small human jitter. Latest message wins per (citizen, requester): if a player
 // sends a second line while a reply is queued, the queued one is replaced.
+// Gamers type fast and game chat is snappy — keep delays short so citizens
+// feel responsive, not laggy.
 
-const MIN_DELAY_MS = 900;
-const MAX_DELAY_MS = 10_000; // cap: a paragraph shouldn't take half a minute
-const JITTER_MIN_MS = 400;
-const JITTER_MAX_MS = 1600;
+const MIN_DELAY_MS = 600;
+const MAX_DELAY_MS = 4000; // cap: game chat should feel snappy, not laggy
+const JITTER_MIN_MS = 200;
+const JITTER_MAX_MS = 800;
 
 function typingDelayMs(reply) {
   const words = String(reply ?? "").trim().split(/\s+/).filter(Boolean).length || 1;
-  const wpm = 40 + Math.random() * 20; // 40-60 wpm
+  const wpm = 60 + Math.random() * 30; // 60-90 wpm: gamers type fast
   const typing = (words / wpm) * 60_000;
   const jitter = JITTER_MIN_MS + Math.random() * (JITTER_MAX_MS - JITTER_MIN_MS);
   return Math.round(Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, typing + jitter)));

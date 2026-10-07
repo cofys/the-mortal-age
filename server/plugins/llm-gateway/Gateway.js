@@ -62,6 +62,7 @@ class Gateway {
       history,
       message: text,
       context: context ?? null,
+      citizenName: citizenUsername,
     });
     // First contact gets the flagship tier: first impressions shape whether a
     // player keeps talking to citizens. Follow-ups ride cheaper slots.
@@ -146,6 +147,7 @@ class Gateway {
       toMemory: toMemory ?? null,
       toKind: toKind ?? null,
       playerNote: playerNote ?? null,
+      citizenName: citizenUsername,
     });
 
     const result = await this.chain.complete(prompt);

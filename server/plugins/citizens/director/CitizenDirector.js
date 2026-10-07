@@ -631,6 +631,15 @@ class CitizenDirector {
         });
       }
     }
+    // Visible life runs on the fast (~10s) tick, not the slow (~60s)
+    // director tick: facing, idle animations, greetings, and emote
+    // reactions need to happen often enough for players to actually see
+    // them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenAlive.tickAlive(this, Date.now());
+    } catch (error) {
+      this.log("alive (proximity) failed", { error: String(error?.message ?? error) });
+    }
   }
 
   isOnline(record) {

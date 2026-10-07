@@ -171,10 +171,126 @@ function getDirectorKingdom(citizenUsername) {
 }
 
 /**
- * Social-packet hook: public chat near citizen bots. Finds citizens in the
- * speaker's local players and emits citizens:chat-heard for each, which
- * onCitizenChatHeard forwards to the LLM gateway.
+ * Social-packet hook: public chat near citizen bots. Selects up to 2
+ * citizens to reply — not all of them. Real players don't all answer at
+ * once; neither do citizens.
+ *
+ * Selection:
+ *   1. A citizen addressed by name in the message always replies (priority).
+ *   2. Otherwise, score by proximity + relationship warmth + randomness,
+ *      pick the top 2. The randomness means different citizens speak up
+ *      each time, like a real crowd.
  */
+const MAX_PUBLIC_REPLIERS = 2;
+// Track who replied to whom recently so the same citizens don't dominate
+// every exchange. username -> Map(speakerUsername -> timestamp)
+const recentRepliers = new Map();
+const REPLIER_MEMORY_MS = 90 * 1000; // 90s before a citizen can reply to the same player again
+
+function pruneReplierMemory(nowMs) {
+  try {
+    for (const [citizen, speakers] of recentRepliers) {
+      for (const [speaker, at] of speakers) {
+        if (nowMs - at > REPLIER_MEMORY_MS) speakers.delete(speaker);
+      }
+      if (speakers.size === 0) recentRepliers.delete(citizen);
+    }
+  } catch {
+    // Non-fatal.
+  }
+}
+
+function citizenTileOf(p) {
+  try {
+    const loc = p.getLocation?.();
+    if (!loc) return null;
+    return { x: loc.getX(), y: loc.getY() };
+  } catch {
+    return null;
+  }
+}
+
+function selectRepliers(citizens, speaker, speakerName, text) {
+  const nowMs = Date.now();
+  pruneReplierMemory(nowMs);
+  const lowered = String(text ?? "").toLowerCase();
+  const speakerTile = citizenTileOf(speaker);
+
+  // 1. Direct address: "hey Petra" / "Petra, what..." — that citizen replies.
+  const addressed = [];
+  const unaddressed = [];
+  for (const bot of citizens) {
+    const name = String(bot.getUsername?.() ?? "");
+    if (!name) continue;
+    // Match first name or full name as a word in the message.
+    const firstName = name.split(" ")[0].toLowerCase();
+    const pattern = new RegExp(`\\b${firstName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    if (pattern.test(lowered)) addressed.push(bot);
+    else unaddressed.push(bot);
+  }
+  if (addressed.length > 0) {
+    // The addressed citizen replies; at most one unaddressed joins in.
+    const rest = scoreCandidates(unaddressed, speaker, speakerName, speakerTile, nowMs);
+    return [...addressed.slice(0, MAX_PUBLIC_REPLIERS), ...rest.slice(0, Math.max(0, MAX_PUBLIC_REPLIERS - addressed.length))];
+  }
+
+  // 2. No direct address: score and pick top 2.
+  return scoreCandidates(unaddressed, speaker, speakerName, speakerTile, nowMs).slice(0, MAX_PUBLIC_REPLIERS);
+}
+
+function scoreCandidates(candidates, speaker, speakerName, speakerTile, nowMs) {
+  const scored = [];
+  for (const bot of candidates) {
+    const name = String(bot.getUsername?.() ?? "");
+    if (!name) continue;
+    let score = Math.random() * 0.5; // base randomness: different citizens each time
+
+    // Proximity: closer citizens are more likely to respond.
+    try {
+      const tile = citizenTileOf(bot);
+      if (tile && speakerTile) {
+        const dist = Math.max(Math.abs(tile.x - speakerTile.x), Math.abs(tile.y - speakerTile.y));
+        score += Math.max(0, 0.4 - dist * 0.03); // +0.4 at 0 tiles, fades by ~13
+      }
+    } catch {
+      // Non-fatal.
+    }
+
+    // Relationship: citizens who like the speaker chime in more.
+    try {
+      const { getMemory } = require("../lib/CitizenMemory");
+      const opinion = getMemory().getOpinion?.(name, speakerName);
+      if (opinion && typeof opinion.score === "number") {
+        score += Math.max(-0.2, Math.min(0.3, opinion.score * 0.1));
+      }
+    } catch {
+      // Non-fatal.
+    }
+
+    // Recency penalty: just replied to this player? Sit this one out.
+    try {
+      const speakers = recentRepliers.get(name);
+      if (speakers?.has(speakerName)) score -= 0.6;
+    } catch {
+      // Non-fatal.
+    }
+
+    scored.push({ bot, name, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((s) => s.bot);
+}
+
+function markReplied(citizenName, speakerName) {
+  try {
+    const nowMs = Date.now();
+    if (!recentRepliers.has(citizenName)) recentRepliers.set(citizenName, new Map());
+    recentRepliers.get(citizenName).set(speakerName, nowMs);
+  } catch {
+    // Non-fatal.
+  }
+}
+
 function onSocialPacket(event) {
   const { player, packet } = event ?? {};
   if (!packet || packet.type !== "public_chat") return;
@@ -182,20 +298,28 @@ function onSocialPacket(event) {
   if (isCitizenBot(player)) return; // citizens don't trigger each other
   const text = String(packet.text ?? "").trim();
   if (!text) return;
-  let heard = 0;
+  const nearby = [];
   for (const local of player.getLocalPlayers?.() ?? []) {
     if (!isCitizenBot(local)) continue;
+    nearby.push(local);
+  }
+  if (nearby.length === 0) return;
+  const speakerName = player.getUsername();
+  const repliers = selectRepliers(nearby, player, speakerName, text);
+  for (const bot of repliers) {
+    const citizenUsername = bot.getUsername();
+    markReplied(citizenUsername, speakerName);
     pluginApi.emitCustomEvent(EVENT_CITIZEN_CHAT_HEARD, {
-      citizenUsername: local.getUsername(),
-      speakerUsername: player.getUsername(),
+      citizenUsername,
+      speakerUsername: speakerName,
       text: text.slice(0, 320),
     });
-    heard++;
   }
-  if (heard > 0) {
+  if (repliers.length > 0) {
     pluginApi.log?.("[citizens] public chat heard", {
-      speaker: player.getUsername(),
-      citizens: heard,
+      speaker: speakerName,
+      citizens: nearby.length,
+      repliers: repliers.length,
     });
   }
 }

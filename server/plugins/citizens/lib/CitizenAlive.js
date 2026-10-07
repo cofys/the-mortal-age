@@ -38,6 +38,8 @@ const STUCK_CHECK_TILES = 2; // moved less than this = didn't move
 const IDLE_FACE_CHANCE = 0.3; // per tick: turn to face a nearby player
 const IDLE_EMOTE_CHANCE = 0.08; // per tick: play an idle emote/animation
 const IDLE_OBSERVE_CHANCE = 0.12; // per tick: voice a small observation
+const IDLE_WANDER_CHANCE = 0.15; // per tick: take a few steps (stretch legs)
+const IDLE_WANDER_RADIUS = 5; // tiles: how far a wander goes
 const SOCIAL_GREET_RADIUS = 4; // tiles: citizens this close may greet
 const SOCIAL_GREET_CHANCE = 0.15; // per eligible pair per tick
 const SOCIAL_GREET_COOLDOWN_MS = 5 * 60 * 1000; // per citizen
@@ -248,7 +250,7 @@ function tickStuckDetection(director, record, bot, nowMs) {
   // We use a small random offset from home — not home itself (which might
   // be the unreachable destination causing the stuck).
   try {
-    const rng = agentRng(`alive:stuck:${name}:${nowMs >> 16}`);
+    const rng = agentRng(`alive:stuck:${name}:${nowMs >> 13}`);
     bot.getMovementQueue?.()?.clear?.();
     const home = record.home ?? tile;
     const nx = home.x + Math.floor(rng() * 7) - 3;
@@ -271,7 +273,7 @@ function tickStuckDetection(director, record, bot, nowMs) {
 function tickIdleLife(director, record, bot, nowMs) {
   if (isMoving(bot)) return; // only when stationary
 
-  const rng = agentRng(`alive:idle:${record.username}:${nowMs >> 16}`);
+  const rng = agentRng(`alive:idle:${record.username}:${nowMs >> 13}`);
   const profile = humanizerProfile(record.personality);
   const nearby = realPlayersNear(bot);
   const watched = nearby.length > 0;
@@ -304,6 +306,24 @@ function tickIdleLife(director, record, bot, nowMs) {
     const emotes = [EMOTES.wave, EMOTES.cheer, EMOTES.shrug];
     playAnim(bot, pickOne(rng, emotes));
   }
+
+  // Stretch legs: stationary citizens occasionally wander a few tiles.
+  // This is the most visible "alive" signal — a citizen who never moves
+  // reads as a statue. Don't wander if the brain has them doing something
+  // stationary on purpose (merchant tending stall).
+  const activityId = record.currentActivityId ?? "";
+  const rootedOk =
+    activityId.includes("merchant") || activityId.includes("prime_merchant");
+  if (!rootedOk && chance(rng, IDLE_WANDER_CHANCE)) {
+    const tile = botTile(bot);
+    if (tile) {
+      const nx = tile.x + Math.floor(rng() * (IDLE_WANDER_RADIUS * 2 + 1)) - IDLE_WANDER_RADIUS;
+      const ny = tile.y + Math.floor(rng() * (IDLE_WANDER_RADIUS * 2 + 1)) - IDLE_WANDER_RADIUS;
+      if (nx !== tile.x || ny !== tile.y) {
+        requestMovement(bot, nx, ny, tile.z, "citizen_alive_wander");
+      }
+    }
+  }
 }
 
 // --- social awareness ------------------------------------------------------------
@@ -319,7 +339,7 @@ function tickSocialAwareness(director, record, bot, nowMs) {
   const name = record.username;
   if (nowMs - (lastGreetAt.get(name) ?? 0) < SOCIAL_GREET_COOLDOWN_MS) return;
 
-  const rng = agentRng(`alive:social:${name}:${nowMs >> 16}`);
+  const rng = agentRng(`alive:social:${name}:${nowMs >> 13}`);
   const profile = humanizerProfile(record.personality);
   // Taciturn citizens rarely greet; chatty ones often do.
   const greetChance = SOCIAL_GREET_CHANCE * profile.sociability;
@@ -364,7 +384,7 @@ function tickSocialAwareness(director, record, bot, nowMs) {
  * human moments to citizen movement.
  */
 function tickImperfections(director, record, bot, nowMs) {
-  const rng = agentRng(`alive:imperfect:${record.username}:${nowMs >> 16}`);
+  const rng = agentRng(`alive:imperfect:${record.username}:${nowMs >> 13}`);
   const profile = humanizerProfile(record.personality);
   const moving = isMoving(bot);
   const watched = realPlayersNear(bot).length > 0;
@@ -516,7 +536,7 @@ function tickEmoteReactions(director, record, bot, nowMs) {
   const name = record.username;
   if (nowMs - (lastEmoteReactAt.get(name) ?? 0) < EMOTE_REACT_COOLDOWN_MS) return;
 
-  const rng = agentRng(`alive:emote:${name}:${nowMs >> 16}`);
+  const rng = agentRng(`alive:emote:${name}:${nowMs >> 13}`);
   const profile = humanizerProfile(record.personality);
   // Only sociable citizens react to emotes.
   if (profile.sociability < 0.8) return;
