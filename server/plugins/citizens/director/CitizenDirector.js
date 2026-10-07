@@ -527,8 +527,7 @@ class CitizenDirector {
           if (idx >= 0) queue.splice(idx, 1);
         }
         World.players.add(bot, true); // true = isBot, doesn't take human slot
-        const bp = bot.getLocation?.() ?? {};
-        console.log(`[citizens-visibility] DIRECT ADD ${record.username} to World.players at ${bp.x},${bp.y},${bp.z}`);
+        console.log(`[citizens-visibility] DIRECT ADD ${record.username} to World.players at ${spawn.x},${spawn.y},${spawn.z}`);
       }
     } catch (e) {
       console.log(`[citizens-visibility] direct add failed: ${e?.message}`);
