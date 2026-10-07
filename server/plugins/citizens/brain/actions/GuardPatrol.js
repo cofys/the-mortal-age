@@ -309,7 +309,18 @@ function createGuardPatrolAction(spec, world) {
         advanceWaypoint(ctx, state, circuit);
         return "running";
       }
-      requestMovement(player, state.target.x, state.target.y, {
+      // Personality movement style: guards walk their beat differently.
+      let patrolTarget = { x: state.target.x, y: state.target.y };
+      try {
+        const { styleWalkTarget } = require("../../lib/CitizenAlive");
+        const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
+        const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+        const username = player.getUsername?.() ?? "unknown";
+        patrolTarget = styleWalkTarget({ username, personality }, state.target.x, state.target.y);
+      } catch {
+        // Fall back to the unstyled target.
+      }
+      requestMovement(player, patrolTarget.x, patrolTarget.y, {
         reason: "citizen_guard_patrol",
         basicPather: true,
         z: state.target.z ?? 0,

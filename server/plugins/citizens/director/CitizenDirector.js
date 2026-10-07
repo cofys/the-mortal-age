@@ -55,6 +55,7 @@ const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
+const CitizenAlive = require("../lib/CitizenAlive");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const CitizenBonds = require("../lib/CitizenBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
@@ -1176,6 +1177,15 @@ class CitizenDirector {
       tickShoppers(this, hour);
     } catch (error) {
       this.log("shoppers failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen "alive" layer: stuck detection & recovery, idle life
+    // (facing, emotes, observations), citizen-to-citizen social awareness,
+    // and player-like imperfections (distractions, changed minds).
+    // Data tier, zero LLM.
+    try {
+      CitizenAlive.tickAlive(this, nowMs);
+    } catch (error) {
+      this.log("alive failed", { error: String(error?.message ?? error) });
     }
     // Player guilds: citizen recruitment (compatible personalities join on
     // their own) and guild outings (muster at the hall, group activities).

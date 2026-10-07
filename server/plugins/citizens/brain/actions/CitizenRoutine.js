@@ -146,7 +146,19 @@ function atTile(player, tile, radius = 3) {
 }
 
 function walkTo(player, tile) {
-  const noisy = noisyTile(tile.x, tile.y, 3, null);
+  // Personality movement styles: the hasty walk direct, the elderly amble,
+  // the drunk weaves, the nervous darts. Applied here so every routine
+  // leg carries the citizen's physical personality.
+  let target = { x: tile.x, y: tile.y };
+  try {
+    const { styleWalkTarget } = require("../../lib/CitizenAlive");
+    const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+    const username = player.getUsername?.() ?? "unknown";
+    target = styleWalkTarget({ username, personality }, tile.x, tile.y);
+  } catch {
+    // Fall back to the unstyled target.
+  }
+  const noisy = noisyTile(target.x, target.y, 3, null);
   requestMovement(player, noisy.x, noisy.y, {
     reason: "citizen_routine",
     basicPather: true,
