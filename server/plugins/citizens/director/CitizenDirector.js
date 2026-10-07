@@ -57,6 +57,7 @@ const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
+const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const CitizenBonds = require("../lib/CitizenBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
@@ -1210,6 +1211,14 @@ class CitizenDirector {
       CitizenOffices.tickOffices(this, hour);
     } catch (error) {
       this.log("offices failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen hangouts: visible ambient social clusters — 2-5 citizens
+    // converge on a tavern/square/market anchor, linger in a circle
+    // chatting, then disperse. Data tier, zero LLM.
+    try {
+      CitizenHangouts.tickHangouts(this, hour);
+    } catch (error) {
+      this.log("hangouts failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {
