@@ -72,40 +72,61 @@ function statusPayload(player) {
  * Order matters: background and names are set BEFORE claimOrigin emits
  * origins:selected, so the legacy chatbox handlers (which check
  * hasBackground/hasFullName) skip their prompts.
+ *
+ * Resumable: any piece the player already has (from an interrupted earlier
+ * attempt) is skipped rather than erroring, so a partial claim completes
+ * on retry instead of failing silently with "Home already claimed."
  * Returns { ok: true } or { ok: false, error }.
  */
 function claimFullCharacter(player, originId, backgroundId, firstName, lastName) {
   if (!player) return { ok: false, error: "No player." };
-  const origin = Data.BY_ID.get(originId);
-  if (!origin) return { ok: false, error: "Unknown home." };
-  if (Selection.hasOrigin(player)) return { ok: false, error: "Home already claimed." };
 
-  // Validate background.
-  if (!BgData.BY_ID.has(backgroundId)) {
+  const needsOrigin = !Selection.hasOrigin(player);
+  const needsBackground = !Backgrounds.hasBackground(player);
+  const needsName = !Backgrounds.hasFullName(player);
+  if (!needsOrigin && !needsBackground && !needsName) return { ok: true };
+
+  // Validate origin (only when still needed).
+  if (needsOrigin && !Data.BY_ID.get(originId)) {
+    return { ok: false, error: "Unknown home." };
+  }
+
+  // Validate background (only when still needed).
+  if (needsBackground && !BgData.BY_ID.has(backgroundId)) {
     return { ok: false, error: "Unknown past." };
   }
-  // Validate names.
-  const first = Backgrounds.cleanNamePart(firstName);
-  const last = Backgrounds.cleanNamePart(lastName);
-  if (!first || !last) {
-    return { ok: false, error: "That name won't do — letters only, 2 to 16 characters each." };
+  // Validate names (only when still needed).
+  let first = null;
+  let last = null;
+  if (needsName) {
+    first = Backgrounds.cleanNamePart(firstName);
+    last = Backgrounds.cleanNamePart(lastName);
+    if (!first || !last) {
+      return { ok: false, error: "That name won't do — letters only, 2 to 16 characters each." };
+    }
   }
 
   // Apply background (no UI) — sets attribute, skills, kit, contact.
-  const bg = Backgrounds.applyBackground(player, backgroundId);
-  if (!bg) return { ok: false, error: "Could not take up that past." };
+  if (needsBackground) {
+    const bg = Backgrounds.applyBackground(player, backgroundId);
+    if (!bg) return { ok: false, error: "Could not take up that past." };
+  }
 
   // Apply names (no UI, no event yet).
-  const nameResult = Backgrounds.setNames(player, first, last);
-  if (nameResult.error) return { ok: false, error: nameResult.error };
+  if (needsName) {
+    const nameResult = Backgrounds.setNames(player, first, last);
+    if (nameResult.error) return { ok: false, error: nameResult.error };
+  }
 
   // Claim origin: sets origin:id, joins kingdom, grants kit, moves to spawn,
   // emits origins:selected. The backgrounds handler sees hasBackground and
   // skips its chatbox prompts.
-  try {
-    Selection.claimOrigin(player, originId);
-  } catch (e) {
-    return { ok: false, error: "Could not claim home." };
+  if (needsOrigin) {
+    try {
+      Selection.claimOrigin(player, originId);
+    } catch (e) {
+      return { ok: false, error: "Could not claim home." };
+    }
   }
 
   // Now the character is fully formed — emit for quest start and other systems.
@@ -139,6 +160,10 @@ function attach(api) {
       }
     }
 
+    // Failed-claim error for this request, surfaced in the payload so the
+    // client can show it — never fail silently while the overlay stays open.
+    let claimError = null;
+
     if (player) {
       // Reset creation: clears origin, background, and name for a fresh start.
       const reset = (query.get("reset") || "").trim().toLowerCase();
@@ -162,6 +187,7 @@ function attach(api) {
       if (originId && backgroundId && firstname && lastname) {
         const result = claimFullCharacter(player, originId, backgroundId, firstname, lastname);
         if (!result.ok) {
+          claimError = result.error;
           console.warn(`[origins-api] full character claim failed for ${username}: ${result.error}`);
         }
       } else {
@@ -176,7 +202,9 @@ function attach(api) {
         }
       }
     }
-    return statusPayload(player);
+    const payload = statusPayload(player);
+    if (claimError) payload.claimError = claimError;
+    return payload;
   });
 }
 
