@@ -28,6 +28,7 @@ module.exports = {
       "succession:heat",
       "succession:heat-at",
       "succession:grey-met",
+      "wartable:open",
     ]) api.persistAttribute(key);
     require("./Seed.Kingdoms")(api);
     require("./Areas.Kingdoms")(api);
@@ -52,6 +53,7 @@ module.exports = {
     require("./Founding.Kingdoms")(api);
     require("./ClaimStake.Kingdoms")(api);
     require("./WarTable.Kingdoms")(api);
+    require("./WarTableApi")(api);
     require("./OfficeTools.Kingdoms")(api);
   },
 };

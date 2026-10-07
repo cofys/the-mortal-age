@@ -33,6 +33,12 @@
  *
  * Group 30015. (30010 citizen stall, 30011 DuelArena, 30012 origin GUI,
  * 30013 player stall, 30014 market board.)
+ *
+ * NOTE (2026-10-07): the web overlay is the war table now. Studying the
+ * table sets the wartable:open player attribute and the React WarTableOverlay
+ * (client/game/plugins/wartable) renders the heraldic UI, fed by WarTableApi.
+ * The engine widget below stays registered as a fallback and for the _test
+ * seam, but openTable no longer opens it.
  */
 
 const {
@@ -262,11 +268,9 @@ function render(player) {
 function openTable(player) {
   if (!player || player.isPlayerBot?.() === true) return;
   try {
-    const sender = player.getPacketSender();
-    sender.sendInterfaceRemoval();
-    player.setInterfaceId?.(GROUP_ID);
-    sender.sendSubInterface(MODAL_TARGET_UID, GROUP_ID, 0);
-    render(player);
+    // The React war table overlay renders from this flag (see WarTableApi).
+    // The engine widget stays registered but no longer opens.
+    player.setAttribute("wartable:open", "1");
     // The seals: a holder studies the table and may take up their office.
     // No seals, no prompt — the table is only a map to other eyes.
     OfficeTools.offerConsoles(player);

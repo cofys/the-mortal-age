@@ -1,0 +1,578 @@
+/* The Mortal Age — war table overlay.
+ * Same heraldic template as the origin screen: tall panel, ornate gold
+ * frame, compass ornament, inset lore panels. Wider, tabbed, built for
+ * the campaign map. */
+
+.tma-wartable-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(11, 8, 5, 0.88) 0%, rgba(11, 8, 5, 0.96) 100%);
+    animation: tma-wartable-fadein 0.5s ease-out;
+}
+
+@keyframes tma-wartable-fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tma-wartable-panel {
+    position: relative;
+    width: min(880px, 94vw);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+    border: 1px solid #6b5a3a;
+    outline: 3px solid #14100b;
+    box-shadow:
+        0 0 0 4px #6b5a3a,
+        0 0 40px rgba(201, 162, 39, 0.15),
+        0 20px 60px rgba(0, 0, 0, 0.8);
+    padding: 34px 28px 16px;
+    animation: tma-wartable-rise 0.6s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes tma-wartable-rise {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Corner brackets — L-shaped bright gold */
+.tma-wartable-panel::before,
+.tma-wartable-panel::after {
+    content: "";
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid #c9a227;
+    pointer-events: none;
+}
+.tma-wartable-panel::before {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+}
+.tma-wartable-panel::after {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+}
+
+.tma-wartable-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    background: #241c13;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    color: #9a8f7d;
+    font-size: 15px;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.tma-wartable-close:hover:not(:disabled) {
+    color: #d9b45b;
+    border-color: #c9a227;
+}
+.tma-wartable-close:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.tma-wartable-compass {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+}
+
+.tma-wartable-title {
+    margin: 0 0 4px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-indent: 0.28em;
+    color: #d9b45b;
+}
+
+.tma-wartable-subtitle {
+    margin: 0 0 8px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #9a8f7d;
+    font-style: italic;
+    letter-spacing: 0.02em;
+}
+
+.tma-wartable-rule {
+    flex: 0 0 auto;
+    height: 1px;
+    margin: 0 60px 12px;
+    background: linear-gradient(90deg, transparent, #6b5a3a, transparent);
+}
+
+/* Tabs */
+.tma-wartable-tabs {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    margin-bottom: 14px;
+}
+
+.tma-wartable-tab {
+    padding: 8px 18px;
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-bottom: 2px solid #3a2f22;
+    border-radius: 2px 2px 0 0;
+    color: #9a8f7d;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.tma-wartable-tab:hover {
+    color: #d9b45b;
+    border-color: #6b5a3a;
+}
+
+.tma-wartable-tab.active {
+    color: #ffd27f;
+    background: #2b2114;
+    border-color: #c9a227;
+    border-bottom-color: #c9a227;
+    box-shadow: 0 0 12px rgba(201, 162, 39, 0.25);
+}
+
+/* Body */
+.tma-wartable-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.tma-wartable-section-title {
+    margin: 18px 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #d9b45b;
+}
+.tma-wartable-section-title:first-child {
+    margin-top: 2px;
+}
+
+.tma-wartable-empty {
+    margin: 6px 0 12px;
+    font-size: 13px;
+    font-style: italic;
+    color: #9a8f7d;
+}
+
+.tma-wartable-note {
+    margin: 14px 0 4px;
+    font-size: 12px;
+    line-height: 1.6;
+    font-style: italic;
+    color: #9a8f7d;
+}
+
+.tma-wartable-muted {
+    color: #9a8f7d;
+}
+
+.tma-wartable-gold {
+    color: #ffd27f;
+    font-weight: 700;
+}
+
+.tma-wartable-war {
+    color: #d43a2a;
+    font-weight: 700;
+}
+
+.tma-wartable-footnote {
+    flex: 0 0 auto;
+    margin: 12px 0 0;
+    text-align: center;
+    font-size: 12px;
+    font-style: italic;
+    color: #9a8f7d;
+}
+
+/* Overview: powers list + detail */
+.tma-wartable-overview {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 14px;
+}
+
+.tma-wartable-powers {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tma-wartable-power {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+    padding: 9px 12px;
+    background: #241c13;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tma-wartable-power:hover {
+    background: #2e2417;
+    border-color: #6b5a3a;
+}
+
+.tma-wartable-power.selected {
+    border-color: #c9a227;
+    background: #2b2114;
+    box-shadow: 0 0 12px rgba(201, 162, 39, 0.35);
+}
+
+.tma-wartable-power.home {
+    border-left: 3px solid #c9a227;
+}
+
+.tma-wartable-power-name {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #d9b45b;
+    text-transform: uppercase;
+}
+
+.tma-wartable-home-tag {
+    color: #c9a227;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+}
+
+.tma-wartable-power-sub {
+    font-size: 12px;
+    color: #9a8f7d;
+}
+
+.tma-wartable-badge {
+    margin-top: 4px;
+    padding: 2px 8px;
+    border: 1px solid;
+    border-radius: 2px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+}
+
+.tma-wartable-detail {
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    padding: 16px 18px;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+    align-self: start;
+}
+
+.tma-wartable-detail-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #d9b45b;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.tma-wartable-rank {
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: #9a8f7d;
+    text-transform: none;
+}
+
+.tma-wartable-detail-ruler {
+    font-size: 13px;
+    color: #e8ded0;
+    margin-bottom: 10px;
+}
+
+.tma-wartable-detail-rulertitle {
+    color: #9a8f7d;
+    font-style: italic;
+}
+
+.tma-wartable-detail-text {
+    margin: 0 0 12px;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #e8ded0;
+}
+
+.tma-wartable-detail-stats {
+    display: flex;
+    gap: 18px;
+    border-top: 1px solid #3a2f22;
+    padding-top: 12px;
+}
+
+.tma-wartable-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tma-wartable-stat-label {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+}
+
+.tma-wartable-stat-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffd27f;
+}
+
+/* Cards */
+.tma-wartable-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.tma-wartable-card {
+    background: #241c13;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    padding: 12px 14px;
+}
+
+.tma-wartable-war-card {
+    border-color: #6b3a2a;
+}
+
+.tma-wartable-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #d9b45b;
+    margin-bottom: 6px;
+}
+
+.tma-wartable-card-sub {
+    font-size: 12px;
+    color: #9a8f7d;
+    font-style: italic;
+    margin-bottom: 6px;
+}
+
+.tma-wartable-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: #e8ded0;
+    margin-top: 6px;
+}
+
+/* Strength pips */
+.tma-wartable-pips {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.tma-wartable-pip {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid #6b5a3a;
+    background: transparent;
+}
+
+.tma-wartable-pip.lit {
+    background: #c9a227;
+    border-color: #c9a227;
+    box-shadow: 0 0 6px rgba(201, 162, 39, 0.6);
+}
+
+/* Tension rows */
+.tma-wartable-tension-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tma-wartable-tension-row {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 12px;
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+}
+
+.tma-wartable-tension-names {
+    font-size: 13px;
+    color: #e8ded0;
+}
+
+.tma-wartable-allied-tag {
+    color: #c9a227;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-left: 6px;
+}
+
+.tma-wartable-tension {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tma-wartable-tension-track {
+    flex: 1 1 auto;
+    height: 8px;
+    background: #14100b;
+    border: 1px solid #3a2f22;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.tma-wartable-tension-fill {
+    display: block;
+    height: 100%;
+    transition: width 0.4s ease;
+}
+
+.tma-wartable-tension-label {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+/* Treasury bars */
+.tma-wartable-treasury-row {
+    display: grid;
+    grid-template-columns: 170px 1fr 130px;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 4px;
+}
+
+.tma-wartable-treasury-name {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #d9b45b;
+    text-transform: uppercase;
+}
+
+.tma-wartable-treasury-bar {
+    height: 14px;
+    background: #14100b;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.tma-wartable-treasury-fill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #8a6d1f, #c9a227);
+    transition: width 0.4s ease;
+}
+
+.tma-wartable-treasury-amt {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffd27f;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* War history */
+.tma-wartable-history {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tma-wartable-history-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    font-size: 13px;
+    color: #e8ded0;
+}
+
+/* Themed scrollbars */
+.tma-wartable-body::-webkit-scrollbar {
+    width: 8px;
+}
+.tma-wartable-body::-webkit-scrollbar-track {
+    background: #14100b;
+    border-radius: 4px;
+}
+.tma-wartable-body::-webkit-scrollbar-thumb {
+    background: #3a2f22;
+    border-radius: 4px;
+}
+.tma-wartable-body::-webkit-scrollbar-thumb:hover {
+    background: #6b5a3a;
+}
+
+/* Narrow screens: stack the overview grid */
+@media (max-width: 640px) {
+    .tma-wartable-overview {
+        grid-template-columns: 1fr;
+    }
+    .tma-wartable-tension-row {
+        grid-template-columns: 1fr;
+    }
+    .tma-wartable-treasury-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+    .tma-wartable-treasury-amt {
+        text-align: left;
+    }
+    .tma-wartable-tabs {
+        flex-wrap: wrap;
+    }
+}
