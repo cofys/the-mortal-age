@@ -77,6 +77,27 @@ function onCitizenChatHeard(event) {
   if (!citizenUsername || !speakerUsername || !text) {
     return;
   }
+  // Enemy cold shoulder: enemies get silence, not conversation. (Checked
+  // before memory recording so enemies don't warm the relationship by
+  // talking.)
+  try {
+    const { isEnemy } = require("../lib/CitizenBonds");
+    if (isEnemy(citizenUsername, speakerUsername)) {
+      return; // No reply. The street knows.
+    }
+  } catch {
+    // Non-fatal — fall through to normal handling.
+  }
+  // Social keywords: player-initiated friend/party/invite actions. Handled
+  // as data (zero LLM); the citizen's next LLM reply will reflect the new
+  // relationship via context.
+  try {
+    if (handleSocialKeyword(citizenUsername, speakerUsername, text)) {
+      return; // Handled — no LLM reply needed (the action speaks).
+    }
+  } catch {
+    // Non-fatal — fall through to normal handling.
+  }
   try {
     const memory = getMemory();
     const said = String(text).slice(0, 320);
