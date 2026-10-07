@@ -48,6 +48,7 @@ const { maybeSocialize, maybeGreetPlayer } = require("../chat/CitizenSocial");
 const SocialMechanics = require("../lib/CitizenSocialMechanics");
 const ActivityParties = require("../lib/CitizenActivityParties");
 const BossRuns = require("../lib/CitizenBossRuns");
+const CitizenWarfare = require("../lib/CitizenWarfare");
 const CitizenBonds = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
@@ -813,6 +814,13 @@ class CitizenDirector {
       BossRuns.tickBossRuns(this, hour);
     } catch (error) {
       this.log("boss runs failed", { error: String(error?.message ?? error) });
+    }
+    // Citizens in warfare: militia musters, war news and morale, and war
+    // demand on the economy. Data tier, zero LLM.
+    try {
+      CitizenWarfare.tickWarfare(this, hour);
+    } catch (error) {
+      this.log("warfare failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {

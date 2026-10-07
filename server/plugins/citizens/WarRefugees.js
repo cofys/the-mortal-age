@@ -28,6 +28,7 @@ const {
 } = require("./constants");
 const KingdomStore = require("../kingdoms/KingdomStore");
 const { borderTileFor, pairKey } = require("../kingdoms/WarConsequences.Kingdoms");
+const { getJournal } = require("./lib/CitizenJournal");
 
 let pluginApi = null;
 // warKey -> [{ username, record }] — the living, for cleanup at peace.
@@ -106,6 +107,16 @@ function spawnColumn(attackerId, defenderId) {
         needs.energy = 40 + Math.random() * 20;
       }
       addMood(bot, -30);
+      // Journal what they saw — the LLM speaks truthfully when asked later.
+      try {
+        getJournal().log(
+          record.username,
+          "traveled",
+          `Fled the ${nameOf(defenderId)} border villages as ${nameOf(attackerId)} marched. Saw smoke on the horizon.`
+        );
+      } catch {
+        // Non-fatal.
+      }
       try {
         bot.forceChat?.(pick(FLIGHT_CRIES).slice(0, 120));
       } catch {
