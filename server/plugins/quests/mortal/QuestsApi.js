@@ -21,10 +21,22 @@
  * Proximity ("arrive") and item tasks are evaluated server-side on every
  * poll: when a task stage's condition is met it auto-advances. Dialogue
  * stages advance only via explicit continue/choice actions.
+ *
+ * Follow-up quests (Data.FollowUpQuests) extend the schema:
+ *   - arrive: { site: "<kingdom site>" } is resolved per-player via
+ *     CitizenSites (square, market, tavern, bank, court, work, patrol).
+ *   - {var} placeholders in any text are substituted from quest vars.
+ *   - choices may carry set: { var: value } written on pick.
+ *   - a stage may carry its own rewards, used when the quest completes
+ *     from that stage (branching endings).
+ * When the player has no active quest, eligible follow-ups auto-start.
  */
 
-const Data = require("./Data.StarterQuests");
+const Data = require("./Data.QuestRegistry");
 const QuestState = require("./QuestState");
+const FollowUps = require("./FollowUpQuests");
+const { substitute } = require("./QuestUtil");
+const { siteTileByKingdom } = require("../../citizens/brain/CitizenSites");
 
 let apiRef = null;
 let Items = null;
@@ -37,6 +49,49 @@ function playerPosition(player) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve a stage's arrive target to concrete { x, y, r }. Symbolic
+ * { site } targets resolve per-player through CitizenSites; patrol
+ * resolves to the first patrol point; missing sites fall back to square.
+ */
+function resolveArrive(player, arrive) {
+  if (!arrive) return null;
+  if (arrive.site) {
+    const kingdomId = FollowUps.playerKingdomId(player);
+    let tile = siteTileByKingdom(kingdomId, arrive.site);
+    if (!tile && arrive.site === "patrol") {
+      // Patrol is a circuit array — resolve to its first point.
+      tile = firstPatrolTile(kingdomId);
+    }
+    if (!tile) tile = siteTileByKingdom(kingdomId, "square");
+    if (!tile) return { x: arrive.x, y: arrive.y, r: arrive.r || 8 };
+    return { x: tile.x, y: tile.y, r: arrive.r || 8 };
+  }
+  return { x: arrive.x, y: arrive.y, r: arrive.r || 8 };
+}
+
+/** First valid tile of a kingdom's patrol circuit (sites.json "patrol"). */
+function firstPatrolTile(kingdomId) {
+  try {
+    const path = require("path");
+    const fs = require("fs");
+    const raw = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, "..", "..", "citizens", "data", "sites.json"),
+        "utf8"
+      )
+    );
+    const circuit = raw?.[kingdomId]?.patrol;
+    if (Array.isArray(circuit)) {
+      const pt = circuit.find((t) => t && Number.isFinite(t.x) && Number.isFinite(t.y));
+      if (pt) return { x: pt.x, y: pt.y, z: pt.z ?? 0 };
+    }
+  } catch {
+    // fall through to square fallback
+  }
+  return null;
 }
 
 function within(pos, target) {
@@ -68,17 +123,17 @@ function itemDisplayName(key) {
   return key.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function rewardsDisplay(quest) {
-  const rewards = quest.rewards || {};
+function rewardsDisplay(rewards, vars) {
+  const r = rewards || {};
   return {
-    items: (rewards.items || []).map(([key, amount]) => [itemDisplayName(key), amount]),
-    xp: (rewards.xp || []).map(([skillName, amount]) => [skillName.toLowerCase(), amount]),
-    message: rewards.message || "",
+    items: (r.items || []).map(([key, amount]) => [itemDisplayName(key), amount]),
+    xp: (r.xp || []).map(([skillName, amount]) => [skillName.toLowerCase(), amount]),
+    message: substitute(r.message || "", vars),
   };
 }
 
-function grantRewards(player, quest) {
-  const rewards = quest.rewards || {};
+function grantRewards(player, quest, stage, vars) {
+  const rewards = (stage && stage.rewards) || quest.rewards || {};
   try {
     const inv = player.getInventory();
     for (const [key, amount] of rewards.items || []) {
@@ -97,20 +152,42 @@ function grantRewards(player, quest) {
   } catch (e) {
     console.warn("[quests-api] reward xp failed", e?.message ?? e);
   }
-  return rewardsDisplay(quest);
+  return rewardsDisplay(rewards, vars);
+}
+
+/** Run completion side-effects: rewards, chat message, follow-up effects. */
+function completeQuestNow(player, quest, stage, stageIndex) {
+  const vars = FollowUps.questVars(player, quest);
+  const rewards = grantRewards(player, quest, stage, vars);
+  try {
+    player.sendMessage(`Quest complete: ${quest.name}`);
+  } catch { /* non-fatal */ }
+  FollowUps.onQuestCompleted(player, quest, apiRef);
+  return {
+    quest: {
+      id: quest.id, name: quest.name, blurb: substitute(quest.blurb, vars),
+      stageIndex, stageTotal: quest.stages.length,
+      complete: true, rewards,
+    },
+  };
 }
 
 function buildPayload(player) {
   const quest = QuestState.activeQuest(player);
   if (!quest) {
-    // Completed but not yet dismissed — show the completion overlay once.
+    // No active quest: maybe a follow-up is now eligible (lazy start),
+    // then show any undismissed completion overlay.
+    FollowUps.maybeStartFollowUps(player);
+    const active = QuestState.activeQuest(player);
+    if (active) return buildPayload(player);
     const done = QuestState.undismissedCompleteQuest(player);
     if (!done) return { quest: null };
+    const vars = FollowUps.questVars(player, done);
     return {
       quest: {
-        id: done.id, name: done.name, blurb: done.blurb,
+        id: done.id, name: done.name, blurb: substitute(done.blurb, vars),
         stageIndex: done.stages.length - 1, stageTotal: done.stages.length,
-        complete: true, rewards: rewardsDisplay(done),
+        complete: true, rewards: rewardsDisplay(done.rewards, vars),
       },
     };
   }
@@ -121,25 +198,17 @@ function buildPayload(player) {
   if (stageIndex >= quest.stages.length) stageIndex = quest.stages.length - 1;
   const stage = quest.stages[stageIndex];
   const pos = playerPosition(player);
+  const vars = FollowUps.questVars(player, quest);
 
-  const arrived = !stage.arrive || within(pos, stage.arrive);
+  const target = resolveArrive(player, stage.arrive);
+  const arrived = !target || within(pos, target);
   const taskCheck = checkTask(player, stage);
 
   // Auto-advance item tasks the moment their condition is met.
   if (stage.task && arrived && taskCheck.done) {
     const result = QuestState.advanceStage(player, quest.id);
     if (result === "complete") {
-      const rewards = grantRewards(player, quest);
-      try {
-        player.sendMessage(`Quest complete: ${quest.name}`);
-      } catch { /* non-fatal */ }
-      return {
-        quest: {
-          id: quest.id, name: quest.name, blurb: quest.blurb,
-          stageIndex, stageTotal: quest.stages.length,
-          complete: true, rewards,
-        },
-      };
+      return completeQuestNow(player, quest, stage, stageIndex);
     }
     // Rebuild for the new stage.
     return buildPayload(player);
@@ -147,10 +216,10 @@ function buildPayload(player) {
 
   const dialogue = arrived && stage.dialogue
     ? {
-        speaker: stage.dialogue.speaker,
-        title: stage.dialogue.title || "",
-        lines: stage.dialogue.lines,
-        choices: (stage.dialogue.choices || []).map((c) => ({ text: c.text })),
+        speaker: substitute(stage.dialogue.speaker, vars),
+        title: substitute(stage.dialogue.title || "", vars),
+        lines: (stage.dialogue.lines || []).map((l) => substitute(l, vars)),
+        choices: (stage.dialogue.choices || []).map((c) => ({ text: substitute(c.text, vars) })),
       }
     : null;
 
@@ -158,10 +227,10 @@ function buildPayload(player) {
     quest: {
       id: quest.id,
       name: quest.name,
-      blurb: quest.blurb,
+      blurb: substitute(quest.blurb, vars),
       stageIndex,
       stageTotal: quest.stages.length,
-      objective: stage.objective,
+      objective: substitute(stage.objective, vars),
       arrived,
       dialogue,
       task: stage.task
@@ -183,24 +252,30 @@ function handleAction(player, quest, action, query) {
   if (!quest) return;
   const stageIndex = QuestState.getStage(player, quest.id);
   const stage = quest.stages[Math.min(stageIndex, quest.stages.length - 1)];
+  const target = resolveArrive(player, stage.arrive);
   const pos = playerPosition(player);
-  const arrived = !stage.arrive || within(pos, stage.arrive);
+  const arrived = !target || within(pos, target);
 
   if (action === "continue") {
     if (!arrived) return; // can't skip travel
     if (stage.dialogue && stage.dialogue.choices && stage.dialogue.choices.length) return; // must pick
     const result = QuestState.advanceStage(player, quest.id);
     if (result === "complete") {
-      grantRewards(player, quest);
-      try {
-        player.sendMessage(`Quest complete: ${quest.name}`);
-      } catch { /* non-fatal */ }
+      completeQuestNow(player, quest, stage, stageIndex);
     }
   } else if (action === "choice") {
     if (!arrived || !stage.dialogue || !stage.dialogue.choices) return;
     const idx = parseInt(query.get("option") || "-1", 10);
     const choice = stage.dialogue.choices[idx];
     if (!choice) return;
+    // Choice-attached var writes (e.g. which ending branch was taken).
+    if (choice.set) {
+      for (const [name, value] of Object.entries(choice.set)) {
+        try {
+          QuestState.setVar(player, quest.id, name, value);
+        } catch { /* non-fatal */ }
+      }
+    }
     QuestState.setStage(player, quest.id, choice.goto);
   }
 }

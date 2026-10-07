@@ -4,13 +4,15 @@
  * QuestState — per-player Mortal Age quest state, persisted via attributes.
  *
  * Attributes (kebab-case, namespaced per AGENTS.md):
- *   quest.<id>.status — "started" | "complete" (absent = not started)
- *   quest.<id>.stage  — integer stage index
+ *   quest.<id>.status     — "started" | "complete" (absent = not started)
+ *   quest.<id>.stage      — integer stage index
+ *   quest.<id>.seen       — completion overlay dismissed
+ *   quest.<id>.var.<name> — bound vars (citizen names, standing, ...)
  *
  * The plugin registers persistAttribute for each quest's keys at boot.
  */
 
-const Data = require("./Data.StarterQuests");
+const Data = require("./Data.QuestRegistry");
 
 const STATUS_STARTED = "started";
 const STATUS_COMPLETE = "complete";
@@ -27,11 +29,16 @@ function seenKey(questId) {
   return `quest.${questId}.seen`;
 }
 
+function varKey(questId, name) {
+  return `quest.${questId}.var.${name}`;
+}
+
 /** All attribute keys this system persists — registered at plugin boot. */
 function allAttributeKeys() {
   const keys = [];
-  for (const q of Data.STARTER_QUESTS) {
+  for (const q of Data.ALL_QUESTS) {
     keys.push(statusKey(q.id), stageKey(q.id), seenKey(q.id));
+    for (const name of q.persistVars || []) keys.push(varKey(q.id, name));
   }
   return keys;
 }
@@ -51,6 +58,26 @@ function isStarted(player, questId) {
 
 function isComplete(player, questId) {
   return getStatus(player, questId) === STATUS_COMPLETE;
+}
+
+function getVar(player, questId, name) {
+  return player.getAttribute(varKey(questId, name)) ?? null;
+}
+
+function setVar(player, questId, name, value) {
+  player.setAttribute(varKey(questId, name), value);
+}
+
+/** All persisted vars for a quest as a plain object (for {var} substitution). */
+function allVars(player, questId) {
+  const quest = Data.BY_ID.get(questId);
+  const out = {};
+  if (!quest) return out;
+  for (const name of quest.persistVars || []) {
+    const v = getVar(player, questId, name);
+    if (v !== null && v !== undefined) out[name] = v;
+  }
+  return out;
 }
 
 function startQuest(player, questId) {
@@ -83,7 +110,7 @@ function completeQuest(player, questId) {
 
 /** The player's currently active (started, not complete) quest, if any. */
 function activeQuest(player) {
-  for (const q of Data.STARTER_QUESTS) {
+  for (const q of Data.ALL_QUESTS) {
     if (isStarted(player, q.id) && !isComplete(player, q.id)) return q;
   }
   return null;
@@ -91,7 +118,7 @@ function activeQuest(player) {
 
 /** A completed quest whose completion overlay hasn't been dismissed yet. */
 function undismissedCompleteQuest(player) {
-  for (const q of Data.STARTER_QUESTS) {
+  for (const q of Data.ALL_QUESTS) {
     if (isComplete(player, q.id) && !player.getAttribute(seenKey(q.id))) return q;
   }
   return null;
@@ -109,6 +136,9 @@ module.exports = {
   getStage,
   isStarted,
   isComplete,
+  getVar,
+  setVar,
+  allVars,
   startQuest,
   setStage,
   advanceStage,

@@ -9,10 +9,13 @@
  * (client/game/plugins/quests/QuestOverlay.tsx) served by QuestsApi.
  *
  * Starter quests auto-start when a player claims their origin
- * (origins:selected custom event).
+ * (origins:selected custom event). Follow-up quests (Data.FollowUpQuests)
+ * auto-start lazily via FollowUpQuests.maybeStartFollowUps when their
+ * prerequisites are met (a starter complete; war quests additionally
+ * require the player's kingdom to be in an active war).
  */
 
-const Data = require("./Data.StarterQuests");
+const Data = require("./Data.QuestRegistry");
 const QuestState = require("./QuestState");
 const QuestsApi = require("./QuestsApi");
 
