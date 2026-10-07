@@ -359,6 +359,9 @@ function resetOrigin({ player, parts }) {
     return;
   }
   target.setAttribute(ORIGIN_ID_ATTRIBUTE, null);
+  // Creation restarts cleanly: the backgrounds module clears background and
+  // name attributes on this event.
+  pluginApi.emitCustomEvent("origins:reset", { player: target });
   cancelFallback(target);
   pending.delete(target);
   player.sendMessage(`${target.getUsername?.() ?? targetName} will choose a home on next login.`);

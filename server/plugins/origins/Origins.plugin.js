@@ -14,6 +14,7 @@
 const Selection = require("./Selection.Origins");
 const Gui = require("./Gui.Origins");
 const OriginsApi = require("./OriginsApi");
+const Backgrounds = require("./Backgrounds.Origins");
 
 module.exports = {
   name: "Origins",
@@ -21,6 +22,9 @@ module.exports = {
     Selection(api);
     Gui.attach(api);
     OriginsApi.attach(api);
+    // Backgrounds registers last: its welcome-screen Play handler must run
+    // after Selection's (Selection returns false so the click propagates).
+    Backgrounds(api);
     // Triggers live in Selection; the screen lives in Gui. Wire them here so
     // neither module requires the other at load time.
     Selection.setGuiHooks(Gui.hooks());
