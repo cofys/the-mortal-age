@@ -49,6 +49,7 @@ const SocialMechanics = require("../lib/CitizenSocialMechanics");
 const ActivityParties = require("../lib/CitizenActivityParties");
 const BossRuns = require("../lib/CitizenBossRuns");
 const CitizenWarfare = require("../lib/CitizenWarfare");
+const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenBonds = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
@@ -821,6 +822,14 @@ class CitizenDirector {
       CitizenWarfare.tickWarfare(this, hour);
     } catch (error) {
       this.log("warfare failed", { error: String(error?.message ?? error) });
+    }
+    // Expeditionary warfare: citizen armies rally, march to the border,
+    // fight journaled battles with real casualties, and march home.
+    // Data tier, zero LLM.
+    try {
+      CitizenCampaigns.tickCampaigns(this, hour);
+    } catch (error) {
+      this.log("campaigns failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {
