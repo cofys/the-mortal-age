@@ -35,6 +35,7 @@ const { initPlayerShops } = require("./shop/PlayerShops");
 const { initMarketBoard } = require("./shop/MarketBoard.Shops");
 const { initMarketRegistrar } = require("./shop/MarketRegistrar.Shops");
 const attachWarRefugees = require("./WarRefugees");
+const { onPlayerLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
 const {
   getMemory,
   initCitizenMemory,
@@ -433,6 +434,14 @@ function onKingdomWarEndedRelief(event) {
   onWarEndedRelief(event);
 }
 
+function onLevelUpHeard(event) {
+  onPlayerLevelUpNotice(event);
+}
+
+function onDeathSeen(event) {
+  onPlayerDeathNotice(event);
+}
+
 module.exports = {
   name: "Citizens",
   register(api) {
@@ -452,6 +461,8 @@ module.exports = {
     api.onCustomEvent("kingdom:wage-day", onKingdomWageDay);
     api.onCustomEvent("arrival:player-arrived", onArrivalPlayerArrived);
     api.onPlayerAttack(onCitizenAttackedByPlayer);
+    api.onPlayerLevelUp(onLevelUpHeard);
+    api.onPlayerDeath(onDeathSeen);
     api.onCustomEvent("thieving:success", onThievingWitnessed);
     api.onSocialPacket(onCitizenSocialPacket);
     api.registerCommand(

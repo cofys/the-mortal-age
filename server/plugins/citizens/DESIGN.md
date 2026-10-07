@@ -208,6 +208,25 @@ store constraints, chemistry scoring, the full wedding machine
 (announced → gather → vows → cheers → married), quiet marriages, feud
 arguments with cooldown, bond pruning, and same-kingdom formation.
 
+## The streets notice (2026-10-07)
+
+Citizens react to the player's visible moments the way real players do
+(`StreetNotices.js`, hooked to `api.onPlayerLevelUp` / `api.onPlayerDeath`):
+
+- **Level-ups** — a nearby citizen congratulates the player out loud
+  ("gz on 30 Woodcutting!"). Milestone levels (10/25/50/70/90/99) get the
+  big lines. Personality-gated (sociable citizens speak, nervous ones
+  don't) and strictly throttled (30 min per citizen, 10 min per player)
+  so a fresh character's fast early levels don't become spam.
+- **Deaths** — a nearby citizen reacts: warm citizens sympathize, wry
+  ones rib. Heavily throttled.
+
+All data tier (scripted forceChat lines, zero LLM — same precedent as
+guard challenges and merchant ads). Every noticed moment warms
+CitizenMemory (citizens remember the player's milestones; the LLM mouth
+riffs on them later) and lands in the citizen's journal. Unit checks:
+`node StreetNotices.test.js` from `server/plugins/citizens`.
+
 ## What's stubbed / deferred
 
 - **Fishing catches.** Fishers do the full visible behavior (dock shifts, cast
