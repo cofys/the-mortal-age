@@ -140,6 +140,20 @@ function attach(api) {
     }
 
     if (player) {
+      // Reset creation: clears origin, background, and name for a fresh start.
+      const reset = (query.get("reset") || "").trim().toLowerCase();
+      if (reset === "true") {
+        try {
+          player.setAttribute("origin:id", null);
+          player.setAttribute("background:id", null);
+          player.setAttribute("character:first-name", null);
+          player.setAttribute("character:last-name", null);
+          player.setAttribute("character:display-name", null);
+          api.emitCustomEvent("origins:reset", { player });
+        } catch (e) {
+          console.warn("[origins-api] reset failed", e?.message ?? e);
+        }
+      }
       // Unified creation claim: origin + background + names in one request.
       const originId = (query.get("origin") || "").trim().toLowerCase();
       const backgroundId = (query.get("background") || "").trim().toLowerCase();
