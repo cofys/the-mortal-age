@@ -320,14 +320,14 @@ const STARTER_QUESTS = [
           title: "Master of the east forge",
           lines: [
             "You! Aye, you with the unscarred hands. The forge eats coal faster than the carts bring it, and my haulers are down with the tunnel cough.",
-            "The coal carts are staged by the north shaft. Walk up, load what you can carry, walk back. Simple work — the mountain respects simple work.",
+            "The coal carts are staged just up by the forge. Walk up, load what you can carry, walk back. Simple work — the mountain respects simple work.",
             "Mind the Consortium men sniffing about. They own the shafts, they think they own the smiths too.",
           ],
         },
       },
       {
-        objective: "Fetch coal from the north shaft carts",
-        arrive: { x: 2862, y: 10190, r: 8 },
+        objective: "Fetch coal from the carts by the forge",
+        arrive: { x: 2862, y: 10173, r: 8 },
         dialogue: {
           speaker: "You",
           title: "",
