@@ -32,6 +32,7 @@
 const fs = require("fs");
 const path = require("path");
 const { agentRng, chance } = require("./humanizer");
+const { ROLE_MERCHANT } = require("../constants");
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-kin.json");
 const MAX_BONDS_PER_CITIZEN = 12;
@@ -866,6 +867,149 @@ function tickFeudArguments(director, rng, now) {
       subjectDisplay: `${da} and ${db}`,
       text: `had another shouting match. The whole street heard it!`,
       holder: pickFriendOrSelf(director, a, b),
+    });
+  }
+}
+
+// --- ambient peer greetings ---------------------------------------------------
+/**
+ * Friends, spouses and sweethearts who cross paths in the street greet each
+ * other by name, sometimes trading a line back. Zero LLM: template lines
+ * through forceChat. Bot-authored chat never reaches the gateway
+ * (onSocialPacket drops citizen speakers), so this costs nothing but pixels.
+ * Feuds get shouting matches; everyone else gets warmth.
+ *
+ * Pacing: per-pair cooldown 20 min, server-wide max 1 event per tick.
+ */
+const GREET_RANGE = 8;
+const GREET_COOLDOWN_MS = 20 * 60 * 1000;
+const REPLY_CHANCE = 0.5;
+const REPLY_DELAY_MS = 4000;
+const REPLY_RANGE = 12;
+const MAX_PENDING_REPLIES = 20;
+
+const GREET_LINES = {
+  married: [
+    "There you are, {B}.",
+    "{B}, my love. How's the day treating you?",
+    "Come here, {B}. Missed you.",
+    "{B}! Everything alright?",
+  ],
+  courting: [
+    "{B}! You look lovely today.",
+    "Fancy seeing you here, {B}.",
+    "Walk with me a bit, {B}?",
+    "{B}! Was just thinking of you.",
+  ],
+  close: [
+    "Oi {B}! How's it going?",
+    "{B}! You old dog.",
+    "Good to see you, {B}!",
+    "Ha! {B}, buy you an ale later?",
+  ],
+  friend: [
+    "Morning, {B}.",
+    "Hey {B}, fancy meeting you here.",
+    "{B}! How's business?",
+    "Alright, {B}?",
+  ],
+};
+
+const GREET_REPLIES = [
+  "Hey {A}! Good to see you.",
+  "Ha, {A}! How goes it?",
+  "{A}! All well here.",
+  "Good to see you too, {A}!",
+];
+
+let pendingGreetReplies = [];
+
+function firstNameOf(display) {
+  return String(display ?? "").split(" ")[0] || display;
+}
+
+function greetLinesFor(bond) {
+  if (bond.type === BOND_ROMANCE) {
+    return bond.stage === "married" ? GREET_LINES.married : GREET_LINES.courting;
+  }
+  return bond.stage === "close" ? GREET_LINES.close : GREET_LINES.friend;
+}
+
+/** Fire due replies; drop ones whose moment passed. Bounded, tick-local. */
+function tickGreetReplies(director, now) {
+  if (pendingGreetReplies.length === 0) return;
+  const still = [];
+  for (const r of pendingGreetReplies) {
+    if (still.length >= MAX_PENDING_REPLIES) break;
+    if (r.dueAt > now) {
+      still.push(r);
+      continue;
+    }
+    if (now - r.dueAt > 60000) continue; // stale: moment passed, drop
+    try {
+      const ra = director.roster.get(r.a);
+      const rb = director.roster.get(r.b);
+      const botA = ra && botOf(director, ra);
+      const botB = rb && botOf(director, rb);
+      if (botA && botB) {
+        const dist = botA.getLocation?.()?.getDistance?.(botB.getLocation?.()) ?? Infinity;
+        if (dist <= REPLY_RANGE) {
+          say(botB, r.line.replace("{A}", firstNameOf(r.da)));
+        }
+      }
+    } catch {
+      // Non-fatal.
+    }
+  }
+  pendingGreetReplies = still;
+}
+
+function tickPeerGreetings(director, rng, now) {
+  tickGreetReplies(director, now);
+  const eligible = [];
+  for (const { a, b, bond } of [...getKinship().bonds.values()]) {
+    if (bond.type !== BOND_FRIEND && bond.type !== BOND_ROMANCE) continue;
+    const last = bond.data.lastGreetAt ?? 0;
+    if (now - last < GREET_COOLDOWN_MS) continue;
+    const ra = director.roster.get(a);
+    const rb = director.roster.get(b);
+    if (!ra || !rb) continue;
+    const botA = botOf(director, ra);
+    const botB = botOf(director, rb);
+    if (!botA || !botB) continue;
+    let dist = Infinity;
+    try {
+      dist = botA.getLocation?.()?.getDistance?.(botB.getLocation?.()) ?? Infinity;
+    } catch {
+      continue;
+    }
+    if (dist > GREET_RANGE) continue;
+    eligible.push({ a, b, bond, ra, rb, botA, botB });
+  }
+  if (eligible.length === 0) return;
+  // One event per tick max: pick a random eligible pair, not always the first.
+  const chosen = pick(rng, eligible.slice(0, 200));
+  const { a, b, bond, botA, botB } = chosen;
+  const speakerFirst = chance(rng, 0.5);
+  const greeter = speakerFirst ? botA : botB;
+  const greeterKey = speakerFirst ? a : b;
+  const greetedKey = speakerFirst ? b : a;
+  const greeterRec = speakerFirst ? chosen.ra : chosen.rb;
+  const greetedRec = speakerFirst ? chosen.rb : chosen.ra;
+  // Merchants stay behind the stall: they can be greeted, but don't start chats.
+  if (greeterRec?.role === ROLE_MERCHANT) return;
+  const db = firstNameOf(displayOf(greetedRec, greetedKey));
+  const line = pick(rng, greetLinesFor(bond)).replace("{B}", db);
+  say(greeter, line);
+  bond.data.lastGreetAt = now;
+  getKinship().touch(a, b, now);
+  if (chance(rng, REPLY_CHANCE)) {
+    pendingGreetReplies.push({
+      a: greetedKey,
+      b: greeterKey,
+      da: displayOf(greeterRec, greeterKey),
+      dueAt: now + REPLY_DELAY_MS,
+      line: pick(rng, GREET_REPLIES),
     });
   }
 }
