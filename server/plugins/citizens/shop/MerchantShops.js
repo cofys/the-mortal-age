@@ -595,6 +595,17 @@ function openStall(api, player, merchant) {
     player.sendMessage("The market is closed while the kingdom is at war.");
     return;
   }
+  // Citizen memory: regulars are greeted by name and get a loyalty
+  // discount; grudges pay cold prices. Every opening counts as a meeting.
+  const memory = getMemory();
+  const merchantName = merchant.getUsername?.() ?? "?";
+  const playerName = player.getUsername?.() ?? "?";
+  memory.recordMeeting(merchantName, playerName);
+  // Opinions have teeth: merchants refuse to serve players they despise.
+  if (memory.standing(merchantName, playerName) === "hostile") {
+    player.sendMessage("I don't serve your kind here. Leave.");
+    return;
+  }
   const wares = merchantWares(api, merchant);
   if (wares.length === 0) {
     player.sendMessage("The merchant has nothing to sell right now.");
@@ -603,12 +614,6 @@ function openStall(api, player, merchant) {
   if (warPricesActive(merchant)) {
     player.sendMessage(warPriceWarning(merchant));
   }
-  // Citizen memory: regulars are greeted by name and get a loyalty
-  // discount; grudges pay cold prices. Every opening counts as a meeting.
-  const memory = getMemory();
-  const merchantName = merchant.getUsername?.() ?? "?";
-  const playerName = player.getUsername?.() ?? "?";
-  memory.recordMeeting(merchantName, playerName);
   const multiplier = memory.priceMultiplier(merchantName, playerName);
   // Personality haggles too: greedy merchants drive a harder bargain,
   // easygoing ones give a little slack. Reads the merchant's seeded

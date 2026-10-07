@@ -217,6 +217,14 @@ function onCitizenAttackedByPlayer({ player, target }) {
     attacker: attackerName,
     kingdom: kingdomId,
   });
+  // The victim warns their own friends: "I don't trust them, and neither
+  // should you." Personal-channel shunning on top of street gossip.
+  try {
+    const { warnFriends } = require("./lib/CitizenRelationships");
+    warnFriends(victimName, attackerName, "attack", 3);
+  } catch {
+    // Warnings must never break the attack path.
+  }
 }
 
 /**
@@ -471,6 +479,30 @@ function onDeathSeen(event) {
   onPlayerDeathNotice(event);
 }
 
+/** A friend logged in: citizen friends light up and say they missed them. */
+function onFriendLoggedIn(event) {
+  try {
+    const { getDirector } = require("./director/CitizenDirector");
+    const { onFriendLogin } = require("./lib/CitizenRelationships");
+    const director = getDirector?.();
+    if (director) onFriendLogin(director, event?.player ?? event);
+  } catch {
+    // Greetings must never break login.
+  }
+}
+
+/** A friend logged out: citizen friends notice the absence and miss them. */
+function onFriendLoggedOut(event) {
+  try {
+    const { getDirector } = require("./director/CitizenDirector");
+    const { onFriendLogout } = require("./lib/CitizenRelationships");
+    const director = getDirector?.();
+    if (director) onFriendLogout(director, event?.player ?? event);
+  } catch {
+    // Missing them must never break logout.
+  }
+}
+
 module.exports = {
   name: "Citizens",
   register(api) {
@@ -493,6 +525,8 @@ module.exports = {
     api.onPlayerAttack(onCitizenAttackedByPlayer);
     api.onPlayerLevelUp(onLevelUpHeard);
     api.onPlayerDeath(onDeathSeen);
+    api.onPlayerLogin(onFriendLoggedIn);
+    api.onPlayerLogout(onFriendLoggedOut);
     api.onCustomEvent("thieving:success", onThievingWitnessed);
     api.onSocialPacket(onCitizenSocialPacket);
     api.registerCommand(

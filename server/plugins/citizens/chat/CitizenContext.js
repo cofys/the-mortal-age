@@ -181,13 +181,22 @@ function buildContext(citizenUsername, speakerUsername) {
   if (goalText) parts.push(`Right now you are ${goalText}.`);
 
   // How they feel about THIS speaker — the relationship colors everything.
+  // Opinion line carries the WHY (moments, grudges); the moment line adds
+  // specific recall. The LLM speaks from these.
   try {
-    const standing = getMemory().standing(citizenUsername, speakerUsername);
-    if (standing === "hostile") parts.push("You dislike this person. Be curt.");
-    else if (standing === "cold") parts.push("You are wary of this person.");
-    else if (standing === "favorite") parts.push("This person is a favorite of yours. Warm to them.");
-    else if (standing === "regular") parts.push("You know this person well. Be friendly.");
-    else if (standing === "warm") parts.push("You like this person.");
+    const mem = getMemory();
+    const opinion = mem.opinionLine?.(citizenUsername, speakerUsername);
+    if (opinion) parts.push(opinion);
+    else {
+      const standing = mem.standing(citizenUsername, speakerUsername);
+      if (standing === "hostile") parts.push("You dislike this person. Be curt.");
+      else if (standing === "cold") parts.push("You are wary of this person.");
+      else if (standing === "favorite") parts.push("This person is a favorite of yours. Warm to them.");
+      else if (standing === "regular") parts.push("You know this person well. Be friendly.");
+      else if (standing === "warm") parts.push("You like this person.");
+    }
+    const recall = mem.momentLine?.(citizenUsername, speakerUsername);
+    if (recall) parts.push(recall);
   } catch {
     // Memory must never break the chat path.
   }
