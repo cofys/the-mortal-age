@@ -316,12 +316,62 @@ function handleHaggle(citizenUsername, speakerUsername, text) {
 function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   const said = String(text ?? "").toLowerCase().trim();
   if (!said) return false;
-  let SocialMechanics, Bonds;
+  let SocialMechanics, Bonds, Favors;
   try {
     SocialMechanics = require("../lib/CitizenSocialMechanics");
     Bonds = require("../lib/CitizenBonds");
+    Favors = require("../lib/CitizenFavors");
   } catch {
     return false;
+  }
+
+  // Favor responses: "yes" accepts a pending favor ask from this citizen,
+  // "no" declines it, "here"/"done" hands over the goods. Checked before
+  // invites so a "yes" lands on the favor the citizen just asked for.
+  if (/^(yes|yeah|yep|accept|sure|ok|okay)$/.test(said)) {
+    const favor = Favors.acceptFavor(citizenUsername, speakerUsername);
+    if (favor) {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "favor_accept");
+      return true;
+    }
+  }
+
+  // "no" / "decline" — decline a pending favor ask from this citizen.
+  if (/^(no|nah|nope|decline|pass)$/.test(said)) {
+    const favor = Favors.declineFavor(citizenUsername, speakerUsername);
+    if (favor) {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "favor_decline");
+      return true;
+    }
+    return false; // No pending favor — let the LLM handle the "no".
+  }
+
+  // "here" / "done" — hand over the goods for an accepted favor.
+  if (/^(here|done|deliver|delivering|take them|take it)$/.test(said)) {
+    let bot = null;
+    try {
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      bot = director?.getBot?.(director?.roster?.get?.(citizenUsername)) ?? null;
+    } catch {
+      // Non-fatal — attemptComplete degrades gracefully without live objects.
+    }
+    const favor = Favors.attemptComplete(
+      citizenUsername,
+      speakerUsername,
+      bot,
+      findPlayerByName(speakerUsername)
+    );
+    if (favor) {
+      // attemptComplete returns the favor even when it only left a hint
+      // message (goods missing / guard still running), so only celebrate
+      // an actual completion.
+      if (favor.state === Favors.DONE) {
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "favor_done");
+      }
+      return true;
+    }
+    return false; // No favor in progress — let the LLM handle it.
   }
 
   // "yes" / "accept" — accept a pending invite from this citizen.
@@ -410,6 +460,9 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
       activity_invite: `${display}: We've got company — ${speakerUsername}'s coming with us!`,
       follow_start: `${display}: Right behind you.`,
       follow_stop: `${display}: I'll wait here then.`,
+      favor_accept: `${display}: Deal — bring what I asked and I'll make it worth your while.`,
+      favor_decline: `${display}: Ah, that's a shame. Never mind then.`,
+      favor_done: `${display}: Much appreciated, truly.`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM

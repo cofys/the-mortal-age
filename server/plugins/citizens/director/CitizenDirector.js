@@ -47,6 +47,7 @@ const { dropNeeds } = require("../brain/CitizenNeeds");
 const { backgroundStep } = require("../lib/CitizenBackground");
 const { maybeSocialize, maybeGreetPlayer } = require("../chat/CitizenSocial");
 const SocialMechanics = require("../lib/CitizenSocialMechanics");
+const CitizenFavors = require("../lib/CitizenFavors");
 const ActivityParties = require("../lib/CitizenActivityParties");
 const BossRuns = require("../lib/CitizenBossRuns");
 const CitizenWarfare = require("../lib/CitizenWarfare");
@@ -1044,6 +1045,12 @@ class CitizenDirector {
           // Follow behavior: party members follow the leader, boss-trip
           // partners travel together. Re-applied each tick (data tier drives).
           SocialMechanics.tickFollow(record, (r) => this.getBot(r));
+          // Citizen-initiated favors: bounded asks to nearby players
+          // (data tier, zero LLM). deps resolve item names from the cache.
+          CitizenFavors.tickFavors(record, (r) => this.getBot(r), nearby, {
+            itemName: (id) =>
+              this.api?.core?.ItemDefinition?.forId?.(id)?.getName?.() ?? null,
+          });
         } catch (error) {
           this.log("social mechanics failed", {
             citizen: record.username,
