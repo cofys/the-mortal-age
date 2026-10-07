@@ -1178,6 +1178,8 @@ function initPlayerShops(api) {
   api.onPlayerLogin(onPlayerLogin);
   api.registerCommand("shop", onShopCommand, api.core.PlayerRights.NONE, SHOP_USAGE);
   startUpkeepTask(api);
+  // Web overlay data layer (see server/plugins/interface/ShopApi.js).
+  require("../../interface/ShopApi").attach(api);
   console.info("[player-shops] player stalls ready");
 }
 
