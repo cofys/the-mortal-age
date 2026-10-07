@@ -374,10 +374,23 @@ function considerStall(director, bot, record, stall, rng) {
   try {
     const owner = onlinePlayer(director, ownerName);
     owner?.sendMessage?.(
-      `${me} bought ${qty} x ${name} from your stall for ${result.cost} coins.`
+      `Your stall sold ${qty} x ${name} for ${result.cost} coins.`
     );
   } catch {
-    // Offline owner; the till tells the story later.
+    // Offline owner; the sales feed tells the story later.
+  }
+  // Record the sale on the stall's feed (visible in the marketplace UI).
+  try {
+    Store.logSale(stall.ownerKey, {
+      id: best.itemId,
+      name,
+      qty,
+      total: result.cost,
+      buyer: me,
+      at: Date.now(),
+    });
+  } catch {
+    // The sale stands; the feed misses a line.
   }
 
   // Visible to anyone watching: the citizen reacts, but ONLY when a real

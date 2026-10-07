@@ -42,6 +42,8 @@ const DEFAULT_STALL_COST = Object.freeze({ upfront: 5000, weeklyRent: 500 });
 const DAILY_WAGE = 75;
 /** Cut of every sale that goes to the kingdom treasury (kingdom:tax-collected). */
 const MARKET_TAX_RATE = 0.05;
+/** Max sales kept per stall's recent-sales feed. */
+const MAX_SALES_LOG = 20;
 /** A stall is a market pitch, not a warehouse: 4 ware types max (one per UI row). */
 const MAX_WARES = 4;
 /** Player-set prices must sit within 10%–1000% of the reference price. */
@@ -113,6 +115,7 @@ function upsertStall(stall) {
     lastWageAt: stall.lastWageAt ?? record.lastWageAt ?? Date.now(),
     lastRentAt: stall.lastRentAt ?? record.lastRentAt ?? Date.now(),
     rentDebt: stall.rentDebt ?? record.rentDebt ?? 0,
+    sales: stall.sales ?? record.sales ?? [],
   };
   // Explicit nulls (e.g. firing an employee) must win over the merge.
   if (stall.employee === null) merged.employee = null;
@@ -164,6 +167,36 @@ function takeReturns(ownerKey) {
   return list;
 }
 
+/**
+ * Record a completed sale on the stall's recent-sales feed (newest first,
+ * capped at MAX_SALES_LOG). Entry: { id, name, qty, total, buyer, at }.
+ * The owner sees this in the marketplace UI — it's the sales notification
+ * that survives them being offline.
+ */
+function logSale(ownerKey, entry) {
+  const stall = getStall(ownerKey);
+  if (!stall) return null;
+  const record = {
+    id: Math.floor(Number(entry?.id)) || 0,
+    name: String(entry?.name ?? "goods"),
+    qty: Math.max(1, Math.floor(Number(entry?.qty)) || 1),
+    total: Math.max(0, Math.floor(Number(entry?.total)) || 0),
+    buyer: String(entry?.buyer ?? "a customer"),
+    at: Number(entry?.at) || Date.now(),
+  };
+  const sales = Array.isArray(stall.sales) ? stall.sales : [];
+  sales.unshift(record);
+  stall.sales = sales.slice(0, MAX_SALES_LOG);
+  save();
+  return record;
+}
+
+/** Recent sales for a stall, newest first (empty array when none). */
+function getSales(ownerKey) {
+  const stall = getStall(ownerKey);
+  return Array.isArray(stall?.sales) ? stall.sales : [];
+}
+
 /** Lease cost for a kingdom id; unknown kingdoms get the default. */
 function stallCosts(kingdomId) {
   return STALL_COSTS[kingdomId] ?? DEFAULT_STALL_COST;
@@ -196,6 +229,7 @@ module.exports = {
   PRICE_MIN_RATIO,
   PRICE_MAX_RATIO,
   MISSED_RENT_WEEKS,
+  MAX_SALES_LOG,
   load,
   save,
   keyOf,
@@ -208,6 +242,8 @@ module.exports = {
   addReturns,
   peekReturns,
   takeReturns,
+  logSale,
+  getSales,
   stallCosts,
   clampPrice,
   resetForTests,

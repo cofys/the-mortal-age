@@ -57,6 +57,8 @@ const {
 
 const ATTR_STALL_OWNER = "shop:stall-owner";
 const ATTR_STALL_EMPLOYEE = "shop:stall-employee";
+/** Web overlay flag: JSON { view: "board"|"manage"|"browse", owner? }. */
+const OVERLAY_OPEN_ATTRIBUTE = "shop:overlay-open";
 
 const GROUP_ID = 30013;
 // NOTE: 30010 = citizen merchant stall, 30011 = DuelArena options (core),
@@ -326,6 +328,33 @@ function renderStall(api, player, session) {
   }
 }
 
+/**
+ * Open the marketplace web overlay (client/game/plugins/shop/ShopOverlay).
+ * view: "board" (all stalls) | "manage" (own stall) | "browse" (owner's stall).
+ * The ShopApi content endpoint renders from this flag; the React overlay
+ * polls /api/shop-status?player=<name>.
+ */
+function openShopOverlay(player, view, owner) {
+  if (!player || player.isPlayerBot?.() === true) return false;
+  const payload = { view: view === "browse" || view === "manage" ? view : "board" };
+  if (owner) payload.owner = String(owner);
+  try {
+    player.setAttribute(OVERLAY_OPEN_ATTRIBUTE, JSON.stringify(payload));
+    return true;
+  } catch (error) {
+    console.warn("[player-shops] overlay open failed", error?.message ?? error);
+    return false;
+  }
+}
+
+function closeShopOverlay(player) {
+  try {
+    player.setAttribute(OVERLAY_OPEN_ATTRIBUTE, "");
+  } catch {
+    // Overlay stays closed on next poll.
+  }
+}
+
 function openStall(api, player, stall) {
   if (player.busy?.()) {
     return;
@@ -370,60 +399,62 @@ function closeStall(player, message) {
   }
 }
 
-function buyFromStall(api, player, ware, amount) {
-  const session = sessions.get(player);
-  if (!session) {
-    return;
-  }
-  const stall = Store.getStall(session.ownerKey);
+/**
+ * Core player->stall purchase, shared by the widget interface and the
+ * marketplace web overlay. Returns { ok, qty, cost, message } — never throws
+ * for expected failures (sold out, can't afford, full inventory); those come
+ * back as { ok: false, message }.
+ */
+function executePlayerSale(api, buyer, stall, itemId, amount) {
+  const fail = (message) => ({ ok: false, qty: 0, cost: 0, message });
   if (!stall || !isStallOpen(stall)) {
-    closeStall(player, "The stall has closed.");
-    return;
+    return fail("The stall has closed.");
   }
   if (isKingdomAtWar(stall.kingdomId)) {
-    closeStall(player, "The market is closed while the kingdom is at war.");
-    return;
+    return fail("The market is closed while the kingdom is at war.");
   }
-  const stock = stall.stock?.[ware.id] ?? 0;
-  const price = stall.prices?.[ware.id] ?? 0;
-  if (stock <= 0 || price <= 0) {
-    player.sendMessage("Sold out.");
-    renderStall(api, player, session);
-    return;
+  const id = Math.floor(Number(itemId));
+  const stock = stall.stock?.[id] ?? 0;
+  const price = stall.prices?.[id] ?? 0;
+  if (!(id > 0) || stock <= 0 || price <= 0) {
+    return fail("Sold out.");
   }
-  const playerInv = player.getInventory();
-  const coins = playerInv?.getAmount?.(COINS) ?? 0;
+  const buyerInv = buyer.getInventory();
+  const coins = buyerInv?.getAmount?.(COINS) ?? 0;
   const afford = Math.floor(coins / price);
   if (afford <= 0) {
-    player.sendMessage("You can't afford that.");
-    return;
+    return fail("You can't afford that.");
   }
-  let qty = Math.min(
-    Math.max(1, Math.floor(amount)),
-    stock,
-    afford,
-    MAX_ACTION_AMOUNT
-  );
-  const definition = api.core.ItemDefinition.forId(ware.id);
+  let qty = Math.min(Math.max(1, Math.floor(amount)), stock, afford, MAX_ACTION_AMOUNT);
+  const definition = api.core.ItemDefinition.forId(id);
+  const name = definition?.getName?.() ?? `Item ${id}`;
   if (definition?.isStackable?.() === true) {
-    if (!playerInv.containsNumber(ware.id) && playerInv.getFreeSlots() <= 0) {
-      playerInv.full();
-      return;
+    if (!buyerInv.containsNumber(id) && buyerInv.getFreeSlots() <= 0) {
+      buyerInv.full();
+      return fail("Your inventory is full.");
     }
   } else {
-    qty = Math.min(qty, playerInv.getFreeSlots());
+    qty = Math.min(qty, buyerInv.getFreeSlots());
     if (qty <= 0) {
-      playerInv.full();
-      return;
+      buyerInv.full();
+      return fail("Your inventory is full.");
     }
   }
   const cost = qty * price;
   const tax = Math.floor(cost * Store.MARKET_TAX_RATE);
-  stall.stock[ware.id] = stock - qty;
+  stall.stock[id] = stock - qty;
   stall.till = (stall.till ?? 0) + (cost - tax);
+  Store.logSale(stall.ownerKey, {
+    id,
+    name,
+    qty,
+    total: cost,
+    buyer: buyer.getUsername?.() ?? "a customer",
+    at: Date.now(),
+  });
   Store.save();
-  playerInv.deleteNumber(COINS, cost);
-  playerInv.adds(ware.id, qty);
+  buyerInv.deleteNumber(COINS, cost);
+  buyerInv.adds(id, qty);
   if (tax > 0) {
     try {
       // Grant before emitting: kingdom:tax-collected is a notification that
@@ -440,14 +471,30 @@ function buyFromStall(api, player, ware, amount) {
   }
   console.info("[player-shops] sale", {
     stall: stall.owner,
-    buyer: player.getUsername?.(),
-    ware: ware.id,
+    buyer: buyer.getUsername?.(),
+    ware: id,
     qty,
     cost,
     tax,
     till: stall.till,
   });
-  player.sendMessage(`You buy ${qty} x ${ware.name} for ${cost} coins.`);
+  // Live sales notification for the stall owner.
+  notifyOwner(stall, `Your stall sold ${qty} x ${name} for ${cost} coins.`);
+  return { ok: true, qty, cost, message: `You buy ${qty} x ${name} for ${cost} coins.` };
+}
+
+function buyFromStall(api, player, ware, amount) {
+  const session = sessions.get(player);
+  if (!session) {
+    return;
+  }
+  const stall = Store.getStall(session.ownerKey);
+  if (!stall || !isStallOpen(stall) || isKingdomAtWar(stall?.kingdomId)) {
+    closeStall(player, "The stall has closed.");
+    return;
+  }
+  const result = executePlayerSale(api, player, stall, ware.id, amount);
+  player.sendMessage(result.message);
   renderStall(api, player, session);
 }
 
@@ -1059,15 +1106,24 @@ function onShopCommand({ player, parts }) {
         showInfo(api, player);
         return true;
       case "list":
-        listStalls(api, player, parts.slice(2).join(" ").trim());
+        openShopOverlay(player, "board");
         return true;
       case "browse":
-        if (!parts[2]) player.sendMessage("Usage: ::shop browse <owner> — or ::shop list to find stalls.");
-        else browseStall(api, player, parts.slice(2).join(" ").trim());
+        if (!parts[2]) {
+          openShopOverlay(player, "board");
+        } else {
+          const target = Store.getStall(parts.slice(2).join(" ").trim());
+          if (!target) {
+            player.sendMessage(`No market stall owned by ${parts.slice(2).join(" ").trim()}. Opening the market board instead.`);
+            openShopOverlay(player, "board");
+          } else {
+            openShopOverlay(player, "browse", target.owner);
+          }
+        }
         return true;
       case "manage": {
         const stall = requireStall(player);
-        if (stall) openStall(api, player, stall);
+        if (stall) openShopOverlay(player, "manage");
         return true;
       }
       case "close":
@@ -1131,10 +1187,13 @@ module.exports = {
   GROUP_ID,
   ATTR_STALL_OWNER,
   ATTR_STALL_EMPLOYEE,
+  OVERLAY_OPEN_ATTRIBUTE,
   SHOP_USAGE,
   // Exported for the Market Board (diegetic ::shop replacement).
   buyStall,
   openStall,
+  openShopOverlay,
+  closeShopOverlay,
   listStalls,
   browseStall,
   promptBrowseStall,

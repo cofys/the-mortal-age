@@ -1,0 +1,379 @@
+/* The Mortal Age — marketplace overlay.
+ * Built on the origin-selection heraldic template: tall dark-bronze panel,
+ * ornate gold frame, corner brackets, gold section headers, parchment body. */
+
+.tma-shop-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(11, 8, 5, 0.72) 0%, rgba(11, 8, 5, 0.9) 100%);
+    animation: tma-shop-fadein 0.35s ease-out;
+}
+
+@keyframes tma-shop-fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tma-shop-panel {
+    position: relative;
+    width: min(560px, 94vw);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+    border: 1px solid #6b5a3a;
+    outline: 3px solid #14100b;
+    box-shadow:
+        0 0 0 4px #6b5a3a,
+        0 0 40px rgba(201, 162, 39, 0.15),
+        0 20px 60px rgba(0, 0, 0, 0.8);
+    padding: 28px 24px 16px;
+    animation: tma-shop-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes tma-shop-rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Corner brackets — L-shaped bright gold */
+.tma-shop-panel::before,
+.tma-shop-panel::after {
+    content: "";
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid #c9a227;
+    pointer-events: none;
+}
+.tma-shop-panel::before {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+}
+.tma-shop-panel::after {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+}
+
+.tma-shop-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #9a8f7d;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.15s ease;
+    z-index: 1;
+}
+
+.tma-shop-close:hover {
+    color: #d9b45b;
+}
+
+.tma-shop-kicker {
+    margin: 0 0 2px;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+}
+
+.tma-shop-name {
+    margin: 0;
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #d9b45b;
+}
+
+.tma-shop-byline {
+    margin: 4px 0 0;
+    text-align: center;
+    font-size: 13px;
+    font-style: italic;
+    color: #9a8f7d;
+}
+
+.tma-shop-header-rule {
+    flex: 0 0 auto;
+    height: 1px;
+    margin: 12px 40px 14px;
+    background: linear-gradient(90deg, transparent, #6b5a3a, transparent);
+}
+
+.tma-shop-banner {
+    flex: 0 0 auto;
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    text-align: center;
+    font-size: 13px;
+    color: #ffd27f;
+    background: #2a2117;
+    border: 1px solid #6b5a3a;
+    border-radius: 2px;
+}
+
+.tma-shop-backlink {
+    align-self: flex-start;
+    margin: 0 0 10px 2px;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 13px;
+    color: #9a8f7d;
+    cursor: pointer;
+}
+.tma-shop-backlink:hover {
+    color: #d9b45b;
+}
+
+.tma-shop-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-right: 2px;
+}
+
+.tma-shop-section {
+    flex: 0 0 auto;
+}
+
+.tma-shop-section-title {
+    margin: 0 0 6px 2px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #d9b45b;
+}
+
+.tma-shop-inset {
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    padding: 12px 14px;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.tma-shop-empty {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #9a8f7d;
+    font-style: italic;
+}
+
+.tma-shop-hint {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #9a8f7d;
+    font-style: italic;
+}
+
+.tma-shop-gold {
+    color: #ffd27f;
+}
+
+.tma-shop-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+/* Rows: name/sub on the left, controls on the right */
+.tma-shop-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid #2a231a;
+}
+.tma-shop-row:last-child {
+    border-bottom: none;
+}
+
+.tma-shop-row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tma-shop-row-name {
+    font-size: 14px;
+    color: #e8ded0;
+}
+
+.tma-shop-row-sub {
+    font-size: 12px;
+    color: #9a8f7d;
+}
+
+.tma-shop-tag {
+    margin-left: 8px;
+    padding: 1px 7px;
+    font-size: 11px;
+    color: #14100b;
+    background: #c9a227;
+    border-radius: 8px;
+}
+
+.tma-shop-open {
+    color: #7fd27f;
+}
+.tma-shop-closed {
+    color: #9a8f7d;
+    font-style: italic;
+}
+
+/* Buttons */
+.tma-shop-button {
+    flex: 0 0 auto;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #ffd27f;
+    background: linear-gradient(180deg, #3a2c1a 0%, #2a2117 100%);
+    border: 1px solid #6b5a3a;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.tma-shop-button:hover:not(:disabled) {
+    background: linear-gradient(180deg, #4a3a22 0%, #3a2c1a 100%);
+    color: #ffe9b0;
+}
+.tma-shop-button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+.tma-shop-button-small {
+    padding: 5px 10px;
+    font-size: 12px;
+}
+.tma-shop-button-muted {
+    color: #9a8f7d;
+}
+
+.tma-shop-danger {
+    align-self: center;
+    margin-top: 4px;
+    background: none;
+    border: none;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: #b06a5a;
+    cursor: pointer;
+}
+.tma-shop-danger:hover {
+    color: #d98a76;
+    text-decoration: underline;
+}
+
+/* Inputs */
+.tma-shop-input {
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    font-size: 13px;
+    color: #e8ded0;
+    background: #14100b;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    outline: none;
+}
+.tma-shop-input:focus {
+    border-color: #6b5a3a;
+}
+.tma-shop-input-narrow {
+    width: 56px;
+    text-align: center;
+}
+
+.tma-shop-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Manage view specifics */
+.tma-shop-mystall {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.tma-shop-mystall-line {
+    margin: 0 0 2px;
+    font-size: 14px;
+    color: #e8ded0;
+}
+.tma-shop-mystall-sub {
+    margin: 0;
+    font-size: 12px;
+    color: #9a8f7d;
+    font-style: italic;
+}
+
+.tma-shop-till {
+    margin: 0 0 4px;
+    font-size: 16px;
+    color: #e8ded0;
+}
+
+.tma-shop-sale {
+    margin: 0;
+    padding: 4px 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #e8ded0;
+    border-bottom: 1px solid #2a231a;
+}
+.tma-shop-sale:last-child {
+    border-bottom: none;
+}
+
+.tma-shop-footnote {
+    flex: 0 0 auto;
+    margin: 14px 0 0;
+    text-align: center;
+    font-size: 12px;
+    font-style: italic;
+    color: #9a8f7d;
+}
+
+/* Themed scrollbar */
+.tma-shop-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+.tma-shop-scroll::-webkit-scrollbar-track {
+    background: #14100b;
+    border-radius: 4px;
+}
+.tma-shop-scroll::-webkit-scrollbar-thumb {
+    background: #3a2f22;
+    border-radius: 4px;
+}
+.tma-shop-scroll::-webkit-scrollbar-thumb:hover {
+    background: #6b5a3a;
+}

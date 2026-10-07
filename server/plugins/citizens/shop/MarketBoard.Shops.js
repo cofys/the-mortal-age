@@ -217,12 +217,10 @@ function onBoardButton(event) {
       PlayerShops.buyStall(api, player, kingdomId);
     } else if (button === uid(C.BTN_MANAGE_BG)) {
       closeBoard(player);
-      const stall = PlayerShops.requireStall(player);
-      if (stall) PlayerShops.openStall(api, player, stall);
+      PlayerShops.openShopOverlay(player, "manage");
     } else if (button === uid(C.BTN_BROWSE_BG)) {
       closeBoard(player);
-      const kingdomId = kingdomAt(player);
-      PlayerShops.promptBrowseStall(api, player, kingdomId ?? "");
+      PlayerShops.openShopOverlay(player, "board");
     }
   } catch (error) {
     console.warn("[market-board] button failed", error?.message ?? error);

@@ -174,4 +174,39 @@ assert.deepEqual(Store.peekReturns("deadbeat"), [{ id: 526, qty: 3 }]);
 assert.equal(calls.notified.filter((n) => n.stall === "Deadbeat").length, 1, "owner told");
 assert.ok(!Store.isEmployed("gone_soon"), "employee released on repossession");
 
+// --- sales feed ---
+Store.resetForTests();
+Store.upsertStall({ owner: "Trader", kingdomId: "keldagrim" });
+assert.deepEqual(Store.getSales("trader"), [], "no sales yet");
+const sale = Store.logSale("trader", {
+  id: 526,
+  name: "Test Sword",
+  qty: 5,
+  total: 500,
+  buyer: "Amy",
+});
+assert.equal(sale.name, "Test Sword");
+assert.equal(sale.qty, 5);
+assert.equal(sale.total, 500);
+assert.equal(sale.buyer, "Amy");
+assert.ok(sale.at > 0);
+assert.equal(Store.getSales("trader").length, 1);
+assert.equal(Store.getSales("TRADER")[0].buyer, "Amy", "case-insensitive");
+// newest first
+Store.logSale("trader", { id: 527, name: "Shield", qty: 1, total: 50, buyer: "Bob" });
+assert.equal(Store.getSales("trader")[0].name, "Shield");
+assert.equal(Store.getSales("trader")[1].name, "Test Sword");
+// capped at MAX_SALES_LOG
+for (let i = 0; i < Store.MAX_SALES_LOG + 5; i++) {
+  Store.logSale("trader", { id: 1, name: `Item${i}`, qty: 1, total: 1, buyer: "x" });
+}
+assert.equal(Store.getSales("trader").length, Store.MAX_SALES_LOG);
+assert.equal(Store.getSales("trader")[0].name, `Item${Store.MAX_SALES_LOG + 4}`);
+// unknown stall -> null, no throw
+assert.equal(Store.logSale("nobody", { id: 1, qty: 1, total: 1 }), null);
+assert.deepEqual(Store.getSales("nobody"), []);
+// upsert merge keeps the feed
+Store.upsertStall({ owner: "Trader", till: 999 });
+assert.equal(Store.getSales("trader").length, Store.MAX_SALES_LOG, "merge keeps sales");
+
 console.log("PlayerShopStore.test.js: all checks passed");
