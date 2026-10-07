@@ -290,7 +290,18 @@ class CitizenDirector {
     // Commoners split between market and square so cities feel populated
     // in multiple areas, not just clustered at one spot.
     const useSquare = role === "commoner" && rng() < 0.4;
-    const anchor = siteTileByKingdom(kingdomId, useSquare ? "square" : "market")
+    let anchorKind = useSquare ? "square" : "market";
+    // Keldagrim has two populated anchors (city center + entrance plaza);
+    // split square-spawners across both so new players see life at spawn.
+    if (
+      useSquare &&
+      kingdomId === "keldagrim" &&
+      siteTileByKingdom(kingdomId, "square2") &&
+      rng() < 0.5
+    ) {
+      anchorKind = "square2";
+    }
+    const anchor = siteTileByKingdom(kingdomId, anchorKind)
       ?? { x: 3200, y: 3200, z: 0 };
     const home = noisyTile(anchor.x, anchor.y, 12, rng);
     home.z = anchor.z ?? 0;
