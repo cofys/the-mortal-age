@@ -53,6 +53,7 @@ const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
+const { tickShoppers } = require("../shop/CitizenShoppers");
 const CitizenBonds = require("../lib/CitizenBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
 const { normalizeName } = require("../lib/CitizenBonds");
@@ -879,6 +880,14 @@ class CitizenDirector {
       CitizenDailyRoutines.tickRoutines(this, hour);
     } catch (error) {
       this.log("daily routines failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen shoppers: citizens browse player-owned market stalls and buy
+    // (needs, role wants, bargain-hunting vs the reference feed). Closes the
+    // economic loop — players can sell, not just buy. Data tier, zero LLM.
+    try {
+      tickShoppers(this, hour);
+    } catch (error) {
+      this.log("shoppers failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {
