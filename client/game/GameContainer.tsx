@@ -16,6 +16,7 @@ import { SplitPrivateChatOverlay } from "./plugins/splitprivatechat/SplitPrivate
 import { VengeanceTimerOverlay } from "./plugins/vengeancetimer/VengeanceTimerOverlay";
 import { FreezeTimerOverlay, PoisonTimerOverlay } from "./plugins/statustimer/StatusTimerOverlay";
 import { OriginOverlay } from "./plugins/origins/OriginOverlay";
+import { QuestOverlay } from "./plugins/quests/QuestOverlay";
 import { SidebarShell } from "./sidebar/SidebarShell";
 
 interface OsrsContainerProps {
@@ -377,6 +378,8 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                         {!hideUi && <SplitPrivateChatOverlay osrsClient={osrsClient} />}
 
                         <OriginOverlay osrsClient={osrsClient} />
+
+                        <QuestOverlay osrsClient={osrsClient} />
 
                         <div className="hud right-top">
                             <div className="fps-counter content-text">{fps}</div>
