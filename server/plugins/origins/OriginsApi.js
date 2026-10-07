@@ -13,12 +13,16 @@
  *          realms: [{ id, name, city, demonym, epithet, lens, welcome }],
  *          backgrounds: [{ id, name, epithet, lens }] }
  *
- * Unified creation claim (all three in one request):
+ * Unified creation claim (all four in one request):
  *   GET /api/origins-status?player=<username>
  *       &origin=<realmId>&background=<bgId>&firstname=<f>&lastname=<l>
- *     -> applies background + names + origin in dependency order, so the
- *        legacy chatbox flows (which check hasBackground/hasFullName) skip.
- *        Emits origins:selected (via claimOrigin) then character:created.
+ *       &appearance=<urlencoded JSON {gender,head,beard,hairColor,torsoColor,legColor,feetColor,skinColor}>
+ *     -> applies background + names + appearance + origin in dependency order,
+ *        so the legacy chatbox flows (which check hasBackground/hasFullName)
+ *        skip. Emits origins:selected (via claimOrigin) then character:created.
+ *
+ * The status payload also carries the player's current `appearance` so the
+ * creation UI can preview it live.
  *
  * Legacy single-origin claim (kept for backward compatibility):
  *   GET /api/origins-status?player=<username>&claim=<realmId>
@@ -34,6 +38,122 @@ const Selection = require("./Selection.Origins");
 const Backgrounds = require("./Backgrounds.Origins");
 
 let apiRef = null;
+
+// Appearance slot indices (mirror Appearance.ts).
+const APP_GENDER = 0;
+const APP_HEAD = 1;
+const APP_CHEST = 2;
+const APP_ARMS = 3;
+const APP_HANDS = 4;
+const APP_LEGS = 5;
+const APP_FEET = 6;
+const APP_BEARD = 7;
+const APP_HAIR_COLOUR = 8;
+const APP_TORSO_COLOUR = 9;
+const APP_LEG_COLOUR = 10;
+const APP_FEET_COLOUR = 11;
+const APP_SKIN_COLOUR = 12;
+
+// Curated valid kit/color ranges for the creation UI. Kit ids come from the
+// cache's identikit configs; these ranges bracket the engine defaults
+// (male head 3, female head 48, male beard 14) so every choice renders.
+const MALE_HEADS = [0, 1, 2, 3, 4, 5, 6, 7];
+const FEMALE_HEADS = [45, 46, 47, 48, 49, 50, 51, 52];
+const MALE_BEARDS = [-1, 10, 11, 12, 13, 14, 15, 16, 17];
+const HAIR_COLORS = 24;   // 0-23
+const CLOTH_COLORS = 28;  // 0-27
+const SKIN_COLORS = 7;    // 0-6
+const FEET_COLORS = 6;    // 0-5
+
+function defaultAppearance(gender) {
+  const female = gender === 1;
+  return female
+    ? { gender: 1, head: 48, beard: -1, hairColor: 2, torsoColor: 14, legColor: 5, feetColor: 4, skinColor: 0 }
+    : { gender: 0, head: 3, beard: 14, hairColor: 2, torsoColor: 14, legColor: 5, feetColor: 4, skinColor: 0 };
+}
+
+function sanitizeAppearance(raw) {
+  let a;
+  try {
+    a = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    return null;
+  }
+  if (!a || typeof a !== "object") return null;
+  const gender = a.gender === 1 ? 1 : 0;
+  const heads = gender === 1 ? FEMALE_HEADS : MALE_HEADS;
+  const head = heads.includes(a.head | 0) ? (a.head | 0) : heads[3];
+  const beard = gender === 1 ? -1 : (MALE_BEARDS.includes(a.beard | 0) ? (a.beard | 0) : 14);
+  const clamp = (v, n) => {
+    v |= 0;
+    return v >= 0 && v < n ? v : 0;
+  };
+  return {
+    gender,
+    head,
+    beard,
+    hairColor: clamp(a.hairColor, HAIR_COLORS),
+    torsoColor: clamp(a.torsoColor, CLOTH_COLORS),
+    legColor: clamp(a.legColor, CLOTH_COLORS),
+    feetColor: clamp(a.feetColor, FEET_COLORS),
+    skinColor: clamp(a.skinColor, SKIN_COLORS),
+  };
+}
+
+/**
+ * Apply a sanitized appearance to the player via the engine Appearance API.
+ * Uses the gender-appropriate default body kits (chest/arms/hands/legs/feet)
+ * since creation only customizes head/beard/colors.
+ */
+function applyAppearance(player, app) {
+  try {
+    const appearance = player.getAppearance?.();
+    if (!appearance) return false;
+    const female = app.gender === 1;
+    const look = appearance.getLook ? [...appearance.getLook()] : new Array(13).fill(0);
+    look[APP_GENDER] = app.gender;
+    look[APP_HEAD] = app.head;
+    look[APP_BEARD] = app.beard;
+    // Body kits: engine defaults per gender (creation doesn't change these).
+    if (female) {
+      look[APP_CHEST] = 57; look[APP_ARMS] = 65; look[APP_HANDS] = 68;
+      look[APP_LEGS] = 77; look[APP_FEET] = 80;
+    } else {
+      look[APP_CHEST] = 18; look[APP_ARMS] = 26; look[APP_HANDS] = 34;
+      look[APP_LEGS] = 38; look[APP_FEET] = 42;
+    }
+    look[APP_HAIR_COLOUR] = app.hairColor;
+    look[APP_TORSO_COLOUR] = app.torsoColor;
+    look[APP_LEG_COLOUR] = app.legColor;
+    look[APP_FEET_COLOUR] = app.feetColor;
+    look[APP_SKIN_COLOUR] = app.skinColor;
+    appearance.setLookArray(look);
+    return true;
+  } catch (e) {
+    console.warn("[origins-api] applyAppearance failed", e?.message ?? e);
+    return false;
+  }
+}
+
+/** Read the player's current appearance into the creation shape (for preview). */
+function readAppearance(player) {
+  try {
+    const look = player.getAppearance?.()?.getLook?.();
+    if (!look || look.length < 13) return null;
+    return {
+      gender: look[APP_GENDER] === 1 ? 1 : 0,
+      head: look[APP_HEAD] | 0,
+      beard: look[APP_BEARD] | 0,
+      hairColor: look[APP_HAIR_COLOUR] | 0,
+      torsoColor: look[APP_TORSO_COLOUR] | 0,
+      legColor: look[APP_LEG_COLOUR] | 0,
+      feetColor: look[APP_FEET_COLOUR] | 0,
+      skinColor: look[APP_SKIN_COLOUR] | 0,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function statusPayload(player) {
   const realms = Data.ORIGINS.map((o) => ({
@@ -52,7 +172,7 @@ function statusPayload(player) {
     lens: b.lens,
   }));
   if (!player) {
-    return { needsChoice: false, realms, backgrounds };
+    return { needsChoice: false, realms, backgrounds, appearance: null };
   }
   const hasOrigin = Selection.hasOrigin(player);
   const hasBackground = Backgrounds.hasBackground(player);
@@ -64,6 +184,7 @@ function statusPayload(player) {
     hasName,
     realms,
     backgrounds,
+    appearance: readAppearance(player),
   };
 }
 
@@ -78,7 +199,7 @@ function statusPayload(player) {
  * on retry instead of failing silently with "Home already claimed."
  * Returns { ok: true } or { ok: false, error }.
  */
-function claimFullCharacter(player, originId, backgroundId, firstName, lastName) {
+function claimFullCharacter(player, originId, backgroundId, firstName, lastName, appearanceRaw) {
   if (!player) return { ok: false, error: "No player." };
 
   const needsOrigin = !Selection.hasOrigin(player);
@@ -128,6 +249,11 @@ function claimFullCharacter(player, originId, backgroundId, firstName, lastName)
       return { ok: false, error: "Could not claim home." };
     }
   }
+
+  // Apply appearance (from the creation UI's appearance step). Falls back to
+  // the engine default for the chosen gender when absent/invalid.
+  const app = sanitizeAppearance(appearanceRaw) || defaultAppearance(0);
+  applyAppearance(player, app);
 
   // Now the character is fully formed — emit for quest start and other systems.
   player.sendMessage(`From this day, you are ${first} ${last}. Make the name mean something.`);
@@ -179,13 +305,14 @@ function attach(api) {
           console.warn("[origins-api] reset failed", e?.message ?? e);
         }
       }
-      // Unified creation claim: origin + background + names in one request.
+      // Unified creation claim: origin + background + names + appearance.
       const originId = (query.get("origin") || "").trim().toLowerCase();
       const backgroundId = (query.get("background") || "").trim().toLowerCase();
       const firstname = (query.get("firstname") || "").trim();
       const lastname = (query.get("lastname") || "").trim();
+      const appearanceRaw = (query.get("appearance") || "").trim();
       if (originId && backgroundId && firstname && lastname) {
-        const result = claimFullCharacter(player, originId, backgroundId, firstname, lastname);
+        const result = claimFullCharacter(player, originId, backgroundId, firstname, lastname, appearanceRaw);
         if (!result.ok) {
           claimError = result.error;
           console.warn(`[origins-api] full character claim failed for ${username}: ${result.error}`);

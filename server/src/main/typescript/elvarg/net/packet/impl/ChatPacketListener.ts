@@ -23,6 +23,19 @@ export class ChatPacketListener {
     return true;
   }
 
+  private static displayName(player: any): string {
+    // Mortal Age: show the character's chosen name (e.g. "Liam Cofy") instead
+    // of the account username (e.g. "Cofy"). Falls back to username for
+    // accounts that haven't completed creation yet.
+    try {
+      const name = player.getAttribute?.("character:display-name");
+      if (typeof name === "string" && name.trim().length > 0) return name.trim();
+    } catch {
+      // ignore
+    }
+    return player.getUsername();
+  }
+
   public static handleText(player: any, value: string): void {
     const text = String(value ?? "").replace(/[<>]/g, "").trim().slice(0, 80);
     if (text.startsWith("::")) {
@@ -62,7 +75,7 @@ export class ChatPacketListener {
       sent.add(recipient.getIndex());
       recipient.getPacketSender().sendPublicChat(
         text,
-        `${iconPrefix}${player.getUsername()}`,
+        `${iconPrefix}${ChatPacketListener.displayName(player)}`,
         player.getIndex()
       );
     }
