@@ -889,6 +889,21 @@ class CitizenDirector {
     } catch (error) {
       this.log("shoppers failed", { error: String(error?.message ?? error) });
     }
+    // Player guilds: citizen recruitment (compatible personalities join on
+    // their own) and guild outings (muster at the hall, group activities).
+    // Data tier, zero LLM.
+    try {
+      const GuildRecruitment = require("../../guilds/GuildRecruitment");
+      GuildRecruitment.tickRecruitment(this);
+    } catch (error) {
+      this.log("guild recruitment failed", { error: String(error?.message ?? error) });
+    }
+    try {
+      const GuildActivities = require("../../guilds/GuildActivities");
+      GuildActivities.tickOutings(this, hour);
+    } catch (error) {
+      this.log("guild outings failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -902,6 +917,13 @@ class CitizenDirector {
       CitizenBonds.save();
     } catch (error) {
       this.log("citizen bonds save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      require("../../guilds/GuildRegistry").save();
+    } catch (error) {
+      this.log("guild registry save failed", {
         error: String(error?.message ?? error),
       });
     }

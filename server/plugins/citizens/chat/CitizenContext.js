@@ -156,6 +156,22 @@ function buildContext(citizenUsername, speakerUsername) {
     // Kinship must never break the chat path.
   }
 
+  // Guild: player-founded guilds with citizen members. A member speaks as
+  // one — loyalty, pride, and the hall are part of their identity now.
+  try {
+    const Registry = require("../../guilds/GuildRegistry");
+    const g = Registry.memberGuild(citizenUsername);
+    if (g) {
+      const rank = Registry.memberRank(g, citizenUsername);
+      parts.push(
+        `You are ${rank === "officer" ? "an officer" : rank === "founder" ? "the founder" : "a member"} ` +
+          `of the guild '${g.name}'. You are loyal to it and speak of it with pride.`
+      );
+    }
+  } catch {
+    // Guilds must never break the chat path.
+  }
+
   parts.push(`It is ${timeWord()}.`);
 
   // Lately: the background tier's journal. This is what makes "what have
