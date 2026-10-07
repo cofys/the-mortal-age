@@ -92,6 +92,7 @@ const FOLLOW_UP_QUESTS = [
       },
       {
         objective: "Return to {citizen} in the square",
+        next: "complete",
         arrive: { site: "square", r: 10 },
         dialogue: {
           speaker: "{citizen}",
@@ -219,6 +220,7 @@ const FOLLOW_UP_QUESTS = [
       },
       {
         objective: "Walk the road patrol",
+        next: 6,
         arrive: { site: "patrol", r: 12 },
         dialogue: {
           speaker: "You",
@@ -330,6 +332,7 @@ const FOLLOW_UP_QUESTS = [
       },
       {
         objective: "The market hears the truth",
+        next: "complete",
         dialogue: {
           speaker: "{merchant}",
           title: "Market trader",
@@ -346,6 +349,7 @@ const FOLLOW_UP_QUESTS = [
       },
       {
         objective: "Burr pays for silence",
+        next: "complete",
         dialogue: {
           speaker: "{merchant}",
           title: "Market trader",
@@ -362,6 +366,7 @@ const FOLLOW_UP_QUESTS = [
       },
       {
         objective: "Two stalls, one market",
+        next: "complete",
         dialogue: {
           speaker: "{merchant}",
           title: "Market trader",
@@ -484,6 +489,7 @@ const FOLLOW_UP_QUESTS = [
       },
       {
         objective: "Walk {missing} home",
+        next: "complete",
         arrive: { site: "tavern", r: 10 },
         dialogue: {
           speaker: "{friend}",

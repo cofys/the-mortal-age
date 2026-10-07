@@ -29,6 +29,11 @@
  *   - choices may carry set: { var: value } written on pick.
  *   - a stage may carry its own rewards, used when the quest completes
  *     from that stage (branching endings).
+ *   - a stage may carry next: <stage index> | "complete" to control where
+ *     the Continue button goes. Without it, Continue advances to the next
+ *     stage index. This is what makes choice branches terminate correctly:
+ *     the first branch's final stage sets next so it doesn't fall through
+ *     into the second branch's stages.
  * When the player has no active quest, eligible follow-ups auto-start.
  */
 
@@ -269,6 +274,17 @@ function handleAction(player, quest, action, query) {
   if (action === "continue") {
     if (!arrived) return; // can't skip travel
     if (stage.dialogue && stage.dialogue.choices && stage.dialogue.choices.length) return; // must pick
+    // Branch terminals: a stage can declare where Continue goes instead of
+    // blindly advancing to stageIndex + 1 (which would fall through into a
+    // sibling branch's stages after a choice).
+    if (stage.next === "complete") {
+      completeQuestNow(player, quest, stage, stageIndex);
+      return;
+    }
+    if (Number.isInteger(stage.next)) {
+      QuestState.setStage(player, quest.id, stage.next);
+      return;
+    }
     const result = QuestState.advanceStage(player, quest.id);
     if (result === "complete") {
       completeQuestNow(player, quest, stage, stageIndex);

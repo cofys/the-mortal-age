@@ -58,6 +58,7 @@ const STARTER_QUESTS = [
       },
       {
         objective: "Tull is grateful — hear him out",
+        next: 4,
         dialogue: {
           speaker: "Merchant Tull",
           title: "Spice merchant",
@@ -222,6 +223,7 @@ const STARTER_QUESTS = [
       },
       {
         objective: "Speak with the palace guard",
+        next: "complete",
         dialogue: {
           speaker: "Palace Guard",
           title: "King Lathas's guard",
@@ -353,6 +355,7 @@ const STARTER_QUESTS = [
       },
       {
         objective: "Return the coal to Forge-master Donal",
+        next: "complete",
         arrive: { x: 2860, y: 10170, r: 10 },
         dialogue: {
           speaker: "Forge-master Donal",
