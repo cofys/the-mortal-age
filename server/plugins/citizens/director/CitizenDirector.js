@@ -90,6 +90,16 @@ const {
 
 const DIRECTOR_TICK_TICKS = 100; // ~60s at 600ms/tick
 
+// --- Proximity-based citizen lifecycle (memory optimization, 2026-10-07) ---
+// Citizens are full Player objects (~3MB each). When no real player is near,
+// the Player object is despawned — the citizen lives on as a roster record
+// (data tier: journal, needs, kinship, crafting all run on the record).
+// The Player rematerializes when a real player approaches.
+// Hysteresis (spawn < despawn) prevents thrash at the boundary.
+const CITIZEN_SPAWN_RADIUS = 50; // tiles from home: spawn when a real player is this close
+const CITIZEN_DESPAWN_RADIUS = 75; // tiles from current pos: despawn when no real player within this
+const PROXIMITY_TICK_TICKS = 17; // ~10s at 600ms/tick: fast spawn/despawn for responsiveness
+
 // role -> rank granted through the kingdoms plugin's hierarchy.
 const ROLE_RANK = Object.freeze({
   [ROLE_GUARD]: "Man-at-arms",
@@ -439,6 +449,141 @@ class CitizenDirector {
       }
     }
     this.api.getTaskManager?.()?.submit(new DirectorTask(DIRECTOR_TICK_TICKS));
+    // Fast proximity task: spawn/despawn citizens as real players move.
+    // The 60s director tick is too slow for "walk into town, see people".
+    class ProximityTask extends Task {
+      execute() {
+        try {
+          director.tickProximity();
+        } catch (error) {
+          director.log("proximity tick failed", {
+            error: String(error?.message ?? error),
+          });
+        }
+      }
+    }
+    this.api.getTaskManager?.()?.submit(new ProximityTask(PROXIMITY_TICK_TICKS));
+  }
+
+  /**
+   * Real (non-bot) player positions, cached per proximity tick.
+   * Used to decide which citizens need a materialized Player object.
+   */
+  realPlayerPositions() {
+    const out = [];
+    try {
+      const World = this.api.core?.World;
+      const players = World?.players;
+      if (!players || typeof players.forEach !== "function") {
+        return out;
+      }
+      players.forEach((p) => {
+        try {
+          // Bots are players too — only real humans trigger citizen spawning.
+          if (!p || p.isPlayerBot?.() === true) {
+            return;
+          }
+          const loc = p.getLocation?.();
+          if (!loc) {
+            return;
+          }
+          out.push({
+            x: loc.getX?.() ?? loc.x ?? 0,
+            y: loc.getY?.() ?? loc.y ?? 0,
+            z: loc.getZ?.() ?? loc.z ?? 0,
+          });
+        } catch {
+          // Skip unreadable players.
+        }
+      });
+    } catch {
+      // World not ready.
+    }
+    return out;
+  }
+
+  /**
+   * Is there a real player within `radius` tiles of (x, y, z)?
+   * Chebyshev distance (matches the engine's view-distance math).
+   */
+  anyRealPlayerNear(x, y, z, radius, positions) {
+    for (const p of positions) {
+      if ((p.z ?? 0) !== (z ?? 0)) {
+        continue;
+      }
+      const dx = Math.abs((p.x ?? 0) - (x ?? 0));
+      const dy = Math.abs((p.y ?? 0) - (y ?? 0));
+      if (Math.max(dx, dy) <= radius) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Fast tick (~10s): reconcile each citizen's materialized Player against
+   * real-player proximity. Spawn when a human approaches, despawn when the
+   * area is empty. The data tier (journal, needs, kinship, crafting) runs on
+   * the roster record regardless — this only controls the ~3MB Player object.
+   */
+  tickProximity() {
+    const hour = hourNow();
+    const positions = this.realPlayerPositions();
+    for (const record of this.roster.values()) {
+      try {
+        const phase = desiredPhase(record, hour);
+        // Asleep or off-schedule: the slow tick handles logout.
+        if (!phase.online) {
+          continue;
+        }
+        const online = this.isOnline(record);
+        if (!online) {
+          // Spawn check: use home (the citizen has no live position yet).
+          const home = record.home ?? { x: 3200, y: 3200, z: 0 };
+          if (
+            this.anyRealPlayerNear(
+              home.x,
+              home.y,
+              home.z ?? 0,
+              CITIZEN_SPAWN_RADIUS,
+              positions
+            )
+          ) {
+            this.spawnCitizen(record);
+          }
+          continue;
+        }
+        // Despawn check: use the bot's CURRENT position (it may have
+        // wandered/patrolled away from home).
+        const bot = this.getBot(record);
+        let bx = record.home?.x ?? 3200;
+        let by = record.home?.y ?? 3200;
+        let bz = record.home?.z ?? 0;
+        try {
+          const loc = bot?.getLocation?.();
+          if (loc) {
+            bx = loc.getX?.() ?? loc.x ?? bx;
+            by = loc.getY?.() ?? loc.y ?? by;
+            bz = loc.getZ?.() ?? loc.z ?? bz;
+          }
+        } catch {
+          // Fall back to home.
+        }
+        if (
+          !this.anyRealPlayerNear(bx, by, bz, CITIZEN_DESPAWN_RADIUS, positions)
+        ) {
+          this.logoutCitizen(record);
+          this.log("citizen despawned (no players near)", {
+            citizen: record.username,
+          });
+        }
+      } catch (error) {
+        this.log("proximity check failed", {
+          citizen: record.username,
+          error: String(error?.message ?? error),
+        });
+      }
+    }
   }
 
   isOnline(record) {
@@ -545,6 +690,9 @@ class CitizenDirector {
       { ROAMING: "roaming" }
     );
     state.citizens = { director: true, workCyclesBanked: 0 };
+    // LOD marker: the bot brain throttles citizens harder than other bots
+    // when no real player is near (see BotBehaviorTask.resolveEntryStride).
+    state.isCitizen = true;
 
     // Wire into the shared bot runtime (mirrors BotRegistry.addEntry).
     const entry = { player: bot, state };
@@ -852,7 +1000,9 @@ class CitizenDirector {
         continue;
       }
       if (!online) {
-        this.spawnCitizen(record);
+        // Proximity gate: only materialize the Player object when a real
+        // player is near. The fast proximity task (~10s) handles the actual
+        // spawn; the slow tick just skips so they don't fight.
         continue;
       }
       if (!bot) {

@@ -190,6 +190,10 @@ class BotBehaviorTask extends Task {
       nearStride: parseStride(rawConfig?.nearStride, 1),
       mediumStride: parseStride(rawConfig?.mediumStride, 2),
       farStride: parseStride(rawConfig?.farStride, this.idleEntryStride),
+      // Citizens far from any real player tick at 1/10th frequency. Their
+      // data-tier systems (journal, needs, kinship) run on the director tick
+      // regardless — this only throttles the per-tick brain. (2026-10-07)
+      citizenFarStride: parseStride(rawConfig?.citizenFarStride, 10),
       nearCacheMs: parseCacheMs(rawConfig?.nearCacheMs, 200),
       mediumCacheMs: parseCacheMs(rawConfig?.mediumCacheMs, 450),
       farCacheMs: parseCacheMs(
@@ -317,8 +321,14 @@ class BotBehaviorTask extends Task {
       return this.idleEntryStride;
     }
     this.refreshHumanObservers(nowMs);
+    // Citizens use a wider far stride (1/10th ticks) — their data tier runs
+    // on the director tick, so the brain can idle harder when unseen.
+    const farStrideFor = (e) =>
+      e?.state?.isCitizen === true
+        ? this.lodConfig.citizenFarStride
+        : this.lodConfig.farStride;
     if (!entry?.player || this._humanObserverCount === 0) {
-      return this.lodConfig.farStride;
+      return farStrideFor(entry);
     }
     const interactingWithRealPlayer = this.isInteractingWithRealPlayer(entry.player);
     if (interactingWithRealPlayer) {
@@ -327,7 +337,7 @@ class BotBehaviorTask extends Task {
 
     const locationSnapshot = this.getLocationSnapshot(entry.player);
     if (!locationSnapshot) {
-      return this.lodConfig.farStride;
+      return farStrideFor(entry);
     }
 
     const state = entry?.state;
@@ -347,7 +357,7 @@ class BotBehaviorTask extends Task {
       this.lodConfig.mediumDistanceTiles
     );
 
-    let stride = this.lodConfig.farStride;
+    let stride = farStrideFor(entry);
     if (bestChebyshevDistance <= this.lodConfig.mediumDistanceTiles) {
       stride = this.lodConfig.mediumStride;
     }
