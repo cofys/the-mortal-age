@@ -47,6 +47,7 @@ const { backgroundStep } = require("../lib/CitizenBackground");
 const { maybeSocialize, maybeGreetPlayer } = require("../chat/CitizenSocial");
 const SocialMechanics = require("../lib/CitizenSocialMechanics");
 const ActivityParties = require("../lib/CitizenActivityParties");
+const BossRuns = require("../lib/CitizenBossRuns");
 const CitizenBonds = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
@@ -805,6 +806,13 @@ class CitizenDirector {
       ActivityParties.tickParties(this, hour);
     } catch (error) {
       this.log("activity parties failed", { error: String(error?.message ?? error) });
+    }
+    // Autonomous boss runs: guard-led parties take on the Giant Mole in the
+    // Falador mole hole, split the loot, and head home. Data tier, zero LLM.
+    try {
+      BossRuns.tickBossRuns(this, hour);
+    } catch (error) {
+      this.log("boss runs failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {
