@@ -201,6 +201,28 @@ function completeQuestNow(player, quest, stage, stageIndex) {
     player.sendMessage(`Quest complete: ${quest.name}`);
   } catch { /* non-fatal */ }
   FollowUps.onQuestCompleted(player, quest, apiRef);
+  // Street news: citizens gossip about quest completions through the
+  // bonded gossip network (zero LLM, template forceChat, paced by the
+  // memory tick). Holderless seed — the first hop picks a citizen to
+  // carry it, same pattern as the skill rumors.
+  try {
+    const { getMemory, GOSSIP_QUEST } = require("../../citizens/lib/CitizenMemory");
+    const { playerName } = require("./QuestUtil");
+    const kingdomId = FollowUps.playerKingdomId(player);
+    const name = playerName(player);
+    if (kingdomId && name) {
+      getMemory().seedGossip({
+        kingdomId,
+        kind: GOSSIP_QUEST,
+        subject: name,
+        subjectDisplay: name,
+        text: `finished the quest "${quest.name}"!`,
+        holder: "",
+      });
+    }
+  } catch {
+    // Quests complete fine without the citizen layer.
+  }
   return {
     quest: {
       id: quest.id, name: quest.name, blurb: substitute(quest.blurb, vars),

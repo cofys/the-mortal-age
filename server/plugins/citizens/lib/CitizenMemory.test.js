@@ -9,7 +9,11 @@ const {
   GRUDGE_INSULT,
   GRUDGE_ATTACK,
   GOSSIP_THEFT,
+  GOSSIP_WEDDING,
+  GOSSIP_FEUD,
 } = require("./CitizenMemory");
+const { getKinship, resetKinshipForTests } = require("./CitizenKinship");
+const { setParty, clearParty } = require("./CitizenBonds");
 
 function fresh() {
   const store = new CitizenMemoryStore();
@@ -189,6 +193,147 @@ assert.equal(scoreTone(""), 0);
   }
   assert.equal(m2.getEntry("Maren", "Dave").spent, 750);
   assert.equal(m2.standing("Maren", "Dave", 5000), "regular");
+}
+
+// --- gossip network: news travels real bonds, never feuds ---
+{
+  const m = fresh();
+  resetKinshipForTests();
+  const now = Date.now();
+  getKinship().add("Maren", "Borin", "friend", "friend", "misthalin", now);
+  getKinship().add("Maren", "Sella", "feud", "cold", "misthalin", now);
+  const links = m.bondedGossipLinks("Maren").map((n) => n.toLowerCase());
+  assert.ok(links.includes("borin"), "bonded friend is a gossip link");
+  assert.ok(!links.includes("sella"), "feuds don't pass news");
+  assert.ok(!links.includes("maren"), "never self");
+  assert.deepEqual(m.bondedGossipLinks("Nobody"), [], "no ties -> empty, caller falls back");
+  assert.deepEqual(m.bondedGossipLinks(""), [], "empty holder -> empty");
+  resetKinshipForTests();
+}
+
+// --- gossip network: party members are gossip links ---
+{
+  const m = fresh();
+  setParty("Maren", { id: "ptest1", leader: "maren", members: ["maren", "tav"] });
+  const links = m.bondedGossipLinks("Maren").map((n) => n.toLowerCase());
+  assert.ok(links.includes("tav"), "party member is a gossip link");
+  assert.ok(!links.includes("maren"), "never self");
+  clearParty("Maren");
+}
+
+// --- gossip network: bonded chain, max 3 hops, then the rumor dies ---
+{
+  const m = fresh();
+  resetKinshipForTests();
+  const now = Date.now();
+  getKinship().add("Maren", "Borin", "friend", "friend", "misthalin", now);
+  getKinship().add("Borin", "Sella", "friend", "friend", "misthalin", now);
+  const members = new Map([["misthalin", ["Maren", "Borin", "Sella", "Tav"]]]);
+  m.seedGossip({
+    kingdomId: "misthalin",
+    kind: GOSSIP_THEFT,
+    subject: "Sneak",
+    text: "stole a pie, bold as brass!",
+    holder: "Maren",
+  });
+  const deps = { kingdomMembers: members }; // nobody online: silent hops only
+  let hops = 0;
+  for (let t = 0; t < 40 && m.gossip.length > 0; t++) {
+    m.gossip[0].lastHopAt -= 200_000;
+    const before = m.gossip[0].holder;
+    m.spreadGossipTick(deps, Date.now() + t * 1000);
+    if (m.gossip[0] && m.gossip[0].holder !== before) hops++;
+  }
+  assert.ok(hops > 0, "rumor hopped the bond chain");
+  assert.ok(hops <= 3, `max 3 hops, saw ${hops}`);
+  assert.equal(m.gossip.length, 0, "rumor dies after its hops");
+  resetKinshipForTests();
+}
+
+// --- gossip network: at most one rumor spoken aloud per tick ---
+{
+  const m = fresh();
+  const members = new Map([["misthalin", ["Maren", "Borin", "Sella"]]]);
+  const said = [];
+  const deps = {
+    kingdomMembers: members,
+    isOnline: () => true,
+    botFor: (n) => ({ forceChat: (line) => said.push({ n, line }) }),
+  };
+  const now = Date.now();
+  m.seedGossip({
+    kingdomId: "misthalin", kind: GOSSIP_WEDDING,
+    subject: "A+B", subjectDisplay: "Asha and Bor",
+    text: "were married at the square!", holder: "Maren",
+  });
+  m.seedGossip({
+    kingdomId: "misthalin", kind: GOSSIP_FEUD,
+    subject: "C+D", subjectDisplay: "Cai and Dov",
+    text: "had a blazing row!", holder: "Sella",
+  });
+  for (let t = 0; t < 6; t++) {
+    for (const r of m.gossip) r.lastHopAt -= 200_000;
+    const spoken = m.spreadGossipTick(deps, now + t * 60_000);
+    assert.ok(spoken.length <= 1, `tick ${t}: at most one spoken event`);
+  }
+  assert.ok(said.length <= 6, "server-wide cap holds across ticks");
+}
+
+// --- gossip network: per-event ~30min speak cooldown ---
+{
+  const m = fresh();
+  const members = new Map([["misthalin", ["Maren", "Borin"]]]);
+  const said = [];
+  const deps = {
+    kingdomMembers: members,
+    isOnline: () => true,
+    botFor: (n) => ({ forceChat: (line) => said.push({ n, line }) }),
+  };
+  const t0 = Date.now();
+  m.seedGossip({
+    kingdomId: "misthalin", kind: GOSSIP_WEDDING,
+    subject: "A+B", subjectDisplay: "Asha and Bor",
+    text: "were married at the square!", holder: "Maren",
+  });
+  m.gossip[0].lastHopAt = t0 - 200_000;
+  m.spreadGossipTick(deps, t0);
+  assert.equal(said.length, 1, "first eligible tick speaks once");
+  // A minute later the rumor hops again but stays silent.
+  m.gossip[0].lastHopAt = t0 - 200_000;
+  m.spreadGossipTick(deps, t0 + 60_000);
+  assert.equal(said.length, 1, "same event not repeated within 30 min");
+  // Past the cooldown it may speak again (loop past the 60% hop gate).
+  let spokeAgain = false;
+  for (let t = 0; t < 20 && !spokeAgain; t++) {
+    if (m.gossip.length === 0) break;
+    m.gossip[0].lastHopAt -= 200_000;
+    m.spreadGossipTick(deps, t0 + 31 * 60_000 + t * 60_000);
+    spokeAgain = said.length === 2;
+  }
+  assert.ok(spokeAgain, "event speakable again after ~30 min");
+}
+
+// --- gossip network: kind templates name the subject, no awkward grammar ---
+{
+  const m = fresh();
+  const members = new Map([["misthalin", ["Maren", "Borin"]]]);
+  const said = [];
+  const deps = {
+    kingdomMembers: members,
+    isOnline: () => true,
+    botFor: (n) => ({ forceChat: (line) => said.push({ n, line }) }),
+  };
+  m.seedGossip({
+    kingdomId: "misthalin", kind: GOSSIP_WEDDING,
+    subject: "A+B", subjectDisplay: "Asha and Bor",
+    text: "were married at the square!", holder: "Maren",
+  });
+  m.gossip[0].lastHopAt = Date.now() - 200_000;
+  m.spreadGossipTick(deps, Date.now());
+  assert.equal(said.length, 1);
+  assert.ok(said[0].line.includes("Asha and Bor"), "wedding line names the couple");
+  assert.ok(!/what .* did\?/.test(said[0].line), `no awkward grammar: ${said[0].line}`);
+  assert.ok(said[0].line.length <= 160, "forceChat length cap");
 }
 
 console.log("CitizenMemory.test.js: all checks passed");

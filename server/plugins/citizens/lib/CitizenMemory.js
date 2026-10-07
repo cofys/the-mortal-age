@@ -93,11 +93,32 @@ const GOSSIP_GENEROSITY = "generosity";
 const GOSSIP_OFFICE = "office";
 const GOSSIP_WEDDING = "wedding";
 const GOSSIP_FEUD = "feud";
+const GOSSIP_QUEST = "quest"; // a real player finished a quest — street news
 
-const GOSSIP_HOPS = 4; // how many social links a rumor travels
+const GOSSIP_HOPS = 3; // max hops: a rumor crosses at most 3 real social ties
 const GOSSIP_HOP_MIN_MS = 90 * 1000; // min time between hops
 const GOSSIP_MAX_AGE_MS = 6 * 3600 * 1000;
 const GOSSIP_SPEAK_COOLDOWN_MS = 10 * 60 * 1000; // per citizen, mirrors realm rumors
+// Per event: the same rumor is spoken aloud at most once per ~30 minutes,
+// no matter how many citizens end up carrying it.
+const GOSSIP_RUMOR_SPEAK_COOLDOWN_MS = 30 * 60 * 1000;
+
+// Citizen-to-citizen street talk. Zero LLM: template lines only, each naming
+// the subject (the "street-talk names the subject" invariant). {S} = subject
+// display, {T} = rumor text.
+const GOSSIP_SPEAK_LINES = {
+  wedding: ["Have you heard? {S} {T}", "Did you hear the news? {S} {T}"],
+  feud: ["Word is {S} {T}", "Heard about it? {S} {T}"],
+  office: ["Big news — {S} {T}", "Did you hear? {S} {T}"],
+  quest: ["Did you hear? {S} {T}", "Word travels fast — {S} {T}"],
+  default: ["Did you hear what {S} did? {T}", "Word is {S} — {T}"],
+};
+
+function gossipSpeakLine(kind, subjectDisplay, text) {
+  const pool = GOSSIP_SPEAK_LINES[kind] ?? GOSSIP_SPEAK_LINES.default;
+  const tpl = pool[Math.floor(Math.random() * pool.length)];
+  return tpl.replace("{S}", subjectDisplay).replace("{T}", text);
+}
 
 const FRIENDLY_WORDS = [
   "thank", "thanks", "please", "hello", "hi", "hey", "good", "great",
@@ -600,6 +621,7 @@ class CitizenMemoryStore {
       hops: GOSSIP_HOPS,
       createdAt: now,
       lastHopAt: now,
+      lastSpokeAt: 0, // per-event speak cooldown (persisted with the rumor)
     };
     this.gossip.push(entry);
     // The seed holder saw it first-hand — they "heard" it too.
@@ -632,23 +654,77 @@ class CitizenMemoryStore {
   }
 
   /**
+   * Real social ties for gossip: the holder's kinship bonds (friends, close
+   * friends, lovers — never feuds) plus their adventuring party, deduped.
+   * Returns [] when the holder has no real ties (or isn't a citizen at all,
+   * e.g. the office-herald seed holders); the caller falls back to the
+   * deterministic socialLinks in that case. News genuinely travels the
+   * relationship graph now, not a pseudo-random shuffle.
+   *
+   * Lazy requires, all guarded: this module sits below CitizenKinship in the
+   * load graph, so these must never run at require time.
+   */
+  bondedGossipLinks(holderName) {
+    const out = [];
+    const seen = new Set();
+    const self = normalizeName(holderName);
+    if (!self) return out;
+    const push = (n) => {
+      const k = normalizeName(n);
+      if (!k || k === self || seen.has(k)) return;
+      seen.add(k);
+      out.push(n);
+    };
+    try {
+      const { getKinship } = require("./CitizenKinship");
+      for (const { other, bond } of getKinship().of(holderName) ?? []) {
+        if (!bond || bond.type === "feud") continue; // feuds don't pass news
+        push(other);
+      }
+    } catch {
+      // Kinship unavailable: party/fallback still work.
+    }
+    try {
+      const { getParty } = require("./CitizenBonds");
+      const party = getParty(holderName);
+      for (const m of party?.members ?? []) push(m);
+    } catch {
+      // Party unavailable: fallback still works.
+    }
+    return out;
+  }
+
+  /**
    * One gossip-propagation step (called on the director's ~60s tick).
    * deps: { kingdomMembers: Map(kingdomId -> [username]),
    *         isOnline(username) -> bool, botFor(username) -> player|null }
    * Returns [{ speaker, line }] for citizens who said the rumor aloud.
+   *
+   * Pacing (all zero-LLM): rumors hop along the holder's REAL social ties
+   * (kinship bonds, then party, then deterministic fallback links), at most
+   * 3 hops; each rumor is spoken aloud at most once per ~30 minutes; and
+   * server-wide at most one rumor is spoken per tick (≤60/hr worst case).
+   * Rumors that don't get to speak still hop silently through memory.
    */
   spreadGossipTick(deps, now = Date.now()) {
     const spoken = [];
     const { kingdomMembers, isOnline, botFor } = deps ?? {};
     if (!kingdomMembers) return spoken;
     const live = [];
+    let spokeThisTick = false;
     for (const rumor of this.gossip) {
       if (now - rumor.createdAt > GOSSIP_MAX_AGE_MS || rumor.hops <= 0) continue;
       live.push(rumor);
       if (now - rumor.lastHopAt < GOSSIP_HOP_MIN_MS) continue;
       if (Math.random() > 0.6) continue;
       const members = kingdomMembers.get(rumor.kingdomId) ?? [];
-      const links = this.socialLinks(rumor.holderDisplay || rumor.holder, members);
+      const holderName = rumor.holderDisplay || rumor.holder;
+      // Real ties first: the holder tells their bonded friends and party.
+      // Holders with no ties (or non-citizen seed holders) fall back to the
+      // deterministic social links so every rumor can still travel.
+      const tied = this.bondedGossipLinks(holderName);
+      const links =
+        tied.length > 0 ? tied : this.socialLinks(holderName, members);
       if (links.length === 0) continue;
       const next = links[Math.floor(Math.random() * links.length)];
       // The link hears it — second-hand memory, even if they're offline.
@@ -660,14 +736,19 @@ class CitizenMemoryStore {
       this.dirty = true;
       // ...and if they're around, they say it where players can hear.
       if (
+        !spokeThisTick &&
         isOnline?.(next) &&
+        now - (rumor.lastSpokeAt ?? 0) >= GOSSIP_RUMOR_SPEAK_COOLDOWN_MS &&
         now - (this.lastGossipSpeakAt.get(rumor.holder) ?? 0) >= GOSSIP_SPEAK_COOLDOWN_MS
       ) {
         const bot = botFor?.(next);
-        const line = `Did you hear what ${rumor.subjectDisplay} did? ${rumor.text}`;
+        const line = gossipSpeakLine(rumor.kind, rumor.subjectDisplay, rumor.text);
         try {
           bot?.forceChat?.(line.slice(0, 160));
+          rumor.lastSpokeAt = now; // per-event ~30min cooldown, persisted
           this.lastGossipSpeakAt.set(rumor.holder, now);
+          this.dirty = true;
+          spokeThisTick = true;
           spoken.push({ speaker: next, line });
         } catch {
           // A silent citizen still spread the word.
@@ -806,6 +887,7 @@ module.exports = {
   GOSSIP_OFFICE,
   GOSSIP_WEDDING,
   GOSSIP_FEUD,
+  GOSSIP_QUEST,
   MOMENT_MET,
   MOMENT_HELPED,
   MOMENT_GIFT,
