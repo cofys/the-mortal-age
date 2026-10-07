@@ -123,6 +123,12 @@ function diagNotArrived(player, quest, stageIndex, pos, target) {
   } catch {
     return;
   }
+  // Only sample near the target (~3x radius, floor 24 tiles). buildPayload is
+  // polled every ~2s, so a once-ever log fires while the player is still at the
+  // quest-giver (~60 tiles away) and never records them standing at the gate.
+  const radius = target.r || 8;
+  const dist = Math.max(Math.abs(pos.x - target.x), Math.abs(pos.y - target.y));
+  if (dist > Math.max(radius * 3, 24)) return;
   const key = `${name}:${quest.id}:${stageIndex}`;
   if (arriveDiagLogged.has(key)) return;
   if (arriveDiagLogged.size > 200) arriveDiagLogged.clear();
