@@ -46,6 +46,7 @@ const { getJournal } = require("../lib/CitizenJournal");
 const { backgroundStep } = require("../lib/CitizenBackground");
 const { maybeSocialize, maybeGreetPlayer } = require("../chat/CitizenSocial");
 const SocialMechanics = require("../lib/CitizenSocialMechanics");
+const ActivityParties = require("../lib/CitizenActivityParties");
 const CitizenBonds = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
@@ -796,6 +797,14 @@ class CitizenDirector {
       maybeGreetPlayer(this, nowMs);
     } catch (error) {
       this.log("greet failed", { error: String(error?.message ?? error) });
+    }
+    // Autonomous activity parties: citizens form their own groups (fishing
+    // trips, market runs, work details, tavern nights), travel together,
+    // and split loot. Data tier, zero LLM.
+    try {
+      ActivityParties.tickParties(this, hour);
+    } catch (error) {
+      this.log("activity parties failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {
