@@ -613,15 +613,17 @@ function tickAlive(director, nowMs) {
       // Non-fatal.
     }
   }
-  // Prune position history for logged-out citizens (memory hygiene).
+  // Prune per-citizen cooldown maps for logged-out citizens (memory hygiene).
+  // These maps are keyed by username and would otherwise grow across
+  // spawn/despawn cycles. Memory-leak plug, 2026-10-07.
   try {
-    if (positionHistory.size > 500) {
-      const onlineNames = new Set();
-      for (const record of director.roster.values()) {
-        if (director.isOnline(record)) onlineNames.add(record.username);
-      }
-      for (const name of [...positionHistory.keys()]) {
-        if (!onlineNames.has(name)) positionHistory.delete(name);
+    const onlineNames = new Set();
+    for (const record of director.roster.values()) {
+      if (director.isOnline(record)) onlineNames.add(record.username);
+    }
+    for (const map of [positionHistory, lastGreetAt, lastEmoteReactAt]) {
+      for (const name of [...map.keys()]) {
+        if (!onlineNames.has(name)) map.delete(name);
       }
     }
   } catch {

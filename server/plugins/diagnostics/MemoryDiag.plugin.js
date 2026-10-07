@@ -76,7 +76,15 @@ function runDiagnosis() {
     try {
       const { getJournal } = require("../citizens/lib/CitizenJournal");
       const journal = getJournal?.();
-      report.journalCitizens = safeSize(journal?.records ?? journal?.store);
+      report.journalCitizens = safeSize(journal?.entries);
+      // Total journal events across all citizens
+      let totalEvents = 0;
+      try {
+        for (const rec of journal?.entries?.values?.() ?? []) {
+          totalEvents += rec?.events?.length ?? 0;
+        }
+      } catch {}
+      report.journalEvents = totalEvents;
     } catch (e) {
       report.journalError = String(e?.message ?? e).slice(0, 100);
     }
@@ -84,7 +92,7 @@ function runDiagnosis() {
     try {
       const { getMemory } = require("../citizens/lib/CitizenMemory");
       const mem = getMemory?.();
-      report.memoryCitizens = safeSize(mem?.records ?? mem?.store);
+      report.memoryCitizens = safeSize(mem?.citizens);
     } catch (e) {
       report.memoryError = String(e?.message ?? e).slice(0, 100);
     }

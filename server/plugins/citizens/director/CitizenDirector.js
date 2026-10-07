@@ -828,6 +828,14 @@ class CitizenDirector {
 
   logoutCitizen(record) {
     const bot = this.getBot(record);
+    // Unregister from the LLM gateway chat — the registration holds a
+    // buildContext closure per citizen. Without this, the interceptor's
+    // map retains entries for despawned citizens. Memory-leak plug, 2026-10-07.
+    try {
+      unregisterCitizenForChat(record.username);
+    } catch {
+      // Non-fatal — chat registration is best-effort.
+    }
     if (!bot) {
       record.online = false;
       record.currentActivityId = null;
