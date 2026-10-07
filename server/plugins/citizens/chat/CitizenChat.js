@@ -154,7 +154,8 @@ function onCitizenChatHeard(event) {
 function getDirectorKingdom(citizenUsername) {
   try {
     const { getDirector } = require("../director/CitizenDirector");
-    return getDirector()?.roster.get(citizenUsername)?.kingdomId ?? null;
+    const { normalizeName } = require("../lib/CitizenBonds");
+    return getDirector()?.roster.get(normalizeName(citizenUsername))?.kingdomId ?? null;
   } catch (error) {
     return null;
   }

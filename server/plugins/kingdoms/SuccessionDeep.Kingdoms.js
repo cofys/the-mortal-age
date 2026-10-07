@@ -184,7 +184,8 @@ function grantFragment(player, fragmentId) {
 function isMisthalinCitizen(citizenUsername) {
   try {
     const { getDirector } = require("../citizens/director/CitizenDirector");
-    const record = getDirector()?.roster.get(citizenUsername);
+    const { normalizeName } = require("../citizens/lib/CitizenBonds");
+    const record = getDirector()?.roster.get(normalizeName(citizenUsername));
     return record?.kingdomId === "misthalin";
   } catch {
     return false;
@@ -194,7 +195,8 @@ function isMisthalinCitizen(citizenUsername) {
 function citizenRole(citizenUsername) {
   try {
     const { getDirector } = require("../citizens/director/CitizenDirector");
-    return getDirector()?.roster.get(citizenUsername)?.role ?? null;
+    const { normalizeName } = require("../citizens/lib/CitizenBonds");
+    return getDirector()?.roster.get(normalizeName(citizenUsername))?.role ?? null;
   } catch {
     return null;
   }

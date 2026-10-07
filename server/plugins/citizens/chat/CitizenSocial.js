@@ -145,7 +145,8 @@ function maybeSocialize(director, nowMs = Date.now()) {
       for (const local of botA.getLocalPlayers?.() ?? []) {
         if (local === botA || isRealPlayer(local)) continue;
         const username = local.getUsername?.();
-        const rec = username ? director.roster.get(username) : null;
+        const { normalizeName } = require("../lib/CitizenBonds");
+        const rec = username ? director.roster.get(normalizeName(username)) : null;
         if (!rec || !director.isOnline(rec)) continue;
         botB = local;
         recordB = rec;

@@ -53,6 +53,7 @@ const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenBonds = require("../lib/CitizenBonds");
+const { normalizeName } = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
   ensureNeeds,
@@ -327,7 +328,10 @@ class CitizenDirector {
       currentActivityId: null,
       lastTickAt: Date.now(),
     };
-    this.roster.set(username, record);
+    // Roster keys are normalized (lowercase): every lib module looks citizens
+    // up via normalizeName, and mixed-case keys silently missed. The record
+    // keeps the raw display username.
+    this.roster.set(normalizeName(username), record);
     ensureNeeds(username); // needs survive logout; the director ticks them offline too
     return record;
   }
@@ -357,7 +361,7 @@ class CitizenDirector {
       return null;
     }
     let username = String(name);
-    if (this.roster.has(username) || this.usedNames.has(username)) {
+    if (this.roster.has(normalizeName(username)) || this.usedNames.has(username)) {
       this.log("named citizen rejected (name taken)", { name });
       return null;
     }
@@ -398,7 +402,7 @@ class CitizenDirector {
       lastTickAt: Date.now(),
       named: true,
     };
-    this.roster.set(username, record);
+    this.roster.set(normalizeName(username), record);
     ensureNeeds(username);
     this.log("named citizen added", { citizen: username, role, kingdom: kingdomId });
     return record;
@@ -900,11 +904,11 @@ class CitizenDirector {
         {
           kingdomMembers,
           isOnline: (username) => {
-            const record = director.roster.get(username);
+            const record = director.roster.get(normalizeName(username));
             return record ? director.isOnline(record) : false;
           },
           botFor: (username) => {
-            const record = director.roster.get(username);
+            const record = director.roster.get(normalizeName(username));
             return record ? director.getBot(record) : null;
           },
         },

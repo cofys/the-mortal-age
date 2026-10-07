@@ -464,9 +464,13 @@ function leaveParty(name) {
   const n = normalizeName(name);
   party.members = (party.members ?? []).filter((m) => m !== n);
   clearParty(name);
+  // Re-share the SAME object reference with every surviving member — the
+  // invariant createParty/joinParty establish. Spread copies here used to
+  // freeze stale state (members, phase, battleTicks) on the leader's copy
+  // and strand phantom members after the second offline drop.
   for (const m of party.members) {
     const mp = getParty(m);
-    if (mp && mp.id === party.id) setParty(m, { ...party });
+    if (mp && mp.id === party.id) setParty(m, party);
   }
   return true;
 }

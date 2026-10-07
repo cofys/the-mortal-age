@@ -160,7 +160,8 @@ function onWarEnded(event) {
     try {
       if (director) {
         director.logoutCitizen(record);
-        director.roster.delete(username);
+        const { normalizeName } = require("./lib/CitizenBonds");
+        director.roster.delete(normalizeName(username));
       }
     } catch {
       // One stranded refugee doesn't stop the peace.

@@ -73,7 +73,10 @@ function resolveArrive(player, arrive) {
 }
 
 /** First valid tile of a kingdom's patrol circuit (sites.json "patrol"). */
+const patrolTileCache = new Map(); // kingdomId -> tile|null
 function firstPatrolTile(kingdomId) {
+  if (patrolTileCache.has(kingdomId)) return patrolTileCache.get(kingdomId);
+  let tile = null;
   try {
     const path = require("path");
     const fs = require("fs");
@@ -86,12 +89,14 @@ function firstPatrolTile(kingdomId) {
     const circuit = raw?.[kingdomId]?.patrol;
     if (Array.isArray(circuit)) {
       const pt = circuit.find((t) => t && Number.isFinite(t.x) && Number.isFinite(t.y));
-      if (pt) return { x: pt.x, y: pt.y, z: pt.z ?? 0 };
+      if (pt) tile = { x: pt.x, y: pt.y, z: pt.z ?? 0 };
     }
   } catch {
     // fall through to square fallback
   }
-  return null;
+  // Cache even nulls: sites.json is static, and the client polls every 2s.
+  patrolTileCache.set(kingdomId, tile);
+  return tile;
 }
 
 function within(pos, target) {

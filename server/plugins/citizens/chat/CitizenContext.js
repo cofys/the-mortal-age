@@ -88,7 +88,8 @@ function getDirector() {
  */
 function buildContext(citizenUsername, speakerUsername) {
   const director = getDirector();
-  const record = director?.roster.get(citizenUsername);
+  const { normalizeName } = require("../lib/CitizenBonds");
+  const record = director?.roster.get(normalizeName(citizenUsername));
   if (!record) return "";
   const bot = director.getBot(record);
 

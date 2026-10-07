@@ -436,7 +436,7 @@ function recordCasualty(director, record, party, fieldName, rng) {
   try { clearParty(name); } catch { /* non-fatal */ }
   try { clearFollow(name); } catch { /* non-fatal */ }
   try { director.logoutCitizen(record); } catch { /* non-fatal */ }
-  try { director.roster.delete(record.username); } catch { /* non-fatal */ }
+  try { director.roster.delete(normalizeName(record.username)); } catch { /* non-fatal */ }
   // Keep the authoritative party copy honest, then push it to all survivors.
   if (Array.isArray(party.members)) {
     party.members = party.members.filter((m) => normalizeName(m) !== normalizeName(name));

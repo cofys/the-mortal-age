@@ -248,7 +248,7 @@ function ensureKeeper() {
     console.warn("[succession] keepers: no citizen director yet, will retry once");
     return false;
   }
-  if (director.roster.has(MARA_NAME)) return true;
+  if (director.roster.has(require("../citizens/lib/CitizenBonds").normalizeName(MARA_NAME))) return true;
   const record = director.addNamedCitizen(MARA_SPEC);
   if (record) {
     console.info("[succession] keepers: Mara Hartley joined Varrock", {
