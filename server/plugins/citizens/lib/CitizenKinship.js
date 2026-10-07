@@ -874,12 +874,15 @@ function tickFeudArguments(director, rng, now) {
 // --- ambient peer greetings ---------------------------------------------------
 /**
  * Friends, spouses and sweethearts who cross paths in the street greet each
- * other by name, sometimes trading a line back. Zero LLM: template lines
- * through forceChat. Bot-authored chat never reaches the gateway
+ * other by name, sometimes trading a line back — and same-party adventuring
+ * companions greet each other too, even without a kinship bond. The greeter
+ * waves (anim 1286) when the bot supports animations. Zero LLM: template
+ * lines through forceChat. Bot-authored chat never reaches the gateway
  * (onSocialPacket drops citizen speakers), so this costs nothing but pixels.
  * Feuds get shouting matches; everyone else gets warmth.
  *
- * Pacing: per-pair cooldown 20 min, server-wide max 1 event per tick.
+ * Pacing: per-pair cooldown 20 min (kinship bonds persist theirs in bond.data;
+ * party pairs gate in memory), server-wide max 1 event per tick.
  */
 const GREET_RANGE = 8;
 const GREET_COOLDOWN_MS = 20 * 60 * 1000;
@@ -913,7 +916,32 @@ const GREET_LINES = {
     "{B}! How's business?",
     "Alright, {B}?",
   ],
+  // Same-party adventuring companions who haven't formed a kinship bond yet.
+  party: [
+    "{B}! Still with us?",
+    "Ha! There's my party mate, {B}.",
+    "Oi {B}, stay close.",
+    "Good to see you, {B}. Ready?",
+  ],
 };
+
+const ANIM_WAVE = 1286; // wave emote (matches Emotes.plugin.js)
+
+// Party-pair greetings are cooldown-gated in memory only — no new save file.
+// Restarting the server just resets the 20-minute gate, which is harmless.
+const partyGreetCooldowns = new Map(); // pairKey -> lastGreetAt (ms)
+
+/** Wave at someone, if the bot supports animations. Silent no-op otherwise. */
+function playWave(director, bot) {
+  try {
+    const Anim = director?.api?.core?.Animation;
+    if (!Anim || !bot?.performAnimation) return false;
+    bot.performAnimation(new Anim(ANIM_WAVE));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const GREET_REPLIES = [
   "Hey {A}! Good to see you.",
@@ -932,6 +960,7 @@ function greetLinesFor(bond) {
   if (bond.type === BOND_ROMANCE) {
     return bond.stage === "married" ? GREET_LINES.married : GREET_LINES.courting;
   }
+  if (bond.stage === "party") return GREET_LINES.party;
   return bond.stage === "close" ? GREET_LINES.close : GREET_LINES.friend;
 }
 
@@ -964,6 +993,64 @@ function tickGreetReplies(director, now) {
   pendingGreetReplies = still;
 }
 
+/**
+ * Party-member pairs eligible for a greeting, independent of kinship bonds.
+ * Pairs that already share a kinship bond greet as kinship (handled by the
+ * main loop); open feuds never greet. Cooldown is per-pair, in-memory.
+ */
+function collectPartyPairs(director, now) {
+  const { getParty } = require("./CitizenBonds");
+  const kinship = getKinship();
+  const byParty = new Map(); // partyId -> [{ rec, name }]
+  for (const rec of director.roster.values()) {
+    const name = normalizeName(rec?.username ?? "");
+    if (!name) continue;
+    let party = null;
+    try {
+      party = getParty(name);
+    } catch {
+      continue;
+    }
+    if (!party?.id || !Array.isArray(party.members) || party.members.length < 2) continue;
+    if (!byParty.has(party.id)) byParty.set(party.id, []);
+    byParty.get(party.id).push({ rec, name });
+  }
+  const out = [];
+  for (const members of byParty.values()) {
+    // Parties cap at 5 members; pair enumeration is tiny and bounded.
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        const { rec: ra, name: a } = members[i];
+        const { rec: rb, name: b } = members[j];
+        if (kinship.bonds.has(pairKey(a, b))) continue; // covered by kinship loop
+        if (isOpenFeud(a, b)) continue;
+        if (now - (partyGreetCooldowns.get(pairKey(a, b)) ?? 0) < GREET_COOLDOWN_MS) continue;
+        const botA = botOf(director, ra);
+        const botB = botOf(director, rb);
+        if (!botA || !botB) continue;
+        let dist = Infinity;
+        try {
+          dist = botA.getLocation?.()?.getDistance?.(botB.getLocation?.()) ?? Infinity;
+        } catch {
+          continue;
+        }
+        if (dist > GREET_RANGE) continue;
+        out.push({
+          a,
+          b,
+          ra,
+          rb,
+          botA,
+          botB,
+          bond: { type: BOND_FRIEND, stage: "party" },
+          partyPair: true,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 function tickPeerGreetings(director, rng, now) {
   tickGreetReplies(director, now);
   const eligible = [];
@@ -984,12 +1071,19 @@ function tickPeerGreetings(director, rng, now) {
       continue;
     }
     if (dist > GREET_RANGE) continue;
-    eligible.push({ a, b, bond, ra, rb, botA, botB });
+    eligible.push({ a, b, bond, ra, rb, botA, botB, partyPair: false });
+  }
+  // Party members greet even without a kinship bond. Same server-wide
+  // throttle: both pools share the single pick below (1 event/tick max).
+  try {
+    for (const p of collectPartyPairs(director, now)) eligible.push(p);
+  } catch {
+    // Non-fatal: kinship greetings still fire.
   }
   if (eligible.length === 0) return;
   // One event per tick max: pick a random eligible pair, not always the first.
   const chosen = pick(rng, eligible.slice(0, 200));
-  const { a, b, bond, botA, botB } = chosen;
+  const { a, b, bond, botA, botB, partyPair } = chosen;
   const speakerFirst = chance(rng, 0.5);
   const greeter = speakerFirst ? botA : botB;
   const greeterKey = speakerFirst ? a : b;
@@ -1001,8 +1095,13 @@ function tickPeerGreetings(director, rng, now) {
   const db = firstNameOf(displayOf(greetedRec, greetedKey));
   const line = pick(rng, greetLinesFor(bond)).replace("{B}", db);
   say(greeter, line);
-  bond.data.lastGreetAt = now;
-  getKinship().touch(a, b, now);
+  playWave(director, greeter);
+  if (partyPair) {
+    partyGreetCooldowns.set(pairKey(a, b), now);
+  } else {
+    bond.data.lastGreetAt = now;
+    getKinship().touch(a, b, now);
+  }
   if (chance(rng, REPLY_CHANCE)) {
     pendingGreetReplies.push({
       a: greetedKey,
@@ -1039,6 +1138,9 @@ function tickKinship(director, hour, nowMs = Date.now()) {
   } catch { /* non-fatal */ }
   try {
     tickFeudArguments(director, rng, now);
+  } catch { /* non-fatal */ }
+  try {
+    tickPeerGreetings(director, rng, now);
   } catch { /* non-fatal */ }
   // `hour` is accepted for signature parity with the other tick modules.
   void hour;
