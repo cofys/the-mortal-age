@@ -51,7 +51,7 @@ function renderHistory(history) {
  *   toMemory: what this citizen remembers about the other (standing, past
  *   meetings) — strangers get a stranger's greeting, old friends get warmth.
  */
-function buildSpeakPrompt({ card, context, toName, toRole, toMemory, worldContext }) {
+function buildSpeakPrompt({ card, context, toName, toRole, toMemory, toKind, playerNote, worldContext }) {
   const systemParts = [
     worldContext || WORLD_GROUNDING,
     `Who you are: ${clampCard(card)}`,
@@ -63,12 +63,26 @@ function buildSpeakPrompt({ card, context, toName, toRole, toMemory, worldContex
   }
   const system = systemParts.join("\n\n");
 
-  let user =
-    `You notice ${toName}, ${toRole ?? "a fellow citizen"}, nearby. ` +
-    (toMemory ? `${toMemory} ` : "") +
-    `Say something to them — a greeting, an observation, a question, a joke, ` +
-    `a complaint, whatever fits your mood. 1-2 short sentences, like a real ` +
-    `player typing. Speak directly, no narration, no asterisks.`;
+  let user;
+  if (toKind === "player") {
+    // A citizen notices a REAL player nearby and speaks first: a greeting,
+    // a comment, a reaction. This is what makes the world feel alive.
+    const note = String(playerNote ?? "").trim();
+    user =
+      `You notice ${toName}, a real traveler, nearby. ` +
+      (toMemory ? `${toMemory} ` : "") +
+      (note ? `${note} ` : "") +
+      `Say something to them — greet them by name if you know them, comment ` +
+      `on the day or what you see, whatever fits your mood. 1 short sentence, ` +
+      `like a real player typing. Speak directly, no narration, no asterisks.`;
+  } else {
+    user =
+      `You notice ${toName}, ${toRole ?? "a fellow citizen"}, nearby. ` +
+      (toMemory ? `${toMemory} ` : "") +
+      `Say something to them — a greeting, an observation, a question, a joke, ` +
+      `a complaint, whatever fits your mood. 1-2 short sentences, like a real ` +
+      `player typing. Speak directly, no narration, no asterisks.`;
+  }
 
   const inputTokens = estimateTokens(system) + estimateTokens(user);
   return {

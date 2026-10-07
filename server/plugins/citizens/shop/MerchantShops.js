@@ -29,6 +29,7 @@
 
 const {
   ATTR_CITIZEN_ROLE,
+  ATTR_CITIZEN_PERSONALITY,
   ATTR_WARE_ITEM,
   ATTR_WARE_PRICE,
   ROLE_MERCHANT,
@@ -508,11 +509,24 @@ function openStall(api, player, merchant) {
   const playerName = player.getUsername?.() ?? "?";
   memory.recordMeeting(merchantName, playerName);
   const multiplier = memory.priceMultiplier(merchantName, playerName);
+  // Personality haggles too: greedy merchants drive a harder bargain,
+  // easygoing ones give a little slack. Reads the merchant's seeded
+  // personality — the same person every session.
+  let haggleEdge = 1;
+  let haggleNote = null;
+  try {
+    const { humanizerProfile } = require("../lib/humanizer");
+    const personality = merchant.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+    haggleEdge = humanizerProfile(personality).haggleEdge ?? 1;
+    if (haggleEdge > 1.01) haggleNote = "drives a hard bargain";
+  } catch {
+    // Fall through with no markup.
+  }
   const priceNote =
-    multiplier < 1 ? "loyalty discount" : multiplier > 1 ? "cold prices" : null;
+    multiplier < 1 ? "loyalty discount" : multiplier > 1 ? "cold prices" : haggleNote;
   const pricedWares = wares.map((ware) => ({
     ...ware,
-    price: Math.max(1, Math.round(ware.price * multiplier)),
+    price: Math.max(1, Math.round(ware.price * multiplier * haggleEdge)),
     priceNote,
   }));
   const greeting = memory.greetingFor(merchantName, playerName);

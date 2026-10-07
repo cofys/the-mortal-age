@@ -49,6 +49,61 @@ const QUIRKS = Object.freeze([
   "keeps a lucky rabbit's foot",
 ]);
 
+// --- voice: how a citizen SOUNDS. Seeded like traits, so the same citizen
+// always talks the same way. A gruff guard and a chatty merchant should be
+// unmistakable in chat even without their names attached. -------------------
+
+const SPEECH_STYLES = Object.freeze([
+  "short clipped sentences",
+  "long winding sentences",
+  "plain blunt words",
+  "colorful flowery words",
+  "a slow drawl",
+  "rapid-fire chatter",
+  "careful formal phrasing",
+  "rough street slang",
+]);
+
+const HUMOR_STYLES = Object.freeze([
+  "dry understatement",
+  "bawdy jokes",
+  "deadpan one-liners",
+  "terrible puns",
+  "dark gallows humor",
+  "warm teasing",
+  "no humor at all — everything is serious",
+  "sarcasm",
+]);
+
+const VOCABULARIES = Object.freeze([
+  "simple everyday words",
+  "colorful vivid words",
+  "educated precise words",
+  "rough coarse words",
+]);
+
+const DEMEANORS = Object.freeze([
+  "warm and open",
+  "guarded and watchful",
+  "bold and brash",
+  "nervous and fidgety",
+  "haughty and proud",
+  "gentle and soft-spoken",
+  "weary and world-tired",
+  "mischievous and sly",
+]);
+
+const MANNERISMS = Object.freeze([
+  "clear your throat before speaking",
+  "speak through a half-smile",
+  "gesture broadly with both hands",
+  "mumble the ends of your sentences",
+  "raise one eyebrow when amused",
+  "spit to the side when annoyed",
+  "laugh a little too loud",
+  "pause a long moment before answering",
+]);
+
 function pick(rng, list) {
   return list[Math.floor(rng() * list.length)];
 }
@@ -91,32 +146,62 @@ function generatePersonality(username, { role, kingdomId, usedNames } = {}) {
     kingdomId: kingdomId ?? null,
     traits: pickUnique(rng, TRAITS, 2),
     quirk: pick(rng, QUIRKS),
+    // Voice — deterministic per username, so the citizen always sounds
+    // like themselves across sessions.
+    speechStyle: pick(rng, SPEECH_STYLES),
+    humorStyle: pick(rng, HUMOR_STYLES),
+    vocabulary: pick(rng, VOCABULARIES),
+    demeanor: pick(rng, DEMEANORS),
+    mannerism: pick(rng, MANNERISMS),
     seed: Math.floor(rng() * 1_000_000_000),
   };
 }
 
-/** Short plain-English card for the llm-gateway (llm:citizen-register). */
+/** The "how you talk" line — the part that makes two citizens sound different.
+ * Kept to ~2 short sentences so the card stays under the gateway's 480-char
+ * clamp with the behavioral core intact. */
+function voiceLine(personality) {
+  const speech = personality.speechStyle ?? "plain blunt words";
+  const vocab = personality.vocabulary ?? "simple everyday words";
+  const humor = personality.humorStyle ?? "no humor at all — everything is serious";
+  const demeanor = personality.demeanor ?? "guarded and watchful";
+  return (
+    `You talk in ${speech}, using ${vocab}. ` +
+    `Your humor is ${humor}; you come across ${demeanor}.`
+  );
+}
+
+/** Short plain-English card for the llm-gateway (llm:citizen-register).
+ * Stays under the gateway's 480-char clamp: the behavioral core ("Never
+ * break character") sits before the optional secret so clamping can only
+ * ever trim secret detail, never instructions. */
 function personalityCard(personality, kingdomName, kingdomSituation) {
   const traits = (personality.traits ?? []).join(" and ");
   return (
     `You are ${personality.name}, a ${personality.role} of ${kingdomName ?? "no kingdom"}. ` +
-    `You are ${traits}. You ${personality.quirk}. ` +
+    `You are ${traits}. Quirk: ${personality.quirk}. ` +
+    `How you talk: ${voiceLine(personality)} ` +
     (kingdomSituation ? `Your land: ${kingdomSituation} ` : "") +
+    "Speak plainly and briefly, like a busy person with work to do. " +
+    "You do not know everything and you say so. Never break character. " +
     (personality.secret
       ? `You carry a secret you almost never speak of: ${personality.secret} ` +
         "You deflect questions about it — change the subject, laugh it off, walk away. " +
         "You never blurt it out. You only hint at it if you truly trust the speaker, and trust is earned slowly. "
-      : "") +
-    "The gods are silent and no one knows why; you have your own theory but you are not sure. " +
-    "You speak plainly and briefly, like a busy person with work to do. " +
-    "You do not know everything and you say so. Never break character."
+      : "")
   ).slice(0, 2000);
 }
 
 module.exports = {
   TRAITS,
   QUIRKS,
+  SPEECH_STYLES,
+  HUMOR_STYLES,
+  VOCABULARIES,
+  DEMEANORS,
+  MANNERISMS,
   generatePersonality,
   generateName,
+  voiceLine,
   personalityCard,
 };

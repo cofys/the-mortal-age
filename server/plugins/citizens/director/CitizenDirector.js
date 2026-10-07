@@ -44,7 +44,7 @@ const { registerCitizenForChat } = require("../chat/CitizenChat");
 const { getMemory } = require("../lib/CitizenMemory");
 const { getJournal } = require("../lib/CitizenJournal");
 const { backgroundStep } = require("../lib/CitizenBackground");
-const { maybeSocialize } = require("../chat/CitizenSocial");
+const { maybeSocialize, maybeGreetPlayer } = require("../chat/CitizenSocial");
 const SocialMechanics = require("../lib/CitizenSocialMechanics");
 const CitizenBonds = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
@@ -385,6 +385,8 @@ class CitizenDirector {
       watch: 0,
       goal: nextGoalForRole(role, 0),
       goalTier: 0,
+      // Emotional weather (see lib/emotions.js): how they FEEL right now.
+      emotion: { state: "calm", intensity: 0, cause: null, updatedAt: 0 },
       online: false,
       currentActivityId: null,
       lastTickAt: Date.now(),
@@ -787,6 +789,13 @@ class CitizenDirector {
       maybeSocialize(this, nowMs);
     } catch (error) {
       this.log("socialize failed", { error: String(error?.message ?? error) });
+    }
+    // Unprompted greetings: citizens notice real players and sometimes speak
+    // first. Same two-tier rule — only when the player is actually there.
+    try {
+      maybeGreetPlayer(this, nowMs);
+    } catch (error) {
+      this.log("greet failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {

@@ -22,7 +22,7 @@
 
 const { getMemory } = require("../lib/CitizenMemory");
 const { buildContext } = require("./CitizenContext");
-const { agentRng, chance } = require("../lib/humanizer");
+const { agentRng, chance, humanizerProfile } = require("../lib/humanizer");
 const {
   ACTIVITY_TAVERN_SOCIAL,
   ACTIVITY_LEISURE_STROLL,
@@ -41,6 +41,19 @@ const MAX_THREADS = 8; // concurrent foreground conversations, world-wide
 const STARTER_COOLDOWN_MS = 30 * 60 * 1000; // a citizen starts a chat at most every 30 min
 const OVERHEAR_RADIUS = 18; // a real player within this many tiles makes it "worth" LLM
 const TICK_CHANCE = 0.10; // per eligible citizen per ~60s tick
+
+// --- unprompted greetings: citizens notice real players ---------------------
+// A citizen with a real player nearby sometimes speaks FIRST to the player:
+// a greeting, a comment, a reaction. Same two-tier rule — only when the
+// player is actually there to hear it. Quota-safe: long cooldowns, few per
+// tick, lite tier.
+const GREET_RADIUS = 10; // tiles — close enough to actually talk to
+const GREET_TICK_CHANCE = 0.06; // per eligible citizen per ~60s tick
+const GREET_CITIZEN_COOLDOWN_MS = 20 * 60 * 1000; // a citizen greets at most every 20 min
+const GREET_PLAYER_COOLDOWN_MS = 5 * 60 * 1000; // a player is greeted at most every 5 min
+const MAX_GREETS_PER_TICK = 2;
+const lastGreetAt = new Map(); // citizen username -> timestamp
+const lastGreetedPlayerAt = new Map(); // player name -> timestamp
 
 let pluginApi = null;
 const threads = new Map(); // threadId -> { a, b, turn, maxTurns, startedAt }
@@ -211,8 +224,145 @@ function onSocialChatResponse(payload) {
   });
 }
 
+/** Cheap distance check between two entities (same plane, Chebyshev). */
+function withinTiles(a, b, radius) {
+  try {
+    const la = a.getLocation?.();
+    const lb = b.getLocation?.();
+    if (!la || !lb || la.getZ() !== lb.getZ()) return false;
+    return Math.max(Math.abs(la.getX() - lb.getX()), Math.abs(la.getY() - lb.getY())) <= radius;
+  } catch {
+    return false;
+  }
+}
+
+/** A player mid-fight doesn't want small talk. */
+function playerBusy(player) {
+  try {
+    if (player.inCombat?.() === true) return true;
+    if (player.busy?.() === true) return true;
+  } catch {
+    // Assume free on error — a missed greet is worse than a mistimed one.
+  }
+  return false;
+}
+
+/**
+ * What a citizen can see about a player at a glance: gear and bearing.
+ * Defensive — anything that throws just yields "a traveler".
+ */
+function gearNote(player) {
+  try {
+    const equipment = player.getEquipment?.();
+    const items = equipment?.getItems?.() ?? [];
+    let worn = 0;
+    let weaponName = null;
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      const id = item?.getId?.() ?? item?.id ?? null;
+      if (Number.isInteger(id) && id > 0) {
+        worn += 1;
+        if (i === 3 && weaponName === null) {
+          // Weapon slot — the most visible thing a person carries.
+          try {
+            weaponName =
+              pluginApi?.core?.ItemDefinition?.forId?.(id)?.getName?.() ?? null;
+          } catch {
+            weaponName = null;
+          }
+        }
+      }
+    }
+    if (weaponName) return `They carry a ${String(weaponName).toLowerCase()}.`;
+    if (worn >= 6) return "They're well-armed and armored.";
+    if (worn >= 3) return "They're geared for the road.";
+    if (worn >= 1) return "They're lightly geared.";
+    return "They're traveling light.";
+  } catch {
+    return "They're a traveler passing through.";
+  }
+}
+
+/**
+ * Unprompted greetings: citizens notice real players and sometimes speak
+ * first — a greeting, a comment on the day, a reaction to the player's
+ * gear. Called on the director tick, right after maybeSocialize.
+ *
+ * Jon's two-tier rule applies: only when the player is actually there.
+ * Personality gates it — nervous/guarded citizens almost never initiate,
+ * warm/chatty ones do. Long cooldowns keep it rare and quota-safe.
+ */
+function maybeGreetPlayer(director, nowMs = Date.now()) {
+  if (!pluginApi || !director) return;
+  const rng = agentRng(`greet:${Math.floor(nowMs / 60000)}`);
+  let greets = 0;
+
+  for (const record of director.roster.values()) {
+    if (greets >= MAX_GREETS_PER_TICK) break;
+    if (!director.isOnline(record)) continue;
+    if (nowMs - (lastGreetAt.get(record.username) ?? 0) < GREET_CITIZEN_COOLDOWN_MS) continue;
+
+    // Personality gates initiation: the bold greet, the nervous don't.
+    let sociability = 1;
+    try {
+      sociability = humanizerProfile(record.personality).sociability ?? 1;
+    } catch {
+      sociability = 1;
+    }
+    if (!chance(rng, GREET_TICK_CHANCE * sociability)) continue;
+
+    const bot = director.getBot(record);
+    if (!bot) continue;
+
+    // Nearest real player in talking range.
+    let target = null;
+    try {
+      for (const local of bot.getLocalPlayers?.() ?? []) {
+        if (local === bot || !isRealPlayer(local)) continue;
+        if (!withinTiles(bot, local, GREET_RADIUS)) continue;
+        if (playerBusy(local)) continue;
+        const name = local.getUsername?.();
+        if (!name) continue;
+        if (nowMs - (lastGreetedPlayerAt.get(name) ?? 0) < GREET_PLAYER_COOLDOWN_MS) continue;
+        target = local;
+        break;
+      }
+    } catch {
+      continue;
+    }
+    if (!target) continue;
+
+    const playerName = target.getUsername();
+    lastGreetAt.set(record.username, nowMs);
+    lastGreetedPlayerAt.set(playerName, nowMs);
+    greets += 1;
+
+    try {
+      const memory = getMemory();
+      memory.recordMeeting(record.username, playerName);
+    } catch {
+      // Memory must never break greetings.
+    }
+
+    pluginApi.emitCustomEvent("llm:speak-request", {
+      citizenUsername: record.username,
+      toKind: "player",
+      toUsername: playerName,
+      toRole: "traveler",
+      toMemory: memoryLine(record.username, playerName),
+      playerNote: gearNote(target),
+      context: buildContext(record.username, playerName),
+    });
+    pluginApi.log?.("[citizens] greeted player", {
+      citizen: record.username,
+      player: playerName,
+    });
+  }
+}
+
 module.exports = {
   initCitizenSocial,
   maybeSocialize,
+  maybeGreetPlayer,
   onSocialChatResponse,
 };

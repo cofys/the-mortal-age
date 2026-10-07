@@ -49,6 +49,37 @@ function onlineBots(kingdomId, role = null) {
   }
 }
 
+/**
+ * Shift every roster citizen of the given kingdoms toward an emotion.
+ * Guards are trained for war — they scare less, anger more. Everyone else
+ * feels the news like a civilian. Pass `roles` to limit to certain roles.
+ * Data tier only; the LLM reads it later.
+ */
+function shiftKingdomEmotion(kingdomIds, state, civilianIntensity, cause, guardIntensity = null, roles = null) {
+  let director = null;
+  try {
+    director = getDirector();
+  } catch {
+    return;
+  }
+  if (!director?.roster) return;
+  const { shiftEmotion } = require("./lib/emotions");
+  const { ROLE_GUARD } = require("./constants");
+  for (const record of director.roster.values()) {
+    if (!kingdomIds.includes(record.kingdomId)) continue;
+    if (roles && !roles.includes(record.role)) continue;
+    const intensity =
+      record.role === ROLE_GUARD && guardIntensity != null
+        ? guardIntensity
+        : civilianIntensity;
+    try {
+      shiftEmotion(record, state, intensity, cause);
+    } catch {
+      // One citizen's feelings never break realm reactions.
+    }
+  }
+}
+
 /** A townsfolk repeats the spymaster's rumor where players can hear it. */
 function onKingdomRumor(event) {
   const kingdomId = event?.kingdomId;
@@ -66,6 +97,10 @@ function onKingdomRumor(event) {
     speaker.forceChat?.(String(text).slice(0, 120));
   } catch {
     // A silent citizen is fine; the rumor still happened.
+  }
+  // Dark rumors unsettle the streets.
+  if (/war|invasion|plague|assassin|vampyre/i.test(String(text))) {
+    shiftKingdomEmotion([kingdomId], "scared", 40, "dark rumors in the streets", 25);
   }
 }
 
@@ -136,6 +171,8 @@ function onWageDay(event) {
     for (const guard of guards) {
       addMood(guard, -10); // unpaid and unhappy
     }
+    // The treasury stiffed payday — the guards feel it personally.
+    shiftKingdomEmotion([kingdomId], "angry", 50, "the treasury stiffed payday", 50, [ROLE_GUARD]);
     return 0;
   }
   const provisioners = onlineBots(kingdomId, ROLE_MERCHANT).filter((bot) => {
@@ -166,6 +203,8 @@ function onWageDay(event) {
       // Dinner can wait; the wage itself landed.
     }
   }
+  // Payday pride — the whole watch walks a little taller.
+  shiftKingdomEmotion([kingdomId], "proud", 0, null, 40, [ROLE_GUARD]);
   return total;
 }
 
@@ -264,6 +303,8 @@ function onSkirmish(event) {
   const location = event?.location ?? "the border marches";
   const aName = kingdomName(a);
   const bName = kingdomName(b);
+  // Blood on the border rattles the streets; guards go grim, not scared.
+  shiftKingdomEmotion([a, b], "scared", 55, `after the skirmish at ${location}`, 30);
   speakFear(
     [a, b],
     [
@@ -282,6 +323,8 @@ function onWarDeclaredFear(event) {
   if (!a || !b) return;
   const aName = kingdomName(a);
   const bName = kingdomName(b);
+  // War shakes everyone; guards feel the weight of the levy, not panic.
+  shiftKingdomEmotion([a, b], "scared", 75, `war declared — ${aName} marches on ${bName}`, 45);
   speakFear(
     [a, b],
     [
@@ -330,6 +373,8 @@ function onWarEndedRelief(event) {
   if (!a || !b) return;
   const aName = kingdomName(a);
   const bName = kingdomName(b);
+  // Relief floods the streets — even the guards breathe again.
+  shiftKingdomEmotion([a, b], "excited", 50, `the war between ${aName} and ${bName} is over`, 40);
   speakFear(
     [a, b],
     [

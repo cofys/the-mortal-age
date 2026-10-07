@@ -26,6 +26,7 @@ const {
 } = require("../constants");
 const { getMemory } = require("../lib/CitizenMemory");
 const { getJournal } = require("../lib/CitizenJournal");
+const { emotionLine } = require("../lib/emotions");
 
 const ACTIVITY_WORDS = Object.freeze({
   [ACTIVITY_GUARD_PATROL]: "on guard patrol",
@@ -111,6 +112,14 @@ function buildContext(citizenUsername, speakerUsername) {
     if (needs.hunger != null && needs.hunger < 25) parts.push("You are starving.");
     else if (needs.hunger != null && needs.hunger < 45) parts.push("Your stomach is growling.");
     if (needs.energy != null && needs.energy < 25) parts.push("You are exhausted.");
+  }
+
+  // Emotional weather: war news, arguments, festivals leave marks that fade.
+  try {
+    const feeling = emotionLine(record);
+    if (feeling) parts.push(feeling);
+  } catch {
+    // Emotions must never break the chat path.
   }
 
   // What they're working toward.

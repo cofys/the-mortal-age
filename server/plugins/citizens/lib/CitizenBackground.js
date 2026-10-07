@@ -24,6 +24,7 @@
 const { getJournal } = require("./CitizenJournal");
 const { getMemory } = require("./CitizenMemory");
 const { agentRng, chance } = require("./humanizer");
+const { shiftEmotion, decayEmotion } = require("./emotions");
 
 function pick(rng, list) {
   return list[Math.floor(rng() * list.length)];
@@ -134,6 +135,13 @@ function backgroundStep(record, director, online) {
   const memory = getMemory();
   const traits = new Set(record.personality?.traits ?? []);
 
+  // Emotional gravity: feelings fade every tick unless refreshed.
+  try {
+    decayEmotion(record);
+  } catch {
+    // Emotions must never break the background tick.
+  }
+
   // Offline citizens: mostly quiet domestic life, occasional event.
   if (!online) {
     if (chance(rng, 0.25)) {
@@ -150,18 +158,24 @@ function backgroundStep(record, director, online) {
   if (chance(rng, 0.45)) {
     const templates = WORK_EVENTS[record.role] ?? WORK_EVENTS[ROLE_COMMONER];
     const other = randomOther(rng, director, record);
+    const coins = 10 + Math.floor(rng() * 200);
+    const goods = pick(rng, GOODS[record.role] ?? GOODS[ROLE_COMMONER]);
     journal.log(
       record.username,
       "worked",
       fill(pick(rng, templates), {
         place: pick(rng, PLACES),
-        goods: pick(rng, GOODS[record.role] ?? GOODS[ROLE_COMMONER]),
+        goods,
         n: 1 + Math.floor(rng() * 8),
-        coins: 10 + Math.floor(rng() * 200),
+        coins,
         other: other?.personality?.name ?? other?.username ?? "a stranger",
       }),
       other ? { with: other.username } : {}
     );
+    // A fat sale day makes a merchant walk tall.
+    if (record.role === ROLE_MERCHANT && coins >= 150) {
+      shiftEmotion(record, "proud", 45, "after a fat sale");
+    }
   }
 
   // Social event (the lifeblood — relationships evolve from these).
@@ -175,6 +189,10 @@ function backgroundStep(record, director, online) {
       });
       journal.log(record.username, "chatted", text, { with: other.username });
       journal.log(other.username, "chatted", text, { with: record.username });
+      // A good laugh lifts the mood.
+      if (/[Ll]augh|drink/.test(text)) {
+        shiftEmotion(record, "excited", 30, "after a good laugh");
+      }
       // Warm the relationship both ways (small, data-only).
       try {
         memory.recordTone(record.username, other.username, 1);
@@ -191,12 +209,20 @@ function backgroundStep(record, director, online) {
   if (chance(rng, 0.06)) {
     const other = randomOther(rng, director, record);
     if (other) {
+      const topic = pick(rng, ARGUE_TOPICS);
       const text = fill(pick(rng, ARGUE_EVENTS), {
         other: other.personality?.name ?? other.username,
-        topic: pick(rng, ARGUE_TOPICS),
+        topic,
       });
       journal.log(record.username, "argued", text, { with: other.username });
       journal.log(other.username, "argued", text, { with: record.username });
+      // Arguments leave people angry; talk of war leaves them scared.
+      const otherName = other.personality?.name ?? other.username;
+      if (/war|gods/.test(topic)) {
+        shiftEmotion(record, "scared", 50, `after arguing about ${topic}`);
+      } else {
+        shiftEmotion(record, "angry", 55, `after arguing with ${otherName}`);
+      }
       try {
         memory.recordTone(record.username, other.username, -2);
         memory.recordTone(other.username, record.username, -2);

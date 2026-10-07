@@ -77,6 +77,7 @@ function chance(rng, p) {
  */
 function humanizerProfile(personality) {
   const traits = new Set(personality?.traits ?? []);
+  const demeanor = String(personality?.demeanor ?? "");
   return {
     // Log-normal sigma for timing: fidgety citizens vary more.
     tempoSigma: traits.has("fidgety") ? 1.0 : traits.has("methodical") ? 0.45 : 0.7,
@@ -88,6 +89,28 @@ function humanizerProfile(personality) {
     chatRate: traits.has("chatty") ? 1.6 : traits.has("taciturn") ? 0.4 : 1.0,
     // Stranger-challenge eagerness (guards).
     challengeRate: traits.has("suspicious") ? 1.5 : traits.has("easygoing") ? 0.5 : 1.0,
+    // Haggling edge: greedy merchants drive harder bargains (price markup
+    // multiplier), easygoing ones give a little slack. Used by merchant stalls.
+    haggleEdge:
+      traits.has("greedy") ? 1.15 : traits.has("easygoing") || traits.has("cheerful") ? 0.95 : 1.0,
+    // Risk tolerance: bold/brash citizens push further — guards challenge
+    // more, commoners roam wider. Nervous ones play it safe.
+    riskTolerance:
+      demeanor.includes("bold") || demeanor.includes("brash")
+        ? 1.4
+        : traits.has("suspicious")
+          ? 1.2
+          : demeanor.includes("nervous") || demeanor.includes("soft-spoken")
+            ? 0.7
+            : 1.0,
+    // Sociability: who starts conversations. Nervous/guarded citizens almost
+    // never initiate; chatty/warm ones do.
+    sociability:
+      demeanor.includes("nervous") || demeanor.includes("guarded")
+        ? 0.4
+        : traits.has("chatty") || demeanor.includes("warm")
+          ? 1.5
+          : 1.0,
   };
 }
 

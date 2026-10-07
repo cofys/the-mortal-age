@@ -119,7 +119,7 @@ class Gateway {
    * otherwise the background journal already recorded that they talked.
    */
   async handleSpeakRequest(payload) {
-    const { citizenUsername, toUsername, toRole, toMemory, context, threadId } = payload ?? {};
+    const { citizenUsername, toUsername, toRole, toMemory, toKind, playerNote, context, threadId } = payload ?? {};
     if (!citizenUsername || !toUsername) return;
 
     const startedAt = Date.now();
@@ -136,6 +136,8 @@ class Gateway {
       toName: toUsername,
       toRole: toRole ?? "a fellow citizen",
       toMemory: toMemory ?? null,
+      toKind: toKind ?? null,
+      playerNote: playerNote ?? null,
     });
 
     const result = await this.chain.complete(prompt);
