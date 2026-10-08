@@ -139,6 +139,7 @@ const { tickFarmfolk } = require("../lib/CitizenFarmers2");
 const { tickMoneyfolk } = require("../lib/CitizenBankers2");
 const { tickErrandfolk } = require("../lib/CitizenCouriers2");
 const { tickHerbfolk } = require("../lib/CitizenHerbalists2");
+const { tickGlassfolk } = require("../lib/CitizenGlassblowers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2342,6 +2343,19 @@ class CitizenDirector {
       tickHerbfolk(this, nowMs);
     } catch (error) {
       this.log("herbfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen glassfolk (CitizenGlassblowers2): bottle collectors buying up
+    // empties, cullet sorters grading broken glass for remelt, sand carriers
+    // hauling silica, and bottle washers for the taverns — the amateur
+    // street economy of the glass trade under the nose of the professional
+    // glassblowers (CitizenGlassblowers), who are excluded; this owns sand
+    // sources, taverns, bottle-pickup requests, pro-glassware small talk and
+    // sand-delay / tavern-smash set-pieces. LOD-gated via brainTickDue
+    // inside (near-band citizens always due). Data tier, zero LLM.
+    try {
+      tickGlassfolk(this, nowMs);
+    } catch (error) {
+      this.log("glassfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
