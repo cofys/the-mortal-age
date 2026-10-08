@@ -11,6 +11,7 @@ const {
   chronicleEventsFor,
   recentChronicles,
   legendPreservedFor,
+  preservedLegendFor,
   librarianNoteFor,
   requestReading,
   readingFor,
@@ -27,6 +28,8 @@ const {
   isRealPlayer,
   withinTiles,
   HISTORIAN_TYPES,
+  CHRONICLE_LINES,
+  LEDGER_ACK_LINES,
   _resetState,
 } = require("./CitizenHistorians");
 
@@ -184,5 +187,123 @@ assert.equal(chatLines2.length, 0, "no output at 03:00");
 tickHistorians({}, Date.now());
 tickHistorians(null, Date.now());
 assert.equal(chatLines.length > 0, true);
+
+// --- Rung 2: real-API wiring + in-world acknowledgment ---
+const Journal = require("./CitizenJournal");
+const Rumors = require("./CitizenRumors");
+const { isHobbyVisible } = require("./CitizenPrimaryHobby");
+
+// A username whose hobby visibility passes (deterministic, hash-based).
+function visibleHistorian(base) {
+  for (let i = 0; i < 500; i++) {
+    const name = base + i;
+    if (isHobbyVisible(name, "historian")) return name;
+  }
+  throw new Error("no visible historian username found");
+}
+// A local-noon timestamp whose deterministic chronicle roll does (or does
+// not) fire the once-per-archive-per-day chronicle moment.
+function chronicleDay(username, wantFire) {
+  const archive = archiveFor({ username, kingdomId: "misthalin" });
+  for (let d = 0; d < 400; d++) {
+    const ms = new Date(2026, 9, 8 + d, 12, 0).getTime();
+    const rng = seededRng(hashStr("chronicle:" + archive.name + ":" + dayNumber(ms)));
+    if ((rng() < 0.1) === wantFire) return ms;
+  }
+  throw new Error("no suitable chronicle day found");
+}
+
+// 19. The chronicle moment writes via CitizenJournal.log (the REAL journal
+// API — addEntry does not exist) and seeds via the REAL
+// seedRumor(rng, event) signature (a bare string is a silent no-op).
+_resetState();
+Journal.getJournal().resetForTests();
+Rumors.resetForTests();
+const rumorName = visibleHistorian("RumorHistorian");
+const rumorMs = chronicleDay(rumorName, true);
+const chatR = [];
+const citR = {
+  getLocation: () => fakeLoc(200, 200, 0),
+  forceChat: (s) => chatR.push(s),
+  getUsername: () => rumorName,
+};
+const dirR = {
+  roster: new Map([[rumorName, { username: rumorName, role: "commoner", kingdomId: "misthalin" }]]),
+  playerFor: () => citR,
+  onlinePlayers: () => [{ getLocation: () => fakeLoc(201, 200, 0), getUsername: () => "RealHuman2" }],
+};
+Math.random = () => 0.0;
+try {
+  tickHistorians(dirR, rumorMs);
+} finally {
+  Math.random = origRandom;
+}
+const recentR = Journal.getJournal().recent(rumorName, 5);
+assert.ok(
+  recentR.some((e) => e.text.includes("entered today's chronicle")),
+  "chronicle moment must journalize through log()"
+);
+const seeded = [...Rumors._activeRumors.values()].filter((r) => r.seedKind === "chronicle");
+assert.ok(seeded.length > 0, "chronicle moment must seed a real rumor");
+assert.ok(seeded.some((r) => r.truth.who === rumorName), "rumor holder is the historian");
+assert.ok(chatR.length > 0, "chronicle moment should speak");
+assert.ok(chatR.every((l) => l.length <= 120), "every spoken chronicle line <=120 chars");
+
+// 20. A nearby player with a pending reading/account/commission gets a
+// scripted in-world answer (the ledgers finally talk back).
+const ackCases = [
+  ["reading", "read today's entry", (n, ms) => requestReading(n, "misthalin", ms)],
+  ["account", "entered in the annals", (n, ms) => contributeAccount(n, "I saw the dragon fly over at dawn.", ms)],
+  ["commission", "commissioned history is underway", (n, ms) => commissionHistory(n, "my family line", ms)],
+];
+for (const [kind, snippet, setup] of ackCases) {
+  _resetState();
+  const cname = visibleHistorian("AckHistorian" + kind);
+  const ms = chronicleDay(cname, false); // no chronicle moment: the ack branch must run
+  const pname = "LedgerPlayer" + kind;
+  setup(pname, ms);
+  const lines = [];
+  const cit = {
+    getLocation: () => fakeLoc(300, 300, 0),
+    forceChat: (s) => lines.push(s),
+    getUsername: () => cname,
+  };
+  const dir = {
+    roster: new Map([[cname, { username: cname, role: "commoner", kingdomId: "misthalin" }]]),
+    playerFor: () => cit,
+    onlinePlayers: () => [{ getLocation: () => fakeLoc(301, 300, 0), getUsername: () => pname }],
+  };
+  Math.random = () => 0.0;
+  try {
+    tickHistorians(dir, ms);
+  } finally {
+    Math.random = origRandom;
+  }
+  assert.ok(
+    lines.some((l) => l.includes(snippet)),
+    `expected a ${kind} acknowledgment, got ${JSON.stringify(lines)}`
+  );
+  assert.ok(lines.every((l) => l.length <= 120), "ack lines <=120 chars");
+}
+
+// 21. Every filled chronicle line stays within the 120-char convention.
+for (const kid of ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"]) {
+  const ch = chronicleFor(kid, new Date(2026, 9, 8, 12, 0).getTime());
+  for (const e of ch.entries) {
+    for (const t of CHRONICLE_LINES) {
+      const s = fill(t, { kingdom: ch.kingdom, entry: e });
+      assert.ok(s.length <= 120, `chronicle line too long (${s.length}): ${s}`);
+    }
+  }
+}
+for (const l of Object.values(LEDGER_ACK_LINES)) assert.ok(l.length <= 120);
+
+// 22. preservedLegendFor returns { legend, text }; the string wrapper matches.
+_resetState();
+const pl = preservedLegendFor("misthalin", new Date(2026, 9, 8, 12, 0).getTime());
+assert.ok(pl === null || (typeof pl.legend === "string" && typeof pl.text === "string"));
+if (pl) {
+  assert.equal(legendPreservedFor("misthalin", new Date(2026, 9, 8, 12, 0).getTime()), pl.text);
+}
 
 console.log("CitizenHistorians: all tests passed");

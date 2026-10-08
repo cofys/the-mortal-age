@@ -109,9 +109,10 @@ const RECORD_LINES = {
 };
 
 const CHRONICLE_LINES = [
-  "The chronicle of {kingdom} for today is written: {entry}.",
+  // Kept short: filled with {kingdom} (<=13) + {entry} (<=75) these stay <=120.
   "Recorded this day in {kingdom}: {entry}.",
-  "*taps the new chronicle page* Today's entry for {kingdom}: {entry}.",
+  "Today's {kingdom} chronicle: {entry}.",
+  "*taps the page dry* {kingdom}: {entry}.",
 ];
 
 const READ_LINES = [
@@ -144,7 +145,7 @@ const ROUTINE_ENTRIES = [
   "the watch reported a quiet night, the walls held, and the lamps were lit on time",
   "the council sat through the morning session with no quarrels worth recording",
   "rain fell on the fields and the farmers smiled, which the chronicle duly notes",
-  "a flock of swallows returned to the eaves of {archive}, which the old ones count lucky",
+  "a flock of swallows returned to the eaves, which the old ones count lucky",
   "the blacksmiths' quarter rang from dawn to dusk and no apprentices were singed",
   "the fishing boats came in full and the gulls were bribed with the usual offal",
   "the tax grain was tallied twice and the clerks agreed for once",
@@ -337,15 +338,32 @@ function journalize(citizen, text) {
   try {
     const j = journalEvent();
     const name = citizen?.getUsername?.() ?? citizen?.username;
-    if (j && name) j.addEntry?.(name, text);
+    // CitizenJournal's real API is log(name, kind, text) — there is no
+    // addEntry method (mentors2 lesson: wire the real function, not a name
+    // that reads right). The old call was a silent no-op, so the historians'
+    // "written record" was never actually written.
+    if (j && name) j.log?.(name, "historian", text);
   } catch { /* cosmetic */ }
 }
 
-/** Best-effort rumor seed; never throws. */
-function seedRumor(text) {
+/**
+ * Best-effort rumor seed; never throws.
+ * CitizenRumors' real signature is seedRumor(rng, { kind, who, what, where,
+ * holder }) — a bare string seed silently returns null, so build the event.
+ */
+function seedRumor(citizen, what, where) {
   try {
     const fn = seedRumorFn();
-    if (fn) fn(text);
+    const name = citizen?.getUsername?.() ?? citizen?.username;
+    if (fn && name && what) {
+      fn(Math.random, {
+        kind: "chronicle",
+        who: String(name),
+        what: String(what),
+        where: where ? String(where) : undefined,
+        holder: String(name),
+      });
+    }
   } catch { /* cosmetic */ }
 }
 
@@ -373,6 +391,7 @@ function chronicleEventsFor() {
     ["siege", "the walls stood a siege"],
     ["birth", "a child was born"],
     ["fire", "fire took a building"],
+    ["chronicle", "the day's chronicle was duly entered"],
   ];
   const found = [];
   try {
@@ -433,9 +452,9 @@ function recentChronicles(kingdomId, dateMs) {
 /**
  * A lorekeeper's preserving-of-legends moment: pulls today's oral legends
  * from the storytellers module (lazy bridge) and frames them as written
- * record; derived, zero storage.
+ * record; derived, zero storage. Returns { legend, text } or null.
  */
-function legendPreservedFor(kingdomId, dateMs) {
+function preservedLegendFor(kingdomId, dateMs) {
   try {
     const storytellers = require("./CitizenStorytellers");
     if (typeof storytellers.recentLegends !== "function") return null;
@@ -447,10 +466,15 @@ function legendPreservedFor(kingdomId, dateMs) {
     const rng = seededRng(hashStr("legendpreserve:" + kingdomId + ":" + dayNumber(dateMs)));
     const legend = pickOne(rng, legends);
     const frame = pickOne(rng, LEGEND_FRAMES);
-    return fill(frame, { legend });
+    return { legend, text: fill(frame, { legend }) };
   } catch {
     return null;
   }
+}
+
+/** The framed preserving text, or null (string wrapper for the LLM tier). */
+function legendPreservedFor(kingdomId, dateMs) {
+  return preservedLegendFor(kingdomId, dateMs)?.text ?? null;
 }
 
 /**
@@ -526,6 +550,41 @@ function commissionFor(playerName, nowMs = Date.now()) {
   pruneLedgers(nowMs);
   const rec = commissions.get(name);
   return rec ? rec.subject : null;
+}
+
+// === Ledger acknowledgments (in-world answers to real player requests) ===
+// The ledgers above are the data tier; without this, a player who requests
+// a reading, contributes an account, or commissions a history never hears
+// a word back in-world. Scripted, zero LLM, all <=120 chars.
+const LEDGER_ACK_LINES = {
+  reading: "You asked for the chronicle, friend. Gather round while I read today's entry.",
+  account: "Your account is entered in the annals now, word for word.",
+  commission: "Your commissioned history is underway; the archives yield slowly.",
+};
+
+/**
+ * A nearby real player with a pending ledger entry, or null.
+ * Checked before the routine branches so real requests get real answers.
+ * Does not consume the ledger — the LLM dialogue tier still owns the
+ * actual reading / account quoting / commission delivery.
+ */
+function pendingLedgerFor(director, citizen, radius, nowMs = Date.now()) {
+  try {
+    pruneLedgers(nowMs);
+    const players = director.onlinePlayers?.() ?? [];
+    for (const p of players) {
+      if (!isRealPlayer(p)) continue;
+      if (!withinTiles(citizen, p, radius)) continue;
+      const name = normalizeName(p.getUsername?.());
+      if (!name) continue;
+      if (reads.has(name)) return { kind: "reading", playerName: name };
+      if (accounts.has(name)) return { kind: "account", playerName: name };
+      if (commissions.has(name)) return { kind: "commission", playerName: name };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================================
@@ -615,7 +674,16 @@ function doHistorianWork(director, record, citizen, type, nowMs) {
     });
     citizen.forceChat?.(line);
     journalize(citizen, `entered today's chronicle at ${archive.name}`);
-    seedRumor(`The historians at ${archive.name} have written today's chronicle of ${ch.kingdom}.`);
+    seedRumor(citizen, `wrote today's chronicle of ${ch.kingdom}`, archive.name);
+    return;
+  }
+
+  // A nearby player with a pending ledger entry gets a personal answer
+  // before any routine flavor — real requests deserve real replies.
+  const pending = pendingLedgerFor(director, citizen, HISTORIAN_RADIUS, nowMs);
+  if (pending && Math.random() < 0.6) {
+    citizen.forceChat?.(LEDGER_ACK_LINES[pending.kind]);
+    journalize(citizen, `answered a ${pending.kind} request from ${pending.playerName} at ${archive.name}`);
     return;
   }
 
@@ -631,11 +699,11 @@ function doHistorianWork(director, record, citizen, type, nowMs) {
     const note = librarianNoteFor(record.username, kid, nowMs);
     if (note) journalize(citizen, `${note} (via the librarians' catalog)`);
   } else if (type === HISTORIAN_LOREKEEPER) {
-    const preserved = legendPreservedFor(kid, nowMs);
+    const preserved = preservedLegendFor(kid, nowMs);
     if (preserved) {
       citizen.forceChat?.("*copies a fading legend into the permanent record*");
-      journalize(citizen, preserved);
-      seedRumor(preserved);
+      journalize(citizen, preserved.text);
+      seedRumor(citizen, `preserved the fading legend of ${preserved.legend}`, archive.name);
     } else {
       const line = pickOne(Math.random, RECORD_LINES[type]);
       citizen.forceChat?.(line);
@@ -660,6 +728,7 @@ module.exports = {
   chronicleEventsFor,
   recentChronicles,
   legendPreservedFor,
+  preservedLegendFor,
   librarianNoteFor,
   requestReading,
   readingFor,
@@ -682,6 +751,8 @@ module.exports = {
   HISTORIAN_ARCHIVIST,
   HISTORIAN_GENEALOGIST,
   HISTORIAN_LOREKEEPER,
+  CHRONICLE_LINES,
+  LEDGER_ACK_LINES,
   ARCHIVES,
   // Test seam:
   _resetState() {
