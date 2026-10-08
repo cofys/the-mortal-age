@@ -37,6 +37,7 @@ const { initMarketRegistrar } = require("./shop/MarketRegistrar.Shops");
 const attachWarRefugees = require("./WarRefugees");
 const { onPlayerLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
 const { onNpcKillWitnessed } = require("./StreetSpectacle");
+const { onLogoutFarewell } = require("./StreetFarewells");
 const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
@@ -487,6 +488,11 @@ function onKillWitnessed(event) {
   onNpcKillWitnessed(event);
 }
 
+/** A player logged out within earshot: the street bids them farewell. */
+function onFarewellSeen(event) {
+  onLogoutFarewell(event);
+}
+
 /** A friend logged in: citizen friends light up and say they missed them. */
 function onFriendLoggedIn(event) {
   try {
@@ -536,6 +542,7 @@ module.exports = {
     api.onNpcDeath(onKillWitnessed);
     api.onPlayerLogin(onFriendLoggedIn);
     api.onPlayerLogout(onFriendLoggedOut);
+    api.onPlayerLogout(onFarewellSeen);
     api.onCustomEvent("thieving:success", onThievingWitnessed);
     api.onSocialPacket(onCitizenSocialPacket);
     api.registerCommand(
