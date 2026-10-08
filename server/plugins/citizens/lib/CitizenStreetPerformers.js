@@ -445,7 +445,7 @@ function tickPerformers(director, nowMs = Date.now()) {
 
 function getDirectorSafe() {
   try {
-    return require("./director/CitizenDirector").getDirector?.() ?? null;
+    return require("../director/CitizenDirector").getDirector?.() ?? null;
   } catch {
     return null;
   }
