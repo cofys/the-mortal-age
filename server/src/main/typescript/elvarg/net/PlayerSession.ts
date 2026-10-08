@@ -530,6 +530,17 @@ export class PlayerSession {
     };
   }
 
+  /**
+   * The update path must never trust the shape of a queued animation: a raw
+   * id or partial duck-type (e.g. from a misbehaving plugin) used to throw
+   * here and abort the whole actor-update view for the player. Drop it instead.
+   */
+  private isAnimationViewable(animation: any): boolean {
+    return animation != null &&
+      typeof animation.getId === "function" &&
+      typeof animation.getDelay === "function";
+  }
+
   private createActorUpdates(actor: any, maxHitpoints: number, mine: boolean): ActorUpdateView {
     const flags = actor.getUpdateFlag();
     const hits = flags.flagged(Flag.HIT) ? actor.getTickHits() : [];
@@ -545,7 +556,7 @@ export class PlayerSession {
       interactionIndex: flags.flagged(Flag.ENTITY_INTERACTION)
         ? this.interactionIndex(interaction)
         : undefined,
-      animation: flags.flagged(Flag.ANIMATION) && animation
+      animation: flags.flagged(Flag.ANIMATION) && this.isAnimationViewable(animation)
         ? { id: animation.getId(), delay: animation.getDelay() }
         : undefined,
       graphics: flags.flagged(Flag.GRAPHIC) ? this.graphicViews(graphic, actor.getSlotGraphics?.()) : undefined,

@@ -232,3 +232,42 @@ describe("tickEmoteReactions", () => {
     assert.doesNotThrow(() => _tickEmoteReactions(director, record, bot, Date.now()));
   });
 });
+
+describe("playAnim — 2026-10-08 playtest crash regression", () => {
+  const { _playAnim } = require("./CitizenAlive");
+
+  function directorWithAnim() {
+    return {
+      api: {
+        core: {
+          Animation: class {
+            constructor(id) { this.id = id; }
+            getId() { return this.id; }
+            getDelay() { return 0; }
+            getPriority() { return 0; }
+          },
+        },
+      },
+    };
+  }
+
+  it("passes a real Animation object (with getId/getDelay), never a raw id", () => {
+    let received = null;
+    const bot = fakeBot({ performAnimation: (a) => { received = a; } });
+    const ok = _playAnim(directorWithAnim(), bot, 861);
+    assert.equal(ok, true);
+    assert.equal(typeof received.getId, "function", "must have getId()");
+    assert.equal(typeof received.getDelay, "function", "must have getDelay()");
+    assert.equal(received.getId(), 861);
+    // The exact shape PlayerSession.createActorUpdates reads:
+    assert.doesNotThrow(() => ({ id: received.getId(), delay: received.getDelay() }));
+  });
+
+  it("returns false and never touches the bot when the engine Animation class is unavailable", () => {
+    let called = false;
+    const bot = fakeBot({ performAnimation: () => { called = true; } });
+    const ok = _playAnim({ api: { core: {} } }, bot, 861);
+    assert.equal(ok, false);
+    assert.equal(called, false);
+  });
+});

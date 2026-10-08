@@ -14,6 +14,7 @@ const {
   isRealPlayer,
   withinTiles,
   HERBALIST_RADIUS,
+  _playAnim,
 } = require("./CitizenHerbalists");
 
 // Deterministic LCG — coverage is exact, not luck-based.
@@ -188,4 +189,33 @@ check("tick fires near real player", () => {
   assert.ok(journals.length > 0, "work was journaled");
 });
 
-console.log(`\n${n}/16 checks passed`);
+console.log(`\n${n}/18 checks passed`);
+
+// 17-18. 2026-10-08 playtest crash regression: playAnim must pass a real
+// engine Animation (getId AND getDelay), never a partial duck-type, because
+// PlayerSession.createActorUpdates reads both in the player-view update path.
+check("playAnim passes a real Animation object", () => {
+  class FakeAnim {
+    constructor(id) { this.id = id; }
+    getId() { return this.id; }
+    getDelay() { return 0; }
+    getPriority() { return 0; }
+  }
+  const director = { api: { core: { Animation: FakeAnim } } };
+  let received = null;
+  const citizen = { performAnimation: (a) => { received = a; } };
+  const ok = _playAnim(director, citizen, 363);
+  assert.equal(ok, true);
+  assert.equal(typeof received.getId, "function");
+  assert.equal(typeof received.getDelay, "function");
+  assert.equal(received.getId(), 363);
+  assert.doesNotThrow(() => ({ id: received.getId(), delay: received.getDelay() }));
+});
+
+check("playAnim is a no-op without the engine Animation class", () => {
+  let called = false;
+  const citizen = { performAnimation: () => { called = true; } };
+  const ok = _playAnim({ api: { core: {} } }, citizen, 363);
+  assert.equal(ok, false);
+  assert.equal(called, false);
+});

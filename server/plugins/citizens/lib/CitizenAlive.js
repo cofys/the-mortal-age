@@ -160,9 +160,20 @@ function citizenBotsNear(director, bot, radius) {
   return out;
 }
 
-function playAnim(bot, animId) {
+/**
+ * Play a REAL engine Animation on the bot.
+ *
+ * A raw numeric id (or a partial duck-type) stored via performAnimation
+ * corrupts the actor update path: PlayerSession.createActorUpdates calls
+ * animation.getId()/getDelay() and a non-Animation throws, aborting that
+ * player's whole view update (playtest crash 2026-10-08). Always wrap.
+ */
+function playAnim(director, bot, animId) {
   try {
-    bot.performAnimation?.(animId);
+    if (!animId) return false;
+    const Anim = director?.api?.core?.Animation;
+    if (!Anim || !bot?.performAnimation) return false;
+    bot.performAnimation(new Anim(animId));
     return true;
   } catch {
     return false;
@@ -290,7 +301,7 @@ function tickIdleLife(director, record, bot, nowMs) {
   const emoteChance = IDLE_EMOTE_CHANCE * (profile.tempoSigma > 0.8 ? 1.8 : 1.0);
   if (chance(rng, emoteChance)) {
     const anims = [IDLE_ANIMS.stretch, IDLE_ANIMS.lookAround, IDLE_ANIMS.yawn];
-    playAnim(bot, pickOne(rng, anims));
+    playAnim(director, bot, pickOne(rng, anims));
   }
 
   // Small observations, only when watched (nobody monologues to an empty room).
@@ -305,7 +316,7 @@ function tickIdleLife(director, record, bot, nowMs) {
   // Rare expressive emote for high-sociability citizens.
   if (watched && profile.sociability > 1.2 && chance(rng, 0.02)) {
     const emotes = [EMOTES.wave, EMOTES.cheer, EMOTES.shrug];
-    playAnim(bot, pickOne(rng, emotes));
+    playAnim(director, bot, pickOne(rng, emotes));
   }
 
   // Stretch legs: stationary citizens occasionally wander a few tiles.
@@ -574,7 +585,7 @@ function tickEmoteReactions(director, record, bot, nowMs) {
     if (!playerTile || !myTile || chebyshev(myTile, playerTile) > EMOTE_REACT_RADIUS) continue;
 
     lastEmoteReactAt.set(name, nowMs);
-    playAnim(bot, reaction);
+    playAnim(director, bot, reaction);
     faceToward(bot, playerTile);
     if (line) {
       try {
@@ -676,4 +687,5 @@ module.exports = {
   _tickSocialAwareness: tickSocialAwareness,
   _tickImperfections: tickImperfections,
   _tickEmoteReactions: tickEmoteReactions,
+  _playAnim: playAnim,
 };

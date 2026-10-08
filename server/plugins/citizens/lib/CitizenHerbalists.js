@@ -299,11 +299,15 @@ const LESSON_OFFER = [
 // Engine actions (best-effort, never throw)
 // ============================================================================
 
-/** Play an animation on the citizen bot, best-effort. */
-function playAnim(citizen, animId) {
+/** Play an animation on the citizen bot, best-effort. Real engine Animation only. */
+function playAnim(director, citizen, animId) {
   try {
-    citizen.performAnimation?.({ getId: () => animId });
-  } catch { /* cosmetic only */ }
+    if (!animId) return false;
+    const Anim = director?.api?.core?.Animation;
+    if (!Anim || !citizen?.performAnimation) return false;
+    citizen.performAnimation(new Anim(animId));
+    return true;
+  } catch { /* cosmetic only */ return false; }
 }
 
 /** Force a chat line above the citizen's head, best-effort. */
@@ -336,7 +340,7 @@ function doGather(director, record, citizen, nowMs) {
       return s / 4294967296;
     };
   })();
-  playAnim(citizen, type.anim);
+  playAnim(director, citizen, type.anim);
   const emotes = type.anim === ANIM_PREP ? PREP_EMOTES : GATHER_EMOTES;
   forceChat(citizen, pickOne(rng, emotes));
   journal(
@@ -449,4 +453,6 @@ module.exports = {
   withinTiles,
   hashStr,
   HERBALIST_RADIUS,
+  // exposed for tests
+  _playAnim: playAnim,
 };
