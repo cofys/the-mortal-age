@@ -283,6 +283,19 @@ function isCitizenBot(player) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Canonical replacement for the dead director.playerFor: only materialize
+ * when the director says the citizen is online.
+ */
+function materializedBot(director, record) {
+  try {
+    return director?.isOnline?.(record) ? director.getBot?.(record) ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cheap Chebyshev distance check (same plane). */
 function withinTiles(a, b, radius) {
   try {
@@ -456,22 +469,47 @@ function cuttingFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// === Journal access (lazy require — CitizenJournal may not load in tests) ===
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch { /* journal absent */ }
+  }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+/**
+ * Journal a gemfolk work event. Canonical: getJournal().log(citizenName,
+ * "work", text) — the old helper probed appendEntry/addEntry, which don't
+ * exist, so all 5 call sites silently dropped. Journal is best-effort.
+ */
+function journalize(citizenName, text) {
+  try {
+    journal()?.log(citizenName, "work", text);
+  } catch {
+    /* journal absent — never break the tick */
+  }
+}
+
+/** Seed a masterpiece-unveiling rumor into the real CitizenRumors system. */
+function seedMasterpieceRumor(who, piece, workshopName) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
-  } catch { /* rumors absent */ }
+    if (typeof rumors.seedRumor === "function") {
+      rumors.seedRumor(Math.random, {
+        kind: "gem-masterpiece",
+        who,
+        what: `a masterpiece ${piece} unveiled at ${workshopName}`,
+        where: workshopName,
+      });
+    }
+  } catch {
+    /* rumors absent */
+  }
 }
 
 // ============================================================================
@@ -495,7 +533,7 @@ function tickGemfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Workshop hours only
@@ -523,8 +561,9 @@ function tickGemfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director; // director.playerFor/onlinePlayers are dead; proximity comes from the bot.
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -548,8 +587,8 @@ function doGemfolkWork(director, record, citizen, type, nowMs) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(pickOne(Math.random, UNVEIL_LINES), { piece: mp });
       citizen.forceChat?.(line);
-      journalize(citizen, `unveiled a masterpiece at ${workshop.name}: ${mp}`);
-      seedRumor(`A masterpiece ${mp} unveiled at ${workshop.name}!`);
+      journalize(name, `unveiled a masterpiece at ${workshop.name}: ${mp}`);
+      seedMasterpieceRumor(name, mp, workshop.name);
       return;
     }
   }
@@ -559,13 +598,13 @@ function doGemfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.4) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     citizen.forceChat?.(line);
-    journalize(citizen, `worked at ${workshop.name}`);
+    journalize(name, `worked at ${workshop.name}`);
   } else if (roll < 0.65) {
     const projects = projectsFor(name, record.kingdomId, nowMs);
     const piece = projects.length ? projects[0] : "a polished stone";
     const line = fill(pickOne(Math.random, FINISH_LINES), { piece });
     citizen.forceChat?.(line);
-    journalize(citizen, `finished ${piece} at ${workshop.name}`);
+    journalize(name, `finished ${piece} at ${workshop.name}`);
   } else if (roll < 0.8) {
     if (type === GEMFOLK_APPRAISER) {
       const line = pickOne(Math.random, APPRAISE_LINES);
@@ -574,11 +613,11 @@ function doGemfolkWork(director, record, citizen, type, nowMs) {
       const line = pickOne(Math.random, COMMISSION_LINES);
       citizen.forceChat?.(line);
     }
-    journalize(citizen, `offered services at ${workshop.name}`);
+    journalize(name, `offered services at ${workshop.name}`);
   } else {
     const line = pickOne(Math.random, LESSON_LINES);
     citizen.forceChat?.(line);
-    journalize(citizen, `offered cutting lessons at ${workshop.name}`);
+    journalize(name, `offered cutting lessons at ${workshop.name}`);
   }
 }
 

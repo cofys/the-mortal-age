@@ -33,16 +33,29 @@ function mockPlayer(name, x, y, isBot = false) {
     _chats: chats,
   };
 }
+/** Citizen bot mock — real-API shape: proximity comes from the bot, not the director. */
+function mockBot(name, x, y, players) {
+  const chats = [];
+  return {
+    getUsername: () => name,
+    isPlayerBot: () => true,
+    getHostAddress: () => "bot",
+    getLocation: () => mockLocation(x, y),
+    getLocalPlayers: () => players || [],
+    forceChat: (m) => chats.push(m),
+    _chats: chats,
+  };
+}
+/** Director mock — real-API shape: isOnline/getBot (playerFor/onlinePlayers are dead). */
 function mockDirector(records, players) {
   const roster = new Map(records.map((r) => [r.username, r]));
   const bots = new Map();
   return {
     roster,
-    playerFor: (rec) => {
-      if (!bots.has(rec.username)) bots.set(rec.username, mockPlayer(rec.username, 100, 100, true));
-      return bots.get(rec.username);
-    },
-    onlinePlayers: () => players,
+    isOnline: (rec) => bots.has(rec.username),
+    getBot: (rec) => bots.get(rec.username) || null,
+    _bots: bots,
+    _players: players,
   };
 }
 function fresh() {
@@ -261,10 +274,12 @@ function fresh() {
   }
   assert.ok(gemName, "found a gemfolk citizen");
   const rec = { username: gemName, role: "commoner", kingdomId: "misthalin" };
-  // Near a real player, in hours, chance forced to pass.
+  // Near a real player, in hours, chance forced to pass. Proximity is wired
+  // through the bot (real-API shape): the human is near.
   const director = mockDirector([rec], [mockPlayer("Jon", 102, 102, false)]);
+  director._bots.set(rec.username, mockBot(rec.username, 100, 100, [mockPlayer("Jon", 102, 102, false)]));
   withFixedRandom(0.05, () => S.tickGemfolk(director, T0));
-  const bot = director.playerFor(rec);
+  const bot = director._bots.get(rec.username);
   assert.ok(bot._chats.length > 0, "tick fires near a real player");
   console.log("tick fires near real player: PASS");
 }
@@ -276,15 +291,17 @@ function fresh() {
     if (S.gemfolkTypeOf({ username: nm, role: "commoner", kingdomId: "misthalin" })) gemName = nm;
   }
   const rec = { username: gemName, role: "commoner", kingdomId: "misthalin" };
-  // Bots only: silent.
+  // Bots only: silent. A citizen bot is near, but no real player.
   const director = mockDirector([rec], [mockPlayer("BotBob", 102, 102, true)]);
+  director._bots.set(rec.username, mockBot(rec.username, 100, 100, [mockPlayer("BotBob", 102, 102, true)]));
   withFixedRandom(0.05, () => S.tickGemfolk(director, T0));
-  assert.equal(director.playerFor(rec)._chats.length, 0, "silent near bots only");
+  assert.equal(director._bots.get(rec.username)._chats.length, 0, "silent near bots only");
   // Outside hours: silent.
   fresh();
   const director2 = mockDirector([rec], [mockPlayer("Jon", 102, 102, false)]);
+  director2._bots.set(rec.username, mockBot(rec.username, 100, 100, [mockPlayer("Jon", 102, 102, false)]));
   withFixedRandom(0.05, () => S.tickGemfolk(director2, T_NIGHT));
-  assert.equal(director2.playerFor(rec)._chats.length, 0, "silent outside hours");
+  assert.equal(director2._bots.get(rec.username)._chats.length, 0, "silent outside hours");
   console.log("tick silent guards: PASS");
 }
 {
@@ -297,8 +314,12 @@ function fresh() {
   }
   const rec = { username: proName, role: "commoner", kingdomId: "misthalin" };
   const director = mockDirector([rec], [mockPlayer("Jon", 102, 102, false)]);
+  // Note: no bot attached — the type gate must skip before materialization.
+  let materialized = false;
+  const origGetBot = director.getBot;
+  director.getBot = (r) => { materialized = true; return origGetBot(r); };
   withFixedRandom(0.05, () => S.tickGemfolk(director, T0));
-  // playerFor was never called for the pro (type gate rejected first).
+  assert.equal(materialized, false, "pro jeweler never materializes for gemfolk");
   console.log("pro jeweler skipped: PASS");
 }
 

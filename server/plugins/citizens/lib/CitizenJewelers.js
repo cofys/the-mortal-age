@@ -374,6 +374,19 @@ function isRealPlayer(player) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Canonical replacement for the dead director.playerFor: only materialize
+ * when the director says the citizen is online.
+ */
+function materializedBot(director, record) {
+  try {
+    return director?.isOnline?.(record) ? director.getBot?.(record) ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cheap Chebyshev distance check (same plane). */
 function withinTiles(a, b, radius) {
   try {
@@ -388,8 +401,9 @@ function withinTiles(a, b, radius) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director; // director.playerFor/onlinePlayers are dead; proximity comes from the bot.
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -455,7 +469,7 @@ function playAnim(director, bot, animId) {
 function doJewelerWork(director, record, citizen, type, nowMs) {
   const line = workLineFor(Math.random, type);
   if (!line) return;
-  const workshop = workshopFor(record.username, record.kingdom, type);
+  const workshop = workshopFor(record.username, record.kingdomId ?? record.kingdom, type);
   // Rare masterpiece unveilings are the crowd moment.
   if (Math.random() < MASTERPIECE_CHANCE) {
     const masterpiece = masterpieceFor(record.username, nowMs);
@@ -550,7 +564,7 @@ function tickJewelers(director, nowMs, desync) {
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the workshop.
@@ -574,7 +588,7 @@ function tickJewelers(director, nowMs, desync) {
         if (!type) continue;
         const last = lastHawkByCitizen.get(record.username) || 0;
         if (nowMs - last < HAWK_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -594,7 +608,7 @@ function tickJewelers(director, nowMs, desync) {
         if (!type) continue;
         const last = lastCommissionByCitizen.get(record.username) || 0;
         if (nowMs - last < COMMISSION_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= COMMISSION_CHANCE) continue;

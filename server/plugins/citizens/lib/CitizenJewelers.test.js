@@ -117,15 +117,21 @@ ok(J.withinTiles(at(0, 0, 0), at(15, 0, 0), 14) === false, "15 tiles out of 14")
 ok(J.withinTiles(at(0, 0, 0), at(1, 1, 1), 14) === false, "different plane excluded");
 
 // --- tickJewelers: fires near real players, silent otherwise ---
+// (jewelers audit 2026-10-08: the old prod code used director.playerFor /
+// director.onlinePlayers, which do not exist, so this tier was
+// dead-on-arrival. These mocks pin the real-API shape: isOnline/getBot on
+// the director (CitizenDirector.js:1374/1379), getLocalPlayers on the bot
+// (Player.ts:796). Records carry kingdomId, not kingdom.)
 J._resetState();
 function makeRecord(username, role) {
-  return { username, role: role || "commoner", kingdom: "misthalin" };
+  return { username, role: role || "commoner", kingdomId: "misthalin" };
 }
-function makeCitizen(x, y, lines) {
+function makeCitizen(x, y, lines, localPlayers) {
   return {
     getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }),
     forceChat: (line) => lines.push(line),
     performAnimation: () => true,
+    getLocalPlayers: () => localPlayers || [],
   };
 }
 function makePlayer(username, x, y) {
@@ -151,27 +157,38 @@ for (let i = 0; i < 500; i++) {
 }
 ok(jewelerName, "found a deterministic gem cutter");
 const lines = [];
-const citizen = makeCitizen(0, 0, lines);
 const real = makePlayer("RealPlayer", 3, 3);
+const citizen = makeCitizen(0, 0, lines, [real]);
 const director = {
   roster: new Map([[jewelerName, makeRecord(jewelerName)]]),
-  playerFor: () => citizen,
-  onlinePlayers: () => [real],
+  isOnline: () => true,
+  getBot: () => citizen,
   api: { core: { Animation: class { constructor(id) { this.id = id; } } } },
 };
+const { getJournal } = require("./CitizenJournal");
+getJournal().resetForTests();
 const origRandom = Math.random;
 Math.random = lcg(99); // force the chance gate to pass
 J.tickJewelers(director, 10 * 60 * 60 * 1000);
 Math.random = origRandom;
 ok(lines.length > 0, "tick fires forceChat near a real player");
+// Journal is canonical: one kind:"work" entry per visible loop, workshop
+// kingdom-preferred (records carry kingdomId, not kingdom).
+const events = getJournal().recent(jewelerName, 10);
+const work = events.find((e) => e.kind === "work");
+ok(work, "journal holds a kind:work entry for the jeweler");
+const workshop = J.workshopFor(jewelerName, "misthalin", "gem cutter");
+const workLoop = events.find((e) => e.kind === "work" && workshop && e.text.includes(workshop.name));
+ok(workLoop, "work loop journals kind:work with the kingdom-preferred workshop (" +
+  (workshop && workshop.name) + ")");
 
 // Same setup but only a bot nearby — must stay silent.
 J._resetState();
 const botLines = [];
 const directorBots = {
   roster: new Map([[jewelerName, makeRecord(jewelerName)]]),
-  playerFor: () => makeCitizen(0, 0, botLines),
-  onlinePlayers: () => [makeBot("Bot1", 3, 3)],
+  isOnline: () => true,
+  getBot: () => makeCitizen(0, 0, botLines, [makeBot("Bot1", 3, 3)]),
   api: {},
 };
 Math.random = lcg(99);
@@ -179,13 +196,27 @@ J.tickJewelers(directorBots, 10 * 60 * 60 * 1000);
 Math.random = origRandom;
 ok(botLines.length === 0, "tick stays silent when only bots are near");
 
+// Offline citizen never materializes — stays silent.
+J._resetState();
+const offLines = [];
+const directorOff = {
+  roster: new Map([[jewelerName, makeRecord(jewelerName)]]),
+  isOnline: () => false,
+  getBot: () => makeCitizen(0, 0, offLines, [real]),
+  api: {},
+};
+Math.random = lcg(99);
+J.tickJewelers(directorOff, 10 * 60 * 60 * 1000);
+Math.random = origRandom;
+ok(offLines.length === 0, "offline citizens never materialize");
+
 // Non-commoner never fires.
 J._resetState();
 const guardLines = [];
 const directorGuard = {
-  roster: new Map([[jewelerName, { username: jewelerName, role: "guard", kingdom: "misthalin" }]]),
-  playerFor: () => makeCitizen(0, 0, guardLines),
-  onlinePlayers: () => [real],
+  roster: new Map([[jewelerName, { username: jewelerName, role: "guard", kingdomId: "misthalin" }]]),
+  isOnline: () => true,
+  getBot: () => makeCitizen(0, 0, guardLines, [real]),
   api: {},
 };
 Math.random = lcg(99);
