@@ -226,6 +226,44 @@ function nearestRealPlayerDistance(bot) {
   return best;
 }
 
+/**
+ * Distance from a citizen's bot to the nearest real player using the
+ * director's global positions list (World.players). This is the SAME data
+ * source the director's spawn/despawn logic uses, so LOD classification
+ * agrees with materialization. Prefer this over nearestRealPlayerDistance()
+ * (bot viewport), which can be empty even with a player adjacent.
+ */
+function nearestRealPlayerDistanceFromPositions(bot, positions) {
+  let bx, by, bz;
+  try {
+    const loc = bot.getLocation?.();
+    if (!loc) return Number.POSITIVE_INFINITY;
+    bx = loc.getX?.() ?? loc.x;
+    by = loc.getY?.() ?? loc.y;
+    bz = loc.getZ?.() ?? loc.z ?? 0;
+    if (!Number.isFinite(bx) || !Number.isFinite(by)) {
+      return Number.POSITIVE_INFINITY;
+    }
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+  let best = Number.POSITIVE_INFINITY;
+  for (const p of positions ?? []) {
+    try {
+      if ((p.z ?? 0) !== (bz ?? 0)) continue;
+      const d = Math.max(
+        Math.abs((p.x ?? 0) - bx),
+        Math.abs((p.y ?? 0) - by)
+      );
+      if (d < best) best = d;
+      if (best <= NEAR_DISTANCE_TILES) break;
+    } catch {
+      // Skip unreadable positions.
+    }
+  }
+  return best;
+}
+
 // --- per-tick driver -----------------------------------------------------------
 
 const bandByCitizen = new Map(); // lowercased username -> band (roster-bounded)
@@ -315,6 +353,20 @@ function tickLodBands(director, nowMs) {
     const rosterKeys = new Set(records.map(normalizeKey));
     pruneBands(rosterKeys, nowMs);
 
+    // Use the director's global real-player positions (World.players), not
+    // the bot's local viewport. Bot getLocalPlayers() can be empty even when
+    // a real player is standing next to the citizen, which misclassifies
+    // everyone as "asleep" and freezes all visible life. The director's
+    // spawn logic already uses realPlayerPositions() — the LOD must agree.
+    // Falls back to the bot viewport when the director doesn't provide
+    // positions (e.g., in unit tests).
+    let positions = [];
+    try {
+      positions = director.realPlayerPositions?.() ?? [];
+    } catch {
+      positions = [];
+    }
+
     for (const record of records) {
       const key = normalizeKey(record);
       if (!key) continue;
@@ -330,7 +382,12 @@ function tickLodBands(director, nowMs) {
       }
       if (!bot) continue;
 
-      const distance = nearestRealPlayerDistance(bot);
+      // Prefer the director's global positions; fall back to the bot's local
+      // viewport when the director doesn't provide positions (unit tests).
+      const distance =
+        positions.length > 0
+          ? nearestRealPlayerDistanceFromPositions(bot, positions)
+          : nearestRealPlayerDistance(bot);
       const prev = bandByCitizen.get(key) ?? null;
       const next = updateBand(prev, distance);
       bandByCitizen.set(key, next);
