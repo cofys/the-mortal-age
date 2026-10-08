@@ -147,6 +147,7 @@ const { tickSocieties } = require("../lib/CitizenSecretSocieties");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
+const { tickLodBands } = require("../lib/CitizenTickLod");
 const CitizenBonds = require("../lib/CitizenBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
 const CitizenWeddings = require("../lib/CitizenWeddings");
@@ -1655,6 +1656,16 @@ class CitizenDirector {
   tick() {
     const hour = hourNow();
     const nowMs = Date.now();
+    // Tick-optimization: classify every online citizen into LOD bands
+    // (near/mid/far/asleep by distance to the nearest real player) before
+    // the feature ticks run. Stamps lodBand/lodStride/lodForceTickAt on
+    // each citizen's bot state so the brain and feature ticks can gate on
+    // them. Pure distance math, zero LLM; the module never throws.
+    try {
+      tickLodBands(this, nowMs);
+    } catch (error) {
+      this.log("tick-lod failed", { error: String(error?.message ?? error) });
+    }
     for (const record of this.roster.values()) {
       const online = this.isOnline(record);
       const bot = online ? this.getBot(record) : null;
