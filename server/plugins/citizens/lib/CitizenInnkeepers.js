@@ -360,7 +360,7 @@ function forceSay(bot, line) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -374,7 +374,7 @@ function anyRealPlayerNear(director, citizen, radius) {
 /** Nearest real player within radius, or null. */
 function nearestRealPlayer(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     let best = null;
     let bestD = Infinity;
     for (const p of players) {
@@ -449,7 +449,7 @@ function tickInnkeepers(director, nowMs, desync) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
 
         // 4. A real player must be within earshot

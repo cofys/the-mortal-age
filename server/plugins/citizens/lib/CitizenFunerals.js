@@ -537,7 +537,7 @@ function tickMortality(director, nowMs, rng) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -571,7 +571,7 @@ function maybeHoldCeremony(director, d, nowMs, rng) {
   if (!hostName) return false;
   const hostRecord = director.roster?.get?.(normalizeName(hostName));
   if (!hostRecord) return false;
-  const host = director.playerFor?.(hostRecord) ?? director.getBot?.(hostRecord);
+  const host = (director.isOnline(hostRecord) ? director.getBot(hostRecord) : null) ?? director.getBot?.(hostRecord);
   if (!host) return false;
   if (!anyRealPlayerNear(director, host, CEREMONY_RADIUS)) return false;
   const hostDisplay = hostRecord.display || hostName;
@@ -581,7 +581,7 @@ function maybeHoldCeremony(director, d, nowMs, rng) {
   let murmured = 0;
   for (const mName of d.mourners.slice(1, 4)) {
     const mRecord = director.roster?.get?.(normalizeName(mName));
-    const mBot = mRecord ? director.playerFor?.(mRecord) ?? director.getBot?.(mRecord) : null;
+    const mBot = mRecord ? (director.isOnline(mRecord) ? director.getBot(mRecord) : null) ?? director.getBot?.(mRecord) : null;
     if (mBot && withinTiles(host, mBot, CEREMONY_RADIUS)) {
       forceChat(mBot, griefLineFor(rng, d, true));
       murmured++;
@@ -589,7 +589,7 @@ function maybeHoldCeremony(director, d, nowMs, rng) {
   }
   // A real player attended — thank them.
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (isRealPlayer(p) && withinTiles(host, p, CEREMONY_RADIUS)) {
         forceChat(host, thanksLineFor(rng, d));
@@ -618,7 +618,7 @@ function maybeGrieve(director, nowMs, rng, desync) {
     if (desyncGate && !desyncGate(record, desync.tick, desync.spread)) continue;
     const last = lastGriefByCitizen.get(username) || 0;
     if (!shouldFire(rng, last, nowMs, GRIEF_COOLDOWN_MS, 0.4)) continue;
-    const citizen = director.playerFor?.(record) ?? director.getBot?.(record);
+    const citizen = (director.isOnline(record) ? director.getBot(record) : null) ?? director.getBot?.(record);
     if (!citizen) continue;
     if (!anyRealPlayerNear(director, citizen, GRIEF_RADIUS)) continue;
     const d = deceased.get(normalizeName(m.deceased));
@@ -647,7 +647,7 @@ function maybeVisitMemorial(director, nowMs, rng, desync) {
     if (!shouldFire(rng, last, nowMs, MEMORIAL_COOLDOWN_MS, 0.25)) continue;
     const d = latestByKingdom.get(record.kingdomId);
     if (!d) continue;
-    const citizen = director.playerFor?.(record) ?? director.getBot?.(record);
+    const citizen = (director.isOnline(record) ? director.getBot(record) : null) ?? director.getBot?.(record);
     if (!citizen) continue;
     if (!anyRealPlayerNear(director, citizen, MEMORIAL_RADIUS)) continue;
     forceChat(citizen, memorialLineFor(rng, d));
@@ -670,7 +670,7 @@ function maybeRemember(director, nowMs, rng, desync) {
     if (!d) continue;
     const last = lastRemembranceByDeceased.get(d.username) || 0;
     if (!shouldFire(rng, last, nowMs, REMEMBRANCE_COOLDOWN_MS, 0.3)) continue;
-    const citizen = director.playerFor?.(record) ?? director.getBot?.(record);
+    const citizen = (director.isOnline(record) ? director.getBot(record) : null) ?? director.getBot?.(record);
     if (!citizen) continue;
     if (!anyRealPlayerNear(director, citizen, GRIEF_RADIUS)) continue;
     forceChat(citizen, remembranceLineFor(rng, d));

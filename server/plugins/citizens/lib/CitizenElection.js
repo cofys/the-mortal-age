@@ -574,7 +574,7 @@ function withinTiles(a, b, radius) {
 
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -591,7 +591,7 @@ function announce(director, race, announcement, nowMs) {
     const square = siteTileByKingdom(race.kingdomId, "square");
     for (const record of director.roster?.values?.() ?? []) {
       if (record.kingdomId !== race.kingdomId) continue;
-      const citizen = director.playerFor?.(record);
+      const citizen = (director.isOnline(record) ? director.getBot(record) : null);
       if (!citizen) continue;
       if (!anyRealPlayerNear(director, citizen, STUMP_RADIUS)) continue;
       speaker = citizen;
@@ -619,7 +619,7 @@ function stumpForCandidates(director, nowMs) {
         const last = stumpCooldowns.get(normalizeName(c.username)) || 0;
         if (nowMs - last < STUMP_COOLDOWN_MS) continue;
         const record = director.roster?.get?.(normalizeName(c.username));
-        const citizen = record ? director.playerFor?.(record) : null;
+        const citizen = record ? (director.isOnline(record) ? director.getBot(record) : null) : null;
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, STUMP_RADIUS)) continue;
         if (Math.random() > STUMP_CHANCE) continue;

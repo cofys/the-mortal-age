@@ -115,7 +115,7 @@ function withinTiles(a, b, radius) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -354,7 +354,7 @@ function reactForCitizen(director, record, t, nowMs, rng) {
   }
 
   // 2. Citizen must be materialized (near a player already).
-  const bot = director.playerFor?.(record);
+  const bot = (director.isOnline(record) ? director.getBot(record) : null);
   if (!bot) return;
 
   // 3. A real player must be within earshot/eyeshot.

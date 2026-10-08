@@ -318,7 +318,7 @@ function withinTiles(a, b, radius) {
 
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -349,7 +349,7 @@ function tickApprenticeLife(director, nowMs, rng = Math.random) {
         (r) => normalizeName(r.username) === apprentice
       );
       if (!apprenticeRec) continue;
-      const apprenticeBot = director.playerFor?.(apprenticeRec);
+      const apprenticeBot = (director.isOnline(apprenticeRec) ? director.getBot(apprenticeRec) : null);
       if (!apprenticeBot) continue;
 
       // 3. A real player must be within earshot.
@@ -358,7 +358,7 @@ function tickApprenticeLife(director, nowMs, rng = Math.random) {
       // 4. Chance gate — then one scripted exchange (zero LLM).
       if (rng() >= CHATTER_CHANCE) continue;
       const masterRec = rosterArr.find((r) => normalizeName(r.username) === p.master);
-      const masterBot = director.playerFor?.(masterRec);
+      const masterBot = (director.isOnline(masterRec) ? director.getBot(masterRec) : null);
       try {
         apprenticeBot.forceChat?.(apprenticeQuestion(rng, p.skill));
         if (masterBot) {

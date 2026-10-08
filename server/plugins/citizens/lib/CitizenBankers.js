@@ -630,7 +630,7 @@ function tickBankers(director, nowMs, desync) {
         // 3. Materialized bot? Real player near?
         let bot = null;
         try {
-          bot = director.playerFor?.(record);
+          bot = (director.isOnline(record) ? director.getBot(record) : null);
         } catch {
           continue;
         }

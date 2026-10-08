@@ -435,7 +435,7 @@ function tickAlchemists(director, nowMs, desync) {
         if (!shouldFire(lastWorkByCitizen.get(record.username), nowMs)) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the lab.
@@ -457,7 +457,7 @@ function tickAlchemists(director, nowMs, desync) {
         const type = alchemistTypeFor(record.username);
         if (type !== ALCHEMIST_APOTHECARY) continue;
         if (!shouldHawk(lastHawkByCitizen.get(record.username), nowMs)) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -476,7 +476,7 @@ function tickAlchemists(director, nowMs, desync) {
         const type = alchemistTypeFor(record.username);
         if (type !== ALCHEMIST_BREWER && type !== ALCHEMIST_APOTHECARY) continue;
         if (!shouldTeach(lastTeachByCitizen.get(record.username), nowMs)) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= TEACH_CHANCE) continue;
@@ -593,7 +593,7 @@ function potionsFor(username, kingdom, dateMs) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

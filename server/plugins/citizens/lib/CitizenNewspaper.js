@@ -242,7 +242,7 @@ function withinTiles(a, b, radius) {
 /** Find a real player near the citizen, or null. */
 function realPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return p;
@@ -429,7 +429,7 @@ function tickCrier(director, nowMs) {
       const last = lastShoutByCrier.get(crierRec.username) || 0;
       if (nowMs - last < CRIER_SHOUT_COOLDOWN_MS) continue;
 
-      const crier = director.playerFor?.(crierRec);
+      const crier = (director.isOnline(crierRec) ? director.getBot(crierRec) : null);
       if (!crier) continue;
 
       const player = realPlayerNear(director, crier, CRIER_RADIUS);

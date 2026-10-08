@@ -578,7 +578,7 @@ function tickJudges(director, nowMs) {
         if (!record || record.role !== "courtier" || !isJudge(record.username)) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
 
         // 4. A real player must be within earshot

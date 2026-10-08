@@ -416,11 +416,11 @@ function tickMessengers(director, nowMs) {
         if (nowMs - last < cooldown) continue;
 
         // 2. Citizen must be materialized (near a player already).
-        const bot = director.playerFor?.(record);
+        const bot = (director.isOnline(record) ? director.getBot(record) : null);
         if (!bot) continue;
 
         // 3. A real player must be within earshot.
-        const players = director.onlinePlayers?.() ?? [];
+        const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
         let near = null;
         for (const p of players) {
           if (!isRealPlayer(p)) continue;

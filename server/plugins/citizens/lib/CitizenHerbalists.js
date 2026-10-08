@@ -405,7 +405,7 @@ function tickHerbalists(director, nowMs, desync) {
         if (!isHerbalist(record)) continue;
 
         // 2. Materialized citizen required, then proximity to a real player.
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (desync && !desync(record.username, nowMs)) continue;
         if (!anyRealPlayerNear(director, citizen, HERBALIST_RADIUS)) continue;

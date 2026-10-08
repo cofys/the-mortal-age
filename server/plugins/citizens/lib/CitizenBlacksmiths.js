@@ -192,7 +192,7 @@ function withinTiles(a, b, radius) {
  */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -456,7 +456,7 @@ function tickSmiths(director, nowMs, desync) {
         const last = lastWorkByCitizen.get(record.username) || 0;
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, WORK_RADIUS)) continue;
         if (Math.random() >= WORK_CHANCE) continue;
@@ -477,7 +477,7 @@ function tickSmiths(director, nowMs, desync) {
         if (!type) continue;
         const last = lastHawkByCitizen.get(record.username) || 0;
         if (nowMs - last < HAWK_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -497,7 +497,7 @@ function tickSmiths(director, nowMs, desync) {
         if (type !== SMITH_WEAPONSMITH && type !== SMITH_BLADESMITH) continue;
         const last = lastCommissionByCitizen.get(record.username) || 0;
         if (nowMs - last < COMMISSION_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= COMMISSION_CHANCE) continue;

@@ -454,7 +454,7 @@ function tickCooks(director, nowMs, desync) {
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the kitchen.
@@ -478,7 +478,7 @@ function tickCooks(director, nowMs, desync) {
         if (!type) continue;
         const last = lastHawkByCitizen.get(record.username) || 0;
         if (nowMs - last < HAWK_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -499,7 +499,7 @@ function tickCooks(director, nowMs, desync) {
         if (!type) continue;
         const last = lastTeachByCitizen.get(record.username) || 0;
         if (nowMs - last < TEACH_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= TEACH_CHANCE) continue;
@@ -601,7 +601,7 @@ function mealOfTheDayFor(username, kingdom, dateMs) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

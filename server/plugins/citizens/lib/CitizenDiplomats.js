@@ -675,7 +675,7 @@ function payEscorts(director, mission) {
   if (!mission.playerEscorts.length) return;
   let players = [];
   try {
-    players = director.onlinePlayers?.() ?? [];
+    players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
   } catch {
     return;
   }
@@ -755,7 +755,7 @@ function realPlayersNearTile(director, tile, radius) {
   if (!tile) return out;
   let players = [];
   try {
-    players = director.onlinePlayers?.() ?? [];
+    players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
   } catch {
     return out;
   }
@@ -778,7 +778,7 @@ function diplomatBot(director, mission) {
   try {
     const record = director.roster?.get?.(normalizeName(mission.diplomat));
     if (!record) return null;
-    return director.playerFor?.(record) ?? null;
+    return (director.isOnline(record) ? director.getBot(record) : null) ?? null;
   } catch {
     return null;
   }
@@ -810,7 +810,7 @@ function botNearTile(director, tile, radius) {
     };
     for (const record of director.roster?.values?.() ?? []) {
       try {
-        const bot = director.playerFor?.(record);
+        const bot = (director.isOnline(record) ? director.getBot(record) : null);
         if (bot && withinTiles(anchor, bot, radius)) return bot;
       } catch { /* skip */ }
     }

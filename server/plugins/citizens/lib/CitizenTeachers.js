@@ -485,7 +485,7 @@ function advanceStudents(nowMs) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -500,7 +500,7 @@ function anyRealPlayerNear(director, citizen, radius) {
 function realPlayersNear(director, citizen, radius) {
   const out = [];
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) out.push(p);
@@ -517,7 +517,7 @@ function studentsNear(director, teacherBot, radius) {
   try {
     for (const record of director.roster?.values?.() ?? []) {
       if (record.username === teacherBot?.getUsername?.()) continue;
-      const bot = director.playerFor?.(record);
+      const bot = (director.isOnline(record) ? director.getBot(record) : null);
       if (!bot || isRealPlayer(bot)) continue;
       if (withinTiles(teacherBot, bot, radius)) {
         out.push(bot);
@@ -609,7 +609,7 @@ function tickTeachers(director, nowMs) {
       if (!shouldHoldClass(rng, last, nowMs)) continue;
 
       // 2. Teacher must be materialized (near a player already).
-      const teacherBot = director.playerFor?.(record);
+      const teacherBot = (director.isOnline(record) ? director.getBot(record) : null);
       if (!teacherBot) continue;
 
       // 3. A real player must be within earshot.

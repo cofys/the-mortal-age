@@ -545,7 +545,7 @@ function tickEducators(director, nowMs, desync = 0) {
         if (!isHobbyVisible(record.username, "tutor")) continue;
 
         // 4. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
 
         // 5. Class hours only
@@ -574,7 +574,7 @@ function tickEducators(director, nowMs, desync = 0) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

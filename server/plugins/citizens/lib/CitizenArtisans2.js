@@ -651,7 +651,7 @@ function tickWoodfolk(director, nowMs, desync) {
         if (!type) continue;
 
         // 4. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
 
         // 5. Work hours only
@@ -683,7 +683,7 @@ function tickWoodfolk(director, nowMs, desync) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -809,7 +809,7 @@ function doWoodfolkWork(director, record, citizen, type, nowMs) {
 /** A nearby real player whose goods order is ready, if any. */
 function nearbyReadyOrder(director, citizen, nowMs) {
   try {
-    for (const p of director.onlinePlayers?.() ?? []) {
+    for (const p of [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean)) {
       if (!isRealPlayer(p)) continue;
       if (!withinTiles(citizen, p, WOODFOLK_RADIUS)) continue;
       const pname = p.getUsername?.() ?? "";

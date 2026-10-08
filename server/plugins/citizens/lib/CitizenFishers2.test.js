@@ -48,6 +48,14 @@ function mockDirector(entries, players) {
     roster: new Map(entries.map((r) => [r.username, r])),
     playerFor: (record) => bots.get(record.username) || null,
     onlinePlayers: () => players,
+    isOnline: (record) => bots.has(record.username),
+    getBot: (record) => bots.get(record.username) || null,
+    realPlayerPositions: () => players.filter(p => {
+      try { return p.isPlayerBot?.() !== true; } catch { return true; }
+    }).map(p => {
+      const loc = p.getLocation?.();
+      return { x: loc.getX(), y: loc.getY(), z: loc.getZ?.() ?? 0 };
+    }),
     _bots: bots,
   };
 }

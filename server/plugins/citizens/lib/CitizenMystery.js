@@ -379,7 +379,7 @@ function archiveMystery(director, mystery) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -396,7 +396,7 @@ function discoverClues(director, nowMs) {
   if (!mystery || mystery.status !== "active") return;
   let players = [];
   try {
-    players = (director.onlinePlayers?.() ?? []).filter(isRealPlayer);
+    players = ([...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean)).filter(isRealPlayer);
   } catch {
     return;
   }
@@ -430,7 +430,7 @@ function discoverClues(director, nowMs) {
 function announceToNearby(director, x, y, z, line) {
   try {
     for (const record of director.roster?.values?.() ?? []) {
-      const citizen = director.playerFor?.(record);
+      const citizen = (director.isOnline(record) ? director.getBot(record) : null);
       if (!citizen) continue;
       let loc = null;
       try {
@@ -469,7 +469,7 @@ function whisperMystery(director, nowMs) {
     // 2. Citizen must be materialized (near a player already)
     let citizen = null;
     try {
-      citizen = director.playerFor?.(record);
+      citizen = (director.isOnline(record) ? director.getBot(record) : null);
     } catch {
       continue;
     }

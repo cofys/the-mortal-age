@@ -395,7 +395,7 @@ function tickSocieties(director, nowMs) {
   // 3. Proximity-visible layer: initiation invites + stumbled-upon meetings.
   let players = [];
   try {
-    players = director.onlinePlayers?.() ?? [];
+    players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
   } catch {
     players = [];
   }
@@ -414,7 +414,7 @@ function tickSocieties(director, nowMs) {
     if (!sid) continue;
     let citizen = null;
     try {
-      citizen = director.playerFor?.(record);
+      citizen = (director.isOnline(record) ? director.getBot(record) : null);
     } catch {
       citizen = null;
     }
@@ -477,7 +477,7 @@ function tickSocieties(director, nowMs) {
         for (const m of membersHere) {
           let mc = null;
           try {
-            mc = director.playerFor?.(m);
+            mc = (director.isOnline(m) ? director.getBot(m) : null);
           } catch {
             mc = null;
           }

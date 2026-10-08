@@ -348,7 +348,7 @@ function formCaravan(director, route, nowMs) {
 function payPlayer(director, playerName, coins, reason) {
   let paid = false;
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       let name = "";

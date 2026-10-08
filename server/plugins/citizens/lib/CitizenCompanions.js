@@ -387,7 +387,7 @@ function sendCompanionInvite(citizen, record, player, nowMs, rng) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function realPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return p;
@@ -417,7 +417,7 @@ function tickCompanions(director, nowMs) {
       if (nowMs - last < COMPANION_CITIZEN_COOLDOWN_MS) continue;
 
       // 2. Citizen must be materialized (near a player already)
-      const citizen = director.playerFor?.(record);
+      const citizen = (director.isOnline(record) ? director.getBot(record) : null);
       if (!citizen) continue;
 
       // 3. A real player must be within earshot

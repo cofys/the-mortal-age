@@ -661,7 +661,7 @@ function tickFarmfolk(director, nowMs, desync) {
         if (!type) continue;
 
         // 4. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
 
         // 5. Dawn-to-dusk hours only
@@ -693,7 +693,7 @@ function tickFarmfolk(director, nowMs, desync) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -761,7 +761,7 @@ function doFarmfolkWork(director, record, citizen, type, nowMs) {
 /** A nearby real player with a pending basket request, if any. */
 function nearbyBasket(director, citizen, nowMs) {
   try {
-    for (const p of director.onlinePlayers?.() ?? []) {
+    for (const p of [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean)) {
       if (!isRealPlayer(p)) continue;
       if (!withinTiles(citizen, p, FARMFOLK_RADIUS)) continue;
       const req = basketFor(p.getUsername?.() ?? "", nowMs);
@@ -774,7 +774,7 @@ function nearbyBasket(director, citizen, nowMs) {
 /** A nearby real player signed up for harvest help, if any (returns the name). */
 function nearbyHelperSignup(director, citizen, nowMs) {
   try {
-    for (const p of director.onlinePlayers?.() ?? []) {
+    for (const p of [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean)) {
       if (!isRealPlayer(p)) continue;
       if (!withinTiles(citizen, p, FARMFOLK_RADIUS)) continue;
       const pname = p.getUsername?.() ?? "";

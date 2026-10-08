@@ -352,7 +352,7 @@ function tickRetirement(director, nowMs, desync, rng) {
         // Desync: spread citizen processing across the tick cycle.
         if (desyncGate && !desyncGate(record, desync.tick, desync.spread)) continue;
 
-        const bot = director.playerFor?.(record) ?? director.getBot?.(record);
+        const bot = (director.isOnline(record) ? director.getBot(record) : null) ?? director.getBot?.(record);
         if (!bot) continue;
 
         const key = normalizeName(record.username);

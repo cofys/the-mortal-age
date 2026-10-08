@@ -403,7 +403,7 @@ function tickSailors(director, nowMs, desync) {
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the docks.
@@ -426,7 +426,7 @@ function tickSailors(director, nowMs, desync) {
         if (sailorTypeFor(record.username) !== SAILOR_CAPTAIN) continue;
         const last = lastOfferByCitizen.get(record.username) || 0;
         if (nowMs - last < OFFER_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, OFFER_RADIUS)) continue;
         if (Math.random() >= OFFER_CHANCE) continue;
@@ -446,7 +446,7 @@ function tickSailors(director, nowMs, desync) {
         if (!shipInPortFor(record.username, nowMs)) continue;
         const last = lastArrivalByCitizen.get(record.username) || 0;
         if (nowMs - last < ARRIVAL_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, SAILOR_RADIUS)) continue;
         if (Math.random() >= ARRIVAL_CHANCE) continue;
@@ -537,7 +537,7 @@ function voyageFor(username, kingdom, dateMs) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

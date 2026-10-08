@@ -476,7 +476,7 @@ function tickFisherfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
 
         // 4. Fishing hours only (dawn to dusk, server-local)
@@ -505,7 +505,23 @@ function tickFisherfolk(director, nowMs, desync = 0) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    // Try director's realPlayerPositions first (production)
+    if (typeof director.realPlayerPositions === 'function') {
+      const positions = director.realPlayerPositions();
+      const loc = citizen.getLocation?.();
+      if (!loc) return false;
+      const cx = loc.getX?.() ?? loc.x ?? 0;
+      const cy = loc.getY?.() ?? loc.y ?? 0;
+      const cz = loc.getZ?.() ?? loc.z ?? 0;
+      for (const p of positions) {
+        if ((p.z ?? 0) !== cz) continue;
+        const d = Math.max(Math.abs((p.x ?? 0) - cx), Math.abs((p.y ?? 0) - cy));
+        if (d <= radius) return true;
+      }
+      return false;
+    }
+    // Fallback: check roster citizens (for tests)
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

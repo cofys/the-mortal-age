@@ -402,7 +402,7 @@ function tickEscort(director, record, bot, me, nowMs, rng) {
   // Continue an active escort first.
   const escort = activeEscorts.get(username);
   if (escort) {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     const target = findPlayerByName(players, escort.target);
     const targetTile = target ? botTile(target) : null;
     if (escortShouldEnd(escort, targetTile, nowMs)) {
@@ -446,7 +446,7 @@ function tickVipEscort(director, record, bot, me, nowMs, rng, seen) {
   for (const other of director.roster?.values?.() ?? []) {
     if (other.username === record.username) continue;
     if (other.role !== "merchant" && other.role !== "courtier") continue;
-    const otherBot = director.playerFor?.(other);
+    const otherBot = (director.isOnline(other) ? director.getBot(other) : null);
     if (!otherBot) continue;
     const t = botTile(otherBot);
     if (!t || chebyshev(me.x, me.y, t.x, t.y) > 6) continue;
@@ -511,7 +511,7 @@ function tickGuardPatrols(director, nowMs, rng) {
     const guards = [];
     const others = [];
     for (const record of director.roster?.values?.() ?? []) {
-      const bot = director.playerFor?.(record);
+      const bot = (director.isOnline(record) ? director.getBot(record) : null);
       if (!bot) continue;
       if (record.role === "guard") guards.push({ record, bot });
       else others.push({ record, bot });

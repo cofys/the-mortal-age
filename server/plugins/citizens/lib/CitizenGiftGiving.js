@@ -323,7 +323,7 @@ function withinTiles(a, b, radius) {
 /** Nearest real player within radius of the citizen, or null. */
 function nearestRealPlayer(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     let best = null;
     let bestD = Infinity;
     for (const p of players) {
@@ -500,7 +500,7 @@ function tickGiftGiving(director, nowMs) {
       if (nowMs - (lastGiftByCitizen.get(citizenName) ?? 0) < GIFT_CITIZEN_COOLDOWN_MS) continue;
 
       // 2. Citizen must be materialized (near a player already).
-      const citizen = director.playerFor?.(record);
+      const citizen = (director.isOnline(record) ? director.getBot(record) : null);
       if (!citizen) continue;
 
       // 3. A real player must be within handing distance.

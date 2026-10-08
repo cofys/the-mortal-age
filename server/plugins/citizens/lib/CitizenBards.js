@@ -628,7 +628,7 @@ function tickBards(director, nowMs, desync) {
       }
       if (!type) continue;
 
-      const citizen = director.playerFor?.(record);
+      const citizen = (director.isOnline(record) ? director.getBot(record) : null);
       if (!citizen) continue;
       if (!anyRealPlayerNear(director, citizen, PERFORMANCE_RADIUS)) continue;
       if (!isPerformanceHour(nowMs)) continue;
@@ -668,7 +668,7 @@ function performSet(director, record, citizen, type, nowMs, rng) {
 /** A nearby real player with a pending song request, if any. */
 function nearbyRequest(director, citizen, nowMs) {
   try {
-    for (const p of director.onlinePlayers?.() ?? []) {
+    for (const p of [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean)) {
       if (!isRealPlayer(p)) continue;
       if (!withinTiles(citizen, p, PERFORMANCE_RADIUS)) continue;
       const req = requestFor(p.getUsername?.() ?? "", nowMs);
@@ -725,7 +725,7 @@ function forceSay(citizen, text) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

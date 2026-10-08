@@ -713,7 +713,7 @@ function pickOne(rng, arr) {
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -736,7 +736,7 @@ function tickSpyShouts(director, nowMs) {
       const handler = spymasterName(director, homeId);
       const spies = pickSpies(courtiersOf(director, homeId), homeId);
       for (const spy of spies) {
-        const citizen = director.playerFor?.(spy.record);
+        const citizen = (director.isOnline(spy.record) ? director.getBot(spy.record) : null);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, SHOUT_RADIUS)) continue;
         const last = lastWhisperByCitizen.get(spy.record.username) || 0;
@@ -753,7 +753,7 @@ function tickSpyShouts(director, nowMs) {
     }
 
     // Asset wage payouts: scan online real players for owed wages.
-    for (const p of director.onlinePlayers?.() ?? []) {
+    for (const p of [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean)) {
       if (!isRealPlayer(p)) continue;
       const key = normalizeName(p.getUsername?.() ?? "");
       const asset = assets.get(key);
@@ -779,7 +779,7 @@ function tickSpyShouts(director, nowMs) {
  */
 function recruitOrSell(director, record, citizen, homeId) {
   try {
-    const players = (director.onlinePlayers?.() ?? []).filter(
+    const players = ([...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean)).filter(
       (p) => isRealPlayer(p) && withinTiles(citizen, p, SHOUT_RADIUS)
     );
     if (players.length === 0) return;
@@ -824,7 +824,7 @@ function recruitOrSell(director, record, citizen, homeId) {
  */
 function whisperIntel(director, record, citizen, nowMs) {
   try {
-    const players = (director.onlinePlayers?.() ?? []).filter(
+    const players = ([...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean)).filter(
       (p) => isRealPlayer(p) && withinTiles(citizen, p, SHOUT_RADIUS)
     );
     if (players.length === 0) return false;
