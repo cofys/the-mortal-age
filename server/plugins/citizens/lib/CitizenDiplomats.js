@@ -31,6 +31,25 @@
  * Wiring: tickDiplomacy on the slow director tick next to caravans;
  * tickDiplomatShouts on the fast proximity tick next to caravan shouts.
  * Plain-node testable: CitizenDiplomats.test.js.
+ *
+ * DIPLOMATS2 RUNG (2026-10-08):
+ *   - Envoy arrival ceremonies: when a mission reaches the foreign court,
+ *     a materialized courtier at the TARGET court anchor heralds the envoy —
+ *     LOD-gated (only when real players are near that anchor; simulated
+ *     data tier carries the story otherwise, zero LLM).
+ *   - Ambassador chatter: stationed ambassadors surface through hourly,
+ *     budget-capped (2 lines) ceremony/cultural-exchange chatter at the
+ *     foreign court anchor, only near real players.
+ *   - Real rumor seeding: arrivals/treaties/collapses now ALSO seed the
+ *     real CitizenRumors ledger (seedRumor(rng, event) with a real event —
+ *     lineage and distortion, not console-only), alongside the street-talk
+ *     kingdom:rumor custom event. Journal already used the real log().
+ *   - Ledger acks: a nearby real player holding an unanswered escort
+ *     invite gets a scripted in-world acknowledgment before routine flavor
+ *     (mentors2/historians2 lesson: real requests get real answers).
+ *   - Non-overlapping claim: isDiplomat(username) wires the REAL
+ *     judge-claim predicate (CitizenJudges.isJudge) — a judge-claimed
+ *     courtier is never also a diplomat. One citizen, one public office.
  */
 
 const { getJournal } = require("./CitizenJournal");
@@ -53,6 +72,15 @@ try {
   Tension = null;
 }
 
+// The judges tier's REAL claim predicate. A judge-claimed courtier is never
+// also a diplomat — the non-overlapping claim lives here, not re-invented.
+let Judges = null;
+try {
+  Judges = require("./CitizenJudges");
+} catch {
+  Judges = null;
+}
+
 // === Tuning: all magic numbers here ===
 const MAX_DIPLOMATS_PER_KINGDOM = 2;
 const MISSION_CADENCE_CHANCE = 0.06; // per idle kingdom per slow (~60s) tick
@@ -66,6 +94,32 @@ const ESCORT_WAGE = 250;
 const MAX_PLAYER_ESCORTS = 2;
 const COINS = 995;
 const INVITE_KIND_ESCORT = "diplomat_escort";
+
+// === Diplomats2 tuning ===
+const CEREMONY_BUDGET = 2; // max spoken lines per mission per interaction tick
+const AMBASSADOR_COOLDOWN_MS = 60 * 60 * 1000; // ambassador chatter at most hourly
+const ESCORT_ACK_COOLDOWN_MS = 15 * 60 * 1000; // invite acks at most every 15 min
+const LINE_MAX = 120; // filled dialogue lines are cut to engine chat length
+
+const ARRIVAL_LINES = Object.freeze([
+  "Make way! The envoy of {home} has arrived at the court of {target}.",
+  "The court of {target} receives {name}, envoy of {home}, bearing a {mission}.",
+  "Trumpets for the envoy of {home}! {name} seeks audience at {target}.",
+]);
+
+const AMBASSADOR_LINES = Object.freeze([
+  "The {home} ambassador {name} shared songs of {home} at the {target} court today.",
+  "{name} of {home} dined with the {target} court — the cups of friendship are deep.",
+  "The ambassador {name} taught {target} children a {home} game of stones.",
+  "Gifts from {home}: {name} presented {target} cloth to the court steward.",
+  "{name} of {home} toasted the {target} harvest at tonight's feast.",
+]);
+
+const ESCORT_ACK_LINES = Object.freeze([
+  "The offer to ride escort to {city} still stands, {name} — say 'yes' or 'no'.",
+  "{name}, the road to {city} wants a guard. Say 'yes' or 'no' to ride escort.",
+  "Still waiting on an escort to {city}, {name}. A simple 'yes' or 'no' will do.",
+]);
 
 const ROLE_ENVOY = "envoy";
 const ROLE_NEGOTIATOR = "negotiator";
@@ -102,21 +156,27 @@ const CITY_FALLBACK = Object.freeze({
 // === Module state (ephemeral; missions resume naturally on restart) ===
 const missions = new Map(); // homeKingdomId -> mission
 const lastShoutAt = new Map(); // missionId:phase -> timestamp (spam plug)
+const lastAmbassadorChatterAt = new Map(); // mission.id -> timestamp (spam plug)
+const lastEscortAckAt = new Map(); // mission.id -> timestamp (spam plug)
 
-// Memory-leak plug: prune shout map hourly, drop entries older than a day.
+// Memory-leak plug: prune spam-plug maps hourly, drop entries older than a day.
 let lastPruneAt = 0;
 function pruneCooldowns(nowMs) {
   if (nowMs - lastPruneAt < 3600 * 1000) return;
   lastPruneAt = nowMs;
   const cutoff = nowMs - 24 * 3600 * 1000;
-  for (const [k, at] of lastShoutAt) {
-    if (at < cutoff) lastShoutAt.delete(k);
+  for (const m of [lastShoutAt, lastAmbassadorChatterAt, lastEscortAckAt]) {
+    for (const [k, at] of m) {
+      if (at < cutoff) m.delete(k);
+    }
   }
 }
 
 function _resetForTests() {
   missions.clear();
   lastShoutAt.clear();
+  lastAmbassadorChatterAt.clear();
+  lastEscortAckAt.clear();
   lastPruneAt = 0;
 }
 
@@ -129,11 +189,54 @@ function pickOne(rng, arr) {
   return arr[Math.floor(rng() * arr.length)];
 }
 
-/** Fill {placeholders} in a template. Unknown keys are left as-is. */
+/** Fill {placeholders} in a template. Unknown keys are left as-is. Cut to engine chat length. */
 function fillLine(template, vars) {
   return String(template).replace(/\{(\w+)\}/g, (m, k) =>
     vars && vars[k] !== undefined ? String(vars[k]) : m
-  );
+  ).slice(0, LINE_MAX);
+}
+
+/** Deterministic PRNG from a seed (same shape as CitizenJudges.mulberry). Pure. */
+function mulberry(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** FNV-1a hash of a string — stable seed input across restarts. Pure. */
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  const s = String(str ?? "");
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/**
+ * The diplomat claim predicate. True when this citizen may serve as a
+ * diplomat: wires the judges tier's REAL claim function
+ * (CitizenJudges.isJudge, the same predicate the court tick drafts judges
+ * with) so the ~35% of courtiers claimed as judges are never also
+ * diplomats. Fail-open when the judges module is absent: a missing tier
+ * cannot claim anyone. Never throws.
+ */
+function isDiplomat(username) {
+  try {
+    if (!normalizeName(username)) return false;
+    if (Judges && typeof Judges.isJudge === "function" && Judges.isJudge(username)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return true; // fail-open: claim checks must never break the tick
+  }
 }
 
 /** True only for real human players (not bots, not logged-out). */
@@ -262,6 +365,31 @@ function emitRumor(director, kingdomId, text) {
   }
 }
 
+/**
+ * Seed into the REAL rumor ledger (CitizenRumors.seedRumor with a real
+ * event — lineage and distortion, not console-only). The real signature is
+ * seedRumor(rng, { kind, who, what, where, holder }); anything else is a
+ * silent no-op, so build the event here. Returns the rumor or null.
+ * Never throws.
+ */
+function seedDiplomatRumor(rng, event) {
+  try {
+    const { seedRumor } = require("./CitizenRumors");
+    if (!event || !event.kind || !event.what || !event.holder) return null;
+    return seedRumor(rng, {
+      kind: String(event.kind),
+      who: String(event.who ?? event.holder),
+      whoDisplay: String(event.whoDisplay ?? event.who ?? event.holder),
+      what: String(event.what),
+      where: String(event.where ?? ""),
+      whereDisplay: String(event.whereDisplay ?? event.where ?? ""),
+      holder: String(event.holder),
+    }) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Ease tension after a successful peace treaty. Never below zero. */
 function easeTension(a, b, relief) {
   try {
@@ -317,7 +445,9 @@ function courtiersOf(director, kingdomId) {
   const out = [];
   try {
     for (const record of director.roster?.values?.() ?? []) {
-      if (record?.kingdomId === kingdomId && record?.role === ROLE_COURTIER) {
+      // Non-overlapping claim: judge-claimed courtiers are never drafted
+      // as diplomats (isDiplomat wires the judges tier's real predicate).
+      if (record?.kingdomId === kingdomId && record?.role === ROLE_COURTIER && isDiplomat(record.username)) {
         out.push({
           username: record.username,
           seed: record.seed ?? record.username,
@@ -383,14 +513,24 @@ function advanceMission(director, mission, nowMs) {
       if (elapsed >= JOURNEY_MS) {
         mission.phase = "negotiating";
         mission.phaseAt = nowMs;
+        const homeName = kingdomName(mission.homeId);
+        const targetName = kingdomName(mission.targetId);
         emitRumor(
           director,
           mission.targetId,
-          `An envoy of ${kingdomName(mission.homeId)} has arrived at court, seeking audience.`
+          `An envoy of ${homeName} has arrived at court, seeking audience.`
         );
+        // Real rumor ledger: the envoy's arrival enters gossip with lineage.
+        seedDiplomatRumor(mulberry(fnv1a("envoy:" + mission.id)), {
+          kind: "envoy",
+          who: mission.diplomat,
+          what: `arrived at the court of ${targetName}, seeking audience for a ${missionLabel(mission)}`,
+          where: targetName,
+          holder: mission.diplomat,
+        });
         journalEvent(
           mission.diplomat,
-          `Arrived at the court of ${kingdomName(mission.targetId)} — negotiations begin.`,
+          `Arrived at the court of ${targetName} — negotiations begin.`,
           "diplomacy"
         );
         return true;
@@ -473,6 +613,14 @@ function resolveOutcome(director, mission, nowMs) {
         fillLine(ALLIANCE_SUCCESS_RUMOR, { name: mission.diplomat, home: homeName, target: targetName })
       );
     }
+    // Real rumor ledger: the treaty enters gossip with lineage.
+    seedDiplomatRumor(mulberry(fnv1a("treaty:" + mission.id)), {
+      kind: "treaty",
+      who: mission.diplomat,
+      what: `concluded a ${label} with ${targetName}`,
+      where: homeName,
+      holder: mission.diplomat,
+    });
     journalEvent(
       mission.diplomat,
       `The ${label} with ${targetName} succeeds.`,
@@ -504,6 +652,14 @@ function resolveOutcome(director, mission, nowMs) {
         fillLine(ALLIANCE_INCIDENT_RUMOR, { name: mission.diplomat, home: homeName, target: targetName })
       );
     }
+    // Real rumor ledger: the collapse enters gossip with lineage.
+    seedDiplomatRumor(mulberry(fnv1a("incident:" + mission.id)), {
+      kind: "incident",
+      who: mission.diplomat,
+      what: `the ${label} with ${targetName} collapsed — talks are dead`,
+      where: homeName,
+      holder: mission.diplomat,
+    });
     journalEvent(
       mission.diplomat,
       `The ${label} with ${targetName} collapses.`,
@@ -628,39 +784,191 @@ function diplomatBot(director, mission) {
   }
 }
 
+/** Scripted line from a materialized citizen. Cosmetic, never throws. */
+function forceSay(bot, line) {
+  try {
+    bot?.forceChat?.(String(line).slice(0, LINE_MAX));
+  } catch {
+    // Non-fatal.
+  }
+}
+
 /**
- * Announce departures/returns at the home court and invite escorts.
- * One shout per phase per mission (spam plug).
+ * The first materialized citizen bot within radius of a tile anchor, or
+ * null. LOD gating for third-person ceremony lines: someone real must be
+ * there to speak, and the data tier stays silent otherwise.
+ */
+function botNearTile(director, tile, radius) {
+  try {
+    if (!tile) return null;
+    const anchor = {
+      getLocation: () => ({
+        getX: () => tile.x,
+        getY: () => tile.y,
+        getZ: () => tile.z ?? 0,
+      }),
+    };
+    for (const record of director.roster?.values?.() ?? []) {
+      try {
+        const bot = director.playerFor?.(record);
+        if (bot && withinTiles(anchor, bot, radius)) return bot;
+      } catch { /* skip */ }
+    }
+  } catch { /* fall through */ }
+  return null;
+}
+
+/**
+ * Envoy arrival ceremony at the TARGET court. LOD-gated: a materialized
+ * citizen at the target court anchor heralds the envoy only when real
+ * players are near enough to hear it. Fires once per mission, then the
+ * data tier's seeded rumor carries the story. Dialogue budget: at most
+ * CEREMONY_BUDGET lines.
+ */
+function arrivalCeremony(director, mission, nowMs) {
+  if (mission.shouted.arrival) return;
+  const anchor = courtAnchor(mission.targetId);
+  const nearby = realPlayersNearTile(director, anchor, SHOUT_RADIUS);
+  if (!nearby.length) return; // no audience: the rumor ledger speaks instead
+  const herald = botNearTile(director, anchor, SHOUT_RADIUS);
+  const rng = mulberry(fnv1a("ceremony:" + mission.id));
+  const vars = {
+    home: kingdomName(mission.homeId),
+    target: kingdomName(mission.targetId),
+    name: mission.diplomat,
+    mission: missionLabel(mission),
+  };
+  const n = 1 + Math.floor(rng() * CEREMONY_BUDGET); // 1..budget lines
+  for (let i = 0; i < n; i++) {
+    forceSay(herald, fillLine(pickOne(rng, ARRIVAL_LINES), vars));
+  }
+  mission.shouted.arrival = true;
+  journalEvent(
+    mission.diplomat,
+    `The court of ${vars.target} received the envoy of ${vars.home} in ceremony.`,
+    "diplomacy"
+  );
+}
+
+/**
+ * Stationed ambassador chatter at the foreign court. LOD-gated and
+ * hourly-capped: a materialized citizen at the target court anchor speaks
+ * at most CEREMONY_BUDGET scripted lines about the ambassador's cultural
+ * exchange. Simulated data tier when no player is near.
+ */
+function ambassadorChatter(director, mission, nowMs) {
+  const last = lastAmbassadorChatterAt.get(mission.id) || 0;
+  if (nowMs - last < AMBASSADOR_COOLDOWN_MS) return;
+  const anchor = courtAnchor(mission.targetId);
+  const nearby = realPlayersNearTile(director, anchor, SHOUT_RADIUS);
+  if (!nearby.length) return;
+  const herald = botNearTile(director, anchor, SHOUT_RADIUS);
+  if (!herald) return;
+  const rng = mulberry(fnv1a("ambassador:" + mission.id + ":" + Math.floor(nowMs / 3600000)));
+  const vars = {
+    home: kingdomName(mission.homeId),
+    target: kingdomName(mission.targetId),
+    name: mission.diplomat,
+  };
+  const n = 1 + Math.floor(rng() * CEREMONY_BUDGET); // 1..budget lines
+  for (let i = 0; i < n; i++) {
+    forceSay(herald, fillLine(pickOne(rng, AMBASSADOR_LINES), vars));
+  }
+  lastAmbassadorChatterAt.set(mission.id, nowMs);
+}
+
+/**
+ * Ledger ack: a nearby real player holding an unanswered escort invite
+ * from this diplomat. Returns the player or null. Checked before routine
+ * flavor so real requests get real answers; does not consume the invite.
+ */
+function pendingEscortAck(director, mission, nowMs) {
+  try {
+    const last = lastEscortAckAt.get(mission.id) || 0;
+    if (nowMs - last < ESCORT_ACK_COOLDOWN_MS) return null;
+    const anchor = courtAnchor(mission.homeId);
+    const nearby = realPlayersNearTile(director, anchor, SHOUT_RADIUS);
+    for (const p of nearby) {
+      let name = "";
+      try {
+        name = p.getUsername?.() ?? "";
+      } catch { continue; }
+      if (!name) continue;
+      if (pendingInviteFor(mission.diplomat, name)) return p;
+    }
+  } catch { /* fall through */ }
+  return null;
+}
+
+/** Acknowledge the pending escort invite in-world (scripted, zero LLM). */
+function ackEscortInvite(director, mission, player, nowMs) {
+  const bot = diplomatBot(director, mission);
+  if (!bot) return;
+  let name = "";
+  try {
+    name = player.getUsername?.() ?? "traveler";
+  } catch { /* fall through */ }
+  const rng = mulberry(fnv1a("ack:" + mission.id + ":" + Math.floor(nowMs / 900000)));
+  forceSay(
+    bot,
+    fillLine(pickOne(rng, ESCORT_ACK_LINES), {
+      name,
+      city: kingdomName(mission.targetId),
+    })
+  );
+  lastEscortAckAt.set(mission.id, nowMs);
+}
+
+/**
+ * Departure/return announcements at the home court + escort invites,
+ * plus ledger acks for nearby players holding unanswered escort invites.
+ * One announcement shout per phase per mission (spam plug); acks are
+ * separately cooldown-capped and fire before routine flavor.
+ */
+function homeCourtShouts(director, mission, nowMs) {
+  const anchor = courtAnchor(mission.homeId);
+  const nearby = realPlayersNearTile(director, anchor, SHOUT_RADIUS);
+  if (nearby.length === 0) return;
+
+  // Ledger ack first: a real unanswered invite beats routine flavor.
+  if (mission.phase === "departing") {
+    const pending = pendingEscortAck(director, mission, nowMs);
+    if (pending) ackEscortInvite(director, mission, pending, nowMs);
+  }
+
+  if (mission.shouted[mission.phase]) return;
+  const bot = diplomatBot(director, mission);
+  const targetName = kingdomName(mission.targetId);
+  const label = missionLabel(mission);
+  const lines = mission.phase === "departing" ? DEPART_LINES : RETURN_LINES;
+  forceSay(bot, fillLine(pickOne(Math.random, lines), { city: targetName, mission: label }));
+  mission.shouted[mission.phase] = true;
+
+  // A departing envoy invites nearby real players to ride escort.
+  if (mission.phase === "departing") {
+    inviteEscorts(director, mission, nearby);
+  }
+}
+
+/**
+ * The interaction-tier tick: LOD-gated chatter, real players only.
+ * Gate order: per-mission try/catch — one broken mission never sinks the
+ * tick. Phase dispatch: departing/returning at the home court, arrival
+ * ceremonies and ambassador chatter at the foreign court.
  */
 function tickDiplomatShouts(director, nowMs) {
+  pruneCooldowns(nowMs);
   try {
     for (const mission of missions.values()) {
-      if (mission.phase !== "departing" && mission.phase !== "returning") continue;
-      if (mission.shouted[mission.phase]) continue;
-
-      const anchor = courtAnchor(mission.homeId);
-      const nearby = realPlayersNearTile(director, anchor, SHOUT_RADIUS);
-      if (nearby.length === 0) continue;
-
-      const bot = diplomatBot(director, mission);
-      const targetName = kingdomName(mission.targetId);
-      const label = missionLabel(mission);
-      const lines = mission.phase === "departing" ? DEPART_LINES : RETURN_LINES;
-      const line = fillLine(pickOne(Math.random, lines), {
-        city: targetName,
-        mission: label,
-      });
       try {
-        if (bot) bot.forceChat?.(line);
-      } catch {
-        // Non-fatal.
-      }
-      mission.shouted[mission.phase] = true;
-
-      // A departing envoy invites nearby real players to ride escort.
-      if (mission.phase === "departing") {
-        inviteEscorts(director, mission, nearby);
-      }
+        if (mission.phase === "departing" || mission.phase === "returning") {
+          homeCourtShouts(director, mission, nowMs);
+        } else if (mission.phase === "negotiating") {
+          arrivalCeremony(director, mission, nowMs);
+        } else if (mission.phase === "stationed") {
+          ambassadorChatter(director, mission, nowMs);
+        }
+      } catch { /* per-mission: never break the loop */ }
     }
   } catch (e) {
     console.warn("[citizen-diplomats] shout tick failed:", e?.message ?? e);
@@ -786,6 +1094,11 @@ module.exports = {
   acceptDiplomatInvite,
   declineDiplomatInvite,
   diplomatStatus,
+  // The diplomat claim predicate: wires the judges tier's REAL claim
+  // function so judge-claimed courtiers are never also diplomats.
+  isDiplomat,
+  // Real rumor ledger seeding (seedRumor with a real event).
+  seedDiplomatRumor,
   // Pure helpers for tests:
   pickDiplomats,
   diplomatRole,
@@ -794,6 +1107,8 @@ module.exports = {
   successChance,
   resolveMission,
   fillLine,
+  mulberry,
+  fnv1a,
   isRealPlayer,
   withinTiles,
   pickOne,
@@ -807,4 +1122,12 @@ module.exports = {
   ROLE_NEGOTIATOR,
   ROLE_AMBASSADOR,
   INVITE_KIND_ESCORT,
+  CEREMONY_BUDGET,
+  AMBASSADOR_COOLDOWN_MS,
+  ESCORT_ACK_COOLDOWN_MS,
+  LINE_MAX,
+  // Line pools (non-empty checks):
+  ARRIVAL_LINES,
+  AMBASSADOR_LINES,
+  ESCORT_ACK_LINES,
 };

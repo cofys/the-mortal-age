@@ -14,12 +14,23 @@ const {
   withinTiles,
   pickOne,
   _resetForTests,
+  isDiplomat,
+  seedDiplomatRumor,
+  mulberry,
+  fnv1a,
   MISSION_TRADE,
   MISSION_CULTURE,
   MISSION_PEACE,
   MISSION_ALLIANCE,
   ROLE_ENVOY,
   ROLE_NEGOTIATOR,
+  CEREMONY_BUDGET,
+  AMBASSADOR_COOLDOWN_MS,
+  ESCORT_ACK_COOLDOWN_MS,
+  LINE_MAX,
+  ARRIVAL_LINES,
+  AMBASSADOR_LINES,
+  ESCORT_ACK_LINES,
 } = require("./CitizenDiplomats");
 
 _resetForTests();
@@ -181,6 +192,82 @@ function tensionOf(a, b) {
   assert.equal(withinTiles(at(0, 0), at(13, 0), 12), false, "outside radius");
   assert.equal(withinTiles(at(0, 0, 0), at(0, 0, 1), 12), false, "different plane");
   assert.equal(withinTiles(null, at(0, 0), 12), false, "null-safe");
+}
+
+// === Diplomats2 rung ===
+
+// --- isDiplomat: non-overlapping claim, wired to the REAL judge predicate ---
+{
+  const { isJudge } = require("./CitizenJudges");
+  // Find one judge-claimed and one unclaimed name to pin both sides.
+  let judgeName = null;
+  let freeName = null;
+  for (let i = 0; i < 500 && (!judgeName || !freeName); i++) {
+    const n = "Courtier" + i;
+    if (isJudge(n) && !judgeName) judgeName = n;
+    if (!isJudge(n) && !freeName) freeName = n;
+  }
+  assert.ok(judgeName, "found a judge-claimed name");
+  assert.ok(freeName, "found an unclaimed name");
+  assert.equal(isDiplomat(judgeName), false, "judge-claimed courtiers are never diplomats");
+  assert.equal(isDiplomat(freeName), true, "unclaimed courtiers may be diplomats");
+  // Full agreement with the real predicate over the sample.
+  for (let i = 0; i < 200; i++) {
+    const n = "Sample" + i;
+    assert.equal(isDiplomat(n), !isJudge(n), `isDiplomat matches !isJudge for ${n}`);
+  }
+  assert.equal(isDiplomat(""), false, "empty name is not a diplomat");
+  assert.equal(isDiplomat(null), false, "null-safe");
+}
+
+// --- fillLine: dialogue budget (engine chat length) ---
+{
+  const long = fillLine("Greetings from {city}!", { city: "x".repeat(200) });
+  assert.ok(long.length <= LINE_MAX, `filled lines stay <=${LINE_MAX} chars`);
+  assert.ok(ARRIVAL_LINES.length > 0 && AMBASSADOR_LINES.length > 0 && ESCORT_ACK_LINES.length > 0, "line pools non-empty");
+  // Worst case: every pool line filled with oversized values still fits.
+  const fat = { home: "x".repeat(60), target: "y".repeat(60), name: "z".repeat(60), mission: "w".repeat(60), city: "v".repeat(60) };
+  for (const pool of [ARRIVAL_LINES, AMBASSADOR_LINES, ESCORT_ACK_LINES]) {
+    for (const tpl of pool) {
+      assert.ok(fillLine(tpl, fat).length <= LINE_MAX, "pool line fits after fill");
+    }
+  }
+  assert.equal(CEREMONY_BUDGET, 2, "ceremony dialogue budget is 2 lines");
+  assert.equal(AMBASSADOR_COOLDOWN_MS, 60 * 60 * 1000, "ambassador chatter hourly");
+  assert.equal(ESCORT_ACK_COOLDOWN_MS, 15 * 60 * 1000, "escort acks every 15 min");
+}
+
+// --- mulberry / fnv1a: deterministic ---
+{
+  const a = mulberry(fnv1a("seed"));
+  const b = mulberry(fnv1a("seed"));
+  assert.equal(a(), b(), "same seed, same sequence");
+  assert.notEqual(mulberry(fnv1a("x"))(), mulberry(fnv1a("y"))(), "different seeds differ");
+}
+
+// --- seedDiplomatRumor: real event into the real rumor ledger ---
+{
+  const { seedRumor } = require("./CitizenRumors");
+  const rumor = seedDiplomatRumor(mulberry(42), {
+    kind: "treaty",
+    who: "Aldric",
+    what: "concluded a peace treaty with Varrock",
+    where: "Misthalin",
+    holder: "Aldric",
+  });
+  assert.ok(rumor, "seeds a real rumor");
+  assert.equal(rumor.seedKind, "treaty", "kind lands in the ledger");
+  assert.equal(rumor.truth.who, "Aldric", "who lands in the ledger");
+  assert.ok(rumor.truth.what.length <= 80, "what is ledger-sized");
+  assert.equal(rumor.holderDisplay, "Aldric", "holder lands in the ledger");
+  assert.equal(
+    seedDiplomatRumor(mulberry(1), { kind: "treaty", what: "" }),
+    null,
+    "empty what is a no-op, not a throw"
+  );
+  assert.equal(seedDiplomatRumor(mulberry(1), null), null, "null event is a no-op");
+  // Never throws on garbage.
+  assert.doesNotThrow(() => seedDiplomatRumor(null, { kind: "x", what: "y", holder: "z" }), "rng failures never throw");
 }
 
 console.log("CitizenDiplomats: all assertions passed");
