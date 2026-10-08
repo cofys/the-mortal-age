@@ -73,6 +73,7 @@ const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
 const { tickFestivals } = require("../lib/CitizenFestivals");
+const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickCaravans } = require("../lib/CitizenTradeCaravans");
 const { tickCaravanShouts } = require("../lib/CitizenTradeCaravans");
@@ -735,6 +736,15 @@ class CitizenDirector {
       CitizenMarketStalls.tickMarketStalls(this, Date.now());
     } catch (error) {
       this.log("market stalls (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Street performers: buskers, bards and conjurers play the squares,
+    // markets and tavern entrances for tips during the day. Nearby citizen
+    // bots applaud; real players tip with "use coins on performer". Data
+    // tier, zero LLM, per-citizen try/catch inside.
+    try {
+      tickPerformers(this, Date.now());
+    } catch (error) {
+      this.log("performers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Guard patrols: the visible watch — checkpoint check-ins, disturbance
     // response, escort offers and follows, night-watch torch announcements,
@@ -1431,6 +1441,16 @@ class CitizenDirector {
       tickFestivals(this, nowMs);
     } catch (error) {
       this.log("festivals failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen fishing tournaments: weekly per-kingdom tournaments
+    // (announcement -> registration -> competition -> weigh-in -> prizes).
+    // Catches simulated data-tier, trash-talk and results player-visible.
+    // Players can register/compete via fishing:tournament-* events.
+    // Data tier, zero LLM.
+    try {
+      tickFishingTournaments(this, nowMs);
+    } catch (error) {
+      this.log("fishing tournaments failed", { error: String(error?.message ?? error) });
     }
     // Citizen newspaper: once a week, compile the paper from journals,
     // rumors, festivals, elections, and retirements — headlines, gossip
