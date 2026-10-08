@@ -138,6 +138,7 @@ const { tickSongfolk } = require("../lib/CitizenBards2");
 const { tickFarmfolk } = require("../lib/CitizenFarmers2");
 const { tickMoneyfolk } = require("../lib/CitizenBankers2");
 const { tickErrandfolk } = require("../lib/CitizenCouriers2");
+const { tickHerbfolk } = require("../lib/CitizenHerbalists2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2329,6 +2330,18 @@ class CitizenDirector {
       tickErrandfolk(this, nowMs);
     } catch (error) {
       this.log("errandfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen herbfolk (CitizenHerbalists2): hedgerow foragers picking
+    // kitchen weeds, petal-driers selling potpourri, window-box tenders and
+    // garden weeders for hire — the amateur greens trade under the nose of
+    // the professional herbalists (CitizenHerbalists), who are excluded;
+    // this owns herb patches, gather requests, pro-herb small talk and
+    // hedgerow-glut / wasp-nest set-pieces. LOD-gated via brainTickDue
+    // inside (near-band citizens always due). Data tier, zero LLM.
+    try {
+      tickHerbfolk(this, nowMs);
+    } catch (error) {
+      this.log("herbfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
