@@ -25,6 +25,7 @@ const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish,
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { initCitizenSocial, onSocialChatResponse } = require("./chat/CitizenSocial");
 const { registerCitizenActionTypes } = require("./brain/CitizenActionTypes");
+const { initCitizenDecisions } = require("./brain/CitizenDecisions");
 const {
   registerCitizenActivities,
   getBaseRegistry,
@@ -97,6 +98,9 @@ function initCitizens(api) {
   registerCitizenActionTypes();
   const added = registerCitizenActivities();
   api.log?.("[citizens] activities registered", { added });
+  // Decision layer: needs-driven activity picker + interrupt hook. Installed
+  // even when the director is idle — it no-ops without citizens.
+  initCitizenDecisions(getBaseRegistry());
   initMarketBoard(api);
   initMarketRegistrar(api);
   if (!citizensEnabled()) {
