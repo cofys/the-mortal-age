@@ -32,16 +32,24 @@ function mockPlayer(name, x, y, isBot = false) {
     _chats: chats,
   };
 }
+// Real-API director shape: isOnline/getBot (CitizenDirector.js:1374/1379);
+// the citizen bot carries getLocalPlayers (Player.ts:796). The old mocks
+// used playerFor/onlinePlayers, which do not exist (blacksmiths audit 2026-10-08).
 function mockDirector(records, players) {
   const roster = new Map(records.map((r) => [r.username, r]));
   const bots = new Map();
+  const botFor = (rec) => {
+    if (!bots.has(rec.username)) {
+      const bot = mockPlayer(rec.username, 100, 100, true);
+      bot.getLocalPlayers = () => players;
+      bots.set(rec.username, bot);
+    }
+    return bots.get(rec.username);
+  };
   return {
     roster,
-    playerFor: (rec) => {
-      if (!bots.has(rec.username)) bots.set(rec.username, mockPlayer(rec.username, 100, 100, true));
-      return bots.get(rec.username);
-    },
-    onlinePlayers: () => players,
+    isOnline: () => true,
+    getBot: botFor,
   };
 }
 function fresh() {
@@ -244,7 +252,7 @@ function fresh() {
   const real = mockPlayer("Jon", 102, 102, false);
   const dir = mockDirector([rec], [real]);
   withFixedRandom(0.05, () => S.tickSmithfolk(dir, T0)); // 0.05 < 0.15 chance gate
-  const bot = dir.playerFor(rec);
+  const bot = dir.getBot(rec);
   assert.ok(bot._chats.length >= 1, "citizen spoke near a real player");
   console.log("tick fires near player: PASS");
 }
@@ -261,7 +269,7 @@ function fresh() {
   const botOnly = mockPlayer("BotBob", 102, 102, true);
   const dir = mockDirector([rec], [botOnly]);
   withFixedRandom(0.05, () => S.tickSmithfolk(dir, T0));
-  const bot = dir.playerFor(rec);
+  const bot = dir.getBot(rec);
   assert.equal(bot._chats.length, 0, "silent near bots only");
   console.log("tick silent near bots: PASS");
 }
@@ -279,11 +287,11 @@ function fresh() {
   const dir = mockDirector([rec], [real]);
   const night = new Date(2026, 9, 8, 3, 0).getTime();
   withFixedRandom(0.05, () => S.tickSmithfolk(dir, night));
-  // playerFor may never have been called (type gate passes but hour gate fails first? no —
+  // getBot may never have been called (type gate passes but hour gate fails first? no —
   // type gate passes, then materialization happens, then hour gate). Either way no chat.
   let chats = 0;
   try {
-    chats = dir.playerFor(rec)._chats.length;
+    chats = dir.getBot(rec)._chats.length;
   } catch { /* never materialized */ }
   assert.equal(chats, 0, "silent at 03:00");
   console.log("tick silent outside hours: PASS");
@@ -303,11 +311,11 @@ function fresh() {
   let materialized = false;
   const dir = {
     roster: new Map([[proU, rec]]),
-    playerFor: () => {
+    isOnline: () => true,
+    getBot: () => {
       materialized = true;
       return mockPlayer(proU, 100, 100, true);
     },
-    onlinePlayers: () => [real],
   };
   withFixedRandom(0.05, () => S.tickSmithfolk(dir, T0));
   assert.ok(!materialized, "pro smith never materialized (type gate first)");

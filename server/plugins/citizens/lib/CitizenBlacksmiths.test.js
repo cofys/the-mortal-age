@@ -176,12 +176,18 @@ function lcg(seed) {
     getHostAddress: () => "bot",
     getLocation: () => ({ getX: () => 3005, getY: () => 3000, getZ: () => 0 }),
   });
-  const mkDirector = (online) => ({
-    roster: new Map([[smithName, { username: smithName, role: "commoner" }]]),
-    playerFor: () => citizenBot,
-    onlinePlayers: () => online,
-    api: { core: { Animation: function (id) { this.id = id; } } },
-  });
+  // Real-API director shape: isOnline/getBot (CitizenDirector.js:1374/1379);
+  // the citizen bot carries getLocalPlayers (Player.ts:796). The old mocks
+  // used playerFor/onlinePlayers, which do not exist (blacksmiths audit 2026-10-08).
+  const mkDirector = (online) => {
+    const bot = { ...citizenBot, getLocalPlayers: () => online };
+    return {
+      roster: new Map([[smithName, { username: smithName, role: "commoner" }]]),
+      isOnline: () => true,
+      getBot: () => bot,
+      api: { core: { Animation: function (id) { this.id = id; } } },
+    };
+  };
 
   // Only a bot online -> no visible work, nothing said.
   B.tickSmiths(mkDirector([mkBot()]), Date.now());
@@ -207,15 +213,8 @@ function lcg(seed) {
   const record = { username: "someguard", role: "guard" };
   const director = {
     roster: new Map([["someguard", record]]),
-    playerFor: () => ({ forceChat: () => { throw new Error("should not fire"); }, performAnimation: () => {} }),
-    onlinePlayers: () => [
-      {
-        getUsername: () => "human",
-        isPlayerBot: () => false,
-        getHostAddress: () => "127.0.0.1",
-        getLocation: () => ({ getX: () => 0, getY: () => 0, getZ: () => 0 }),
-      },
-    ],
+    isOnline: () => true,
+    getBot: () => ({ forceChat: () => { throw new Error("should not fire"); }, performAnimation: () => {} }),
   };
   const real = Math.random;
   Math.random = () => 0.0;
