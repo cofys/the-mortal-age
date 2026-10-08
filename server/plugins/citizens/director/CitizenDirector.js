@@ -68,6 +68,7 @@ const CitizenTailors = require("../lib/CitizenTailors");
 const CitizenBlacksmiths = require("../lib/CitizenBlacksmiths");
 const CitizenAlchemists = require("../lib/CitizenAlchemists");
 const CitizenHerbalists = require("../lib/CitizenHerbalists");
+const CitizenJewelers = require("../lib/CitizenJewelers");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -882,6 +883,16 @@ class CitizenDirector {
       CitizenHerbalists.tickHerbalists(this, Date.now(), desync);
     } catch (error) {
       this.log("herbalists (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Jewelers: gem cutters, goldsmiths, appraisers and traders visibly
+    // work their workshops (engine-verified gem-cutting anims 885-892,
+    // 2717, 7185 from Crafting.plugin.js, wares hawking, masterpiece
+    // unveilings, commission offers) — only while a real player is around
+    // to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenJewelers.tickJewelers(this, Date.now(), desync);
+    } catch (error) {
+      this.log("jewelers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
