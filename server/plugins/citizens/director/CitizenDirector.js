@@ -118,6 +118,7 @@ const { tickVolunteers } = require("../lib/CitizenVolunteers");
 const { tickStorytellers } = require("../lib/CitizenStorytellers");
 const { tickHistorians } = require("../lib/CitizenHistorians");
 const { tickMenders } = require("../lib/CitizenMenders");
+const { tickCouriers } = require("../lib/CitizenCouriers");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2038,6 +2039,18 @@ class CitizenDirector {
       tickMenders(this, nowMs);
     } catch (error) {
       this.log("menders failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen couriers: the private delivery underworld — pigeon keepers,
+    // parcel runners, letter carriers and message runners-for-hire.
+    // Hash-derived types and per-day runs, 7-day-TTL ledgers for hired
+    // deliveries and pigeon messages, pigeon-release fanfare as the crowd
+    // moment. Activity system (no professional exclusions): any commoner
+    // may courier. Distinct from messengers (official post) — this module
+    // owns the private side. Data tier, zero LLM.
+    try {
+      tickCouriers(this, nowMs);
+    } catch (error) {
+      this.log("couriers failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
