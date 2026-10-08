@@ -82,6 +82,7 @@ const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenBankers = require("../lib/CitizenBankers");
 const CitizenInnkeepers = require("../lib/CitizenInnkeepers");
+const CitizenStablehands = require("../lib/CitizenStablehands");
 const CitizenLibrarians = require("../lib/CitizenLibrarians");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
@@ -956,6 +957,16 @@ class CitizenDirector {
       CitizenInnkeepers.tickInnkeepers(this, Date.now(), desync);
     } catch (error) {
       this.log("innkeepers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Stablehands: grooms, trainers, breeders and veterinarians visibly
+    // run the stable yards (scripted grooming/training/breeding/vet lines,
+    // foaling announcements, rare-breed hawking, stabling and riding-lesson
+    // offers) — only while a real player is around to see them. Data tier,
+    // zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenStablehands.tickStablehands(this, Date.now(), desync);
+    } catch (error) {
+      this.log("stablehands (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Librarians: archivists, researchers, scribes and storytellers visibly
     // keep the kingdom libraries (scripted shelving/study/copying emotes,
