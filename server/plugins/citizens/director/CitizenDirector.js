@@ -134,6 +134,7 @@ const { tickGemfolk } = require("../lib/CitizenJewelers2");
 const { tickDockfolk } = require("../lib/CitizenSailors2");
 const { tickGuardfolk } = require("../lib/CitizenGuards2");
 const { tickHostfolk } = require("../lib/CitizenInnkeepers2");
+const { tickSongfolk } = require("../lib/CitizenBards2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2274,6 +2275,19 @@ class CitizenDirector {
       tickHostfolk(this, nowMs);
     } catch (error) {
       this.log("hostfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen amateur songfolk (CitizenBards2): street buskers, tale-
+    // spinners, amateur minstrels and ballad-swappers — the campfire-
+    // circle and community-stage amateur side of the bard's trade.
+    // Professional bards (CitizenBards), anchored street performers and
+    // inn bards are excluded; this owns simple tunes, tune requests,
+    // busker tips, tune lessons, rival ballad contests and recovered
+    // legendary ballads. LOD-gated via brainTickDue inside (near-band
+    // citizens always due). Data tier, zero LLM.
+    try {
+      tickSongfolk(this, nowMs);
+    } catch (error) {
+      this.log("songfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
