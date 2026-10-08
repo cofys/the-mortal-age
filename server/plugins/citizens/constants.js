@@ -19,6 +19,10 @@ const ATTR_CITIZEN_NEEDS = "citizens:needs";
 // (see the merchant_tend spec in data/citizen-activities.json).
 const ATTR_WARE_ITEM = "citizens:ware-item";
 const ATTR_WARE_PRICE = "citizens:ware-price";
+// Market-stall wares published by CitizenMarketStalls: JSON [{id, price}]
+// for the day's 3-5 wares. When set, MerchantShops renders these instead
+// of the single spec ware. Empty/unset = the stall is closed.
+const ATTR_MARKET_WARES = "citizens:market-wares";
 // Merchant specializations. Per capital: one prime (fully-real stall,
 // restocks wholesale from the supplier), one supplier (wholesaler), one
 // provisioner (default bread stall).
@@ -90,6 +94,7 @@ module.exports = {
   ATTR_CITIZEN_NEEDS,
   ATTR_WARE_ITEM,
   ATTR_WARE_PRICE,
+  ATTR_MARKET_WARES,
   ATTR_PRIME_MERCHANT,
   ATTR_SUPPLIER_MERCHANT,
   ROLE_GUARD,

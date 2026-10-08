@@ -59,6 +59,7 @@ const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
+const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
@@ -685,6 +686,15 @@ class CitizenDirector {
       CitizenShopkeeping.tickShopkeeping(this, Date.now());
     } catch (error) {
       this.log("shopkeeping (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Market stalls: merchants claim a pitch during market hours, set up
+    // 3-5 wares with personality-driven prices, haggle with liked
+    // customers, and pack up at night. Data tier, zero LLM,
+    // per-citizen try/catch inside.
+    try {
+      CitizenMarketStalls.tickMarketStalls(this, Date.now());
+    } catch (error) {
+      this.log("market stalls (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Personal companion invites: citizens invite nearby players on 1-on-1
     // outings (fishing, dungeon, walk, tavern) and remember yes/no.

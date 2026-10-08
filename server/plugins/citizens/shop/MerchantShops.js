@@ -32,6 +32,7 @@ const {
   ATTR_CITIZEN_PERSONALITY,
   ATTR_WARE_ITEM,
   ATTR_WARE_PRICE,
+  ATTR_MARKET_WARES,
   ROLE_MERCHANT,
 } = require("../constants");
 const { isKingdomAtWar } = require("../CitizenEvents");
@@ -160,7 +161,62 @@ function queryReferencePrice(api, itemId) {
   return Number.isFinite(price) && price > 0 ? Math.floor(price) : null;
 }
 
+/**
+ * The layered market price stack (war / scarcity / demand / season),
+ * applied to one ware. Shared by the single-ware and market-stall paths.
+ */
+function priceWithMarketStack(api, merchant, wareId, base) {
+  const name =
+    api.core.ItemDefinition.forId(wareId)?.getName?.() ?? `Item ${wareId}`;
+  const warMult = isWarGood(name) ? warPriceMultiplier(merchant) : 1;
+  const scarce = scarcityPricing(merchant, wareId);
+  const demand = demandPricing(wareId);
+  const season = seasonalPricing(name);
+  const marketMult = warMult * scarce.mult * demand.mult * season.mult;
+  const price = Math.max(1, Math.ceil(base * marketMult));
+  const marketNote =
+    scarce.note ?? demand.note ?? season.note ?? (warMult > 1 ? "war prices" : null);
+  return { id: wareId, name, price, marketNote };
+}
+
+/**
+ * Market-stall wares published by CitizenMarketStalls on the merchant's
+ * citizens:market-wares attribute (JSON [{id, price}]). Returns the priced
+ * ware list, or null when the merchant has no stall set up (falls back to
+ * the single-ware spec path).
+ */
+function marketStallWares(api, merchant) {
+  let raw = null;
+  try {
+    raw = merchant?.getAttribute?.(ATTR_MARKET_WARES);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  let list = null;
+  try {
+    list = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const out = [];
+  for (const entry of list.slice(0, COMPONENT.MAX_WARES)) {
+    const id = Math.floor(Number(entry?.id));
+    const base = Math.floor(Number(entry?.price));
+    if (!(id > 0) || !(base > 0)) continue;
+    out.push(priceWithMarketStack(api, merchant, id, base));
+  }
+  return out.length > 0 ? out : null;
+}
+
 function merchantWares(api, merchant) {
+  // CitizenMarketStalls publishes the day's 3-5 wares (with
+  // personality-driven list prices) while the stall is open. The market
+  // stack applies on top, same as the single-ware path.
+  const stallWares = marketStallWares(api, merchant);
+  if (stallWares) return stallWares;
+
   const spec = loadMerchantSpec();
   // Per-merchant ware override: specialist merchants (the sword supplier,
   // the prime) carry citizens:ware-item / citizens:ware-price attributes
@@ -185,24 +241,9 @@ function merchantWares(api, merchant) {
   }
   const base =
     queryReferencePrice(api, wareId) ?? Math.max(1, Math.floor(pricePerWare));
-  const name =
-    api.core.ItemDefinition.forId(wareId)?.getName?.() ?? String(wareItem);
-  // Layered market pricing, all data-tier:
-  //   war — steel and bread cost war prices when the borders run hot
-  //         (the market closes outright once the war itself starts);
-  //   scarcity — nearly sold out costs more, overstock gets a markdown;
-  //   demand — open economy:demand orders for this ware price desperation in;
-  //   season — food breathes with the harvest year.
-  const warMult = isWarGood(name) ? warPriceMultiplier(merchant) : 1;
-  const scarce = scarcityPricing(merchant, wareId);
-  const demand = demandPricing(wareId);
-  const season = seasonalPricing(name);
-  const marketMult = warMult * scarce.mult * demand.mult * season.mult;
-  const marketBase = Math.max(1, Math.ceil(base * marketMult));
-  const priceNote =
-    scarce.note ?? demand.note ?? season.note ?? (warMult > 1 ? "war prices" : null);
-  journalPriceMove(merchant, name, marketBase);
-  return [{ id: wareId, name, price: marketBase, marketNote: priceNote }];
+  const priced = priceWithMarketStack(api, merchant, wareId, base);
+  journalPriceMove(merchant, priced.name, priced.price);
+  return [priced];
 }
 
 // War goods: weapons and food — what an army (or a frightened town) buys.
@@ -1015,4 +1056,6 @@ module.exports = {
   // Exported for tests / review.
   GROUP_ID,
   TRADE_OPTION_SLOT,
+  marketStallWares,
+  priceWithMarketStack,
 };
