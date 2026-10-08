@@ -142,6 +142,7 @@ const { tickHerbfolk } = require("../lib/CitizenHerbalists2");
 const { tickGlassfolk } = require("../lib/CitizenGlassblowers2");
 const { tickWoodfolk } = require("../lib/CitizenArtisans2");
 const { tickLaborfolk } = require("../lib/CitizenBuilders2");
+const { tickTimefolk } = require("../lib/CitizenClockmakers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2383,6 +2384,19 @@ class CitizenDirector {
       tickLaborfolk(this, nowMs);
     } catch (error) {
       this.log("laborfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen timefolk (CitizenClockmakers2): knocker-uppers, bell-tenders,
+    // hour-callers and sandglass-minders — the amateur public-time side of
+    // the horology trade under the master clockmakers (CitizenClockmakers),
+    // who are excluded via the real module's clockmakerTypeOf null path; this
+    // owns rounds/bells/squares/glasses, the daily guild-workshop bridge,
+    // wake-up calls, player callouts, and the full-peal / rope-snap /
+    // hoarse-caller / clogged-glass set-pieces. LOD-gated via brainTickDue
+    // inside (near-band citizens always due). Data tier, zero LLM.
+    try {
+      tickTimefolk(this, nowMs);
+    } catch (error) {
+      this.log("timefolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
