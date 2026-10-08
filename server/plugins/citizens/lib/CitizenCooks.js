@@ -177,6 +177,19 @@ function isRealPlayer(player) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Canonical replacement for the dead director.playerFor: only materialize
+ * when the director says the citizen is online.
+ */
+function materializedBot(director, record) {
+  try {
+    return director?.isOnline?.(record) ? director.getBot?.(record) ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cheap Chebyshev distance check (same plane). */
 function withinTiles(a, b, radius) {
   try {
@@ -277,12 +290,12 @@ function specialFor(username, kingdom, dateMs) {
 }
 
 /** The sellable wares for a cook type (what they hawk). */
-function waresFor(username, type, dateMs) {
+function waresFor(username, type, dateMs, kingdom) {
   if (type === COOK_BAKER) return BAKER_BAKES[hashStr("wares|" + String(username).toLowerCase()) % BAKER_BAKES.length];
   if (type === COOK_STREET_VENDOR) return STREET_FOOD[hashStr("wares|" + String(username).toLowerCase()) % STREET_FOOD.length];
   if (type === COOK_CHEF) return EXOTIC_PLATES[hashStr("wares|" + String(username).toLowerCase()) % EXOTIC_PLATES.length];
   // Tavern keepers sell the meal of the day.
-  return mealFor(username, "misthalin", dateMs);
+  return mealFor(username, kingdom || "misthalin", dateMs);
 }
 
 // === Visible work lines (forceChat emotes, zero LLM) ===
@@ -454,7 +467,7 @@ function tickCooks(director, nowMs, desync) {
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the kitchen.
@@ -478,7 +491,7 @@ function tickCooks(director, nowMs, desync) {
         if (!type) continue;
         const last = lastHawkByCitizen.get(record.username) || 0;
         if (nowMs - last < HAWK_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -499,7 +512,7 @@ function tickCooks(director, nowMs, desync) {
         if (!type) continue;
         const last = lastTeachByCitizen.get(record.username) || 0;
         if (nowMs - last < TEACH_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= TEACH_CHANCE) continue;
@@ -519,12 +532,12 @@ function tickCooks(director, nowMs, desync) {
 function doCookWork(director, record, citizen, type, nowMs) {
   const line = workLineFor(Math.random, type);
   if (!line) return;
-  const kitchen = kitchenFor(record.username, record.kingdom, type);
+  const kitchen = kitchenFor(record.username, record.kingdomId ?? record.kingdom, type);
   const season = seasonFor(nowMs);
   const ingredients = ingredientsFor(season);
   // Rare seasonal-special unveilings are the crowd moment.
   if (Math.random() < SPECIAL_CHANCE) {
-    const special = specialFor(record.username, record.kingdom, nowMs);
+    const special = specialFor(record.username, record.kingdomId ?? record.kingdom, nowMs);
     try {
       citizen.forceChat?.(specialLineFor(Math.random, special, kitchen));
     } catch {
@@ -543,7 +556,7 @@ function doCookWork(director, record, citizen, type, nowMs) {
   // One journal line per loop — the LLM's source of truth. Includes the
   // kitchen, the meal, and where the ingredients came from (the farmers),
   // so "what have you been up to?" is answerable.
-  const meal = mealFor(record.username, record.kingdom, nowMs);
+  const meal = mealFor(record.username, record.kingdomId ?? record.kingdom, nowMs);
   const ingredient = ingredients.length > 0 ? ingredients[hashStr(record.username) % ingredients.length] : "local produce";
   const tavernNote = type === COOK_TAVERN_KEEPER ? " Game night at the tavern later — everyone's welcome." : "";
   journalEvent(
@@ -555,9 +568,9 @@ function doCookWork(director, record, citizen, type, nowMs) {
 /** Meal announcement + fresh-food hawking for nearby players. */
 function doCookHawk(director, citizen, record, type, nowMs) {
   void director;
-  const kitchen = kitchenFor(record.username, record.kingdom, type);
-  const meal = mealFor(record.username, record.kingdom, nowMs);
-  const wares = waresFor(record.username, type, nowMs);
+  const kitchen = kitchenFor(record.username, record.kingdomId ?? record.kingdom, type);
+  const meal = mealFor(record.username, record.kingdomId ?? record.kingdom, nowMs);
+  const wares = waresFor(record.username, type, nowMs, record.kingdomId ?? record.kingdom);
   const line = mealLineFor(Math.random, meal, kitchen);
   try {
     citizen.forceChat?.(line);
@@ -570,8 +583,8 @@ function doCookHawk(director, citizen, record, type, nowMs) {
 /** Recipe lesson offer — journal records the recipe so the LLM tier knows. */
 function doTeachOffer(citizen, record, type, nowMs) {
   void type;
-  const kitchen = kitchenFor(record.username, record.kingdom, type);
-  const meal = mealFor(record.username, record.kingdom, nowMs);
+  const kitchen = kitchenFor(record.username, record.kingdomId ?? record.kingdom, type);
+  const meal = mealFor(record.username, record.kingdomId ?? record.kingdom, nowMs);
   const line = teachLineFor(Math.random, meal);
   try {
     citizen.forceChat?.(line);
@@ -594,14 +607,15 @@ function mealOfTheDayFor(username, kingdom, dateMs) {
     type,
     kitchen: kitchen ? kitchen.name : "the kitchen",
     meal: mealFor(username, kingdom, dateMs),
-    wares: waresFor(username, type, dateMs),
+    wares: waresFor(username, type, dateMs, kingdom),
   };
 }
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director; // director.playerFor/onlinePlayers are dead; proximity comes from the bot.
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

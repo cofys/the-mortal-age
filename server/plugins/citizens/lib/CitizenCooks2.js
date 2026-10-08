@@ -286,6 +286,19 @@ function isCitizenBot(player) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Canonical replacement for the dead director.playerFor: only materialize
+ * when the director says the citizen is online.
+ */
+function materializedBot(director, record) {
+  try {
+    return director?.isOnline?.(record) ? director.getBot?.(record) ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cheap Chebyshev distance check (same plane). */
 function withinTiles(a, b, radius) {
   try {
@@ -498,23 +511,44 @@ function helpedCookFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// === Journal access (lazy require — CitizenJournal may not load in tests) ===
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
+  }
+  return _journal || null;
+}
+
+/**
+ * Journal a cookfolk work event. Canonical: getJournal().log(citizenName,
+ * "work", text) — the old helper probed appendEntry/addEntry, which don't
+ * exist, so all 7 call sites silently dropped. Journal is best-effort.
+ */
+function journalize(citizenName, text) {
+  try {
+    journal()?.log(citizenName, "work", text);
   } catch {
-    /* journal absent */
+    /* journal absent — never break the tick */
   }
 }
 
-function seedRumor(text) {
+/** Seed a grand-feast rumor into the real CitizenRumors system. */
+function seedFeastRumor(who, dish, kitchenName) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
+    if (typeof rumors.seedRumor === "function") {
+      rumors.seedRumor(Math.random, {
+        kind: "grand-feast",
+        who,
+        what: `a grand feast at ${kitchenName} — ${dish} for all`,
+        where: kitchenName,
+      });
+    }
   } catch {
     /* rumors absent */
   }
@@ -541,7 +575,7 @@ function tickCookfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Cooking hours only (dawn to late, server-local)
@@ -569,8 +603,9 @@ function tickCookfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director; // director.playerFor/onlinePlayers are dead; proximity comes from the bot.
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -597,8 +632,8 @@ function doCookfolkWork(director, record, citizen, type, nowMs) {
         dish: feast.dish,
       });
       citizen.forceChat?.(line);
-      journalize(citizen, `served a grand feast at ${kitchen.name}: ${feast.dish}`);
-      seedRumor(`Grand feast at ${kitchen.name} — ${feast.dish} for all!`);
+      journalize(name, `served a grand feast at ${kitchen.name}: ${feast.dish}`);
+      seedFeastRumor(name, feast.dish, kitchen.name);
       return;
     }
   }
@@ -610,28 +645,28 @@ function doCookfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.35) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     citizen.forceChat?.(line);
-    journalize(citizen, `cooked at ${kitchen.name}`);
+    journalize(name, `cooked at ${kitchen.name}`);
   } else if (roll < 0.55) {
     const line = fill(pickOne(Math.random, DISH_LINES), { dish });
     citizen.forceChat?.(line);
-    journalize(citizen, `served ${todays.join(", ")} at ${kitchen.name}`);
+    journalize(name, `served ${todays.join(", ")} at ${kitchen.name}`);
   } else if (roll < 0.7) {
     const price = priceFor(type);
     const line = fill(pickOne(Math.random, SELL_LINES), { dish });
     citizen.forceChat?.(price > 0 ? `${line} (${price} coins)` : line);
-    journalize(citizen, `hawked ${dish} at ${kitchen.name}`);
+    journalize(name, `hawked ${dish} at ${kitchen.name}`);
   } else if (roll < 0.82) {
     const line = pickOne(Math.random, type === COOKFOLK_SOUP ? SHARE_LINES : TEACH_LINES);
     citizen.forceChat?.(fill(line, { dish }));
-    journalize(citizen, `shared ${dish} at ${kitchen.name}`);
+    journalize(name, `shared ${dish} at ${kitchen.name}`);
   } else if (roll < 0.93) {
     const line = fill(pickOne(Math.random, TEACH_LINES), { dish });
     citizen.forceChat?.(line);
-    journalize(citizen, `taught ${dish} at ${kitchen.name}`);
+    journalize(name, `taught ${dish} at ${kitchen.name}`);
   } else {
     const line = pickOne(Math.random, HELP_LINES);
     citizen.forceChat?.(line);
-    journalize(citizen, `asked for help at ${kitchen.name}`);
+    journalize(name, `asked for help at ${kitchen.name}`);
   }
 }
 
