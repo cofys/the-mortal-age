@@ -80,6 +80,7 @@ const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const { tickPerformers } = require("../lib/CitizenStreetPerformers");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
+const CitizenBankers = require("../lib/CitizenBankers");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
@@ -933,6 +934,16 @@ class CitizenDirector {
       CitizenGuards.tickGuards(this, Date.now());
     } catch (error) {
       this.log("guards (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Bankers: tellers, vault-keepers, loan officers and auditors visibly
+    // run the banks (engine-free scripted service lines, vault open/seal
+    // announcements, loan offers and collections, daily audits) — only
+    // while a real player is around to see them. Data tier, zero LLM,
+    // per-citizen try/catch inside.
+    try {
+      CitizenBankers.tickBankers(this, Date.now());
+    } catch (error) {
+      this.log("bankers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Caravan shouts: muster/departure/arrival announcements and
     // guard/trader invites, only where a real player can see them.
