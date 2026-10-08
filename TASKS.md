@@ -22,6 +22,7 @@ before you start. See `COLLAB.md` for the full protocol.
 
 ## DONE
 
+- [x] 2026-10-08 — citizens: guards rung audit (coordinator-1430) — CLEAN 5/5: LOD-gated (per-guard `seen` = real player within 14 tiles, all sub-ticks take seen and early-return; shift announcements only inside 10-min change window), tick-safe (outer + per-citizen + per-sub-tick try/catch; all engine reads wrapped), zero LLM (11 scripted pools; LLM dialogue tier only calls exported reportCrime/joinWatch), no overlap (investigators cold-cases only ≥5min, outside patrol fresh window; CitizenGuards2.guardfolkTypeOf returns null for role "guard" — verified at runtime; CitizenJudges only reads isWanted), real APIs (journal→getJournal().log, notoriety→CitizenMemory). 20/20 tests pass. No code changes; PC untouched (one TASKS.md commit behind, safe to bundle).
 - [x] 2026-10-08 — citizens: bards rung audit (coordinator-1415) — CLEAN 5/5: LOD-gated (cooldown→bard→materialized→real player within 14 tiles→evening hours→chance; forceChat only near players; daily rhythms day-gated data-tier), tick-safe (outer + per-citizen try/catch), scripted-only (zero LLM; ballad-of-the-week from journaled event words), no overlap (street-performer exclusion via CitizenStreetPerformers.performerTypeOf and inn-bard exclusion via CitizenInnkeepers.innTypeFor — both verified exported), real APIs (getJournal/seedRumor; commission/request ledgers journaled). 22/22 tests pass. No code changes.
 - [x] 2026-10-08 — PC deploy 14:25 EDT (coordinator-1415): kill → pull 1117e99e→74206338 → node --check CitizenOffices.js/.test.js clean → start-tma.bat → port 43594 LISTENING, clean boot in C:\\tma\\server\\logs\\server.log, watchdog re-enabled (Ready). RAM free 0.99GB — 12 node procs are ONE server (ts-node 975MB) + ONE craco client dev server (591MB) + yarn wrappers, NOT duplicates (answers 1400 selfreview open item).
 - [x] 2026-10-08 — citizens: offices rung — honor judge claims in candidacy, deterministic weighting tests (13/13 pass), pushed to origin/main c0e6abdd
@@ -31,6 +32,12 @@ before you start. See `COLLAB.md` for the full protocol.
 - [x] 2026-10-08 — citizens: fix LOD bands using director positions
 
 ## Handoffs
+
+_2026-10-08 ~14:50 EDT (coordinator-1430) → next:_
+- origin/main = 599bbd28 (this run: guards rung audit CLEAN 5/5 recorded in TASKS.md; no code changes, no PC deploy — PC is on 74206338, one TASKS.md commit behind, safe to bundle into the next deploy).
+- Movement bug: STILL awaiting Jon's live playtest. Do NOT write speculative fixes (alignment law: claim nothing until his screen agrees).
+- Next rung audit candidates: festivalgames, healers, farmers (untouched today); guards/bards/offices done. Pattern is stable: LOD-gate, tick-safety, zero-LLM, sibling-exclusion-runtime-check, real-APIs.
+- RAM on PC: 0.99GB free at last boot — 8GB ceiling remains gating; browsers are the reclaimable bulk per Jon.
 
 _2026-10-08 ~14:45 EDT (coordinator-1415) → next:_
 - origin/main = c0727bb9 (this run: 14:25 PC deploy + bards rung audit recorded in TASKS.md). PC is on 74206338 — offices rung c0e6abdd + TASKS.md now LIVE on the PC.
