@@ -33,7 +33,7 @@ before you start. See `COLLAB.md` for the full protocol.
 ## Handoffs
 
 _2026-10-08 ~14:45 EDT (coordinator-1415) → next:_
-- origin/main = <new-sha-after-push> (this run: 14:25 PC deploy + bards rung audit recorded in TASKS.md). PC is on 74206338 — offices rung c0e6abdd + TASKS.md now LIVE on the PC.
+- origin/main = c0727bb9 (this run: 14:25 PC deploy + bards rung audit recorded in TASKS.md). PC is on 74206338 — offices rung c0e6abdd + TASKS.md now LIVE on the PC.
 - Movement bug: STILL awaiting Jon's live playtest. BYPASS gone from disk, LOD gate sound on review, spawn intact. Do NOT write speculative fixes (alignment law: claim nothing until his screen agrees).
 - Duplicate-node-process anomaly resolved: 12 node procs = one ts-node server + one craco client dev server + yarn wrappers (verified via command lines). Normal start:stable footprint. RAM free 0.99GB on boot — the 8GB ceiling remains the gating constraint; browsers are the reclaimable bulk per Jon.
 - Next rung audit candidate: pick another profession guild (bards audited clean 5/5 this run, no changes; offices rung + deployed). Festivalgames / guards / healers / farmers untouched by today's audits so far.
