@@ -121,6 +121,7 @@ const { tickMenders } = require("../lib/CitizenMenders");
 const { tickCouriers } = require("../lib/CitizenCouriers");
 const { tickScribes } = require("../lib/CitizenScribes");
 const { tickEducators } = require("../lib/CitizenTeachers2");
+const { tickCaregivers } = require("../lib/CitizenHealers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2078,6 +2079,24 @@ class CitizenDirector {
       tickEducators(this, nowMs);
     } catch (error) {
       this.log("teachers2 failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen community caregivers: neighbors who sit vigil with the sick,
+    // bonesetters who splint breaks, midwives who tend new mothers, and
+    // remedy-brewers who simmer household cures. Hash-derived types and
+    // per-day care rounds naming REAL patients from the CitizenHealers
+    // ailment map, remedy herbs from the real CitizenHerbalists tables;
+    // 7-day-TTL ledgers for house calls, remedy purchases, first-aid
+    // lessons; recoveries as the crowd moment. Activity system (no
+    // professional exclusions): any commoner may care. Distinct from the
+    // professional healers (CitizenHealers — clinics, plague, surgery,
+    // birth announcements; excluded) and the professional herbalists
+    // (CitizenHerbalists — the herb trade; excluded). Visibility throttled
+    // via chance + cooldown (couriers precedent), no hobby key. Data tier,
+    // zero LLM.
+    try {
+      tickCaregivers(this, nowMs);
+    } catch (error) {
+      this.log("healers2 failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
