@@ -59,6 +59,7 @@ const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
+const CitizenRumors = require("../lib/CitizenRumors");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenRelationships = require("../lib/CitizenRelationships");
@@ -687,6 +688,14 @@ class CitizenDirector {
       CitizenShopkeeping.tickShopkeeping(this, Date.now());
     } catch (error) {
       this.log("shopkeeping (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Rumors: citizens spread distorted retellings of real events along
+    // social ties (data tier), and speak them aloud near real players
+    // (taverns/streets). Zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenRumors.tickRumors(this, Date.now());
+    } catch (error) {
+      this.log("rumors (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Market stalls: merchants claim a pitch during market hours, set up
     // 3-5 wares with personality-driven prices, haggle with liked
