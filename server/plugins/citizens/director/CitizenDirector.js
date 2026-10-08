@@ -80,6 +80,7 @@ const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const { tickPerformers } = require("../lib/CitizenStreetPerformers");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
+const CitizenJudges = require("../lib/CitizenJudges");
 const CitizenBankers = require("../lib/CitizenBankers");
 const CitizenInnkeepers = require("../lib/CitizenInnkeepers");
 const CitizenStablehands = require("../lib/CitizenStablehands");
@@ -938,6 +939,16 @@ class CitizenDirector {
       CitizenGuards.tickGuards(this, Date.now());
     } catch (error) {
       this.log("guards (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Judges: magistrates, high judges, arbiters and bailiffs hold court
+    // (scripted trials from the day's docket during 09:00-16:00, summons,
+    // arbitration offers, fine ledger, appeals) — only while a real player
+    // is around to see them. Data tier, zero LLM, per-citizen try/catch
+    // inside. Reads the live CitizenGuards wanted list.
+    try {
+      CitizenJudges.tickJudges(this, Date.now());
+    } catch (error) {
+      this.log("judges (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Bankers: tellers, vault-keepers, loan officers and auditors visibly
     // run the banks (engine-free scripted service lines, vault open/seal
