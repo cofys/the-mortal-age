@@ -62,6 +62,7 @@ const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenRumors = require("../lib/CitizenRumors");
 const CitizenMystery = require("../lib/CitizenMystery");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
+const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenRetirement = require("../lib/CitizenRetirement");
@@ -722,6 +723,15 @@ class CitizenDirector {
       CitizenMarketStalls.tickMarketStalls(this, Date.now());
     } catch (error) {
       this.log("market stalls (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Guard patrols: the visible watch — checkpoint check-ins, disturbance
+    // response, escort offers and follows, night-watch torch announcements,
+    // and reassured citizens near patrolling guards. Data tier, zero LLM,
+    // per-citizen try/catch inside.
+    try {
+      CitizenGuardPatrols.tickGuardPatrols(this, Date.now());
+    } catch (error) {
+      this.log("guard patrols (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Caravan shouts: muster/departure/arrival announcements and
     // guard/trader invites, only where a real player can see them.
