@@ -71,6 +71,7 @@ const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
+const CitizenBuilders = require("../lib/CitizenBuilders");
 const CitizenRetirement = require("../lib/CitizenRetirement");
 const { tickElections } = require("../lib/CitizenElection");
 const CitizenRelationships = require("../lib/CitizenRelationships");
@@ -731,6 +732,15 @@ class CitizenDirector {
       CitizenArtisans.tickArtisanLife(this, Date.now());
     } catch (error) {
       this.log("artisans (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen builders: construction crews work visibly at the kingdom's
+    // active site, the architect supervises, lingering players get hire
+    // offers — but only while a real player is actually around to see them.
+    // Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenBuilders.tickBuilderLife(this, Date.now(), desync);
+    } catch (error) {
+      this.log("builders (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Rumors: citizens spread distorted retellings of real events along
     // social ties (data tier), and speak them aloud near real players
@@ -1447,6 +1457,14 @@ class CitizenDirector {
       CitizenArtisans.tickArtisans(this, nowMs);
     } catch (error) {
       this.log("artisans failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen builders: construction crews with deterministic trades,
+    // per-kingdom projects advancing through phases, completions journaled.
+    // Data tier, zero LLM.
+    try {
+      CitizenBuilders.tickBuilders(this, nowMs);
+    } catch (error) {
+      this.log("builders failed", { error: String(error?.message ?? error) });
     }
     // Visible daily routines: merchants open stalls, crafters work visible
     // forge shifts, guards patrol — phase transitions journaled and
