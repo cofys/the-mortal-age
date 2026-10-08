@@ -24,13 +24,15 @@ function withFixedRandom(value, fn) {
 function loc(x, y, z = 0) {
   return { getX: () => x, getY: () => y, getZ: () => z };
 }
-function mockBot(name, x = 3000, y = 3000) {
+function mockBot(name, x = 3000, y = 3000, players = []) {
   const chats = [];
   return {
     getUsername: () => name,
     isPlayerBot: () => true,
     getHostAddress: () => "bot",
     getLocation: () => loc(x, y),
+    // Real-API shape (hunters audit 2026-10-08): proximity comes from the bot.
+    getLocalPlayers: () => players,
     forceChat: (m) => chats.push(m),
     _chats: chats,
   };
@@ -43,12 +45,13 @@ function mockPlayer(name, x = 3005, y = 3005) {
     getLocation: () => loc(x, y),
   };
 }
+/** Director mock — real-API shape: isOnline/getBot (playerFor/onlinePlayers are dead). */
 function mockDirector(entries, players) {
   const bots = new Map();
   return {
     roster: new Map(entries.map((r) => [r.username, r])),
-    playerFor: (record) => bots.get(record.username) || null,
-    onlinePlayers: () => players,
+    isOnline: (record) => bots.has(record.username),
+    getBot: (record) => bots.get(record.username) || null,
     _bots: bots,
   };
 }
@@ -277,9 +280,11 @@ function fresh() {
 {
   fresh();
   const rec = findHuntfolk("tickfire");
-  const bot = mockBot(rec.username);
   const player = mockPlayer("RealRon");
-  const d = mockDirector([rec], [player, bot]);
+  const players = [player];
+  const bot = mockBot(rec.username, 3000, 3000, players);
+  players.push(bot);
+  const d = mockDirector([rec], players);
   d._bots.set(rec.username, bot);
   withFixedRandom(0.05, () => HF.tickHuntfolk(d, T0));
   assert.ok(bot._chats.length >= 1, "huntfolk chats near a real player");
@@ -290,9 +295,11 @@ function fresh() {
 {
   fresh();
   const rec = findHuntfolk("tickbot");
-  const bot = mockBot(rec.username);
-  const other = mockBot("BotBob");
-  const d = mockDirector([rec], [other, bot]);
+  const players = [];
+  const bot = mockBot(rec.username, 3000, 3000, players);
+  const other = mockBot("BotBob", 3005, 3005, players);
+  players.push(bot, other);
+  const d = mockDirector([rec], players);
   d._bots.set(rec.username, bot);
   withFixedRandom(0.05, () => HF.tickHuntfolk(d, T0));
   assert.equal(bot._chats.length, 0, "silent when only bots are near");
@@ -303,9 +310,11 @@ function fresh() {
 {
   fresh();
   const rec = findHuntfolk("ticknight");
-  const bot = mockBot(rec.username);
   const player = mockPlayer("RealRon");
-  const d = mockDirector([rec], [player, bot]);
+  const players = [player];
+  const bot = mockBot(rec.username, 3000, 3000, players);
+  players.push(bot);
+  const d = mockDirector([rec], players);
   d._bots.set(rec.username, bot);
   withFixedRandom(0.05, () => HF.tickHuntfolk(d, NIGHT));
   assert.equal(bot._chats.length, 0, "silent at 03:00");
@@ -318,10 +327,59 @@ function fresh() {
   const pro = findProHunter("tickpro");
   const rec = { username: pro, role: "commoner", kingdomId: "misthalin" };
   const player = mockPlayer("RealRon");
-  const d = mockDirector([rec], [player]);
+  const players = [player];
+  const d = mockDirector([rec], players);
   withFixedRandom(0.05, () => HF.tickHuntfolk(d, T0));
-  assert.equal(d._bots.size, 0, "no bot created — pro skipped at the type gate");
+  assert.equal(d._bots.size, 0, "no bot engaged — pro skipped at the type gate");
   console.log("tick skips pro hunter: PASS");
+}
+
+// --- tick journals kind:work entries (dead journalize fixed by the audit) ---
+{
+  fresh();
+  const { getJournal } = require("./CitizenJournal");
+  getJournal().resetForTests();
+  const rec = findHuntfolk("tickjournal");
+  const player = mockPlayer("RealRon");
+  const players = [player];
+  const bot = mockBot(rec.username, 3000, 3000, players);
+  players.push(bot);
+  const d = mockDirector([rec], players);
+  d._bots.set(rec.username, bot);
+  withFixedRandom(0.05, () => HF.tickHuntfolk(d, T0));
+  const events = getJournal().recent(rec.username, 10);
+  assert.ok(events.some((e) => e.kind === "work"), "journal holds kind:work for huntfolk");
+  const ground = HF.groundFor(rec);
+  assert.ok(events.some((e) => e.kind === "work" && e.text.includes(ground.name)),
+    "work loop journals the kingdom-preferred ground");
+  console.log("tick journals work: PASS");
+}
+
+// --- trophy bag seeds a real hunt-trophy rumor (bare-string seed fixed) ---
+{
+  fresh();
+  const Rumors = require("./CitizenRumors");
+  Rumors.resetForTests();
+  const rec = findHuntfolk("tickrumor");
+  const ground = HF.groundFor(rec);
+  // Find a day where this ground bags a trophy (~8%/day, deterministic).
+  let dayMs = null;
+  for (let d = 0; d < 60 && dayMs === null; d++) {
+    const t = T0 + d * 86400000;
+    if (HF.trophyBagFor(ground, t)) dayMs = t;
+  }
+  assert.ok(dayMs !== null, "found a trophy-bag day for the ground");
+  const player = mockPlayer("RealRon");
+  const players = [player];
+  const bot = mockBot(rec.username, 3000, 3000, players);
+  players.push(bot);
+  const d = mockDirector([rec], players);
+  d._bots.set(rec.username, bot);
+  withFixedRandom(0.05, () => HF.tickHuntfolk(d, dayMs));
+  const rumors = [...Rumors._activeRumors.values()];
+  assert.ok(rumors.some((r) => r.seedKind === "hunt-trophy"),
+    "trophy bag seeds a hunt-trophy rumor into the real rumor system");
+  console.log("trophy bag seeds rumor: PASS");
 }
 
 // --- never throws on hostile input ---
