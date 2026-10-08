@@ -119,6 +119,7 @@ const { tickStorytellers } = require("../lib/CitizenStorytellers");
 const { tickHistorians } = require("../lib/CitizenHistorians");
 const { tickMenders } = require("../lib/CitizenMenders");
 const { tickCouriers } = require("../lib/CitizenCouriers");
+const { tickScribes } = require("../lib/CitizenScribes");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2051,6 +2052,18 @@ class CitizenDirector {
       tickCouriers(this, nowMs);
     } catch (error) {
       this.log("couriers failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen scribes: freelance writing folk — copyists, letter-writers,
+    // record-keepers and calligraphers. Hash-derived types and per-day job
+    // queues, 7-day-TTL ledgers for hires, copy requests and record
+    // commissions; illuminated-manuscript unveilings as the crowd moment.
+    // Activity system (no professional exclusions): any commoner may scribe.
+    // Distinct from librarians (professional library staff scribes) — this
+    // module owns the freelance writing trade. Data tier, zero LLM.
+    try {
+      tickScribes(this, nowMs);
+    } catch (error) {
+      this.log("scribes failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).

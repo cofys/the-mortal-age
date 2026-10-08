@@ -11,9 +11,9 @@ function check(cond, msg) {
   assert.ok(cond, msg);
 }
 
-// 1. HOBBY_KEYS has exactly the 7 activity systems.
-check(H.HOBBY_KEYS.length === 7, "7 hobby keys");
-check(new Set(H.HOBBY_KEYS).size === 7, "keys unique");
+// 1. HOBBY_KEYS has exactly the 8 activity systems.
+check(H.HOBBY_KEYS.length === 8, "8 hobby keys");
+check(new Set(H.HOBBY_KEYS).size === 8, "keys unique");
 
 // 2. primaryHobbyFor returns a valid key for any username.
 for (const n of ["Alice", "bob", "  Charlie  ", "x", "Citizen123"]) {
@@ -35,7 +35,7 @@ check(H.isHobbyVisible("Alice", "") === false, "empty key not visible");
 check(H.isHobbyVisible("Alice", "blacksmith") === false, "unknown key not visible");
 check(H.isHobbyVisible(null, "gardener") === false, "null username not visible");
 
-// 5. Roughly uniform distribution across 7 keys (3000 names).
+// 5. Roughly uniform distribution across 8 keys (3000 names).
 const counts = {};
 for (let i = 0; i < 3000; i++) {
   const h = H.primaryHobbyFor("Citizen" + i);

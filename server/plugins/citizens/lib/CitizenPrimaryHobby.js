@@ -65,6 +65,7 @@ const HOBBY_KEYS = Object.freeze([
   "mender",      // CitizenMenders
   "volunteer",   // CitizenVolunteers
   "pet_owner",   // CitizenPetOwners
+  "scribe",      // CitizenScribes
 ]);
 
 function normalizeName(name) {
