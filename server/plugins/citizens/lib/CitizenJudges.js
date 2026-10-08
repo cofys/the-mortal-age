@@ -11,7 +11,10 @@
  *   all deterministic, zero disk state. The wanted list from CitizenGuards
  *   is read live (bailiffs work wanted cases; high judges sentence them).
  *   Fines are kept in an in-memory court ledger (TTL, pruned). Everything is
- *   journaled so the LLM mouth can riff on it later.
+ *   journaled so the LLM mouth can riff on it later. Each session seeds one
+ *   real "verdict" rumor so citizens gossip about trials; fined defendants
+ *   may appeal (deterministic), and later sessions review pending appeals
+ *   through the real ledgers (overturn pays the fine off in full).
  *
  * WHAT THE PLAYER SEES (interaction tier, only near real players):
  *   During court hours (09:00-16:00 server time) a materialized judge holds
@@ -150,6 +153,16 @@ const WANTED_SENTENCE_LINES = Object.freeze([
 const APPEAL_LINES = Object.freeze([
   "{judge}: an appeal? Very well — the court will hear it. {defendant}, your fine is stayed until the review.",
   "{judge}: the appeal is noted. Justice twice-measured is justice sure.",
+]);
+
+const APPEAL_UPHOLD_LINES = Object.freeze([
+  "{judge}: the appeal is denied. {defendant}, the fine stands. Justice has spoken twice.",
+  "{judge}: appeal reviewed and upheld. The sentence stands, {defendant}.",
+]);
+
+const APPEAL_OVERTURN_LINES = Object.freeze([
+  "{judge}: on appeal, the court corrects itself — {defendant}, your fine is overturned.",
+  "{judge}: the appeal is granted. {defendant} owes nothing. The record is struck.",
 ]);
 
 const CLOSING_LINES = Object.freeze([
@@ -388,6 +401,61 @@ function appealFor(username, nowMs) {
   return a;
 }
 
+/** Clear a pending appeal (after review). Returns true if one existed. */
+function resolveAppeal(username) {
+  const key = normName(username);
+  if (!key || !appealLedger.has(key)) return false;
+  appealLedger.delete(key);
+  return true;
+}
+
+/** Deterministic appeal gate: ~30% of fined defendants appeal, per (defendant, day). Pure. */
+function appealFiresFor(defendant, dayMs) {
+  const day = Math.floor(dayMs / 86400000);
+  return mulberry(fnv1a("appeal:" + normName(defendant) + ":" + day))() < 0.3;
+}
+
+/** Deterministic appeal review outcome, per (defendant, day). Pure. */
+function appealOverturnedFor(defendant, dayMs) {
+  const day = Math.floor(dayMs / 86400000);
+  return mulberry(fnv1a("appealreview:" + normName(defendant) + ":" + day))() < 0.5;
+}
+
+/**
+ * Review pending appeals for the day's docket defendants (data tier).
+ * Only appeals filed on an EARLIER day are reviewable — a fine appealed
+ * this session is stayed, not decided. Overturned fines are paid off in
+ * full through the real fine ledger. Returns the reviewed list for the
+ * tick to announce and journal: [{ defendant, kind, overturned, fine }].
+ */
+function reviewAppeals(judgeName, docket, nowMs) {
+  const out = [];
+  const day = Math.floor(nowMs / 86400000);
+  for (const c of docket ?? []) {
+    const defendant = c?.defendant;
+    if (!defendant) continue;
+    let a;
+    try {
+      a = appealFor(defendant, nowMs);
+    } catch {
+      continue;
+    }
+    if (!a) continue;
+    if (Math.floor(a.at / 86400000) >= day) continue; // this session's own appeals stay pending
+    const fine = fineForPlayer(defendant, nowMs);
+    const overturned = appealOverturnedFor(defendant, nowMs);
+    if (overturned && fine) payFine(defendant, fine.amount, nowMs);
+    resolveAppeal(defendant);
+    out.push({
+      defendant: String(defendant),
+      kind: c.kind?.kind ?? "the case",
+      overturned,
+      fine: fine ? fine.amount : 0,
+    });
+  }
+  return out;
+}
+
 // ============================================================================
 // Engine helpers (impure, guarded).
 // ============================================================================
@@ -455,6 +523,37 @@ function wantedInfo(username, nowMs) {
   }
 }
 
+/** Seed one real "verdict" rumor per court session so citizens gossip about trials. Guarded. */
+function seedVerdictRumor(judgeName, court, caseObj, verdict, nowMs) {
+  try {
+    const { seedRumor } = require("./CitizenRumors");
+    const day = Math.floor(nowMs / 86400000);
+    const rng = mulberry(fnv1a("verdictrumor:" + normName(judgeName) + ":" + day));
+    let what;
+    if (verdict.guilty) {
+      const s = verdict.sentence;
+      const outcome =
+        s.jail === "exile" ? "exiled from the kingdom"
+        : s.jail === "jail" ? `jailed for ${jailFor(caseObj.kind.gravity)}`
+        : `fined ${s.fine} coins`;
+      what = `found guilty of ${caseObj.kind.kind} and ${outcome}`;
+    } else {
+      what = `acquitted of ${caseObj.kind.kind}`;
+    }
+    seedRumor(rng, {
+      kind: "verdict",
+      who: caseObj.defendant,
+      whoDisplay: caseObj.defendant,
+      what,
+      where: court,
+      whereDisplay: court,
+      holder: judgeName,
+    });
+  } catch {
+    // Rumors must never break the court.
+  }
+}
+
 // ============================================================================
 // The tick function — called from the director tick.
 // Gate order: cooldown (cheapest) → citizen exists → real player near → work.
@@ -496,6 +595,14 @@ function tickJudges(director, nowMs) {
           const docket = docketFor(record.username, type, nowMs, names);
           if (!docket.length) continue;
           const rng = mulberry(fnv1a("session:" + record.username + ":" + Math.floor(nowMs / 86400000)));
+          // Appeal reviews first: earlier-day appeals from today's docket defendants.
+          for (const rev of reviewAppeals(record.username, docket, nowMs)) {
+            const rvars = { ...vars, defendant: rev.defendant, fine: rev.fine };
+            forceSay(citizen, fillLine(pickOne(rng, rev.overturned ? APPEAL_OVERTURN_LINES : APPEAL_UPHOLD_LINES), rvars));
+            journal(director, record.username, "court",
+              `${rev.defendant}'s appeal was ${rev.overturned ? "granted — fine overturned" : "denied — fine stands"} at ${court}`,
+              { kind: rev.kind });
+          }
           const c = pickOne(rng, docket);
           const verdict = verdictFor(c, nowMs);
           const cvars = { ...vars, plaintiff: c.plaintiff, defendant: c.defendant, kind: c.kind.kind };
@@ -518,6 +625,12 @@ function tickJudges(director, nowMs) {
             } else {
               forceSay(citizen, fillLine(pickOne(rng, SENTENCE_FINE_LINES), { ...cvars, fine: sent.fine }));
               recordFine(c.defendant, sent.fine, c.kind.kind, nowMs);
+              if (appealFiresFor(c.defendant, nowMs) && requestAppeal(c.defendant, nowMs)) {
+                forceSay(citizen, fillLine(pickOne(rng, APPEAL_LINES), cvars));
+                journal(director, record.username, "court",
+                  `${c.defendant} appealed the ${sent.fine}-coin fine for ${c.kind.kind} at ${court}`,
+                  { kind: c.kind.kind });
+              }
             }
             journal(director, record.username, "court",
               `found ${c.defendant} guilty of ${c.kind.kind} at ${court}`, { plaintiff: c.plaintiff });
@@ -526,6 +639,7 @@ function tickJudges(director, nowMs) {
             journal(director, record.username, "court",
               `acquitted ${c.defendant} of ${c.kind.kind} at ${court}`, { plaintiff: c.plaintiff });
           }
+          seedVerdictRumor(record.username, court, c, verdict, nowMs);
           forceSay(citizen, fillLine(pickOne(rng, CLOSING_LINES), vars));
         } else if (type === "bailiff") {
           // Bailiffs serve summons on lingering players.
@@ -564,6 +678,10 @@ module.exports = {
   fineCount,
   requestAppeal,
   appealFor,
+  resolveAppeal,
+  reviewAppeals,
+  appealFiresFor,
+  appealOverturnedFor,
   // Export pure helpers for tests:
   pickOne,
   isRealPlayer,
@@ -601,6 +719,8 @@ module.exports = {
   ARBITER_OFFER_LINES,
   WANTED_SENTENCE_LINES,
   APPEAL_LINES,
+  APPEAL_UPHOLD_LINES,
+  APPEAL_OVERTURN_LINES,
   CLOSING_LINES,
   COURTS,
   CASE_KINDS,
