@@ -61,6 +61,7 @@ const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenFarmers = require("../lib/CitizenFarmers");
 const CitizenMiners = require("../lib/CitizenMiners");
+const CitizenFishers = require("../lib/CitizenFishers");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -807,6 +808,15 @@ class CitizenDirector {
       CitizenMiners.tickMiners(this, Date.now(), desync);
     } catch (error) {
       this.log("miners (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Fishers: deep-sea fishers, river fishers, ice fishers and pearl divers
+    // work the waters visibly (casts, net hauls, big-catch celebrations,
+    // fresh-catch hawking, storm warnings) — only while a real player is
+    // around to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenFishers.tickFishers(this, Date.now(), desync);
+    } catch (error) {
+      this.log("fishers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
