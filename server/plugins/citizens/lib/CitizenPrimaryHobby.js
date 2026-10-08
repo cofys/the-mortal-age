@@ -5,23 +5,24 @@
  *
  * WHAT IT DOES (data tier, free):
  *   Every username is deterministically assigned EXACTLY ONE primary hobby
- *   from the 7 universal activity systems, via a uniform hash partition.
+ *   from the 9 universal activity systems, via a uniform hash partition.
  *   No storage, stable across restarts, zero token cost.
  *
  * WHY IT EXISTS:
- *   The 2026-10-08 distribution audit found all 7 activity systems
+ *   The 2026-10-08 distribution audit found all 9 activity systems
  *   (hobbyists, gardeners, storytellers, historians, menders, volunteers,
- *   pet owners) claim 100% of commoners by design — "everyone has a hobby".
- *   That's fine for the data tier, but with 7 universal layers firing at
+ *   pet owners, scribes, tutors) claim 100% of commoners by design —
+ *   "everyone has a hobby".
+ *   That's fine for the data tier, but with 9 universal layers firing at
  *   full rate, no citizen's visible behavior has focus: everyone is
  *   visibly doing everything.
  *
- *   The data tier stays universal (all 7 type functions still return types
+ *   The data tier stays universal (all 9 type functions still return types
  *   for everyone). Only the VISIBLE tick firing is weighted: a citizen's
  *   primary hobby always passes the visibility gate; each of their other
- *   six hobbies passes deterministically 1-in-3. The primary hobby thus
+ *   eight hobbies passes deterministically 1-in-3. The primary hobby thus
  *   fires ~3x more often than any other single hobby, giving each citizen
- *   a visible focus while the LLM dialogue tier keeps all 7 for depth.
+ *   a visible focus while the LLM dialogue tier keeps all 9 for depth.
  *
  * HOW TO USE:
  *   In each activity tick, right after the identity check:
@@ -33,7 +34,7 @@
  *   (type derivation, ledgers, catalogs) are NOT gated — only the tick.
  *
  * SCOPE (deliberate):
- *   - Covers ONLY the 7 universal activity systems. Professional modules
+ *   - Covers ONLY the 9 universal activity systems. Professional modules
  *     (early partition + late chain) are NOT part of this.
  *   - Couriers are an activity system but are narrowed separately
  *     (COURIER_CHANCE + messenger exclusion); they are not in HOBBY_KEYS.
@@ -54,7 +55,7 @@ function fnv1a(str) {
 }
 
 /**
- * The 7 universal activity systems. Keys match the hobby name each
+ * The 9 universal activity systems. Keys match the hobby name each
  * module's tick passes to isHobbyVisible().
  */
 const HOBBY_KEYS = Object.freeze([
@@ -66,6 +67,7 @@ const HOBBY_KEYS = Object.freeze([
   "volunteer",   // CitizenVolunteers
   "pet_owner",   // CitizenPetOwners
   "scribe",      // CitizenScribes
+  "tutor",       // CitizenTeachers2
 ]);
 
 function normalizeName(name) {
@@ -74,7 +76,7 @@ function normalizeName(name) {
 
 /**
  * Exactly one primary hobby for this username, stable across restarts.
- * Uniform across the 7 keys (~14.3% each). Returns null for empty names.
+ * Uniform across the 9 keys (~11.1% each). Returns null for empty names.
  */
 function primaryHobbyFor(username) {
   const name = normalizeName(username);

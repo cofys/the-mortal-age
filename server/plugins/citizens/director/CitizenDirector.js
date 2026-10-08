@@ -120,6 +120,7 @@ const { tickHistorians } = require("../lib/CitizenHistorians");
 const { tickMenders } = require("../lib/CitizenMenders");
 const { tickCouriers } = require("../lib/CitizenCouriers");
 const { tickScribes } = require("../lib/CitizenScribes");
+const { tickEducators } = require("../lib/CitizenTeachers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2064,6 +2065,19 @@ class CitizenDirector {
       tickScribes(this, nowMs);
     } catch (error) {
       this.log("scribes failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen informal educators: home tutors, trade mentors, village
+    // schoolmasters and public scholars. Hash-derived types and per-day
+    // lesson schedules, pupil rosters, 7-day-TTL ledgers for tutor hires,
+    // class attendance and mentoring requests; graduations as the crowd
+    // moment. Activity system (no professional exclusions): any commoner
+    // may teach. Distinct from the professional kingdom schools
+    // (CitizenTeachers — assigned teachers are excluded) and from
+    // CitizenMentors (reactive level-up lessons). Data tier, zero LLM.
+    try {
+      tickEducators(this, nowMs);
+    } catch (error) {
+      this.log("teachers2 failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
