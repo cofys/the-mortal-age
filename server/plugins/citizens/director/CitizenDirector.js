@@ -128,6 +128,7 @@ const { tickMinerfolk } = require("../lib/CitizenMiners2");
 const { tickHuntfolk } = require("../lib/CitizenHunters2");
 const { tickCookfolk } = require("../lib/CitizenCooks2");
 const { tickSewfolk } = require("../lib/CitizenTailors2");
+const { tickSmithfolk } = require("../lib/CitizenBlacksmiths2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2180,6 +2181,18 @@ class CitizenDirector {
       tickSewfolk(this, nowMs);
     } catch (error) {
       this.log("sewfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen village smithfolk: farriers, blade honers, implement
+    // tinkerers and forge apprentices at community smithies. Hash-derived
+    // types, per-day smithies/jobs, masterwork crowd moments, 7-day-TTL
+    // ledgers for repairs, iron goods and smithing lessons. Professional
+    // smiths (CitizenBlacksmiths) are excluded — the trade owns the forges;
+    // menders own small-tool and household repair. Visibility throttled via
+    // chance + cooldown (sewfolk precedent), no hobby key. Data tier, zero LLM.
+    try {
+      tickSmithfolk(this, nowMs);
+    } catch (error) {
+      this.log("smithfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
