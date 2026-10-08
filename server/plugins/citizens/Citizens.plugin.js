@@ -43,6 +43,7 @@ const { onGiftGiven } = require("./CitizenGifts");
 const { tipPerformer } = require("./lib/CitizenStreetPerformers");
 const { tipBard } = require("./lib/CitizenBards");
 const { tipActor } = require("./lib/CitizenActors");
+const { tipPainter } = require("./lib/CitizenPainters");
 const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
@@ -521,11 +522,12 @@ function onGiftSeen(event) {
   onGiftGiven(event);
 }
 
-/** A player used coins on a citizen bot: a tip for a street performer, bard or actor. */
+/** A player used coins on a citizen bot: a tip for a street performer, bard, actor or painter. */
 function onTipSeen(event) {
   tipPerformer(event);
   if (!event.handled) tipBard(event);
   if (!event.handled) tipActor(event);
+  if (!event.handled) tipPainter(event);
 }
 
 /** A player logged out: drop their idle-tracking state. */

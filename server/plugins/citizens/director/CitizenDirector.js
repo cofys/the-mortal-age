@@ -80,6 +80,7 @@ const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const { tickPerformers } = require("../lib/CitizenStreetPerformers");
 const { tickBards } = require("../lib/CitizenBards");
 const { tickActors } = require("../lib/CitizenActors");
+const { tickPainters } = require("../lib/CitizenPainters");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenJudges = require("../lib/CitizenJudges");
@@ -947,6 +948,18 @@ class CitizenDirector {
       tickActors(this, Date.now(), desync);
     } catch (error) {
       this.log("actors (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Painters: portraitists, landscapists, muralists and miniaturists
+    // visibly work the kingdom studios and galleries during daylight
+    // hours — scripted easel work, painting hawking, masterpiece
+    // unveilings, commission offers and coin tips ("use coins on
+    // painter"). No overlap with street performers (squares), bards
+    // (music), actors (theaters) or inn bards. Data tier, zero LLM,
+    // per-citizen try/catch inside.
+    try {
+      tickPainters(this, Date.now(), desync);
+    } catch (error) {
+      this.log("painters (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Guard patrols: the visible watch — checkpoint check-ins, disturbance
     // response, escort offers and follows, night-watch torch announcements,
