@@ -283,12 +283,6 @@ function tickStuckDetection(director, record, bot, nowMs) {
  * This is the difference between "a statue" and "a person waiting."
  */
 function tickIdleLife(director, record, bot, nowMs) {
-  // DEBUG: Track if tickIdleLife is being called
-  if (Math.random() < 0.01) { // 1% sample to avoid log spam
-    try {
-      director.log("tickIdleLife called", { citizen: record.username, moving: isMoving(bot) });
-    } catch {}
-  }
   if (isMoving(bot)) return; // only when stationary
 
   const rng = agentRng(`alive:idle:${record.username}:${nowMs >> 13}`);
@@ -634,14 +628,7 @@ function tickAlive(director, nowMs, desync = null) {
     // cycles. Near-band (and unclassified) citizens are always due, so
     // behavior near players is unchanged. Runs before the desync hash —
     // a single Map lookup short-circuits the rest for distant citizens.
-    const due = true; // BYPASS LOD for diagnostic - remove after testing
-    // DEBUG: Track LOD gate decisions
-    if (Math.random() < 0.01) {
-      try {
-        director.log("brainTickDue check", { citizen: record.username, due });
-      } catch {}
-    }
-    if (!due) {
+    if (!brainTickDue(director, record, desync?.tick)) {
       continue;
     }
     // Note: timing desync intentionally NOT applied to idle life. The desync
