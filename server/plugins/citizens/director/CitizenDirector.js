@@ -135,6 +135,7 @@ const { tickDockfolk } = require("../lib/CitizenSailors2");
 const { tickGuardfolk } = require("../lib/CitizenGuards2");
 const { tickHostfolk } = require("../lib/CitizenInnkeepers2");
 const { tickSongfolk } = require("../lib/CitizenBards2");
+const { tickFarmfolk } = require("../lib/CitizenFarmers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2288,6 +2289,19 @@ class CitizenDirector {
       tickSongfolk(this, nowMs);
     } catch (error) {
       this.log("songfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen farmfolk (CitizenFarmers2): farmhands, tenant farmers,
+    // orchard keepers, market-garden sellers and seasonal harvest crews —
+    // the amateur allotment-and-harvest side of the farmer's trade.
+    // Professional farmers (CitizenFarmers) are excluded; this owns
+    // farmyard work emotes, seasonal harvest set-pieces, produce pitches
+    // from the real seasonal tables, basket requests and harvest-help
+    // signups. LOD-gated via brainTickDue inside (near-band citizens
+    // always due). Data tier, zero LLM.
+    try {
+      tickFarmfolk(this, nowMs);
+    } catch (error) {
+      this.log("farmfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
