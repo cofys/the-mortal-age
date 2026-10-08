@@ -126,6 +126,7 @@ const { tickWatchmen } = require("../lib/CitizenWatchmen2");
 const { tickFisherfolk } = require("../lib/CitizenFishers2");
 const { tickMinerfolk } = require("../lib/CitizenMiners2");
 const { tickHuntfolk } = require("../lib/CitizenHunters2");
+const { tickCookfolk } = require("../lib/CitizenCooks2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2152,6 +2153,19 @@ class CitizenDirector {
       tickHuntfolk(this, nowMs);
     } catch (error) {
       this.log("huntfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen community cooking folk: home cooks, street vendors, feast
+    // cooks and soup-kitchen helpers at community hearths, stalls and
+    // communal ovens. Hash-derived types, per-day kitchens/menus, grand-
+    // feast crowd moments, 7-day-TTL ledgers for buying meals, learning
+    // recipes and helping cook. Professional cooks (CitizenCooks) are
+    // excluded — the trade owns the kitchens; farmers own the ingredients.
+    // Visibility throttled via chance + cooldown (huntfolk precedent),
+    // no hobby key. Data tier, zero LLM.
+    try {
+      tickCookfolk(this, nowMs);
+    } catch (error) {
+      this.log("cookfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
