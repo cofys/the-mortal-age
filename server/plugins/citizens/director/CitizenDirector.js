@@ -123,6 +123,7 @@ const { tickScribes } = require("../lib/CitizenScribes");
 const { tickEducators } = require("../lib/CitizenTeachers2");
 const { tickCaregivers } = require("../lib/CitizenHealers2");
 const { tickWatchmen } = require("../lib/CitizenWatchmen2");
+const { tickFisherfolk } = require("../lib/CitizenFishers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2110,6 +2111,19 @@ class CitizenDirector {
       tickWatchmen(this, nowMs);
     } catch (error) {
       this.log("watchmen2 failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen dockside fishing folk: net casters, line anglers, crabbers
+    // and community fishmongers on the piers and shallows. Hash-derived
+    // types, per-day spots/catches, big-catch crowd moments, 7-day-TTL
+    // ledgers for fishing alongside, buying catch and learning techniques.
+    // Professional fishers (CitizenFishers) are excluded — the trade owns
+    // commercial fishing; tournaments own the competition; sailors own
+    // boats. Visibility throttled via chance + cooldown (watchmen2
+    // precedent), no hobby key. Data tier, zero LLM.
+    try {
+      tickFisherfolk(this, nowMs);
+    } catch (error) {
+      this.log("fisherfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
