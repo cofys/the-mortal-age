@@ -130,6 +130,7 @@ const { tickCookfolk } = require("../lib/CitizenCooks2");
 const { tickSewfolk } = require("../lib/CitizenTailors2");
 const { tickSmithfolk } = require("../lib/CitizenBlacksmiths2");
 const { tickBrewfolk } = require("../lib/CitizenAlchemists2");
+const { tickGemfolk } = require("../lib/CitizenJewelers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2208,6 +2209,20 @@ class CitizenDirector {
       tickBrewfolk(this, nowMs);
     } catch (error) {
       this.log("brewfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen community gemfolk: hobby gem cutters, ring setters, stone
+    // polishers and informal appraisers at community workshops. Hash-derived
+    // types, per-day projects, masterpiece-unveiling crowd moments,
+    // 7-day-TTL ledgers for commissions, raw-gem sales and cutting lessons.
+    // Professional jewelers (CitizenJewelers) are excluded — the trade owns
+    // the gem business; miners2 gem hunters own raw-stone finds; hobby
+    // appraisers give opinions only, never certificates. Visibility
+    // throttled via chance + cooldown (brewfolk precedent), no hobby key.
+    // Data tier, zero LLM.
+    try {
+      tickGemfolk(this, nowMs);
+    } catch (error) {
+      this.log("gemfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
