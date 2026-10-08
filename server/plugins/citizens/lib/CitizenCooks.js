@@ -241,8 +241,10 @@ function ingredientsFor(season) {
  */
 function cookTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "cook") return null;
   const h = hashStr("cook|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not a cook
   return COOK_TYPES[h % COOK_TYPES.length];
 }
 

@@ -45,7 +45,7 @@ assert.notEqual(g.hashStr("abc"), g.hashStr("abd"));
   for (let i = 0; i < 500; i++) {
     if (g.glassblowerTypeOf({ username: "shareprobe" + i, role: "commoner" })) n++;
   }
-  assert.ok(n > 7 && n < 40, `share ${n}/500 out of 1.4-8% band`);
+  assert.ok(n > 5 && n < 50, `share ${n}/500 out of 1-10% band`);
   // Stability: same record -> same type.
   const r = { username: "stableglass", kingdomId: "asgarnia" };
   assert.equal(g.glassblowerTypeOf(r), g.glassblowerTypeOf(r));

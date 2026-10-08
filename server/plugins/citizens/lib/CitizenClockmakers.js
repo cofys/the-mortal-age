@@ -313,7 +313,7 @@ function clockmakerTypeOf(record) {
     } catch { /* module absent */ }
     try {
       const smiths = require("./CitizenBlacksmiths");
-      if (typeof smiths.smithTypeFor === "function" && smiths.smithTypeFor({ username: name })) return null;
+      if (typeof smiths.smithTypeFor === "function" && smiths.smithTypeFor(name)) return null;
     } catch { /* module absent */ }
     try {
       const jewelers = require("./CitizenJewelers");

@@ -238,8 +238,10 @@ function pruneCooldowns(nowMs) {
  */
 function smithTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "blacksmith") return null;
   const h = hashStr("smith|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not a smith
   return SMITH_TYPES[h % SMITH_TYPES.length];
 }
 

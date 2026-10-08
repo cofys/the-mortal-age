@@ -64,7 +64,7 @@ assert.equal(farmerTypeFor(""), null, "empty username -> null");
 assert.equal(farmerTypeFor(null), null, "null username -> null");
 let farmerCount = 0;
 for (let i = 0; i < 1000; i++) if (farmerTypeFor("pop" + i)) farmerCount++;
-assert.ok(farmerCount > 300 && farmerCount < 500, `~40% farmers, got ${farmerCount}/1000`);
+assert.ok(farmerCount > 30 && farmerCount < 120, `~6.9% farmers (primary-profession partition), got ${farmerCount}/1000`);
 
 // --- seasons ---
 assert.equal(seasonFor(0), "winter");

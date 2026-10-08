@@ -35,7 +35,7 @@ check("minerTypeFor returns a valid type or null, stable across calls", () => {
   const miners = [];
   for (let i = 0; i < 200; i++) miners.push(M.minerTypeFor("miner-seed-" + i));
   const share = miners.filter(Boolean).length / miners.length;
-  assert.ok(share > 0.25 && share < 0.5, "miner share out of range: " + share);
+  assert.ok(share > 0.02 && share < 0.12, "miner share out of range (primary-profession partition ~6%): " + share);
   assert.equal(M.minerTypeFor(""), null);
   assert.equal(M.minerTypeFor(null), null);
 });

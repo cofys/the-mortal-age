@@ -83,7 +83,7 @@ function makeRealPlayer(username) {
       assert.ok(SAILOR_TYPES.includes(t), "type in list");
     }
   }
-  assert.ok(sailors > 100 && sailors < 180, `~35% sailors, got ${sailors}`);
+  assert.ok(sailors > 10 && sailors < 45, `~6% sailors (primary-profession partition), got ${sailors}`);
   assert.equal(Object.keys(counts).length, 4, "all four types assigned");
   assert.equal(sailorTypeFor("sailor-user-5"), sailorTypeFor("sailor-user-5"), "stable");
   assert.equal(sailorTypeFor(""), null, "empty username -> null");

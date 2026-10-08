@@ -128,8 +128,11 @@ function withinTiles(a, b, radius) {
  */
 function farmerTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  // The old ~40% shares survive as partition weights (CitizenPrimaryProfession).
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "farmer") return null;
   const h = hashStr("farmer|" + String(username).toLowerCase());
-  if (h % 5 >= 2) return null; // not a farmer
   return FARMER_TYPES[h % FARMER_TYPES.length];
 }
 

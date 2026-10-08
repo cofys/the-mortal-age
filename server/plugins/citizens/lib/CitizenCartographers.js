@@ -188,8 +188,10 @@ function withinTiles(a, b, radius) {
  */
 function cartographerTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "cartographer") return null;
   const h = hashStr("cartographer|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not a cartographer
   return CARTO_TYPES[h % CARTO_TYPES.length];
 }
 

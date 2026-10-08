@@ -250,8 +250,9 @@ function fnv1a(str) {
  * auditor 20% / vault-keeper 15%. Returns null for non-bankers.
  */
 function bankerTypeFor(username) {
-  const h = fnv1a("banker|" + String(username ?? "").toLowerCase()) % 100;
-  if (h >= 35) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "banker") return null;
   const t = fnv1a("bankertype|" + String(username ?? "").toLowerCase()) % 100;
   if (t < 45) return "teller";
   if (t < 65) return "loan-officer";

@@ -240,8 +240,10 @@ function ingredientsFor(season) {
  */
 function alchemistTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "alchemist") return null;
   const h = hashStr("alchemist|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not an alchemist
   return ALCHEMIST_TYPES[h % ALCHEMIST_TYPES.length];
 }
 

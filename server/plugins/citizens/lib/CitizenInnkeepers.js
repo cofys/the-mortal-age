@@ -108,7 +108,9 @@ const INN_TYPE_WEIGHTS = { host: 0.3, cook: 0.3, stablehand: 0.2, bard: 0.2 };
 
 /** Hash-derived innkeeper type for a username (~35% of commoners are innkeepers). */
 function innTypeFor(username) {
-  if (hashChance("innkeeper", username) > 0.35) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "innkeeper") return null;
   const r = hashChance("inntype", username);
   let acc = 0;
   for (const t of INN_TYPES) {

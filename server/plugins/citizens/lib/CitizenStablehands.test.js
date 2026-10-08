@@ -98,13 +98,13 @@ check("stableTypeFor stable + valid", () => {
   assert.ok(a === null || STABLE_TYPES.includes(a), `bad type: ${a}`);
 });
 
-// 6. Distribution: ~35% of usernames are stablehands.
-check("stableTypeFor ~35%", () => {
+// 6. Distribution: ~6% of usernames are stablehands (primary-profession partition).
+check("stableTypeFor ~6%", () => {
   let count = 0;
   for (let i = 0; i < 2000; i++) {
     if (stableTypeFor(`user${i}`)) count++;
   }
-  assert.ok(count > 500 && count < 900, `unexpected count: ${count}`);
+  assert.ok(count > 60 && count < 200, `unexpected count: ${count}`);
 });
 
 // 7. All four types appear in a large sample.

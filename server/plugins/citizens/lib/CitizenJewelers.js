@@ -261,8 +261,10 @@ function pickOne(rng, arr) {
  */
 function jewelerTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "jeweler") return null;
   const h = hashStr("jeweler|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not a jeweler
   return JEWELER_TYPES[h % JEWELER_TYPES.length];
 }
 

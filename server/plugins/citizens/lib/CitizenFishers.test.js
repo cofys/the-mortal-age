@@ -95,7 +95,7 @@ check("fisherTypeFor ~35% stable across restarts", () => {
   for (let i = 0; i < 500; i++) names.push("citizen" + i);
   const fishers = names.filter((n) => fisherTypeFor(n));
   const ratio = fishers.length / names.length;
-  assert.ok(ratio > 0.28 && ratio < 0.42, "ratio " + ratio);
+  assert.ok(ratio > 0.03 && ratio < 0.10, "ratio " + ratio + " (primary-profession partition ~6%)");
   // Stability: same result on second pass.
   assert.deepEqual(names.map(fisherTypeFor), names.map(fisherTypeFor));
   // All types represented.

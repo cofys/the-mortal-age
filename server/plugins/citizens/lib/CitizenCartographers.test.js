@@ -36,7 +36,7 @@ for (let i = 0; i < 400; i++) {
   }
 }
 const share = cartoCount / 400;
-assert.ok(share > 0.28 && share < 0.42, `~35% share, got ${share}`);
+assert.ok(share > 0.03 && share < 0.10, `~6% share (primary-profession partition), got ${share}`);
 assert.equal(typeHits.size, 4, "all 4 types reachable");
 assert.equal(C.cartographerTypeFor(null), null);
 assert.equal(C.cartographerTypeFor(""), null);

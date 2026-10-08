@@ -156,8 +156,10 @@ function withinTiles(a, b, radius) {
  */
 function hunterTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "hunter") return null;
   const h = hashStr("hunter|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not a hunter
   return HUNTER_TYPES[h % HUNTER_TYPES.length];
 }
 

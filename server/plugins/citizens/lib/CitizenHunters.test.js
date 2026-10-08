@@ -57,7 +57,7 @@ check("hunterTypeFor stable and typed", () => {
       assert.ok(H.HUNTER_TYPES.includes(t1), "type must be one of the four");
     }
   }
-  assert.ok(hunters >= 50 && hunters <= 90, `~35% expected, got ${hunters}/200`);
+  assert.ok(hunters >= 3 && hunters <= 30, `~6% hunters (primary-profession partition), got ${hunters}/200`);
   assert.equal(H.hunterTypeFor(null), null);
   assert.equal(H.hunterTypeFor(""), null);
 });

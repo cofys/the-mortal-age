@@ -34,7 +34,7 @@ function lcg(seed) {
     }
   }
   const ratio = smithCount / 1000;
-  assert.ok(ratio > 0.28 && ratio < 0.42, `~35% smiths, got ${ratio}`);
+  assert.ok(ratio > 0.03 && ratio < 0.10, `~6% smiths (primary-profession partition), got ${ratio}`);
   assert.deepEqual([...types].sort(), [...B.SMITH_TYPES].sort(), "all four types occur");
   assert.equal(B.smithTypeFor("Citizen5"), B.smithTypeFor("citizen5"), "case-insensitive assignment");
   assert.equal(B.smithTypeFor(null), null, "null username -> null");

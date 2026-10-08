@@ -71,7 +71,7 @@ check("tailorTypeFor stable and bounded", () => {
     assert.equal(tailorTypeFor("user" + i), tailorTypeFor("USER" + i)); // lowercased
   }
   const tailors = Array.from({ length: 200 }, (_, i) => tailorTypeFor("user" + i)).filter(Boolean);
-  assert.ok(tailors.length > 40 && tailors.length < 120, `expected ~35% tailors, got ${tailors.length}`);
+  assert.ok(tailors.length > 4 && tailors.length < 25, `expected ~6% tailors (primary-profession partition), got ${tailors.length}`);
   for (const t of TAILOR_TYPES) {
     assert.ok(tailors.includes(t), `type never assigned: ${t}`);
   }

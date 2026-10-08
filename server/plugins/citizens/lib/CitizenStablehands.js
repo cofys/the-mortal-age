@@ -128,7 +128,9 @@ const STABLE_TYPE_WEIGHTS = { groom: 0.35, trainer: 0.25, breeder: 0.2, veterina
 
 /** Hash-derived stablehand type for a username (~35% of commoners). */
 function stableTypeFor(username) {
-  if (hashChance("stablehand", username) > 0.35) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "stablehand") return null;
   const r = hashChance("stabletype", username);
   let acc = 0;
   for (const t of STABLE_TYPES) {

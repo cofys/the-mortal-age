@@ -68,7 +68,7 @@ check("innTypeFor is stable across calls and null for most", () => {
   for (const u of ["a1", "b2"]) assert.equal(Inn.innTypeFor(u), Inn.innTypeFor(u));
   const samples = Array.from({ length: 200 }, (_, i) => Inn.innTypeFor("user" + i));
   const nonNull = samples.filter(Boolean);
-  assert.ok(nonNull.length > 40 && nonNull.length < 110, `innkeeper share ${nonNull.length}/200`);
+  assert.ok(nonNull.length > 4 && nonNull.length < 25, `innkeeper share ${nonNull.length}/200 (primary-profession partition ~6%)`);
   for (const t of nonNull) assert.ok(Inn.INN_TYPES.includes(t));
 });
 

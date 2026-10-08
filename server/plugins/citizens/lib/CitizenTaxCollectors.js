@@ -176,8 +176,9 @@ function pickOne(rng, arr) {
  * auditor 15% / enforcer 15%. Returns null for non-collectors.
  */
 function collectorTypeFor(username) {
-  const h = fnv1a("tax|coll|" + normName(username)) % 100;
-  if (h >= 35) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "taxcollector") return null;
   const t = fnv1a("tax|ctype|" + normName(username)) % 100;
   if (t < 40) return "assessor";
   if (t < 70) return "collector";

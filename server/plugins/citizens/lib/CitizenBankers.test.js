@@ -31,11 +31,11 @@ check("bankerTypeFor is stable across calls", () => {
   assert.equal(B.bankerTypeFor("somebanker"), B.bankerTypeFor("SOMEBANKER"));
 });
 
-check("bankerTypeFor returns null for most commoners (~65%)", () => {
+check("bankerTypeFor returns null for most commoners (~94%, primary-profession partition)", () => {
   let bankers = 0;
   const N = 1000;
   for (let i = 0; i < N; i++) if (B.bankerTypeFor("citizen" + i)) bankers++;
-  assert.ok(bankers > 250 && bankers < 450, `bankers=${bankers}`);
+  assert.ok(bankers > 30 && bankers < 100, `bankers=${bankers}`);
 });
 
 check("bankerTypeFor distributes types among bankers", () => {

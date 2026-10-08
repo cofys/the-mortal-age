@@ -199,8 +199,10 @@ function pickOne(rng, arr) {
 
 /** Hash-stable messenger type, or null when this citizen is not a messenger. */
 function messengerTypeFor(username) {
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "messenger") return null;
   const h = fnv1a("messenger:" + username);
-  if ((h % 100) / 100 >= MESSENGER_CHANCE) return null;
   return MESSENGER_TYPES[h % MESSENGER_TYPES.length];
 }
 

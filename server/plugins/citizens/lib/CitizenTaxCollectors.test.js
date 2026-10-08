@@ -33,12 +33,12 @@ check("normName lowercases and trims", () => {
 });
 
 // --- Collector type assignment -----------------------------------------------
-check("collectorTypeFor: ~35% of courtiers become collectors, stable", () => {
+check("collectorTypeFor: ~6% become collectors (primary-profession partition), stable", () => {
   let count = 0;
   for (let i = 0; i < 1000; i++) {
     if (M.collectorTypeFor("user" + i) !== null) count++;
   }
-  assert.ok(count >= 300 && count <= 400, `got ${count}`);
+  assert.ok(count >= 30 && count <= 100, `got ${count}`);
   assert.equal(M.collectorTypeFor("taxman1"), M.collectorTypeFor("taxman1"));
   assert.equal(M.collectorTypeFor("TAXMAN1"), M.collectorTypeFor("taxman1"));
 });

@@ -38,7 +38,7 @@ function lcg(seed) {
     assert.equal(M.messengerTypeFor("Citizen" + i), t, "type must be stable");
   }
   const share = count / 2000;
-  assert.ok(share > 0.28 && share < 0.42, "messenger share ~35%, got " + share);
+  assert.ok(share > 0.03 && share < 0.10, "messenger share ~6% (primary-profession partition), got " + share);
   assert.deepEqual([...seen].sort(), [...M.MESSENGER_TYPES].sort());
 }
 

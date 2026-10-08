@@ -130,8 +130,10 @@ function withinTiles(a, b, radius) {
  */
 function minerTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "miner") return null;
   const h = hashStr("miner|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not a miner
   return MINER_TYPES[h % MINER_TYPES.length];
 }
 

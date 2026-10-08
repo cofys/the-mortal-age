@@ -33,7 +33,7 @@ for (let i = 0; i < 400; i++) {
   }
   ok(J.jewelerTypeFor("user" + i) === t, "type stable across calls");
 }
-ok(jewelers > 100 && jewelers < 180, "roughly 35% of commoners are jewelers (" + jewelers + ")");
+ok(jewelers > 10 && jewelers < 45, "roughly 6% of commoners are jewelers (primary-profession partition) (" + jewelers + ")");
 ok(seenTypes.size === 4, "all four jeweler types appear: " + [...seenTypes].join(","));
 ok(J.jewelerTypeFor("") === null, "empty username -> null");
 ok(J.jewelerTypeFor(null) === null, "null username -> null");

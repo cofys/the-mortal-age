@@ -286,8 +286,10 @@ function materialsFor(season) {
  */
 function tailorTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "tailor") return null;
   const h = hashStr("tailor|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not a tailor
   return TAILOR_TYPES[h % TAILOR_TYPES.length];
 }
 

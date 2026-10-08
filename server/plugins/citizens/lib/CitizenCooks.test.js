@@ -42,7 +42,7 @@ const MIDDAY = Date.UTC(2026, 6, 15, 12, 0, 0); // July 15 — summer
 assert.equal(hashStr("cook|bob"), hashStr("cook|bob"));
 assert.ok(hashStr("cook|bob") >>> 0 >= 0);
 
-// 2. ~35% of usernames are cooks; every cook type is a valid type.
+// 2. ~6% of usernames are cooks (primary-profession partition); every cook type is a valid type.
 {
   let cooks = 0;
   const seen = new Set();
@@ -54,7 +54,7 @@ assert.ok(hashStr("cook|bob") >>> 0 >= 0);
       seen.add(t);
     }
   }
-  assert.ok(cooks > 500 && cooks < 900, "expected ~35%, got " + cooks);
+  assert.ok(cooks > 60 && cooks < 200, "expected ~6% (primary-profession partition), got " + cooks);
   assert.equal(seen.size, 4, "expected all 4 cook types, saw " + Array.from(seen));
 }
 

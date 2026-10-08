@@ -151,8 +151,10 @@ function withinTiles(a, b, radius) {
  */
 function fisherTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "fisher") return null;
   const h = hashStr("fisher|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not a fisher
   return FISHER_TYPES[h % FISHER_TYPES.length];
 }
 

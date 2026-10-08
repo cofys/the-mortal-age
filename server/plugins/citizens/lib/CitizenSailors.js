@@ -162,8 +162,10 @@ function withinTiles(a, b, radius) {
  */
 function sailorTypeFor(username) {
   if (!username) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "sailor") return null;
   const h = hashStr("sailor|" + String(username).toLowerCase());
-  if (h % 20 >= 7) return null; // not a sailor
   return SAILOR_TYPES[h % SAILOR_TYPES.length];
 }
 

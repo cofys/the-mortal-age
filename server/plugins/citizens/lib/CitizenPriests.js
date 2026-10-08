@@ -118,7 +118,9 @@ const PRIEST_TYPE_WEIGHTS = {
 
 /** Hash-derived priest type for a username (~35% of commoners are priests). */
 function priestTypeFor(username) {
-  if (hashChance("priest", username) > 0.35) return null;
+  // Primary-profession partition: exactly one early profession per citizen.
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  if (primaryProfessionFor(username) !== "priest") return null;
   const r = hashChance("priesttype", username);
   let acc = 0;
   for (const t of PRIEST_TYPES) {

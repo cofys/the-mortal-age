@@ -69,14 +69,14 @@ assert.equal(P.priestTypeFor(hp), "high-priest");
 assert.equal(P.priestTypeFor(hp), P.priestTypeFor(hp));
 assert.ok(P.PRIEST_TYPES.includes(P.priestTypeFor(hp)));
 
-// --- 3. ~35% of citizens are priests ---
+// --- 3. ~6% of citizens are priests (primary-profession partition) ---
 let priestCount = 0;
 const N = 2000;
 for (let i = 0; i < N; i++) {
   if (P.priestTypeFor(`dist${i}`)) priestCount++;
 }
 const ratio = priestCount / N;
-assert.ok(ratio > 0.28 && ratio < 0.42, `priest ratio ${ratio} out of band`);
+assert.ok(ratio > 0.03 && ratio < 0.10, `priest ratio ${ratio} out of band`);
 
 // --- 4. non-priests return null ---
 assert.equal(P.priestTypeFor(findNonPriest()), null);

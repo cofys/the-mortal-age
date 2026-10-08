@@ -23,7 +23,7 @@ check("hashStr is deterministic and distributes", () => {
   assert.notEqual(A.hashStr("alice"), A.hashStr("bob"));
 });
 
-check("alchemistTypeFor is stable and ~35% of names are alchemists", () => {
+check("alchemistTypeFor is stable and ~6% of names are alchemists (primary-profession partition)", () => {
   let alchemists = 0;
   for (let i = 0; i < 2000; i++) {
     const t = A.alchemistTypeFor("user" + i);
@@ -34,7 +34,7 @@ check("alchemistTypeFor is stable and ~35% of names are alchemists", () => {
     }
   }
   const rate = alchemists / 2000;
-  assert.ok(rate > 0.28 && rate < 0.42, "approx 35%, got " + rate);
+  assert.ok(rate > 0.03 && rate < 0.10, "approx 6% (primary-profession partition), got " + rate);
   assert.equal(A.alchemistTypeFor(""), null);
   assert.equal(A.alchemistTypeFor(null), null);
 });
