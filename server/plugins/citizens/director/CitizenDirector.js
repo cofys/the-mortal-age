@@ -141,6 +141,7 @@ const { tickErrandfolk } = require("../lib/CitizenCouriers2");
 const { tickHerbfolk } = require("../lib/CitizenHerbalists2");
 const { tickGlassfolk } = require("../lib/CitizenGlassblowers2");
 const { tickWoodfolk } = require("../lib/CitizenArtisans2");
+const { tickLaborfolk } = require("../lib/CitizenBuilders2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2369,6 +2370,19 @@ class CitizenDirector {
       tickWoodfolk(this, nowMs);
     } catch (error) {
       this.log("woodfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen laborfolk (CitizenBuilders2): hod carriers, mortar mixers,
+    // scaffolders' mates, day laborers and rubble clearers — the amateur
+    // muscle-and-mortar side of the building trade under the master builders
+    // (CitizenBuilders), who are excluded via the real module's getBuilderInfo
+    // null path; this owns work sites, the daily master-project bridge,
+    // day-labor hires, boss callouts, and topping-out / scaffold-slip /
+    // supply-delay set-pieces. LOD-gated via brainTickDue inside (near-band
+    // citizens always due). Data tier, zero LLM.
+    try {
+      tickLaborfolk(this, nowMs);
+    } catch (error) {
+      this.log("laborfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
