@@ -30,7 +30,6 @@
 
 const { agentRng, chance, logNormalJitter, humanizerProfile } = require("./humanizer");
 const { getJournal } = require("./CitizenJournal");
-const TimingDesync = require("./CitizenTimingDesync");
 const { brainTickDue } = require("./CitizenTickLod");
 
 // --- tuning ------------------------------------------------------------------
@@ -621,16 +620,11 @@ function tickAlive(director, nowMs, desync = null) {
     if (!brainTickDue(director, record, desync?.tick)) {
       continue;
     }
-    // Timing desync: only the citizens whose hash slot matches this tick's
-    // phase do the visible-life work — this breaks the synchronized wave
-    // where everyone emotes/greets/wanders on the same tick. Stuck
-    // detection above stays global (it's a safety net, not flavor).
-    if (
-      desync &&
-      !TimingDesync.isCitizenDue(record, desync.tick, desync.spread)
-    ) {
-      continue;
-    }
+    // Note: timing desync intentionally NOT applied to idle life. The desync
+    // spread (10x) throttled visible behavior to ~1/10 the designed rate,
+    // freezing citizens. LOD gate above handles distant-citizen perf; the
+    // random chances in tickIdleLife provide natural variation without
+    // synchronized waves.
     try {
       tickIdleLife(director, record, bot, nowMs);
     } catch {
