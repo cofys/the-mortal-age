@@ -21,6 +21,20 @@ function fresh() {
   return store;
 }
 
+// The module gates gossip hops behind an unseeded `Math.random() > 0.6`
+// check in spreadGossipTick, which made the gossip sections below flaky
+// (~2/5 runs). Run those sections with a fixed RNG so they are
+// deterministic; module behavior is untouched.
+const realRandom = Math.random;
+function withFixedRandom(value, fn) {
+  Math.random = () => value;
+  try {
+    return fn();
+  } finally {
+    Math.random = realRandom;
+  }
+}
+
 // --- tone scoring ---
 assert.equal(scoreTone("thanks so much, friend!"), 2);
 assert.ok(scoreTone("shut up, you stupid idiot") <= -4, "rude weighs double");
@@ -132,7 +146,8 @@ assert.equal(scoreTone(""), 0);
 }
 
 // --- gossip propagation walks social links, not the whole world ---
-{
+// (fixed RNG: spreadGossipTick's 60% hop gate made this flaky)
+withFixedRandom(0, () => {
   const m = fresh();
   const members = new Map([["misthalin", ["Maren", "Borin", "Sella", "Tav", "Wren"]]]);
   const online = new Set(["Borin"]);
@@ -172,7 +187,7 @@ assert.equal(scoreTone(""), 0);
     said.every((s) => s.line.includes("Sneak")),
     "street-talk names the subject"
   );
-}
+});
 
 // --- persistence round-trip (in-memory seam, no disk) ---
 {
@@ -222,7 +237,8 @@ assert.equal(scoreTone(""), 0);
 }
 
 // --- gossip network: bonded chain, max 3 hops, then the rumor dies ---
-{
+// (fixed RNG: spreadGossipTick's 60% hop gate made this flaky)
+withFixedRandom(0, () => {
   const m = fresh();
   resetKinshipForTests();
   const now = Date.now();
@@ -248,10 +264,11 @@ assert.equal(scoreTone(""), 0);
   assert.ok(hops <= 3, `max 3 hops, saw ${hops}`);
   assert.equal(m.gossip.length, 0, "rumor dies after its hops");
   resetKinshipForTests();
-}
+});
 
 // --- gossip network: at most one rumor spoken aloud per tick ---
-{
+// (fixed RNG: spreadGossipTick's 60% hop gate made this flaky)
+withFixedRandom(0, () => {
   const m = fresh();
   const members = new Map([["misthalin", ["Maren", "Borin", "Sella"]]]);
   const said = [];
@@ -277,10 +294,11 @@ assert.equal(scoreTone(""), 0);
     assert.ok(spoken.length <= 1, `tick ${t}: at most one spoken event`);
   }
   assert.ok(said.length <= 6, "server-wide cap holds across ticks");
-}
+});
 
 // --- gossip network: per-event ~30min speak cooldown ---
-{
+// (fixed RNG: spreadGossipTick's 60% hop gate made this flaky)
+withFixedRandom(0, () => {
   const m = fresh();
   const members = new Map([["misthalin", ["Maren", "Borin"]]]);
   const said = [];
@@ -311,10 +329,11 @@ assert.equal(scoreTone(""), 0);
     spokeAgain = said.length === 2;
   }
   assert.ok(spokeAgain, "event speakable again after ~30 min");
-}
+});
 
 // --- gossip network: kind templates name the subject, no awkward grammar ---
-{
+// (fixed RNG: spreadGossipTick's 60% hop gate made this flaky)
+withFixedRandom(0, () => {
   const m = fresh();
   const members = new Map([["misthalin", ["Maren", "Borin"]]]);
   const said = [];
@@ -334,6 +353,6 @@ assert.equal(scoreTone(""), 0);
   assert.ok(said[0].line.includes("Asha and Bor"), "wedding line names the couple");
   assert.ok(!/what .* did\?/.test(said[0].line), `no awkward grammar: ${said[0].line}`);
   assert.ok(said[0].line.length <= 160, "forceChat length cap");
-}
+});
 
 console.log("CitizenMemory.test.js: all checks passed");
