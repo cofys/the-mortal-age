@@ -143,6 +143,7 @@ const { tickGlassfolk } = require("../lib/CitizenGlassblowers2");
 const { tickWoodfolk } = require("../lib/CitizenArtisans2");
 const { tickLaborfolk } = require("../lib/CitizenBuilders2");
 const { tickTimefolk } = require("../lib/CitizenClockmakers2");
+const { tickHawker } = require("../lib/CitizenHawkers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2397,6 +2398,17 @@ class CitizenDirector {
       tickTimefolk(this, nowMs);
     } catch (error) {
       this.log("timefolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen hawkerfolk (CitizenHawkers2): amateur street hawkers and cryers
+    // — the "2" layer under the professional stall merchants (CitizenMarketStalls,
+    // who are excluded via the role gate before the share roll); this owns
+    // pitches/baskets, the daily market-wares bridge, crowd-gathering moments
+    // and the hoarse-crier / heckled-pitch set-pieces. LOD-gated via
+    // brainTickDue inside (near-band citizens always due). Data tier, zero LLM.
+    try {
+      tickHawker(this, nowMs);
+    } catch (error) {
+      this.log("hawkerfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
