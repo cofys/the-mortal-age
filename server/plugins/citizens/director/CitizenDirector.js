@@ -64,6 +64,7 @@ const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
 const CitizenGiftGiving = require("../lib/CitizenGiftGiving");
 const CitizenMystery = require("../lib/CitizenMystery");
+const CitizenTeachers = require("../lib/CitizenTeachers");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const { tickPerformers } = require("../lib/CitizenStreetPerformers");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
@@ -757,6 +758,16 @@ class CitizenDirector {
       CitizenMystery.tickMystery(this, Date.now());
     } catch (error) {
       this.log("mystery (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen teachers: schools with deterministic teacher staff, school-age
+    // students whose curriculum advances daily (persisted), and visible
+    // class sessions during school hours — but only while a real player is
+    // actually around to see them. Data tier, zero LLM, per-citizen
+    // try/catch inside.
+    try {
+      CitizenTeachers.tickTeachers(this, Date.now());
+    } catch (error) {
+      this.log("teachers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Market stalls: merchants claim a pitch during market hours, set up
     // 3-5 wares with personality-driven prices, haggle with liked
