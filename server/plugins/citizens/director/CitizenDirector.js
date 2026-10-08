@@ -63,6 +63,7 @@ const CitizenRumors = require("../lib/CitizenRumors");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
+const CitizenRetirement = require("../lib/CitizenRetirement");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
@@ -723,6 +724,15 @@ class CitizenDirector {
       CitizenApprentices.tickApprenticeLife(this, Date.now());
     } catch (error) {
       this.log("apprentices (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Retirement: elders (60+) hold a one-time retirement ceremony, then
+    // tell stories, share wisdom, and receive deference from younger
+    // citizens — only while a real player is around to witness. Data tier,
+    // zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenRetirement.tickRetirement(this, Date.now(), desync);
+    } catch (error) {
+      this.log("retirement (proximity) failed", { error: String(error?.message ?? error) });
     }
   }
 
