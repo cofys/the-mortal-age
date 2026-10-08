@@ -67,6 +67,7 @@ const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
 const { tickFestivals } = require("../lib/CitizenFestivals");
+const { tickSocieties } = require("../lib/CitizenSecretSocieties");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
@@ -1366,6 +1367,14 @@ class CitizenDirector {
       CitizenRelationships.tickRelationships(this, nowMs);
     } catch (error) {
       this.log("relationships failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen secret societies: hidden orders (Gilded Ledger, Shadow Circle,
+    // Old Guard) hold night meetings, advance agendas, and quietly recruit
+    // trusted players. Data tier, zero LLM.
+    try {
+      tickSocieties(this, nowMs);
+    } catch (error) {
+      this.log("societies failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {
