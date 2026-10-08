@@ -41,6 +41,7 @@ const { onLogoutFarewell } = require("./StreetFarewells");
 const { onIdleSeen, clearIdleOnLogout } = require("./StreetIdle");
 const { onGiftGiven } = require("./CitizenGifts");
 const { tipPerformer } = require("./lib/CitizenStreetPerformers");
+const { tipBard } = require("./lib/CitizenBards");
 const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
@@ -519,9 +520,10 @@ function onGiftSeen(event) {
   onGiftGiven(event);
 }
 
-/** A player used coins on a citizen bot: a tip for a street performer. */
+/** A player used coins on a citizen bot: a tip for a street performer or bard. */
 function onTipSeen(event) {
   tipPerformer(event);
+  if (!event.handled) tipBard(event);
 }
 
 /** A player logged out: drop their idle-tracking state. */

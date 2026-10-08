@@ -78,6 +78,7 @@ const CitizenMystery = require("../lib/CitizenMystery");
 const CitizenTeachers = require("../lib/CitizenTeachers");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const { tickPerformers } = require("../lib/CitizenStreetPerformers");
+const { tickBards } = require("../lib/CitizenBards");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenJudges = require("../lib/CitizenJudges");
@@ -923,6 +924,18 @@ class CitizenDirector {
       tickPerformers(this, Date.now());
     } catch (error) {
       this.log("performers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Bards: professional minstrels play the great halls and feast halls
+    // in the evening — named repertoire, touring troupes, court bards,
+    // premieres, ballads composed from real journaled events, song
+    // requests, commissions and coin tips ("use coins on bard"). No
+    // overlap with street performers (buskers own the squares) or inn
+    // bards (they own the inns). Data tier, zero LLM, per-citizen
+    // try/catch inside.
+    try {
+      tickBards(this, Date.now(), desync);
+    } catch (error) {
+      this.log("bards (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Guard patrols: the visible watch — checkpoint check-ins, disturbance
     // response, escort offers and follows, night-watch torch announcements,
