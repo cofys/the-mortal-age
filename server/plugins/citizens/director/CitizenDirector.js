@@ -81,6 +81,7 @@ const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
 const { tickCaravans } = require("../lib/CitizenTradeCaravans");
 const { tickCaravanShouts } = require("../lib/CitizenTradeCaravans");
+const { tickDiplomacy, tickDiplomatShouts } = require("../lib/CitizenDiplomats");
 const { tickExplorers } = require("../lib/CitizenExplorers");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
@@ -778,6 +779,15 @@ class CitizenDirector {
       tickCaravanShouts(this, Date.now());
     } catch (error) {
       this.log("caravan shouts (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Diplomat shouts: departure/return announcements at the home court
+    // anchor and escort invitations to nearby real players, only where a
+    // real player can see them. Data tier, zero LLM, per-mission
+    // try/catch inside.
+    try {
+      tickDiplomatShouts(this, Date.now());
+    } catch (error) {
+      this.log("diplomat shouts (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Personal companion invites: citizens invite nearby players on 1-on-1
     // outings (fishing, dungeon, walk, tavern) and remember yes/no.
@@ -1545,6 +1555,18 @@ class CitizenDirector {
       tickCaravans(this, nowMs);
     } catch (error) {
       this.log("trade caravans failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen diplomats: courtier-envoys run trade/culture missions and
+    // negotiators work peace treaties and alliance proposals between
+    // capitals on a slow per-kingdom cadence — travel abstracted (data
+    // tier), personality-weighted negotiation outcomes, real tension
+    // effects (treaties ease it, collapsed talks spike it), successful
+    // envoys stationed abroad as ambassadors. Everything journaled.
+    // Data tier, zero LLM.
+    try {
+      tickDiplomacy(this, nowMs);
+    } catch (error) {
+      this.log("diplomacy failed", { error: String(error?.message ?? error) });
     }
     // Citizen explorers: scouts, treasure hunters, naturalists, and
     // pathfinders form expeditions on a slow per-kingdom cadence — muster,
