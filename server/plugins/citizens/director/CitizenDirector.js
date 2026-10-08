@@ -124,6 +124,7 @@ const { tickEducators } = require("../lib/CitizenTeachers2");
 const { tickCaregivers } = require("../lib/CitizenHealers2");
 const { tickWatchmen } = require("../lib/CitizenWatchmen2");
 const { tickFisherfolk } = require("../lib/CitizenFishers2");
+const { tickMinerfolk } = require("../lib/CitizenMiners2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2124,6 +2125,19 @@ class CitizenDirector {
       tickFisherfolk(this, nowMs);
     } catch (error) {
       this.log("fisherfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen community mining folk: amateur prospectors, claim diggers,
+    // ore carriers and gem hunters working the community claims. Hash-
+    // derived types, per-day claims/finds, rich-vein-strike crowd moments,
+    // 7-day-TTL ledgers for staking claims, hiring miners and buying ore.
+    // Professional miners (CitizenMiners) are excluded — the trade owns
+    // the commercial mines; jewelers own gem cutting. Visibility throttled
+    // via chance + cooldown (fisherfolk precedent), no hobby key.
+    // Data tier, zero LLM.
+    try {
+      tickMinerfolk(this, nowMs);
+    } catch (error) {
+      this.log("minerfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
