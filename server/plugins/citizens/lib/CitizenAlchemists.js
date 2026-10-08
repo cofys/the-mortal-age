@@ -164,6 +164,16 @@ function pickOne(rng, arr) {
   return arr[Math.floor(rng() * arr.length)];
 }
 
+/** Materialized citizen bot for a roster record, or null when offline. */
+function materializedBot(director, record) {
+  try {
+    if (!director?.isOnline?.(record)) return null;
+    return director.getBot?.(record) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** True only for real human players (not bots, not logged-out). */
 function isRealPlayer(player) {
   if (!player) return false;
@@ -378,11 +388,24 @@ function shouldTeach(lastTaughtAt, nowMs) {
 }
 
 // === Journal helper ===
+// Journal access (lazy require — CitizenJournal may not load in tests).
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
+    }
+  }
+  return _journal || null;
+}
+
+/** Journal a visible-loop work event — best-effort, never breaks the tick. */
 function journalEvent(username, text) {
   try {
-    const Journal = require("./CitizenJournal");
-    const citizenName = String(username).toLowerCase();
-    Journal.journalFor?.(citizenName)?.log(citizenName, "work", text);
+    // Canonical journal API (CitizenJournal.js:79): getJournal().log(name, kind, text).
+    journal()?.log(String(username).toLowerCase(), "work", text);
   } catch {
     // Journal is best-effort; never break the tick.
   }
@@ -435,7 +458,7 @@ function tickAlchemists(director, nowMs, desync) {
         if (!shouldFire(lastWorkByCitizen.get(record.username), nowMs)) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the lab.
@@ -457,7 +480,7 @@ function tickAlchemists(director, nowMs, desync) {
         const type = alchemistTypeFor(record.username);
         if (type !== ALCHEMIST_APOTHECARY) continue;
         if (!shouldHawk(lastHawkByCitizen.get(record.username), nowMs)) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -476,7 +499,7 @@ function tickAlchemists(director, nowMs, desync) {
         const type = alchemistTypeFor(record.username);
         if (type !== ALCHEMIST_BREWER && type !== ALCHEMIST_APOTHECARY) continue;
         if (!shouldTeach(lastTeachByCitizen.get(record.username), nowMs)) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= TEACH_CHANCE) continue;
@@ -494,7 +517,7 @@ function tickAlchemists(director, nowMs, desync) {
 
 /** The visible work: herblore animation + emote line + journal line. */
 function doAlchemistWork(director, record, citizen, type, nowMs) {
-  const lab = labFor(record.username, record.kingdom);
+  const lab = labFor(record.username, record.kingdomId ?? record.kingdom);
   const season = seasonFor(nowMs);
   const ingredients = ingredientsFor(season);
   const ingredient = ingredients.length > 0 ? ingredients[hashStr(record.username) % ingredients.length] : "dried herbs";
@@ -548,7 +571,7 @@ function doAlchemistWork(director, record, citizen, type, nowMs) {
 function doAlchemistHawk(director, citizen, record, type, nowMs) {
   void director;
   void type;
-  const lab = labFor(record.username, record.kingdom);
+  const lab = labFor(record.username, record.kingdomId ?? record.kingdom);
   const wares = waresFor(record.username, nowMs);
   const line = hawkLineFor(Math.random, wares, lab);
   try {
@@ -562,7 +585,7 @@ function doAlchemistHawk(director, citizen, record, type, nowMs) {
 /** Recipe lesson offer — journal records the recipe so the LLM tier knows. */
 function doTeachOffer(citizen, record, type, nowMs) {
   void type;
-  const lab = labFor(record.username, record.kingdom);
+  const lab = labFor(record.username, record.kingdomId ?? record.kingdom);
   const brew = brewFor(record.username, nowMs);
   const line = teachLineFor(Math.random, brew);
   try {
@@ -592,8 +615,11 @@ function potionsFor(username, kingdom, dateMs) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    // Canonical real-player proximity: bot-local players from the engine
+    // Player API (Player.ts:796), filtered for real players.
+    const players = citizen?.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

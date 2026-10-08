@@ -36,13 +36,22 @@ function mockPlayer(name, x, y, isBot = false) {
 function mockDirector(records, players) {
   const roster = new Map(records.map((r) => [r.username, r]));
   const bots = new Map();
+  const online = new Set(records.map((r) => r.username));
   return {
     roster,
-    playerFor: (rec) => {
-      if (!bots.has(rec.username)) bots.set(rec.username, mockPlayer(rec.username, 100, 100, true));
+    // Canonical materialization APIs (CitizenDirector.js:1374/1379) — the
+    // old playerFor mock pointed at a method that does not exist in prod.
+    isOnline: (rec) => online.has(rec?.username),
+    getBot: (rec) => {
+      if (!bots.has(rec.username)) {
+        const bot = mockPlayer(rec.username, 100, 100, true);
+        // Canonical proximity source: engine Player API on the bot.
+        bot.getLocalPlayers = () => players;
+        bots.set(rec.username, bot);
+      }
       return bots.get(rec.username);
     },
-    onlinePlayers: () => players,
+    _getBot: (rec) => bots.get(rec.username),
   };
 }
 function fresh() {
@@ -268,7 +277,7 @@ function fresh() {
   const realNear = mockPlayer("Jon", 102, 102, false);
   const dir = mockDirector([rec], [realNear]);
   withFixedRandom(0.05, () => S.tickBrewfolk(dir, T0)); // 0.05 < BREW_CHANCE (0.15)
-  const bot = dir.playerFor(rec);
+  const bot = dir._getBot(rec);
   assert.ok(bot._chats.length >= 1, "tick fires near a real player");
   console.log("tick fires: PASS");
 }
@@ -282,7 +291,7 @@ function fresh() {
   const onlyBots = [mockPlayer("Bot1", 102, 102, true)];
   const dir = mockDirector([rec], onlyBots);
   withFixedRandom(0.05, () => S.tickBrewfolk(dir, T0));
-  const bot = dir.playerFor(rec);
+  const bot = dir._getBot(rec);
   assert.equal(bot._chats.length, 0, "silent when only bots are near");
   console.log("tick silent near bots: PASS");
 }
@@ -296,9 +305,46 @@ function fresh() {
   const realNear = mockPlayer("Jon", 102, 102, false);
   const dir = mockDirector([rec], [realNear]);
   withFixedRandom(0.05, () => S.tickBrewfolk(dir, T_NIGHT));
-  const bot = dir.playerFor(rec);
+  const bot = dir._getBot(rec);
   assert.equal(bot._chats.length, 0, "silent outside brew hours");
   console.log("tick silent at night: PASS");
+}
+
+// --- mishap path journals a work event AND seeds a canonical rumor
+// (the old seedRumor(text) call passed text as rng and was a dead no-op) ---
+{
+  fresh();
+  let uname = null;
+  for (let i = 0; i < 5000 && !uname; i++) {
+    if (S.brewfolkTypeOf({ username: "mish" + i, role: "commoner" })) uname = "mish" + i;
+  }
+  assert.ok(uname, "found an eligible brewfolk name");
+  const rec = { username: uname, role: "commoner", kingdomId: "misthalin" };
+  const room = S.stillroomFor(rec);
+  let day = null;
+  for (let d = 0; d < 200 && day === null; d++) {
+    if (S.mishapFor(room, T0 + d * 86400000)) day = T0 + d * 86400000;
+  }
+  assert.ok(day, "found a mishap day at this stillroom");
+  const realNear = mockPlayer("Jon", 102, 102, false);
+  const dir = mockDirector([rec], [realNear]);
+  const R = require("./CitizenRumors");
+  R.resetForTests();
+  const before = R._activeRumors.size;
+  withFixedRandom(0.05, () => S.tickBrewfolk(dir, day));
+  const bot = dir._getBot(rec);
+  const expectedMishap = S.mishapFor(room, day);
+  assert.ok(expectedMishap && bot._chats.includes(expectedMishap), "mishap fanfare fired");
+  assert.ok(R._activeRumors.size > before, "a rumor was seeded into the real rumor graph");
+  const seeded = [...R._activeRumors.values()].find((r) => r.seedKind === "brewfolk");
+  assert.ok(seeded, "seeded rumor carries the canonical brewfolk kind");
+  assert.ok(seeded.truth.what && seeded.truth.what.includes("green smoke"), "rumor what is the mishap text");
+  assert.ok(seeded.truth.where && seeded.truth.where.length > 0, "rumor where is the stillroom");
+  const J = require("./CitizenJournal");
+  const recent = J.getJournal().recent(uname, 3);
+  assert.ok(recent.length > 0 && recent[0].kind === "work", "mishap journaled as a work event");
+  R.resetForTests();
+  console.log("mishap journal+rumor: PASS");
 }
 
 // --- pro alchemist skipped at the type gate before materialization ---
