@@ -433,23 +433,40 @@ function techniqueFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// === Journal access (lazy require — CitizenJournal may not load in tests) ===
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method (fishers rung audit 2026-10-08).
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
+  }
+  return _journal || null;
+}
+
+function journalize(citizenName, text) {
+  try {
+    journal()?.log(citizenName, "work", text);
   } catch {
-    /* journal absent */
+    /* journal is best-effort; never break the tick */
   }
 }
 
-function seedRumor(text) {
+// Canonical rumor seed: seedRumor(rng, event) with
+// event: { kind, who, whoDisplay, what, where, whereDisplay, amount }.
+// Calling it with a bare string silently no-ops (returns null) — fishers
+// rung audit 2026-10-08.
+function seedBigCatchRumor(who, text, where) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
+    if (typeof rumors.seedRumor === "function") {
+      rumors.seedRumor(Math.random, { kind: "big-catch", who, what: text, where });
+    }
   } catch {
     /* rumors absent */
   }
@@ -476,7 +493,7 @@ function tickFisherfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Fishing hours only (dawn to dusk, server-local)
@@ -502,10 +519,27 @@ function tickFisherfolk(director, nowMs, desync = 0) {
   }
 }
 
+/**
+ * The materialized player-bot for a roster record, or null when the citizen
+ * isn't online. Canonical director API: isOnline(record) + getBot(record)
+ * (CitizenDirector.js:1374/1379). director.playerFor / director.onlinePlayers
+ * do NOT exist — never call them (fishers rung audit 2026-10-08).
+ */
+function materializedBot(director, record) {
+  try {
+    if (director.isOnline?.(record)) return director.getBot?.(record) ?? null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    // Real engine API: Player.getLocalPlayers() (Player.ts:796).
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -532,8 +566,8 @@ function doFisherfolkWork(director, record, citizen, type, nowMs) {
         weight: big.weightKg,
       });
       citizen.forceChat?.(line);
-      journalize(citizen, `landed a ${big.weightKg}kg ${big.fish} at ${spot.name}`);
-      seedRumor(`A ${big.weightKg}kg ${big.fish} landed at ${spot.name}!`);
+      journalize(record.username, `landed a ${big.weightKg}kg ${big.fish} at ${spot.name}`);
+      seedBigCatchRumor(record.username, `A ${big.weightKg}kg ${big.fish} landed at ${spot.name}!`, spot.name);
       return;
     }
   }
@@ -543,17 +577,17 @@ function doFisherfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.35) {
     const line = pickOne(Math.random, CAST_LINES[type]);
     citizen.forceChat?.(line);
-    journalize(citizen, `fished at ${spot.name}`);
+    journalize(record.username, `fished at ${spot.name}`);
   } else if (roll < 0.55) {
     const todays = catchFor(name, type, spot, nowMs);
     const fish = todays.length ? todays[0] : "fish";
     const line = fill(pickOne(Math.random, CATCH_LINES), { fish });
     citizen.forceChat?.(line);
-    journalize(citizen, `caught ${todays.join(", ")} at ${spot.name}`);
+    journalize(record.username, `caught ${todays.join(", ")} at ${spot.name}`);
   } else if (roll < 0.7) {
     const line = pickOne(Math.random, TEACH_LINES);
     citizen.forceChat?.(line);
-    journalize(citizen, `shared fishing wisdom at ${spot.name}`);
+    journalize(record.username, `shared fishing wisdom at ${spot.name}`);
   } else if (type === FISHERFOLK_STALL) {
     const todays = catchFor(name, type, spot, nowMs);
     const fish = todays.length ? todays[0] : "fish";
@@ -563,13 +597,13 @@ function doFisherfolkWork(director, record, citizen, type, nowMs) {
       price: priceFor(fish, nowMs),
     });
     citizen.forceChat?.(line);
-    journalize(citizen, `sold fresh ${fish} at the community stall`);
+    journalize(record.username, `sold fresh ${fish} at the community stall`);
   } else {
     const todays = catchFor(name, type, spot, nowMs);
     const fish = todays.length ? todays[0] : "fish";
     const line = fill(pickOne(Math.random, SHARE_LINES), { fish });
     citizen.forceChat?.(line);
-    journalize(citizen, `shared ${fish} with neighbors at ${spot.name}`);
+    journalize(record.username, `shared ${fish} with neighbors at ${spot.name}`);
   }
 }
 

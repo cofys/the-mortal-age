@@ -58,13 +58,16 @@ function botPlayer(username, x, y) {
   };
 }
 
-function citizenBot(x, y) {
+// Real engine API: Player.getLocalPlayers() (Player.ts:796). The director
+// mock uses the canonical isOnline/getBot; nearby players come from the bot.
+function citizenBot(x, y, localPlayers = []) {
   const chat = [];
   return {
     chat,
     forceChat: (line) => chat.push(line),
     performAnimation: () => true,
     getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }),
+    getLocalPlayers: () => localPlayers,
     isPlayerBot: () => true,
     getHostAddress: () => "bot",
     getUsername: () => "citizenbot",
@@ -275,18 +278,19 @@ check("tickFishers work pass fires near real players only", () => {
     // Simpler: just verify silence with no players, then chat with one.
     const noPlayers = {
       roster: new Map([[fisher, rec]]),
-      playerFor: () => bot,
-      onlinePlayers: () => [],
+      isOnline: () => true,
+      getBot: () => bot,
       api: null,
     };
     tickFishers(noPlayers, Date.now());
     assert.equal(bot.chat.length, 0, "no players -> no work lines");
 
     // Bots only -> silence.
+    const botNearBots = citizenBot(100, 100, [botPlayer("b1", 100, 101)]);
     const botsOnly = {
       roster: new Map([[fisher, rec]]),
-      playerFor: () => bot,
-      onlinePlayers: () => [botPlayer("b1", 100, 101)],
+      isOnline: () => true,
+      getBot: () => botNearBots,
       api: null,
     };
     tickFishers(botsOnly, Date.now());
@@ -298,11 +302,11 @@ check("tickFishers work pass fires near real players only", () => {
     let fired = 0;
     for (let d = 0; d < 5; d++) {
       _resetState();
-      const bot2 = citizenBot(100, 100);
+      const bot2 = citizenBot(100, 100, [realPlayer("jon", 100, 102)]);
       const withPlayer = {
         roster: new Map([[fisher, rec]]),
-        playerFor: () => bot2,
-        onlinePlayers: () => [realPlayer("jon", 100, 102)],
+        isOnline: () => true,
+        getBot: () => bot2,
         api: null,
       };
       tickFishers(withPlayer, Date.UTC(2026, 6, 1 + d, 12));
@@ -334,10 +338,11 @@ check("guards are not fishers in the tick", () => {
   Math.random = () => 0.0;
   try {
     const bot = citizenBot(100, 100);
+    const guardBot = citizenBot(100, 100, [realPlayer("jon", 100, 102)]);
     const director = {
       roster: new Map([[fisher, { username: fisher, role: "guard", kingdom: "kandarin" }]]),
-      playerFor: () => bot,
-      onlinePlayers: () => [realPlayer("jon", 100, 102)],
+      isOnline: () => true,
+      getBot: () => guardBot,
       api: null,
     };
     tickFishers(director, Date.UTC(2026, 6, 1, 12));

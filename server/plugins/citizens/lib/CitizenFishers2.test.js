@@ -23,13 +23,16 @@ function withFixedRandom(value, fn) {
 function loc(x, y, z = 0) {
   return { getX: () => x, getY: () => y, getZ: () => z };
 }
-function mockBot(name, x = 3000, y = 3000) {
+// Real engine API: Player.getLocalPlayers() (Player.ts:796). The director
+// mock uses the canonical isOnline/getBot; nearby players come from the bot.
+function mockBot(name, x = 3000, y = 3000, localPlayers = []) {
   const chats = [];
   return {
     getUsername: () => name,
     isPlayerBot: () => true,
     getHostAddress: () => "bot",
     getLocation: () => loc(x, y),
+    getLocalPlayers: () => localPlayers,
     forceChat: (m) => chats.push(m),
     _chats: chats,
   };
@@ -42,12 +45,12 @@ function mockPlayer(name, x = 3005, y = 3005) {
     getLocation: () => loc(x, y),
   };
 }
-function mockDirector(entries, players) {
+function mockDirector(entries) {
   const bots = new Map();
   return {
     roster: new Map(entries.map((r) => [r.username, r])),
-    playerFor: (record) => bots.get(record.username) || null,
-    onlinePlayers: () => players,
+    isOnline: (record) => bots.has(record.username),
+    getBot: (record) => bots.get(record.username) || null,
     _bots: bots,
   };
 }
@@ -254,9 +257,8 @@ function fresh() {
 {
   fresh();
   const rec = findFisherfolk("fire");
-  const bot = mockBot(rec.username, 3000, 3000);
-  const player = mockPlayer("Jon", 3005, 3005);
-  const d = mockDirector([rec], [player]);
+  const bot = mockBot(rec.username, 3000, 3000, [mockPlayer("Jon", 3005, 3005)]);
+  const d = mockDirector([rec]);
   d._bots.set(rec.username, bot);
   withFixedRandom(0.1, () => FF.tickFisherfolk(d, T0));
   assert.equal(bot._chats.length, 1, "citizen speaks once near a real player");
@@ -268,9 +270,8 @@ function fresh() {
 {
   fresh();
   const rec = findFisherfolk("quiet");
-  const bot = mockBot(rec.username, 3000, 3000);
-  const other = mockBot("OtherBot", 3005, 3005);
-  const d = mockDirector([rec], [other]);
+  const bot = mockBot(rec.username, 3000, 3000, [mockBot("OtherBot", 3005, 3005)]);
+  const d = mockDirector([rec]);
   d._bots.set(rec.username, bot);
   withFixedRandom(0.1, () => FF.tickFisherfolk(d, T0));
   assert.equal(bot._chats.length, 0, "silent when only bots are near");
@@ -281,9 +282,8 @@ function fresh() {
 {
   fresh();
   const rec = findFisherfolk("night");
-  const bot = mockBot(rec.username, 3000, 3000);
-  const player = mockPlayer("Jon", 3005, 3005);
-  const d = mockDirector([rec], [player]);
+  const bot = mockBot(rec.username, 3000, 3000, [mockPlayer("Jon", 3005, 3005)]);
+  const d = mockDirector([rec]);
   d._bots.set(rec.username, bot);
   withFixedRandom(0.1, () => FF.tickFisherfolk(d, NIGHT));
   assert.equal(bot._chats.length, 0, "silent at 03:00");
@@ -295,9 +295,8 @@ function fresh() {
   fresh();
   const pro = findProFisher("proskip");
   const rec = { username: pro, role: "commoner", kingdomId: "kandarin" };
-  const bot = mockBot(pro, 3000, 3000);
-  const player = mockPlayer("Jon", 3005, 3005);
-  const d = mockDirector([rec], [player]);
+  const bot = mockBot(pro, 3000, 3000, [mockPlayer("Jon", 3005, 3005)]);
+  const d = mockDirector([rec]);
   d._bots.set(pro, bot);
   withFixedRandom(0.1, () => FF.tickFisherfolk(d, T0));
   assert.equal(bot._chats.length, 0, "pro fisher never fires the folk tick");
