@@ -84,6 +84,7 @@ const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const CitizenBonds = require("../lib/CitizenBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
+const CitizenWeddings = require("../lib/CitizenWeddings");
 const { normalizeName } = require("../lib/CitizenBonds");
 const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
 const {
@@ -1271,6 +1272,15 @@ class CitizenDirector {
       }
     }
     this.tickMemory(nowMs);
+    // Citizen weddings: anniversaries, love triangles, cold feet, proposals —
+    // the romantic layer. Data tier, zero LLM. Runs BEFORE tickKinship so
+    // cold feet can call off an announced wedding before the ceremony
+    // machine processes it.
+    try {
+      CitizenWeddings.tickWeddings(this, Math.random, nowMs);
+    } catch (error) {
+      this.log("weddings failed", { error: String(error?.message ?? error) });
+    }
     // Citizen kinship: friendships, romances, weddings and feuds between
     // citizens — the social fabric that makes them read as real people.
     // Data tier, zero LLM.

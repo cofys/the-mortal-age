@@ -171,6 +171,20 @@ function reconcileMod(traits) {
   return m;
 }
 
+/**
+ * 0..1 — how likely a serious couple is to actually propose.
+ * Romantic/warm souls propose readily; shy/gruff pairs often stay
+ * "serious" forever, happy as they are.
+ */
+function proposalChance(traitsA, traitsB) {
+  const t = new Set([...(traitsA ?? []), ...(traitsB ?? [])]);
+  let p = 0.55;
+  for (const r of ["devout", "cheerful", "chatty", "easygoing"]) if (t.has(r)) p += 0.12;
+  for (const s of ["taciturn", "suspicious"]) if (t.has(s)) p -= 0.18;
+  if (t.has("gruff")) p -= 0.12;
+  return Math.min(0.95, Math.max(0.05, p));
+}
+
 // --- data layer ------------------------------------------------------------
 function blankBond(type, stage, kingdomId, now) {
   return {
@@ -604,7 +618,19 @@ function progressBonds(director, rng, now) {
           text: `are courting — wedding bells soon, mark my words!`,
           holder: pickFriendOrSelf(director, a, b),
         });
-      } else if (bond.stage === "serious" && age > SERIOUS_AGE_MS && !bond.data.event) {
+      } else if (bond.stage === "serious" && age > SERIOUS_AGE_MS && !bond.data.event && !bond.data.proposalShy) {
+        // Personality-driven proposals: not every serious couple marries.
+        // Romantic souls propose readily; shy/gruff pairs may stay "serious"
+        // forever, happy as they are.
+        const pChance = proposalChance(ra.personality?.traits ?? [], rb.personality?.traits ?? []);
+        if (!chance(rng, pChance)) {
+          if (chance(rng, 0.3)) {
+            bond.data.proposalShy = true;
+            getKinship().touch(a, b, now);
+            journalEvent(a, `${db} and I are happy as we are — no need for vows.`, "romance", b);
+          }
+          continue;
+        }
         bond.data.event = { type: "wedding", phase: "announced", at: now };
         getKinship().touch(a, b, now);
         journalEvent(a, `I'm marrying ${db}! The whole square will hear of it.`, "romance", b);
@@ -1158,6 +1184,7 @@ module.exports = {
   compatScore,
   clashScore,
   reconcileMod,
+  proposalChance,
   pairKey,
   normalizeName,
   BOND_FRIEND,
