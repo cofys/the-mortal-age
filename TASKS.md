@@ -5,8 +5,8 @@ before you start. See `COLLAB.md` for the full protocol.
 
 ## NOW
 
-- [ ] IN PROGRESS — coordinator-1500 — citizens: farmers rung audit (CitizenFarmers.js).
-  Paths: `server/plugins/citizens/lib/CitizenFarmers.js`
+- [x] DONE — coordinator-1500 — citizens: farmers rung audit (CitizenFarmers.js) — FOUND + FIXED 1 REAL verified-at-runtime bug, then CLEAN 5/5: the entire interaction tier called dead director APIs — `director.playerFor?.(record)` and `director.onlinePlayers?.()` do NOT exist on the real CitizenDirector (verified: no such methods anywhere in director/CitizenDirector.js; the API mocks only lived in the module's own tests). Every farmer's materialize gate returned null, so NO farmer has EVER produced visible work or produce pitches in production — silently no-op'ing since the module landed (same bug class as the festivalgames journal no-op). Fix: canonical `materializedBot()` helper via `director.isOnline?.(record)` + `director.getBot?.(record)`, and `anyRealPlayerNear()` scans the real engine API `bot.getLocalPlayers?.() ?? []` (Player.ts:796; same as healers/bankers/alive). Test file rewritten to the real director API shape. Scorecard after fix: LOD-gated 5/5 (data tier pure date+hash-derived, free; interaction needs materialized bot + real player within 40/14 tiles; 4h work + 2h pitch per-citizen cooldowns checked before materialization; hourly prune), tick-safe 5/5 (outer + per-citizen try/catch, all engine reads wrapped, director wraps at CitizenDirector.js:878), real APIs 5/5 (getJournal().log canonical, primaryProfessionFor→"farmer" verified, Farmers2 excludes pro farmers at runtime F2:400-402), no overlap 5/5 (Farmers2 excludes pro via farmerTypeFor null path, verified live; Gardeners are hobbyists; Herbalists own herb trade), zero LLM 5/5 (scripted pools; journals feed the LLM mouth — end-to-end verified: tick wrote kind:"work" entries readable via getJournal().recent()). node --check clean; CitizenFarmers.test.js all assertions pass. Pushed + deployed to PC 15:1x (kill→pull 6dcc0f21→2155b1d8→node --check→start-tma.bat; port 43594 LISTENING, clean boot in C:\\tma\\server\\logs\\server.log, watchdog re-enabled Ready). OPEN ITEM: movement bug still awaiting Jon's live playtest — untouched by this run.
+  Paths: `server/plugins/citizens/lib/CitizenFarmers.js`, `server/plugins/citizens/lib/CitizenFarmers.test.js`
 - [ ] Citizen AI mission (ongoing) — personalities, social mechanics, relationships,
   guilds, shops. Break off concrete subtasks below as they arise.
   Paths: `server/plugins/citizens/`
@@ -36,6 +36,13 @@ before you start. See `COLLAB.md` for the full protocol.
 - [x] 2026-10-08 — citizens: fix LOD bands using director positions
 
 ## Handoffs
+
+_2026-10-08 ~15:30 EDT (coordinator-1500) → next:_
+- origin/main = 2155b1d85da6eb0d5f4635cec8ec02cbe6ccd98f (this run: farmers rung audit found + fixed 1 REAL bug — dead playerFor/onlinePlayers director APIs meant the whole farmer interaction tier silently no-op'd in production; fix uses canonical isOnline+getBot / bot.getLocalPlayers. Pushed + DEPLOYED to PC 15:1x — kill→pull→verify→start-tma.bat clean, port 43594 LISTENING, watchdog Ready. Farmers now actually work/pitch near real players for the first time).
+- Movement bug: STILL awaiting Jon's live playtest. Do NOT write speculative fixes.
+- Next rung audit candidates: miners, fishers, blacksmiths, tailors (untouched today); farmers/healers/festivalgames/guards/bards/offices done. Pattern stable: LOD-gate, tick-safety, zero-LLM, sibling-exclusion-runtime-check, real-APIs — verify every cross-module API name EXISTS at runtime (today: journal.appendEntry/addEntry, festivals.festivalToday, director.playerFor/onlinePlayers — all dead APIs caught at runtime).
+- Systemic open item: ~20 other siblings still carry the dead journalize(appendEntry/addEntry) template pattern; and OTHER modules may carry the dead playerFor/onlinePlayers director-API pattern (farmers' tests codified it — check other modules' tests for the same shape). Dedicated sweep candidate, NOT folded into rung audits.
+- Parked stash untouched (other-agents-work-20261007). PC-side parked stash (staged hot-revert 2026-10-07) untouched — needs Jon's call.
 
 _2026-10-08 ~15:15 EDT (coordinator-1445) → next:_
 - origin/main = 69e359b1c2fdda787983180a23e3f71c49694e02 (this run: healers rung audit CLEAN 5/5 recorded in TASKS.md; no code changes, no PC deploy — TASKS.md-only commit, safe to bundle into the next code deploy).
