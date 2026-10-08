@@ -32,31 +32,58 @@ function makeDirector(records) {
   };
 }
 
-test("marshal seat goes to the guard (fit weighting)", () => {
-  CitizenOffices._resetForTests();
-  const director = makeDirector([
-    makeRecord("Mira", { role: "merchant", traits: ["chatty"] }),
-    makeRecord("Brom", { role: "guard", traits: ["gruff"] }),
-  ]);
-  const b = CitizenOffices.bindCitizen(director, "asgarnia:marshal", "asgarnia", "marshal", "Marshal");
-  assert.ok(b);
-  assert.equal(b.citizenName, "Brom");
+test("marshal fit weighting favors the guard over the merchant", () => {
+  // Deterministic: compares weights directly instead of rolling the
+  // time-seeded weighted coin, which is window-flaky by design.
+  const guard = makeRecord("Rurik", { role: "guard", traits: ["gruff"] });
+  const merchant = makeRecord("Mira", { role: "merchant", traits: ["chatty"] });
+  assert.ok(
+    CitizenOffices.fitWeight(guard, "marshal") > CitizenOffices.fitWeight(merchant, "marshal"),
+    `guard=${CitizenOffices.fitWeight(guard, "marshal")} merchant=${CitizenOffices.fitWeight(merchant, "marshal")}`
+  );
 });
 
-test("quartermaster seat goes to the merchant", () => {
+test("marshal seat goes to the lone guard candidate", () => {
+  CitizenOffices._resetForTests();
+  const director = makeDirector([makeRecord("Rurik", { role: "guard", traits: ["gruff"] })]);
+  const b = CitizenOffices.bindCitizen(director, "asgarnia:marshal", "asgarnia", "marshal", "Marshal");
+  assert.ok(b);
+  assert.equal(b.citizenName, "Rurik");
+});
+
+test("quartermaster fit weighting favors the supplier merchant", () => {
+  // Deterministic weight comparison (see marshal test note).
+  const guard = makeRecord("Rurik", { role: "guard" });
+  const merchant = makeRecord("Mira", {
+    role: "merchant",
+    merchantKind: "supplier",
+    traits: ["methodical"],
+  });
+  assert.ok(
+    CitizenOffices.fitWeight(merchant, "quartermaster") > CitizenOffices.fitWeight(guard, "quartermaster"),
+    `merchant=${CitizenOffices.fitWeight(merchant, "quartermaster")} guard=${CitizenOffices.fitWeight(guard, "quartermaster")}`
+  );
+});
+
+test("quartermaster seat goes to the lone merchant candidate", () => {
   CitizenOffices._resetForTests();
   const director = makeDirector([
-    makeRecord("Brom", { role: "guard" }),
     makeRecord("Mira", { role: "merchant", merchantKind: "supplier", traits: ["methodical"] }),
   ]);
-  const b = CitizenOffices.bindCitizen(director, "asgarnia:quartermaster", "asgarnia", "quartermaster", "Quartermaster");
+  const b = CitizenOffices.bindCitizen(
+    director,
+    "asgarnia:quartermaster",
+    "asgarnia",
+    "quartermaster",
+    "Quartermaster"
+  );
   assert.ok(b);
   assert.equal(b.citizenName, "Mira");
 });
 
 test("no candidate in the kingdom returns null", () => {
   CitizenOffices._resetForTests();
-  const director = makeDirector([makeRecord("Brom", { role: "guard", kingdomId: "misthalin" })]);
+  const director = makeDirector([makeRecord("Rurik", { role: "guard", kingdomId: "misthalin" })]);
   const b = CitizenOffices.bindCitizen(director, "asgarnia:marshal", "asgarnia", "marshal", "Marshal");
   assert.equal(b, null);
 });
@@ -64,8 +91,8 @@ test("no candidate in the kingdom returns null", () => {
 test("one citizen holds one office; second seat goes to someone else", () => {
   CitizenOffices._resetForTests();
   const director = makeDirector([
-    makeRecord("Brom", { role: "guard" }),
-    makeRecord("Cade", { role: "guard" }),
+    makeRecord("Rurik", { role: "guard" }),
+    makeRecord("Haldor", { role: "guard" }),
   ]);
   const a = CitizenOffices.bindCitizen(director, "asgarnia:marshal", "asgarnia", "marshal", "Marshal");
   const b = CitizenOffices.bindCitizen(director, "asgarnia:steward", "asgarnia", "steward", "Steward");
@@ -75,7 +102,7 @@ test("one citizen holds one office; second seat goes to someone else", () => {
 
 test("fillVacancy seats and is idempotent (no double seating)", () => {
   CitizenOffices._resetForTests();
-  const director = makeDirector([makeRecord("Brom", { role: "guard" })]);
+  const director = makeDirector([makeRecord("Rurik", { role: "guard" })]);
   const a = CitizenOffices.fillVacancy(director, {
     officeId: "asgarnia:marshal",
     kingdomId: "asgarnia",
@@ -93,18 +120,18 @@ test("fillVacancy seats and is idempotent (no double seating)", () => {
 
 test("unbindOffice releases the citizen and the office", () => {
   CitizenOffices._resetForTests();
-  const director = makeDirector([makeRecord("Brom", { role: "guard" })]);
+  const director = makeDirector([makeRecord("Rurik", { role: "guard" })]);
   CitizenOffices.bindCitizen(director, "asgarnia:marshal", "asgarnia", "marshal", "Marshal");
-  assert.ok(CitizenOffices.officeOfCitizen("brom"));
+  assert.ok(CitizenOffices.officeOfCitizen("rurik"));
   CitizenOffices.unbindOffice("asgarnia:marshal");
-  assert.equal(CitizenOffices.officeOfCitizen("brom"), null);
+  assert.equal(CitizenOffices.officeOfCitizen("rurik"), null);
   assert.equal(CitizenOffices.getBinding("asgarnia:marshal"), null);
 });
 
 test("officesOfKingdom lists only that kingdom's seated offices", () => {
   CitizenOffices._resetForTests();
   const director = makeDirector([
-    makeRecord("Brom", { role: "guard", kingdomId: "asgarnia" }),
+    makeRecord("Rurik", { role: "guard", kingdomId: "asgarnia" }),
     makeRecord("Mira", { role: "guard", kingdomId: "misthalin" }),
   ]);
   CitizenOffices.bindCitizen(director, "asgarnia:marshal", "asgarnia", "marshal", "Marshal");
@@ -112,12 +139,12 @@ test("officesOfKingdom lists only that kingdom's seated offices", () => {
   const list = CitizenOffices.officesOfKingdom("asgarnia");
   assert.equal(list.length, 1);
   assert.equal(list[0].title, "Marshal");
-  assert.equal(list[0].citizenName, "Brom");
+  assert.equal(list[0].citizenName, "Rurik");
 });
 
 test("tickOffices performs a duty when due (lastDutyMs updates)", () => {
   CitizenOffices._resetForTests();
-  const director = makeDirector([makeRecord("Brom", { role: "guard" })]);
+  const director = makeDirector([makeRecord("Rurik", { role: "guard" })]);
   const b = CitizenOffices.bindCitizen(
     director,
     "asgarnia:marshal",
@@ -147,10 +174,29 @@ test("tickOffices performs a duty when due (lastDutyMs updates)", () => {
 
 test("tickOffices clears bindings for citizens who left the realm", () => {
   CitizenOffices._resetForTests();
-  const director = makeDirector([makeRecord("Brom", { role: "guard" })]);
+  const director = makeDirector([makeRecord("Rurik", { role: "guard" })]);
   CitizenOffices.bindCitizen(director, "asgarnia:marshal", "asgarnia", "marshal", "Marshal", { quiet: true });
   assert.equal(CitizenOffices.officesOfKingdom("asgarnia").length, 1);
   director.roster.clear();
   CitizenOffices.tickOffices(director, 12);
   assert.equal(CitizenOffices.officesOfKingdom("asgarnia").length, 0);
+});
+
+test("judge-claimed citizens are never seated, even when best fit", () => {
+  CitizenOffices._resetForTests();
+  // Brom is judge-claimed by the judges tier (stable hash predicate).
+  const director = makeDirector([
+    makeRecord("Brom", { role: "guard", traits: ["dutiful", "gruff"] }),
+    makeRecord("Rurik", { role: "guard" }),
+  ]);
+  const b = CitizenOffices.bindCitizen(director, "asgarnia:marshal", "asgarnia", "marshal", "Marshal");
+  assert.ok(b);
+  assert.equal(b.citizenName, "Rurik");
+});
+
+test("only judge-claimed candidates means the office stays vacant", () => {
+  CitizenOffices._resetForTests();
+  const director = makeDirector([makeRecord("Brom", { role: "guard" })]);
+  const b = CitizenOffices.bindCitizen(director, "asgarnia:marshal", "asgarnia", "marshal", "Marshal");
+  assert.equal(b, null);
 });

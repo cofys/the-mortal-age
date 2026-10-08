@@ -34,6 +34,13 @@
  * Two-tier as always: everything runs on the director tick as pure data
  * (zero LLM). Ceremonies are announced where players can actually see them;
  * gossip carries the news where they can't.
+ *
+ * NON-OVERLAP: the judges tier (CitizenJudges: verdict rumors, appeals) and
+ * the diplomats tier (CitizenDiplomats: courtier drafting, court ceremonies)
+ * own their citizens and content. Offices honor CitizenJudges.isJudge —
+ * judge-claimed citizens are never seated — and office duties (garrison
+ * musters, supply orders, ledger readings) are distinct work, never
+ * verdicts or court ceremonies. One citizen, one primary claim.
  */
 
 const fs = require("fs");
@@ -45,6 +52,29 @@ const { getMemory } = require("./CitizenMemory");
 const { GOSSIP_OFFICE } = require("../constants");
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-offices.json");
+
+// --- judge-claim honor (non-overlap with the judges tier) --------------------
+// The judges tier claims ~35% of courtiers by a stable hash predicate
+// (CitizenJudges.isJudge: seedVerdictRumor + reviewAppeals live there).
+// Office candidacy honors that claim: a judge-claimed citizen is never
+// seated in a kingdom office. Guarded require — a missing judges module
+// claims nobody, and the check never throws (claim checks must never
+// break the tick).
+let Judges = null;
+try {
+  Judges = require("./CitizenJudges");
+} catch {
+  Judges = null;
+}
+
+/** True when the judges tier has claimed this username. Never throws. */
+function isJudgeClaimed(username) {
+  try {
+    return !!(Judges && typeof Judges.isJudge === "function" && Judges.isJudge(username));
+  } catch {
+    return false; // fail-open: a broken claim check excludes nobody
+  }
+}
 
 // --- fit weighting per office ----------------------------------------------
 // roleWeights: base pull of a citizen role. merchantKindBonus: the three
@@ -212,6 +242,7 @@ function pickCandidate(director, kingdomId, office) {
   for (const record of director?.roster?.values?.() ?? []) {
     if (record?.kingdomId !== kingdomId) continue;
     if (record?.role === "refugee") continue;
+    if (isJudgeClaimed(record?.username)) continue; // judges never hold offices
     if (taken.has(normalizeName(record.username))) continue;
     candidates.push({ record, weight: fitWeight(record, office) });
   }
@@ -473,6 +504,7 @@ module.exports = {
   bindOffices,
   fillVacancy,
   unbindOffice,
+  fitWeight, // exported for deterministic weighting tests
   getBinding: (officeId) => {
     load();
     return bindings[officeId] ?? null;
