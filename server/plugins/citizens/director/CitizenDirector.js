@@ -132,6 +132,7 @@ const { tickSmithfolk } = require("../lib/CitizenBlacksmiths2");
 const { tickBrewfolk } = require("../lib/CitizenAlchemists2");
 const { tickGemfolk } = require("../lib/CitizenJewelers2");
 const { tickDockfolk } = require("../lib/CitizenSailors2");
+const { tickGuardfolk } = require("../lib/CitizenGuards2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2238,6 +2239,18 @@ class CitizenDirector {
       tickDockfolk(this, nowMs);
     } catch (error) {
       this.log("dockfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen militia (CitizenGuards2): gate wardens, wall walkers, night
+    // sentries and militiamen — commoners taking rotational gate/wall duty,
+    // drilling at the muster grounds, forming the levy. Professional guards
+    // (role "guard") and volunteer watchmen are excluded; this owns drill
+    // practice, levy musters, honor-guard ceremonies and civic issue
+    // reports. Visibility throttled via chance + cooldown (dockfolk
+    // precedent), no hobby key. Data tier, zero LLM.
+    try {
+      tickGuardfolk(this, nowMs);
+    } catch (error) {
+      this.log("guardfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
