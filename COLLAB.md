@@ -1,7 +1,8 @@
 # Collaboration Protocol — The Mortal Age
 
 Two humans, two Muses, one repo. This file is the law. Both Muses read it at the
-start of every work session on this project.
+start of every work session on this project — along with `CONTEXT.md` (the project
+briefing) first, then `TASKS.md` (the board).
 
 ## Who's who
 
@@ -48,6 +49,9 @@ If it's not in the repo, it didn't happen.
 
 ## File layout
 
+- `CONTEXT.md` — the project briefing: vision, design laws, locked lore, architecture,
+  boundaries. Read it every session. **If your merge changes anything it describes,
+  update it in the same merge** — a stale briefing is worse than none.
 - `TASKS.md` — the board: NOW / NEXT / LATER / DONE lanes.
 - Quest content, citizen systems, etc. live wherever the codebase puts them;
   the task entry notes the paths touched.

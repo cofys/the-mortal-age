@@ -8,6 +8,8 @@ before you start. See `COLLAB.md` for the full protocol.
 - [ ] Citizen AI mission (ongoing) — personalities, social mechanics, relationships,
   guilds, shops. Break off concrete subtasks below as they arise.
   Paths: `server/plugins/citizens/`
+- [ ] IN PROGRESS — heartbeat-1325 — Citizen movement diagnosis + fix (Jon playtest: citizens materialize but never move). Remove temp debug logging (0e594d76) and revert BYPASS LOD (8b13f678) after root cause found. Then deploy PC.
+  Paths: `server/plugins/citizens/lib/CitizenAlive.js`, `server/plugins/citizens/`
 
 ## NEXT
 
