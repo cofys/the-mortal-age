@@ -36,6 +36,7 @@ const { initMarketBoard } = require("./shop/MarketBoard.Shops");
 const { initMarketRegistrar } = require("./shop/MarketRegistrar.Shops");
 const attachWarRefugees = require("./WarRefugees");
 const { onPlayerLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
+const { onNpcKillWitnessed } = require("./StreetSpectacle");
 const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
@@ -481,6 +482,11 @@ function onDeathSeen(event) {
   onPlayerDeathNotice(event);
 }
 
+/** A monster died in view of the street: citizens react to the fight. */
+function onKillWitnessed(event) {
+  onNpcKillWitnessed(event);
+}
+
 /** A friend logged in: citizen friends light up and say they missed them. */
 function onFriendLoggedIn(event) {
   try {
@@ -527,6 +533,7 @@ module.exports = {
     api.onPlayerAttack(onCitizenAttackedByPlayer);
     api.onPlayerLevelUp(onLevelUpHeard);
     api.onPlayerDeath(onDeathSeen);
+    api.onNpcDeath(onKillWitnessed);
     api.onPlayerLogin(onFriendLoggedIn);
     api.onPlayerLogout(onFriendLoggedOut);
     api.onCustomEvent("thieving:success", onThievingWitnessed);
