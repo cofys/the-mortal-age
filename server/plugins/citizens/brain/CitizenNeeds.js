@@ -35,6 +35,7 @@
 
 const { ATTR_CITIZEN_NEEDS, ATTR_WARE_ITEM, ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { voiceFor, voiceLine } = require("../lib/citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
 
 const BREAD_ID = 2309; // ItemIds.BREAD
 const BRONZE_SWORD_ID = 1277; // ItemIds.BRONZE_SWORD
@@ -210,7 +211,9 @@ function say(player, key, pool, cooldownMs = LINE_COOLDOWN_MS) {
   needs.lastLineAt[key] = now;
   try {
     const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
-    player.forceChat?.(voiceLine(voiceFor(personality), pool));
+    const line = voiceLine(voiceFor(personality), pool);
+    // Player-style speech: overhead + chat box, not NPC overhead-only.
+    sayPublic(player, line);
   } catch (error) {
     // Cosmetic only.
   }

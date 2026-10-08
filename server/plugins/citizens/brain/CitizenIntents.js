@@ -51,6 +51,7 @@ const {
   ATTR_CITIZEN_INTENTS,
 } = require("../constants");
 const { hashSeed, agentRng, chance } = require("../lib/humanizer");
+const { sayPublic } = require("../chat/CitizenSayPublic");
 
 // ---------------------------------------------------------------------------
 // Bartle types
@@ -210,7 +211,8 @@ function journal(player, text) {
 
 function say(player, text) {
   try {
-    player?.forceChat?.(text);
+    // Player-style speech: overhead + chat box.
+    sayPublic(player, text);
   } catch {
     // Cosmetic only.
   }

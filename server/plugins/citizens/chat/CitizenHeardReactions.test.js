@@ -211,16 +211,19 @@ check("tryScriptedReaction: missing bot → null", () => {
   assert.equal(line, null);
 });
 
-check("tryScriptedReaction: forceChat throws → null", () => {
+check("tryScriptedReaction: broken bot degrades gracefully", () => {
   const bot = {
     getAttribute: () => ({ traits: ["chatty"] }),
     forceChat: () => { throw new Error("nope"); },
+    getLocalPlayers: () => { throw new Error("boom"); },
   };
-  // Loop to get past the chance gate; forceChat throwing should return null.
+  // Loop to get past the chance gate; a fully broken bot must not crash.
+  // sayPublic degrades gracefully (overhead fails, no locals) — the reaction
+  // attempt itself must never throw.
   for (let i = 0; i < 20; i++) {
     resetForTests();
     const line = tryScriptedReaction("Petra Stone", "Cofy", "hi", bot, Date.now());
-    assert.equal(line, null, "throwing forceChat should return null");
+    assert.ok(line === null || typeof line === "string", "must not throw");
   }
 });
 

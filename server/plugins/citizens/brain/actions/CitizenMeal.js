@@ -22,6 +22,7 @@ const {
   clearMovementRequest,
 } = require("../../../bots/behaviours/navigation/BotNavigation");
 const { siteTile } = require("../CitizenSites");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
 const {
   ATTR_CITIZEN_PERSONALITY,
   ATTR_CITIZEN_ROLE,
@@ -125,7 +126,7 @@ function createCitizenMealAction(spec, world) {
           state.saidFull = true;
           try {
             const line = FULL_HP_LINES[Math.floor(state.rng() * FULL_HP_LINES.length)];
-            player.forceChat?.(line);
+            sayPublic(player, line);
           } catch {
             // Cosmetic only.
           }
@@ -143,7 +144,7 @@ function createCitizenMealAction(spec, world) {
           state.saidEat = true;
           try {
             const line = EAT_LINES[Math.floor(state.rng() * EAT_LINES.length)];
-            player.forceChat?.(line);
+            sayPublic(player, line);
           } catch {
             // Cosmetic only.
           }

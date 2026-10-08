@@ -21,6 +21,7 @@
  */
 
 const { getMemory } = require("./lib/CitizenMemory");
+const { sayPublic } = require("./chat/CitizenSayPublic");
 const { getJournal } = require("./lib/CitizenJournal");
 const { humanizerProfile, chance } = require("./lib/humanizer");
 const { normalizeName } = require("./lib/CitizenBonds");
@@ -267,7 +268,7 @@ function onPlayerLevelUpNotice(event, nowMs = Date.now()) {
   }
   const line = fillLine(pick(pool), { name: playerName, skill: skillName, level: newLevel });
   try {
-    bot.forceChat?.(line.slice(0, 120));
+    sayPublic(bot, line.slice(0, 120));
   } catch {
     // A shy citizen.
   }
@@ -326,7 +327,7 @@ function onPlayerDeathNotice(event, nowMs = Date.now()) {
     level: "",
   });
   try {
-    bot.forceChat?.(line.slice(0, 120));
+    sayPublic(bot, line.slice(0, 120));
   } catch {
     // A silent citizen.
   }

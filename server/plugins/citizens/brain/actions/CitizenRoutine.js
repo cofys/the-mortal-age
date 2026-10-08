@@ -42,6 +42,7 @@ const {
   humanizerProfile,
 } = require("../../lib/humanizer");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
 
 const KIND_HOME = "home";
 const KIND_WORK = "work";
@@ -331,9 +332,7 @@ function createCitizenRoutineAction(spec, world) {
     if (chance(state.rng, 0.5 * state.human.chatRate)) {
       try {
         const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
-        player.forceChat?.(
-          voiceLine(voiceFor(personality), FISHING_LINES, state.rng)
-        );
+        sayPublic(player, voiceLine(voiceFor(personality), FISHING_LINES, state.rng));
       } catch (error) {
         // Cosmetic only.
       }

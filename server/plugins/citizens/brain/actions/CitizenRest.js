@@ -20,6 +20,7 @@ const {
 } = require("../../../bots/behaviours/navigation/BotNavigation");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
 const { needsFor, addEnergy } = require("../CitizenNeeds");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
 const {
   agentRng,
   logNormalJitter,
@@ -109,7 +110,7 @@ function createCitizenRestAction(spec, world) {
         state.nextLineAt =
           nowMs + logNormalJitter(state.rng, 90000, state.human.tempoSigma);
         try {
-          player.forceChat?.(
+          sayPublic(player, 
             REST_LINES[Math.floor(state.rng() * REST_LINES.length)]
           );
         } catch {

@@ -27,6 +27,7 @@ const {
 } = require("../../lib/humanizer");
 const { getMemory } = require("../../lib/CitizenMemory");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
 
 const ARRIVE_RADIUS = 2;
 const SCAN_RADIUS_TILES = 12;
@@ -196,7 +197,7 @@ function createGuardPatrolAction(spec, world) {
       state.challengedAt.set(username, nowMs);
       state.nextChallengeAt = nowMs + GLOBAL_CHALLENGE_COOLDOWN_MS;
       try {
-        player.forceChat?.(
+        sayPublic(player,
           warned ? pickWarnedLine(state, username, player) : pickChallengeLine(state, atWar, player)
         );
       } catch (error) {
@@ -255,7 +256,7 @@ function createGuardPatrolAction(spec, world) {
       state.nextAcknowledgeAt =
         nowMs + logNormalJitter(state.rng, 30000, state.human.tempoSigma);
       try {
-        player.forceChat?.(pickOfficeAddressLine(state, held[0].title));
+        sayPublic(player, pickOfficeAddressLine(state, held[0].title));
       } catch (error) {
         // Cosmetic; never break the patrol.
       }
@@ -328,9 +329,7 @@ function createGuardPatrolAction(spec, world) {
         if (chance(state.rng, 0.12 * state.human.chatRate)) {
           try {
             const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
-            player.forceChat?.(
-              voiceLine(voiceFor(personality), GREETING_LINES, state.rng)
-            );
+            sayPublic(player, voiceLine(voiceFor(personality), GREETING_LINES, state.rng));
           } catch (error) {
             // Cosmetic only.
           }

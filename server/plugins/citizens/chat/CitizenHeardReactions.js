@@ -27,6 +27,7 @@
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { humanizerProfile } = require("../lib/humanizer");
 const { voiceFor, voiceLine } = require("../lib/citizenVoice");
+const { sayPublic } = require("./CitizenSayPublic");
 
 // Per-citizen throttle: username -> timestamp of last scripted reaction.
 const lastReactionAt = new Map();
@@ -206,9 +207,9 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
   const voice = voiceFor(personality);
   const line = voiceLine(voice, voicePool(key));
 
-  // Speak.
+  // Speak like a player: overhead + chat box (not NPC-style overhead-only).
   try {
-    bot.forceChat?.(line);
+    sayPublic(bot, line);
   } catch {
     return null; // couldn't speak — let LLM try
   }
