@@ -58,10 +58,12 @@ const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
+const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
 const { tickShoppers } = require("../shop/CitizenShoppers");
+const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const CitizenBonds = require("../lib/CitizenBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
 const { normalizeName } = require("../lib/CitizenBonds");
@@ -253,6 +255,11 @@ class CitizenDirector {
     this.roster = new Map(); // username -> record
     this.usedNames = new Set();
     this.taskStarted = false;
+    // Timing desync: monotonically increasing proximity-tick counter. Each
+    // citizen's tick offset comes from their username hash (stable across
+    // restarts), so the counter itself doesn't need persisting.
+    this.aiTickCount = 0;
+    this._desyncSpread = null;
     try {
       SocialMechanics.init(api);
     } catch {
@@ -262,6 +269,17 @@ class CitizenDirector {
 
   runtime() {
     return getActiveBotRuntime()?.runtime ?? null;
+  }
+
+  /**
+   * Timing-desync spread: how many ticks a full citizen rotation takes.
+   * Resolved once from CITIZEN_DESYNC_SPREAD (default 10).
+   */
+  desyncSpread() {
+    if (this._desyncSpread == null) {
+      this._desyncSpread = configuredSpread();
+    }
+    return this._desyncSpread;
   }
 
   log(message, extra) {
@@ -571,6 +589,13 @@ class CitizenDirector {
    * the roster record regardless — this only controls the ~3MB Player object.
    */
   tickProximity() {
+    // Timing desync: stagger the visible-life AI so the whole population
+    // doesn't act in one synchronized wave. Each citizen's slot comes from
+    // a hash of their username (stable across restarts); the phase advances
+    // every proximity tick, so ~1/spread of citizens are due per tick.
+    // The systems keep their own tick loops — desync just gates them.
+    this.aiTickCount += 1;
+    const desync = { tick: this.aiTickCount, spread: this.desyncSpread() };
     const hour = hourNow();
     const positions = this.realPlayerPositions();
     for (const record of this.roster.values()) {
@@ -638,7 +663,7 @@ class CitizenDirector {
     // reactions need to happen often enough for players to actually see
     // them. Data tier, zero LLM, per-citizen try/catch inside.
     try {
-      CitizenAlive.tickAlive(this, Date.now());
+      CitizenAlive.tickAlive(this, Date.now(), desync);
     } catch (error) {
       this.log("alive (proximity) failed", { error: String(error?.message ?? error) });
     }
@@ -647,9 +672,17 @@ class CitizenDirector {
     // only while a real player is actually around to see them.
     // Data tier, zero LLM, per-citizen try/catch inside.
     try {
-      CitizenWorkLoops.tickWorkLoops(this, Date.now());
+      CitizenWorkLoops.tickWorkLoops(this, Date.now(), desync);
     } catch (error) {
       this.log("work loops (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Merchant shopkeeping: shop owners visibly restock/arrange/sweep and
+    // greet customers, but only while a real player is actually around to
+    // see them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenShopkeeping.tickShopkeeping(this, Date.now());
+    } catch (error) {
+      this.log("shopkeeping (proximity) failed", { error: String(error?.message ?? error) });
     }
   }
 
