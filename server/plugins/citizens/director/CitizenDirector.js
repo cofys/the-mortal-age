@@ -64,6 +64,7 @@ const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenRetirement = require("../lib/CitizenRetirement");
+const { tickElections } = require("../lib/CitizenElection");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
@@ -1345,6 +1346,14 @@ class CitizenDirector {
       CitizenOffices.tickOffices(this, hour);
     } catch (error) {
       this.log("offices failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen elections: towns elect mayor, sheriff, guild master on a
+    // slow cycle (nominations -> campaigning -> voting -> results -> term).
+    // Data tier, zero LLM. Announcements and stumping are player-visible.
+    try {
+      tickElections(this, nowMs);
+    } catch (error) {
+      this.log("elections failed", { error: String(error?.message ?? error) });
     }
     // Citizen hangouts: visible ambient social clusters — 2-5 citizens
     // converge on a tavern/square/market anchor, linger in a circle

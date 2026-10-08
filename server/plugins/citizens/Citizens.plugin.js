@@ -51,6 +51,7 @@ const {
 } = require("./lib/CitizenMemory");
 const { initCitizenJournal } = require("./lib/CitizenJournal");
 const CitizenOffices = require("./lib/CitizenOffices");
+const CitizenElection = require("./lib/CitizenElection");
 const KingdomStore = require("../kingdoms/KingdomStore");
 const {
   EVENT_WAR_DECLARED,
@@ -341,6 +342,18 @@ function onKingdomOfficeVacated(event) {
 }
 
 /**
+ * A player endorses a candidate in a town election. Endorsements add
+ * weight to the candidate's tally on voting day.
+ */
+function onElectionEndorse(event) {
+  const director = getDirector();
+  if (!director) {
+    return;
+  }
+  CitizenElection.handleEndorsement(director, event);
+}
+
+/**
  * The realm calls for an office-holder: seat a living citizen of the
  * kingdom and answer with an AI holder (kind "ai", ref the office
  * identity — the contract Politics.Kingdoms challenges resolve against).
@@ -541,6 +554,7 @@ module.exports = {
     api.onCustomEvent(EVENT_OFFICE_ASSIGNED, onKingdomOfficeAssigned);
     api.onCustomEvent(EVENT_OFFICE_VACATED, onKingdomOfficeVacated);
     api.onCustomEvent("kingdom:office-seeks-holder", onKingdomOfficeSeeksHolder);
+    api.onCustomEvent("election:endorse", onElectionEndorse);
     api.onCustomEvent(EVENT_CITIZEN_CHAT_HEARD, onCitizenChatHeard);
     api.onCustomEvent("llm:chat-response", onSocialThreadResponse);
     api.onCustomEvent("kingdom:rumor", onKingdomRumorHeard);
