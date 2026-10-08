@@ -60,6 +60,7 @@ const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenFarmers = require("../lib/CitizenFarmers");
+const CitizenMiners = require("../lib/CitizenMiners");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -797,6 +798,15 @@ class CitizenDirector {
       CitizenFarmers.tickFarmers(this, Date.now());
     } catch (error) {
       this.log("farmers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Miners: prospectors, diggers, smelters and gem cutters work the mines
+    // visibly (pickaxe swings, rich-vein callouts, hazard warnings) — only
+    // while a real player is around to see them. Data tier, zero LLM,
+    // per-citizen try/catch inside.
+    try {
+      CitizenMiners.tickMiners(this, Date.now(), desync);
+    } catch (error) {
+      this.log("miners (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
