@@ -27,6 +27,8 @@ function freshBot(x = 3200, y = 3200, z = 0) {
     isPlayerBot: () => true,
     getHostAddress: () => "bot",
     forceChat: (line) => said.push(line),
+    // Real proximity source: the bot's own getLocalPlayers (engine Player API).
+    getLocalPlayers: () => [],
   };
 }
 
@@ -42,11 +44,18 @@ function realPlayer(name, x = 3205, y = 3205, z = 0) {
   };
 }
 
-function mockDirector(records, players) {
+function mockDirector(records, bots, localPlayersByName) {
+  // Real-API shape: isOnline/getBot on the director, proximity on the bot.
+  const roster = new Map(records.map((r) => [r.username, r]));
+  const byName = new Map(Object.entries(bots || {}));
+  for (const [uname, players] of Object.entries(localPlayersByName || {})) {
+    const b = byName.get(uname);
+    if (b) b.getLocalPlayers = () => players;
+  }
   return {
-    roster: new Map(records.map((r) => [r.username, r])),
-    playerFor: (record) => record._bot ?? null,
-    onlinePlayers: () => players,
+    roster,
+    isOnline: (record) => byName.has(record.username),
+    getBot: (record) => byName.get(record.username) || null,
     log: () => {},
   };
 }
@@ -163,9 +172,9 @@ check("tickInnkeepers fires near real players, silent near bots only", () => {
   }
   assert.ok(keeper, "found an innkeeper username");
   const bot = freshBot();
-  const rec = { username: keeper, kingdom: "varrock", _bot: bot };
+  const rec = { username: keeper, kingdom: "varrock" };
   const human = realPlayer("HumanOne");
-  const d = mockDirector([rec], [human]);
+  const d = mockDirector([rec], { [keeper]: bot }, { [keeper]: [human] });
   // Chance gate is 0.35/tick; retry until it fires (bounded).
   for (let i = 0; i < 30 && bot.said.length === 0; i++) {
     Inn.tickInnkeepers(d, Date.now() + i * 1000);
@@ -181,8 +190,8 @@ check("tickInnkeepers is silent with no real player", () => {
     if (Inn.innTypeFor(u)) keeper = u;
   }
   const bot = freshBot();
-  const rec = { username: keeper, kingdom: "varrock", _bot: bot };
-  const d = mockDirector([rec], [freshBot(3210, 3210)]); // bot only
+  const rec = { username: keeper, kingdom: "varrock" };
+  const d = mockDirector([rec], { [keeper]: bot }, { [keeper]: [freshBot(3210, 3210)] }); // bot only
   Inn.tickInnkeepers(d, Date.now());
   assert.equal(bot.said.length, 0, "silent with no real player");
 });
@@ -199,6 +208,17 @@ check("tickInnkeepers never throws on hostile input", () => {
 check("seedInnRumor never throws", () => {
   Inn.resetForTests();
   assert.doesNotThrow(() => Inn.seedInnRumor(lcg(3), "the Blue Moon Inn", "dragons in the cellar."));
+});
+
+check("seedInnRumor seeds a real inn-talk rumor", () => {
+  Inn.resetForTests();
+  const Rumors = require("./CitizenRumors");
+  Rumors.resetForTests();
+  Inn.seedInnRumor(lcg(3), "the Blue Moon Inn", "dragons in the cellar.");
+  const seeded = [...Rumors._activeRumors.values()].filter((r) => r.seedKind === "inn-talk");
+  assert.ok(seeded.length >= 1, "inn-talk rumor landed in the rumor graph");
+  assert.ok(seeded[0].truth.what.includes("dragons"), `what carries the text: "${seeded[0].truth.what}"`);
+  Rumors.resetForTests();
 });
 
 check("innMealFor returns a non-empty meal string", () => {

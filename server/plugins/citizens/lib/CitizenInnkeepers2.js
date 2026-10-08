@@ -225,6 +225,16 @@ function isHospitalityHour(nowMs) {
   return h >= HOSPITALITY_START_HOUR && h < HOSPITALITY_END_HOUR;
 }
 
+/** Materialized citizen bot for a roster record, or null when offline. */
+function materializedBot(director, record) {
+  try {
+    if (!director?.isOnline?.(record)) return null;
+    return director.getBot?.(record) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** True only for real human players (not bots, not logged-out). */
 function isRealPlayer(player) {
   if (!player) return false;
@@ -416,21 +426,33 @@ function feastForPlayer(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// Journal access (lazy require — CitizenJournal may not load in tests).
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
+  }
+  return _journal || null;
+}
+
+/** Journal a hostfolk event — best-effort, never breaks the tick. */
+function journalize(citizenName, text) {
+  try {
+    journal()?.log(citizenName, "work", text);
   } catch { /* journal absent */ }
 }
 
-function seedRumor(text) {
+/** Seed a feast-night rumor into the real rumor graph — best-effort. */
+function seedFeastRumor(who, what, where) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
+    if (typeof rumors.seedRumor === "function") {
+      rumors.seedRumor(Math.random, { kind: "feast-night", who, what, where });
+    }
   } catch { /* rumors absent */ }
 }
 
@@ -477,7 +499,7 @@ function tickHostfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Hospitality hours only
@@ -505,8 +527,9 @@ function tickHostfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = citizen?.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -531,8 +554,8 @@ function doHostfolkWork(director, record, citizen, type, nowMs) {
       const line = fill(feast, { venue: venue.name });
       citizen.forceChat?.(line);
       const dish = dishForFeast(name, record.kingdomId, nowMs);
-      journalize(citizen, `hosted feast night at ${venue.name} (serving ${dish})`);
-      seedRumor(`Feast night at ${venue.name}! Long table, long tales!`);
+      journalize(name, `hosted feast night at ${venue.name} (serving ${dish})`);
+      seedFeastRumor(record.username, `Feast night at ${venue.name}! Long table, long tales!`, venue.name);
       return;
     }
   }
@@ -543,7 +566,7 @@ function doHostfolkWork(director, record, citizen, type, nowMs) {
     if (rumor) {
       const line = fill(pickOne(Math.random, GOSSIP_LINES), { rumor: rumor.slice(0, 120) });
       citizen.forceChat?.(line);
-      journalize(citizen, "traded gossip at the common room");
+      journalize(name, "traded gossip at the common room");
       return;
     }
   }
@@ -553,7 +576,7 @@ function doHostfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.45) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     citizen.forceChat?.(line);
-    journalize(citizen, `worked the ${venue.name}`);
+    journalize(name, `worked the ${venue.name}`);
   } else if (roll < 0.75) {
     const brew = brewForToday(name, nowMs);
     const line = fill(pickOne(Math.random, HAWK_LINES), {
@@ -561,11 +584,11 @@ function doHostfolkWork(director, record, citizen, type, nowMs) {
       venue: venue.name,
     });
     citizen.forceChat?.(line);
-    journalize(citizen, `called out ${brew} at ${venue.name}`);
+    journalize(name, `called out ${brew} at ${venue.name}`);
   } else {
     const line = pickOne(Math.random, ROOM_OFFER_LINES);
     citizen.forceChat?.(line);
-    journalize(citizen, `offered the spare room near ${venue.name}`);
+    journalize(name, `offered the spare room near ${venue.name}`);
   }
 }
 
