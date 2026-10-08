@@ -95,6 +95,7 @@ const CitizenBankers = require("../lib/CitizenBankers");
 const CitizenInnkeepers = require("../lib/CitizenInnkeepers");
 const CitizenStablehands = require("../lib/CitizenStablehands");
 const CitizenLibrarians = require("../lib/CitizenLibrarians");
+const { tickBookfolk } = require("../lib/CitizenLibrarians2");
 const CitizenPriests = require("../lib/CitizenPriests");
 const CitizenTaxCollectors = require("../lib/CitizenTaxCollectors");
 const CitizenMessengers = require("../lib/CitizenMessengers");
@@ -1238,6 +1239,21 @@ class CitizenDirector {
       CitizenLibrarians.tickLibrarians(this, Date.now());
     } catch (error) {
       this.log("librarians (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen bookfolk (CitizenLibrarians2): amateur reading-room helpers,
+    // pamphlet-sellers, story-circle minders and book-swappers under the
+    // professional libraries — street reading spots (not the pro
+    // libraries), daily pamphlet hawking and swap calls (never manuscripts
+    // or rare tomes), the pro-library small-talk bridge, the rain-soak /
+    // bad-swap set-pieces and the tale-crowd moment. Citizens claimed by
+    // the master's real claimed-type function (isLibrarian) and by
+    // CitizenHawkers2 (hawkerTypeOf) are excluded before the share roll
+    // inside the module. LOD-gated via brainTickDue inside (near-band
+    // citizens always due). Data tier, zero LLM.
+    try {
+      tickBookfolk(this, Date.now(), desync);
+    } catch (error) {
+      this.log("bookfolk failed", { error: String(error?.message ?? error) });
     }
     // Priests: high priests, chaplains, monks and oracles visibly keep the
     // kingdom temples (scripted services during service hours, blessings,
