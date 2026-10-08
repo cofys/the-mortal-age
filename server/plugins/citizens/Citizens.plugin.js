@@ -11,7 +11,7 @@
  *   in:  kingdom:war-declared / kingdom:war-ended  (kingdoms plugin)
  *   in:  kingdom:office-assigned / kingdom:office-vacated (kingdoms plugin;
  *        player office-holders, so citizens address them by title)
- *   in:  citizens:chat-heard                       (stubbed — see chat/CitizenChat.js)
+ *   in:  citizens:chat-heard                       (chat/CitizenChat.js — all nearby citizens hear; top-2 repliers may speak)
  *   out: llm:citizen-register                      (llm-gateway plugin)
  *   out: kingdom:rank-granted                       (kingdoms plugin)
  *

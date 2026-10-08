@@ -17,9 +17,13 @@
  * it after the chat filter passes): the handler below finds citizen bots in
  * the speaker's local players and forwards each as:
  *
- *   citizens:chat-heard    (out) { citizenUsername, speakerUsername, text }
+ *   citizens:chat-heard    (out) { citizenUsername, speakerUsername, text, shouldReply }
  *
- * which onCitizenChatHeard forwards to llm:chat-request with channel "public".
+ * ALL nearby citizens hear (shouldReply=false for the crowd — they remember
+ * and their mood shifts, but they don't speak); the top-2 selected repliers
+ * get shouldReply=true. onCitizenChatHeard tries a zero-LLM scripted reaction
+ * first (CitizenHeardReactions: "gz!", greetings, farewells...); if none fires
+ * it forwards to llm:chat-request with channel "public".
  */
 
 const {
@@ -85,7 +89,7 @@ function onCitizenChatHeard(event) {
   if (!pluginApi) {
     return;
   }
-  const { citizenUsername, speakerUsername, text } = event ?? {};
+  const { citizenUsername, speakerUsername, text, shouldReply } = event ?? {};
   if (!citizenUsername || !speakerUsername || !text) {
     return;
   }
@@ -143,8 +147,37 @@ function onCitizenChatHeard(event) {
         speaker: speakerUsername,
       });
     }
+    // Friendly chatter warms the mood a little — being around people feels good.
+    if (tone > 0) {
+      try {
+        const { addMood } = require("../brain/CitizenNeeds");
+        const bot = findPlayerByName(citizenUsername);
+        if (bot) addMood(bot, 2);
+      } catch {
+        // Cosmetic only.
+      }
+    }
   } catch (error) {
     // Memory must never break the chat path.
+  }
+  // Crowd members (shouldReply=false) heard it and remember it, but don't speak.
+  if (shouldReply === false) {
+    return;
+  }
+  // Scripted reactions: fast zero-LLM reflexes for common patterns ("gz!",
+  // greetings, "thanks!"). If one fires, skip the LLM — the moment is handled.
+  try {
+    const { tryScriptedReaction } = require("./CitizenHeardReactions");
+    const bot = findPlayerByName(citizenUsername);
+    if (bot && tryScriptedReaction(citizenUsername, speakerUsername, text, bot)) {
+      pluginApi.log?.("[citizens] scripted chat reaction", {
+        citizen: citizenUsername,
+        speaker: speakerUsername,
+      });
+      return; // Handled — no LLM needed.
+    }
+  } catch {
+    // Non-fatal — fall through to the LLM path.
   }
   pluginApi.emitCustomEvent(EVENT_LLM_CHAT_REQUEST, {
     citizenUsername,
@@ -306,13 +339,20 @@ function onSocialPacket(event) {
   if (nearby.length === 0) return;
   const speakerName = player.getUsername();
   const repliers = selectRepliers(nearby, player, speakerName, text);
-  for (const bot of repliers) {
-    const citizenUsername = bot.getUsername();
-    markReplied(citizenUsername, speakerName);
+  const replierSet = new Set(repliers.map((b) => b.getUsername?.()));
+  // ALL nearby citizens hear (for memory/mood/reactions); only the selected
+  // repliers may speak (shouldReply). The rest are the crowd — they heard it,
+  // they remember it, but they don't all chime in.
+  for (const bot of nearby) {
+    const citizenUsername = bot.getUsername?.();
+    if (!citizenUsername) continue;
+    const shouldReply = replierSet.has(citizenUsername);
+    if (shouldReply) markReplied(citizenUsername, speakerName);
     pluginApi.emitCustomEvent(EVENT_CITIZEN_CHAT_HEARD, {
       citizenUsername,
       speakerUsername: speakerName,
       text: text.slice(0, 320),
+      shouldReply,
     });
   }
   if (repliers.length > 0) {
