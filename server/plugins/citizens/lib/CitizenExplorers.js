@@ -359,7 +359,9 @@ function advanceExpeditions(director, roster, nowMs) {
 
 function resolveJourney(exp, nowMs) {
   const rng = agentRng(`expedition:${exp.id}:return:${nowMs >> 16}`);
-  const { discoveryCount, dangerCount } = journeyOutcome(rng);
+  const { discoveryCount: baseCount, dangerCount } = journeyOutcome(rng);
+  // Sponsored expeditions (CitizenExplorers2 funding) return richer.
+  const discoveryCount = baseCount + expeditionFundingBonus(exp.id);
   for (let i = 0; i < discoveryCount; i++) {
     const type = i === 0 ? exp.type : pickOne(rng, EXPLORER_TYPES);
     const d = rollDiscovery(type, rng);
@@ -526,6 +528,57 @@ function findRecord(director, username) {
   return null;
 }
 
+/**
+ * Finished expeditions with their discoveries (newest last).
+ * The frontier layer (CitizenExplorers2) reads these to found settlements,
+ * sketch amateur maps and write naturalist field notes. Returns shallow
+ * copies — mutate the copies, not the simulation.
+ */
+function finishedExpeditions(nowMs, maxAgeMs = 24 * 3600 * 1000) {
+  const at = nowMs ?? Date.now();
+  const age = maxAgeMs ?? 24 * 3600 * 1000;
+  return expeditions
+    .filter((e) => e.phase === "done" && at - (e.finishedAt ?? 0) <= age)
+    .map((e) => ({
+      id: e.id,
+      leader: e.leader,
+      members: [...e.members],
+      type: e.type,
+      kingdomId: e.kingdomId,
+      finishedAt: e.finishedAt,
+      discoveries: e.discoveries.map((d) => ({ ...d })),
+      dangers: [...e.dangers],
+    }));
+}
+
+/** Expeditions currently mustering — players may fund or join these. */
+function musteringExpeditions() {
+  return expeditions
+    .filter((e) => e.phase === "muster")
+    .map((e) => ({
+      id: e.id,
+      leader: e.leader,
+      members: [...e.members],
+      type: e.type,
+      kingdomId: e.kingdomId,
+      musterEndsAt: e.musterEndsAt,
+    }));
+}
+
+/**
+ * One-time funding bonus for a sponsored expedition, consumed on read.
+ * Lazy require: CitizenExplorers2 requires this module at load time, so a
+ * top-level require here would cycle.
+ */
+function expeditionFundingBonus(expeditionId) {
+  try {
+    const e2 = require("./CitizenExplorers2");
+    return e2.fundingBonusFor?.(expeditionId) ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** One-line status for debugging (mirrors toastStatus). */
 function explorersStatus() {
   const out = [];
@@ -565,6 +618,8 @@ module.exports = {
   hireExplorerGuide,
   // Introspection:
   explorersStatus,
+  finishedExpeditions,
+  musteringExpeditions,
   resetForTests,
   INVITE_KIND_JOIN,
   INVITE_KIND_GUIDE,

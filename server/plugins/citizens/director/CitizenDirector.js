@@ -125,6 +125,7 @@ const { tickCaravanShouts } = require("../lib/CitizenTradeCaravans");
 const { tickDiplomacy, tickDiplomatShouts } = require("../lib/CitizenDiplomats");
 const { tickSpies, tickSpyShouts } = require("../lib/CitizenSpies");
 const { tickExplorers } = require("../lib/CitizenExplorers");
+const { tickExplorers2 } = require("../lib/CitizenExplorers2");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -2093,6 +2094,15 @@ class CitizenDirector {
       tickExplorers(this, nowMs);
     } catch (error) {
       this.log("explorers failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen explorers v2 (frontier layer): scout recon trips, pioneer
+    // settlements at discovery sites, amateur map sketches for sale,
+    // naturalist field notes, and player funding of expeditions. Builds on
+    // the CitizenExplorers simulation — data tier, zero LLM.
+    try {
+      tickExplorers2(this, nowMs);
+    } catch (error) {
+      this.log("explorers2 failed", { error: String(error?.message ?? error) });
     }
     // Citizen relationships: friend citizens hail friend players passing
     // nearby, by name. Data tier, zero LLM.
