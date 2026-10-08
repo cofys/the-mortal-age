@@ -331,7 +331,7 @@ function tickMiners(director, nowMs, desync) {
         if (nowMs - last < MINER_WORK_COOLDOWN_MS) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the work.
@@ -356,7 +356,7 @@ function tickMiners(director, nowMs, desync) {
         if (veinStateFor(record.username, nowMs) !== "rich") continue;
         const last = lastCalloutByCitizen.get(record.username) || 0;
         if (nowMs - last < CALLOUT_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, CALLOUT_RADIUS)) continue;
         if (Math.random() >= CALLOUT_CHANCE) continue;
@@ -376,7 +376,7 @@ function tickMiners(director, nowMs, desync) {
         if (minerTypeFor(record.username) !== MINER_PROSPECTOR) continue;
         const last = lastHazardByCitizen.get(record.username) || 0;
         if (nowMs - last < HAZARD_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, CALLOUT_RADIUS)) continue;
         if (Math.random() >= HAZARD_CHANCE) continue;
@@ -407,7 +407,7 @@ function doMineWork(director, record, citizen, type, nowMs) {
   // One journal line per loop — the LLM's source of truth. Includes the
   // mine and the ore, so "what have you been up to?" is answerable, and a
   // note that this miner could be hired (hiring dialogue is the LLM tier).
-  const mine = mineFor(record.username, record.kingdom);
+  const mine = mineFor(record.username, record.kingdomId ?? record.kingdom);
   const ore = oreFor(record.username, nowMs);
   const typeLabel = {
     [MINER_PROSPECTOR]: "prospecting rock",
@@ -423,7 +423,7 @@ function doMineWork(director, record, citizen, type, nowMs) {
 
 /** Rich-vein callout: advertise the contested seam. */
 function doRichVeinCallout(director, citizen, record, nowMs) {
-  const mine = mineFor(record.username, record.kingdom);
+  const mine = mineFor(record.username, record.kingdomId ?? record.kingdom);
   const ore = oreFor(record.username, nowMs);
   const line = richVeinLineFor(Math.random, mine, ore);
   try {
@@ -452,14 +452,33 @@ function doHazardWarning(citizen, username) {
 function maybeHireOffer(rng, record) {
   const type = minerTypeFor(record && record.username);
   if (!type) return null;
-  const mine = mineFor(record.username, record.kingdom);
+  const mine = mineFor(record.username, record.kingdomId ?? record.kingdom);
   return hireLineFor(rng, mine);
+}
+
+/**
+ * The materialized player-bot for a roster record, or null when the citizen
+ * isn't online. Canonical director API: isOnline(record) + getBot(record)
+ * (CitizenDirector.js:1374/1379). director.playerFor / director.onlinePlayers
+ * do NOT exist — the miners rung audit (2026-10-08) found them dead and the
+ * interaction tier dead-on-arrival because of it. Never call them.
+ */
+function materializedBot(director, record) {
+  try {
+    if (director.isOnline?.(record)) return director.getBot?.(record) ?? null;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    // Real engine API: Player.getLocalPlayers() (Player.ts:796). The citizen
+    // bot's local players are the only players that can possibly be near.
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

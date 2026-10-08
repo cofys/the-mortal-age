@@ -23,13 +23,14 @@ function withFixedRandom(value, fn) {
 function loc(x, y, z = 0) {
   return { getX: () => x, getY: () => y, getZ: () => z };
 }
-function mockBot(name, x = 3000, y = 3000) {
+function mockBot(name, x = 3000, y = 3000, players = []) {
   const chats = [];
   return {
     getUsername: () => name,
     isPlayerBot: () => true,
     getHostAddress: () => "bot",
     getLocation: () => loc(x, y),
+    getLocalPlayers: () => players,
     forceChat: (m) => chats.push(m),
     _chats: chats,
   };
@@ -44,11 +45,15 @@ function mockPlayer(name, x = 3005, y = 3005) {
 }
 function mockDirector(entries, players) {
   const bots = new Map();
+  // Real director API shape: isOnline(record) + getBot(record)
+  // (CitizenDirector.js:1374/1379). director.playerFor/onlinePlayers do NOT
+  // exist — mocks must not codify them.
   return {
     roster: new Map(entries.map((r) => [r.username, r])),
-    playerFor: (record) => bots.get(record.username) || null,
-    onlinePlayers: () => players,
+    isOnline: (record) => bots.has(record.username),
+    getBot: (record) => bots.get(record.username) || null,
     _bots: bots,
+    _players: players,
   };
 }
 /** Find a username that passes minerfolkTypeOf (and is not a pro miner). */
@@ -256,8 +261,8 @@ function fresh() {
 {
   fresh();
   const rec = findMinerfolk("fire");
-  const bot = mockBot(rec.username, 3000, 3000);
   const player = mockPlayer("Jon", 3005, 3005);
+  const bot = mockBot(rec.username, 3000, 3000, [player]);
   const d = mockDirector([rec], [player]);
   d._bots.set(rec.username, bot);
   withFixedRandom(0.1, () => MF.tickMinerfolk(d, T0));
@@ -270,8 +275,8 @@ function fresh() {
 {
   fresh();
   const rec = findMinerfolk("quiet");
-  const bot = mockBot(rec.username, 3000, 3000);
   const other = mockBot("OtherBot", 3005, 3005);
+  const bot = mockBot(rec.username, 3000, 3000, [other]);
   const d = mockDirector([rec], [other]);
   d._bots.set(rec.username, bot);
   withFixedRandom(0.1, () => MF.tickMinerfolk(d, T0));
@@ -283,8 +288,8 @@ function fresh() {
 {
   fresh();
   const rec = findMinerfolk("night");
-  const bot = mockBot(rec.username, 3000, 3000);
   const player = mockPlayer("Jon", 3005, 3005);
+  const bot = mockBot(rec.username, 3000, 3000, [player]);
   const d = mockDirector([rec], [player]);
   d._bots.set(rec.username, bot);
   withFixedRandom(0.1, () => MF.tickMinerfolk(d, NIGHT));
