@@ -110,6 +110,7 @@ const { tickToasts } = require("../lib/CitizenToasts");
 const { tickTavernGames } = require("../lib/CitizenTavernGames");
 const { tickFestivals } = require("../lib/CitizenFestivals");
 const { tickFestivalGames } = require("../lib/CitizenFestivalGames");
+const { tickSports } = require("../lib/CitizenSports");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -1940,6 +1941,15 @@ class CitizenDirector {
       tickFestivalGames(this, nowMs);
     } catch (error) {
       this.log("festival games failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen sports: year-round league sports — football fixtures with
+    // league tables and championships, horse race meets, wrestling and
+    // archery league circuits. Match days are Saturdays. Distinct from
+    // festival games (festival windows only). Data tier, zero LLM.
+    try {
+      tickSports(this, nowMs);
+    } catch (error) {
+      this.log("sports failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
