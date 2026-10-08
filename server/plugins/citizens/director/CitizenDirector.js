@@ -114,6 +114,7 @@ const { tickSports } = require("../lib/CitizenSports");
 const { tickHobbyists } = require("../lib/CitizenHobbyists");
 const { tickPetOwners } = require("../lib/CitizenPetOwners");
 const { tickGardeners } = require("../lib/CitizenGardeners");
+const { tickVolunteers } = require("../lib/CitizenVolunteers");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -1986,6 +1987,18 @@ class CitizenDirector {
       tickGardeners(this, nowMs);
     } catch (error) {
       this.log("gardeners failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen volunteers: street cleaners, helpers, charity workers and
+    // event helpers with per-day service shifts, weekly charity drives and
+    // player ledgers for sign-ups, donations and organized drives. Activity
+    // system (no professional exclusions): any commoner may volunteer.
+    // Event helpers only work during real festivals. Distinct from
+    // gardeners (public gardens) and festivals (festival events). Data tier,
+    // zero LLM.
+    try {
+      tickVolunteers(this, nowMs);
+    } catch (error) {
+      this.log("volunteers failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
