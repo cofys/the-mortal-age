@@ -40,6 +40,7 @@ const { onNpcKillWitnessed } = require("./StreetSpectacle");
 const { onLogoutFarewell } = require("./StreetFarewells");
 const { onIdleSeen, clearIdleOnLogout } = require("./StreetIdle");
 const { onGiftGiven } = require("./CitizenGifts");
+const { tipPerformer } = require("./lib/CitizenStreetPerformers");
 const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
@@ -518,6 +519,11 @@ function onGiftSeen(event) {
   onGiftGiven(event);
 }
 
+/** A player used coins on a citizen bot: a tip for a street performer. */
+function onTipSeen(event) {
+  tipPerformer(event);
+}
+
 /** A player logged out: drop their idle-tracking state. */
 function onIdleLogoutCleared(event) {
   clearIdleOnLogout(event);
@@ -577,6 +583,7 @@ module.exports = {
     api.onPlayerProcess(onIdlePlayerSeen);
     api.onPlayerLogout(onIdleLogoutCleared);
     api.onCustomEvent("thieving:success", onThievingWitnessed);
+    api.onItemOnPlayer(onTipSeen);
     api.onItemOnPlayer(onGiftSeen);
     api.onSocialPacket(onCitizenSocialPacket);
     // Web overlay data layer for the newspaper (see interface/NewspaperApi.js).
