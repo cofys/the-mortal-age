@@ -111,6 +111,7 @@ const { tickTavernGames } = require("../lib/CitizenTavernGames");
 const { tickFestivals } = require("../lib/CitizenFestivals");
 const { tickFestivalGames } = require("../lib/CitizenFestivalGames");
 const { tickSports } = require("../lib/CitizenSports");
+const { tickHobbyists } = require("../lib/CitizenHobbyists");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -1950,6 +1951,16 @@ class CitizenDirector {
       tickSports(this, nowMs);
     } catch (error) {
       this.log("sports failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen hobbyists: leisure-time hobbies — gardening, birdwatching,
+    // collecting, board games. Activity system (no professional exclusions):
+    // any commoner may have a hobby. Rare finds are the crowd moment;
+    // weekly club meetups announced. Distinct from sports (league sports)
+    // and festival games (festival windows). Data tier, zero LLM.
+    try {
+      tickHobbyists(this, nowMs);
+    } catch (error) {
+      this.log("hobbyists failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
