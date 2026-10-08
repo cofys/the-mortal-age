@@ -119,14 +119,15 @@ check("paintingsFor returns empty for non-painters", () => {
   assert.equal(c.masterpiece, false);
 });
 
-// --- isStudioHour: 08:00-17:00 ---
+// --- isStudioHour: 08:00-17:00 (server-local time) ---
 check("isStudioHour covers daylight hours only", () => {
-  assert.equal(P.isStudioHour(Date.UTC(2026, 9, 8, 7, 59)), false);
-  assert.equal(P.isStudioHour(Date.UTC(2026, 9, 8, 8, 0)), true);
-  assert.equal(P.isStudioHour(Date.UTC(2026, 9, 8, 12, 0)), true);
-  assert.equal(P.isStudioHour(Date.UTC(2026, 9, 8, 16, 59)), true);
-  assert.equal(P.isStudioHour(Date.UTC(2026, 9, 8, 17, 0)), false);
-  assert.equal(P.isStudioHour(Date.UTC(2026, 9, 8, 23, 0)), false);
+  const at = (h, m) => new Date(2026, 9, 8, h, m).getTime(); // local time, not UTC
+  assert.equal(P.isStudioHour(at(7, 59)), false);
+  assert.equal(P.isStudioHour(at(8, 0)), true);
+  assert.equal(P.isStudioHour(at(12, 0)), true);
+  assert.equal(P.isStudioHour(at(16, 59)), true);
+  assert.equal(P.isStudioHour(at(17, 0)), false);
+  assert.equal(P.isStudioHour(at(23, 0)), false);
 });
 
 // --- commission ledger: round-trip + TTL ---
@@ -204,8 +205,8 @@ check("tickPainters fires near a real player, silent otherwise", () => {
     playerFor: () => citizen,
     onlinePlayers: () => [human],
   };
-  // Midday UTC so studio hours hold regardless of server tz edge cases.
-  const noon = Date.UTC(2026, 9, 8, 12, 0, 0);
+  // Midday local time so studio hours hold regardless of server tz.
+  const noon = new Date(2026, 9, 8, 12, 0, 0).getTime();
   // Force the chance gate by trying many ticks with cooldown reset.
   let sawFire = false;
   for (let i = 0; i < 60 && !sawFire; i++) {
@@ -256,7 +257,7 @@ check("tickPainters silent outside studio hours", () => {
     playerFor: () => citizen,
     onlinePlayers: () => [{ getUsername: () => "RealHuman", getLocation: () => mkLoc(105, 100, 0) }],
   };
-  const midnight = Date.UTC(2026, 9, 8, 20, 0, 0); // 20:00 UTC
+  const midnight = new Date(2026, 9, 8, 20, 0, 0).getTime(); // 20:00 local — after studio hours
   for (let i = 0; i < 5; i++) {
     P.tickPainters(director, midnight + i * 3600 * 1000, 0);
   }
