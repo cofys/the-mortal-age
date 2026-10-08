@@ -62,6 +62,7 @@ const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenRumors = require("../lib/CitizenRumors");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const CitizenCompanions = require("../lib/CitizenCompanions");
+const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
@@ -714,6 +715,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("companions (proximity) failed", { error: String(error?.message ?? error) });
     }
+    // Master-apprentice life: apprentices follow their masters and the
+    // pair exchange scripted trade chatter — only while a real player is
+    // around to overhear. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenApprentices.tickApprenticeLife(this, Date.now());
+    } catch (error) {
+      this.log("apprentices (proximity) failed", { error: String(error?.message ?? error) });
+    }
   }
 
   isOnline(record) {
@@ -1255,6 +1264,14 @@ class CitizenDirector {
       CitizenSkilling.tickSkilling(this, hour);
     } catch (error) {
       this.log("skilling failed", { error: String(error?.message ?? error) });
+    }
+    // Master-apprentice pairings: masters (level 60+ trade) take on young
+    // citizens, who gain real trade XP each slow tick and graduate at 40.
+    // Data tier, zero LLM.
+    try {
+      CitizenApprentices.tickApprenticeships(this, nowMs);
+    } catch (error) {
+      this.log("apprenticeships failed", { error: String(error?.message ?? error) });
     }
     // Visible daily routines: merchants open stalls, crafters work visible
     // forge shifts, guards patrol — phase transitions journaled and
