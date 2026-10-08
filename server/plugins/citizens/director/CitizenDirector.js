@@ -127,6 +127,7 @@ const { tickFisherfolk } = require("../lib/CitizenFishers2");
 const { tickMinerfolk } = require("../lib/CitizenMiners2");
 const { tickHuntfolk } = require("../lib/CitizenHunters2");
 const { tickCookfolk } = require("../lib/CitizenCooks2");
+const { tickSewfolk } = require("../lib/CitizenTailors2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2166,6 +2167,19 @@ class CitizenDirector {
       tickCookfolk(this, nowMs);
     } catch (error) {
       this.log("cookfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen community sewing folk: home seamstresses, quilters,
+    // pattern-sharers and plant dyers at community sewing circles.
+    // Hash-derived types, per-day circles/projects, grand-quilt crowd
+    // moments, 7-day-TTL ledgers for commissions, fabric buys and
+    // sewing lessons. Professional tailors (CitizenTailors) are
+    // excluded — the trade owns the workshops; menders own repair.
+    // Visibility throttled via chance + cooldown (cookfolk precedent),
+    // no hobby key. Data tier, zero LLM.
+    try {
+      tickSewfolk(this, nowMs);
+    } catch (error) {
+      this.log("sewfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
