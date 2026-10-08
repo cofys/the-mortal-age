@@ -68,6 +68,7 @@ const { tickPerformers } = require("../lib/CitizenStreetPerformers");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
+const CitizenArtisans = require("../lib/CitizenArtisans");
 const CitizenRetirement = require("../lib/CitizenRetirement");
 const { tickElections } = require("../lib/CitizenElection");
 const CitizenRelationships = require("../lib/CitizenRelationships");
@@ -705,6 +706,16 @@ class CitizenDirector {
       CitizenShopkeeping.tickShopkeeping(this, Date.now());
     } catch (error) {
       this.log("shopkeeping (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen artisans: master craftspeople work visibly at their workshops,
+    // reveal masterpieces, announce completed commissions, and offer new
+    // commissions to lingering players — but only while a real player is
+    // actually around to see them. Data tier, zero LLM, per-citizen
+    // try/catch inside.
+    try {
+      CitizenArtisans.tickArtisanLife(this, Date.now());
+    } catch (error) {
+      this.log("artisans (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Rumors: citizens spread distorted retellings of real events along
     // social ties (data tier), and speak them aloud near real players
@@ -1385,6 +1396,14 @@ class CitizenDirector {
       CitizenApprentices.tickApprenticeships(this, nowMs);
     } catch (error) {
       this.log("apprenticeships failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen artisans: master craftspeople with workshops, masterpieces,
+    // commissions, and renown. Deterministic trade assignment, data tier,
+    // zero LLM.
+    try {
+      CitizenArtisans.tickArtisans(this, nowMs);
+    } catch (error) {
+      this.log("artisans failed", { error: String(error?.message ?? error) });
     }
     // Visible daily routines: merchants open stalls, crafters work visible
     // forge shifts, guards patrol — phase transitions journaled and
