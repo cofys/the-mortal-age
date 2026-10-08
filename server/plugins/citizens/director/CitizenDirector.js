@@ -79,6 +79,7 @@ const CitizenTeachers = require("../lib/CitizenTeachers");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const { tickPerformers } = require("../lib/CitizenStreetPerformers");
 const { tickBards } = require("../lib/CitizenBards");
+const { tickActors } = require("../lib/CitizenActors");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenJudges = require("../lib/CitizenJudges");
@@ -936,6 +937,16 @@ class CitizenDirector {
       tickBards(this, Date.now(), desync);
     } catch (error) {
       this.log("bards (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Actors: stage plays at the theaters and amphitheaters during show
+    // hours — scripted scenes, monologues, premieres, troupe-join offers
+    // and coin tips ("use coins on actor"). No overlap with street
+    // performers (squares), bards (great halls) or inn bards. Data tier,
+    // zero LLM, per-citizen try/catch inside.
+    try {
+      tickActors(this, Date.now(), desync);
+    } catch (error) {
+      this.log("actors (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Guard patrols: the visible watch — checkpoint check-ins, disturbance
     // response, escort offers and follows, night-watch torch announcements,
