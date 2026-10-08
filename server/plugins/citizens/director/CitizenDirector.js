@@ -82,6 +82,7 @@ const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenBankers = require("../lib/CitizenBankers");
 const CitizenInnkeepers = require("../lib/CitizenInnkeepers");
+const CitizenLibrarians = require("../lib/CitizenLibrarians");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
@@ -955,6 +956,16 @@ class CitizenDirector {
       CitizenInnkeepers.tickInnkeepers(this, Date.now(), desync);
     } catch (error) {
       this.log("innkeepers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Librarians: archivists, researchers, scribes and storytellers visibly
+    // keep the kingdom libraries (scripted shelving/study/copying emotes,
+    // service offers, rare-tome unveilings, evening tales, borrowing and
+    // donations through a data-tier ledger) — only while a real player is
+    // around to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenLibrarians.tickLibrarians(this, Date.now());
+    } catch (error) {
+      this.log("librarians (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Caravan shouts: muster/departure/arrival announcements and
     // guard/trader invites, only where a real player can see them.
