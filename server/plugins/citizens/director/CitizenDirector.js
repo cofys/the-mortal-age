@@ -116,6 +116,7 @@ const { tickPetOwners } = require("../lib/CitizenPetOwners");
 const { tickGardeners } = require("../lib/CitizenGardeners");
 const { tickVolunteers } = require("../lib/CitizenVolunteers");
 const { tickStorytellers } = require("../lib/CitizenStorytellers");
+const { tickHistorians } = require("../lib/CitizenHistorians");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2012,6 +2013,17 @@ class CitizenDirector {
       tickStorytellers(this, nowMs);
     } catch (error) {
       this.log("storytellers failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen historians: chroniclers, archivists, genealogists and
+    // lorekeepers keeping per-kingdom daily chronicles from real journaled
+    // events, with read/contribute/commission ledgers for players. Activity
+    // system (no professional exclusions): any commoner may keep history.
+    // Distinct from storytellers (oral tales) and librarians (book catalogs)
+    // — this module owns the WRITTEN RECORD of events. Data tier, zero LLM.
+    try {
+      tickHistorians(this, nowMs);
+    } catch (error) {
+      this.log("historians failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
