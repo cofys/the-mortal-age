@@ -39,8 +39,8 @@ const STUCK_CHECK_TILES = 2; // moved less than this = didn't move
 const IDLE_FACE_CHANCE = 0.3; // per tick: turn to face a nearby player
 const IDLE_EMOTE_CHANCE = 0.08; // per tick: play an idle emote/animation
 const IDLE_OBSERVE_CHANCE = 0.12; // per tick: voice a small observation
-const IDLE_WANDER_CHANCE = 0.15; // per tick: take a few steps (stretch legs)
-const IDLE_WANDER_RADIUS = 5; // tiles: how far a wander goes
+const IDLE_WANDER_CHANCE = 0.4; // per tick: take a few steps (stretch legs)
+const IDLE_WANDER_RADIUS = 10; // tiles: how far a wander goes
 const SOCIAL_GREET_RADIUS = 4; // tiles: citizens this close may greet
 const SOCIAL_GREET_CHANCE = 0.15; // per eligible pair per tick
 const SOCIAL_GREET_COOLDOWN_MS = 5 * 60 * 1000; // per citizen
