@@ -59,9 +59,11 @@ const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
+const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
+const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const CitizenBonds = require("../lib/CitizenBonds");
@@ -684,6 +686,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("shopkeeping (proximity) failed", { error: String(error?.message ?? error) });
     }
+    // Personal companion invites: citizens invite nearby players on 1-on-1
+    // outings (fishing, dungeon, walk, tavern) and remember yes/no.
+    // Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenCompanions.tickCompanions(this, Date.now());
+    } catch (error) {
+      this.log("companions (proximity) failed", { error: String(error?.message ?? error) });
+    }
   }
 
   isOnline(record) {
@@ -1293,6 +1303,16 @@ class CitizenDirector {
       tickToasts(this, nowMs);
     } catch (error) {
       this.log("toasts failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen weather reactions: when the sky changes (rain starts, storm
+    // hits, dusk/night falls, dawn breaks), citizens near a real player
+    // react in personality-gated ways - rain-haters hurry home, rain-lovers
+    // cheer, the afraid-of-the-dark flee at dusk, early risers greet dawn.
+    // Data tier, zero LLM.
+    try {
+      tickWeatherReactions(this, nowMs);
+    } catch (error) {
+      this.log("weather reactions failed", { error: String(error?.message ?? error) });
     }
     // Citizen relationships: friend citizens hail friend players passing
     // nearby, by name. Data tier, zero LLM.

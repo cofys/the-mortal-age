@@ -467,7 +467,18 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       notifyCitizenSpoke(citizenUsername, speakerUsername, "favor_decline");
       return true;
     }
-    return false; // No pending favor — let the LLM handle the "no".
+    // No pending favor — check for a pending companion invite from this citizen.
+    try {
+      const Companions = require("../lib/CitizenCompanions");
+      const invite = Companions.declineCompanionInvite(speakerUsername, citizenUsername);
+      if (invite) {
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "companion_decline");
+        return true;
+      }
+    } catch {
+      // Non-fatal — fall through to LLM.
+    }
+    return false; // No pending favor or invite — let the LLM handle the "no".
   }
 
   // "here" / "done" — hand over the goods for an accepted favor.
@@ -587,6 +598,9 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
       favor_accept: `${display}: Deal — bring what I asked and I'll make it worth your while.`,
       favor_decline: `${display}: Ah, that's a shame. Never mind then.`,
       favor_done: `${display}: Much appreciated, truly.`,
+      companion_accept: `${display}: Wonderful! Let's go — right now, while the mood's right.`,
+      companion_decline: `${display}: Ah, that's a shame. Maybe another time.`,
+      companion_invite: `${display}: Wonderful! Let's go — right now, while the mood's right.`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM

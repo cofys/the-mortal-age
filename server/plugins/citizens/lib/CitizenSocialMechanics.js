@@ -408,6 +408,15 @@ function acceptInvite(playerName, citizenName, kind) {
     } catch {
       // Non-fatal — the invite is still resolved.
     }
+  } else if (invite.kind === "companion_invite") {
+    // Companion invite accepted: 1-on-1 outing. Lazy require to avoid
+    // any load-order issues — CitizenCompanions only needs CitizenBonds.
+    try {
+      const Companions = require("./CitizenCompanions");
+      Companions.acceptCompanionInvite(playerName, citizenName);
+    } catch {
+      // Non-fatal — the invite is still resolved.
+    }
   } else {
     journalEvent(citizenName, `Became friends with ${playerName}.`, "social");
   }
