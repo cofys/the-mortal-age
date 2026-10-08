@@ -86,6 +86,7 @@ const CitizenInnkeepers = require("../lib/CitizenInnkeepers");
 const CitizenStablehands = require("../lib/CitizenStablehands");
 const CitizenLibrarians = require("../lib/CitizenLibrarians");
 const CitizenPriests = require("../lib/CitizenPriests");
+const CitizenTaxCollectors = require("../lib/CitizenTaxCollectors");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
@@ -949,6 +950,16 @@ class CitizenDirector {
       CitizenJudges.tickJudges(this, Date.now());
     } catch (error) {
       this.log("judges (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Tax collectors: assessors, collectors, auditors and enforcers work
+    // collection rounds (08:00-18:00), assess property, audit players and
+    // seize goods — only while a real player is around to see them. Data
+    // tier, zero LLM, per-citizen try/catch inside. Writes evasion
+    // penalties through the real CitizenJudges fine ledger.
+    try {
+      CitizenTaxCollectors.tickTaxCollectors(this, Date.now());
+    } catch (error) {
+      this.log("taxcollectors (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Bankers: tellers, vault-keepers, loan officers and auditors visibly
     // run the banks (engine-free scripted service lines, vault open/seal
