@@ -227,4 +227,108 @@ check("pickOne", () => {
   assert.equal(pickOne(rng, ["a", "b", "c"]), "a");
 });
 
+// 19. Tick interaction tier: fires near real players, silent near bots only.
+// (tailors audit 2026-10-08: the old prod code used director.playerFor /
+// director.onlinePlayers, which do not exist, so this tier was
+// dead-on-arrival. These checks pin the fixed shape.)
+check("tick fires near real player / silent near bots only", () => {
+  _resetState();
+  const { tickTailors, tailorTypeFor } = require("./CitizenTailors");
+  let tailorName = null;
+  for (let i = 0; i < 2000 && !tailorName; i++) {
+    if (tailorTypeFor("e2etick" + i)) tailorName = "e2etick" + i;
+  }
+  assert.ok(tailorName, "seed produced a tailor");
+  const locOf = (x, y) => ({ getX: () => x, getY: () => y, getZ: () => 0 });
+  const said = [];
+  const bot = {
+    forceChat: (m) => said.push(m),
+    performAnimation: () => {},
+    getLocation: () => locOf(3000, 3000),
+    getLocalPlayers: () => [],
+  };
+  const mkHuman = (x) => ({
+    getUsername: () => "human",
+    isPlayerBot: () => false,
+    getHostAddress: () => "127.0.0.1",
+    getLocation: () => locOf(x, 3000),
+  });
+  const mkBotPlayer = () => ({
+    getUsername: () => "botty",
+    isPlayerBot: () => true,
+    getHostAddress: () => "bot",
+    getLocation: () => locOf(3005, 3000),
+  });
+  // Real-API director shape: isOnline/getBot (CitizenDirector.js:1374/1379);
+  // the citizen bot carries getLocalPlayers (Player.ts:796).
+  const mkDirector = (online) => {
+    bot.getLocalPlayers = () => online;
+    return {
+      roster: new Map([[tailorName, { username: tailorName, role: "commoner", kingdomId: "misthalin" }]]),
+      isOnline: () => true,
+      getBot: () => bot,
+      api: { core: { Animation: function (id) { this.id = id; } } },
+    };
+  };
+  const real = Math.random;
+  Math.random = () => 0.0; // force all chance gates open
+  try {
+    // Bots only -> silent.
+    tickTailors(mkDirector([mkBotPlayer()]), Date.now());
+    assert.equal(said.length, 0, "silent when only bots are near");
+    _resetState();
+    // Real player near -> the tailor speaks.
+    let fired = false;
+    for (let i = 0; i < 5 && !fired; i++) {
+      tickTailors(mkDirector([mkHuman(3005)]), Date.now());
+      fired = said.length > 0;
+    }
+    assert.ok(fired, "visible work fires near a real player");
+  } finally {
+    Math.random = real;
+  }
+});
+
+// 20. Journal is canonical: one kind:"work" entry per visible loop,
+// and workshops prefer the citizen's kingdom (records carry kingdomId).
+check("work journals kind:work with kingdom-preferred workshop", () => {
+  _resetState();
+  const { getJournal } = require("./CitizenJournal");
+  getJournal().resetForTests();
+  const { tickTailors, tailorTypeFor } = require("./CitizenTailors");
+  let tailorName = null;
+  for (let i = 0; i < 2000 && !tailorName; i++) {
+    if (tailorTypeFor("e2ej" + i)) tailorName = "e2ej" + i;
+  }
+  const locOf = (x, y) => ({ getX: () => x, getY: () => y, getZ: () => 0 });
+  const bot = {
+    forceChat: () => {},
+    performAnimation: () => {},
+    getLocation: () => locOf(3000, 3000),
+    getLocalPlayers: () => [{
+      getUsername: () => "human",
+      isPlayerBot: () => false,
+      getHostAddress: () => "127.0.0.1",
+      getLocation: () => locOf(3005, 3000),
+    }],
+  };
+  const director = {
+    roster: new Map([[tailorName, { username: tailorName, role: "commoner", kingdomId: "asgarnia" }]]),
+    isOnline: () => true,
+    getBot: () => bot,
+    api: { core: { Animation: function (id) { this.id = id; } } },
+  };
+  const real = Math.random;
+  Math.random = () => 0.3; // fires work, not the 0.1 masterpiece path
+  try {
+    tickTailors(director, Date.now());
+  } finally {
+    Math.random = real;
+  }
+  const events = getJournal().recent(tailorName, 10);
+  const work = events.find((e) => e.kind === "work");
+  assert.ok(work, "journal holds a kind:work entry for the tailor");
+  assert.ok(/falador|burthorpe/i.test(work.text), `workshop kingdom-preferred to asgarnia, journal: "${work.text}"`);
+});
+
 console.log(`\n${process.exitCode ? "FAILURES" : "ALL PASS"} — ${n} checks`);

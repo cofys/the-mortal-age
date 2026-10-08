@@ -447,22 +447,40 @@ function sewingFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// Canonical journal: getJournal().log(citizenName, kind, text)
+// (CitizenJournal.js:79). appendEntry/addEntry do not exist in prod — the
+// old probes silently dropped every sewing-folk journal entry. The journal
+// is the LLM tier's source of truth for "what have you been up to?".
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch { /* journal absent */ }
+  }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+function journalize(citizenName, text) {
+  try {
+    journal()?.log(citizenName, "work", text);
+  } catch {
+    /* journal is best-effort; never break the tick */
+  }
+}
+
+// Canonical rumor seed: seedRumor(rng, event). The bare-string call is dead —
+// CitizenRumors.seedRumor (lib/CitizenRumors.js:101) requires event.kind +
+// event.what and returns null otherwise.
+function seedRumor(event) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
-  } catch { /* rumors absent */ }
+    if (typeof rumors.seedRumor === "function") rumors.seedRumor(Math.random, event);
+  } catch {
+    /* rumors absent */
+  }
 }
 
 // ============================================================================
@@ -486,7 +504,7 @@ function tickSewfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Sewing hours only (server-local)
@@ -512,10 +530,32 @@ function tickSewfolk(director, nowMs, desync = 0) {
   }
 }
 
-/** True if any real (non-bot) player is within radius tiles of the citizen. */
-function anyRealPlayerNear(director, citizen, radius) {
+/**
+ * The materialized player-bot for a roster record, or null when the citizen
+ * isn't online. Canonical director API: isOnline(record) + getBot(record)
+ * (CitizenDirector.js:1374/1379). director.playerFor / director.onlinePlayers
+ * do NOT exist — optional-chained call sites were silent no-ops, so no
+ * sewing-folk citizen ever did visible work in production. Never call them.
+ */
+function materializedBot(director, record) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    if (director.isOnline?.(record)) return director.getBot?.(record) ?? null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True if any real (non-bot) player is within radius tiles of the citizen.
+ * Real engine API: Player.getLocalPlayers() (Player.ts:796). The citizen
+ * bot's local players are the only players that can possibly be near —
+ * director.onlinePlayers does not exist and always yielded [].
+ */
+function anyRealPlayerNear(director, citizen, radius) {
+  void director;
+  try {
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -542,8 +582,13 @@ function doSewfolkWork(director, record, citizen, type, nowMs) {
         days: q.days,
       });
       citizen.forceChat?.(line);
-      journalize(citizen, `unveiled the ${q.quilt} at ${circle.name}`);
-      seedRumor(`The ${q.quilt} is finished at ${circle.name}!`);
+      journalize(record.username, `unveiled the ${q.quilt} at ${circle.name}`);
+      seedRumor({
+        kind: "grand-quilt",
+        who: record.username,
+        what: `the finished ${q.quilt} at ${circle.name}`,
+        where: circle.name,
+      });
       return;
     }
   }
@@ -553,16 +598,16 @@ function doSewfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     citizen.forceChat?.(line);
-    journalize(citizen, `sewed at ${circle.name}`);
+    journalize(record.username, `sewed at ${circle.name}`);
   } else if (roll < 0.75) {
     const projects = projectsFor(name, record.kingdomId, nowMs);
     const garment = projects.length ? projects[0] : "a fine garment";
     citizen.forceChat?.(`Nearly done — ${garment} for little ${name}.`);
-    journalize(citizen, `finished ${garment} at ${circle.name}`);
+    journalize(record.username, `finished ${garment} at ${circle.name}`);
   } else {
     const line = pickOne(Math.random, SHARE_LINES);
     citizen.forceChat?.(line);
-    journalize(citizen, `shared patterns at ${circle.name}`);
+    journalize(record.username, `shared patterns at ${circle.name}`);
   }
 }
 
