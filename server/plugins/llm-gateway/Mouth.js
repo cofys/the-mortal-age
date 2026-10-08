@@ -13,7 +13,7 @@
 // Disable the default mouth with LLM_GATEWAY_MOUTH=0 if the citizens plugin
 // wants to speak replies itself.
 
-const PUBLIC_CHAT_MAX_CHARS = 80;
+const PUBLIC_CHAT_MAX_CHARS = 60;
 
 // Pacing between multi-line replies: a real player types one message, sends
 // it, pauses, then types the next. Citizens do the same. Without this, a

@@ -16,7 +16,7 @@ const TOKEN_CHARS = 4;
 const estimateTokens = (text) => Math.ceil(String(text ?? "").length / TOKEN_CHARS);
 
 const INPUT_BUDGET_TOKENS = 2000;
-const MAX_OUTPUT_TOKENS = 40;
+const MAX_OUTPUT_TOKENS = 15;
 const MAX_CARD_CHARS = 480; // short personality cards, not long system prompts
 const MAX_NOTES_IN_PROMPT = 5;
 const MAX_HISTORY_EXCHANGES = 6;
@@ -27,8 +27,8 @@ const WORLD_GROUNDING =
   "everyone has a theory why. Great powers: Asgarnia (Falador, no king), Misthalin " +
   "(Varrock, aging king), Kandarin (Ardougne, the plague lie), Morytania (vampyres), " +
   "Keldagrim (dwarf mining companies). Stay in character. Never mention you are an AI. " +
-  "Reply in 1-2 short sentences, like a real player typing. Keep it under " +
-  "160 characters total. No lists, no asterisks, " +
+  "Reply in 1 short sentence, like a real player typing. Keep it under " +
+  "60 characters total. No lists, no asterisks, " +
   "no line breaks - one paragraph only.";
 
 const STYLE_LINE =
@@ -87,8 +87,8 @@ function buildSpeakPrompt({ card, context, toName, toRole, toMemory, toKind, pla
       `You notice ${toName}, ${toRole ?? "a fellow citizen"}, nearby. ` +
       (toMemory ? `${toMemory} ` : "") +
       `Say something to them — a greeting, an observation, a question, a joke, ` +
-      `a complaint, whatever fits your mood. 1-2 short sentences, like a real ` +
-      `player typing. Speak directly, no narration, no asterisks.`;
+      `a complaint, whatever fits your mood. 1 short sentence, like a real ` +
+      `player typing. Under 60 characters. Speak directly, no narration, no asterisks.`;
   }
 
   const inputTokens = estimateTokens(system) + estimateTokens(user);
