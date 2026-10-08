@@ -60,8 +60,10 @@ const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenRumors = require("../lib/CitizenRumors");
+const CitizenGiftGiving = require("../lib/CitizenGiftGiving");
 const CitizenMystery = require("../lib/CitizenMystery");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
+const { tickPerformers } = require("../lib/CitizenStreetPerformers");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
@@ -705,6 +707,16 @@ class CitizenDirector {
       CitizenRumors.tickRumors(this, Date.now());
     } catch (error) {
       this.log("rumors (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Gift giving: citizens give gifts to real players — birthdays,
+    // thank-yous after completed favors, festival gifts, reciprocity for
+    // player generosity, and rare spontaneous generosity from fond
+    // citizens. Personality-driven gift pools, ceremony lines, journaled
+    // for the LLM. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenGiftGiving.tickGiftGiving(this, Date.now());
+    } catch (error) {
+      this.log("gift giving (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Mysteries: a monthly town mystery (missing person, theft, strange
     // lights) citizens whisper about; players find scattered clues and the
