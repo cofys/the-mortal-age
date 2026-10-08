@@ -38,6 +38,7 @@ const attachWarRefugees = require("./WarRefugees");
 const { onPlayerLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
 const { onNpcKillWitnessed } = require("./StreetSpectacle");
 const { onLogoutFarewell } = require("./StreetFarewells");
+const { onIdleSeen, clearIdleOnLogout } = require("./StreetIdle");
 const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
@@ -493,6 +494,16 @@ function onFarewellSeen(event) {
   onLogoutFarewell(event);
 }
 
+/** A player tick passed: the street notices players standing idle nearby. */
+function onIdlePlayerSeen(event) {
+  onIdleSeen(event);
+}
+
+/** A player logged out: drop their idle-tracking state. */
+function onIdleLogoutCleared(event) {
+  clearIdleOnLogout(event);
+}
+
 /** A friend logged in: citizen friends light up and say they missed them. */
 function onFriendLoggedIn(event) {
   try {
@@ -543,6 +554,8 @@ module.exports = {
     api.onPlayerLogin(onFriendLoggedIn);
     api.onPlayerLogout(onFriendLoggedOut);
     api.onPlayerLogout(onFarewellSeen);
+    api.onPlayerProcess(onIdlePlayerSeen);
+    api.onPlayerLogout(onIdleLogoutCleared);
     api.onCustomEvent("thieving:success", onThievingWitnessed);
     api.onSocialPacket(onCitizenSocialPacket);
     api.registerCommand(
