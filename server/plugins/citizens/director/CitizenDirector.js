@@ -68,6 +68,8 @@ const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
 const { tickFestivals } = require("../lib/CitizenFestivals");
+const { tickCaravans } = require("../lib/CitizenTradeCaravans");
+const { tickCaravanShouts } = require("../lib/CitizenTradeCaravans");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -708,6 +710,14 @@ class CitizenDirector {
       CitizenMarketStalls.tickMarketStalls(this, Date.now());
     } catch (error) {
       this.log("market stalls (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Caravan shouts: muster/departure/arrival announcements and
+    // guard/trader invites, only where a real player can see them.
+    // Data tier, zero LLM, per-caravan try/catch inside.
+    try {
+      tickCaravanShouts(this, Date.now());
+    } catch (error) {
+      this.log("caravan shouts (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Personal companion invites: citizens invite nearby players on 1-on-1
     // outings (fishing, dungeon, walk, tavern) and remember yes/no.
@@ -1370,6 +1380,15 @@ class CitizenDirector {
       tickFestivals(this, nowMs);
     } catch (error) {
       this.log("festivals failed", { error: String(error?.message ?? error) });
+    }
+    // Trade caravans: merchant-led expeditions between capitals on a
+    // staggered schedule — muster, travel (data-tier), bandit risk on
+    // arrival, profit splits, player guard/trader signups. Data tier,
+    // zero LLM.
+    try {
+      tickCaravans(this, nowMs);
+    } catch (error) {
+      this.log("trade caravans failed", { error: String(error?.message ?? error) });
     }
     // Citizen relationships: friend citizens hail friend players passing
     // nearby, by name. Data tier, zero LLM.
