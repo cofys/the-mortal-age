@@ -62,9 +62,11 @@ assert.equal(M.mentorfolkTypeOf({ username: "SomeFolk", role: "guard" }), null);
 assert.equal(M.mentorfolkTypeOf({ username: "SomeFolk", attributes: { role: "banker" } }), null);
 
 // --- 4. master exclusion: level-60 trade masters are never mentorfolk ---
-// The master's real professional-master criterion is skillStore.getLevel
-// >= MASTER_LEVEL (60) in any trade skill — no exported claim predicate
-// exists, so the exclusion is verified against the real skill store.
+// The module wires the master tier's REAL exported claim predicate —
+// CitizenApprentices.eligibleMaster (same function the pair-formation
+// tick drafts masters with): working-role citizen with
+// skillStore.getLevel >= MASTER_LEVEL (60) in a trade skill. The
+// exclusion is verified against the real skill store.
 const MASTER_LEVEL = Skilling.skillStore ? 60 : 60;
 let boosted = 0;
 for (let i = 0; i < 20000 && boosted < 20; i++) {

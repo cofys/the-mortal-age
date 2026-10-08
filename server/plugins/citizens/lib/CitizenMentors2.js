@@ -36,16 +36,17 @@
  * No overlap (by design):
  *   - CitizenMentors (master) owns the PROFESSIONAL mentor trade: masters
  *     (level 60+ in a trade skill) give reactive level-up lessons, found
- *     mentorship bonds, and trade tips. The master has no exported
- *     claim predicate like engineerTypeOf/smithfolkTypeOf — its real
- *     professional-master criterion is skillStore.getLevel >=
- *     MASTER_LEVEL (60) in any trade skill, so this module applies that
- *     same real criterion via isProMentor BEFORE the share roll. A level-
- *     60 master is never mentorfolk. Mentorfolk never found mentorship
- *     bonds, never give skill tips, never claim master-titles: recruiters
- *     hawk contracts (never instruct), taskmasters set chores (never give
- *     trade lessons), soapbox preachers scold morals (never teach skills),
- *     oath-wardens witness oaths (never grade).
+ *     mentorship bonds, and trade tips. CitizenMentors exports no claim
+ *     predicate itself — its real, exported master-claim function is
+ *     CitizenApprentices.eligibleMaster(record, masterNames,
+ *     apprenticeNames), the same predicate the pair-formation tick uses
+ *     to draft masters. This module wires that ACTUAL function via
+ *     isProMentor BEFORE the share roll — no invented criterion. A
+ *     claimed master is never mentorfolk. Mentorfolk never found
+ *     mentorship bonds, never give skill tips, never claim master-titles:
+ *     recruiters hawk contracts (never instruct), taskmasters set chores
+ *     (never give trade lessons), soapbox preachers scold morals (never
+ *     teach skills), oath-wardens witness oaths (never grade).
  *   - CitizenApprentices owns real master-apprentice pairs: level-60
  *     masters paired with low-skill apprentices gaining real XP via
  *     skillStore with follow bonds. The same 60+ exclusion covers it —
@@ -108,8 +109,8 @@ function safeRequire(path) {
     return null;
   }
 }
-const ProMentors = safeRequire("./CitizenMentors"); // master: MASTER_LEVEL, skill-based master criterion
-const Skilling = safeRequire("./CitizenSkilling"); // skillStore + SKILLS: the real pro-master test
+const ProMentors = safeRequire("./CitizenMentors"); // master: the real MASTER_LEVEL export (60)
+const Apprentices = safeRequire("./CitizenApprentices"); // master tier: the REAL master-claim predicate (eligibleMaster)
 const Bonds = safeRequire("./CitizenBonds");
 const Lod = safeRequire("./CitizenTickLod");
 const Journal = safeRequire("./CitizenJournal");
@@ -427,34 +428,30 @@ function masterLevel() {
   return 60;
 }
 
+// Module-level empty sets for the real claim call — eligibleMaster only
+// reads them (never mutates), so sharing one instance is safe.
+const EMPTY_MASTER_NAMES = new Set();
+const EMPTY_APPRENTICE_NAMES = new Set();
+
 /**
- * True when this citizen is claimed by the MASTER CitizenMentors /
- * CitizenApprentices professional mentor trade. The master has no
- * exported claim predicate (no mentorTypeOf) — its real professional-
- * master criterion is level 60+ in a trade skill (MASTER_LEVEL), tested
- * here through the real skillStore.getLevel for every SKILLS key. Those
- * citizens give reactive level-up lessons and take on real apprentices —
- * devices of the master layer. The 2-layer owns amateur mentorfolk only,
- * so this exclusion runs BEFORE the share roll. Fail-open when the
- * master or the skilling store is absent: a missing master cannot claim
- * anyone. Never throws.
+ * True when this citizen is claimed by the professional master tier
+ * (CitizenMentors / CitizenApprentices). CitizenMentors itself exports no
+ * claim predicate — its real, exported master-claim function is
+ * CitizenApprentices.eligibleMaster(record, masterNames, apprenticeNames),
+ * the same predicate the pair-formation tick uses to draft masters:
+ * working-role citizen with level >= MASTER_LEVEL (60) in a trade skill,
+ * checked through the real skill store. We wire that actual function —
+ * no re-invented criterion. Claimed masters give reactive level-up
+ * lessons and take on real apprentices — devices of the master layer.
+ * The 2-layer owns amateur mentorfolk only, so this exclusion runs
+ * BEFORE the share roll. Fail-open when the master tier module is
+ * absent: a missing master cannot claim anyone. Never throws.
  */
 function isProMentor(record) {
   try {
-    if (!Skilling || !Skilling.skillStore || !Skilling.SKILLS) return false;
-    const name = normalizeName(record?.username);
-    if (!name) return false;
-    const level = masterLevel();
-    for (const key of Object.keys(Skilling.SKILLS)) {
-      let lv = 0;
-      try {
-        lv = Skilling.skillStore.getLevel(name, key);
-      } catch {
-        continue;
-      }
-      if (lv >= level) return true;
-    }
-    return false;
+    if (!Apprentices || typeof Apprentices.eligibleMaster !== "function") return false;
+    const claimed = Apprentices.eligibleMaster(record, EMPTY_MASTER_NAMES, EMPTY_APPRENTICE_NAMES);
+    return claimed !== null && claimed !== undefined;
   } catch {
     return false;
   }
@@ -472,10 +469,11 @@ function folkTypeFromRoll(roll) {
 
 /**
  * The mentorfolk type for a roster record, or null.
- * Excludes the professional masters (level 60+ in any trade skill, the
- * master's real criterion, checked via the real skillStore) BEFORE the
- * share roll, so it holds regardless of the 35% draw. Uses name-first
- * salts to avoid the FNV-1a prefix-correlation bug.
+ * Excludes professional masters via the master tier's REAL exported
+ * claim predicate (CitizenApprentices.eligibleMaster, the same function
+ * the pair-formation tick drafts masters with) BEFORE the share roll, so
+ * it holds regardless of the 35% draw. Uses name-first salts to avoid
+ * the FNV-1a prefix-correlation bug.
  */
 function mentorfolkTypeOf(record) {
   try {
