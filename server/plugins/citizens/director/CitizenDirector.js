@@ -125,6 +125,7 @@ const { tickCaregivers } = require("../lib/CitizenHealers2");
 const { tickWatchmen } = require("../lib/CitizenWatchmen2");
 const { tickFisherfolk } = require("../lib/CitizenFishers2");
 const { tickMinerfolk } = require("../lib/CitizenMiners2");
+const { tickHuntfolk } = require("../lib/CitizenHunters2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2138,6 +2139,19 @@ class CitizenDirector {
       tickMinerfolk(this, nowMs);
     } catch (error) {
       this.log("minerfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen community hunting folk: amateur trackers, bowmen, trappers
+    // and falconers on the community grounds near the settlements. Hash-
+    // derived types, per-day grounds/bags, trophy-bag crowd moments,
+    // 7-day-TTL ledgers for joining hunts, buying game and learning
+    // tracking. Professional hunters (CitizenHunters) are excluded — the
+    // trade owns the wilds; cooks own the kitchens. Visibility throttled
+    // via chance + cooldown (minerfolk precedent), no hobby key.
+    // Data tier, zero LLM.
+    try {
+      tickHuntfolk(this, nowMs);
+    } catch (error) {
+      this.log("huntfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
