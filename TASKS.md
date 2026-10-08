@@ -5,6 +5,8 @@ before you start. See `COLLAB.md` for the full protocol.
 
 ## NOW
 
+- [ ] IN PROGRESS — coordinator-1500 — citizens: farmers rung audit (CitizenFarmers.js).
+  Paths: `server/plugins/citizens/lib/CitizenFarmers.js`
 - [ ] Citizen AI mission (ongoing) — personalities, social mechanics, relationships,
   guilds, shops. Break off concrete subtasks below as they arise.
   Paths: `server/plugins/citizens/`
