@@ -122,6 +122,7 @@ const { tickCouriers } = require("../lib/CitizenCouriers");
 const { tickScribes } = require("../lib/CitizenScribes");
 const { tickEducators } = require("../lib/CitizenTeachers2");
 const { tickCaregivers } = require("../lib/CitizenHealers2");
+const { tickWatchmen } = require("../lib/CitizenWatchmen2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2097,6 +2098,18 @@ class CitizenDirector {
       tickCaregivers(this, nowMs);
     } catch (error) {
       this.log("healers2 failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen volunteer watch: night watchmen with lanterns, day wardens,
+    // gate-minders and fire lookouts. Hash-derived types, per-day patrol
+    // rotas, fire-scare crowd moments, 7-day-TTL ledgers for crime reports,
+    // volunteer sign-ups and warden hires. Professional guards (role
+    // "guard") are excluded — CitizenGuards owns the official watch.
+    // Visibility throttled via chance + cooldown (couriers/healers2
+    // precedent), no hobby key. Data tier, zero LLM.
+    try {
+      tickWatchmen(this, nowMs);
+    } catch (error) {
+      this.log("watchmen2 failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
