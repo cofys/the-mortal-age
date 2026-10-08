@@ -30,6 +30,7 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
 
 // === Tuning ===
 const VOLUNTEER_RADIUS = 14; // tiles — close enough to see/hear
@@ -465,6 +466,10 @@ function tickVolunteers(director, nowMs, desync = 0) {
         // 2. Must be a volunteer (hash-derived, cheap)
         const type = volunteerTypeOf(record);
         if (!type) continue;
+
+        // 2b. Visibility weight (Phase 2 distribution fix): the primary hobby
+        // always fires visibly; other hobbies fire 1/3 as often.
+        if (!isHobbyVisible(record.username, "volunteer")) continue;
 
         // 3. Event helpers only work during festivals
         if (type === VOLUNTEER_EVENT && !isFestivalNow(now)) continue;

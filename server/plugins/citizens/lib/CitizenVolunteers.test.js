@@ -217,11 +217,13 @@ function mockRealPlayer(x, y) {
 }
 
 check("tick fires near a real player during service hours", () => {
-  // Find a deterministic volunteer name.
+  // Find a deterministic volunteer name that also passes the visibility gate.
+  const { isHobbyVisible } = require("./CitizenPrimaryHobby");
   let uname = null;
   for (let i = 0; i < 500 && !uname; i++) {
     const n = "vol" + i;
-    if (V.volunteerTypeOf({ username: n, role: "commoner" }) === V.VOLUNTEER_CLEANER) uname = n;
+    if (V.volunteerTypeOf({ username: n, role: "commoner" }) === V.VOLUNTEER_CLEANER &&
+        isHobbyVisible(n, "volunteer")) uname = n;
   }
   assert.ok(uname, "no deterministic cleaner found");
   const cit = mockCitizen(100, 100);

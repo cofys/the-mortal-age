@@ -45,7 +45,7 @@ const DELIVERY_HOUR_END = 19;
 const PIGEON_HOUR_START = 6; // pigeons fly 06:00-18:00 server time
 const PIGEON_HOUR_END = 18;
 const HIRE_LEDGER_TTL_MS = 7 * 24 * 60 * 60 * 1000; // hired deliveries linger a week
-const COURIER_CHANCE = 0.45; // ~45% of commoners take courier work (activity system)
+const COURIER_CHANCE = 0.15; // ~15% of commoners take courier work (activity system, Phase 2 narrowed from 45%)
 const INTERCEPT_CHANCE = 0.08; // ~8% of runs yield overheard gossip
 const COURIER_TYPES = Object.freeze([
   "pigeon_keeper", // 30% — carrier-pigeon loft, private bird messages
@@ -146,7 +146,9 @@ function fillLine(line, vars) {
 
 // ============================================================================
 // Courier identity — hash-derived, stable across restarts, no storage.
-// ACTIVITY SYSTEM: no professional exclusions — any commoner may courier.
+// ACTIVITY SYSTEM: any commoner may courier, EXCEPT messengers (mutual
+// exclusion — a messenger runs the official post, not private deliveries).
+// Narrowed to ~15% in Phase 2 (was 45%).
 // ============================================================================
 
 function courierTypeFromRoll(roll) {
@@ -161,6 +163,15 @@ function courierTypeFromRoll(roll) {
 function courierTypeFor(username) {
   const name = normalizeName(username);
   if (!name) return null;
+  // Mutual exclusion with messengers (Phase 2 distribution fix): a citizen
+  // whose primary profession is messenger runs the official post — they do
+  // not also run private deliveries. Lazy require avoids load-order cycles.
+  try {
+    const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+    if (primaryProfessionFor(name) === "messenger") return null;
+  } catch {
+    // Partition unavailable — fall through and allow.
+  }
   const h = fnv1a("courier:" + name);
   if ((h % 100) / 100 >= COURIER_CHANCE) return null;
   return courierTypeFromRoll(fnv1a("couriertype:" + name) % 100);

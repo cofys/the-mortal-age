@@ -33,6 +33,7 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
 
 // === Tuning ===
 const STORYTELLER_RADIUS = 14; // tiles — close enough to see/hear
@@ -533,6 +534,10 @@ function tickStorytellers(director, nowMs, desync = 0) {
         // 2. Must be a storyteller (hash-derived, cheap)
         const type = storytellerTypeOf(record);
         if (!type) continue;
+
+        // 2b. Visibility weight (Phase 2 distribution fix): the primary hobby
+        // always fires visibly; other hobbies fire 1/3 as often.
+        if (!isHobbyVisible(record.username, "storyteller")) continue;
 
         // 3. Citizen must be materialized (near a player already)
         const citizen = director.playerFor?.(record);

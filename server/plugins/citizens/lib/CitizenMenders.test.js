@@ -207,11 +207,13 @@ function mockRealPlayer(x, y) {
 }
 
 check("tick fires near a real player during shop hours", () => {
-  // Find a deterministic mender name.
+  // Find a deterministic mender name that also passes the visibility gate.
+  const { isHobbyVisible } = require("./CitizenPrimaryHobby");
   let uname = null;
   for (let i = 0; i < 500 && !uname; i++) {
     const n = "mendtick" + i;
-    if (M.menderTypeOf({ username: n, role: "commoner" }) === M.MENDER_TINKER) uname = n;
+    if (M.menderTypeOf({ username: n, role: "commoner" }) === M.MENDER_TINKER &&
+        isHobbyVisible(n, "mender")) uname = n;
   }
   assert.ok(uname, "no deterministic tinker found");
   const cit = mockCitizen(100, 100);

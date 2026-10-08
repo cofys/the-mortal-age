@@ -46,13 +46,30 @@ check("courierTypeFor stable", () => {
   assert.equal(a, b);
 });
 
-// 4. Broad distribution: ~45% of names become couriers (activity, no chain).
-check("broad distribution ~45%", () => {
+// 4. Broad distribution: ~15% of names become couriers (Phase 2 narrowed
+// from 45%; messengers excluded).
+check("broad distribution ~15%", () => {
   let n = 0;
   for (let i = 0; i < 2000; i++) {
     if (C.courierTypeFor("Citizen" + i)) n++;
   }
-  assert.ok(n > 800 && n < 1000, "expected ~900 couriers, got " + n);
+  assert.ok(n > 200 && n < 400, "expected ~300 couriers, got " + n);
+});
+
+// 4b. Messengers are mutually exclusive with couriers.
+check("messenger/courier mutual exclusion", () => {
+  const { primaryProfessionFor } = require("./CitizenPrimaryProfession");
+  let messengers = 0;
+  let overlap = 0;
+  for (let i = 0; i < 2000; i++) {
+    const name = "Citizen" + i;
+    if (primaryProfessionFor(name) === "messenger") {
+      messengers++;
+      if (C.courierTypeFor(name)) overlap++;
+    }
+  }
+  assert.ok(messengers > 0, "test needs some messengers");
+  assert.equal(overlap, 0, `messengers must not be couriers, got ${overlap} overlap`);
 });
 
 // 5. Non-commoners are gated out.

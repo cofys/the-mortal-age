@@ -220,10 +220,12 @@ function localDay(year, month, day, hour = 12, min = 0) {
     getLocation: () => ({ getX: () => 5, getY: () => 5, getZ: () => 0 }),
   };
 
-  // Find a pet-owner name deterministically
+  // Find a pet-owner name deterministically (must also pass visibility gate)
+  const { isHobbyVisible } = require("./CitizenPrimaryHobby");
   let ownerName = null;
   for (let i = 0; i < 500 && !ownerName; i++) {
-    if (P.petTypeOf({ username: "Owner" + i, role: "commoner" })) ownerName = "Owner" + i;
+    const n = "Owner" + i;
+    if (P.petTypeOf({ username: n, role: "commoner" }) && isHobbyVisible(n, "pet_owner")) ownerName = n;
   }
   assert.ok(ownerName, "found a pet-owner test name");
 

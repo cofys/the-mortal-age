@@ -29,6 +29,7 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
 
 // === Tuning ===
 const HOBBY_RADIUS = 14; // tiles — close enough to see/hear
@@ -454,6 +455,11 @@ function tickHobbyists(director, nowMs, desync = 0) {
         // 2. Must have a hobby (hash-derived, cheap)
         const hobby = hobbyTypeOf(record);
         if (!hobby) continue;
+
+        // 2b. Visibility weight (Phase 2 distribution fix): the primary hobby
+        // always fires visibly; other hobbies fire 1/3 as often. Data stays
+        // universal — only the visible tick is gated.
+        if (!isHobbyVisible(record.username, "hobbyist")) continue;
 
         // 3. Citizen must be materialized (near a player already)
         const citizen = director.playerFor?.(record);

@@ -221,11 +221,19 @@ function localNoon(dayOffset = 0) {
 
   const realRandom = Math.random;
   Math.random = () => 0.05; // passes the 0.35 chance gate
+  // Find a username that passes the hobby visibility gate (Phase 2).
+  const { isHobbyVisible } = require("./CitizenPrimaryHobby");
+  let tickName = null;
+  for (let i = 0; i < 100 && !tickName; i++) {
+    const n = "TickHobbyist" + i;
+    if (isHobbyVisible(n, "hobbyist")) tickName = n;
+  }
+  assert.ok(tickName, "no visibility-passing hobbyist name found");
   try {
     // Fires near a real player
     H._resetState();
     const cz = mockCitizen(0, 0);
-    const rec = { username: "TickHobbyist", role: "commoner", kingdomId: "misthalin", _citizen: cz };
+    const rec = { username: tickName, role: "commoner", kingdomId: "misthalin", _citizen: cz };
     const dir = makeDirector([rec], [mockHuman(5, 5)]);
     H.tickHobbyists(dir, localNoon(0));
     assert.ok(cz.calls.length > 0, "tick fires near a real player");
