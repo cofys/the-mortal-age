@@ -12495,7 +12495,7 @@
   {"level":0,"name":"Warrior woman","x":2575,"y":3384,"id":3260},
   {"level":0,"name":"Mourner","x":2582,"y":3329,"id":5301},
   {"level":0,"name":"Guard","x":2588,"y":3341,"id":6705},
-  {"level":0,"name":"Elena","x":2592,"y":3336,"id":2011},
+  {"level":0,"name":"Elena","x":2592,"y":3336,"key":"ELENA_2"},
   {"level":0,"name":"Farmer Brumty","x":2593,"y":3358,"id":3985},
   {"level":0,"name":"Yellow Sheep","x":2596,"y":3359,"id":3993,"wanderRadius":0},
   {"level":0,"name":"Blue Sheep","x":2597,"y":3360,"id":3992,"wanderRadius":0},
@@ -24381,5 +24381,7 @@
   {"level":0,"name":"Gladiator","x":1811,"y":9518,"id":12835,"wanderRadius":3},
   {"level":0,"name":"Gladiator","x":1807,"y":9491,"id":12836,"wanderRadius":3},
   {"level":0,"name":"Gladiator","x":1805,"y":9523,"id":12838,"wanderRadius":0,"direction":6},
-  {"level":0,"name":"Gladiator","x":1807,"y":9523,"id":12839,"wanderRadius":0,"direction":6}
+  {"level":0,"name":"Gladiator","x":1807,"y":9523,"id":12839,"wanderRadius":0,"direction":6},
+  {"level":0,"name":"Mad Angel","x":2532,"y":2215,"id":16313,"wanderRadius":0,"direction":4},
+  {"level":0,"name":"Broken down golem","x":2573,"y":8650,"id":16320,"wanderRadius":0,"direction":6}
 ]

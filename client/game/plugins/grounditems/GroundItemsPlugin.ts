@@ -256,6 +256,7 @@ export class GroundItemsPlugin extends Plugin {
         name: "Ground Items",
         description: "Highlights, filters, and recolors item labels.",
         tags: ["items", "overlay"],
+        enabledByDefault: false,
         configKey: "grounditemsplugin",
     };
 

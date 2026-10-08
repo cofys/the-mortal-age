@@ -6,7 +6,7 @@ import { CustomInterfaceRegistry } from "../game/interfaces/CustomInterfaceRegis
 import * as fs from "fs";
 import * as path from "path";
 import { GameConstants } from "../game/GameConstants";
-import { isMembersWorld } from "../game/definition/WorldDefinition";
+import { isMembersWorld, readWorldConfig } from "../game/definition/WorldDefinition";
 import { PlayerRights } from "../game/model/rights/PlayerRights";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import { DefinitionLoader } from "../game/definition/loader/DefinitionLoader";
@@ -1752,9 +1752,7 @@ export class PluginManager {
 
   private static loadDisabledPluginNames(): Set<string> {
     const configPath = path.join(process.cwd(), "data", "definitions", "world.json");
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
-      disabledPlugins?: unknown;
-    };
+    const config = readWorldConfig() as { disabledPlugins?: unknown };
     if (!config || typeof config !== "object" || Array.isArray(config)) {
       throw new Error(`[plugins] ${configPath} must contain an object`);
     }
@@ -1779,9 +1777,7 @@ export class PluginManager {
     }
     let parsed: unknown;
     try {
-      const configPath = path.join(process.cwd(), "data", "definitions", "world.json");
-      parsed = (JSON.parse(fs.readFileSync(configPath, "utf8")) as { pluginConfig?: unknown })
-        .pluginConfig;
+      parsed = (readWorldConfig() as { pluginConfig?: unknown }).pluginConfig;
     } catch {
       parsed = undefined;
     }

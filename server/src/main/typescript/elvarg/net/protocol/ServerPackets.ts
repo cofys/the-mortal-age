@@ -29,6 +29,7 @@ export const enum ServerPacketId {
     VARP_LARGE = 41, // varp with value outside byte range
     VARBIT = 42,
     VARP_BATCH = 43, // multiple varps in one packet
+    VARP_LONG = 44, // 64-bit varp (rev 241: GE offer price)
 
     // ========================================
     // INVENTORY/ITEMS (50-69)
@@ -180,6 +181,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.VARP_LARGE]: 6, // varpId(2) + value(4)
     [ServerPacketId.VARBIT]: 6, // varbitId(2) + value(4)
     [ServerPacketId.VARP_BATCH]: -1,
+    [ServerPacketId.VARP_LONG]: 10, // varpId(2) + value(8)
 
     [ServerPacketId.INVENTORY_SNAPSHOT]: -2,
     // Quantity is encoded OSRS-style: 1 byte, or 255 + int (variable length).

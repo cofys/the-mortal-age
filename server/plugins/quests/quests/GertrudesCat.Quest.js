@@ -160,7 +160,7 @@ module.exports = function registerGertrudesCatQuest(api) {
 
   /** Fluffs: milk, seasoned sardine, then her kitten. */
   function handleItemOnCat(event) {
-    if (event.target?.getId?.() !== FLUFFS_NPC_ID) return;
+    if ((event.npcId ?? event.target?.getId?.()) !== FLUFFS_NPC_ID) return;
     const { player, itemId } = event;
     const stage = quest.getStage(player);
     if (itemId === MILK_ITEM_ID && stage === STAGE_PAID_BOY) {

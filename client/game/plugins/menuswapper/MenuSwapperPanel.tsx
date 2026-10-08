@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore, type JSX } from "react";
 
+import { NavigationButton } from "@runelite/client/ui/NavigationButton";
 import type { MenuSwapperPlugin } from "./MenuSwapperPlugin";
 import type { MenuSwap, MenuSwapKind, MenuSwapperPresets } from "./types";
 
@@ -27,14 +28,10 @@ export function MenuSwapperPanel({ plugin }: { plugin: MenuSwapperPlugin }): JSX
 
     return (
         <div className="rl-sidebar-panel-content rl-sidebar-scrollable">
-            <div className="rl-sidebar-panel-title">Menu Entry Swapper</div>
             <p className="rl-sidebar-panel-copy">
                 Hold Shift and right-click an NPC, object or item, then pick "Swap left click" or
                 "Swap shift click".
             </p>
-            {!config.enabled && (
-                <p className="rl-sidebar-panel-copy">Plugin is currently disabled in RSPS.app.</p>
-            )}
 
             {PRESET_LABELS.map(([preset, label]) => (
                 <label key={preset} className="rl-sidebar-check">
@@ -81,4 +78,23 @@ export function MenuSwapperPanel({ plugin }: { plugin: MenuSwapperPlugin }): JSX
             )}
         </div>
     );
+}
+
+function MenuSwapperIcon({ label }: { label: string }): JSX.Element {
+    return (
+        <svg className="rl-sidebar-icon-svg" viewBox="0 0 24 24" role="img" aria-label={label}>
+            <path d="M4 7h12M13 4l3 3-3 3" />
+            <path d="M20 17H8M11 14l-3 3 3 3" />
+        </svg>
+    );
+}
+
+/** The Menu Entry Swapper's sidebar button. */
+export function createMenuSwapperNavigationButton(plugin: MenuSwapperPlugin): NavigationButton {
+    return NavigationButton.builder()
+        .tooltip("Menu Entry Swapper")
+        .icon(MenuSwapperIcon)
+        .priority(5)
+        .panel(() => <MenuSwapperPanel plugin={plugin} />)
+        .build();
 }

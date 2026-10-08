@@ -174,9 +174,9 @@ function threadRunePouch({ player }) {
 function kerisJewels() {
   const I = ids();
   return [
-    { name: "Eye of the corruptor", id: I.EYE_OF_THE_CORRUPTOR, partisan: I.KERIS_PARTISAN_OF_CORRUPTION },
-    { name: "Breach of the scarab", id: I.BREACH_OF_THE_SCARAB, partisan: I.KERIS_PARTISAN_OF_BREACHING },
-    { name: "Jewel of the sun", id: I.JEWEL_OF_THE_SUN, partisan: I.KERIS_PARTISAN_OF_THE_SUN },
+    { name: "Eye of the Corruptor", id: I.EYE_OF_THE_CORRUPTOR, partisan: I.KERIS_PARTISAN_OF_CORRUPTION },
+    { name: "Breach of the Scarab", id: I.BREACH_OF_THE_SCARAB, partisan: I.KERIS_PARTISAN_OF_BREACHING },
+    { name: "Jewel of the Sun", id: I.JEWEL_OF_THE_SUN, partisan: I.KERIS_PARTISAN_OF_THE_SUN },
   ];
 }
 
@@ -293,8 +293,8 @@ module.exports = function registerTombsItems(api) {
   for (const name of ["Masori mask", "Masori body", "Masori chaps"]) api.onItemOnItem("Armadylean plate", name, useArmadyleanPlate);
   for (const name of ["Armadyl helmet", "Armadyl chestplate", "Armadyl chainskirt"]) api.onItemOnItem("Chisel", name, useChisel);
   api.onItemOnItem("Arcane sigil", "Elidinis' ward", fortifyWard);
-  api.onItemOnItem("Thread of elidinis", "Rune pouch", threadRunePouch);
-  for (const name of ["Eye of the corruptor", "Breach of the scarab", "Jewel of the sun"]) api.onItemOnItem("Keris partisan", name, useKerisJewel);
+  api.onItemOnItem("Thread of Elidinis", "Rune pouch", threadRunePouch);
+  for (const name of ["Eye of the Corruptor", "Breach of the Scarab", "Jewel of the Sun"]) api.onItemOnItem("Keris partisan", name, useKerisJewel);
   for (const rune of ["Soul rune", "Chaos rune"]) {
     api.onItemOnItem(rune, "Tumeken's shadow", chargeShadow);
     api.onItemOnItem(rune, "Tumeken's shadow (uncharged)", chargeShadow);

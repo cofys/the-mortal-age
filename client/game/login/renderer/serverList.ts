@@ -1,10 +1,20 @@
-import { getConfiguredServers, getWebRtcRelayConfig } from "../../../config/clientEnv";
+import {
+    getConfiguredDefaultServer,
+    getConfiguredServers,
+    getWebRtcRelayConfig,
+} from "../../../config/clientEnv";
 import { SERVER_LIST_URL } from "./constants";
 import type { LoginRendererHost } from "./host";
 import type { ServerListEntry } from "./types";
 
 function filterServersForCurrentHost(servers: ServerListEntry[]) {
 
+        // The default server is always pickable, even when the list doesn't name it, so
+        // choosing another world never strands the player away from it.
+        const preferred = getConfiguredDefaultServer();
+        if (preferred && !servers.some((s) => s.address === preferred.address)) {
+            servers = [serverEntry(preferred), ...servers];
+        }
         if (typeof window === "undefined") return servers;
         const pageHost = window.location.hostname.toLowerCase();
         const pageIsLocal =

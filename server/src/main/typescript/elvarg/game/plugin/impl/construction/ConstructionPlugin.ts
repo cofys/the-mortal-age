@@ -129,6 +129,11 @@ export function releaseHouse(player: ConstructionPlayer, restoreLocation: boolea
   if (restoreLocation && PlayerHouseInstance.isAllocationLocation(player.getLocation())) player.moveTo(houseExit(houseStateFor(player)));
 }
 
+/** "construction:owns-house" { player, owns }: whether the player has bought a house. */
+function ownsHouse(request: { player: ConstructionPlayer; owns?: boolean }): void {
+  if (request?.player) request.owns = houseStateFor(request.player).owned !== false;
+}
+
 function enterHouse(player: ConstructionPlayer, buildingMode: boolean): boolean {
   if (houseStateFor(player).owned === false) {
     player.sendMessage("You do not own a house. Speak to an Estate agent to buy one.");
@@ -1036,6 +1041,7 @@ export const ConstructionPlugin = {
     api.onCustomEvent("interface:close", closeHouseSettings);
     api.onCustomEvent("spell:teleport-arrival", houseTeleportArrival);
     api.onCustomEvent("construction:house-tablet", houseTablet);
+    api.onCustomEvent("construction:owns-house", ownsHouse);
     api.onPlayerLogin(loginHouse);
     api.onPlayerProcess(processHouse);
     api.onPlayerDisconnect(logoutHouse);

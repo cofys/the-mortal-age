@@ -853,14 +853,14 @@ module.exports = function registerLegendsQuest(api) {
       return;
     }
     if (stage < STAGE_SUMMONED_FIRE) quest.setStage(player, STAGE_SUMMONED_FIRE);
-    startTranscript(api, player, target?.getId?.() ?? NpcIdentifiers.UNGADULU, PAGE, "book-of-binding-using-the-binding-book-on-ungadulu");
+    startTranscript(api, player, target?.getContentId?.(player) ?? target?.getId?.() ?? NpcIdentifiers.UNGADULU, PAGE, "book-of-binding-using-the-binding-book-on-ungadulu");
     spawnNezikchened(player, 1);
   }
 
   function useHolyWaterOnUngadulu(player, target) {
     take(player, HOLY_WATER, 1);
     player.setAttribute(SOAKED_ATTRIBUTE, 1);
-    startTranscript(api, player, target?.getId?.() ?? NpcIdentifiers.UNGADULU, PAGE, "book-of-binding-hitting-ungadulu-while-he-is-possessed-with-holy-water");
+    startTranscript(api, player, target?.getContentId?.(player) ?? target?.getId?.() ?? NpcIdentifiers.UNGADULU, PAGE, "book-of-binding-hitting-ungadulu-while-he-is-possessed-with-holy-water");
   }
 
   function giveHolyForce(player, target) {
@@ -871,25 +871,25 @@ module.exports = function registerLegendsQuest(api) {
     }
     take(player, DARK_DAGGER, 1);
     give(player, HOLY_FORCE, 1);
-    startTranscript(api, player, target?.getId?.() ?? NpcIdentifiers.UNGADULU, PAGE, "the-source-of-the-spring-using-the-dark-dagger-on-ungadulu-light-path");
+    startTranscript(api, player, target?.getContentId?.(player) ?? target?.getId?.() ?? NpcIdentifiers.UNGADULU, PAGE, "the-source-of-the-spring-using-the-dark-dagger-on-ungadulu-light-path");
   }
 
   function stabViyeldi(player, target) {
     take(player, DARK_DAGGER, 1);
     give(player, GLOWING_DAGGER, 1);
     player.setAttribute(VIYELDI_ATTRIBUTE, 1);
-    startTranscript(api, player, target?.getId?.() ?? VIYELDI_ID, PAGE, "the-source-of-the-spring-killing-viyeldi-dark-path");
+    startTranscript(api, player, target?.getContentId?.(player) ?? target?.getId?.() ?? VIYELDI_ID, PAGE, "the-source-of-the-spring-killing-viyeldi-dark-path");
   }
 
   function castHolyForce(player, target) {
     take(player, HOLY_FORCE, 1);
-    startTranscript(api, player, target?.getId?.() ?? ECHNED_ID, PAGE, "the-source-of-the-spring-using-the-holy-force-spell-on-echned-light-path");
+    startTranscript(api, player, target?.getContentId?.(player) ?? target?.getId?.() ?? ECHNED_ID, PAGE, "the-source-of-the-spring-using-the-holy-force-spell-on-echned-light-path");
     spawnNezikchened(player);
   }
 
   function giveGlowingDagger(player, target) {
     take(player, GLOWING_DAGGER, 1);
-    startTranscript(api, player, target?.getId?.() ?? ECHNED_ID, PAGE, "the-source-of-the-spring-talking-to-echned-with-the-glowing-dagger-dark-path");
+    startTranscript(api, player, target?.getContentId?.(player) ?? target?.getId?.() ?? ECHNED_ID, PAGE, "the-source-of-the-spring-talking-to-echned-with-the-glowing-dagger-dark-path");
     spawnNezikchened(player);
   }
 
@@ -1271,7 +1271,7 @@ module.exports = function registerLegendsQuest(api) {
   function handleItemOnNpc(event) {
     const { player, itemId } = event;
     const target = event.target;
-    const npcId = target?.getId?.();
+    const npcId = event.npcId ?? target?.getId?.();
     if (!player || npcId === undefined) return;
 
     if (RADIMUS_IDS.has(npcId)) {

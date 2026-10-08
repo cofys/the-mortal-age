@@ -112,6 +112,13 @@ export class ServerPacketReader {
         );
     }
 
+    /** A signed 64-bit big-endian value. */
+    readLong(): bigint {
+        const high = BigInt(this.readInt());
+        const low = BigInt(this.readInt() >>> 0);
+        return BigInt.asIntN(64, (high << 32n) | low);
+    }
+
     readBoolean(): boolean {
         return this.readByte() !== 0;
     }
@@ -647,6 +654,15 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 payload: {
                     varpId: reader.readShort(),
                     value: reader.readInt(),
+                },
+            };
+
+        case ServerPacketId.VARP_LONG:
+            return {
+                type: "varp_long",
+                payload: {
+                    varpId: reader.readShort(),
+                    value: reader.readLong(),
                 },
             };
 

@@ -372,7 +372,7 @@ module.exports = function registerWitchsHouseQuest(api) {
     if (event.itemId !== MAGNET_ITEM_ID) return;
     const { player } = event;
     const tracked = mouseByPlayer.get(player);
-    if (!tracked || tracked.getId?.() !== event.target?.getId?.()) return;
+    if (!tracked || tracked.getId?.() !== (event.npcId ?? event.target?.getId?.())) return;
     event.handled = true;
     const stage = quest.getStage(player);
     if (stage >= STAGE_UNLOCKED_BACK_DOOR) {

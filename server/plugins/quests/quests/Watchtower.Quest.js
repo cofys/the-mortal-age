@@ -1163,7 +1163,7 @@ module.exports = function registerWatchtowerQuest(api) {
 
   function handleItemOnNpc(event) {
     const { player, itemId } = event;
-    const targetId = event.target?.getId?.();
+    const targetId = event.npcId ?? event.target?.getId?.();
     if (!player || !targetId) return;
 
     if (targetId === CITY_GUARD_ID) {

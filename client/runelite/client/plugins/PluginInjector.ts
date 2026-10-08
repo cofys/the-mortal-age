@@ -1,5 +1,6 @@
 import { type ConfigGroupDescriptor, type ConfigOf, isConfigGroupDescriptor } from "../config/ConfigItem";
 import { ConfigManager } from "../config/ConfigManager";
+import { ClientToolbar } from "../ui/ClientToolbar";
 
 /**
  * Angular-style injector: PluginManager sets the current injector while it
@@ -60,5 +61,7 @@ export function inject(token: unknown): unknown {
 // PluginManager, so config falls back to a memory-backed injector.
 function createFallbackInjector(): PluginInjector {
     const configManager = new ConfigManager(undefined);
-    return new PluginInjector(configManager).provide(ConfigManager, configManager);
+    return new PluginInjector(configManager)
+        .provide(ConfigManager, configManager)
+        .provide(ClientToolbar, new ClientToolbar());
 }

@@ -422,7 +422,7 @@ function farmingItemAction(event) {
         player.sendMessage("You learn to use two volcanic ash with Fertile Soil to apply ultracompost.");
         return;
     }
-    if (name === "Amulet of nature" && action === "rub") {
+    if (name === "Amulet of Nature" && action === "rub") {
         event.handled = true;
         const bound = Patches.farmFor(player).boundPatch;
         const patch = Data.CACHE.patches.find(p => Data.patchKey(p) === bound);

@@ -15,7 +15,7 @@
 | Core → plugin coupling | Renderer and sidebar call plugins by field name (`osrsClient.groundItemsPlugin.…`) | `render/render/interact/*`, `render/render/frame/render.ts`, `game/sidebar/SidebarShell.tsx` |
 | Events | None for plugins. The network layer has per-packet listener sets (`subscribeTick`, `subscribeChatMessages`, `subscribeInventory`, `subscribeSkills`, `subscribeNpcInfo`, `subscribePlayerSync`, `subscribeGroundItems`, …) | `client/network/serverConnection/subscriptions/*`, `state.ts` |
 | Config | Each plugin has a hand-written `types.ts` config interface, sanitizers, a `Browser*Persistence` localStorage wrapper and `subscribe`/`getState`/`setConfig` | `client/game/plugins/*/` |
-| Config UI | A hand-written React panel per plugin, plus a hard-coded toggle list in the plugin hub | `game/sidebar/SidebarShell.tsx` (1071 lines), `OsrsClient.syncSidebarPlugins` |
+| Config UI | A hand-written React panel per plugin, plus a hard-coded toggle list in the plugin hub (now replaced: the generated `ConfigPanel`, the plugin hub, and `ClientToolbar` for side panels, see Phase 5) | `game/sidebar/SidebarShell.tsx` (1071 lines), `OsrsClient.syncSidebarPlugins` |
 | Overlays | An internal WebGL `Overlay`/`OverlayManager` (init/update/draw by `RenderPhase`), fed a large `OverlayUpdateArgs.state` bag. Not plugin-facing. | `client/ui/devoverlay/Overlay.ts`, `OverlayManager.ts` |
 | Menus | One `transformMenuEntries(SimpleMenuEntry[])` pass. Clicks go through `MenuState.invoke` → `menuAction(arg0, arg1, opcode, identifier, itemId, option, target, x, y)`, which already has RuneLite's `MenuOptionClicked` field set. | `ui/menu/menuTransforms.ts`, `MenuState.ts`, `MenuAction.ts` |
 | Vars | `VarManager.onVarpChange(varpId, old, new)`, a single callback slot that `OsrsClient` already uses | `rs/config/vartype/VarManager.ts`, `OsrsClient.ts` (≈6454) |
@@ -282,14 +282,16 @@ Each phase ends with real RuneLite plugins ported unchanged except for the conve
 - Tile/Scene API (`Tile`, `getSelectedSceneTile`, `TileItem`), ItemSpawned/Despawned/QuantityChanged, GameObject/Wall/Ground/Decorative spawn events, WorldViewLoaded/Unloaded.
 - `Actor.getConvexHull()`/`getModel()` via a renderer-side projected-hull query, and `ModelOutlineRenderer` (RuneLite's outline). This could reuse the outline from `InteractHighlightOverlay`.
 - `WidgetItemOverlay`.
-- **Replace our hand-written plugins with ports of RuneLite's:** `grounditems`, `groundmarkers` (replaces `tilemarkers`), `menuentryswapper` (replaces `menuswapper`), `interacthighlight` (RuneLite has the same plugin). Each keeps its legacy-config migration. Delete the old folders, the per-plugin panels in `SidebarShell.tsx`, `syncSidebarPlugins`, and the plugin fields on `OsrsClient`.
+- **Replace our hand-written plugins with ports of RuneLite's:** `grounditems`, `groundmarkers` (replaces `tilemarkers`), `menuentryswapper` (replaces `menuswapper`), `interacthighlight` (RuneLite has the same plugin). Each keeps its legacy-config migration. Delete the old folders and the plugin fields on `OsrsClient` (the per-plugin sidebar panels and `syncSidebarPlugins` are already gone, replaced by `ClientToolbar`).
 - **Keep, moved onto `Plugin`:** `hd`, `firstperson`, `gameframe317`, `editmode`, `notes`, `rememberlogin`, `splitprivatechat`, `animationsmoothing`. These are ours; they get `Plugin` lifecycle and generated config, not a RuneLite port.
 
 ### Phase 5: polish and parity
 - Overlay dragging, snapping and resizing, persisted positions, overlay right-click menus (`OverlayMenuEntry`), and `drawAfterInterface`/`drawAfterLayer`.
 - RS-profile-scoped config, `ProfileChanged`, a config export/import that accepts RuneLite's `settings.properties` format for groups we support.
 - `ChatboxPanelManager`, `ChatCommandManager`, `WorldMapPointManager`, `ScheduledExecutorService`, the `Gson` shim.
-- `ClientToolbar`/`NavigationButton`/`PluginPanel` (React) for plugins with side panels.
+- **Done:** `ClientToolbar`/`NavigationButton` (`client/runelite/client/ui/`), with a React component as the `PluginPanel`.
+  - Plugins add their button in `startUp()` and remove it in `shutDown()`: the hidden `ConfigPlugin` (the plugin hub, priority 0), Notes and Menu Entry Swapper.
+  - The sidebar (`client/game/sidebar/Sidebar.tsx`) draws whatever is in the toolbar: a rail beside the game and the open panel, docked (the game narrows) or over the game (`RuneLiteConfig.sidebarMode`).
 - **Canaries:** `xptracker` (side panel, RS profile, StatChanged), `statusbars`, `entityhider` (needs a render-side hide hook; this checks the `DrawCallbacks`-style extension).
 
 ### Phase 6: harder parity and external plugins (optional, decide later)

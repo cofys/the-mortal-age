@@ -974,6 +974,14 @@ export function encodeVarp(id: number, value: number): Buffer {
   return encodeServerPacket(payload.length === 3 ? ServerPacketId.VARP_SMALL : ServerPacketId.VARP_LARGE, payload);
 }
 
+/** A 64-bit varp (rev 241 reads the GE offer price from one). */
+export function encodeVarpLong(id: number, value: bigint): Buffer {
+  const payload = Buffer.alloc(10);
+  payload.writeUInt16BE(id & 0xffff);
+  payload.writeBigInt64BE(BigInt.asIntN(64, value), 2);
+  return encodeServerPacket(ServerPacketId.VARP_LONG, payload);
+}
+
 export function encodeVarbit(id: number, value: number): Buffer {
   const payload = Buffer.alloc(6);
   payload.writeUInt16BE(id & 0xffff);

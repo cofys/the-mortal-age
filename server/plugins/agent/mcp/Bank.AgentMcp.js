@@ -32,8 +32,8 @@ module.exports = function registerBankTools(ctx) {
       return clickEach(username, all ? ["All"] : ["amount", "X"], (p, step) => step === "amount"
         ? { type: "dialogue_amount", amount }
         : {
-          type: "widget_action", widgetId: (Bank.MAIN_INTERFACE_ID << 16) | 12, groupId: Bank.MAIN_INTERFACE_ID,
-          childId: 12, slot: entry.slot, itemId: entry.itemId, buttonNum: 1, option: `Withdraw-${step}`,
+          type: "widget_action", widgetId: (Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD, groupId: Bank.MAIN_INTERFACE_ID,
+          childId: Bank.ITEMS_CHILD, slot: entry.slot, itemId: entry.itemId, buttonNum: 1, option: `Withdraw-${step}`,
         });
     }
   );
@@ -47,7 +47,7 @@ module.exports = function registerBankTools(ctx) {
       bankEntries(p);
       const groupId = Bank.MAIN_INTERFACE_ID;
       if (name === undefined) {
-        send(p, { type: "widget_action", widgetId: (groupId << 16) | 41, groupId, childId: 41, buttonNum: 1 });
+        send(p, { type: "widget_action", widgetId: (groupId << 16) | Bank.DEPOSIT_INVENTORY_CHILD, groupId, childId: Bank.DEPOSIT_INVENTORY_CHILD, buttonNum: 1 });
         await sleepTicks(1);
         return status(find(username));
       }
@@ -57,8 +57,8 @@ module.exports = function registerBankTools(ctx) {
       return clickEach(username, all ? ["All"] : ["amount", "X"], (p, step) => step === "amount"
         ? { type: "dialogue_amount", amount }
         : {
-          type: "widget_action", widgetId: (Bank.SIDE_INTERFACE_ID << 16) | 3, groupId: Bank.SIDE_INTERFACE_ID,
-          childId: 3, slot, itemId, buttonNum: 1, option: `Deposit-${step}`,
+          type: "widget_action", widgetId: (Bank.SIDE_INTERFACE_ID << 16) | Bank.SIDE_ITEMS_CHILD, groupId: Bank.SIDE_INTERFACE_ID,
+          childId: Bank.SIDE_ITEMS_CHILD, slot, itemId, buttonNum: 1, option: `Deposit-${step}`,
         });
     }
   );

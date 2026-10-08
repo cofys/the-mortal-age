@@ -22,6 +22,7 @@ import {
   CREATION_MENU_GROUP_ID,
   CREATION_MENU_FIRST_ITEM_COMPONENT,
   CREATION_MENU_MAX_QUANTITY,
+  CREATION_MENU_LAST_ITEM_ATTRIBUTE,
 } from "./packet/PacketSender";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import {
@@ -436,9 +437,12 @@ export class ClientConnection {
           ) {
             const itemId = creationMenu.getItems()[creationChildId - CREATION_MENU_FIRST_ITEM_COMPONENT];
             if (Number.isInteger(itemId)) {
+              const limit = creationMenu.getOptions?.()?.maxAmount;
               const amount = Number.isInteger(packet.childIndex) && packet.childIndex > 0
-                ? Math.min(packet.childIndex, CREATION_MENU_MAX_QUANTITY)
+                ? Math.min(packet.childIndex, Number.isInteger(limit) ? limit : CREATION_MENU_MAX_QUANTITY)
                 : 1;
+              // Remembered for the space key next time (CREATION_MENU_LAST_ITEM_VARP).
+              this.player.setAttribute(CREATION_MENU_LAST_ITEM_ATTRIBUTE, creationChildId - CREATION_MENU_FIRST_ITEM_COMPONENT);
               this.player.getPacketSender().closeCreationMenu();
               creationMenu.execute(itemId, amount);
               continue;
@@ -533,6 +537,8 @@ export class ClientConnection {
               );
             } else if (actionPacket.groupId === 593 && actionPacket.childId === 39) {
               CombatSpecial.activate(this.player);
+            } else if (WeaponInterfaceManager.handleStyleButton(this.player, actionPacket.groupId, actionPacket.childId)) {
+              BonusManager.update(this.player);
             } else if (Autocasting.handleWidgetAction(
               this.player, actionPacket.groupId, actionPacket.childId, actionPacket.slot
             )) {

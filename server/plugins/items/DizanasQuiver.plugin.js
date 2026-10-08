@@ -268,7 +268,7 @@ module.exports = {
     api.persistAttribute(ATTRIBUTE);
     api.onPlayerLogin(login);
     api.onInterfaceActionClick(slotClicked);
-    for (const quiver of ["Dizana's quiver", "Dizana's quiver (uncharged)", "Blessed dizana's quiver"]) {
+    for (const quiver of ["Dizana's quiver", "Dizana's quiver (uncharged)", "Blessed Dizana's quiver"]) {
       api.onItemAction(quiver, { Empty: emptyQuiver });
     }
     api.registerRangedAmmoResolver({ resolve: resolveAmmo });

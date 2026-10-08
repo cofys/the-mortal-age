@@ -86,7 +86,6 @@ const MAX_PROGRESS = STAGE.HOME_TELE;
 
 /** Tutorial Island start tile (Gielinor Guide room) and mainland destination. */
 const TUTORIAL_SPAWN = Object.freeze({ x: 3094, y: 3104, z: 0 });
-const LUMBRIDGE_SPAWN = Object.freeze({ x: 3221, y: 3218, z: 0 });
 
 /** Cache "Tutorial Island Progress" overlay (group 649) and its progress varp. */
 const OVERLAY_GROUP = 649;
@@ -456,7 +455,7 @@ const HINT_NPC = Object.freeze({
 });
 
 let pluginApi;
-let Items, Objects, Location, World, PlayerRights, Server, PluginManager;
+let Items, Objects, Location, World, PlayerRights, Server, PluginManager, GameConstants;
 let npcSet, gielinor, survival, chef, quest, mining, combat, magic, account, prayer;
 let treeIds, doorIds, cageIds, ladderIds;
 
@@ -470,6 +469,7 @@ function initialize(api) {
     PlayerRights,
     Server,
     PluginManager,
+    GameConstants,
   } = api.core);
   npcSet = new Set(
     Object.values(IDS).filter((value) => Array.isArray(value)).flat()
@@ -1162,10 +1162,11 @@ function giveLeaveKit(player) {
   const coins = bank.getAmount(Items.COINS);
   if (coins < 25) bank.adds(Items.COINS, 25 - coins);
 
-  player.moveTo(new Location(LUMBRIDGE_SPAWN.x, LUMBRIDGE_SPAWN.y, LUMBRIDGE_SPAWN.z));
+  // The world's home spawn (world.json), not Lumbridge: servers choose where new players land.
+  player.moveTo(GameConstants.DEFAULT_LOCATION.clone());
   setStage(player, STAGE.COMPLETED);
   hideOverlay(player);
-  player.sendMessage("Welcome to Lumbridge!");
+  player.sendMessage("Welcome to Gielinor!");
 }
 
 /** Gate the trees by stage; chopping itself runs through the Woodcutting skill loop. */

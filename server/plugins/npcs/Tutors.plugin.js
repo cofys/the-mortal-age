@@ -407,7 +407,7 @@ function autoEquipPickedUpAmmo(event) {
 // --- Using items on the tutors.
 
 function handleItemOnNpc(event) {
-  const npcId = event.target.getId?.();
+  const npcId = event.npcId ?? event.target.getId?.();
   const giveBack = {
     [NPC.MELEE]: {
       [ITEM.TRAINING_SWORD]: "using-items-on-melee-combat-tutor-training-sword",

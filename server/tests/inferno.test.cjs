@@ -162,7 +162,11 @@ function createWorld() {
     ObjectIdentifiers: Objects,
     CombatType,
     CombatMethod: class {},
-    PendingHit: class { constructor(attacker, target, method) { Object.assign(this, { attacker, target, style: method.type() }); } },
+    PendingHit: class {
+      constructor(attacker, target, method, config) {
+        Object.assign(this, { attacker, target, style: method.type(), rollAccuracy: config?.rollAccuracy ?? true });
+      }
+    },
     CombatFactory: { addPendingHit: (hit) => world.hits.push(hit) },
     PrayerHandler: { PROTECT_FROM_MAGIC: 16, PROTECT_FROM_MISSILES: 17, isActivated: (mob, prayer) => mob.prayers?.has(prayer) === true },
     Projectile: class {
@@ -583,7 +587,7 @@ test('the chasm is jumped into from the tip of the walkway, as its pit has no wa
   assert.equal(other.destination, undefined);
 });
 
-test('Jal-Nib never go for the player: not when hit, and not once every support is down', () => {
+test('Jal-Nib leave the player alone while a support stands, then always hit them', () => {
   const { player, session } = startAt(1);
   tick(player, 20);
   const nibblers = [...session.npcs].filter((npc) => npc.id === Npcs.JAL_NIB);
@@ -601,9 +605,23 @@ test('Jal-Nib never go for the player: not when hit, and not once every support 
   assert.ok(session.supports.some((support) => support.npc === nibblers[0].target), 'back onto a support');
 
   session.supports.length = 0;
-  nibblers[0].target = player;
+  nibblers[0].target = null;
   tick(player);
-  assert.equal(nibblers[0].target, null, 'with no support left it stays idle');
+  assert.equal(nibblers[0].target, player, 'with no support left it goes for the player');
+  assert.equal(deny(nibblers[0], player), null);
+  tick(player);
+  assert.equal(nibblers[0].target, player, 'and stays on them');
+
+  const method = new (world.providers.get(Npcs.JAL_NIB))();
+  const strike = (target) => {
+    method.start(nibblers[0], target);
+    return method.hits(nibblers[0], target)[0];
+  };
+  const onPlayer = strike(player);
+  assert.equal(onPlayer.style, CombatType.MELEE);
+  assert.equal(onPlayer.rollAccuracy, false, 'every attack on the player lands');
+  const support = new FakeNpc(Npcs.COL_00FFFF_ROCKY_SUPPORT_COL, new Location(2257, 5349, 0));
+  assert.equal(strike(support).rollAccuracy, true, 'on a support it is rolled');
   run.leave(player);
 });
 

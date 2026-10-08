@@ -12,6 +12,41 @@ import { MapManager, MapSquare } from "./MapManager";
 import { OsrsClient } from "./OsrsClient";
 import { IProjectileManager } from "./interfaces/IProjectileManager";
 import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
+import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
+
+/** Optional details of a LOC change (moves, rotations, shape changes). */
+export type LocChangeOptions = {
+    oldTile?: { x: number; y: number };
+    newTile?: { x: number; y: number };
+    oldRotation?: number;
+    newRotation?: number;
+    newShape?: number;
+};
+
+/** A server REGION replacement: new terrain/object data for one 64x64 region. */
+export type RegionReplacementEvent = {
+    regionId: number;
+    allowReload: boolean;
+    terrainData: Uint8Array;
+    objectData?: Uint8Array;
+};
+
+/** A spot animation on an NPC (e.g. ice barrage or a whip special on its target). */
+export type NpcSpotAnimationEvent = {
+    npcServerId: number;
+    spotId: number;
+    height: number;
+    startCycle: number;
+    slot?: number;
+};
+
+/** A spot animation anchored to a tile. */
+export type WorldSpotAnimationEvent = {
+    spotId: number;
+    tile: { x: number; y: number; level?: number };
+    height?: number;
+    startCycle: number;
+};
 
 export interface HitsplatEventPayload {
     targetType: "player" | "npc";
@@ -415,9 +450,62 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         }
     }
 
+    /** OSRS's gamma exponent (lower is brighter), from the Settings "Screen brightness" slider. */
+    brightness: number = gammaFromScreenBrightness(loadScreenBrightness());
+
     registerHitsplat(_event: HitsplatEventPayload): void {}
 
     registerSpotAnimation(_event: PlayerSpotAnimationEvent): void {}
+
+    registerNpcSpotAnimation(_event: NpcSpotAnimationEvent): void {}
+
+    registerWorldSpotAnimation(_event: WorldSpotAnimationEvent): void {}
+
+    // World objects (LOC packets). Backends rebuild the affected map squares.
+    onLocChange(
+        _oldId: number,
+        _newId: number,
+        _tile: { x: number; y: number },
+        _level: number,
+        _opts?: LocChangeOptions,
+    ): void {}
+
+    onLocAddChange(
+        _locId: number,
+        _tile: { x: number; y: number },
+        _level: number,
+        _shape: number,
+        _rotation: number,
+    ): void {}
+
+    onLocDel(_tile: { x: number; y: number }, _level: number, _shape: number, _rotation: number): void {}
+
+    onLocAnim(
+        _locId: number,
+        _tile: { x: number; y: number },
+        _level: number,
+        _shape: number,
+        _rotation: number,
+        _animId: number,
+    ): void {}
+
+    refreshGamemodeWorldLocs(): void {}
+
+    onRegionReplacement(_payload: RegionReplacementEvent): void {}
+
+    // Instanced areas (REBUILD_REGION): the scene is one built map square while active.
+    /** True while an instance scene replaces normal map streaming. */
+    instanceActive: boolean = false;
+    /** The map square the drawn instance scene is built as; it owns every NPC in the scene. */
+    instanceSceneMap: { mapX: number; mapY: number } | null = null;
+
+    async loadInstanceScene(
+        _templateChunks: number[][][],
+        _regionX: number,
+        _regionY: number,
+    ): Promise<void> {}
+
+    clearInstance(): void {}
 
     abstract getProjectileManager(): IProjectileManager | undefined;
 

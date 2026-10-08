@@ -272,6 +272,15 @@ export const isWebGL2Supported = (() => {
     }
 })();
 
+export const isWebGPUSupported = (() => {
+    if (typeof navigator === "undefined") return false;
+    try {
+        return !!navigator.gpu;
+    } catch {
+        return false;
+    }
+})();
+
 export function getCanvasCssSize(canvas: HTMLCanvasElement): { width: number; height: number } {
     const clientWidth = canvas.clientWidth || canvas.offsetWidth;
     const clientHeight = canvas.clientHeight || canvas.offsetHeight;

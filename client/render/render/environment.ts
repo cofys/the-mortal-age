@@ -1,6 +1,12 @@
 import { type HdEnvironment, resolveHdEnvironmentForRegion } from "../../game/plugins/hd/HdEnvironment";
 import type { WebGLOsrsRendererHost } from "./hostInterface";
 
+/** What the environment lookup reads; both renderer backends satisfy it. */
+export type EnvironmentHost = Pick<
+    WebGLOsrsRendererHost,
+    "instanceActive" | "instanceTemplateChunks" | "instanceRegionX" | "instanceRegionY"
+>;
+
 /** How far the sky moves toward a new area's colour each frame. */
 const SKY_BLEND_PER_FRAME = 0.15;
 
@@ -9,7 +15,7 @@ const SKY_BLEND_PER_FRAME = 0.15;
  * template chunk was copied from (as 117HD does): a Gauntlet room sits at allocated tiles far
  * outside the map, but it is region 7512's room and takes the Gauntlet's colours.
  */
-export function environmentRegionAt(host: WebGLOsrsRendererHost, tileX: number, tileY: number): number {
+export function environmentRegionAt(host: EnvironmentHost, tileX: number, tileY: number): number {
     const x = Math.floor(tileX);
     const y = Math.floor(tileY);
     const chunks = host.instanceActive ? host.instanceTemplateChunks : null;
@@ -27,7 +33,7 @@ export function environmentRegionAt(host: WebGLOsrsRendererHost, tileX: number, 
     return ((x >> 6) << 8) | (y >> 6);
 }
 
-export function environmentAt(host: WebGLOsrsRendererHost, tileX: number, tileY: number): HdEnvironment {
+export function environmentAt(host: EnvironmentHost, tileX: number, tileY: number): HdEnvironment {
     return resolveHdEnvironmentForRegion(environmentRegionAt(host, tileX, tileY));
 }
 

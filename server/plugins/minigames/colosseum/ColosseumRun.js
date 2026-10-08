@@ -80,7 +80,7 @@ function cycle() {
 
 function savePlayer(player) {
   try {
-    Shared.core().GameConstants.PLAYER_PERSISTENCE?.save(player);
+    Shared.core().GameConstants.PLAYER_PERSISTENCE?.save(player, "colosseum");
   } catch (error) {
     console.warn("[colosseum] save failed", error);
   }

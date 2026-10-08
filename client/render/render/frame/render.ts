@@ -815,6 +815,10 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         transparentPlayerBatches = Math.max(0, host._frameBatches - passStartBatches);
         profiler.endPhase();
 
+        profiler.startPhase("afterScene");
+        host.osrsClient.clientPlugins.afterSceneRender(host);
+        profiler.endPhase();
+
         try {
             host.drawSceneTileOverlays(time, deltaTime);
         } catch {}

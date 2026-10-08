@@ -195,7 +195,8 @@ export class World {
     /**
     * Saves all players in the game.
     */
-    public static savePlayers() {
+    /** Saves every online player (except those marked to skip persistence), recording `reason`. */
+    public static savePlayers(reason: string = "save") {
         let saved = 0;
         let failed = 0;
         this.players.forEach(player => {
@@ -206,7 +207,7 @@ export class World {
                 return;
             }
             try {
-                GameConstants.PLAYER_PERSISTENCE.save(player);
+                GameConstants.PLAYER_PERSISTENCE.save(player, reason);
                 saved++;
             } catch (err) {
                 failed++;

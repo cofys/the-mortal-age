@@ -294,7 +294,7 @@ test("core: an npc whose death handler leaves remains stays, then goes and respa
     getMovementQueue: () => ({ setBlockMovement() { return { reset() {} }; } }),
     getCombat: () => ({ getKiller: () => killer, reset() {}, setUnderAttack() {} }),
     performAnimation() {},
-    getCurrentDefinition: () => ({ getDeathAnim: () => 12508, getDeathSound: () => 0 }),
+    getCurrentDefinition: () => ({ getDeathAnim: () => 12508, getDeathSound: () => 0, getDeathTicks: () => 2 }),
     getDefinition: () => ({ getRespawn: () => 25 }),
     setMobileInteraction() {},
     getId: () => 7234,

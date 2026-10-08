@@ -270,7 +270,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
 
   function handleItemOnNpc(event) {
     if (event.itemId !== RUM_ITEM_ID) return;
-    if (event.target?.getId?.() !== FRANK_NPC_ID) return;
+    if ((event.npcId ?? event.target?.getId?.()) !== FRANK_NPC_ID) return;
     const { player } = event;
     if (quest.getStage(player) !== STAGE_STARTED || !hasItem(player, RUM_ITEM_ID)) return;
     player.getInventory().deleteNumber(RUM_ITEM_ID, 1);

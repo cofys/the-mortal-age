@@ -248,10 +248,10 @@ function savedSupports(session) {
   return saved;
 }
 
-// Each wave's Jal-Nib go for the next standing support in turn. They never go for the player,
-// and with every support down they have nothing to attack.
+// Each wave's Jal-Nib go for the next standing support in turn, ignoring the player. With every
+// support down they go for the player instead (Wiki: Jal-Nib).
 function nibblerTarget(session) {
-  if (session.supports.length === 0) return null;
+  if (session.supports.length === 0) return session.player;
   return session.supports[session.nibblerTurn++ % session.supports.length].npc;
 }
 
@@ -260,7 +260,10 @@ function tendNibblers(session) {
   for (const npc of session.npcs) {
     if (npc.getId() !== core.NpcIdentifiers.JAL_NIB || npc.getHitpoints() <= 0) continue;
     const current = npc.getCombat().getTarget();
-    if (current && !current.isPlayer?.() && current.getHitpoints() > 0 && current.isRegistered()) continue;
+    const onPlayer = current?.isPlayer?.() === true;
+    // A support is kept until it falls; the player only once there are no supports left.
+    const keep = onPlayer ? session.supports.length === 0 : current?.getHitpoints() > 0 && current.isRegistered();
+    if (current && keep) continue;
     if (target === undefined) target = nibblerTarget(session);
     if (target) npc.getCombat().attack(target);
     else if (current) npc.getCombat().reset();
@@ -637,8 +640,9 @@ function guardPassives(event) {
   const inRun = (mob) => mob?.isNpc?.() && mob.__infernoRun != null;
   if (inRun(attacker) && passiveIds.has(attacker.getId())) {
     event.allow = false;
-  } else if (inRun(attacker) && attacker.getId() === Npcs.JAL_NIB && target?.isPlayer?.()) {
-    // Jal-Nib only ever attack the rocky supports.
+  } else if (inRun(attacker) && attacker.getId() === Npcs.JAL_NIB && target?.isPlayer?.()
+    && attacker.__infernoRun.supports.length > 0) {
+    // Jal-Nib leave the player alone while any rocky support stands.
     event.allow = false;
   } else if (attacker?.isPlayer?.() && inRun(target) && untouchableIds.has(target.getId())) {
     event.allow = false;

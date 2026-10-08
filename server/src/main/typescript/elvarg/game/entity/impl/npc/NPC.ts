@@ -554,6 +554,16 @@ export class NPC extends Mobile {
     }
 
     /**
+     * The id content keys on: the cache variant this NPC's transform resolves to for
+     * `player`. Revision 241 moved many display names into NPC transforms, leaving the
+     * spawned id as a nameless parent, while quest plugins and npc-dialogue-index.json
+     * list the resolved variant ids. Interaction events pass this id so both sides meet.
+     */
+    public getContentId(player?: Player): number {
+        return this.getCurrentDefinition(player)?.getId?.() ?? this.getId();
+    }
+
+    /**
      * Gets the base definition for this NPC, regardless of NPC transformation etc.
      *
      * @return

@@ -369,3 +369,50 @@ test('"same as above" after an NPC line carries on as that line does elsewhere, 
   assert.equal(said.filter((line) => line.startsWith('This here is the Gauntlet')).length, 1, 'said once');
   assert.equal(said.at(-1), '<closed>');
 });
+
+test('a random story skips alternatives a plugin rules out, and an action can splice in steps', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const condition = { pluginName: 'test', handler: ({ text }) => (text === 'If done:' ? true : text === 'If not done:' ? false : null) };
+  PluginManager.npcDialogueConditionHooks.unshift(condition);
+  const said = [];
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          if (entry.text) said.push(entry.text);
+          try { entry.send(player); } catch { /* unwired dialogue entries are fine here */ }
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage() {},
+  };
+  const story = {
+    type: 'random',
+    options: [
+      { text: 'a', condition: 'If not done:', steps: [{ player: 'Never happened.' }] },
+      { text: 'b', condition: 'If done:', steps: [{ player: 'It happened.' }] },
+    ],
+  };
+  const api = {
+    emitCustomEvent(name, payload) {
+      if (name === 'npc-dialogue:action' && payload.stepId === 'pick') {
+        payload.steps = [story];
+        payload.handled = true;
+      }
+    },
+  };
+  const definition = { getName: () => 'Juna', getId: () => 5785 };
+  const event = { player, npc: null, npcId: 5785, definition };
+  try {
+    for (let i = 0; i < 10; i++) {
+      startDialogue(api, event, [{ type: 'reference', id: 'pick' }, { npc: 'Your stories have entertained me.' }], {}, { player, npc: null, npcId: 5785, definition, pages: [] });
+    }
+  } finally {
+    PluginManager.npcDialogueConditionHooks.splice(PluginManager.npcDialogueConditionHooks.indexOf(condition), 1);
+  }
+  assert.equal(said.filter((line) => line === 'Never happened.').length, 0);
+  assert.equal(said.filter((line) => line === 'It happened.').length, 10);
+  assert.equal(said.filter((line) => line === 'Your stories have entertained me.').length, 10);
+});

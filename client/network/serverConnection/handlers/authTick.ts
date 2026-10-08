@@ -1,6 +1,7 @@
 import { ClientState } from "../../../game/ClientState";
 import { clearHintArrow, setHintArrowNpc, setHintArrowTile } from "../../../game/HintArrow";
 import { clearAttackTimer, setAttackTimer } from "../../../game/plugins/attacktimer/attackTimerState";
+import { loadItemPrices } from "../domain/itemPrices";
 import { state } from "../state";
 
 export function handleAuthTickMessage(msg: any): boolean {
@@ -20,7 +21,10 @@ export function handleAuthTickMessage(msg: any): boolean {
     }
     if (msg.type === "login_response") {
         console.log(`[ws] login_response success=${msg.payload.success}`);
-        if (msg.payload.success) clearAttackTimer();
+        if (msg.payload.success) {
+            clearAttackTimer();
+            loadItemPrices();
+        }
         for (const cb of state.loginResponseListeners) {
             try {
                 cb(msg.payload);

@@ -1314,7 +1314,7 @@ module.exports = {
     }, PlayerRights.OWNER, "Corrupt save test");
 
     api.registerCommand("saveall", ({ player }) => {
-      World.savePlayers();
+      World.savePlayers("saveall");
       player.sendMessage("Queued save for all players.");
       return true;
     }, PlayerRights.ADMINISTRATOR, "Save all players");

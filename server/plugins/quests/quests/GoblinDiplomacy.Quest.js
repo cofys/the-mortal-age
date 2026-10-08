@@ -247,7 +247,7 @@ module.exports = function registerGoblinDiplomacyQuest(api) {
 
   // Using a goblin mail on a general is the hand-in; wrong colours are refused.
   function handleItemOnNpc(event) {
-    const npcId = event.target?.getId?.();
+    const npcId = event.npcId ?? event.target?.getId?.();
     if (!GENERAL_IDS.has(npcId)) return;
     const stage = quest.getStage(event.player);
     const itemId = event.itemId;

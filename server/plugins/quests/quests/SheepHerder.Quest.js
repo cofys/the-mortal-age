@@ -360,7 +360,7 @@ module.exports = function registerSheepHerderQuest(api) {
   /** Poison the penned sheep and collect its bones. */
   function handleItemOnNpc(event) {
     if (event.itemId !== FEED_ITEM_ID) return;
-    const index = SHEEP.findIndex((sheep) => sheep.npcId === event.target?.getId?.());
+    const index = SHEEP.findIndex((sheep) => sheep.npcId === (event.npcId ?? event.target?.getId?.()));
     if (index === -1) return;
     const { player } = event;
     if (!isPlayersSheep(player, index, event.target)) return;

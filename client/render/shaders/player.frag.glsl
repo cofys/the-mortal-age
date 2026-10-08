@@ -5,6 +5,7 @@ precision highp float;
 layout(std140, column_major) uniform;
 
 #include "./includes/scene-uniforms.glsl";
+#include "./includes/brightness.glsl";
 
 uniform highp sampler2DArray u_textures;
 uniform highp isampler2D u_textureMaterials;
@@ -50,7 +51,7 @@ void main() {
 
     float banding = max(u_colorBanding, 1.0);
     vec3 paletteColor = round(v_color.rgb * banding) / banding;
-    vec3 surface = textureColor.rgb * paletteColor * u_brightness;
+    vec3 surface = applyBrightness(textureColor.rgb, paletteColor);
 
     float fog = clamp(v_fogAmount, 0.0, 1.0);
     fog = smoothstep(0.0, 1.0, fog);

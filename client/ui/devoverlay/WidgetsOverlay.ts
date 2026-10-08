@@ -19,16 +19,16 @@ import {
 } from "../../widgets/gl/widgets-gl";
 import { drawTextGL } from "../../widgets/components/TextRenderer";
 import type { WidgetManager } from "../../widgets/WidgetManager";
-import type { GameFrameDrawContext } from "../../game/plugins/ClientPluginManager";
+import type { GameFrameDrawContext, WidgetOverlay } from "../../game/plugins/ClientPluginManager";
 import { Overlay, OverlayInitArgs, OverlayUpdateArgs, RenderPhase } from "./Overlay";
 import { CLIENT_TYPE_ENHANCED, reportedClientType } from "../../rs/cs2/ClientType";
 
 /**
- * The enhanced client's "show mouseover text" setting. For clienttype 10 the game draws that
- * text itself (cache script 4726, while this is 1) and lays HUD overlays out below it (4731).
- * The server turns it on at login.
+ * The enhanced client's mouseover text setting, mouseover_text_disabled from rev 241 (it was
+ * 12377, mouseover_text_enabled). For clienttype 10 the game draws that text itself (cache
+ * script 4726, while this is 0) and lays HUD overlays out below it (4731).
  */
-const VARBIT_SHOW_MOUSEOVER_TEXT = 12377;
+const VARBIT_MOUSEOVER_TEXT_DISABLED = 10035;
 
 export interface WidgetsContext {
     getCacheSystem: () => CacheSystem;
@@ -97,6 +97,8 @@ export class WidgetsOverlay implements Overlay {
     private rootSetChanged: boolean = true;
 
     private lastMenuVisualSignature: string = "";
+    private lastWidgetOverlaySignature: string = "";
+    private widgetOverlayRects: DirtyRect[] = [];
     private lastMenuVisualRect?: DirtyRect;
     private lastTradeAmountOverlaySignature: string = "";
     private lastMouseOverTextSignature: string = "";
@@ -603,7 +605,7 @@ export class WidgetsOverlay implements Overlay {
         if (reportedClientType(client.widgetManager?.rootInterface) === CLIENT_TYPE_ENHANCED) {
             return { signature: "hidden" };
         }
-        if (client.varManager?.getVarbit?.(VARBIT_SHOW_MOUSEOVER_TEXT) === 0) {
+        if (client.varManager?.getVarbit?.(VARBIT_MOUSEOVER_TEXT_DISABLED) === 1) {
             return { signature: "hidden" };
         }
 
@@ -695,6 +697,8 @@ export class WidgetsOverlay implements Overlay {
 
         // A plugin may supply an alternate gameframe (e.g. the classic 317 frame).
         const gameFrame = this.ctx.getGameContext?.()?.osrsClient?.clientPlugins?.activeGameFrame?.();
+        const widgetOverlays: WidgetOverlay[] =
+            this.ctx.getGameContext?.()?.osrsClient?.clientPlugins?.widgetOverlays?.() ?? [];
 
         if (this.widgetEntries.length === 0) {
             const widgetManager = this.ctx.getWidgetManager?.();
@@ -725,7 +729,10 @@ export class WidgetsOverlay implements Overlay {
                 const gameCtx = this.ctx.getGameContext?.();
                 const cameraYaw = gameCtx?.osrsClient?.camera?.yaw ?? 0;
                 widgetManager.updateCompassAngle(cameraYaw);
+                widgetManager.updateMinimap();
 
+                // Rebuilt widgets only need a redraw if they came out different.
+                widgetManager.flushChildRebuilds?.();
                 // Check if any root widget region needs redraw
                 anyDirty = widgetManager.isAnyRootDirty();
                 const getPreciseDirtyWidgets = (widgetManager as any).getPreciseDirtyWidgets;
@@ -757,8 +764,15 @@ export class WidgetsOverlay implements Overlay {
             // The Choose Option menu is drawn as part of the shared widget overlay. When it is
             // open, partial dirty-rect redraws can visibly blink as hover/click state changes
             // every frame. Redraw the full overlay for the duration of the menu instead.
+            let widgetOverlaySignature = "";
+            for (const overlay of widgetOverlays) widgetOverlaySignature += overlay.signature() + "|";
             const forceFullRedraw =
-                !this.hasPresentedFrame || this.rootSetChanged || menuOpen || tradeOverlayDirty || !!gameFrame;
+                !this.hasPresentedFrame ||
+                this.rootSetChanged ||
+                menuOpen ||
+                tradeOverlayDirty ||
+                !!gameFrame ||
+                widgetOverlaySignature !== this.lastWidgetOverlaySignature;
             const preciseDirtyCount = preciseDirtyWidgets.length | 0;
             const shouldRedraw =
                 anyDirty ||
@@ -809,6 +823,15 @@ export class WidgetsOverlay implements Overlay {
                         dirtyRects = this.mergeDirtyRects(dirtyRects);
                     }
                 }
+                // Overlays draw whole, so a partial pass touching one clears and redraws all of them.
+                const redrawWidgetOverlays =
+                    !renderFull &&
+                    this.widgetOverlayRects.some((rect) =>
+                        dirtyRects.some((dirty) => this.rectsIntersect(rect, dirty)),
+                    );
+                if (redrawWidgetOverlays) {
+                    dirtyRects = this.mergeDirtyRects([...dirtyRects, ...this.widgetOverlayRects]);
+                }
 
                 if (widgetManager) {
                     const managerAny = widgetManager as any;
@@ -839,8 +862,18 @@ export class WidgetsOverlay implements Overlay {
                         }
                     } catch {}
 
+                    const lastEntry = this.widgetEntries[this.widgetEntries.length - 1];
                     for (const entry of this.widgetEntries) {
-                        renderWidgetTreeGL(this.glRenderer, entry.root, entry.renderOpts);
+                        renderWidgetTreeGL(
+                            this.glRenderer,
+                            entry.root,
+                            entry === lastEntry
+                                ? {
+                                      ...entry.renderOpts,
+                                      drawAboveWidgets: () => this.drawWidgetOverlays(widgetOverlays),
+                                  }
+                                : entry.renderOpts,
+                        );
                     }
                     this.drawTradeAmountOverlay(widgetManager);
                     this.drawMouseOverText(mouseOverTextState);
@@ -875,6 +908,7 @@ export class WidgetsOverlay implements Overlay {
                             });
                         }
                     }
+                    if (redrawWidgetOverlays) this.drawWidgetOverlays(widgetOverlays);
                     this.drawTradeAmountOverlay(widgetManager);
                     const mouseOverTextRect = mouseOverTextState.rect;
                     if (
@@ -890,6 +924,7 @@ export class WidgetsOverlay implements Overlay {
                 this.presentOverlayCanvas(renderFull, dirtyRects);
 
                 this.lastMenuVisualSignature = menuVisualState.signature;
+                this.lastWidgetOverlaySignature = widgetOverlaySignature;
                 this.lastMenuVisualRect = menuVisualState.rect;
                 this.lastTradeAmountOverlaySignature = tradeOverlaySignature;
                 this.lastMouseOverTextSignature = mouseOverTextState.signature;
@@ -906,6 +941,29 @@ export class WidgetsOverlay implements Overlay {
         } catch (e) {
             console.error("Error rendering widgets:", e);
         }
+    }
+
+    private drawWidgetOverlays(overlays: WidgetOverlay[]): void {
+        const glr = this.glRenderer;
+        if (!glr) return;
+        const context = {
+            renderer: glr,
+            fontLoader: this.ctx.getFontLoader?.() || (() => undefined),
+            sprite: (id: number) => (glr.canvas as any).__textureCache?.getSpriteById(id),
+        };
+        this.widgetOverlayRects = [];
+        for (const overlay of overlays) {
+            for (const r of overlay.draw(context)) {
+                const rect = this.clampRectToCanvas(
+                    Math.floor(r.x),
+                    Math.floor(r.y),
+                    Math.ceil(r.w) + 1,
+                    Math.ceil(r.h) + 1,
+                );
+                if (rect) this.widgetOverlayRects.push(rect);
+            }
+        }
+        glr.flush();
     }
 
     private buildGameFrameContext(glr: GLRenderer): GameFrameDrawContext {

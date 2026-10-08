@@ -46,23 +46,10 @@ const DESCENT_TEXT = "You jump further into the burrow...";
 const MUSIC = 828;
 const GAP_ROTATION = 1;
 
-/** The boss HUD (interface 303), as the capture opens it. */
+/** The boss HUD (the BossHud plugin): the bar's colours, blue while the shield is up (capture). */
 const HUD = {
-  openScript: 2376,
-  fadeInScript: 2887,
-  fadeOutScript: 2889,
-  components: [0, 2, 4, 5, 8, 10, 20, 13, 14, 15, 9, 6, 7, 11, 18, 19, 16, 17, 3].map((child) => (303 << 16) | child),
-  fadeComponents: [5, 8, 6, 7, 9, 11, 13, 14, 15, 20, 18, 19, 16, 17].map((child) => (303 << 16) | child),
-  hp: (303 << 16) | 5,
-  /** The bar's back, sliding and remaining parts, and their colours (15-bit RGB, capture). */
-  colourComponents: [13, 14, 15].map((child) => (303 << 16) | child),
   colours: [25600, 576, 800],
   shieldColours: [132, 623, 853],
-  updateScript: 2102,
-  /** cc_deleteall on hpbar_hud:container (capture, at each delve change). */
-  clearScript: 2249,
-  container: (303 << 16) | 1,
-  updateComponents: [5, 20, 13, 14, 15, 8, 9, 18, 19, 16, 17].map((child) => (303 << 16) | child),
 };
 
 const runs = new Map();
@@ -104,7 +91,7 @@ function arenaClass() {
 
 function savePlayer(player) {
   try {
-    Shared.core().GameConstants.PLAYER_PERSISTENCE?.save(player);
+    Shared.core().GameConstants.PLAYER_PERSISTENCE?.save(player, "doom");
   } catch (error) {
     console.warn("[doom] save failed", error);
   }
@@ -293,67 +280,46 @@ class DoomRun {
     this.updateHud();
   }
 
-  /**
-   * Capture: the HUD's bar is recoloured (303:13-15) blue while the shield is up and back after,
-   * then script 2102 redraws it.
-   */
-  hudColours(shielded, redraw = true) {
-    const sender = this.player.getPacketSender();
-    const colours = shielded ? HUD.shieldColours : HUD.colours;
-    HUD.colourComponents.forEach((component, index) => sender.sendInterfaceColour?.(component, colours[index]));
-    if (redraw) sender.sendInterfaceScript(HUD.updateScript, [...HUD.updateComponents, 1]);
+  /** Capture: the HUD's bar is recoloured (303:13-15) blue while the shield is up and back after, then redrawn. */
+  hudColours(shielded) {
+    Shared.api().emitCustomEvent("boss-hud:update", { player: this.player, colours: shielded ? HUD.shieldColours : HUD.colours });
   }
 
   // ---------------------------------------------------------------- the HUD
 
+  /** The npc, points and maximum the HUD shows: the shield's while it is up (Wiki: the bar turns blue then). */
+  hudValues() {
+    const boss = this.boss;
+    const shielded = this.shield.up;
+    return {
+      player: this.player,
+      npcId: shielded ? Shared.NPC.DOOM_SHIELDED : boss.getId() === Shared.NPC.DOOM_BURROWED ? Shared.NPC.DOOM_BURROWED : Shared.NPC.DOOM,
+      current: shielded ? this.shield.hudPoints() : Math.max(0, boss.getHitpoints()),
+      maximum: shielded ? 500 : boss.getMaxHitpoints(),
+    };
+  }
+
   /**
    * Capture: as the Doom surfaces, the HUD's varps, its bar colours, then 2376 with `hp` still
-   * hidden (see resetHud) - only then does 2377 lay the bar out (2246, 2101) and fade it in. A
-   * finished fade-out leaves the parts at 255 and 2887 does nothing when told to start from where
-   * they already are, so it is also faded in from 254 (as the Gemstone Crab's HUD).
+   * hidden (see resetHud) and a fade-in - the BossHud plugin's show.
    */
   showHud() {
-    const sender = this.player.getPacketSender();
-    this.updateHud();
-    this.hudColours(false, false);
-    sender.sendInterfaceScript(HUD.openScript, HUD.components);
-    sender.sendInterfaceScript(HUD.fadeInScript, [...HUD.fadeComponents, 254]);
+    if (!this.boss) return;
+    Shared.api().emitCustomEvent("boss-hud:show", { ...this.hudValues(), colours: HUD.colours });
   }
 
   /** Capture: jumping the gap and each descent hide the HUD's `hp` and empty its container. */
   resetHud() {
-    const sender = this.player.getPacketSender();
-    sender.sendInterfaceDisplayState(HUD.hp, true);
-    sender.sendInterfaceScript(HUD.clearScript, [HUD.container]);
+    Shared.api().emitCustomEvent("boss-hud:reset", { player: this.player });
   }
 
-  /** The HUD shows the shield's points while it is up (Wiki: the bar turns blue then). */
   updateHud(force = false) {
-    const boss = this.boss;
-    if (!boss) return;
-    const shielded = this.shield.up;
-    const hp = shielded ? this.shield.hudPoints() : Math.max(0, boss.getHitpoints());
-    const npc = shielded ? Shared.NPC.DOOM_SHIELDED
-      : boss.getId() === Shared.NPC.DOOM_BURROWED ? Shared.NPC.DOOM_BURROWED : Shared.NPC.DOOM;
-    if (!force && hp === this.hudHp && npc === this.hudNpc) return;
-    this.hudHp = hp;
-    this.hudNpc = npc;
-    this.player.getPacketSender()
-      .sendConfig(Shared.VARP.HUD_NPC, npc)
-      .sendVarbit(Shared.VARBIT.HUD_HP, hp)
-      .sendVarbit(Shared.VARBIT.HUD_MAX, shielded ? 500 : boss.getMaxHitpoints())
-      .sendVarbit(Shared.VARBIT.HUD_BOSS, 1);
+    if (!this.boss) return;
+    Shared.api().emitCustomEvent("boss-hud:update", { ...this.hudValues(), force });
   }
 
   hideHud(fade = true) {
-    const sender = this.player.getPacketSender();
-    if (fade) sender.sendInterfaceScript(HUD.fadeOutScript, [...HUD.fadeComponents, 0]);
-    sender.sendConfig(Shared.VARP.HUD_NPC, -1)
-      .sendVarbit(Shared.VARBIT.HUD_HP, 0)
-      .sendVarbit(Shared.VARBIT.HUD_MAX, 0)
-      .sendVarbit(Shared.VARBIT.HUD_BOSS, 0);
-    this.hudHp = undefined;
-    this.hudNpc = undefined;
+    Shared.api().emitCustomEvent("boss-hud:hide", { player: this.player, fade, afterTicks: 0 });
   }
 
   // ---------------------------------------------------------------- a delve won

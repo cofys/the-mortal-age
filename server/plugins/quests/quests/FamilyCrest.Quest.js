@@ -191,7 +191,7 @@ module.exports = function registerFamilyCrestQuest(api) {
   /** Cure Johnathon with any antipoison. */
   function handleItemOnNpc(event) {
     if (!ANTIPOISONS.has(event.itemId)) return;
-    if (!JOHNATHON_NPC_IDS.has(event.target?.getId?.())) return;
+    if (!JOHNATHON_NPC_IDS.has(event.npcId ?? event.target?.getId?.())) return;
     const { player } = event;
     if (quest.getStage(player) !== STAGE_SPOKEN_JOHNATHON) {
       player.sendMessage("Johnathon does not need that now.");

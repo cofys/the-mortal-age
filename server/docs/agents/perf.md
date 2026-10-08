@@ -5,6 +5,10 @@ Start the server with the agent MCP enabled, then connect to it:
     AGENT_MCP=1 yarn dev
     claude mcp add --transport http tsps http://127.0.0.1:49700/mcp
 
+In a worktree, `scripts/wt` has already registered `tsps` at that worktree's own
+`AGENT_MCP_PORT` (see [docs/worktrees.md](../../../docs/worktrees.md)); never connect to another
+worktree's port.
+
 ## Before and after a change
 
 1. **Load:** `load_spawn` logs in headless *real* players (bots skip `onPlayerProcess` and NPC

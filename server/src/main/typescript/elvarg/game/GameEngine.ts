@@ -90,7 +90,7 @@ export class GameEngine  {
             await World.process();
         } catch (e) {
             console.log(e);
-            World.savePlayers();
+            World.savePlayers("tick-error");
         } finally {
             const tickEndedAt = monotonicNow();
             const tickDurationMs = Math.round(tickEndedAt - tickStartedAt);

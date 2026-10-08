@@ -6,10 +6,18 @@ import { Direction } from "../../../model/Direction";
 import { Location } from "../../../model/Location";
 import { DefinitionLoader } from "../DefinitionLoader";
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
+import { NpcIdentifiers } from "../../../../util/NpcIdentifiers";
 import { PluginManager } from "../../../../plugins/PluginManager";
 
 interface RawNpcSpawnDefinition {
-    id: number;
+    /** Numeric cache id. Use `key` instead to name a constant in NpcIdentifiers. */
+    id?: number;
+    /**
+     * Name of a constant in NpcIdentifiers (e.g. "KING_NARNODE_SHAREEN"). Resolved when
+     * the world loads, so a cache update that regenerates the identifiers re-points the
+     * spawn with it. Prefer this over `id` for NPCs that have a constant.
+     */
+    key?: string;
     name?: string;
     x: number;
     y: number;
@@ -74,7 +82,14 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
         raw: RawNpcSpawnDefinition,
         source: string
     ): NpcSpawnDefinition | null {
-        const id = Math.trunc(Number(raw?.id));
+        const keyed = typeof raw?.key === "string" && raw.key.length > 0
+            ? (NpcIdentifiers as unknown as Record<string, number | undefined>)[raw.key]
+            : undefined;
+        if (typeof raw?.key === "string" && raw.key.length > 0 && typeof keyed !== "number") {
+            console.warn(`[npc-spawns] Unknown NpcIdentifiers key "${raw.key}" in ${source}`);
+            return null;
+        }
+        const id = Math.trunc(Number(keyed ?? raw?.id));
         const x = Math.trunc(Number(raw?.x));
         const y = Math.trunc(Number(raw?.y));
         const z = Math.trunc(Number(raw?.level));

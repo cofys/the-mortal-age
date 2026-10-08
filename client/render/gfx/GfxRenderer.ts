@@ -10,6 +10,14 @@ import { SpotAnimGpuCache } from "./SpotAnimGpuCache";
 
 type Pass = "opaque" | "alpha";
 
+/**
+ * How far a graphic played on a tile is drawn above it, in model units (a tile is 128). The game
+ * paints those after the floor's flat decorations - marble patterns (1 unit up), the light rays
+ * falling through a window (4 up) - so a falling rock's shadow always shows on top of them; with
+ * depth testing it would sink under them instead.
+ */
+const TILE_GFX_LIFT_UNITS = 8;
+
 export class GfxRenderer {
     private cache: GfxCache;
     private gpuCache: SpotAnimGpuCache;
@@ -257,9 +265,9 @@ export class GfxRenderer {
                 if (inst.anchor === "offset") {
                     const tiles = inst.yOffsetTiles ?? inst.world?.heightOffsetTiles ?? 0;
                     const units = Math.round(tiles * 128);
-                    return units;
+                    return units + TILE_GFX_LIFT_UNITS;
                 }
-                return 0;
+                return TILE_GFX_LIFT_UNITS;
             });
         }
     }

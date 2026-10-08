@@ -448,7 +448,7 @@ function itemOnObject(event) {
     else if (id === Data.itemId("Plant cure") || id === Data.itemId("Secateurs") || id === Data.itemId("Magic secateurs")) cure(player, patch, true, id);
     else if (/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(core.CacheDefinitions.getItem(id).name)) waterPatch(player, patch, id);
     else if (core.CacheDefinitions.getItem(id).name === "Bottomless compost bucket") Services.useBottomless(player, patch, id);
-    else if (id === Data.itemId("Amulet of nature")) {
+    else if (id === Data.itemId("Amulet of Nature")) {
         farmFor(player).boundPatch = Data.patchKey(patch);
         farmFor(player).boundStatus = state.crop ? state.status : "empty";
         player.sendMessage("You bind the amulet to this patch.");
@@ -531,7 +531,7 @@ function grow(player) {
     seedlingDue.set(player, Services.growSeedlings(player, now));
     const bound = farm.patches[farm.boundPatch];
     const status = bound?.crop ? bound.status : "empty";
-    if (farm.boundStatus !== status && ["diseased", "dead", "grown"].includes(status) && hasTool(player, "Amulet of nature")) {
+    if (farm.boundStatus !== status && ["diseased", "dead", "grown"].includes(status) && hasTool(player, "Amulet of Nature")) {
         player.sendMessage(`Your amulet of nature hums: the crop in your bound patch is ${status}.`);
     }
     farm.boundStatus = status;

@@ -4,7 +4,6 @@ const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wi
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const Presets = require("../modes/pvp/Presets");
 
-const SKILLS_TAB_GROUP_ID = 320;
 // Skills keyed by their component in the Skills tab (interface 320).
 const SKILLS = new Map([
   [1, Skill.ATTACK],
@@ -72,14 +71,16 @@ function promptForLevel(player, skill) {
   player.getPacketSender().sendEnterAmountPrompt(`Set ${skill.getName()} Level (${minimum}-99)`);
 }
 
-function handleSkillClick(event) {
-  const { player, groupId, childId } = event;
-  const skill =
-    Number(groupId) === SKILLS_TAB_GROUP_ID
-      ? SKILLS.get(Number(childId))
-      : undefined;
+/**
+ * A Skills tab click, offered by SkillGuide before it opens the guide: on PvP worlds (presets
+ * enabled) a settable skill gets the level prompt instead; everywhere else the guide opens.
+ */
+function claimStatClick(offer) {
+  const { player, childId } = offer;
+  if (offer.handled || !Presets.isEnabled()) return;
+  const skill = SKILLS.get(Number(childId));
   if (!skill || (!skill.canSetLevel() && !isDeveloper(player))) return;
-  event.handled = true;
+  offer.handled = true;
 
   const reason = blockReason(player, skill);
   if (reason) {
@@ -92,6 +93,6 @@ function handleSkillClick(event) {
 module.exports = {
   name: "SetSkillLevel",
   register(api) {
-    api.onInterfaceActionClick(handleSkillClick);
+    api.onCustomEvent("skills:stat-clicked", claimStatClick);
   },
 };

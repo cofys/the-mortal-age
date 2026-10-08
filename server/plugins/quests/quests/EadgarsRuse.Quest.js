@@ -775,7 +775,7 @@ module.exports = function registerEadgarsRuseQuest(api) {
   }
 
   function handleItemOnNpc(event) {
-    if (event.itemId !== FAKE_MAN || event.target?.getId?.() !== BURNTMEAT_NPC_ID) return;
+    if (event.itemId !== FAKE_MAN || (event.npcId ?? event.target?.getId?.()) !== BURNTMEAT_NPC_ID) return;
     event.handled = true;
     if (quest.getStage(event.player) !== STAGE_GOT_FAKE_MAN) return;
     playVariant(

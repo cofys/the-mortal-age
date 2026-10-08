@@ -1,0 +1,371 @@
+/**
+ * 117 HD's WebGPU scene extension (render/webgpu/sceneExtension.ts): the HD uniform buffer,
+ * material lookup, texture array and shadow map appended to group(1), the per-frame uniform and
+ * light update, and the shadow pass. Port of ../HdPlugin.ts and ../HdMaterials.ts.
+ *
+ * The HD texture array keeps the WebGL path's data layout (256x256, layer 0 white, one layer per
+ * unique material file) but uploads per layer as images arrive; mipmaps are skipped
+ * (textureSampleLevel LOD 0), so HD textures use plain bilinear filtering.
+ */
+import { mat4, vec3 } from "gl-matrix";
+
+import {
+    GPU_BUFFER_USAGE,
+    GPU_SHADER_STAGE,
+    GPU_TEXTURE_USAGE,
+} from "../../../../render/webgpu/bindings";
+import { resolveWebGPURenderDistance } from "../../../../render/webgpu/frameConfig";
+import {
+    SCENE_EXTENSION_FIRST_BINDING,
+    type WebGPUSceneExtension,
+    type WebGPUSceneExtensionContext,
+} from "../../../../render/webgpu/sceneExtension";
+import type { WebGPURenderer } from "../../../../render/webgpu/WebGPURenderer";
+import { environmentAt } from "../../../../render/render/environment";
+import { collectHdLights } from "../HdLights";
+import { HD_GROUND_MATERIALS, HD_MATERIALS, type HdMaterial } from "../HdMaterialData";
+import { HD_LOOKUP_WIDTH, HD_TEXTURE_FILES, HD_TEXTURE_SIZE } from "../HdMaterials";
+import { HD_SCENE_SHADERS } from "./hdSceneShaders";
+
+/** group(1) bindings, matching HD_BINDINGS_WGSL. */
+const HD_BINDINGS = {
+    uniforms: SCENE_EXTENSION_FIRST_BINDING,
+    materials: SCENE_EXTENSION_FIRST_BINDING + 1,
+    textures: SCENE_EXTENSION_FIRST_BINDING + 2,
+    shadowMap: SCENE_EXTENSION_FIRST_BINDING + 3,
+} as const;
+
+/** HdUniforms: 2 mat4 + 7 vec4 + 4 scalars + 2 vec4[16] = 192 floats = 768 bytes. */
+const HD_UNIFORM_FLOATS = 192;
+const HD_UNIFORM_BYTES = HD_UNIFORM_FLOATS * 4;
+const LIGHT_LIMIT = 16;
+const LIGHT_INTERVAL_MS = 1000 / 30;
+const SHADOW_MAP_SIZE = 2048;
+const SHADER_STAGES = GPU_SHADER_STAGE.VERTEX | GPU_SHADER_STAGE.FRAGMENT;
+
+// Field offsets in the uniform buffer, matching HdUniforms in hd-lighting.wgsl.ts.
+const OFF_INVERSE_VIEW = 0;
+const OFF_SHADOW_MATRIX = 16;
+const OFF_LIGHT_DIRECTION = 32;
+const OFF_AMBIENT = 36;
+const OFF_DIRECTIONAL = 40;
+const OFF_FOG_COLOR = 44;
+const OFF_FOG = 48;
+const OFF_GROUND_FOG = 52;
+const OFF_GRADING = 56;
+const OFF_SPECULAR = 60;
+const OFF_SHADOW_STRENGTH = 61;
+const OFF_LIGHT_COUNT = 62; // i32 bit pattern
+const OFF_ENABLED = 63;
+const OFF_LIGHT_POSITIONS = 64;
+const OFF_LIGHT_COLORS = 128;
+
+/** Port of HdMaterials: the 2-row RGBA32F lookup plus the HD texture array. */
+class HdMaterialsGpu {
+    readonly lookup: GPUTexture;
+    readonly textures: GPUTexture;
+    private readonly device: GPUDevice;
+    private readonly lookupData = new Float32Array(HD_LOOKUP_WIDTH * 2 * 4);
+    private readonly loaded = new Set<string>();
+    private started = false;
+    private dirty = true;
+    private mapping = "";
+
+    constructor(device: GPUDevice) {
+        this.device = device;
+        this.lookup = device.createTexture({
+            label: "webgpu hd material lookup",
+            size: [HD_LOOKUP_WIDTH, 2],
+            format: "rgba32float",
+            usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING | GPU_TEXTURE_USAGE.COPY_DST,
+        });
+        this.textures = device.createTexture({
+            label: "webgpu hd textures",
+            size: [HD_TEXTURE_SIZE, HD_TEXTURE_SIZE, HD_TEXTURE_FILES.length + 1],
+            format: "rgba8unorm",
+            usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING | GPU_TEXTURE_USAGE.COPY_DST,
+        });
+        const white = new Uint8Array(HD_TEXTURE_SIZE * HD_TEXTURE_SIZE * 4);
+        white.fill(255);
+        device.queue.writeTexture(
+            { texture: this.textures, origin: { x: 0, y: 0, z: 0 } },
+            white,
+            { bytesPerRow: HD_TEXTURE_SIZE * 4, rowsPerImage: HD_TEXTURE_SIZE },
+            { width: HD_TEXTURE_SIZE, height: HD_TEXTURE_SIZE, depthOrArrayLayers: 1 },
+        );
+    }
+
+    update(layers: Map<number, number>): void {
+        if (!this.started) {
+            this.started = true;
+            HD_TEXTURE_FILES.forEach((file, index) => {
+                const image = new Image();
+                image.onload = () => {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = canvas.height = HD_TEXTURE_SIZE;
+                    const context = canvas.getContext("2d");
+                    if (!context) return;
+                    try {
+                        context.drawImage(image, 0, 0, HD_TEXTURE_SIZE, HD_TEXTURE_SIZE);
+                        const pixels = context.getImageData(0, 0, HD_TEXTURE_SIZE, HD_TEXTURE_SIZE).data;
+                        this.device.queue.writeTexture(
+                            { texture: this.textures, origin: { x: 0, y: 0, z: index + 1 } },
+                            pixels,
+                            { bytesPerRow: HD_TEXTURE_SIZE * 4, rowsPerImage: HD_TEXTURE_SIZE },
+                            { width: HD_TEXTURE_SIZE, height: HD_TEXTURE_SIZE, depthOrArrayLayers: 1 },
+                        );
+                        this.loaded.add(file);
+                        this.dirty = true;
+                    } catch (error) {
+                        console.warn("117 HD: texture unavailable", error);
+                    }
+                };
+                image.onerror = () => { console.warn("117 HD: texture unavailable", file); };
+                image.src = file;
+            });
+        }
+        const mapping = HD_MATERIALS.map(m => layers.get(m.id) ?? 0).join(",");
+        if (!this.dirty && this.mapping === mapping) return;
+        this.lookupData.fill(0);
+        for (let layer = 0; layer < HD_LOOKUP_WIDTH; layer++) {
+            this.lookupData[(HD_LOOKUP_WIDTH + layer) * 4 + 3] = 1;
+        }
+        const readyLayer = (file: string | null) =>
+            file && this.loaded.has(file) ? HD_TEXTURE_FILES.indexOf(file) + 1 : 0;
+        const write = (material: HdMaterial, layer: number) => {
+            this.lookupData.set(material.params, layer * 4);
+            this.lookupData.set(
+                [readyLayer(material.file), material.unlit ? 1 : 0, readyLayer(material.normal), material.brightness],
+                (HD_LOOKUP_WIDTH + layer) * 4,
+            );
+        };
+        for (const material of HD_MATERIALS) {
+            const layer = layers.get(material.id);
+            // Layer zero is shared by untextured faces and capacity fallbacks.
+            if (layer === undefined || layer <= 0 || layer >= 1024) continue;
+            write(material, layer);
+        }
+        for (const material of HD_GROUND_MATERIALS) write(material, 1024 + material.id);
+        this.device.queue.writeTexture(
+            { texture: this.lookup },
+            this.lookupData,
+            { bytesPerRow: HD_LOOKUP_WIDTH * 4 * 4, rowsPerImage: 2 },
+            { width: HD_LOOKUP_WIDTH, height: 2, depthOrArrayLayers: 1 },
+        );
+        this.mapping = mapping;
+        this.dirty = false;
+    }
+
+    dispose(): void {
+        this.lookup.destroy();
+        this.textures.destroy();
+    }
+}
+
+class HdWebGPUExtension implements WebGPUSceneExtension {
+    readonly shaders = HD_SCENE_SHADERS;
+    readonly depthFormat: GPUTextureFormat = "depth32float";
+
+    readonly layoutEntries: GPUBindGroupLayoutEntry[];
+    readonly bindGroupEntries: GPUBindGroupEntry[];
+
+    private readonly device: GPUDevice;
+    private readonly textureIdIndexMap: Map<number, number>;
+    private readonly materials: HdMaterialsGpu;
+    private readonly uniformBuffer: GPUBuffer;
+    private readonly uniforms = new Float32Array(HD_UNIFORM_FLOATS);
+    private readonly uniformInts = new DataView(this.uniforms.buffer);
+    private readonly lightPositions = new Float32Array(LIGHT_LIMIT * 4);
+    private readonly lightColors = new Float32Array(LIGHT_LIMIT * 4);
+    private readonly inverseView = mat4.create();
+    private readonly shadowMatrix = mat4.create();
+    /** 2048x2048 depth32float shadow map, the depth attachment of the shadow pass. */
+    private readonly shadowTexture: GPUTexture;
+    private readonly shadowView: GPUTextureView;
+    /** Binding 9 is a 1x1 placeholder while drawing the shadow map into its own texture. */
+    readonly depthBindGroupEntries: GPUBindGroupEntry[];
+    private readonly shadowPlaceholder: GPUTexture;
+    private lightCount = 0;
+    private lastLights?: { time: number; x: number; z: number; plane: number };
+    private destroyed = false;
+
+    constructor(
+        private readonly isEnabled: () => boolean,
+        { device, textureIdIndexMap }: WebGPUSceneExtensionContext,
+    ) {
+        this.device = device;
+        this.textureIdIndexMap = textureIdIndexMap;
+        this.materials = new HdMaterialsGpu(device);
+
+        this.uniformBuffer = device.createBuffer({
+            label: "webgpu hd uniforms",
+            size: HD_UNIFORM_BYTES,
+            usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+        });
+        this.shadowTexture = device.createTexture({
+            label: "webgpu hd shadow map",
+            size: [SHADOW_MAP_SIZE, SHADOW_MAP_SIZE],
+            format: "depth32float",
+            usage: GPU_TEXTURE_USAGE.RENDER_ATTACHMENT | GPU_TEXTURE_USAGE.TEXTURE_BINDING,
+        });
+        this.shadowView = this.shadowTexture.createView();
+        this.shadowPlaceholder = device.createTexture({
+            label: "webgpu hd shadow placeholder",
+            size: [1, 1],
+            format: "depth32float",
+            usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING,
+        });
+
+        this.layoutEntries = [
+            {
+                binding: HD_BINDINGS.uniforms,
+                visibility: SHADER_STAGES,
+                buffer: { type: "uniform", minBindingSize: HD_UNIFORM_BYTES },
+            },
+            {
+                binding: HD_BINDINGS.materials,
+                visibility: SHADER_STAGES,
+                texture: { sampleType: "unfilterable-float", viewDimension: "2d" },
+            },
+            {
+                binding: HD_BINDINGS.textures,
+                visibility: SHADER_STAGES,
+                texture: { sampleType: "float", viewDimension: "2d-array" },
+            },
+            {
+                binding: HD_BINDINGS.shadowMap,
+                visibility: SHADER_STAGES,
+                texture: { sampleType: "depth", viewDimension: "2d" },
+            },
+        ];
+        this.bindGroupEntries = [
+            {
+                binding: HD_BINDINGS.uniforms,
+                resource: { buffer: this.uniformBuffer, offset: 0, size: HD_UNIFORM_BYTES },
+            },
+            { binding: HD_BINDINGS.materials, resource: this.materials.lookup.createView() },
+            {
+                binding: HD_BINDINGS.textures,
+                resource: this.materials.textures.createView({ dimension: "2d-array" }),
+            },
+            { binding: HD_BINDINGS.shadowMap, resource: this.shadowView },
+        ];
+        this.depthBindGroupEntries = [
+            ...this.bindGroupEntries.slice(0, 3),
+            { binding: HD_BINDINGS.shadowMap, resource: this.shadowPlaceholder.createView() },
+        ];
+    }
+
+    isActive(): boolean {
+        return this.isEnabled();
+    }
+
+    /**
+     * HdPlugin.beforeSceneRender: uniforms, lights, then the shadow map (world opaque, world
+     * alpha, actors). ponytail: world and actors are redrawn every frame instead of WebGL's
+     * 15Hz world-depth cache + depth blit; add the cache if the extra pass shows up in timing.
+     */
+    beforeScene(renderer: WebGPURenderer, encoder: GPUCommandEncoder): void {
+        if (this.destroyed) return;
+        this.update(renderer);
+        const pass = encoder.beginRenderPass({
+            colorAttachments: [],
+            depthStencilAttachment: {
+                view: this.shadowView,
+                depthClearValue: 1.0,
+                depthLoadOp: "clear",
+                depthStoreOp: "store",
+            },
+        });
+        renderer.drawSceneDepth(pass);
+        pass.end();
+    }
+
+    /** Port of HdPlugin.beforeSceneRender's uniform + shadow matrix block. */
+    private update(renderer: WebGPURenderer): void {
+        if (this.destroyed) return;
+        this.materials.update(this.textureIdIndexMap);
+
+        const x = renderer.playerPosUni[0];
+        const z = renderer.playerPosUni[1];
+        const environment = environmentAt(renderer, x, z);
+        mat4.invert(this.inverseView, renderer.osrsClient.camera.viewMatrix);
+
+        const pitch = environment.lightPitch * Math.PI / 180;
+        const yaw = environment.lightYaw * Math.PI / 180;
+        const direction = vec3.fromValues(
+            Math.cos(pitch) * Math.sin(yaw),
+            Math.sin(pitch),
+            Math.cos(pitch) * Math.cos(yaw),
+        );
+
+        const fogEnd = Math.max(1, resolveWebGPURenderDistance(renderer));
+        const plane = renderer.getPlayerRawPlane();
+
+        const target = vec3.fromValues(x, renderer.sampleHeightAtExactPlane(x, z, plane), z);
+        const eye = vec3.scaleAndAdd(vec3.create(), target, direction, 100);
+        const view = mat4.lookAt(mat4.create(), eye, target, Math.abs(direction[1]) > 0.99 ? [0, 0, 1] : [0, -1, 0]);
+        const extent = Math.min(48, fogEnd);
+        mat4.multiply(this.shadowMatrix, mat4.ortho(mat4.create(), -extent, extent, -extent, extent, 1, 220), view);
+        // Snap the light projection to texels to keep stationary surfaces stable.
+        for (const component of [12, 13]) {
+            this.shadowMatrix[component] =
+                Math.round(this.shadowMatrix[component] * SHADOW_MAP_SIZE / 2) * 2 / SHADOW_MAP_SIZE;
+        }
+
+        this.uniforms.set(this.inverseView, OFF_INVERSE_VIEW);
+        this.uniforms.set(this.shadowMatrix, OFF_SHADOW_MATRIX);
+        this.uniforms[OFF_LIGHT_DIRECTION] = direction[0];
+        this.uniforms[OFF_LIGHT_DIRECTION + 1] = direction[1];
+        this.uniforms[OFF_LIGHT_DIRECTION + 2] = direction[2];
+        this.uniforms[OFF_AMBIENT] = environment.ambientColor[0] * environment.ambient * 0.74;
+        this.uniforms[OFF_AMBIENT + 1] = environment.ambientColor[1] * environment.ambient * 0.74;
+        this.uniforms[OFF_AMBIENT + 2] = environment.ambientColor[2] * environment.ambient * 0.74;
+        this.uniforms[OFF_DIRECTIONAL] = environment.directionalColor[0] * environment.lightStrength * 0.9;
+        this.uniforms[OFF_DIRECTIONAL + 1] = environment.directionalColor[1] * environment.lightStrength * 0.9;
+        this.uniforms[OFF_DIRECTIONAL + 2] = environment.directionalColor[2] * environment.lightStrength * 0.9;
+        this.uniforms.set(environment.fogColor, OFF_FOG_COLOR);
+        this.uniforms[OFF_FOG] = environment.fogDepth;
+        this.uniforms[OFF_FOG + 1] = environment.fogScale;
+        this.uniforms[OFF_FOG + 2] = fogEnd;
+        this.uniforms[OFF_GROUND_FOG] = environment.groundFogStart / 128;
+        this.uniforms[OFF_GROUND_FOG + 1] = environment.groundFogEnd / 128;
+        this.uniforms[OFF_GROUND_FOG + 2] = environment.groundFogOpacity;
+        this.uniforms[OFF_GRADING] = 1.12;
+        this.uniforms[OFF_GRADING + 1] = 1;
+        this.uniforms[OFF_GRADING + 2] = 0.6;
+        this.uniforms[OFF_GRADING + 3] = 0;
+        this.uniforms[OFF_SPECULAR] = 1;
+        this.uniforms[OFF_SHADOW_STRENGTH] = 0.5;
+        this.uniforms[OFF_ENABLED] = 1;
+
+        const now = performance.now();
+        const lastLights = this.lastLights;
+        if (!lastLights || now - lastLights.time >= LIGHT_INTERVAL_MS ||
+            Math.abs(x - lastLights.x) >= 1 || Math.abs(z - lastLights.z) >= 1 || plane !== lastLights.plane) {
+            this.lightCount = collectHdLights(renderer, this.lightPositions, this.lightColors, Date.now());
+            this.lastLights = { time: now, x, z, plane };
+        }
+        this.uniformInts.setInt32(OFF_LIGHT_COUNT * 4, this.lightCount, true);
+        this.uniforms.set(this.lightPositions, OFF_LIGHT_POSITIONS);
+        this.uniforms.set(this.lightColors, OFF_LIGHT_COLORS);
+
+        this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniforms);
+    }
+
+    dispose(): void {
+        if (this.destroyed) return;
+        this.destroyed = true;
+        this.uniformBuffer.destroy();
+        this.shadowTexture.destroy();
+        this.shadowPlaceholder.destroy();
+        this.materials.dispose();
+    }
+}
+
+export function createHdWebGPUExtension(
+    isEnabled: () => boolean,
+    context: WebGPUSceneExtensionContext,
+): WebGPUSceneExtension {
+    return new HdWebGPUExtension(isEnabled, context);
+}

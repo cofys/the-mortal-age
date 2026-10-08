@@ -42,7 +42,7 @@ export class NPCDeathTask extends Task {
                 this.npc.getCombat().reset();
                 this.npc.getCombat().setUnderAttack(null);
                 this.npc.setMobileInteraction(null);
-                this.setDelay(2);
+                this.setDelay(Math.max(1, this.npc.getCurrentDefinition().getDeathTicks()));
                 break;
             case 0:
                 if (this.killer != null) {

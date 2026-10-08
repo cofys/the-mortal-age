@@ -23,7 +23,21 @@ const ShortcutAnim = Object.freeze({
   FALL_INTO_WATER_LEFT: 2581,
   FALL_INTO_WATER_RIGHT: 2582,
   SWIM: 772,
+  CLIMB_LOOP: 4435,
+  LEDGE_SIDESTEP_LEFT: 2757,
+  LEDGE_SIDESTEP_RIGHT: 7142,
+  // From rsprox captures; the comments are the cache's gamevals.
+  CRUMBLED_WALL: 840, // human_walk_crumbledwall
+  CLIMB_TRELLIS: 12091, // human_climb_trellis
+  WALK_BACKWARDS: 820, // human_walk_b
+  LONG_CRAWL: 2796, // human_longcrawl
+  SHORT_JUMP: 12196, // human_yama_shortjump01
+  STEPPING_STONE_JUMP: 769, // human_steppingstonejump
+  GRAPPLE_CLIMB: 1779, // xbows_human_fire_and_climb_grapple_fast
+  GRAPPLE_CLIMB_GRAPHIC: 3575, // xbows_fire_and_climbed_grapple_spot_anim_fast
 });
+
+const PIPE_SOUND = 2489;
 
 function distance(a, b) {
   return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]));
@@ -83,16 +97,14 @@ function hops(...tiles) {
   return steps;
 }
 
-/** Squeezes through a pipe in two crawls, via its middle tile. */
+/**
+ * Squeezes through a pipe in two crawls, via its middle tile, as captured (rsprox: the Edgeville,
+ * Taverley and Yanille dungeon pipes): each half moves from cycle 30 to 126 and lands 4 ticks
+ * later with the pipe's sound; the second half starts a tick after the first lands.
+ */
 function pipe(middle, to) {
-  return [
-    { anim: Anim.SQUEEZE_PIPE },
-    { wait: 1 },
-    { move: middle, speed: [0, 90], ticks: 2 },
-    { wait: 2 },
-    { anim: Anim.SQUEEZE_PIPE },
-    { move: to, speed: [0, 90], ticks: 2 },
-  ];
+  const half = (tile) => ({ move: tile, anim: Anim.SQUEEZE_PIPE, delay: 30, speed: [30, 126], ticks: 4 });
+  return [half(middle), { sound: PIPE_SOUND }, { wait: 1 }, half(to), { sound: PIPE_SOUND }];
 }
 
 /** Ducks under a wall: vanish into the tunnel and emerge at `to`. */
@@ -132,6 +144,17 @@ function crawlUp(...path) {
   return [{ render: ShortcutAnim.CRAWL_UP_ROCKS }, { walk: path }, { render: null }];
 }
 
+/** Runs up to `near` and hurdles the fence onto `far`. */
+function hurdle(near, far) {
+  return [
+    { face: near },
+    { move: near, anim: Anim.RUN_UP, speed: [0, 60] },
+    { anim: Anim.JUMP_HURDLE },
+    { wait: 1 },
+    { move: far, speed: [0, 15] },
+  ];
+}
+
 /** Rope swings: the rope animates while the player swings to `to`. */
 function ropeSwing(to) {
   return [
@@ -153,4 +176,5 @@ module.exports = {
   crawlDown,
   crawlUp,
   ropeSwing,
+  hurdle,
 };

@@ -113,7 +113,7 @@ assert.equal(vm.intStack[0], 42, "Other settings still use the cache getter with
 // Render calls and tab hits share the widget transform, without needing WebGL.
 (GameFrame317Plugin.prototype as any).loadAssets = async () => {};
 const fixedWidgets = new Map([
-    [17, { rawX: 547 }], [9, { rawX: 516 }], [11, { rawWidth: 519 }], [56, { rawY: 0 }],
+    [17, { rawX: 547 }], [9, { rawX: 516 }], [11, { rawWidth: 519 }], [57, { rawY: 0 }],
 ]);
 const actions: any[] = [];
 const reportStone = { spriteId: 3057 };
@@ -192,7 +192,7 @@ frameWidgets.rootInterface = 161;
 vars.setVarp(VARP_GAMEFRAME_317, 1);
 assert.equal(plugin.gameFrame.isGameFrameActive(), true);
 plugin.updateWidgetLayout();
-assert.equal(fixedWidgets.get(56)!.rawY, -4, "Resizable 317 lifts the chat display too");
+assert.equal(fixedWidgets.get(57)!.rawY, -4, "Resizable 317 lifts the chat display too");
 assert.equal(plugin.gameFrame.widgetRules!().find(rule => rule.contentType === 1339)?.hide, false);
 assert.ok(plugin.gameFrame.keepChrome!().includes((161 << 16) | 32), "Resizable 317 retains the minimap frame sprite");
 draws.length = hits.length = 0;

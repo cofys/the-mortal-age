@@ -436,7 +436,7 @@ module.exports = function registerShiloVillageQuest(api) {
   }
 
   function handleItemOnNpc(event) {
-    const npcId = event.target?.getId?.();
+    const npcId = event.npcId ?? event.target?.getId?.();
     if (npcId !== TRUFITUS) return;
     const { player, itemId } = event;
     event.handled = true;

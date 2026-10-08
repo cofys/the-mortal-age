@@ -45,6 +45,8 @@ export class NpcDefinition {
     private deathAnim: number = 836;
     private spawnAnim: number | null = null;
     private deathSound: number = -1;
+    /** Ticks from the death animation to the death itself (drops, removal). */
+    private deathTicks: number = 2;
     private combatLevel: number = 0;
     private stats: number[] = [...NpcDefinition.DEFAULT_STATS];
     private slayerLevel: number = 0;
@@ -188,6 +190,10 @@ export class NpcDefinition {
 
     public getDeathSound(): number {
         return this.deathSound;
+    }
+
+    public getDeathTicks(): number {
+        return this.deathTicks;
     }
 
     public getCombatLevel(): number {

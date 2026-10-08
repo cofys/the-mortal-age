@@ -791,7 +791,7 @@ module.exports = function registerHandInTheSandQuest(api) {
 
   function handleItemOnNpc(event) {
     const { player, itemId } = event;
-    const targetId = event.target?.getId?.();
+    const targetId = event.npcId ?? event.target?.getId?.();
     if (targetId === GUARD_CAPTAIN_NPC_ID && itemId === BEER) {
       if (
         quest.getStage(player) === STAGE_INVESTIGATE_HAND &&

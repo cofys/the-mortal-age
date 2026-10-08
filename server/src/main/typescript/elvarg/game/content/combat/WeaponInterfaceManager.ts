@@ -9,11 +9,22 @@ import { WeaponInterfaces } from "./WeaponInterfaces";
 export class WeaponInterfaceManager {
     private static readonly WEAPON_CATEGORY_VARBIT = 357;
 
+    /** The combat tab's four style buttons (593:6, 10, 14, 18), the styles' slots 0-3. */
+    private static readonly STYLE_BUTTONS = [6, 10, 14, 18];
+
+    /** A style button clicked on the combat tab (the click is the server's to answer, as live). */
+    public static handleStyleButton(player: Player, groupId: number, childId: number): boolean {
+        if (groupId !== 593) return false;
+        const slot = WeaponInterfaceManager.STYLE_BUTTONS.indexOf(childId);
+        return slot >= 0 && WeaponInterfaceManager.changeCombatStyle(player, slot);
+    }
+
     public static changeCombatStyle(player: Player, slot: number): boolean {
         if (!Number.isInteger(slot) || slot < 0 || slot > 3) return false;
         const fightType = Object.values(player.getWeapon()?.getFightType?.() ?? {})
             .find((type): type is FightType => type instanceof FightType && type.getChildId() === slot);
         if (!fightType) return false;
+        Autocasting.clearForStyle(player);
         player.setFightType(fightType);
         player.getPacketSender().sendConfig(fightType.getParentId(), fightType.getChildId());
         Autocasting.refreshIndicators(player);

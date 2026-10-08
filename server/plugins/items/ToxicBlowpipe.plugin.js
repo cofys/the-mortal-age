@@ -5,11 +5,12 @@ const { Equipment } = require("../../src/main/typescript/elvarg/game/model/conta
 const { PendingHit } = require("../../src/main/typescript/elvarg/game/content/combat/hit/PendingHit");
 const { Projectile } = require("../../src/main/typescript/elvarg/game/model/Projectile");
 const { RangedCombatMethod } = require("../../src/main/typescript/elvarg/game/content/combat/method/impl/RangedCombatMethod");
-const { RangedData, RangedWeapon, Ammunition } = require("../../src/main/typescript/elvarg/game/content/combat/ranged/RangedData");
+const { RangedWeapon, Ammunition } = require("../../src/main/typescript/elvarg/game/content/combat/ranged/RangedData");
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { WeaponInterfaces } = require("../../src/main/typescript/elvarg/game/content/combat/WeaponInterfaces");
+const { WeaponProfiles } = require("../../src/main/typescript/elvarg/game/content/combat/WeaponProfile");
 const { WeaponInterfaceManager } = require("../../src/main/typescript/elvarg/game/content/combat/WeaponInterfaceManager");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
@@ -348,7 +349,8 @@ class ToxicBlowpipeCombatMethod extends RangedCombatMethod {
 
   hits(character, target) {
     const distance = character.getLocation().getDistance(target.getLocation());
-    const delay = RangedData.hitDelay(distance, character.getCombat().getRangedWeapon());
+    // The blowpipe's own hit-delay profile, as RangedCombatMethod reads it.
+    const delay = WeaponProfiles.hitDelays(character.getAsPlayer(), distance)[0];
     return [new PendingHit(character, target, this, delay)];
   }
 

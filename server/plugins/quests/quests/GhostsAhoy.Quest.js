@@ -950,7 +950,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
 
   function handleItemOnNpc(event) {
     const { player, itemId } = event;
-    const targetId = event.target?.getId?.() ?? event.npcId;
+    const targetId = event.npcId ?? event.target?.getId?.();
     if (targetId === ROBIN_NPC_ID) {
       if (itemId === BEDSHEET) {
         player.getInventory().deleteNumber(BEDSHEET, 1);

@@ -373,7 +373,7 @@ module.exports = function registerRestlessGhostQuest(api) {
 
   function giveSkullToGhost(event) {
     if (event.itemId !== GHOSTS_SKULL_ID) return;
-    if (event.target.getId?.() !== NpcIdentifiers.RESTLESS_GHOST) return;
+    if ((event.npcId ?? event.target.getId?.()) !== NpcIdentifiers.RESTLESS_GHOST) return;
     event.player.sendMessage("I can't give it to him. It goes right through him.");
     event.handled = true;
   }

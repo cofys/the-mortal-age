@@ -38,11 +38,12 @@ const WORLD_GAMEFRAME_OPTIONS = {
 // Cache script 3962 reads this to pick the selected dropdown row; 4607 is only
 // a display mirror of the layout (no rendering effect in this revision).
 const GAMEFRAME_STONE_VARBIT = 4607;
-// The enhanced client's "show mouseover text" setting (cache script 4582 toggles it).
-// Our client reports itself as enhanced (clienttype 10) and draws the top-left text, so
-// this must be on: with it, HUD overlays laid out by script 4731 (Wintertodt, the
-// Gauntlet, ToA...) drop 23px below the text instead of sitting under it, as on live.
-const MOUSEOVER_TEXT_VARBIT = 12377;
+// The enhanced client's mouseover text setting (cache script 4582 toggles it), from rev 241
+// mouseover_text_disabled (it was 12377, mouseover_text_enabled). Our client reports itself as
+// enhanced (clienttype 10) and draws the top-left text, so this must be 0 (shown): then HUD
+// overlays laid out by script 4731 (Wintertodt, the Gauntlet, ToA...) drop 23px below the
+// text instead of sitting under it, as on live.
+const MOUSEOVER_TEXT_DISABLED_VARBIT = 10035;
 // Opaque player attribute; NetworkBuilder/WelcomeScreen read it to boot the
 // saved gameframe.
 const CLIENT_LAYOUT_ATTRIBUTE = "client-layout-root";
@@ -403,7 +404,7 @@ module.exports = {
       syncPlayerKeybindings(player);
       if (worldGameframeOption !== undefined) selectGameframeOption(player, worldGameframeOption);
       syncGameframeVarbit(player);
-      player.getPacketSender().sendVarbit(MOUSEOVER_TEXT_VARBIT, 1);
+      player.getPacketSender().sendVarbit(MOUSEOVER_TEXT_DISABLED_VARBIT, 0);
     });
 
     api.registerCommand("keybinds", ({ player }) => openKeybindings(player), undefined, "Open keybindings");

@@ -185,6 +185,15 @@ wins over both of the above:
 "pluginConfig": { "commands:permissions": { "items": "NONE", "teleports": "OWNER" } }
 ```
 
+A deployment keeps its own settings in `data/definitions/world.local.json` (gitignored), layered
+over world.json: each top-level key replaces world.json's, and `pluginConfig` merges key by key.
+A live world can then change its XP rate or `disabledPlugins` and still update from main by
+fast-forward:
+
+```json
+{ "experienceMultiplier": 10, "disabledPlugins": ["VoiceChat"] }
+```
+
 ## Conventions
 
 - Do not hardcode semantic ids when a named symbol exists (rights, opcodes, states,

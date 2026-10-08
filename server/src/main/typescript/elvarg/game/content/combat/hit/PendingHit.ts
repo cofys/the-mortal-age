@@ -19,6 +19,8 @@ type PendingHitConfig = {
     handleAfterHitEffects?: boolean;
     hitAmount?: number;
     rollAccuracy?: boolean;
+    /** False for damage that pays its own XP (or none), skipping the usual combat XP. */
+    experience?: boolean;
 };
 
 export class PendingHit {
@@ -31,6 +33,7 @@ export class PendingHit {
     private readonly delay: number;
     private accurate: boolean;
     private handleAfterHitEffects: boolean;
+    private experience = true;
     /** Optional per-hitsplat extra reveal delays (from `hitDelayTicks`). */
     private hitDelays?: number[];
 
@@ -63,6 +66,9 @@ export class PendingHit {
             if (typeof delayOrConfig.rollAccuracy === "boolean") {
                 resolvedRollAccuracy = delayOrConfig.rollAccuracy;
             }
+            if (delayOrConfig.experience === false) {
+                this.experience = false;
+            }
         }
 
         this.hits = this.prepareHits(resolvedHitAmount, resolvedRollAccuracy);
@@ -92,6 +98,11 @@ export class PendingHit {
 
     public getTotalDamage(): number {
         return this.totalDamage;
+    }
+
+    /** Whether the attacker gets the usual combat XP for this hit. */
+    public rewardsExperience(): boolean {
+        return this.experience;
     }
 
     public isAccurate(): boolean {

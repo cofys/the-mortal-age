@@ -610,6 +610,47 @@ test("native autocast indicators clear on staff removal while remembering the de
 });
 
 
+test("choosing a style while autocasting turns autocast off, and autocast shows as com_mode 4 (rsprox)", () => {
+  const { Autocasting } = require("../dist/game/content/combat/magic/Autocasting");
+  const { CombatSpells } = require("../dist/game/content/combat/magic/CombatSpells");
+  const { BonusManager } = require("../dist/game/model/equipment/BonusManager");
+  const { WeaponInterfaceManager } = require("../dist/game/content/combat/WeaponInterfaceManager");
+  const { WeaponInterfaces } = require("../dist/game/content/combat/WeaponInterfaces");
+  const { FightType } = require("../dist/game/content/combat/FightType");
+  const update = BonusManager.update;
+  BonusManager.update = () => {};
+  try {
+    let selected = null, fightType = FightType.STAFF_BASH;
+    const varbits = new Map(), varps = new Map();
+    const sender = new Proxy({
+      sendVarbit(id, n) { varbits.set(id, n); return sender; },
+      sendConfig(id, n) { varps.set(id, n); return sender; },
+    }, { get: (t, key) => t[key] ?? (() => sender) });
+    const p = { getCombat: () => ({ getAutocastSpell: () => selected, setAutocastSpell: s => { selected = s; } }),
+      getEquipment: () => ({ hasStaffEquipped: () => true }),
+      getWeapon: () => WeaponInterfaces.STAFF,
+      getPacketSender: () => sender, getFightType: () => fightType, setFightType: type => { fightType = type; },
+      sendMessage() {} };
+
+    Autocasting.setAutocast(p, CombatSpells.FIRE_STRIKE);
+    assert.equal(varps.get(43), 4, "autocasting is com_mode 4, so any style click is a change");
+
+    // The style the selector left selected (the same-value click the report hit), as a button.
+    assert.equal(WeaponInterfaceManager.handleStyleButton(p, 593, 10), true);
+    assert.equal(selected, null, "autocast off");
+    assert.equal(varbits.get(275), 0); assert.equal(varbits.get(276), 0);
+    assert.equal(varps.get(43), 1);
+    assert.equal(fightType.getChildId(), 1);
+
+    // And the same through a varp 43 change.
+    Autocasting.setAutocast(p, CombatSpells.FIRE_STRIKE);
+    assert.equal(WeaponInterfaceManager.changeCombatStyle(p, 0), true);
+    assert.equal(selected, null);
+    assert.equal(varps.get(43), 0);
+
+    assert.equal(WeaponInterfaceManager.handleStyleButton(p, 593, 26), false, "other combat-tab buttons aren't styles");
+  } finally { BonusManager.update = update; }
+});
 test("client feedback IDs and per-gem animations exist in the active OSRS cache", async () => {
   const { CachePipeline } = require("../dist/game/cache/CachePipeline");
   const { CacheIndexDat2 } = require("../dist/game/cache/codec/rs/cache/CacheIndex");

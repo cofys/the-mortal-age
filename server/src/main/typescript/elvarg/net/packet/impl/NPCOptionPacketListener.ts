@@ -36,7 +36,7 @@ export class NPCOptionPacketListener {
 
     player.setPositionToFace(npc.getLocation());
     const routeEvent = {
-      player, npc, definition, npcId: npc.getId(), npcIndex: index, clickType,
+      player, npc, definition, npcId: npc.getContentId(player), npcIndex: index, clickType,
       location: { x: npc.getLocation().getX(), y: npc.getLocation().getY(), z: npc.getLocation().getZ() },
       handled: false, range: 1,
     };
@@ -81,7 +81,7 @@ export class NPCOptionPacketListener {
       player,
       npc,
       definition,
-      npcId: npc.getId(),
+      npcId: npc.getContentId(player),
       npcIndex: index,
       clickType,
       location: {

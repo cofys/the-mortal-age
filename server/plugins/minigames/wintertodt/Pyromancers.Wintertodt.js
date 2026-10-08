@@ -69,7 +69,7 @@ function itemOnPyromancer(event) {
   if (index < 0 || !/Pyromancer$/.test(Supplies.npcName(event.target) ?? "")) return;
   event.handled = true;
   if (!Shared.POTIONS.includes(event.itemId)) {
-    npcSay(event.player, event.target.getId(), "That's no use!");
+    npcSay(event.player, event.npcId ?? event.target.getId(), "That's no use!");
     return;
   }
   heal(event.player, event.target);

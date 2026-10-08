@@ -96,6 +96,13 @@ function fakeNpc(id, x, y) {
   return npc;
 }
 
+// The HUD is the BossHud plugin's, reached through custom events.
+const bossHud = new Map();
+require('../plugins/interface/BossHud.plugin').register({
+  core: PluginManager.getCoreApi(),
+  onCustomEvent: (name, handler) => bossHud.set(name, handler),
+});
+
 function fakeApi() {
   return {
     core: PluginManager.getCoreApi(),
@@ -117,7 +124,7 @@ function fakeApi() {
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
     spawnNpc: ({ id, x, y }) => fakeNpc(id, x, y),
     removeNpc: (npc) => { npc.registered = false; },
-    emitCustomEvent() {},
+    emitCustomEvent: (name, payload) => bossHud.get(name)?.(payload),
   };
 }
 

@@ -12,6 +12,7 @@ import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
+import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
 import {
     FreezeTimerPlugin,
     PoisonTimerPlugin,
@@ -19,11 +20,14 @@ import {
 import { TileMarkersConfig } from "../../../game/plugins/tilemarkers/TileMarkersConfig";
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
+import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
+import { ConfigPlugin } from "./config/ConfigPlugin";
 import type { PluginClass } from "./Plugin";
 
 /** Static core plugin list (RuneLite's `PluginManager.loadCorePlugins`). */
 export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
+    ConfigPlugin,
     HdPlugin,
     FirstPersonPlugin,
     GameFrame317Plugin,
@@ -39,6 +43,8 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     VengeanceTimerPlugin,
     PoisonTimerPlugin,
     FreezeTimerPlugin,
+    WeatherPlugin,
+    StatusBarsPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */

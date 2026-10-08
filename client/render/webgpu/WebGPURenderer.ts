@@ -1,0 +1,695 @@
+import Denque from "denque";
+import { mat4, vec3 } from "gl-matrix";
+
+import { isWebGPUSupported } from "../../common/utils/DeviceUtil";
+import { GameRenderer } from "../../game/GameRenderer";
+import type {
+    HitsplatEventPayload,
+    LocChangeOptions,
+    NpcSpotAnimationEvent,
+    RegionReplacementEvent,
+    WorldSpotAnimationEvent,
+} from "../../game/GameRenderer";
+import { OsrsRendererType, WEBGPU } from "../../game/GameRenderers";
+import type { IProjectileManager } from "../../game/interfaces/IProjectileManager";
+import type { OsrsClient } from "../../game/OsrsClient";
+import type { PlayerSpotAnimationEvent } from "../../game/sync/PlayerSyncTypes";
+import { flushPackets } from "../../network/packet";
+import { getMapSquareId } from "../../rs/map/MapFileIndex";
+import { Scene } from "../../rs/scene/Scene";
+import type { MinimapIcon } from "../loader/SdMapData";
+import { SdMapData } from "../loader/SdMapData";
+import { SdMapDataLoader } from "../loader/SdMapDataLoader";
+import { SdMapLoaderInput } from "../loader/SdMapLoaderInput";
+import { WebGPUMapSquare } from "./WebGPUMapSquare";
+import { WorldResources } from "./WorldResources";
+import { WebGPUActors } from "./actors/WebGPUActors";
+import { WebGPUInstances } from "./instances";
+import { environmentAt } from "../render/environment";
+import { GPU_TEXTURE_USAGE, SCENE_GROUP, WORLD_TEXTURES_GROUP } from "./bindings";
+import { getControlledPlayerEcsIndex, updateFollowCamera } from "./camera";
+import { computeWebGPURoofPlaneLimit, resolveWebGPURenderDistance } from "./frameConfig";
+import { WebGPUOverlays } from "./overlays/WebGPUOverlays";
+import { LocUpdates, type LocReloadGroup } from "./locUpdates";
+import { getClientCycle } from "../../network/ServerConnection";
+import { WebGPUUi } from "./ui/WebGPUUi";
+import type { UiRenderMetrics } from "./ui/WebGPUUi";
+
+interface QueuedMap {
+    mapData: SdMapData;
+    streamGeneration?: number;
+    /** LocUpdates reload version the build started at; stale builds are dropped. */
+    locVersion?: number;
+}
+
+const SKY_BLEND_PER_FRAME = 0.15;
+const MAP_APPLY_BUDGET_MS = 4;
+const AUTO_FOG_DEPTH_FACTOR = 0.85;
+
+/**
+ * WebGPU backend. Stage 2 renders the main world pass (terrain, locs, doors) over the
+ * existing WebGL renderer's game-level shell. Actors, overlays, widgets and the login
+ * screen are not ported yet; see docs/webgpu-renderer.md.
+ */
+export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
+    type: OsrsRendererType = WEBGPU;
+
+    device!: GPUDevice;
+    context!: GPUCanvasContext;
+    format!: GPUTextureFormat;
+
+    private world?: WorldResources;
+    /** This frame's visible maps and roof limit, for drawSceneDepth during beforeScene. */
+    private frameVisibleMaps: readonly WebGPUMapSquare[] = [];
+    private frameRoofPlaneLimit = 3;
+    private depthTexture?: GPUTexture;
+    private depthView?: GPUTextureView;
+    private depthWidth: number = 0;
+    private depthHeight: number = 0;
+
+    private dataLoader = new SdMapDataLoader();
+
+    // Dynamic world-object state from LOC/REGION packets (same names as WebGLOsrsRenderer, which
+    // plugins read). Every map build passes it to the worker, so rebuilt squares include it.
+    readonly locOverrides: NonNullable<SdMapLoaderInput["locOverrides"]> = new Map();
+    /** Dynamically spawned locs (LOC_ADD_CHANGE), keyed by "x,y,level,shape". */
+    readonly addedLocs = new Map<
+        string,
+        { locId: number; x: number; y: number; level: number; shape: number; rotation: number }
+    >();
+    readonly locSpawns: NonNullable<SdMapLoaderInput["locSpawns"]> = new Map();
+    readonly terrainOverrides: NonNullable<SdMapLoaderInput["terrainOverrides"]> = new Map();
+    readonly mapRegionReplacements: NonNullable<SdMapLoaderInput["mapRegionReplacements"]> = new Map();
+    /** LOC/REGION packet handling and the map rebuilds they cause (./locUpdates.ts). */
+    readonly locUpdates = new LocUpdates(this);
+    private mapsToLoad = new Denque<QueuedMap>();
+
+    private skyColor = new Float32Array([0, 0, 0]);
+    private sceneHslOverride = new Float32Array([-1, -1, -1, 0]);
+    private cameraPosUni = new Float32Array(2);
+    readonly playerPosUni = new Float32Array(2);
+
+    // Follow-camera state, same fields the WebGL renderer keeps for camera2.updateCameraFollow.
+    followCamFocalXSub: number = 0;
+    followCamFocalZSub: number = 0;
+    followCamFocalLastClientCycle: number = -1;
+    followCamFocalInitialized: boolean = false;
+    readonly followCamRot = mat4.create();
+    readonly followCamForwardAxis = vec3.fromValues(0, 0, -1);
+    readonly followCamForward = vec3.create();
+    heightValidAtTime: number | undefined;
+    mapDataLoadedNotified: boolean = false;
+
+    /** Stage 3/4/5 systems, owned by client/render/webgpu/{actors,overlays,ui}/. */
+    actors?: WebGPUActors;
+    overlays?: WebGPUOverlays;
+    ui?: WebGPUUi;
+    /** Instanced areas (REBUILD_REGION), see ./instances.ts. */
+    readonly instances = new WebGPUInstances(this);
+    instanceTemplateChunks: number[][][] | null = null;
+    instanceRegionX = 0;
+    instanceRegionY = 0;
+
+    constructor(osrsClient: OsrsClient) {
+        super(osrsClient);
+        this.mapManager.onMapRemoved = (mapX, mapY) => {
+            this.actors?.onMapRemoved(mapX, mapY);
+            this.overlays?.onMapRemoved(mapX, mapY);
+        };
+    }
+
+    static isSupported(): boolean {
+        return isWebGPUSupported;
+    }
+
+    static async probeAdapter(): Promise<GPUAdapter | undefined> {
+        if (!isWebGPUSupported) return undefined;
+        try {
+            return (await navigator.gpu.requestAdapter()) ?? undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
+    override async init(): Promise<void> {
+        await super.init();
+
+        const adapter = await WebGPURenderer.probeAdapter();
+        if (!adapter) {
+            throw new Error("[webgpu] no adapter available");
+        }
+        this.device = await adapter.requestDevice();
+        this.device.lost.then((info) => {
+            console.error("[webgpu] device lost", info);
+        });
+        // WebGPU validation errors are reported asynchronously and do not throw; surface them
+        // with the [webgpu] tag the smoke test scans for.
+        this.device.onuncapturederror = (event) => {
+            console.error("[webgpu] uncaptured error", event.error.message);
+        };
+
+        const context = this.canvas.getContext("webgpu") as GPUCanvasContext | null;
+        if (!context) {
+            throw new Error("[webgpu] canvas.getContext('webgpu') returned null");
+        }
+        this.context = context;
+        this.format = navigator.gpu.getPreferredCanvasFormat();
+        this.context.configure({
+            device: this.device,
+            format: this.format,
+            alphaMode: "premultiplied",
+        });
+
+        this.ensureDepthTexture(this.canvas.width, this.canvas.height);
+
+        (window as unknown as { __WEBGPU_RENDERER__?: WebGPURenderer }).__WEBGPU_RENDERER__ = this;
+        console.info("[webgpu] device ready", adapter.info ?? {});
+    }
+
+    /**
+     * The world texture atlas needs the cache's texture loader, which only exists after
+     * phased loading (same reason WebGLOsrsRenderer.initTextures re-runs from initCache).
+     */
+    override initCache(): void {
+        super.initCache();
+        void this.initWorldResources();
+    }
+
+    private async initWorldResources(): Promise<void> {
+        if (this.world || !this.device || !this.osrsClient.loadedCache) return;
+        try {
+            this.world = await WorldResources.create(this.device, this.osrsClient, this.format);
+            this.actors = new WebGPUActors(this);
+            this.overlays = new WebGPUOverlays(this);
+            this.ui = new WebGPUUi(this);
+            await this.actors.init();
+            await this.overlays.init();
+            await this.ui.init();
+        } catch (error) {
+            console.error("[webgpu] world resources init failed", error);
+        }
+    }
+
+    override onResize(width: number, height: number): void {
+        this.ensureDepthTexture(width, height);
+    }
+
+    private ensureDepthTexture(width: number, height: number): void {
+        if (!this.device) return;
+        const w = Math.max(1, width | 0);
+        const h = Math.max(1, height | 0);
+        if (this.depthTexture && this.depthWidth === w && this.depthHeight === h) return;
+        this.depthTexture?.destroy();
+        this.depthTexture = this.device.createTexture({
+            size: [w, h],
+            format: "depth24plus",
+            usage: GPU_TEXTURE_USAGE.RENDER_ATTACHMENT,
+        });
+        this.depthView = this.depthTexture.createView();
+        this.depthWidth = w;
+        this.depthHeight = h;
+    }
+
+    override queueLoadMap(mapX: number, mapY: number, streamGeneration?: number): void {
+        // Normal map streaming is suppressed while an instance scene is active.
+        if (this.instanceActive) return;
+        if (!this.osrsClient.loadedCache) return;
+        void this.loadMapData(mapX, mapY, streamGeneration);
+    }
+
+    /** Rebuilds a square after a loc change: just its door or loc geometry when that is all that changed. */
+    queueLocReload(mapX: number, mapY: number, group: LocReloadGroup): void {
+        if (this.instanceActive || !this.osrsClient.loadedCache) return;
+        void this.loadMapData(mapX, mapY, undefined, group === "full" ? undefined : group);
+    }
+
+    private async loadMapData(
+        mapX: number,
+        mapY: number,
+        streamGeneration?: number,
+        partial?: "door" | "loc",
+    ): Promise<void> {
+        this.locUpdates.applyGamemode();
+        const locVersion = this.locUpdates.version(mapX, mapY);
+        const input: SdMapLoaderInput = {
+            mapX,
+            mapY,
+            maxLevel: Math.max(0, Math.min(Scene.MAX_LEVELS - 1, Scene.MAX_LEVELS - 1)),
+            loadNpcs: false,
+            smoothTerrain: true,
+            minimizeDrawCalls: true,
+            loadedTextureIds: this.world?.loadedTextureIds ?? new Set<number>(),
+            locOverrides: this.locOverrides,
+            locSpawns: this.locSpawns,
+            terrainOverrides: this.terrainOverrides,
+            mapRegionReplacements: this.mapRegionReplacements,
+            extraLocs: this.getExtraLocs(mapX, mapY),
+            doorOnly: partial === "door",
+            locOnly: partial === "loc",
+        };
+        try {
+            const mapData = await this.osrsClient.workerPool.queueLoad<
+                SdMapLoaderInput,
+                SdMapData | undefined,
+                SdMapDataLoader
+            >(this.dataLoader, input);
+            if (!mapData) {
+                this.mapManager.loadingMapIds.delete(getMapSquareId(mapX, mapY));
+                return;
+            }
+            this.mapsToLoad.push({ mapData, streamGeneration, locVersion });
+        } catch (error) {
+            console.error(`[webgpu] map load failed for (${mapX}, ${mapY})`, error);
+            this.mapManager.deferFailedMapLoad(mapX, mapY);
+        }
+    }
+
+    /** Rebuilds the active instance scene after its locs changed (filled in by the instances work). */
+    scheduleInstanceLocRebuild(): void {
+        this.instances.scheduleLocRebuild();
+    }
+
+    override async loadInstanceScene(
+        templateChunks: number[][][],
+        regionX: number,
+        regionY: number,
+    ): Promise<void> {
+        return this.instances.load(templateChunks, regionX, regionY);
+    }
+
+    override clearInstance(): void {
+        this.instances.clear();
+        this.mapsToLoad.clear();
+        // Drops the instance square and resets the grid, so streaming reloads the normal maps.
+        this.mapManager.cleanUp();
+        this.osrsClient.rehomeNpcs?.();
+    }
+
+    /** Builds a scene in the map worker (instances build theirs through here). */
+    async loadSceneData(input: Omit<SdMapLoaderInput, "loadedTextureIds">): Promise<SdMapData | undefined> {
+        return await this.osrsClient.workerPool.queueLoad<SdMapLoaderInput, SdMapData | undefined, SdMapDataLoader>(
+            this.dataLoader,
+            { ...input, loadedTextureIds: this.world?.loadedTextureIds ?? new Set<number>() },
+        );
+    }
+
+    /**
+     * Port of replaceSceneWithInstance + its loadMap: swaps a finished instance build in for
+     * everything drawn, in one frame, without the fade-in. Normal loads that land while the
+     * instance is active are dropped, as WebGL's queueStreamMapData does.
+     */
+    private applyInstanceScene(frameCount: number): void {
+        this.mapsToLoad.clear();
+        const world = this.world;
+        const mapData = world ? this.instances.takeBuiltScene() : null;
+        if (!world || !mapData) return;
+        this.mapManager.cleanUp();
+        this.osrsClient.clearMinimapImageUrls();
+        const { mapX, mapY } = mapData;
+        // Its NPCs belong to this one square now, wherever in the scene they stand.
+        this.instanceSceneMap = { mapX: mapX | 0, mapY: mapY | 0 };
+        const square = WebGPUMapSquare.load(this.device, world, mapData, -1, frameCount);
+        square.initAnimatedLocs(mapData, this.osrsClient.seqTypeLoader, getClientCycle() | 0);
+        world.uploadMapTextures(mapData.loadedTextures);
+        this.mapManager.addMap(mapX, mapY, square);
+        this.actors?.onMapAdded(square, mapData);
+        this.overlays?.onMapAdded(square, mapData);
+        this.ui?.registerMinimapData(mapData);
+        this.osrsClient.rehomeNpcs?.(getMapSquareId(mapX, mapY));
+    }
+
+    /** addedLocs as loader extraLocs: those inside one map square, or all of them (instances). */
+    getExtraLocs(mapX?: number, mapY?: number): SdMapLoaderInput["extraLocs"] {
+        const out: NonNullable<SdMapLoaderInput["extraLocs"]> = [];
+        for (const loc of this.addedLocs.values()) {
+            if (mapX !== undefined && mapY !== undefined && ((loc.x >> 6) !== mapX || (loc.y >> 6) !== mapY)) {
+                continue;
+            }
+            out.push({ id: loc.locId, x: loc.x, y: loc.y, level: loc.level, shape: loc.shape, rotation: loc.rotation });
+        }
+        return out.length > 0 ? out : undefined;
+    }
+
+    private applyReadyMaps(frameCount: number): void {
+        const world = this.world;
+        if (!world) return;
+        const startedAt = performance.now();
+        while (this.mapsToLoad.length > 0) {
+            if (performance.now() - startedAt > MAP_APPLY_BUDGET_MS) break;
+            const queued = this.mapsToLoad.shift();
+            if (!queued) break;
+            const { mapData } = queued;
+            const { mapX, mapY } = mapData;
+            // Built before a loc change: the reload LocUpdates queued replaces it.
+            if (queued.locVersion !== undefined && !this.locUpdates.isCurrent(mapX, mapY, queued.locVersion)) {
+                continue;
+            }
+            const existing = this.mapManager.getMap(mapX, mapY);
+            if (mapData.doorOnly || mapData.locOnly) {
+                // A door-only/loc-only build only replaces that group of a resident square;
+                // if the square is gone (pruned or never applied) rebuild it whole.
+                if (!existing) {
+                    this.queueLocReload(mapX, mapY, "full");
+                    continue;
+                }
+                existing.refreshPartial(mapData, this.osrsClient.seqTypeLoader, getClientCycle() | 0);
+                world.uploadMapTextures(mapData.loadedTextures);
+                if (mapData.locOnly) this.ui?.registerMinimapData(mapData);
+                this.locUpdates.applied(mapX, mapY);
+                continue;
+            }
+            if (queued.locVersion !== undefined) this.locUpdates.applied(mapX, mapY);
+            const timeLoaded = existing ? existing.timeLoaded : performance.now() / 1000;
+            if (existing) {
+                this.mapManager.removeMap(mapX, mapY);
+            }
+            const square = WebGPUMapSquare.load(
+                this.device,
+                world,
+                mapData,
+                timeLoaded,
+                frameCount,
+            );
+            square.initAnimatedLocs(mapData, this.osrsClient.seqTypeLoader, getClientCycle() | 0);
+            world.uploadMapTextures(mapData.loadedTextures);
+            this.mapManager.addMap(mapX, mapY, square);
+            this.actors?.onMapAdded(square, mapData);
+            this.overlays?.onMapAdded(square, mapData);
+            this.ui?.registerMinimapData(mapData);
+        }
+    }
+
+    private updateSkyColor(deltaFrames: number = 1): void {
+        const playerX = this.playerPosUni[0];
+        const playerZ = this.playerPosUni[1];
+        // In an instance, the region its template chunk was copied from (environmentAt).
+        const target = environmentAt(this, playerX, playerZ).fogColor;
+        const blend = Math.min(1, SKY_BLEND_PER_FRAME * deltaFrames);
+        for (let i = 0; i < 3; i++) {
+            const delta = target[i] - this.skyColor[i];
+            this.skyColor[i] =
+                Math.abs(delta) < 1 / 512 ? target[i] : this.skyColor[i] + delta * blend;
+        }
+    }
+
+    private writeSceneUniforms(timeSec: number): void {
+        if (!this.world) return;
+        const camera = this.osrsClient.camera;
+        this.cameraPosUni[0] = camera.getPosX();
+        this.cameraPosUni[1] = camera.getPosZ();
+
+        const renderDistance = resolveWebGPURenderDistance(this);
+        const fogEnd = renderDistance;
+        const fogDepth = Math.max(0, fogEnd * AUTO_FOG_DEPTH_FACTOR);
+
+        const data = this.world.sceneData;
+        data.set(camera.viewProjMatrix as Float32Array, 0);
+        data.set(camera.viewMatrix as Float32Array, 16);
+        data.set(camera.projectionMatrix as Float32Array, 32);
+        data[48] = this.skyColor[0];
+        data[49] = this.skyColor[1];
+        data[50] = this.skyColor[2];
+        data[51] = 1.0;
+        data.set(this.sceneHslOverride, 52);
+        data.set(this.cameraPosUni, 56);
+        data.set(this.playerPosUni, 58);
+        data[60] = fogEnd;
+        data[61] = fogDepth;
+        data[62] = timeSec;
+        data[63] = this.brightness;
+        data[64] = 255.0; // colorBanding (WebGL default; shader divides by 255)
+        data[65] = this.osrsClient.isNewTextureAnim ? 1.0 : 0.0;
+        this.world.flushSceneUniforms();
+    }
+
+    override render(time: number, deltaTime: number, _resized: boolean): void {
+        const world = this.world;
+        if (!this.device || !world || !this.depthView) return;
+        const width = this.canvas.width;
+        const height = this.canvas.height;
+        if (width < 1 || height < 1) return;
+
+        const timeSec = time / 1000;
+        const loggedIn = this.osrsClient.isLoggedIn();
+
+        if (loggedIn) {
+            this.handleInput(deltaTime);
+            updateFollowCamera(this, timeSec);
+            this.osrsClient.camera.update(width, height, 0, 0, width, height);
+            // Swap in built squares before the visible list is made: replacing a square (a door
+            // or loc rebuild) destroys the old one's buffers, and a frame that still draws it
+            // fails as a whole, flashing the clear colour.
+            if (this.instanceActive) this.applyInstanceScene(this.stats.frameCount);
+            else this.applyReadyMaps(this.stats.frameCount);
+            this.mapManager.update(
+                this.osrsClient.camera.getPosX(),
+                this.osrsClient.camera.getPosZ(),
+                this.osrsClient.camera,
+                this.stats.frameCount,
+                this.osrsClient.mapRadius,
+                -1,
+                -1,
+                this.osrsClient.expandedMapLoading | 0,
+            );
+            this.updateSkyColor();
+            const cycle = getClientCycle() | 0;
+            for (const map of this.mapManager.visibleMaps) {
+                map.updateAnimatedLocs(this.osrsClient.seqFrameLoader, cycle);
+            }
+        }
+
+        this.writeSceneUniforms(timeSec);
+
+        // A scene extension (e.g. 117 HD) is a runtime toggle: pick the pipeline pair once per
+        // frame, before any map draw.
+        const extension = world.extension;
+        world.selectExtension(!!extension?.isActive());
+
+        // Same point the WebGL frame loop flushes queued client packets (render.ts login
+        // early-out and in-game path).
+        flushPackets();
+        this.actors?.update(timeSec);
+        this.overlays?.update(time, deltaTime);
+        this.ui?.update(time, deltaTime);
+
+        const encoder = this.device.createCommandEncoder();
+        const visible = loggedIn ? this.mapManager.visibleMaps : [];
+        const roofPlaneLimit = loggedIn ? computeWebGPURoofPlaneLimit(this) : 3;
+        this.frameVisibleMaps = visible;
+        this.frameRoofPlaneLimit = roofPlaneLimit;
+
+        // The extension's own passes (117 HD: uniforms, lights, shadow map) go in the same
+        // encoder, before the scene pass that samples them.
+        if (world.extensionActive && loggedIn) {
+            extension!.beforeScene?.(this, encoder);
+        }
+
+        const canvasView = this.context.getCurrentTexture().createView();
+        const pass = encoder.beginRenderPass({
+            colorAttachments: [
+                {
+                    view: canvasView,
+                    clearValue: {
+                        r: this.skyColor[0],
+                        g: this.skyColor[1],
+                        b: this.skyColor[2],
+                        a: 1,
+                    },
+                    loadOp: "clear",
+                    storeOp: "store",
+                },
+            ],
+            depthStencilAttachment: {
+                view: this.depthView,
+                depthClearValue: 1.0,
+                depthLoadOp: "clear",
+                depthStoreOp: "store",
+            },
+        });
+
+        if (loggedIn) {
+            for (let i = 0; i < visible.length; i++) {
+                if (visible[i].canRender(this.stats.frameCount)) {
+                    visible[i].drawOpaque(pass, roofPlaneLimit);
+                }
+            }
+            this.actors?.drawOpaque(pass);
+            for (let i = visible.length - 1; i >= 0; i--) {
+                if (visible[i].canRender(this.stats.frameCount)) {
+                    visible[i].drawAlpha(pass, roofPlaneLimit);
+                }
+            }
+            this.actors?.drawAlpha(pass);
+            this.overlays?.drawWorld(pass);
+        }
+
+        pass.end();
+
+        // Overlays and UI that draw after the world, without depth (ToFrameTexture +
+        // PostPresent until stage 5 adds an offscreen frame texture).
+        const screenPass = encoder.beginRenderPass({
+            colorAttachments: [{ view: canvasView, loadOp: "load", storeOp: "store" }],
+        });
+        if (loggedIn) {
+            this.overlays?.drawScreen(screenPass);
+        }
+        this.ui?.draw(screenPass);
+        screenPass.end();
+
+        this.device.queue.submit([encoder.finish()]);
+    }
+
+    /**
+     * Draws this frame's world and actors with the scene extension's depth pipelines into
+     * `pass` (a depth-only pass the extension began), in the WebGL drawActors order: world
+     * opaque, world alpha, actors. A no-op without a depth shader.
+     */
+    drawSceneDepth(pass: GPURenderPassEncoder): void {
+        const world = this.world;
+        if (!world?.depthTextureBindGroup) return;
+        pass.setBindGroup(SCENE_GROUP, world.sceneBindGroup);
+        pass.setBindGroup(WORLD_TEXTURES_GROUP, world.depthTextureBindGroup);
+        const visible = this.frameVisibleMaps;
+        for (let i = 0; i < visible.length; i++) {
+            if (visible[i].canRender(this.stats.frameCount)) {
+                visible[i].drawDepth(pass, this.frameRoofPlaneLimit);
+            }
+        }
+        this.actors?.drawDepth(pass);
+    }
+
+    hasPendingMapStreamingWork(): boolean {
+        return this.mapsToLoad.length > 0;
+    }
+
+    /** Controlled player's raw plane; part of the HdLightsHost surface. */
+    getPlayerRawPlane(): number {
+        const idx = getControlledPlayerEcsIndex(this);
+        return idx !== undefined ? this.osrsClient.playerEcs.getLevel(idx) | 0 : 0;
+    }
+
+    /** Terrain height at a world tile/plane; part of the HdLightsHost surface. */
+    sampleHeightAtExactPlane(worldX: number, worldZ: number, plane: number): number {
+        const map = this.mapManager.getMapForWorldTile(Math.floor(worldX), Math.floor(worldZ));
+        return map ? map.sampleHeightAtExactPlane(worldX, worldZ, plane) : 0;
+    }
+
+    getProjectileManager(): IProjectileManager | undefined {
+        return this.actors?.getProjectileManager();
+    }
+
+    override registerHitsplat(event: HitsplatEventPayload): void {
+        this.overlays?.registerHitsplat(event);
+    }
+
+    override registerSpotAnimation(event: PlayerSpotAnimationEvent): void {
+        this.actors?.registerSpotAnimation(event);
+    }
+
+    override registerNpcSpotAnimation(event: NpcSpotAnimationEvent): void {
+        this.actors?.registerNpcSpotAnimation(event);
+    }
+
+    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): void {
+        this.actors?.registerWorldSpotAnimation(event);
+    }
+
+    override onLocChange(oldId: number, newId: number, tile: { x: number; y: number }, level: number, opts?: LocChangeOptions): void {
+        this.locUpdates.onLocChange(oldId, newId, tile, level, opts);
+    }
+
+    override onLocAddChange(locId: number, tile: { x: number; y: number }, level: number, shape: number, rotation: number): void {
+        this.locUpdates.onLocAddChange(locId, tile, level, shape, rotation);
+    }
+
+    override onLocDel(tile: { x: number; y: number }, level: number, shape: number, rotation: number): void {
+        this.locUpdates.onLocDel(tile, level, shape, rotation);
+    }
+
+    override onLocAnim(locId: number, tile: { x: number; y: number }, level: number, shape: number, rotation: number, animId: number): void {
+        this.locUpdates.onLocAnim(locId, tile, level, shape, rotation, animId);
+    }
+
+    override refreshGamemodeWorldLocs(): void {
+        this.locUpdates.refreshGamemodeWorldLocs();
+    }
+
+    override onRegionReplacement(payload: RegionReplacementEvent): void {
+        this.locUpdates.onRegionReplacement(payload);
+    }
+
+    getWidgetsGLCanvas(): HTMLCanvasElement | undefined {
+        return this.ui?.getWidgetsGLCanvas();
+    }
+
+    computeUiRenderMetrics(bufW: number, bufH: number): UiRenderMetrics {
+        return (
+            this.ui?.computeUiRenderMetrics(bufW, bufH) ?? {
+                layoutW: bufW,
+                layoutH: bufH,
+                renderScaleX: 1,
+                renderScaleY: 1,
+                renderOffsetX: 0,
+                renderOffsetY: 0,
+            }
+        );
+    }
+
+    getUiRenderMetrics(bufW: number, bufH: number): UiRenderMetrics {
+        return this.ui?.getUiRenderMetrics(bufW, bufH) ?? this.computeUiRenderMetrics(bufW, bufH);
+    }
+
+    getSceneViewportWidgetRect(): { x: number; y: number; width: number; height: number } {
+        return (
+            this.ui?.getSceneViewportWidgetRect() ?? {
+                x: 0,
+                y: 0,
+                width: this.canvas.width,
+                height: this.canvas.height,
+            }
+        );
+    }
+
+    getMinimapIcons(mapX: number, mapY: number, level: number = 0): MinimapIcon[] | undefined {
+        return this.ui?.getMinimapIcons(mapX, mapY, level);
+    }
+
+    registerMinimapData(mapData: SdMapData): void {
+        this.ui?.registerMinimapData(mapData);
+    }
+
+    /**
+     * Logout/disconnect reset (port of render/render/session.ts clearSessionCaches). Without it
+     * mapDataLoadedNotified stays set, MAP_DATA_LOADED never completes on the next login and the
+     * client sits on "Loading - please wait".
+     */
+    override clearSessionCaches(): void {
+        this.locUpdates.dispose();
+        this.locOverrides.clear();
+        this.addedLocs.clear();
+        this.locSpawns.clear();
+        this.terrainOverrides.clear();
+        this.mapRegionReplacements.clear();
+        this.mapsToLoad.clear();
+        this.followCamFocalInitialized = false;
+        this.followCamFocalLastClientCycle = -1;
+        this.mapDataLoadedNotified = false;
+        this.heightValidAtTime = undefined;
+    }
+
+    override cleanUp(): void {
+        this.locUpdates.dispose();
+        this.actors?.dispose();
+        this.overlays?.dispose();
+        this.ui?.dispose();
+        this.actors = undefined;
+        this.overlays = undefined;
+        this.ui = undefined;
+        super.cleanUp();
+        this.world?.destroy();
+        this.world = undefined;
+        this.depthTexture?.destroy();
+        this.depthTexture = undefined;
+        this.depthView = undefined;
+    }
+}

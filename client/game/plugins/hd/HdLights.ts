@@ -1,5 +1,22 @@
-import type { WebGLOsrsRenderer } from "../../../render/WebGLOsrsRenderer";
 import { HD_OBJECT_LIGHTS_BY_ID, type HdObjectLightDefinition } from "./hdObjectLightData";
+
+/** The slice of a map square collectHdLights reads, shared by WebGLMapSquare and WebGPUMapSquare. */
+export interface HdLightsMap {
+    getRenderBaseWorldX(): number;
+    getRenderBaseWorldY(): number;
+    tileLocOffsetsByLevel?: Uint32Array[];
+    tileLocIdsByLevel?: Int32Array[];
+    tileLocTypeRotByLevel?: Uint8Array[];
+}
+
+/** The slice of a renderer collectHdLights reads; both backends satisfy it. */
+export interface HdLightsHost {
+    playerPosUni: ArrayLike<number>;
+    getPlayerRawPlane(): number;
+    sampleHeightAtExactPlane(worldX: number, worldZ: number, plane: number): number;
+    mapManager: { visibleMapCount: number; visibleMaps: ReadonlyArray<HdLightsMap> };
+    osrsClient: { locTypeLoader: { load(id: number): { sizeX: number; sizeY: number } } };
+}
 
 const ABSOLUTE_ALIGNMENTS = ["NORTH", "NORTHEAST", "EAST", "SOUTHEAST", "SOUTH", "SOUTHWEST", "WEST", "NORTHWEST"];
 const RELATIVE_ALIGNMENTS = ["BACK", "BACKLEFT", "LEFT", "FRONTLEFT", "FRONT", "FRONTRIGHT", "RIGHT", "BACKRIGHT"];
@@ -29,18 +46,19 @@ export function animateHdLight(light: HdObjectLightDefinition, seed: number, tim
     return 1;
 }
 
-export function collectHdLights(renderer: WebGLOsrsRenderer, positions: Float32Array, colors: Float32Array, time: number): number {
+export function collectHdLights(host: HdLightsHost, positions: Float32Array, colors: Float32Array, time: number): number {
     const candidates: Array<{ position: number[]; color: number[]; distance: number }> = [];
-    const [playerX, playerZ] = renderer.playerPosUni;
-    const plane = renderer.getPlayerRawPlane();
-    for (let m = 0; m < renderer.mapManager.visibleMapCount; m++) {
-        const map = renderer.mapManager.visibleMaps[m];
+    const playerX = host.playerPosUni[0];
+    const playerZ = host.playerPosUni[1];
+    const plane = host.getPlayerRawPlane();
+    for (let m = 0; m < host.mapManager.visibleMapCount; m++) {
+        const map = host.mapManager.visibleMaps[m];
         const offsets = map.tileLocOffsetsByLevel?.[plane];
         const ids = map.tileLocIdsByLevel?.[plane];
         const rotations = map.tileLocTypeRotByLevel?.[plane];
         if (!offsets || !ids) continue;
-        const baseX = map.renderPosX * 64;
-        const baseZ = map.renderPosY * 64;
+        const baseX = map.getRenderBaseWorldX();
+        const baseZ = map.getRenderBaseWorldY();
         const minX = Math.max(0, Math.floor(playerX - baseX - 16));
         const maxX = Math.min(63, Math.ceil(playerX - baseX + 16));
         const minZ = Math.max(0, Math.floor(playerZ - baseZ - 16));
@@ -50,7 +68,7 @@ export function collectHdLights(renderer: WebGLOsrsRenderer, positions: Float32A
             for (let i = offsets[tile]; i < offsets[tile + 1]; i++) {
                 const definitions = HD_OBJECT_LIGHTS_BY_ID[ids[i]];
                 if (!definitions) continue;
-                const loc = renderer.osrsClient.locTypeLoader.load(ids[i]);
+                const loc = host.osrsClient.locTypeLoader.load(ids[i]);
                 const rotation = (rotations?.[i] ?? 0) >> 6;
                 const width = rotation & 1 ? loc.sizeY : loc.sizeX;
                 const length = rotation & 1 ? loc.sizeX : loc.sizeY;
@@ -58,7 +76,7 @@ export function collectHdLights(renderer: WebGLOsrsRenderer, positions: Float32A
                     const [offsetX, offsetZ] = hdLightOffset(light.alignment, rotation, width, length);
                     const lx = baseX + x + width / 2 + offsetX;
                     const lz = baseZ + z + length / 2 + offsetZ;
-                    const height = renderer.sampleHeightAtExactPlane(lx, lz, plane);
+                    const height = host.sampleHeightAtExactPlane(lx, lz, plane);
                     const animation = animateHdLight(light, ids[i] ^ (x << 7) ^ z, time);
                     candidates.push({
                         position: [lx, height - light.height / 128, lz, Math.max(0.5, light.radius / 128 * animation)],

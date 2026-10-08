@@ -270,6 +270,17 @@ export class SystemUpdateOverlay implements Overlay {
         }
     }
 
+    /** Present into an external 2D context (DOM-hosted backends) at the same anchor as `draw`. */
+    drawTo2D(ctx: CanvasRenderingContext2D): void {
+        if (!this.lastText) return;
+        const anchor = this.resolveAnchor();
+        ctx.drawImage(this.canvas, anchor.x, anchor.y);
+    }
+
+    isVisible(): boolean {
+        return !!this.lastText;
+    }
+
     dispose(): void {
         this.unsubscribeUpdate?.();
         this.unsubscribeDisconnect?.();

@@ -5,6 +5,7 @@ precision highp float;
 layout(std140, column_major) uniform;
 
 #include "./includes/scene-uniforms.glsl";
+#include "./includes/brightness.glsl";
 
 uniform highp sampler2DArray u_textures;
 uniform highp isampler2D u_textureMaterials;
@@ -308,10 +309,12 @@ void main() {
     vec3 paletteColor = round(v_color.rgb * banding) / banding;
     vec3 surface;
     // Water shading is floor-only; water textures on models (fountains,
-    // waterfalls) keep the vanilla texture path like OSRS.
+    // waterfalls) keep the vanilla texture path like OSRS. It is 117 HD's
+    // water, so it stays off unless the 117 HD plugin rewrites this flag.
+    const bool hdWater = false;
     bool isFloorWater = false;
     WaterMaskSample waterMask = WaterMaskSample(0.0, 0.0, 0.0, vec3(0.0));
-    if ((mat.flags & MATERIAL_FLAG_WATER) != 0) {
+    if (hdWater && (mat.flags & MATERIAL_FLAG_WATER) != 0) {
         waterMask = sampleWaterMask(v_worldUv, v_plane);
         isFloorWater = waterMask.water > 0.5;
     }
@@ -319,7 +322,7 @@ void main() {
         surface =
             shadeWater(v_worldUv, v_texCoord, v_worldPos, mat, waterMask, u_currentTime) * u_brightness;
     } else {
-        surface = textureColor.rgb * paletteColor * u_brightness;
+        surface = applyBrightness(textureColor.rgb, paletteColor);
     }
 
     float fog = clamp(v_fogAmount, 0.0, 1.0);

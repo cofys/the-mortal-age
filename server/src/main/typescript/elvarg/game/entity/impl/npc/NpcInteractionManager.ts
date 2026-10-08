@@ -84,7 +84,7 @@ export class NpcInteractionManager {
         npcIndex: number,
         clickType: number
     ): boolean {
-        const npcId = npc.getId();
+        const npcId = npc.getContentId(player);
         const action = NpcInteractionDefinition.forNpcId(npcId)?.getAction(clickType);
         if (!action) {
             return false;

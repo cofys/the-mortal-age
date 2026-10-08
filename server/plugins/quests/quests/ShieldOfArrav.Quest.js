@@ -517,7 +517,7 @@ module.exports = function registerShieldOfArravQuest(api) {
 
   function handReportToStraven(event) {
     if (event.itemId !== REPORT_ID) return;
-    if (event.target?.getId?.() !== STRAVEN_NPC_ID) return;
+    if ((event.npcId ?? event.target?.getId?.()) !== STRAVEN_NPC_ID) return;
     if (handInReport(event.player, quest)) event.handled = true;
   }
 

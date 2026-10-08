@@ -103,7 +103,11 @@ import {
 import { clamp } from "../common/utils/MathUtil";
 import { ClientState } from "../game/ClientState";
 import { GameRenderer } from "../game/GameRenderer";
-import type { HitsplatEventPayload } from "../game/GameRenderer";
+import type {
+    HitsplatEventPayload,
+    NpcSpotAnimationEvent,
+    WorldSpotAnimationEvent,
+} from "../game/GameRenderer";
 import { OsrsRendererType, WEBGL } from "../game/GameRenderers";
 import { ClickMode, getMousePos } from "../game/InputManager";
 import { OsrsClient } from "../game/OsrsClient";
@@ -330,10 +334,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public pendingStreamMapsByGeneration: Map<number, StreamMapBatch> = new Map();
     // Coalesce back-to-back loc changes (e.g. 2-piece gates) to avoid transient half-updates/flicker.
     public static readonly LOC_RELOAD_FLUSH_DELAY_MS = 25;
-    public static readonly MOBILE_GAMEPLAY_UI_MIN_SCALE = 1.25;
-    public static readonly MOBILE_GAMEPLAY_UI_MAX_SCALE = 1.5;
-    public static readonly MOBILE_GAMEPLAY_UI_PHONE_EDGE = 390;
-    public static readonly MOBILE_GAMEPLAY_UI_TABLET_EDGE = 768;
     app!: PicoApp;
     gl!: WebGL2RenderingContext;
 
@@ -380,6 +380,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     colorTarget?: Renderbuffer;
     depthTarget?: Renderbuffer;
     framebuffer?: Framebuffer;
+    /**
+     * Desktop 3D scene resolution as a share of the canvas (0.5-1), set in the debug panel. The
+     * scene is drawn smaller and scaled up; the interface stays at full resolution.
+     */
+    public sceneResolutionScale: number = 1;
     public sceneRenderWidth: number = 1;
     public sceneRenderHeight: number = 1;
 
@@ -557,7 +562,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     //          lum (-1=no override, 0-127), amount (0-255, 0=disabled)]
     sceneHslOverride: vec4 = vec4.fromValues(-1, -1, -1, 0);
 
-    brightness: number = 0.8;
     colorBanding: number = 255;
 
     smoothTerrain: boolean = false;
@@ -673,6 +677,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     playerIndexBufferAlpha?: VertexBuffer;
     playerInterleavedBufferAlpha?: VertexBuffer;
     playerSlotBuffer?: VertexBuffer;
+    /** Player pose matrices for GPU animation (PlayerRenderer); every player draw binds it. */
+    playerPoseTexture?: Texture;
     playerDrawCall?: DrawCall;
     playerDrawCallAlpha?: DrawCall;
     playerDrawRanges?: DrawRange[];
@@ -796,6 +802,15 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
             this.getWorldEntityTransformForMap(map);
         this.sceneRaycaster.deckToWorldProvider = (entityIndex, fineX, fineY) =>
             this.projectDeckToWorld(entityIndex, fineX, fineY);
+        this.sceneRaycaster.npcHeightProvider = (npcTypeId) => this.getNpcDefaultHeight(npcTypeId);
+        this.sceneRaycaster.npcTrianglesProvider = (ecsId, serverId) =>
+            this.buildNpcModelHighlightTriangles({
+                kind: "npc",
+                ecsId,
+                serverId,
+                npcTypeId: this.osrsClient.npcEcs.getNpcTypeId(ecsId),
+                plane: 0,
+            });
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
         this.mapManager.onMapRemoved = (mapX: number, mapY: number) => {
             this.clearMinimapIconsForMap(mapX | 0, mapY | 0);
@@ -1226,22 +1241,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.registerSpotAnimation(this, event);
     }
 
-    registerNpcSpotAnimation(event: {
-        npcServerId: number;
-        spotId: number;
-        height: number;
-        startCycle: number;
-        slot?: number;
-    }): void {
+    override registerNpcSpotAnimation(event: NpcSpotAnimationEvent): void {
         return render.registerNpcSpotAnimation(this, event);
     }
 
-    registerWorldSpotAnimation(event: {
-        spotId: number;
-        tile: { x: number; y: number; level?: number };
-        height?: number;
-        startCycle: number;
-    }): void {
+    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): void {
         return render.registerWorldSpotAnimation(this, event);
     }
 

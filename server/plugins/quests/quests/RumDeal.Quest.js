@@ -912,7 +912,7 @@ module.exports = function registerRumDealQuest(api) {
 
   function handleItemOnNpc(event) {
     const { player, itemId, target } = event;
-    if (!player || target?.getId?.() !== BRAINDEATH_NPC_ID) return;
+    if (!player || (event.npcId ?? target?.getId?.()) !== BRAINDEATH_NPC_ID) return;
     event.handled = true;
     if (itemId === SLUGLINGS) {
       startTranscript(api, player, BRAINDEATH_NPC_ID, PAGE, "sluglings-using-sluglings-on-captain-braindeath");

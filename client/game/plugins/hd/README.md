@@ -27,8 +27,8 @@ Reflections use upstream's Phong gloss and the sun's colour
 and intensity. HD model textures replace baked directional shading with neutral
 brightness, avoiding double shading on brick walls.
 
-The existing water shader, texture assets, seabed and shoreline generation are
-unchanged and do not depend on this toggle. HD replacements use a separate texture
+Floor water (normal maps, foam, caustics, seabed and shorelines) is 117 HD's
+and follows this toggle; with HD off, water uses the vanilla cache texture. HD replacements use a separate texture
 array, leaving the original textures available immediately on disable.
 
 Point lights cover the nearest 16 on the active plane. The 2048px shadow map uses

@@ -443,6 +443,24 @@ export class LoadingMessageOverlay implements Overlay {
         this.app.disable(PicoGL.BLEND);
     }
 
+    /** Present into an external 2D context (DOM-hosted backends). Same fade + box as `draw`. */
+    drawTo2D(ctx: CanvasRenderingContext2D): void {
+        if (this.fadeState === FadeState.HIDDEN) return;
+        const alpha = this.fadeState === FadeState.FADING_OUT ? 1.0 - this.fadeProgress : 1.0;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        if (this.lastMessage) {
+            ctx.drawImage(this.canvas, 10, 10);
+        }
+        ctx.restore();
+    }
+
+    isVisible(): boolean {
+        return this.fadeState !== FadeState.HIDDEN;
+    }
+
     dispose(): void {
         // Unsubscribe from state machine
         this.unsubscribe?.();

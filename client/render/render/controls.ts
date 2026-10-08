@@ -188,6 +188,7 @@ import {
 import { KNOWN_WATER_TEXTURE_IDS } from "../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "./hostInterface";
 import { RENDER_CONSTANTS, ColorRgb, TextureFilterMode } from "./constants";
+import { SCREEN_BRIGHTNESS_MAX, loadScreenBrightness } from "../../ui/ScreenBrightness";
 
 export function clearControlledPlayerAppearanceCache(host: WebGLOsrsRendererHost, ): void {
 
@@ -327,6 +328,16 @@ export function getControls(host: WebGLOsrsRendererHost, ): Schema {
                 },
                 { collapsed: false },
             ),
+            "Scene Resolution": {
+                value: Math.round(host.sceneResolutionScale * 100),
+                min: 50,
+                max: 100,
+                step: 5,
+                label: "Scene resolution (%)",
+                onChange: (v: number) => {
+                    host.sceneResolutionScale = Math.max(0.5, Math.min(1, v / 100));
+                },
+            },
             "Max Level": {
                 value: host.maxLevel,
                 min: 0,
@@ -377,13 +388,14 @@ export function getControls(host: WebGLOsrsRendererHost, ): Schema {
                 },
                 { collapsed: true },
             ),
+            // The Settings "Screen brightness" (device option 6, 0..100), saved like the slider.
             Brightness: {
-                value: 1,
+                value: loadScreenBrightness(),
                 min: 0,
-                max: 4,
-                step: 1,
+                max: SCREEN_BRIGHTNESS_MAX,
+                step: 5,
                 onChange: (v: number) => {
-                    host.brightness = 1.0 - v * 0.1;
+                    host.osrsClient.applyScreenBrightness(v);
                 },
             },
             "Color Banding": {

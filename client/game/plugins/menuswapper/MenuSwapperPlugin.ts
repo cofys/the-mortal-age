@@ -1,4 +1,8 @@
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
+import { inject } from "@runelite/client/plugins/PluginInjector";
+import { ClientToolbar } from "@runelite/client/ui/ClientToolbar";
+import type { NavigationButton } from "@runelite/client/ui/NavigationButton";
+import { createMenuSwapperNavigationButton } from "./MenuSwapperPanel";
 import { ClientState } from "../../ClientState";
 import type { SimpleMenuEntry } from "../../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../../ui/menu/menuTransforms";
@@ -44,6 +48,8 @@ export class MenuSwapperPlugin extends Plugin {
     };
 
     private readonly listeners = new Set<MenuSwapperPluginListener>();
+    private readonly clientToolbar = inject(ClientToolbar);
+    private navButton?: NavigationButton;
     private readonly persistence?: MenuSwapperPluginPersistence;
     private config: MenuSwapperPluginConfig;
     private state: MenuSwapperPluginState;
@@ -54,6 +60,16 @@ export class MenuSwapperPlugin extends Plugin {
         this.persistence = persistence ?? createBrowserMenuSwapperPluginPersistence("osrs.plugin.menu_swapper.v1");
         this.config = withDefaults(this.persistence?.load());
         this.state = { config: this.config, version: this.version };
+    }
+
+    protected async startUp(): Promise<void> {
+        this.navButton = createMenuSwapperNavigationButton(this);
+        this.clientToolbar.addNavigation(this.navButton);
+    }
+
+    protected async shutDown(): Promise<void> {
+        if (this.navButton) this.clientToolbar.removeNavigation(this.navButton);
+        this.navButton = undefined;
     }
 
     subscribe(listener: MenuSwapperPluginListener): () => void {

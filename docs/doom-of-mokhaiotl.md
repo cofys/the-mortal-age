@@ -71,7 +71,7 @@ Rocks and acid stay from delve to delve. Delve 2 leaves delve 1's behind with th
 
 It appears at local (29, 35), its south-west tile (it is 5×5), with anim 12418 and graphic 3372. The same tick:
 - varp 4805 is set to the cycle, 4828 to the level (0-based), and 4804 is cleared;
-- the boss HUD opens: varp 1683 = 14707, varbits 6099/6100 = its hitpoints, 12401 = 1, then scripts 2376 and 2887. Its overhead bar is headbar 20.
+- the boss HUD opens: varp 1683 = 14707, varbits 6099/6100 = its hitpoints, 12401 = 1, then scripts 2376 and 2887 (the `BossHud` plugin, [boss-hud.md](boss-hud.md)). Its overhead bar is headbar 20.
 
 **Beaten** (capture), it plays 12422 with graphic 3377 and its larvae and volatile earth go. The game says:
 - "Delve level: N duration: m:ss.cc. Personal best: m:ss.cc"

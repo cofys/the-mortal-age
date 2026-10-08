@@ -536,6 +536,8 @@ export interface PluginItemOnPlayerEvent {
 export interface PluginItemOnNpcEvent {
   player: any;
   target: any;
+  /** The target NPC's content id (its varbit-resolved cache variant), for quest id sets. */
+  npcId: number;
   targetIndex: number;
   item: any;
   itemId: number;

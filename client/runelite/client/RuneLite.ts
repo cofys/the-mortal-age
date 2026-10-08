@@ -10,6 +10,7 @@ import { subscribeTick } from "../../network/serverConnection/timing";
 import { ConfigManager } from "./config/ConfigManager";
 import { EventBus } from "./eventbus/EventBus";
 import { PluginManager } from "./plugins/PluginManager";
+import { ClientToolbar } from "./ui/ClientToolbar";
 import { CLIENT_TOKEN } from "./plugins/PluginInjector";
 import { CORE_PLUGINS, LEGACY_CONFIG_MIGRATIONS } from "./plugins";
 import { toRuneLiteGameState } from "../impl/GameStateMapping";
@@ -26,10 +27,13 @@ export class RuneLite {
     readonly eventBus = new EventBus();
     readonly configManager: ConfigManager;
     readonly pluginManager: PluginManager;
+    /** The sidebar's buttons, added by plugins (`inject(ClientToolbar)`). */
+    readonly clientToolbar: ClientToolbar;
 
     private constructor(private readonly client: OsrsClient) {
         this.configManager = new ConfigManager(this.eventBus);
         this.pluginManager = new PluginManager(this.eventBus, this.configManager);
+        this.clientToolbar = this.pluginManager.getInjector().get(ClientToolbar);
     }
 
     static start(client: OsrsClient): RuneLite {

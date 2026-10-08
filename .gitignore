@@ -58,8 +58,10 @@ public/map-images
 references
 /mcp
 AGENTS.md
+!/AGENTS.md
 toolkit
 CLAUDE.md
+!/CLAUDE.md
 # VitePress local cache/output (config/theme under docs/.vitepress stay tracked)
 **/.vitepress/cache
 **/.vitepress/dist
@@ -83,3 +85,9 @@ docs/node_modules/
 # Discord handoff notes (local only — not for the repo)
 .dev-notes/
 *.discord.md
+
+# WebGPU smoke-test screenshots
+client/tests/artifacts/
+
+# Per-deployment world overrides (WorldDefinition.readWorldConfig)
+server/data/definitions/world.local.json

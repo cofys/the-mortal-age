@@ -2045,8 +2045,7 @@ function buildEditorRegionPack(
     const replacement = replacements.get(regionId) ?? terrainHost(client)?.mapRegionReplacements.get(regionId);
     const xteas = client.loadedCache?.xteas;
     const terrainData = replacement?.terrainData ?? mapFileLoader.getTerrainData(mapX, mapY, xteas);
-    const objectData =
-        replacement?.objectData ?? (xteas ? mapFileLoader.getLocData(mapX, mapY, xteas) : undefined);
+    const objectData = replacement?.objectData ?? mapFileLoader.getLocData(mapX, mapY, xteas);
     if (!terrainData || !objectData) throw new Error(`Region ${regionId} is not loaded`);
     // Keep the imported/cache base separate from temporary editor preview packs.
     if (!replacements.has(regionId)) replacements.set(regionId, {

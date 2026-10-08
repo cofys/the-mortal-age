@@ -6,6 +6,7 @@ export class AttackTimerPlugin extends Plugin {
         name: "Attack Timer",
         description: "Shows the ticks until your next attack over your head.",
         tags: ["combat"],
+        enabledByDefault: false,
         configKey: "attacktimerplugin",
     };
 }

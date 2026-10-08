@@ -11,8 +11,6 @@ const Run = require("./GauntletRun");
 const Monsters = require("./GauntletMonsters");
 
 // Instances sit at tile 8192+ (TemplatedInstanceArea); a player saved there was in a run.
-const INSTANCE_MIN_X = 8192;
-const INSTANCE_MAX_X = 9599;
 
 const EXIT_TEXT = "Are you sure you wish to exit the Gauntlet? All of your progress will be lost and you will start again upon re-entering.";
 
@@ -195,12 +193,14 @@ function blockTeleports(event) {
   event.player.sendMessage("You can't teleport out of the Gauntlet.");
 }
 
-/** A player saved inside a maze (the server stopped mid-run) comes back to the lobby, empty-handed. */
+/**
+ * A player saved inside a maze (the server stopped mid-run) comes back to the lobby, empty-handed.
+ * Only the run's own saved attribute counts: every copied instance (the Gauntlet's, the Mad
+ * Angel's cathedral, ...) lives in the same tile range, so a position there says nothing.
+ */
 function recoverOnLogin({ player }) {
   Run.sendCompletionVarp(player);
-  const x = player.getLocation().getX();
-  const wasInside = player.getAttribute(Run.ATTR_RUN) || (x >= INSTANCE_MIN_X && x <= INSTANCE_MAX_X && !player.getArea?.());
-  if (!wasInside || Run.runOf(player)) return;
+  if (!player.getAttribute(Run.ATTR_RUN) || Run.runOf(player)) return;
   player.setAttribute(Run.ATTR_RUN, null);
   Shared.clearItems(player);
   player.moveTo(Shared.loc(Shared.LOBBY));

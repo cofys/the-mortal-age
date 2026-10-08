@@ -46,6 +46,15 @@ export class Bank extends ItemContainer {
     }
     public static readonly ITEMS_CHILD = 12;
     public static readonly SIDE_ITEMS_CHILD = 3;
+    /** bankmain buttons (rev 241 component ids, named by the cache's gamevals). */
+    public static readonly FRAME_CHILD = 2; // bankmain:frame (its close button)
+    public static readonly SWAP_INSERT_CHILD = 23; // bankmain:swap_insert
+    public static readonly NOTE_CHILD = 25; // bankmain:note
+    /** bankmain:quantity1, quantity5, quantity10, quantityx, quantityall. */
+    public static readonly QUANTITY_CHILDREN = [29, 31, 33, 35, 37];
+    public static readonly PLACEHOLDER_CHILD = 40; // bankmain:placeholder
+    public static readonly DEPOSIT_INVENTORY_CHILD = 47; // bankmain:depositinv
+    public static readonly DEPOSIT_WORN_CHILD = 49; // bankmain:depositworn
     /** Drops on the empty space after tab N's items report item-grid slot 1428 + N. */
     public static readonly TAB_DROP_SLOT_OFFSET = 1410 + 9 * 2;
 
@@ -521,14 +530,14 @@ export class Bank extends ItemContainer {
         if (!Bank.isOpen(player)) return false;
 
         // Capture (bank search): picking a tab heading switches to that tab and ends the search.
-        if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === 12 && packet.slot != null &&
+        if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === Bank.ITEMS_CHILD && packet.slot != null &&
             packet.slot >= Bank.TAB_HEADING_FIRST_SLOT && packet.slot <= Bank.TAB_HEADING_LAST_SLOT) {
             Bank.viewTab(player, packet.slot - Bank.TAB_HEADING_FIRST_SLOT + 1);
             Bank.closeSearch(player);
             return true;
         }
 
-        if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === 12 && packet.slot != null) {
+        if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === Bank.ITEMS_CHILD && packet.slot != null) {
             const entry = Bank.resolveDisplaySlot(player, packet.slot);
             if (!entry || (packet.itemId != null && packet.itemId !== Bank.displayItemId(entry.item))) return true;
             if (entry.item.getAmount() === 0) {
@@ -578,21 +587,21 @@ export class Bank extends ItemContainer {
 
         if (packet.groupId !== Bank.MAIN_INTERFACE_ID) return false;
         const sender = player.getPacketSender();
-        if (packet.childId === 2) sender.sendInterfaceRemoval();
-        else if (packet.childId === 17) {
+        if (packet.childId === Bank.FRAME_CHILD) sender.sendInterfaceRemoval();
+        else if (packet.childId === Bank.SWAP_INSERT_CHILD) {
             player.setInsertMode(!player.insertModeReturn());
             sender.sendVarbit(3959, player.insertModeReturn() ? 1 : 0);
-        } else if (packet.childId === 19) {
+        } else if (packet.childId === Bank.NOTE_CHILD) {
             player.setNoteWithdrawal(!player.withdrawAsNote());
             sender.sendVarbit(3958, player.withdrawAsNote() ? 1 : 0);
-        } else if ([23, 25, 27, 29, 31].includes(packet.childId)) {
-            player.setBankQuantityMode([23, 25, 27, 29, 31].indexOf(packet.childId));
+        } else if (Bank.QUANTITY_CHILDREN.includes(packet.childId)) {
+            player.setBankQuantityMode(Bank.QUANTITY_CHILDREN.indexOf(packet.childId));
             sender.sendVarbit(6590, player.getBankQuantityMode());
-        } else if (packet.childId === 34) {
+        } else if (packet.childId === Bank.PLACEHOLDER_CHILD) {
             player.setPlaceholders(!player.isPlaceholders());
             sender.sendVarbit(3755, player.isPlaceholders() ? 1 : 0);
-        } else if (packet.childId === 41) Bank.depositItems(player, player.getInventory(), false);
-        else if (packet.childId === 43) Bank.depositItems(player, player.getEquipment(), false);
+        } else if (packet.childId === Bank.DEPOSIT_INVENTORY_CHILD) Bank.depositItems(player, player.getInventory(), false);
+        else if (packet.childId === Bank.DEPOSIT_WORN_CHILD) Bank.depositItems(player, player.getEquipment(), false);
         else return false;
         return true;
     }

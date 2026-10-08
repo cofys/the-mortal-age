@@ -131,3 +131,20 @@ export function deriveAdditionalEquipSlotsFromParams(obj: ObjType | undefined): 
     }
     return slots;
 }
+
+/**
+ * The appearance with an animation's held items (a fishing net, a harpoon) in the hands, or the
+ * same appearance when the sequence holds none. The cache stores these item ids offset by 512.
+ */
+export function withSeqHandItems(
+    app: PlayerAppearance,
+    seq: { leftHandItem: number; rightHandItem: number } | undefined,
+): PlayerAppearance {
+    if (!seq || (app.npcTransformationId ?? -1) >= 0) return app;
+    if (seq.leftHandItem < 0 && seq.rightHandItem < 0) return app;
+    const unoffset = (id: number) => (id >= 512 ? id - 512 : id);
+    const equip = app.equip.slice();
+    if (seq.leftHandItem >= 0) equip[EquipmentSlot.SHIELD] = unoffset(seq.leftHandItem);
+    if (seq.rightHandItem >= 0) equip[EquipmentSlot.WEAPON] = unoffset(seq.rightHandItem);
+    return new PlayerAppearance(app.gender, app.colors, app.kits, equip, app.headIcons);
+}

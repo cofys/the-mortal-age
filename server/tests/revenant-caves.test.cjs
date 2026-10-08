@@ -284,9 +284,10 @@ test("deaths: the fee is lost in the caves or to a player in the Wilderness; the
   assert.equal(lumbridge.p.getAttribute(T.FEE_PAID_ATTRIBUTE), true, "outside the Wilderness it stays");
 });
 
-test("the scroll's fifth option is Config, not a drop: the option's name decides", () => {
+test("the scroll's Config is found by name (rev 241: fourth slot, then Drop); the fifth slot drops only by name", () => {
   const { ItemActionPacketListener } = require("../dist/net/packet/impl/ItemActionPacketListener");
-  assert.deepEqual(ItemActionPacketListener.resolveInventoryWidgetAction(SCROLL, 7), { optionIndex: 5, option: "Config" });
+  assert.deepEqual(ItemActionPacketListener.resolveInventoryWidgetAction(SCROLL, 6), { optionIndex: 4, option: "Config" });
+  assert.deepEqual(ItemActionPacketListener.resolveInventoryWidgetAction(SCROLL, 7), { optionIndex: 5, option: "Drop" });
   assert.equal(ItemActionPacketListener.isDropOption("config", 5), false);
   assert.equal(ItemActionPacketListener.isDropOption("drop", 5), true);
   assert.equal(ItemActionPacketListener.isDropOption("destroy", 5), true);

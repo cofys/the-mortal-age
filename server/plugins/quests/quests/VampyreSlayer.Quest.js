@@ -28,8 +28,15 @@ module.exports = function registerVampyreSlayerQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest } = require("../QuestRuntime");
 
-  const MORGAN_NPC_ID = NpcIdentifiers.MORGAN;
-  const HARLOW_NPC_ID = NpcIdentifiers.DR_HARLOW;
+  // Rev 241 moved Morgan's and Harlow's names into NPC transforms: the world spawns the
+  // nameless parents 3479/3480, and interactions resolve to these variants. Content is
+  // handed the resolved id, so accept every variant.
+  const MORGAN_NPC_IDS = new Set([
+    NpcIdentifiers.MORGAN,
+    NpcIdentifiers.MORGAN_2,
+    NpcIdentifiers.MORGAN_3,
+  ]);
+  const HARLOW_NPC_IDS = new Set([NpcIdentifiers.DR_HARLOW, NpcIdentifiers.DR_HARLOW_2]);
   const COUNT_NPC_IDS = new Set([NpcIdentifiers.COUNT_DRAYNOR]);
 
   const VARP_VAMPYRE_SLAYER = 178;
@@ -94,7 +101,7 @@ module.exports = function registerVampyreSlayerQuest(api) {
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
 
-    if (npcId === MORGAN_NPC_ID) {
+    if (MORGAN_NPC_IDS.has(npcId)) {
       if (stage >= STAGE_COMPLETE) {
         const greeted = player.getAttribute(MORGAN_GREET_ATTR) === true;
         if (!greeted) player.setAttribute(MORGAN_GREET_ATTR, true);
@@ -114,7 +121,7 @@ module.exports = function registerVampyreSlayerQuest(api) {
       return { page: "Vampyre Slayer", variant: "starting-off" };
     }
 
-    if (npcId === HARLOW_NPC_ID) {
+    if (HARLOW_NPC_IDS.has(npcId)) {
       if (stage >= STAGE_COMPLETE) {
         // No post-quest Harlow transcript exists; fall back to his generic page.
         return { page: "Dr Harlow", variant: "standard-dialogue" };
@@ -137,7 +144,7 @@ module.exports = function registerVampyreSlayerQuest(api) {
   }
 
   function answerCondition({ npcId, player, text }) {
-    if (npcId !== MORGAN_NPC_ID && npcId !== HARLOW_NPC_ID) return null;
+    if (!MORGAN_NPC_IDS.has(npcId) && !HARLOW_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase();
     if (value.includes("combat level less than 20")) {
       return player.getSkillManager().getCombatLevel() < 20;
@@ -148,13 +155,13 @@ module.exports = function registerVampyreSlayerQuest(api) {
   }
 
   function handleStartHook({ player, npcId, hook }) {
-    if (npcId !== MORGAN_NPC_ID || hook !== QUEST_START_HOOK) return;
+    if (!MORGAN_NPC_IDS.has(npcId) || hook !== QUEST_START_HOOK) return;
     if (quest.getStage(player) >= STAGE_STARTED) return;
     quest.setStage(player, STAGE_STARTED);
   }
 
   function handleDialogueAction(event) {
-    if (event.npcId !== HARLOW_NPC_ID) return;
+    if (!HARLOW_NPC_IDS.has(event.npcId)) return;
     const { player, stepId } = event;
 
     if (stepId === HARLOW_BEER_MESSAGE_ID) {
@@ -180,7 +187,7 @@ module.exports = function registerVampyreSlayerQuest(api) {
   // Beer on Dr Harlow: hand it over and take the stake without the menu.
   function handleItemOnNpc(event) {
     if (event.itemId !== BEER_ITEM_ID) return;
-    if (event.target.getId?.() !== HARLOW_NPC_ID) return;
+    if (!HARLOW_NPC_IDS.has(event.npcId ?? event.target.getId?.())) return;
     const stage = quest.getStage(event.player);
     if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return;
     const inventory = event.player.getInventory();

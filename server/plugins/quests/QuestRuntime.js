@@ -238,6 +238,20 @@ function openCompletedScroll(player, quest, questPoints) {
   }
 }
 
+/**
+ * quest:is-complete / quest:is-started { player, key, complete | started }: answered for quests
+ * registered here, by each quest's own stage values. An unknown key is left unanswered (null).
+ */
+function answerIsComplete(request) {
+  const quest = quests.find((entry) => entry.key === request?.key);
+  if (quest && request.player) request.complete = quest.isComplete(request.player);
+}
+
+function answerIsStarted(request) {
+  const quest = quests.find((entry) => entry.key === request?.key);
+  if (quest && request.player) request.started = quest.isStarted(request.player);
+}
+
 function registerQuestWidgets(api) {
   if (widgetsRegistered) return;
   widgetsRegistered = true;
@@ -257,6 +271,8 @@ function registerQuestWidgets(api) {
   );
   // SideJournalDefaults asks for the list when it mounts the quest tab.
   api.onCustomEvent("quest:list-refresh", ({ player }) => refreshQuestList(player));
+  api.onCustomEvent("quest:is-complete", answerIsComplete);
+  api.onCustomEvent("quest:is-started", answerIsStarted);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
 }

@@ -133,7 +133,7 @@ function useTopDoor({ player, object, location }) {
 }
 
 function showKamfreena(event) {
-  if (event.target?.getId() !== Guild.NPCS.KAMFREENA) return;
+  if ((event.npcId ?? event.target?.getId()) !== Guild.NPCS.KAMFREENA) return;
   event.handled = true;
   const tier = TIERS.get(event.itemId);
   if (tier === undefined) {
@@ -212,7 +212,7 @@ function lorelaiUnlocks({ player, npcId, text }) {
 }
 
 function showLorelai(event) {
-  if (event.target?.getId() !== Guild.NPCS.LORELAI) return;
+  if ((event.npcId ?? event.target?.getId()) !== Guild.NPCS.LORELAI) return;
   const tier = TIERS.get(event.itemId);
   if (tier === undefined || tier < 6) return;
   event.handled = true;

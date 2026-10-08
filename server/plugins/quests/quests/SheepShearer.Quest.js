@@ -307,7 +307,7 @@ module.exports = function registerSheepShearerQuest(api) {
 
   function handleItemOnNpc(event) {
     if (event.itemId !== SHEARS_ITEM_ID) return;
-    const npcId = event.target?.getId?.();
+    const npcId = event.npcId ?? event.target?.getId?.();
     if (npcId === STRANGE_SHEEP_NPC_ID) {
       shearStrangeSheep(event.player);
       event.handled = true;

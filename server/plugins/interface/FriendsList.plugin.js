@@ -32,6 +32,8 @@ module.exports = {
         FriendsChatManager.setChatFilters(player, packet.publicMode, packet.privateMode, packet.tradeMode);
       } else if (packet.type === "chat" && packet.messageType === "friends_chat") {
         FriendsChatManager.handleChat(player, packet.text);
+      } else {
+        return; // public_chat and other packets are not ours
       }
       // Do NOT mark public_chat or other packet types as handled — let them
       // continue to their proper handlers. The old catch-all else broke public chat.

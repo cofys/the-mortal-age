@@ -32,6 +32,8 @@ for (const kind of ["main", "npc", "projectile", "player"]) {
             "Smooth normals must not flip at grazing camera angles");
         if (kind !== "player") {
             assert.match(result[1], /if \(u_hdEnabled && !isFloorWater\)/);
+            assert.ok(fragment.includes("const bool hdWater = false;"), "Core water is vanilla without 117 HD");
+            assert.ok(result[1].includes("bool hdWater = u_hdEnabled;"), "117 HD switches floor water on");
             const waterFunction = fragment.slice(fragment.indexOf("vec3 shadeWater("), fragment.indexOf("vec4 sampleModelTexture("));
             assert.ok(result[1].includes(waterFunction), "Water shading must remain byte-for-byte unchanged");
         }

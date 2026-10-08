@@ -29,7 +29,7 @@ async function main(): Promise<void> {
 
     /**
      * As the enhanced client (clienttype 10) the game draws the top-left mouseover text itself
-     * (cache script 4726, with varbit 12377 on), so the client's own text stays hidden: drawing
+     * (cache script 4726, with varbit 10035, mouseover_text_disabled, at 0), so the client's own text stays hidden: drawing
      * both showed it twice. A touchscreen desktop is still the enhanced client (#358), or the
      * mobile scripts hide the text on it.
      */
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
         showMouseOverText: true,
         menuOpen: false,
         widgetManager: { rootInterface: 161 },
-        varManager: { getVarbit: () => 1 },
+        varManager: { getVarbit: () => 0 },
         menuActiveSimpleEntries: [{ option: "Walk here", target: "" }],
     };
     const overlay: any = Object.create(WidgetsOverlay.prototype);

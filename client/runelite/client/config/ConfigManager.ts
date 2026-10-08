@@ -141,6 +141,18 @@ export class ConfigManager {
         );
     }
 
+    /**
+     * RuneLite's `setDefaultConfiguration(config, override)`: with `override`, every item of the
+     * group goes back to its default (the stored values are removed); without it, nothing
+     * changes, as values never stored already read as their defaults.
+     */
+    setDefaultConfiguration(descriptor: ConfigGroupDescriptor, override: boolean): void {
+        if (!override) return;
+        for (const [property, item] of Object.entries(descriptor.items)) {
+            this.unsetConfiguration(descriptor.group, itemKey(item, property));
+        }
+    }
+
     unsetConfiguration(group: string, key: string): void {
         const previous = this.getConfiguration(group, key);
         if (previous === undefined) return;

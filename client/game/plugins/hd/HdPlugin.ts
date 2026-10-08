@@ -8,6 +8,11 @@ import { createHdProgram } from "./HdShader";
 import { collectHdLights } from "./HdLights";
 import lighting from "./hd-lighting.glsl";
 import { HdMaterials } from "./HdMaterials";
+import type {
+    WebGPUSceneExtension,
+    WebGPUSceneExtensionContext,
+} from "../../../render/webgpu/sceneExtension";
+import { createHdWebGPUExtension } from "./webgpu/HdWebGPU";
 
 // PicoGL exposes these methods at runtime but omits them from its declarations.
 type SceneProgram = Program & { bind(): void; uniform(name: string, value: unknown): void };
@@ -186,6 +191,11 @@ export class HdPlugin extends Plugin {
             if (scissor) renderer.app.enable(PicoGL.SCISSOR_TEST);
             if (blend) renderer.app.enable(PicoGL.BLEND);
         }
+    }
+
+    /** The WebGPU backend's equivalent of the hooks above: see ./webgpu/HdWebGPU.ts. */
+    createWebGPUSceneExtension(context: WebGPUSceneExtensionContext): WebGPUSceneExtension {
+        return createHdWebGPUExtension(() => this.isEnabled(), context);
     }
 
     disposeRenderer(renderer: WebGLOsrsRenderer): void {

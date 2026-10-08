@@ -132,6 +132,10 @@ export class Server {
     process.on("SIGTERM", () => {
       void Server.gracefulShutdown("SIGTERM");
     });
+    // Closing the terminal the server runs in.
+    process.on("SIGHUP", () => {
+      void Server.gracefulShutdown("SIGHUP");
+    });
     process.once("SIGUSR2", () => {
       void Server.gracefulShutdown("SIGUSR2", "restart");
     });
@@ -153,7 +157,7 @@ export class Server {
         `[shutdown] ${reason} received. Persisting ${onlinePlayers} online players...`
       );
       PluginManager.emitServerShutdown({ timestamp: Date.now() });
-      World.savePlayers();
+      World.savePlayers("shutdown");
       await GameConstants.PLAYER_PERSISTENCE.flush();
       console.info("[shutdown] Player persistence completed.");
     } catch (err) {

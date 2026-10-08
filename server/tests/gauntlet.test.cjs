@@ -1030,3 +1030,13 @@ test('the lobby chest opens by its multiloc id, and ::gauntletreward fills it', 
   assert.equal(Rewards.waitingReward(player), null, 'opened');
   assert.ok(player.inventory.contains(Rewards.ID.GAUNTLET_CAPE));
 });
+
+test('a login in another copied instance is not taken for a Gauntlet run: only the run attribute counts', () => {
+  bindHooks();
+  const player = fakePlayer('Visitor');
+  // The Mad Angel's cathedral (any TemplatedInstanceArea) shares the Gauntlet's tile range.
+  player.location = new Location(8400, 1655, 0);
+  for (const hook of hooks.login) hook({ player });
+  assert.equal(player.location.getX(), 8400, 'left where the other instance put them');
+  assert.ok(!player.messages.some((message) => message.includes('no longer available')));
+});

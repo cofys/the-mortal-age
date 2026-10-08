@@ -15,10 +15,11 @@ Presets.register({
   onInterfaceActionButton() {},
 });
 
-let clickHandler;
+// SkillGuide offers each Skills tab click as skills:stat-clicked before opening the guide.
+let claimHandler;
 require("../plugins/interface/SetSkillLevel.plugin").register({
-  onInterfaceActionClick(handler) {
-    clickHandler = handler;
+  onCustomEvent(name, handler) {
+    if (name === "skills:stat-clicked") claimHandler = handler;
   },
 });
 
@@ -44,9 +45,9 @@ function player({ rights = 0, gear = [] } = {}) {
 }
 
 function click(player, childId) {
-  const event = { player, groupId: 320, childId, buttonId: (320 << 16) | childId, action: 0, handled: false };
-  clickHandler(event);
-  return event;
+  const offer = { player, childId, handled: false };
+  claimHandler(offer);
+  return offer;
 }
 
 const nonCombatSkills = [
@@ -81,14 +82,15 @@ test("hitpoints uses the 10-99 range", () => {
   assert.deepEqual(regular.messages, ["Invalid level. Please enter a level from 10 to 99."]);
 });
 
-test("only developers can set non-combat skills regardless of presets", (t) => {
+test("only developers can set non-combat skills, and only with presets on", (t) => {
   for (const enabled of [true, false]) {
     t.mock.method(Presets, "isEnabled", () => enabled);
     for (const rights of [0, 1, 2, 3, 4]) {
       for (const [childId, skill] of nonCombatSkills) {
         const account = player({ rights });
-        assert.equal(click(account, childId).handled, rights === 4);
-        if (rights === 4) {
+        const claimed = enabled && rights === 4;
+        assert.equal(click(account, childId).handled, claimed);
+        if (claimed) {
           assert.deepEqual(account.prompts, [`Set ${skill.getName()} Level (1-99)`]);
           account.getEnteredAmountAction().execute(99);
           assert.deepEqual(account.levels, [[skill, 99]]);
@@ -128,25 +130,24 @@ test("developer skilling levels stay within 1-99 and ignore non-skill buttons", 
   assert.equal(click(developer, 24).handled, true);
   developer.getEnteredAmountAction().execute(50);
   assert.deepEqual(developer.levels.at(-1), [Skill.SAILING, 50]);
-  const event = { player: developer, groupId: 321, childId: 8, handled: false };
-  clickHandler(event);
-  assert.equal(event.handled, false);
+  const claimed = { player: developer, childId: 8, handled: true };
+  claimHandler(claimed);
+  assert.deepEqual(developer.prompts.slice(-1), ["Set Sailing Level (1-99)"], "an offer already claimed is left alone");
 });
 
-test("combat stat setting retains preset restrictions and rechecks them on submission", (t) => {
+test("with presets off the click is left to the skill guide, and an open prompt rechecks presets", (t) => {
   const regular = player();
   click(regular, 1);
   t.mock.method(Presets, "isEnabled", () => false);
   regular.getEnteredAmountAction().execute(99);
   assert.deepEqual(regular.levels, []);
-  const blocked = player();
-  click(blocked, 1);
-  assert.deepEqual(blocked.prompts, []);
-  assert.deepEqual(blocked.messages, ["Setting skill levels requires enabled presets."]);
-  const developer = player({ rights: 4 });
-  click(developer, 1);
-  developer.getEnteredAmountAction().execute(99);
-  assert.deepEqual(developer.levels, [[Skill.ATTACK, 99]]);
+  assert.deepEqual(regular.messages, ["Setting skill levels requires enabled presets."]);
+  for (const rights of [0, 4]) {
+    const account = player({ rights });
+    assert.equal(click(account, 1).handled, false);
+    assert.deepEqual(account.prompts, []);
+    assert.deepEqual(account.messages, []);
+  }
 });
 
 test("gear blocks a regular player but not a developer", () => {

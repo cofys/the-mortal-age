@@ -3,13 +3,13 @@ import { HD_MATERIALS, HD_GROUND_MATERIALS, type HdMaterial } from "./HdMaterial
 
 export const HD_TEXTURE_SIZE = 256;
 export const HD_LOOKUP_WIDTH = 1024 + HD_GROUND_MATERIALS.length + 1;
-const files = [...new Set([...HD_MATERIALS, ...HD_GROUND_MATERIALS].flatMap(m => [m.file, m.normal]).filter((file): file is string => !!file))];
+export const HD_TEXTURE_FILES = [...new Set([...HD_MATERIALS, ...HD_GROUND_MATERIALS].flatMap(m => [m.file, m.normal]).filter((file): file is string => !!file))];
 
 export class HdMaterials {
     readonly lookup: Texture;
     readonly textures: Texture;
     private readonly lookupData = new Float32Array(HD_LOOKUP_WIDTH * 2 * 4);
-    private readonly pixels = new Uint8Array(HD_TEXTURE_SIZE * HD_TEXTURE_SIZE * 4 * (files.length + 1));
+    private readonly pixels = new Uint8Array(HD_TEXTURE_SIZE * HD_TEXTURE_SIZE * 4 * (HD_TEXTURE_FILES.length + 1));
     private readonly loaded = new Set<string>();
     private started = false;
     private disposed = false;
@@ -24,7 +24,7 @@ export class HdMaterials {
         this.pixels.fill(255, 0, HD_TEXTURE_SIZE * HD_TEXTURE_SIZE * 4);
         // Allocate at final dimensions: PicoGL counts array depth when allocating
         // mip levels, so width/height must exceed our small material layer count.
-        this.textures = app.createTextureArray(this.pixels, HD_TEXTURE_SIZE, HD_TEXTURE_SIZE, files.length + 1, {
+        this.textures = app.createTextureArray(this.pixels, HD_TEXTURE_SIZE, HD_TEXTURE_SIZE, HD_TEXTURE_FILES.length + 1, {
             minFilter: PicoGL.LINEAR_MIPMAP_LINEAR, magFilter: PicoGL.LINEAR,
             wrapS: PicoGL.REPEAT, wrapT: PicoGL.REPEAT, maxAnisotropy: 8,
         });
@@ -33,7 +33,7 @@ export class HdMaterials {
     update(layers: Map<number, number>): void {
         if (!this.started) {
             this.started = true;
-            files.forEach((file, index) => {
+            HD_TEXTURE_FILES.forEach((file, index) => {
                 const image = new Image();
                 image.onload = () => {
                     if (this.disposed) return;
@@ -56,7 +56,7 @@ export class HdMaterials {
         if (!this.dirty && this.mapping === mapping) return;
         this.lookupData.fill(0);
         for (let layer = 0; layer < HD_LOOKUP_WIDTH; layer++) this.lookupData[(HD_LOOKUP_WIDTH + layer) * 4 + 3] = 1;
-        const readyLayer = (file: string | null) => file && this.loaded.has(file) ? files.indexOf(file) + 1 : 0;
+        const readyLayer = (file: string | null) => file && this.loaded.has(file) ? HD_TEXTURE_FILES.indexOf(file) + 1 : 0;
         const write = (material: HdMaterial, layer: number) => {
             this.lookupData.set(material.params, layer * 4);
             this.lookupData.set([readyLayer(material.file), material.unlit ? 1 : 0, readyLayer(material.normal), material.brightness], (HD_LOOKUP_WIDTH + layer) * 4);

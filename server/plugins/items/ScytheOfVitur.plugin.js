@@ -190,9 +190,9 @@ module.exports = {
     ]);
     chargedIds = new Set(unchargedByCharged.keys());
     chargedByUncharged = new Map([...unchargedByCharged].map(([charged, uncharged]) => [uncharged, charged]));
-    api.onItemAction("Scythe of vitur", { Check: checkCharges, Uncharge: uncharge });
-    api.onItemAction("Holy scythe of vitur", { Check: checkCharges, Uncharge: uncharge });
-    api.onItemAction("Sanguine scythe of vitur", { Check: checkCharges, Uncharge: uncharge });
+    api.onItemAction("Scythe of Vitur", { Check: checkCharges, Uncharge: uncharge });
+    api.onItemAction("Holy Scythe of Vitur", { Check: checkCharges, Uncharge: uncharge });
+    api.onItemAction("Sanguine Scythe of Vitur", { Check: checkCharges, Uncharge: uncharge });
     api.onItemOnItem(chargeScythe, { noted: false });
     api.registerCombatMethodResolver({ resolve: resolveScythe });
   },

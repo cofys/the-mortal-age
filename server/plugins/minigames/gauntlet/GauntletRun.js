@@ -56,7 +56,7 @@ const LIT_NODE_OFFSET = 2;
 
 function savePlayer(player) {
   try {
-    Shared.core().GameConstants.PLAYER_PERSISTENCE?.save(player);
+    Shared.core().GameConstants.PLAYER_PERSISTENCE?.save(player, "gauntlet");
   } catch (error) {
     console.warn("[gauntlet] could not save", player.getUsername?.(), error);
   }

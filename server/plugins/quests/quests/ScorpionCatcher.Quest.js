@@ -202,7 +202,7 @@ module.exports = function registerScorpionCatcherQuest(api) {
   }
 
   function onCageOnScorpion(event) {
-    const scorpionBit = SCORPION_BIT_BY_NPC.get(event.target?.getId?.());
+    const scorpionBit = SCORPION_BIT_BY_NPC.get(event.npcId ?? event.target?.getId?.());
     if (scorpionBit === undefined) return;
     const currentMask = CAGE_MASK_BY_ITEM.get(event.itemId);
     if (currentMask === undefined) return;

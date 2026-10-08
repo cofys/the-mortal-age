@@ -1,6 +1,6 @@
 import type { ProgramSource } from "../../../render/shaders/ShaderUtil";
 
-/** Adapt the shared world programs, never UI shaders or water shading. */
+/** Adapt the shared world programs (never UI shaders); also gates the floor water shading. */
 export function createHdProgram([vertex, fragment]: ProgramSource, lighting: string): ProgramSource {
     const vertexEnd = vertex.lastIndexOf("}");
     if (vertexEnd < 0 || !vertex.includes("vec4 viewPos =") || !fragment.includes("void main()") ||
@@ -13,7 +13,7 @@ export function createHdProgram([vertex, fragment]: ProgramSource, lighting: str
     vertex = vertex.slice(0, vertexEnd) + `
     v_hdTerrain = ${terrain ? "modelInfo.contourGround == 3.0 ? 1.0 : 0.0" : "0.0"};
     v_hdGroundMaterial = ${terrain ? "v_hdTerrain > 0.5 && vertex.textureId == 0u ? uint(max(round(-vertex.texCoord.x * 64.0), 0.0)) : 0u" : "0u"};
-    v_hdNormal = ${terrain ? "u_hdEnabled && !u_hdShadowPass && v_hdTerrain > 0.5 ? hdTerrainNormal(localPos.xz - u_mapPos * 64.0, modelInfo.plane) : vec3(0.0)" : actorInfo ? `u_hdEnabled && !u_hdShadowPass && (a_vertex.w >> 16u) != 0u ? mat3(u_hdInverseView * u_worldEntityTransform * u_viewMatrix) * (vec4(hdActorNormal(a_vertex.w), 0.0) * rotationY(float(${actorInfo}.rotation) * RS_TO_RADIANS)).xyz : vec3(0.0)` : "vec3(0.0)"};
+    v_hdNormal = ${terrain ? "u_hdEnabled && !u_hdShadowPass && v_hdTerrain > 0.5 ? hdTerrainNormal(localPos.xz - u_mapPos * 64.0, modelInfo.plane) : vec3(0.0)" : actorInfo ? `u_hdEnabled && !u_hdShadowPass && (a_vertex.w >> 16u) != 0u ? mat3(u_hdInverseView * u_worldEntityTransform * u_viewMatrix) * (vec4(${actorInfo === "playerInfo" ? "skinNormal(hdActorNormal(a_vertex.w))" : "hdActorNormal(a_vertex.w)"}, 0.0) * rotationY(float(${actorInfo}.rotation) * RS_TO_RADIANS)).xyz : vec3(0.0)` : "vec3(0.0)"};
     ${actorInfo ? `if (u_hdEnabled && !u_hdShadowPass && (a_vertex.w >> 16u) != 0u) {
         int baseHsl = applyHslOverride(int(a_vertex.w & 0xffffu), ${actorInfo}.hslOverride);
         baseHsl = applyHslOverride(baseHsl, u_sceneHslOverride);
@@ -98,6 +98,8 @@ void main()`);
         return;
     }
     float banding =`);
+    // Floor water is 117 HD's: core leaves it off, HD turns it on with the toggle.
+    fragment = fragment.replace("const bool hdWater = false;", "bool hdWater = u_hdEnabled;");
     fragment = fragment.replace("    vec3 surface;", `
     // Like 117 HD, replace baked directional shading on textured faces with
     // neutral brightness. Otherwise brick walls are lit twice and lose detail.

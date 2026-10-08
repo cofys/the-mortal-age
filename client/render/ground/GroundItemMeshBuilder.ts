@@ -7,7 +7,7 @@ import type { ClientGroundItemStack } from "../../game/data/ground/GroundItemSto
 import { resolveHeightSamplePlaneForLocal } from "../../game/scene/PlaneResolver";
 import { DrawRange, newDrawRange } from "../DrawRange";
 import { InteractType } from "../InteractType";
-import type { WebGLMapSquare } from "../WebGLMapSquare";
+import type { TileFlagMapSquare } from "../../game/scene/TileRenderFlags";
 import {
     ContourGroundType,
     type DrawCommand,
@@ -91,7 +91,7 @@ function cloneStack(stack: ClientGroundItemStack): ClientGroundItemStack {
 }
 
 export function buildGroundItemGeometry(
-    map: WebGLMapSquare,
+    map: TileFlagMapSquare,
     stacks: ClientGroundItemStack[] | undefined,
     objModelLoader: ObjModelLoader,
     textureLoader: TextureLoader,

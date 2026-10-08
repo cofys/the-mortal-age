@@ -183,41 +183,33 @@ class Room {
   /** Called when a player steps from one tile onto `to` while in this room. */
   onStep(_player, _from, _to) {}
 
-  /** Shows the boss health bar (interface 303) to everyone in the room. */
+  /** Shows the boss health bar (the BossHud plugin) to everyone in the room. */
   openBossHud(npc) {
+    this.closeBossHud();
     this.hudNpc = npc;
-    this.hudSent = new Map();
-    for (const player of this.roomPlayers()) this.sendBossHud(player);
+    this.hudPlayers = new Set();
+    this.updateBossHud();
   }
 
-  sendBossHud(player) {
+  hudValues(player) {
     const npc = this.hudNpc;
-    if (!npc) return;
-    const sender = player.getPacketSender();
-    sender.sendConfig(BOSS_HUD.NPC_VARP, npc.getId());
-    sender.sendVarbit(BOSS_HUD.CURRENT, Math.max(0, npc.getHitpoints()));
-    sender.sendVarbit(BOSS_HUD.MAXIMUM, npc.getMaxHitpoints());
-    sender.sendSubInterface(BOSS_HUD.TARGET_UID, BOSS_HUD.GROUP, 1);
-    this.hudSent?.set(player, `${npc.getHitpoints()}/${npc.getMaxHitpoints()}`);
+    return { player, npcId: npc.getId(), current: Math.max(0, npc.getHitpoints()), maximum: npc.getMaxHitpoints() };
   }
 
   closeBossHud() {
     if (!this.hudNpc) return;
     this.hudNpc = null;
-    for (const player of this.roomPlayers()) player.getPacketSender().closeSubInterface(BOSS_HUD.TARGET_UID);
+    for (const player of this.hudPlayers) Shared.api().emitCustomEvent("boss-hud:hide", { player });
+    this.hudPlayers.clear();
   }
 
-  /** Keeps the health bar in step with the boss, sending only what changed. */
+  /** Keeps the health bar in step with the boss (BossHud sends only what changed), shown to anyone who came in since. */
   updateBossHud() {
-    const npc = this.hudNpc;
-    if (!npc) return;
-    const value = `${Math.max(0, npc.getHitpoints())}/${npc.getMaxHitpoints()}`;
+    if (!this.hudNpc) return;
     for (const player of this.roomPlayers()) {
-      if (this.hudSent.get(player) === value) continue;
-      this.hudSent.set(player, value);
-      const sender = player.getPacketSender();
-      sender.sendVarbit(BOSS_HUD.CURRENT, Math.max(0, npc.getHitpoints()));
-      sender.sendVarbit(BOSS_HUD.MAXIMUM, npc.getMaxHitpoints());
+      const shown = this.hudPlayers.has(player);
+      if (!shown) this.hudPlayers.add(player);
+      Shared.api().emitCustomEvent(shown ? "boss-hud:update" : "boss-hud:show", this.hudValues(player));
     }
   }
 
@@ -580,8 +572,6 @@ class Room {
 
 const OSMUMTEN_SPAWN_ANIMATION = 9795;
 
-/** Boss health HUD: interface 303 reads the NPC from varp 1683 and its health from varbits 6099/6100. */
-const BOSS_HUD = { GROUP: 303, TARGET_UID: (161 << 16) | 2, NPC_VARP: 1683, CURRENT: 6099, MAXIMUM: 6100 };
 
 /** Crosses a barrier two tiles to the far side. */
 function walkThrough(player, object) {

@@ -3,6 +3,9 @@ import { ConfigChanged } from "@runelite/api/events";
 import { inject } from "@runelite/client/plugins/PluginInjector";
 import { ConfigManager } from "@runelite/client/config/ConfigManager";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
+import { ClientToolbar } from "@runelite/client/ui/ClientToolbar";
+import type { NavigationButton } from "@runelite/client/ui/NavigationButton";
+import { createNotesNavigationButton } from "./NotesPanel";
 
 export const NotesConfig = ConfigGroup("notes", {
     notes: ConfigItem({ name: "Notes", description: "Notes persisted locally.", textArea: true, default: "" }),
@@ -30,6 +33,7 @@ export class NotesPlugin extends Plugin {
         name: "Notes",
         description: "Persistent local notes for client/plugin tasks.",
         tags: ["notes"],
+        enabledByDefault: false,
         configKey: "notesplugin",
     };
 
@@ -37,6 +41,8 @@ export class NotesPlugin extends Plugin {
 
     private readonly listeners: Set<NotesPluginListener> = new Set();
     private readonly configManager = inject(ConfigManager);
+    private readonly clientToolbar = inject(ClientToolbar);
+    private navButton?: NavigationButton;
     private state: NotesPluginState;
     private version = 0;
 
@@ -44,6 +50,16 @@ export class NotesPlugin extends Plugin {
         super();
         this.configManager.getConfig(NotesConfig);
         this.state = { config: this.getConfig(), version: 0 };
+    }
+
+    protected async startUp(): Promise<void> {
+        this.navButton = createNotesNavigationButton(this);
+        this.clientToolbar.addNavigation(this.navButton);
+    }
+
+    protected async shutDown(): Promise<void> {
+        if (this.navButton) this.clientToolbar.removeNavigation(this.navButton);
+        this.navButton = undefined;
     }
 
     subscribe(listener: NotesPluginListener): () => void {

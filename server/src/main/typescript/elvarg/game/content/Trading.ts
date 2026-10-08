@@ -439,7 +439,7 @@ export class Trading {
     private static save(player: Player): void {
         if (player.getAttribute?.(ATTR_SKIP_PERSISTENCE) === true) return;
         try {
-            GameConstants.PLAYER_PERSISTENCE.save(player);
+            GameConstants.PLAYER_PERSISTENCE.save(player, "trade");
         } catch (err) {
             console.error(`[trade] Failed to save ${player.getUsername()} after a trade`, err);
         }

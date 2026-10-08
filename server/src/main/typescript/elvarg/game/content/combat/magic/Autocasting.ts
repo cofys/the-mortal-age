@@ -11,6 +11,12 @@ const getBonusManager = () => require("../../../model/equipment/BonusManager").B
 
 export class Autocasting {
     private static readonly COMBAT_INTERFACE = 593;
+    /**
+     * Varp 43 (com_mode) is 0-3 for the weapon's styles and 4 while a spell is autocast (rsprox
+     * captures: choosing a spell sets it to 4, and choosing a style clears autocast and sets 0-3).
+     */
+    private static readonly COM_MODE_VARP = 43;
+    private static readonly COM_MODE_AUTOCAST = 4;
     private static readonly AUTOCAST_INTERFACE = 201;
     private static readonly AUTOCAST_CONTAINER = 1;
 
@@ -154,10 +160,16 @@ export class Autocasting {
 
         this.refreshIndicators(player);
         getBonusManager().update(player);
-        if (activeSpell != null) {
-            const childId = player.getFightType()?.getChildId?.() ?? FightType.STAFF_POUND.getChildId();
-            player.getPacketSender().sendConfig(FightType.STAFF_BASH.getParentId(), childId);
-        }
+    }
+
+    /**
+     * Choosing one of the weapon's styles turns autocast off (rsprox captures: autocast_set and
+     * autocast_spell go to 0 on the same tick). The default spell isn't kept.
+     */
+    public static clearForStyle(player: Player): void {
+        if (player.getCombat().getAutocastSpell() == null) return;
+        player.getCombat().setAutocastSpell(null);
+        this.refreshIndicators(player);
     }
 
     public static refreshIndicators(player: Player): void {
@@ -167,6 +179,9 @@ export class Autocasting {
             .sendVarbit(275, spell == null ? 0 : 1)
             .sendVarbit(276, spell == null ? 0 : this.resolveAutocastIndex(spell))
             .sendVarbit(2668, spell != null && defensive ? 1 : 0);
+        if (spell != null) {
+            player.getPacketSender().sendConfig(this.COM_MODE_VARP, this.COM_MODE_AUTOCAST);
+        }
     }
 
     private static resolveAutocastIndex(spell: CombatSpell): number {

@@ -628,7 +628,7 @@ module.exports = function registerPrinceAliRescueQuest(api) {
 
   // Simple item-on-NPC shortcuts (mirror the reference registrations).
   function handleItemOnNpc(event) {
-    const npcId = event.target?.getId?.();
+    const npcId = event.npcId ?? event.target?.getId?.();
     const stage = quest.getStage(event.player);
     const inventory = event.player.getInventory();
 

@@ -2,6 +2,7 @@ import { PluginChanged } from "../../api/events";
 import type { ConfigGroupDescriptor } from "../config/ConfigItem";
 import { ConfigManager } from "../config/ConfigManager";
 import { EventBus } from "../eventbus/EventBus";
+import { ClientToolbar } from "../ui/ClientToolbar";
 import { type Plugin, type PluginClass, type PluginDescriptor } from "./Plugin";
 import { PluginInjector } from "./PluginInjector";
 
@@ -34,7 +35,8 @@ export class PluginManager {
         this.injector
             .provide(PluginManager, this)
             .provide(ConfigManager, configManager)
-            .provide(EventBus, eventBus);
+            .provide(EventBus, eventBus)
+            .provide(ClientToolbar, new ClientToolbar());
     }
 
     getInjector(): PluginInjector {

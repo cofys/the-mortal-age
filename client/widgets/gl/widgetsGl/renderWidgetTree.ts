@@ -3870,6 +3870,8 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         // Temple Trekking outlines left as-is for now
     }
 
+    opts.drawAboveWidgets?.();
+
     // GL-based context menu (Choose Option) devoverlay via component
     try {
         const menuOverlayStartMs = profileWidgetRender ? performance.now() : 0;

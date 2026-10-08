@@ -41,7 +41,32 @@ export class WorldDefinitionValidationError extends Error {}
 
 type JsonObject = Record<string, unknown>;
 
-const WORLD_FILE = path.resolve("data/definitions/world.json");
+
+/**
+ * world.json with world.local.json layered over it: each top-level key there replaces
+ * world.json's, except pluginConfig, which is merged key by key. Read by both the world
+ * definition and PluginManager (disabledPlugins, pluginConfig).
+ */
+export function readWorldConfig(): JsonObject {
+    // Resolved per call from the working directory, as PluginManager always did.
+    const shipped = object(JSON.parse(fs.readFileSync(path.resolve("data/definitions/world.json"), "utf8")), "world.json");
+    // Optional per-deployment overrides (gitignored), so a live world can differ from the
+    // shipped world.json (e.g. its XP rate or tutorial) and still update from main by fast-forward.
+    const localFile = path.resolve("data/definitions/world.local.json");
+    if (!fs.existsSync(localFile)) return shipped;
+    const local = object(JSON.parse(fs.readFileSync(localFile, "utf8")), "world.local.json");
+    const merged: JsonObject = { ...shipped, ...local };
+    const shippedConfig = shipped.pluginConfig;
+    const localConfig = local.pluginConfig;
+    if (isPlainObject(shippedConfig) && isPlainObject(localConfig)) {
+        merged.pluginConfig = { ...shippedConfig, ...localConfig };
+    }
+    return merged;
+}
+
+function isPlainObject(value: unknown): value is JsonObject {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+}
 
 function object(value: unknown, label: string): JsonObject {
     if (!value || Array.isArray(value) || typeof value !== "object") {
@@ -173,9 +198,7 @@ export function parseWorldDefinition(value: unknown): WorldDefinitionData {
     };
 }
 
-const definition = parseWorldDefinition(
-    JSON.parse(fs.readFileSync(WORLD_FILE, "utf8"))
-);
+const definition = parseWorldDefinition(readWorldConfig());
 
 export const WORLD_SPAWN = new Location(
     definition.spawn.x,

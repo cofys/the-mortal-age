@@ -7,6 +7,11 @@ import type { GLRenderer } from "../../widgets/gl/renderer";
 import type { ClickRegistry } from "../../widgets/gl/click-registry";
 import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../ui/menu/menuTransforms";
+import type { FontLoader } from "../../widgets/components/TextRenderer";
+import type {
+    WebGPUSceneExtension,
+    WebGPUSceneExtensionContext,
+} from "../../render/webgpu/sceneExtension";
 
 /**
  * Draw/input context handed to a plugin that supplies a custom gameframe (the
@@ -53,6 +58,22 @@ export interface GameFrameProvider {
     drawGameFrame(context: GameFrameDrawContext): void;
 }
 
+/** Draw context for a `WidgetOverlay`; coordinates are device pixels on the UI canvas. */
+export type WidgetOverlayDrawContext = {
+    renderer: GLRenderer;
+    fontLoader: FontLoader;
+    /** A cache sprite as a texture. */
+    sprite(id: number): { tex: WebGLTexture; w: number; h: number } | undefined;
+};
+
+/** UI drawn above the widgets and under the right-click menu (RuneLite's ABOVE_WIDGETS). */
+export interface WidgetOverlay {
+    /** Changes whenever the drawing would; a change redraws the UI. */
+    signature(): string;
+    /** Draws the overlay and returns the device rects it covered. */
+    draw(context: WidgetOverlayDrawContext): { x: number; y: number; w: number; h: number }[];
+}
+
 export type CameraInputContext = {
     camera: Camera;
     input: InputManager;
@@ -70,8 +91,12 @@ export interface ClientPlugin {
     transformSceneProgram?(source: ProgramSource): ProgramSource;
     sceneProgramsReady?(renderer: WebGLOsrsRenderer, programs: Program[]): void;
     beforeSceneRender?(renderer: WebGLOsrsRenderer, drawActors: () => void): void;
+    /** Draws over the finished scene (depth test and blending still active). */
+    afterSceneRender?(renderer: WebGLOsrsRenderer): void;
     configureSceneDrawCall?(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void;
     disposeRenderer?(renderer: WebGLOsrsRenderer): void;
+    /** WebGPU: extra scene pipelines, resources and passes (see render/webgpu/sceneExtension.ts). */
+    createWebGPUSceneExtension?(context: WebGPUSceneExtensionContext): WebGPUSceneExtension | undefined;
     handleCameraKeys?(context: CameraInputContext): boolean;
     handleCameraMouse?(context: CameraInputContext): boolean;
     handleCameraScroll?(context: CameraInputContext): boolean;
@@ -80,6 +105,7 @@ export interface ClientPlugin {
     shouldKeepWorldMenuOpen?(): boolean;
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
+    widgetOverlay?: WidgetOverlay;
     /** Handle a client-side `::command`; return true to consume it (no server round trip). */
     handleClientCommand?(command: string): boolean;
     /** Reorders or extends a menu (top first); its first eligible entry is the left-click. */
@@ -119,12 +145,26 @@ export class ClientPluginManager {
         for (const plugin of this.plugins) plugin.beforeSceneRender?.(renderer, drawActors);
     }
 
+    afterSceneRender(renderer: WebGLOsrsRenderer): void {
+        for (const plugin of this.plugins) plugin.afterSceneRender?.(renderer);
+    }
+
     configureSceneDrawCall(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void {
         for (const plugin of this.plugins) plugin.configureSceneDrawCall?.(renderer, drawCall);
     }
 
     disposeRenderer(renderer: WebGLOsrsRenderer): void {
         for (const plugin of this.plugins) plugin.disposeRenderer?.(renderer);
+    }
+
+    // ponytail: one WebGPU scene extension (the first offered); composing several needs
+    // per-extension binding/location ranges and a pipeline set per active combination.
+    createWebGPUSceneExtension(context: WebGPUSceneExtensionContext): WebGPUSceneExtension | undefined {
+        for (const plugin of this.plugins) {
+            const extension = plugin.createWebGPUSceneExtension?.(context);
+            if (extension) return extension;
+        }
+        return undefined;
     }
 
     handleCameraKeys(context: CameraInputContext): boolean {
@@ -158,6 +198,12 @@ export class ClientPluginManager {
             if (frame?.isGameFrameActive()) return frame;
         }
         return undefined;
+    }
+
+    widgetOverlays(): WidgetOverlay[] {
+        const overlays: WidgetOverlay[] = [];
+        for (const plugin of this.plugins) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
+        return overlays;
     }
 
     handleClientCommand(command: string): boolean {

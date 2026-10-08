@@ -43,6 +43,8 @@ type CombatAnimation = {
     anims?: { spawn?: number | null; attack?: number; block?: number; death?: number };
     sounds?: { death?: number };
     projectile?: number;
+    /** Ticks from the death animation to the death itself; 2 when absent. */
+    deathTicks?: number;
 };
 
 type CombatAnimationRole = "attack" | "block" | "death";
@@ -255,6 +257,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
                     deathAnim: animation.anims?.death ?? definition.getDeathAnim(),
                     spawnAnim: animation.anims?.spawn ?? definition.getSpawnAnim(),
                     deathSound: animation.sounds?.death ?? definition.getDeathSound(),
+                    deathTicks: Number.isInteger(animation.deathTicks) ? animation.deathTicks : definition.getDeathTicks(),
                 });
             }
         }

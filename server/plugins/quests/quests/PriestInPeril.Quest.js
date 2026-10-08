@@ -32,9 +32,14 @@ module.exports = function registerPriestInPerilQuest(api) {
     NpcIdentifiers.MONK_OF_ZAMORAK,
     NpcIdentifiers.MONK_OF_ZAMORAK_2,
     NpcIdentifiers.MONK_OF_ZAMORAK_3,
+    // Rev 241 moved the temple monks' names into transforms; interactions resolve the
+    // spawned parents 3484-3486 to these variants.
     NpcIdentifiers.MONK_OF_ZAMORAK_4,
     NpcIdentifiers.MONK_OF_ZAMORAK_5,
     NpcIdentifiers.MONK_OF_ZAMORAK_6,
+    NpcIdentifiers.MONK_OF_ZAMORAK_15,
+    NpcIdentifiers.MONK_OF_ZAMORAK_16,
+    NpcIdentifiers.MONK_OF_ZAMORAK_17,
   ]);
 
   const VARP_PRIEST_IN_PERIL = 302;

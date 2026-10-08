@@ -232,7 +232,7 @@ module.exports = function registerNatureSpiritQuest(api) {
   /** The mirror proves to Filliman that he is dead. */
   function handleMirrorOnFilliman(event) {
     if (event.itemId !== MIRROR_ITEM_ID) return;
-    const target = event.target?.getId?.();
+    const target = event.npcId ?? event.target?.getId?.();
     if (target !== FILLIMAN_NPC_ID && target !== NATURE_SPIRIT_NPC_ID) return;
     if (quest.getStage(event.player) !== STAGE_SPOKEN_FILLIMAN) return;
     if (!wearingGhostspeak(event.player)) return;
@@ -244,7 +244,7 @@ module.exports = function registerNatureSpiritQuest(api) {
   /** Giving Filliman his journal earns the Bloom spell. */
   function handleJournalOnFilliman(event) {
     if (event.itemId !== JOURNAL_ITEM_ID) return;
-    const target = event.target?.getId?.();
+    const target = event.npcId ?? event.target?.getId?.();
     if (target !== FILLIMAN_NPC_ID && target !== NATURE_SPIRIT_NPC_ID) return;
     if (quest.getStage(event.player) !== STAGE_SHOWN_MIRROR) return;
     if (!held(event.player, JOURNAL_ITEM_ID)) return;

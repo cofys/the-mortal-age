@@ -541,7 +541,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           text: step.text, action: step.action, target: step.target, stepId: step.id, handled: false,
         };
         api.emitCustomEvent("npc-dialogue:action", action);
-        if (action.handled) return action.end ? close() : run(rest, currentRecord);
+        // A handler can also hand back `steps` to play first (a story picked from another page).
+        if (action.handled) return action.end ? close() : run([...(action.steps ?? []), ...rest], currentRecord);
         if (step.type === "end") return close();
         if (step.type === "message") {
           // Item hand-outs are also `message` steps; let quests hook their id.
@@ -563,9 +564,13 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         if (step.type === "choice") return presentMenu({ step, rest, record: currentRecord });
         if (step.type === "random") {
           // A parsed-but-empty random (the export dropped its alternatives) is not
-          // a dead end; continue with whatever follows.
-          if (!step.options?.length) return run(rest, currentRecord);
-          const option = step.options[Math.floor(Math.random() * step.options.length)];
+          // a dead end; continue with whatever follows. Alternatives the wiki guards
+          // ("If Animal Magnetism is completed:") are left out once a plugin answers
+          // their condition false, as menu options are.
+          const options = (step.options ?? []).filter((option) =>
+            !option.condition || resolveCondition({ text: option.condition, id: option.id }) !== false);
+          if (!options.length) return run(rest, currentRecord);
+          const option = options[Math.floor(Math.random() * options.length)];
           if (option.hook) return unavailable();
           return run([...(option.steps || []), ...rest], currentRecord);
         }
@@ -707,15 +712,17 @@ module.exports = {
 
     /**
      * Plays one named variant of an NPC's transcript outside Talk-to (a door that has the
-     * guard speak, an item used on an NPC): { player, npc?, npcId, variant, handled }.
+     * guard speak, an item used on an NPC): { player, npc?, npcId, variant, select?, handled }.
+     * `select(steps)` can narrow the variant to the steps that apply (a right-click shortcut).
      */
     api.onCustomEvent("npc-dialogue:start", (request) => {
       const definition = NpcDefinition.forId(request.npcId);
       if (!request.player || !definition) return;
       const event = { player: request.player, npc: request.npc, npcId: request.npcId, definition, variant: request.variant };
       const resolved = resolveTranscript(event);
-      if (!resolved?.steps?.length) return;
-      startDialogue(api, event, resolved.steps, resolved.branches, resolved.context);
+      const steps = typeof request.select === "function" && resolved?.steps ? request.select(resolved.steps) : resolved?.steps;
+      if (!steps?.length) return;
+      startDialogue(api, event, steps, resolved.branches, resolved.context);
       request.handled = true;
     });
 

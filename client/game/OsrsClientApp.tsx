@@ -30,7 +30,7 @@ import {
 } from "../common/utils/StorageUtil";
 import { fetchCacheList, loadCacheFilesAuto } from "./Caches";
 import { GameContainer } from "./GameContainer";
-import { getAvailableRenderers } from "./GameRenderers";
+import { pickRendererType } from "./GameRenderers";
 import { OsrsClient } from "./OsrsClient";
 import {
     getClientPreference,
@@ -289,12 +289,12 @@ function OsrsClientApp() {
 
             // ========== Create OsrsClient BEFORE cache download ==========
             // This allows the LoginRenderer to display download progress via the state machine
-            const availableRenderers = getAvailableRenderers();
-            if (availableRenderers.length === 0) {
+            const rendererType = await pickRendererType();
+            if (!rendererType) {
                 setErrorMessage("No renderers available");
                 return;
             }
-            const rendererType = availableRenderers[0];
+            console.log(`[renderer] using ${rendererType}`);
 
             // Create OsrsClient without cache - starts in DOWNLOADING state
             const client = new OsrsClient(

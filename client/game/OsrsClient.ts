@@ -187,6 +187,13 @@ import { TextureLoader } from "../rs/texture/TextureLoader";
 import { faceAngleRs } from "../rs/utils/rotation";
 import { getOsrsInterfaceScalingPercent, setOsrsInterfaceScalingPercent } from "../ui/UiScale";
 import {
+    DEVICE_OPTION_SCREEN_BRIGHTNESS,
+    gammaFromScreenBrightness,
+    loadScreenBrightness,
+    normalizeScreenBrightness,
+    saveScreenBrightness,
+} from "../ui/ScreenBrightness";
+import {
     setHelmSteeringHandler,
     setNpcExamineIdResolver,
     setSpellSelectionClearHandler,
@@ -282,6 +289,7 @@ import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/Stat
 import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
 import { AnimationSmoothingPlugin } from "./plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
+import { WeatherPlugin } from "./plugins/weather/WeatherPlugin";
 import { RuneLite } from "../runelite/client/RuneLite";
 import { setMenuTransform } from "../ui/menu/menuTransforms";
 import {
@@ -298,11 +306,6 @@ import {
 } from "./selectedSpellPackets";
 import { createBrowserSidebarPersistence } from "./sidebar/BrowserSidebarPersistence";
 import { SidebarStore } from "./sidebar/SidebarStore";
-import {
-    type ClientSidebarEntryData,
-    type SidebarPluginVisibilityOptions,
-    registerDefaultClientSidebarEntries,
-} from "./sidebar/entries";
 import {
     GameStateMachine,
     LoadingRequirement,
@@ -445,31 +448,6 @@ export class OsrsClient {
     // The official client never tries to "fast forward" thousands of 20ms cycles in one go.
     private static readonly MAX_CLIENT_TICKS_PER_SLICE = 50;
 
-    private syncSidebarPlugins(force = false): void {
-        const visibility: Required<SidebarPluginVisibilityOptions> = {
-            groundItemsEnabled: this.groundItemsPlugin.getConfig().enabled,
-            interactHighlightEnabled: this.interactHighlightPlugin.getConfig().enabled,
-            menuSwapperEnabled: this.menuSwapperPlugin.getState().config.enabled,
-            notesEnabled: this.notesPlugin.getConfig().enabled,
-            tileMarkersEnabled: this.tileMarkersPlugin.getConfig().enabled,
-        };
-
-        if (
-            !force &&
-            this.sidebarPluginVisibility.groundItemsEnabled === visibility.groundItemsEnabled &&
-            this.sidebarPluginVisibility.interactHighlightEnabled ===
-                visibility.interactHighlightEnabled &&
-            this.sidebarPluginVisibility.notesEnabled === visibility.notesEnabled &&
-            this.sidebarPluginVisibility.menuSwapperEnabled === visibility.menuSwapperEnabled &&
-            this.sidebarPluginVisibility.tileMarkersEnabled === visibility.tileMarkersEnabled
-        ) {
-            return;
-        }
-
-        this.sidebarPluginVisibility = visibility;
-        registerDefaultClientSidebarEntries(this.sidebar, visibility);
-    }
-
     /** Load the editor only for its opt-in URL. */
     private loadEditModePlugin(): void {
         void import("./plugins/editmode/install")
@@ -531,7 +509,9 @@ export class OsrsClient {
     // These store engine-level settings like audio volume, brightness, etc.
     clientOptions: Map<number, number> = new Map();
     gameOptions: Map<number, number> = new Map();
-    deviceOptions: Map<number, number> = new Map();
+    // Device option 6 (screen brightness) starts from the saved setting, so the Settings slider
+    // shows it.
+    deviceOptions: Map<number, number> = new Map([[DEVICE_OPTION_SCREEN_BRIGHTNESS, loadScreenBrightness()]]);
 
     // Client-side gameplay/UI preferences that affect input semantics.
     // Exposed for UI semantics (e.g., Shift-click Drop, tap-to-drop, left-click menu).
@@ -577,8 +557,8 @@ export class OsrsClient {
     /** Loading requirement tracker for login transitions */
     readonly loadingTracker: LoadingTracker = new LoadingTracker();
 
-    /** Renderer-agnostic sidebar state/registry. */
-    readonly sidebar: SidebarStore<ClientSidebarEntryData>;
+    /** Which sidebar panel is open; the buttons are `runeLite.clientToolbar`'s. */
+    readonly sidebar: SidebarStore;
     readonly runeLite: RuneLite;
     readonly groundItemsPlugin: GroundItemsPlugin;
     readonly interactHighlightPlugin: InteractHighlightPlugin;
@@ -596,14 +576,8 @@ export class OsrsClient {
     readonly firstPersonPlugin: FirstPersonPlugin;
     readonly gameFrame317Plugin: GameFrame317Plugin;
     readonly hdPlugin: HdPlugin;
+    readonly weatherPlugin: WeatherPlugin;
     readonly tileHighlightManager: TileHighlightManager = new TileHighlightManager();
-    private sidebarPluginVisibility: Required<SidebarPluginVisibilityOptions> = {
-        groundItemsEnabled: true,
-        interactHighlightEnabled: true,
-        menuSwapperEnabled: true,
-        notesEnabled: true,
-        tileMarkersEnabled: true,
-    };
 
     /** Current game state (getter for backwards compatibility) */
     get gameState(): GameState {
@@ -1177,10 +1151,7 @@ export class OsrsClient {
             });
         } catch {}
         this.applyDisplayDefaults();
-        this.sidebar = new SidebarStore<ClientSidebarEntryData>({
-            defaultOpen: false,
-            persistence: createBrowserSidebarPersistence("osrs.sidebar.v1"),
-        });
+        this.sidebar = new SidebarStore(createBrowserSidebarPersistence("osrs.sidebar.v1"));
         // Boots the RuneLite-shaped runtime: config, event bus, plugin manager,
         // core plugins (constructed inside the injector, enabled ones started).
         this.runeLite = RuneLite.start(this);
@@ -1200,17 +1171,14 @@ export class OsrsClient {
         this.firstPersonPlugin = pluginManager.getPlugin(FirstPersonPlugin)!;
         this.gameFrame317Plugin = pluginManager.getPlugin(GameFrame317Plugin)!;
         this.hdPlugin = pluginManager.getPlugin(HdPlugin)!;
+        this.weatherPlugin = pluginManager.getPlugin(WeatherPlugin)!;
         // Menus are built in pure modules (ui/menu, widgets/menu); they reach the plugins here.
         setMenuTransform((entries, context) =>
             this.clientPlugins.transformMenuEntries(entries, context),
         );
-        this.syncSidebarPlugins(true);
         if (new URLSearchParams(window.location.search).has("edit")) {
             this.loadEditModePlugin();
         }
-        pluginManager.subscribe(() => {
-            this.syncSidebarPlugins();
-        });
         // If cache is provided, initialize immediately
         // Otherwise, OsrsClient stays in DOWNLOADING state until initCache() is called
         if (cache) {
@@ -1457,6 +1425,7 @@ export class OsrsClient {
             getCs2Vm: () => this.cs2Vm,
             getVarManager: () => this.varManager,
             getWorldMap: () => this.worldMap,
+            getChatKeyboard: () => this.mobileChatKeyboard,
             getCustomInterfaces: () => this.customInterfaces,
             getPlayerDesign: () => this.playerDesign,
             getObjTypeLoader: () => this.objTypeLoader,
@@ -2117,6 +2086,9 @@ export class OsrsClient {
                         break;
                     case DEVICE_OPTION_INTERFACE_SCALING:
                         self.audioVarp.applyInterfaceScalingPercentDeviceOption(storedValue);
+                        break;
+                    case DEVICE_OPTION_SCREEN_BRIGHTNESS:
+                        self.applyScreenBrightness(storedValue);
                         break;
                 }
             },
@@ -2974,14 +2946,14 @@ export class OsrsClient {
                         });
                     } else if (typeof payload.npcId === "number") {
                         const npcServerId = payload.npcId | 0;
-                        (this.renderer as any)?.registerNpcSpotAnimation?.({
+                        this.renderer?.registerNpcSpotAnimation({
                             npcServerId,
                             spotId: payload.spotId | 0,
                             height: (payload.height ?? 0) | 0,
                             startCycle,
                         });
                     } else if (payload.tile) {
-                        (this.renderer as any)?.registerWorldSpotAnimation?.({
+                        this.renderer?.registerWorldSpotAnimation({
                             spotId: payload.spotId | 0,
                             tile: payload.tile,
                             height: (payload.height ?? 0) | 0,
@@ -3495,13 +3467,11 @@ export class OsrsClient {
                         );
                         ClientState.inInstance = true;
                         ClientState.instanceTemplateChunks = payload.templateChunks;
-                        if (this.renderer && "loadInstanceScene" in this.renderer) {
-                            (this.renderer as any).loadInstanceScene(
-                                payload.templateChunks,
-                                payload.regionX,
-                                payload.regionY,
-                            );
-                        }
+                        void this.renderer?.loadInstanceScene(
+                            payload.templateChunks,
+                            payload.regionX,
+                            payload.regionY,
+                        );
                     } catch (err) {
                         console.warn("[OsrsClient] rebuild_region error", err);
                     }
@@ -3517,9 +3487,9 @@ export class OsrsClient {
                         const wasInInstance = ClientState.inInstance;
                         ClientState.inInstance = false;
                         ClientState.instanceTemplateChunks = null;
-                        const rendererWasInInstance = (this.renderer as any)?.instanceActive === true;
-                        if ((wasInInstance || rendererWasInInstance) && this.renderer && "clearInstance" in this.renderer) {
-                            (this.renderer as any).clearInstance();
+                        const rendererWasInInstance = this.renderer?.instanceActive === true;
+                        if (wasInInstance || rendererWasInInstance) {
+                            this.renderer?.clearInstance();
                         }
                     } catch (err) {
                         console.warn("[OsrsClient] rebuild_normal error", err);
@@ -4033,6 +4003,14 @@ export class OsrsClient {
 
     private applyMasterVolume(): void {
         this.audioVarp.applyMasterVolume();
+    }
+
+    /** The Settings "Screen brightness" slider (device option 6, 0..100): saved, and the scene's gamma follows. */
+    applyScreenBrightness(value: number): void {
+        const brightness = normalizeScreenBrightness(value);
+        this.deviceOptions.set(DEVICE_OPTION_SCREEN_BRIGHTNESS, brightness);
+        saveScreenBrightness(brightness);
+        if (this.renderer) this.renderer.brightness = gammaFromScreenBrightness(brightness);
     }
 
     private applyInterfaceScalingPercentDeviceOption(value: number): void {
@@ -7027,8 +7005,8 @@ export class OsrsClient {
                 `[OsrsClient] Loc change: ${oldId} -> ${newId} at (${tile.x}, ${tile.y}, ${level})`,
             );
             // Notify renderer to update the loc
-            if (this.renderer && typeof (this.renderer as any).onLocChange === "function") {
-                (this.renderer as any).onLocChange(oldId, newId, tile, level, opts);
+            if (this.renderer) {
+                this.renderer.onLocChange(oldId, newId, tile, level, opts);
             }
         } catch (err) {
             console.warn("onLocChange error", err);
@@ -7042,7 +7020,7 @@ export class OsrsClient {
         objectData?: Uint8Array;
     }): void {
         try {
-            (this.renderer as any)?.onRegionReplacement?.(payload);
+            this.renderer?.onRegionReplacement(payload);
         } catch (err) {
             console.warn("onRegionReplacement error", err);
         }
@@ -7050,12 +7028,7 @@ export class OsrsClient {
 
     refreshGamemodeWorldLocs(): void {
         try {
-            if (
-                this.renderer &&
-                typeof (this.renderer as any).refreshGamemodeWorldLocs === "function"
-            ) {
-                (this.renderer as any).refreshGamemodeWorldLocs();
-            }
+            this.renderer?.refreshGamemodeWorldLocs();
         } catch (err) {
             console.warn("refreshGamemodeWorldLocs error", err);
         }
@@ -7072,8 +7045,8 @@ export class OsrsClient {
             console.log(
                 `[OsrsClient] Loc add: ${locId} at (${tile.x}, ${tile.y}, ${level}) shape=${shape} rot=${rotation}`,
             );
-            if (this.renderer && typeof (this.renderer as any).onLocAddChange === "function") {
-                (this.renderer as any).onLocAddChange(locId, tile, level, shape, rotation);
+            if (this.renderer) {
+                this.renderer.onLocAddChange(locId, tile, level, shape, rotation);
             }
         } catch (err) {
             console.warn("onLocAddChange error", err);
@@ -7085,8 +7058,8 @@ export class OsrsClient {
             console.log(
                 `[OsrsClient] Loc del at (${tile.x}, ${tile.y}, ${level}) shape=${shape} rot=${rotation}`,
             );
-            if (this.renderer && typeof (this.renderer as any).onLocDel === "function") {
-                (this.renderer as any).onLocDel(tile, level, shape, rotation);
+            if (this.renderer) {
+                this.renderer.onLocDel(tile, level, shape, rotation);
             }
         } catch (err) {
             console.warn("onLocDel error", err);
@@ -7102,8 +7075,8 @@ export class OsrsClient {
         animId: number,
     ): void {
         try {
-            if (this.renderer && typeof (this.renderer as any).onLocAnim === "function") {
-                (this.renderer as any).onLocAnim(locId, tile, level, shape, rotation, animId);
+            if (this.renderer) {
+                this.renderer.onLocAnim(locId, tile, level, shape, rotation, animId);
             }
         } catch (err) {
             console.warn("onLocAnim error", err);
@@ -7250,8 +7223,8 @@ export class OsrsClient {
      * is the 64x64 square the tile is in.
      */
     private npcOwnerMap(tileX: number, tileY: number): { mapX: number; mapY: number; instance: boolean } {
-        const scene = (this.renderer as any)?.instanceSceneMap as { mapX: number; mapY: number } | null | undefined;
-        if (scene && (this.renderer as any)?.instanceActive) {
+        const scene = this.renderer?.instanceSceneMap;
+        if (scene && this.renderer?.instanceActive) {
             return { mapX: scene.mapX | 0, mapY: scene.mapY | 0, instance: true };
         }
         return { mapX: getMapIndexFromTile(tileX | 0), mapY: getMapIndexFromTile(tileY | 0), instance: false };
@@ -7591,7 +7564,7 @@ export class OsrsClient {
                 // spot animation delay is in client cycles (Client.cycle units).
                 const delayCycles = Math.max(0, spot.delayCycles | 0);
                 const startCycle = getClientCycle() + delayCycles;
-                (this.renderer as any)?.registerNpcSpotAnimation?.({
+                this.renderer?.registerNpcSpotAnimation({
                     npcServerId: serverId,
                     spotId: spot.id | 0,
                     height: spot.height | 0,
@@ -8136,10 +8109,12 @@ export class OsrsClient {
             }
             this.splitPrivateChatPlugin.clear();
 
-            // Clear transient varcs while keeping persistent client preferences loaded.
+            // Clear the last account's varps and transient varcs, keeping persistent client
+            // preferences loaded: the next login only sends its non-zero varps, so anything
+            // left over would show as that account's (a home teleport cooldown, say).
             // Camera zoom bounds are reseeded by the login root bootstrap script.
             try {
-                this.varManager?.clearTransientVarcs?.();
+                this.varManager?.resetForLogout?.();
             } catch (err) {
                 console.warn("[OsrsClient] VarManager clear error:", err);
             }

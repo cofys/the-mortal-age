@@ -1441,7 +1441,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function handleItemOnNpc(event) {
     const { player, itemId } = event;
-    const npcId = event.target?.getId?.();
+    const npcId = event.npcId ?? event.target?.getId?.();
     if (itemId === BEER || itemId === BEER_TANKARD) {
       if (npcId === COUNCIL_WORKMAN_ID) {
         event.handled = true;

@@ -1,14 +1,17 @@
 // Run after `yarn build`: node --test tests/agility.test.cjs
 const assert = require("node:assert/strict");
-const { test } = require("node:test");
+const { test, before } = require("node:test");
+const path = require("node:path");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const { Location } = require("../dist/game/model/Location");
 const { Skill } = require("../dist/game/model/Skill");
-const { ObjectIdentifiers } = require("../dist/util/ObjectIdentifiers");
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { ObjectIds } = require("../dist/util/IdEnums");
+const { PluginManager } = require("../dist/plugins/PluginManager");
 
 /** Runs submitted tasks on demand instead of on the game loop. */
 const tasks = [];
@@ -27,10 +30,11 @@ function tick() {
   }
 }
 
-const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [], npcs: {} };
+const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [], npcs: {}, answers: {}, listeners: {} };
 const groundItems = [];
 const Agility = require("../plugins/skills/Agility.plugin");
 Agility.register({
+  core: PluginManager.getCoreApi(),
   getTaskManager: () => taskManager,
   getItemOnGroundManager: () => ({ registerNonGlobals: (player, item, position) => groundItems.push({ item, position }) }),
   persistAttribute() {},
@@ -39,14 +43,20 @@ Agility.register({
   onCanTeleport: (handler) => hooks.teleport.push(handler),
   onPlayerLogout: (handler) => hooks.logout.push(handler),
   onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
-  emitCustomEvent: (name, payload) => hooks.events.push({ name, payload }),
+  onCustomEvent: (name, handler) => { hooks.listeners[name] = handler; },
+  emitCustomEvent: (name, payload) => {
+    hooks.events.push({ name, payload });
+    hooks.answers[name]?.(payload);
+  },
   log() {},
 });
 
 const { COURSES } = require("../plugins/skills/agility/courses");
 const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts");
+const { build } = require("../plugins/skills/agility/shortcuts/ShortcutData");
+const SHORTCUT_DATA = require("../data/definitions/agility-shortcuts.json");
 
-function createPlayer(x, y, z, level = 99) {
+function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] } = {}) {
   let location = new Location(x, y, z);
   let forceMovement = null;
   const attributes = new Map();
@@ -69,13 +79,14 @@ function createPlayer(x, y, z, level = 99) {
     setSkillAnimation() {},
     getUpdateFlag: () => ({ flag() {} }),
     performAnimation: (animation) => state.animations.push(animation.getId()),
+    performGraphic() {},
     setPositionToFace() {},
     forceChat() {},
     sendMessage: (message) => state.messages.push(message),
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getSkillManager: () => ({
-      getCurrentLevel: (skill) => (skill === Skill.AGILITY ? level : 99),
+      getCurrentLevel: (skill) => (skill === Skill.AGILITY ? level : skills[skill.getName?.().toLowerCase?.()] ?? 99),
       getMaxLevel: () => level,
       addExperiences: (skill, amount) => { assert.equal(skill, Skill.AGILITY); state.xp += amount; },
     }),
@@ -83,11 +94,20 @@ function createPlayer(x, y, z, level = 99) {
       sendVarbit: (id, value) => state.varbits.set(id, value),
       sendRunEnergy: () => { state.energyUpdates = (state.energyUpdates ?? 0) + 1; },
       sendSound() {},
+      sendSoundEffect() {},
       sendObjectAnimation() {},
     }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: () => { state.hits++; } }) }),
-    getInventory: () => ({ isFull: () => false, addItem() {} }),
-    getEquipment: () => ({ getItems: () => new Array(14).fill(null) }),
+    getInventory: () => ({
+      isFull: () => false,
+      addItem() {},
+      contains: (id) => held.includes(id),
+      getAmount: (id) => held.filter((item) => item === id).length,
+      delete: (id, amount) => {
+        for (let i = 0; i < amount; i++) held.splice(held.indexOf(id), 1);
+      },
+    }),
+    getEquipment: () => ({ getItems: () => worn }),
     isRegistered: () => true,
     getHitpoints: () => 99,
   };
@@ -131,24 +151,45 @@ function operate(player, objectId, objectTile) {
 /** One lap in index order, using each index's first obstacle; the object sits beside the player. */
 function runLap(course, player) {
   const byIndex = new Map();
+  // A course that shares its first obstacles runs those from the course they belong to.
+  const shared = course.sharesWith ? COURSES.find((other) => other.key === course.sharesWith.course) : null;
+  for (const obstacle of shared?.obstacles ?? []) {
+    if (obstacle.index <= course.sharesWith.through && !byIndex.has(obstacle.index)) byIndex.set(obstacle.index, obstacle);
+  }
   for (const obstacle of course.obstacles) {
     if (obstacle.index != null && !byIndex.has(obstacle.index)) byIndex.set(obstacle.index, obstacle);
   }
   for (const index of [...byIndex.keys()].sort((a, b) => a - b)) {
     const obstacle = byIndex.get(index);
+    if (obstacle.npc != null) {
+      hooks.npcs["Agility Trainer"]["Give-Stick"]({ player, npc: { getId: () => obstacle.npc }, npcId: obstacle.npc });
+      continue;
+    }
     const objectId = Array.isArray(obstacle.object) ? obstacle.object[0] : obstacle.object;
     const [x, y, z] = obstacle.at ?? tileOf(player);
     assert.notEqual(operate(player, objectId, obstacle.at ?? [x, y + 1, z]), false, `${course.key} obstacle ${index} was not handled`);
   }
 }
 
-const KNOWN_OBJECT_IDS = new Set(Object.values(ObjectIdentifiers).filter(Number.isInteger));
+before(async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+});
+
+/** A loc the cache has: named, or a nameless multiloc (Wyrmscraig's cliff top) drawn as one. */
+function isCacheLoc(id) {
+  const loc = Number.isInteger(id) ? CacheDefinitions.getObject(id) : null;
+  return !!loc && ((loc.name && loc.name !== "null") || (loc.transforms ?? []).some((other) => other >= 0));
+}
 
 test("every obstacle and shortcut uses an object id from the cache", () => {
   for (const entry of [...COURSES.flatMap((course) => course.obstacles), ...SHORTCUTS]) {
+    if (entry.npc != null) {
+      assert.ok(CacheDefinitions.getNpc(entry.npc)?.name, `unknown npc id ${entry.npc} (${entry.course?.key})`);
+      continue;
+    }
     const ids = Array.isArray(entry.object) ? entry.object : [entry.object];
     for (const id of ids) {
-      assert.ok(KNOWN_OBJECT_IDS.has(id), `unknown object id ${id} (${entry.course?.key ?? "shortcut"})`);
+      assert.ok(isCacheLoc(id), `unknown object id ${id} (${entry.course?.key ?? "shortcut"})`);
     }
   }
 });
@@ -157,7 +198,9 @@ test("course indices run 1..n without gaps", () => {
   for (const course of COURSES) {
     const indices = [...new Set(course.obstacles.map((obstacle) => obstacle.index).filter((index) => index != null))];
     indices.sort((a, b) => a - b);
-    assert.deepEqual(indices, indices.map((_, i) => i + 1), course.key);
+    // A course that shares its first obstacles with another starts after them.
+    const first = (course.sharesWith?.through ?? 0) + 1;
+    assert.deepEqual(indices, indices.map((_, i) => i + first), course.key);
   }
 });
 
@@ -172,12 +215,21 @@ const LAP_ENDS = {
   prifddinas: [3240, 6109, 0],
   barbarian: [2543, 3553, 0],
   pyramid: [3364, 2830, 0],
+  "shayzien-basic": [1554, 3639, 0],
+  "shayzien-advanced": [1522, 3626, 0],
+  "wyrm-basic": [1645, 2933, 0],
+  "wyrm-advanced": [1645, 2933, 0],
+  werewolf: [3528, 9873, 0],
 };
+/** Courses that need gear to finish a lap. */
+const LAP_GEAR = { "shayzien-advanced": () => grappleGear() };
+/** Courses that need an item carried to finish a lap: Werewolf's stick, fetched on the way. */
+const LAP_ITEMS = { werewolf: [4179] };
 
 for (const course of COURSES) {
   test(`${course.name}: a full lap counts once and pays the course's lap experience`, () => {
     groundItems.length = 0;
-    const player = createPlayer(3200, 3200, 0);
+    const player = createPlayer(3200, 3200, 0, 99, { worn: LAP_GEAR[course.key]?.() ?? [], held: [...(LAP_ITEMS[course.key] ?? [])] });
     runLap(course, player);
 
     assert.equal(player.getAttribute("agility.laps")?.[course.key], 1);
@@ -221,11 +273,168 @@ test("every shortcut plays out from either side without leaving the player locke
   }
 });
 
+/** A loc's first option, or (for a multiloc like Wyrmscraig's cliff top) one of the locs it shows. */
+function firstOption(id) {
+  const loc = CacheDefinitions.getObject(id);
+  return (loc?.actions ?? [])[0] ?? (loc?.transforms ?? []).filter((other) => other >= 0).map(firstOption).find(Boolean);
+}
+
+test("every shortcut in agility-shortcuts.json has a loc the player can click", () => {
+  for (const entry of SHORTCUT_DATA.shortcuts) {
+    assert.ok([].concat(entry.object).some(firstOption), `${entry.name}: no clickable loc`);
+  }
+});
+
+test("the shortcut data refuses unknown kinds, scripts, animations and keys", () => {
+  const base = { name: "Test", object: ObjectIds.STILE, level: 1 };
+  assert.throws(() => build({ ...base }, 0), /needs one of/);
+  assert.throws(() => build({ ...base, script: "nope" }, 0), /unknown script "nope"/);
+  assert.throws(() => build({ ...base, steps: [{ anim: "NOT_AN_ANIM" }] }, 0)[0].steps, /unknown animation "NOT_AN_ANIM"/);
+  assert.throws(() => build({ ...base, steps: [], colour: "red" }, 0), /unknown key "colour"/);
+});
+
+test("a crossing's via tiles are walked in travel order, both ways", () => {
+  const [crossing] = build({
+    name: "Test stones", object: ObjectIds.STILE, level: 1,
+    between: { ends: [[10, 10, 0], [10, 14, 0]], via: [[10, 11], [10, 12], [10, 13]], cross: [{ use: "hops", args: ["...via", "to"] }] },
+  }, 0);
+  const moves = (pos) => crossing.steps({ pos, obj: { x: 10, y: 12, z: 0 } }).filter((step) => step.move).map((step) => step.move);
+  assert.deepEqual(moves({ x: 10, y: 10, z: 0 }), [[10, 11], [10, 12], [10, 13], [10, 14, 0]]);
+  assert.deepEqual(moves({ x: 10, y: 14, z: 0 }), [[10, 13], [10, 12], [10, 11], [10, 10, 0]]);
+});
+
+/** The worn items for a crossbow and a mith grapple, in their equipment slots. */
+function grappleGear() {
+  const { Equipment } = PluginManager.getCoreApi();
+  const worn = new Array(14).fill(null);
+  worn[Equipment.WEAPON_SLOT] = { getId: () => 9183, getDefinition: () => ({ getName: () => "Mithril crossbow" }) };
+  worn[Equipment.AMMUNITION_SLOT] = { getId: () => 9419, getDefinition: () => ({ getName: () => "Mith grapple" }) };
+  return worn;
+}
+
+test("a grapple needs the gear and skills, or the barehanded Agility level (Wiki: Rough wall)", () => {
+  const wall = [3033, 3390, 0];
+  const fires = (player) => player.state.animations.includes(1779); // fire and climb (rsprox, rev 237)
+  const bare = createPlayer(3033, 3390, 0, 40, { skills: { strength: 37, ranged: 19 } });
+  operate(bare, ObjectIds.ROUGH_WALL_8, wall);
+  assert.deepEqual(tileOf(bare), [3033, 3390, 0], "refused: no crossbow, and short of the barehanded 52");
+  assert.ok(bare.state.messages.includes("You need a crossbow equipped to do that."));
+
+  const geared = createPlayer(3033, 3390, 0, 11, { skills: { strength: 37, ranged: 19 }, worn: grappleGear() });
+  operate(geared, ObjectIds.ROUGH_WALL_8, wall);
+  assert.deepEqual(tileOf(geared), [3033, 3389, 1]);
+  assert.ok(fires(geared), "fires the grapple");
+
+  const weak = createPlayer(3033, 3390, 0, 11, { skills: { strength: 36, ranged: 19 }, worn: grappleGear() });
+  operate(weak, ObjectIds.ROUGH_WALL_8, wall);
+  assert.deepEqual(tileOf(weak), [3033, 3390, 0]);
+  assert.ok(weak.state.messages.includes("You need a Strength level of at least 37 to attempt this."));
+
+  const climber = createPlayer(3033, 3390, 0, 52);
+  operate(climber, ObjectIds.ROUGH_WALL_8, wall);
+  assert.deepEqual(tileOf(climber), [3033, 3389, 1], "barehanded at 52");
+  assert.ok(!fires(climber), "no grapple fired");
+});
+
+test("a quest gate refuses only when the quest plugin says it isn't done", () => {
+  const window = [3290, 3158, 0];
+  try {
+    hooks.answers["quest:is-complete"] = (request) => {
+      if (request.key === "prince_ali_rescue") request.complete = false;
+    };
+    const before = createPlayer(3290, 3157, 0);
+    operate(before, ObjectIds.BIG_WINDOW, window);
+    assert.ok(before.state.messages.includes("You need to complete Prince Ali Rescue to use this shortcut."));
+    hooks.answers["quest:is-complete"] = (request) => {
+      if (request.key === "prince_ali_rescue") request.complete = true;
+    };
+    const after = createPlayer(3290, 3157, 0);
+    operate(after, ObjectIds.BIG_WINDOW, window);
+    assert.ok(!after.state.messages.some((message) => message.includes("Prince Ali")));
+  } finally {
+    delete hooks.answers["quest:is-complete"];
+  }
+  const unknown = createPlayer(3290, 3157, 0);
+  operate(unknown, ObjectIds.BIG_WINDOW, window);
+  assert.ok(!unknown.state.messages.some((message) => message.includes("Prince Ali")), "a quest no plugin knows is no bar");
+});
+
+test("diary gates are recorded but not enforced until the diary's tasks can be done", () => {
+  hooks.events.length = 0;
+  const player = createPlayer(2898, 9902, 0);
+  operate(player, ObjectIds.CREVICE_7, [2898, 9901, 0]);
+  assert.ok(!hooks.events.some((event) => event.name === "diary:is-complete"));
+  assert.ok(!player.state.messages.some((message) => message.includes("Diary")));
+});
+
+test("failures roll the OSRS low/high success chance the Wiki charts", () => {
+  const random = Math.random;
+  try {
+    // Lumbridge Swamp Caves stones: low 51, high 252 -> 52/256 at level 1.
+    const stones = [3207, 9572, 0];
+    Math.random = () => 51.5 / 256;
+    const lucky = createPlayer(3208, 9572, 0, 1);
+    operate(lucky, ObjectIds.STEPPING_STONE_2, stones);
+    assert.equal(lucky.state.xp, 3, "success: 3 XP");
+    Math.random = () => 52.5 / 256;
+    const unlucky = createPlayer(3208, 9572, 0, 1);
+    operate(unlucky, ObjectIds.STEPPING_STONE_2, stones);
+    assert.equal(unlucky.state.xp, 1, "failure: 1 XP");
+    assert.equal(unlucky.state.hits, 1);
+  } finally {
+    Math.random = random;
+  }
+});
+
+test("a failure that still crosses moves the player and hurts them (Wiki: Jutting wall)", () => {
+  const random = Math.random;
+  try {
+    Math.random = () => 0.99;
+    const player = createPlayer(2400, 4404, 0, 46);
+    operate(player, ObjectIds.JUTTING_WALL_2, [2400, 4403, 0]);
+    assert.deepEqual(tileOf(player), [2400, 4402, 0], "still crossed");
+    assert.equal(player.state.hits, 1);
+    assert.equal(player.state.xp, 6, "the failure's 6 XP");
+  } finally {
+    Math.random = random;
+  }
+});
+
 test("shortcuts sharing an object id are told apart by their tile", () => {
   const dropTile = [3033, 3390, 1];
   const player = createPlayer(3033, 3389, 1);
   operate(player, ObjectIds.WALL_60, dropTile);
   assert.deepEqual(tileOf(player), [3033, 3390, 0]);
+});
+
+test("Shayzien: the shared start goes on into either course, and the beams need the grapple", () => {
+  const basic = COURSES.find((course) => course.key === "shayzien-basic");
+  const advanced = COURSES.find((course) => course.key === "shayzien-advanced");
+  const shared = basic.obstacles.filter((obstacle) => obstacle.index <= 3);
+  const beam = advanced.obstacles.find((obstacle) => obstacle.index === 4);
+
+  const bare = createPlayer(1554, 3630, 0);
+  for (const obstacle of shared) operate(bare, obstacle.object, [1554, 3631, 0]);
+  operate(bare, beam.object, [1512, 3637, 2]);
+  assert.ok(bare.state.messages.includes("You need a crossbow equipped to do that."));
+  assert.deepEqual(bare.getAttribute("agility.progress"), { course: "shayzien-basic", index: 3 }, "still mid-lap");
+
+  const geared = createPlayer(1554, 3630, 0, 99, { worn: grappleGear() });
+  for (const obstacle of shared) operate(geared, obstacle.object, [1554, 3631, 0]);
+  operate(geared, beam.object, [1512, 3637, 2]);
+  assert.deepEqual(geared.getAttribute("agility.progress"), { course: "shayzien-advanced", index: 4 });
+});
+
+test("Shayzien's start ladder is claimed from the Ladders plugin and climbed as the course's obstacle", () => {
+  const player = createPlayer(1554, 3630, 0);
+  const request = { player, object: gameObject(42209, 1554, 3631, 0), objectId: 42209, clickType: 1, handled: false };
+  hooks.listeners["ladders:climb"](request);
+  assert.equal(request.handled, true);
+  for (let ticks = 0; player.getAttribute("agility.obstacle") != null && ticks < 10; ticks++) tick();
+  assert.deepEqual(tileOf(player), [1554, 3632, 3]);
+  const other = { player, object: gameObject(16683, 3200, 3200, 0), objectId: 16683, clickType: 1, handled: false };
+  hooks.listeners["ladders:climb"](other);
+  assert.equal(other.handled, false, "other ladders stay the Ladders plugin's");
 });
 
 test("skipping an obstacle does not count a lap", () => {
@@ -271,6 +480,28 @@ test("logging out mid-obstacle lands the player on the far side", () => {
   assert.deepEqual(tileOf(player), [3090, 3277, 3]);
   assert.equal(player.getAttribute("agility.obstacle"), null);
   assert.equal(player.state.xp, 8);
+});
+
+test("moves land after exactly their ticks (Rocks, Ralos' Rise: three 2-tick moves, as captured)", () => {
+  const player = createPlayer(1455, 3128, 0);
+  hooks.click.get(ObjectIds.ROCKS_151)({ player, object: gameObject(ObjectIds.ROCKS_151, 1456, 3128, 0), objectId: ObjectIds.ROCKS_151, clickType: 1, location: { x: 1456, y: 3128, z: 0 }, handled: false });
+  let ticks = 0;
+  while (tileOf(player)[0] !== 1465 && ticks < 60) {
+    tick();
+    ticks++;
+  }
+  assert.equal(ticks, 6);
+  for (let more = 0; player.getAttribute("agility.obstacle") != null && more < 5; more++) tick();
+});
+
+test("the Mokhaiotl pillars swap sides: each jump sets varbit 16716 so the far pillar shows (as captured)", () => {
+  const player = createPlayer(1311, 9506, 1);
+  operate(player, 56608, [1311, 9509, 1]);
+  assert.deepEqual(tileOf(player), [1311, 9509, 1]);
+  assert.equal(player.state.varbits.get(16716), 1);
+  operate(player, 56609, [1311, 9506, 1]);
+  assert.deepEqual(tileOf(player), [1311, 9506, 1]);
+  assert.equal(player.state.varbits.get(16716), 0);
 });
 
 test("teleports are refused while crossing an obstacle", () => {

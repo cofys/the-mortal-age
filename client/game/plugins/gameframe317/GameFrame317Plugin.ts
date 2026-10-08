@@ -128,9 +128,9 @@ export class GameFrame317Plugin extends Plugin implements ClientPlugin {
     /** Align mounted widgets before layout; restore stock coordinates when disabled. */
     updateWidgetLayout(): void {
         const manager = this.osrsClient.widgetManager;
-        // The chat display (messages + input + separator line) rides with 162:56
+        // The chat display (messages + input + separator line) rides with 162:57 (chatbox:chatdisplay)
         // in both layouts; the 317 sprite anchors to the container, not this child.
-        const display = manager.getWidgetByUid((162 << 16) | 56);
+        const display = manager.getWidgetByUid((162 << 16) | 57);
         const displayY = this.enabled ? CHAT_CONTENT_Y : 0;
         if (display && display.rawY !== displayY) {
             display.rawY = displayY;

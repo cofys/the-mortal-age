@@ -207,6 +207,17 @@ export function ConfigPanel({
     }, [configManager, descriptor]);
 
     const groups = useMemo(() => groupBySection(descriptor, orderItems(descriptor)), [descriptor]);
+    // Sections fold like RuneLite's: closed at first when `closedByDefault`.
+    const [closed, setClosed] = useState<ReadonlySet<string>>(() => {
+        const sections = Object.entries(descriptor.sections ?? {});
+        return new Set(sections.filter(([, section]) => section.closedByDefault).map(([id]) => id));
+    });
+    const toggleSection = (id: string): void =>
+        setClosed((current) => {
+            const next = new Set(current);
+            if (!next.delete(id)) next.add(id);
+            return next;
+        });
 
     return (
         <div className="rl-config-panel">
@@ -214,9 +225,20 @@ export function ConfigPanel({
             {groups.map((group, index) => (
                 <div key={group.id || `section-${index}`}>
                     {group.section ? (
-                        <div className="rl-config-section-title">{group.section.name}</div>
+                        <button
+                            type="button"
+                            className={
+                                closed.has(group.id)
+                                    ? "rl-config-section-title closed"
+                                    : "rl-config-section-title"
+                            }
+                            aria-expanded={!closed.has(group.id)}
+                            onClick={() => toggleSection(group.id)}
+                        >
+                            {group.section.name}
+                        </button>
                     ) : null}
-                    {group.items.map((entry) => (
+                    {(group.section && closed.has(group.id) ? [] : group.items).map((entry) => (
                         <ConfigField
                             key={entry.property}
                             descriptor={descriptor}

@@ -734,7 +734,7 @@ export class CombatFactory {
             });
 
             // Reward the player experience after plugins have finalized this hit.
-            CombatFactory.rewardExp(attacker.getAsPlayer(), qHit);
+            if (qHit.rewardsExperience()) CombatFactory.rewardExp(attacker.getAsPlayer(), qHit);
 
             // Java parity: apply skull at hit-queue time, before executeHit mutates
             // attacker/retaliation state (which can otherwise suppress skulling).

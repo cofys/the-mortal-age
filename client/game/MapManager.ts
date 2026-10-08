@@ -195,6 +195,8 @@ export class MapManager<T extends MapSquare> {
             }
         }
         this.mapSquares.clear();
+        this.visibleMaps.length = 0;
+        this.visibleMapCount = 0;
     }
 
     getMap(mapX: number, mapY: number): T | undefined {
@@ -526,6 +528,7 @@ export class MapManager<T extends MapSquare> {
                     this.visibleMaps[this.visibleMapCount++] = mapSquare;
                 }
             }
+            this.visibleMaps.length = this.visibleMapCount;
             return;
         }
 
@@ -747,6 +750,9 @@ export class MapManager<T extends MapSquare> {
                 }
             }
         }
+        // Drop entries from a longer previous frame: backends that iterate visibleMaps (WebGPU)
+        // would otherwise draw squares that were removed since.
+        this.visibleMaps.length = this.visibleMapCount;
     }
 
     cleanUp(): void {

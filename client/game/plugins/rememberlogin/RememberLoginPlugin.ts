@@ -22,7 +22,6 @@ export class RememberLoginPlugin extends Plugin {
         name: "Remember Login",
         description: "Restores credentials stored unencrypted in this browser.",
         tags: ["login"],
-        enabledByDefault: false,
         configKey: "rememberloginplugin",
     };
 

@@ -181,6 +181,7 @@ export interface OverlayUpdateArgs {
             radiusFine: number,
         ) => number;
         sampleHeightAtExactPlane: (worldX: number, worldZ: number, plane: number) => number;
+        getHeightSamplePlaneForTile?: (tileX: number, tileY: number, basePlane: number) => number;
         getEffectivePlaneForTile: (tileX: number, tileY: number, basePlane: number) => number;
         getOccupancyPlaneForTile?: (tileX: number, tileY: number, basePlane: number) => number;
         getTileRenderFlagAt: (level: number, tileX: number, tileY: number) => number;
@@ -193,6 +194,7 @@ export interface OverlayUpdateArgs {
 export interface Overlay {
     init(args: OverlayInitArgs): void;
     update(args: OverlayUpdateArgs): void;
-    draw(phase: RenderPhase): void;
+    /** `clip` is the scissor box (x, y, w, h) already applied for a viewport-clipped overlay. */
+    draw(phase: RenderPhase, clip?: readonly number[]): void;
     dispose(): void;
 }
