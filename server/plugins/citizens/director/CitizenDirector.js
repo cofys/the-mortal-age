@@ -62,6 +62,7 @@ const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenFarmers = require("../lib/CitizenFarmers");
 const CitizenMiners = require("../lib/CitizenMiners");
 const CitizenFishers = require("../lib/CitizenFishers");
+const CitizenHunters = require("../lib/CitizenHunters");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -817,6 +818,15 @@ class CitizenDirector {
       CitizenFishers.tickFishers(this, Date.now(), desync);
     } catch (error) {
       this.log("fishers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Hunters: trackers, bowmen, trappers and beastmasters work the
+    // wilds visibly (bow draws, snare settings, trophy celebrations,
+    // meat/hide hawking, danger warnings) — only while a real player is
+    // around to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenHunters.tickHunters(this, Date.now(), desync);
+    } catch (error) {
+      this.log("hunters (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
