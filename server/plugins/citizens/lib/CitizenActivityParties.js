@@ -33,6 +33,12 @@ const { createParty, disbandParty, leaveParty } = require("./CitizenSocialMechan
 const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
+const {
+  kinOrder,
+  maybeRefusalLine,
+  maybeStormOff,
+  realPlayersNear,
+} = require("./CitizenPartyKinship");
 
 /** Uniform pick from a non-empty array using an rng function. */
 function pickOne(rng, arr) {
@@ -181,17 +187,7 @@ function pickActivity(record, kingdomId, hour, rng) {
   return pickOne(rng, options);
 }
 
-function realPlayersNear(bot) {
-  const out = [];
-  try {
-    for (const p of bot.getLocalPlayers?.() ?? []) {
-      if (p !== bot && p?.isPlayerBot?.() !== true) out.push(p);
-    }
-  } catch {
-    // Non-fatal.
-  }
-  return out;
-}
+// realPlayersNear lives in CitizenPartyKinship now (shared witness gate).
 
 // --- formation ---------------------------------------------------------------
 
@@ -239,7 +235,12 @@ function tryFormParty(record, director, hour) {
     const j = friends.length + Math.floor(rng() * (ordered.length - friends.length));
     [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
   }
-  for (const c of ordered) {
+  // Kinship consequences: spouses/partners stick together, open feuds don't
+  // march together. Excluded rivals are reported by the leader if players
+  // are watching (maybeRefusalLine below).
+  const kin = kinOrder(name, ordered);
+  const excluded = kin.excluded;
+  for (const c of kin.kept) {
     if (companions.length >= def.maxMembers - 1) break;
     companions.push(c.username);
   }
@@ -271,6 +272,10 @@ function tryFormParty(record, director, hour) {
     const rec = director.roster.get(normalizeName(c));
     journalEvent(c, `Joined ${leaderDisplay}'s ${activityLabel(activityId)}.`, "social");
   }
+
+  // Kinship consequence, visible: the leader says why a feuding citizen
+  // was left out (witness-gated and cooldown-gated inside).
+  maybeRefusalLine(director, record, excluded);
 
   // Visible to nearby real players: the leader calls out (data-tier shout,
   // no LLM — the LLM can riff on it later if asked) and nearby players get
@@ -357,6 +362,14 @@ function maintainParty(director, party, leader, hour) {
       try { leaveParty(m); } catch { /* non-fatal */ }
       try { clearFollow(m); } catch { /* non-fatal */ }
     }
+  }
+
+  // Kinship consequence: an open feud can't share a party. If a feud has
+  // gone open between members, the rival storms off (never a real player).
+  try {
+    maybeStormOff(director, party, leader);
+  } catch {
+    // Non-fatal.
   }
 
   // Time's up — wrap up with loot split and disband.
