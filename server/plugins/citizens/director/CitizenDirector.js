@@ -59,6 +59,7 @@ const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
+const { tickToasts } = require("../lib/CitizenToasts");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const CitizenBonds = require("../lib/CitizenBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
@@ -1237,6 +1238,14 @@ class CitizenDirector {
       CitizenHangouts.tickHangouts(this, hour);
     } catch (error) {
       this.log("hangouts failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen toasts: when a real player lingers at a tavern hangout,
+    // a citizen may raise a glass - a scripted toast celebrating journal
+    // news from someone present. Data tier, zero LLM.
+    try {
+      tickToasts(this, nowMs);
+    } catch (error) {
+      this.log("toasts failed", { error: String(error?.message ?? error) });
     }
     // Citizen relationships: friend citizens hail friend players passing
     // nearby, by name. Data tier, zero LLM.
