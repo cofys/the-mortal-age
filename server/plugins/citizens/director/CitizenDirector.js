@@ -72,6 +72,7 @@ const { tickElections } = require("../lib/CitizenElection");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
+const { tickTavernGames } = require("../lib/CitizenTavernGames");
 const { tickFestivals } = require("../lib/CitizenFestivals");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
@@ -1422,6 +1423,15 @@ class CitizenDirector {
       tickToasts(this, nowMs);
     } catch (error) {
       this.log("toasts failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen tavern games: citizens play dice, cards, arm wrestling, and
+    // drinking contests at the tavern in the evenings. Data tier, zero LLM -
+    // games, wagers, champions, and rivalries are journaled; visible banter
+    // is scripted and only fires near a real player.
+    try {
+      tickTavernGames(this, hour, nowMs);
+    } catch (error) {
+      this.log("tavern games failed", { error: String(error?.message ?? error) });
     }
     // Citizen weather reactions: when the sky changes (rain starts, storm
     // hits, dusk/night falls, dawn breaks), citizens near a real player
