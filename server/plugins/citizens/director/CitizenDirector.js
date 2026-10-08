@@ -1245,9 +1245,13 @@ class CitizenDirector {
     // Citizen "alive" layer: stuck detection & recovery, idle life
     // (facing, emotes, observations), citizen-to-citizen social awareness,
     // and player-like imperfections (distractions, changed minds).
-    // Data tier, zero LLM.
+    // Data tier, zero LLM. Desynced like the proximity pass so the slow
+    // tick doesn't reintroduce a full-population wave every 60s.
     try {
-      CitizenAlive.tickAlive(this, nowMs);
+      CitizenAlive.tickAlive(this, nowMs, {
+        tick: this.aiTickCount,
+        spread: this.desyncSpread(),
+      });
     } catch (error) {
       this.log("alive failed", { error: String(error?.message ?? error) });
     }

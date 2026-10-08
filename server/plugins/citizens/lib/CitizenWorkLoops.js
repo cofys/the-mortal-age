@@ -52,6 +52,7 @@ const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { normalizeName } = require("./CitizenBonds");
+const TimingDesync = require("./CitizenTimingDesync");
 
 // --- tuning --------------------------------------------------------------------
 
@@ -538,9 +539,17 @@ function tickCitizenWork(director, record, nowMs) {
  * Fast-tick entry. Called from CitizenDirector.tickProximity() (~10s),
  * after the alive layer. Wraps every citizen in try/catch.
  */
-function tickWorkLoops(director, nowMs = Date.now()) {
+function tickWorkLoops(director, nowMs = Date.now(), desync = null) {
   if (!director?.roster) return;
   for (const record of director.roster.values()) {
+    // Timing desync: only the citizens whose hash slot matches this tick's
+    // phase are evaluated — no synchronized wave of loop starts.
+    if (
+      desync &&
+      !TimingDesync.isCitizenDue(record, desync.tick, desync.spread)
+    ) {
+      continue;
+    }
     try {
       tickCitizenWork(director, record, nowMs);
     } catch {

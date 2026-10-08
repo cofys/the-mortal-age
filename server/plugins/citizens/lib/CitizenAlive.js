@@ -30,6 +30,7 @@
 
 const { agentRng, chance, logNormalJitter, humanizerProfile } = require("./humanizer");
 const { getJournal } = require("./CitizenJournal");
+const TimingDesync = require("./CitizenTimingDesync");
 
 // --- tuning ------------------------------------------------------------------
 
@@ -601,7 +602,7 @@ function tickEmoteReactions(director, record, bot, nowMs) {
  * The alive tick. Called from CitizenDirector.tick() once per ~60s tick.
  * All sub-ticks are data-tier, zero LLM, per-citizen try/catch.
  */
-function tickAlive(director, nowMs) {
+function tickAlive(director, nowMs, desync = null) {
   if (!director?.roster) return;
   for (const record of director.roster.values()) {
     if (!director.isOnline(record)) continue;
@@ -611,6 +612,16 @@ function tickAlive(director, nowMs) {
       tickStuckDetection(director, record, bot, nowMs);
     } catch {
       // One bad citizen never breaks the tick.
+    }
+    // Timing desync: only the citizens whose hash slot matches this tick's
+    // phase do the visible-life work — this breaks the synchronized wave
+    // where everyone emotes/greets/wanders on the same tick. Stuck
+    // detection above stays global (it's a safety net, not flavor).
+    if (
+      desync &&
+      !TimingDesync.isCitizenDue(record, desync.tick, desync.spread)
+    ) {
+      continue;
     }
     try {
       tickIdleLife(director, record, bot, nowMs);
