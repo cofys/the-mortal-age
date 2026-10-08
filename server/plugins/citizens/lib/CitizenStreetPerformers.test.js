@@ -28,6 +28,11 @@ const {
   PERFORMANCE_CLOSE_HOUR,
   COINS_ID,
   TIP_MAX_COINS,
+  TIP_RIPPLE_MIN_COINS,
+  TIP_RIPPLE_MAX_VOICES,
+  TIP_RIPPLE_LINES,
+  CROWD_RADIUS,
+  rippleAppreciation,
 } = require("./CitizenStreetPerformers");
 
 // Deterministic LCG — coverage is exact, not luck-based.
@@ -302,6 +307,153 @@ check("tipPerformer: already-handled events are skipped", () => {
     item: { getId: () => COINS_ID, getAmount: () => 100 },
   };
   tipPerformer(event); // must not throw, must not double-handle
+});
+
+// --- rippleAppreciation ------------------------------------------------------------
+function mockRippleBot(username, x, y, said) {
+  return {
+    getUsername: () => username,
+    getHostAddress: () => "bot",
+    getLocation: () => ({ x, y, z: 0 }),
+    getInventory: () => ({ adds: () => {} }),
+    forceChat: (line) => { said.push({ who: username, line }); },
+  };
+}
+
+function rippleWorld(names, personalities) {
+  const said = [];
+  const performer = mockRippleBot("Bardy McSong", 100, 100, said);
+  const onlookers = names.map((n, i) =>
+    mockRippleBot(n, 100 + i + 1, 100, said) // within CROWD_RADIUS of the performer
+  );
+  performer.getLocalPlayers = () => [performer, ...onlookers];
+  const { normalizeName } = require("./CitizenBonds");
+  const roster = new Map();
+  names.forEach((n, i) =>
+    roster.set(normalizeName(n), { username: n, role: "commoner", kingdomId: "asgarnia", personality: personalities[i] })
+  );
+  const director = { roster, isOnline: () => true };
+  return { said, performer, director };
+}
+
+const WARM = { traits: ["warm"], demeanor: "" };
+const NEUTRAL = { traits: [], demeanor: "" };
+const WRY = { traits: ["gruff"], demeanor: "" };
+const NERVOUS = { traits: [], demeanor: "nervous" };
+
+check("rippleAppreciation: silent on small tips", () => {
+  const { said, performer, director } = rippleWorld(["Ripple Tiny"], [WARM]);
+  const voices = rippleAppreciation(director, performer, {
+    tipperName: "GenerousTipper", amount: TIP_RIPPLE_MIN_COINS - 1, performerName: "Bardy McSong",
+  }, { rng: () => 0 }, 1_800_000_000_000);
+  assert.equal(voices, 0, "below the ripple threshold");
+  assert.equal(said.length, 0, "nobody spoke");
+});
+
+check("rippleAppreciation: warm onlooker applauds the tipper", () => {
+  const { said, performer, director } = rippleWorld(["Ripple Warm"], [WARM]);
+  const voices = rippleAppreciation(director, performer, {
+    tipperName: "GenerousTipper", amount: 500, performerName: "Bardy McSong",
+  }, { rng: () => 0 }, 1_800_000_001_000);
+  assert.equal(voices, 1, "one voice");
+  assert.equal(said.length, 1, "one forceChat");
+  assert.equal(said[0].who, "Ripple Warm", "the onlooker spoke");
+  assert.ok(said[0].line.includes("GenerousTipper"), "names the tipper");
+  assert.equal(
+    said[0].line,
+    TIP_RIPPLE_LINES.warm[0].replace("{name}", "GenerousTipper"),
+    "first warm line, deterministic"
+  );
+});
+
+check("rippleAppreciation: wry onlooker gets the wry voice", () => {
+  const { said, performer, director } = rippleWorld(["Ripple Wry"], [WRY]);
+  rippleAppreciation(director, performer, {
+    tipperName: "GenerousTipper", amount: 500, performerName: "Bardy McSong",
+  }, { rng: () => 0 }, 1_800_000_002_000);
+  assert.equal(said.length, 1);
+  assert.equal(
+    said[0].line,
+    TIP_RIPPLE_LINES.wry[0].replace("{name}", "GenerousTipper").replace("{amount}", "500"),
+    "first wry line, deterministic"
+  );
+});
+
+check("rippleAppreciation: nervous citizens stay quiet", () => {
+  const { said, performer, director } = rippleWorld(["Ripple Nervous"], [NERVOUS]);
+  const voices = rippleAppreciation(director, performer, {
+    tipperName: "GenerousTipper", amount: 500, performerName: "Bardy McSong",
+  }, { rng: () => 0 }, 1_800_000_003_000);
+  assert.equal(voices, 0, "sociability gate");
+  assert.equal(said.length, 0, "nobody spoke");
+});
+
+check("rippleAppreciation: at most TIP_RIPPLE_MAX_VOICES speak", () => {
+  const names = ["Ripple Crowd1", "Ripple Crowd2", "Ripple Crowd3", "Ripple Crowd4", "Ripple Crowd5"];
+  const { said, performer, director } = rippleWorld(names, names.map(() => WARM));
+  const voices = rippleAppreciation(director, performer, {
+    tipperName: "GenerousTipper", amount: 500, performerName: "Bardy McSong",
+  }, { rng: () => 0 }, 1_800_000_004_000);
+  assert.equal(voices, TIP_RIPPLE_MAX_VOICES, "capped");
+  assert.equal(said.length, TIP_RIPPLE_MAX_VOICES, "capped forceChats");
+});
+
+check("rippleAppreciation: cooldown gates repeat reactions", () => {
+  const { said, performer, director } = rippleWorld(["Ripple Cooldown"], [WARM]);
+  const opts = { tipperName: "GenerousTipper", amount: 500, performerName: "Bardy McSong" };
+  const deps = { rng: () => 0 };
+  const t = 1_800_000_005_000;
+  assert.equal(rippleAppreciation(director, performer, opts, deps, t), 1, "first tip ripples");
+  assert.equal(rippleAppreciation(director, performer, opts, deps, t + 1000), 0, "cooldown silences the echo");
+  assert.equal(said.length, 1, "only one forceChat");
+});
+
+check("rippleAppreciation: null-safe", () => {
+  assert.equal(rippleAppreciation(null, null), 0);
+  assert.equal(rippleAppreciation({ roster: new Map() }, null, { tipperName: "X", amount: 500 }), 0);
+  const { performer, director } = rippleWorld(["Ripple Null"], [WARM]);
+  assert.equal(rippleAppreciation(director, performer, undefined, { rng: () => 0 }), 0, "no tipper, no ripple");
+});
+
+check("tipPerformer: generous tip draws onlooker appreciation", () => {
+  // Deterministic performer username, as in the tip tests above.
+  let performerName = null;
+  let performerRecord = null;
+  for (let i = 0; i < 500 && !performerName; i++) {
+    const cand = `RippleTip${i} Tunes`;
+    const rec = { username: cand, role: "commoner", kingdomId: "asgarnia", personality: WARM };
+    if (performerTypeOf(rec)) {
+      performerName = cand;
+      performerRecord = rec;
+    }
+  }
+  assert.ok(performerName, "found a deterministic performer");
+
+  const said = [];
+  const target = mockRippleBot(performerName, 100, 100, said);
+  const onlooker = mockRippleBot("Ripple Fan", 102, 100, said);
+  target.getLocalPlayers = () => [target, onlooker];
+  const { normalizeName } = require("./CitizenBonds");
+  const director = {
+    roster: new Map([
+      [normalizeName(performerName), performerRecord],
+      [normalizeName("Ripple Fan"), { username: "Ripple Fan", role: "commoner", kingdomId: "asgarnia", personality: WARM }],
+    ]),
+    isOnline: () => true,
+  };
+
+  mockPlayer._msgs = [];
+  mockPlayer._deleted = 0;
+  const event = {
+    player: mockPlayer("GenerousTipper", 5000),
+    target,
+    item: { getId: () => COINS_ID, getAmount: () => 500 },
+  };
+  tipPerformer(event, { director, rng: () => 0 });
+  assert.equal(event.handled, true, "tip handled");
+  const fanLines = said.filter((s) => s.who === "Ripple Fan");
+  assert.equal(fanLines.length, 1, "onlooker acknowledged the tipper");
+  assert.ok(fanLines[0].line.includes("GenerousTipper"), "onlooker names the tipper");
 });
 
 console.log(`\nAll ${passed} CitizenStreetPerformers tests PASS`);

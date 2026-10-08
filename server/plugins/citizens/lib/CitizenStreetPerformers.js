@@ -28,8 +28,9 @@
 const { getJournal } = require("./CitizenJournal");
 const { getMemory } = require("./CitizenMemory");
 const { normalizeName } = require("./CitizenBonds");
+const { warmthOf } = require("../StreetNotices");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
-const { chance } = require("./humanizer");
+const { chance, humanizerProfile } = require("./humanizer");
 
 // --- tuning ----------------------------------------------------------------
 
@@ -44,6 +45,9 @@ const PERFORMANCE_OPEN_HOUR = 10; // performers work 10:00–22:00 server time
 const PERFORMANCE_CLOSE_HOUR = 22;
 const TIP_MAX_COINS = 25000; // fat-finger guard per tip
 const TIP_MEMORY_TONE = 2; // generous tippers are remembered warmly
+const TIP_RIPPLE_MIN_COINS = 100; // small change draws no crowd reaction
+const TIP_RIPPLE_CHANCE = 0.7; // per eligible onlooker
+const TIP_RIPPLE_MAX_VOICES = 2; // at most two voices per tip — never a chorus
 
 // Performance spots: deterministic offsets around the anchor tile so
 // performers spread out instead of stacking on one tile.
@@ -136,6 +140,27 @@ const THANK_LINES = Object.freeze([
   "{amount} coins! {name}, you're a legend of the square!",
   "Much obliged, {name}! I'll drink to your health tonight!",
 ]);
+
+// Onlooker reactions when a real player tips a performer generously.
+// Personality-voiced via warmthOf; slots: {name} tipper, {amount}, {performer}.
+const TIP_RIPPLE_LINES = Object.freeze({
+  warm: Object.freeze([
+    "Well tipped, {name}! The square loves a generous soul.",
+    "{amount} coins! {name}, you've made {performer}'s day.",
+    "*applauds* That's how you treat an artist, {name}!",
+    "Generous and kind — {name} sets the example!",
+  ]),
+  neutral: Object.freeze([
+    "A solid tip, {name}. {amount} coins, well placed.",
+    "*nods approvingly at {name}* The performer earned it.",
+    "{name} knows quality when they hear it.",
+  ]),
+  wry: Object.freeze([
+    "{amount} coins? {name}'s either generous or showing off.",
+    "Easy there, {name} — you'll spoil {performer}.",
+    "Hah! {name} tips better than most pay their tab.",
+  ]),
+});
 
 // --- state (in-memory; re-derived on restart, idempotent) --------------------
 
@@ -452,6 +477,50 @@ function getDirectorSafe() {
 }
 
 /**
+ * The tip ripples: nearby onlooker citizens acknowledge a generous tipper.
+ * Personality-voiced (warm/neutral/wry via warmthOf), sociability-gated —
+ * nervous/guarded citizens stay quiet. Shares the 15-minute crowd voice
+ * budget (lastCrowdAt), caps at TIP_RIPPLE_MAX_VOICES, and ignores small
+ * change below TIP_RIPPLE_MIN_COINS. Cosmetic: never throws.
+ *
+ * `deps.rng` injects the RNG in tests; production uses Math.random.
+ * Returns the number of onlookers who spoke.
+ */
+function rippleAppreciation(director, target, { tipperName, amount, performerName } = {}, deps = {}, nowMs = Date.now()) {
+  try {
+    if (!director?.roster || !target) return 0;
+    if (!Number.isFinite(amount) || amount < TIP_RIPPLE_MIN_COINS) return 0;
+    if (!tipperName) return 0;
+    const rng = deps.rng ?? Math.random;
+    const crowd = citizenCrowdNear(director, target, CROWD_RADIUS);
+    let voices = 0;
+    for (const { record, bot: fan, name } of crowd) {
+      if (voices >= TIP_RIPPLE_MAX_VOICES) break;
+      if (nowMs - (lastCrowdAt.get(name) ?? 0) < CROWD_COOLDOWN_MS) continue;
+      if (humanizerProfile(record?.personality).sociability < 1.0) continue;
+      if (!chance(rng, TIP_RIPPLE_CHANCE)) continue;
+      const warmth = warmthOf(record?.personality);
+      const pool = TIP_RIPPLE_LINES[warmth] ?? TIP_RIPPLE_LINES.neutral;
+      const line = fillLine(pickOne(rng, pool), {
+        name: tipperName,
+        amount,
+        performer: performerName ?? "the performer",
+      });
+      try {
+        fan.forceChat?.(line.slice(0, 120));
+      } catch {
+        continue;
+      }
+      lastCrowdAt.set(name, nowMs);
+      voices += 1;
+    }
+    return voices;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * A real player used coins on a citizen: if the citizen is a street
  * performer, it is a tip, not a gift. Moves real coins, thanks the tipper
  * with a scripted line, and remembers generous tippers in CitizenMemory
@@ -563,6 +632,16 @@ function tipPerformer(event, deps = {}, nowMs = Date.now()) {
     `Received a ${amount} coin tip from ${playerName} (${rep} act).`,
     { from: playerName, amount, type }
   );
+  // The moment ripples: nearby onlookers acknowledge a generous tipper.
+  try {
+    rippleAppreciation(director, target, {
+      tipperName: playerName,
+      amount,
+      performerName: citizenName,
+    }, deps, nowMs);
+  } catch {
+    // Cosmetic — the tip already landed.
+  }
 }
 
 module.exports = {
@@ -577,6 +656,10 @@ module.exports = {
   PERFORMANCE_OPEN_HOUR,
   PERFORMANCE_CLOSE_HOUR,
   TIP_MAX_COINS,
+  TIP_RIPPLE_MIN_COINS,
+  TIP_RIPPLE_CHANCE,
+  TIP_RIPPLE_MAX_VOICES,
+  TIP_RIPPLE_LINES,
   // types
   PERFORMER_TYPES,
   PERFORMER_MUSICIAN,
@@ -600,4 +683,5 @@ module.exports = {
   // lifecycle
   tickPerformers,
   tipPerformer,
+  rippleAppreciation,
 };
