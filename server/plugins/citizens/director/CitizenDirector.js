@@ -57,6 +57,7 @@ const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
+const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
@@ -640,6 +641,15 @@ class CitizenDirector {
       CitizenAlive.tickAlive(this, Date.now());
     } catch (error) {
       this.log("alive (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // In-town ambient craft-station work loops: idle commoners near a
+    // forge/anvil/range/workbench/stall do short visible work loops, but
+    // only while a real player is actually around to see them.
+    // Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenWorkLoops.tickWorkLoops(this, Date.now());
+    } catch (error) {
+      this.log("work loops (proximity) failed", { error: String(error?.message ?? error) });
     }
   }
 
