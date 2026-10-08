@@ -140,6 +140,7 @@ const { tickMoneyfolk } = require("../lib/CitizenBankers2");
 const { tickErrandfolk } = require("../lib/CitizenCouriers2");
 const { tickHerbfolk } = require("../lib/CitizenHerbalists2");
 const { tickGlassfolk } = require("../lib/CitizenGlassblowers2");
+const { tickWoodfolk } = require("../lib/CitizenArtisans2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2356,6 +2357,18 @@ class CitizenDirector {
       tickGlassfolk(this, nowMs);
     } catch (error) {
       this.log("glassfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen woodfolk (CitizenArtisans2): bowl turners, basket weavers,
+    // whittlers and timber hands — the amateur woodcraft street economy of
+    // bowls, baskets and firewood under the nose of the master artisans
+    // (CitizenArtisans), who are excluded; this owns woodlots, goods-order
+    // requests, woodcraft lessons, pro-carpenter small talk and
+    // timber-delay / windfall set-pieces. LOD-gated via brainTickDue
+    // inside (near-band citizens always due). Data tier, zero LLM.
+    try {
+      tickWoodfolk(this, nowMs);
+    } catch (error) {
+      this.log("woodfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
