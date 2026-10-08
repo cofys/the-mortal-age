@@ -69,6 +69,7 @@ const CitizenBlacksmiths = require("../lib/CitizenBlacksmiths");
 const CitizenAlchemists = require("../lib/CitizenAlchemists");
 const CitizenHerbalists = require("../lib/CitizenHerbalists");
 const CitizenJewelers = require("../lib/CitizenJewelers");
+const CitizenSailors = require("../lib/CitizenSailors");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -893,6 +894,16 @@ class CitizenDirector {
       CitizenJewelers.tickJewelers(this, Date.now(), desync);
     } catch (error) {
       this.log("jewelers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Sailors: deckhands, navigators, captains and dockworkers visibly
+    // work the docks and decks (engine-verified sailing anims 13340,
+    // 13576, 13599, passage offers, ship-arrival announcements, storm
+    // batten-downs) — only while a real player is around to see them.
+    // Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenSailors.tickSailors(this, Date.now(), desync);
+    } catch (error) {
+      this.log("sailors (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
