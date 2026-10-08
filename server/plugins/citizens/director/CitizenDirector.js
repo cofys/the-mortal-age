@@ -83,6 +83,7 @@ const { tickActors } = require("../lib/CitizenActors");
 const { tickPainters } = require("../lib/CitizenPainters");
 const { tickSculptors } = require("../lib/CitizenSculptors");
 const { tickArchitects } = require("../lib/CitizenArchitects");
+const { tickDraftfolk } = require("../lib/CitizenArchitects2");
 const { tickEngineers } = require("../lib/CitizenEngineers");
 const { tickClockmakers } = require("../lib/CitizenClockmakers");
 const { tickGlassblowers } = require("../lib/CitizenGlassblowers");
@@ -1032,6 +1033,21 @@ class CitizenDirector {
       tickArchitects(this, Date.now(), desync);
     } catch (error) {
       this.log("architects (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen draftfolk (CitizenArchitects2): amateur rough-drafters,
+    // plan-copyists and corner-advisers under the professional drafting
+    // trade — corner draft boards (not the pro studios), daily rough
+    // sketches (never approved plans or masterworks), the pro-plans
+    // small-talk bridge, the board-collapse / bad-measure set-pieces and
+    // the copy-dispute crowd moment. Citizens claimed by the master's
+    // real claimed-type function (architectTypeOf) and by
+    // CitizenBuilders2 (laborfolkTypeOf) are excluded before the share
+    // roll inside the module. LOD-gated via brainTickDue inside
+    // (near-band citizens always due). Data tier, zero LLM.
+    try {
+      tickDraftfolk(this, Date.now(), desync);
+    } catch (error) {
+      this.log("draftfolk failed", { error: String(error?.message ?? error) });
     }
     // Engineers: millwrights, siege engineers, aqueduct engineers and
     // inventors visibly work the kingdom machine workshops during daylight
