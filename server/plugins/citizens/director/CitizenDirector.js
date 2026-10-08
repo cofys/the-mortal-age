@@ -82,6 +82,7 @@ const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = re
 const { tickCaravans } = require("../lib/CitizenTradeCaravans");
 const { tickCaravanShouts } = require("../lib/CitizenTradeCaravans");
 const { tickDiplomacy, tickDiplomatShouts } = require("../lib/CitizenDiplomats");
+const { tickSpies, tickSpyShouts } = require("../lib/CitizenSpies");
 const { tickExplorers } = require("../lib/CitizenExplorers");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
@@ -788,6 +789,15 @@ class CitizenDirector {
       tickDiplomatShouts(this, Date.now());
     } catch (error) {
       this.log("diplomat shouts (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Spy shouts: spymaster-handlers whisper recruitment/dossier offers and
+    // informants whisper gathered intel to nearby real players, only where a
+    // real player can hear. Asset wage payouts go out whenever an asset is
+    // online. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      tickSpyShouts(this, Date.now());
+    } catch (error) {
+      this.log("spy shouts (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Personal companion invites: citizens invite nearby players on 1-on-1
     // outings (fishing, dungeon, walk, tavern) and remember yes/no.
@@ -1567,6 +1577,16 @@ class CitizenDirector {
       tickDiplomacy(this, nowMs);
     } catch (error) {
       this.log("diplomacy failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen spies: covert intelligence rings run missions (steal documents,
+    // eavesdrop, sabotage, counter-intelligence) on a slow per-kingdom
+    // cadence — briefed -> operating -> debrief, detection risk creates real
+    // diplomatic incidents, gathered intel can trigger early warnings that
+    // ease hot borders. Everything journaled. Data tier, zero LLM.
+    try {
+      tickSpies(this, nowMs);
+    } catch (error) {
+      this.log("spies failed", { error: String(error?.message ?? error) });
     }
     // Citizen explorers: scouts, treasure hunters, naturalists, and
     // pathfinders form expeditions on a slow per-kingdom cadence — muster,

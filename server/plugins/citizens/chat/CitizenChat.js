@@ -478,6 +478,17 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     } catch {
       // Non-fatal — fall through to LLM.
     }
+    // No pending companion invite — check for a pending spy invite.
+    try {
+      const Spies = require("../lib/CitizenSpies");
+      const invite = Spies.declineSpyInvite(speakerUsername, citizenUsername);
+      if (invite) {
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "spy_decline");
+        return true;
+      }
+    } catch {
+      // Non-fatal — fall through to LLM.
+    }
     return false; // No pending favor or invite — let the LLM handle the "no".
   }
 
@@ -511,6 +522,22 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
 
   // "yes" / "accept" — accept a pending invite from this citizen.
   if (/^(yes|yeah|yep|accept|sure|ok|okay)$/.test(said)) {
+    // Spy network invites (asset recruitment, dossier purchase). Lazy
+    // require; the player object is passed so dossiers can be charged.
+    try {
+      const Spies = require("../lib/CitizenSpies");
+      const spyInvite = Spies.acceptSpyInvite(
+        speakerUsername,
+        citizenUsername,
+        findPlayerByName(speakerUsername)
+      );
+      if (spyInvite) {
+        notifyCitizenSpoke(citizenUsername, speakerUsername, spyInvite.kind);
+        return true;
+      }
+    } catch {
+      // Non-fatal — fall through to the generic invite path.
+    }
     const invite = SocialMechanics.acceptInvite(speakerUsername, citizenUsername);
     if (invite) {
       notifyCitizenSpoke(citizenUsername, speakerUsername, invite.kind);
