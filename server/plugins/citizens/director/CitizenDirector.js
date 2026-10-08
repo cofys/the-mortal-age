@@ -112,6 +112,7 @@ const { tickFestivals } = require("../lib/CitizenFestivals");
 const { tickFestivalGames } = require("../lib/CitizenFestivalGames");
 const { tickSports } = require("../lib/CitizenSports");
 const { tickHobbyists } = require("../lib/CitizenHobbyists");
+const { tickPetOwners } = require("../lib/CitizenPetOwners");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -1961,6 +1962,17 @@ class CitizenDirector {
       tickHobbyists(this, nowMs);
     } catch (error) {
       this.log("hobbyists failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen pet owners: companion pets — cats, dogs, birds, exotics — with
+    // named pets, personalities, daily care routines, and weekly per-kingdom
+    // pet shows with derived winners. Activity system (no professional
+    // exclusions): any commoner may own a pet. Distinct from hobbyists
+    // (leisure pursuits) and stablehands (horse/mount care). Data tier,
+    // zero LLM.
+    try {
+      tickPetOwners(this, nowMs);
+    } catch (error) {
+      this.log("pet owners failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
