@@ -57,6 +57,7 @@ const {
   GOAL_MAKE_FRIENDS,
 } = require("../lib/goals");
 const { hashSeed, agentRng } = require("../lib/humanizer");
+const { tickIntents, intentBonusFor } = require("./CitizenIntents");
 
 const COINS_ID = 995;
 const INVENTORY_SIZE = 28;
@@ -399,7 +400,12 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
   const snap = snapshot(player);
   const scored = candidates
     .filter((a) => a && typeof a.id === "string")
-    .map((a) => ({ activity: a, score: scoreActivity(a.id, snap) }))
+    .map((a) => ({
+      activity: a,
+      // Session intents steer the pick: a citizen with "earn 2000 coins"
+      // scores work higher. Capped so intents never override critical needs.
+      score: scoreActivity(a.id, snap) + intentBonusFor(a.id, player),
+    }))
     .sort((x, y) => y.score - x.score);
   if (scored.length === 0) {
     return null;
@@ -544,6 +550,14 @@ function decisionTick(args) {
   }
   const username = usernameOf(player);
   pruneState(nowMs);
+  // Session intents tick BEFORE the stagger gate: the first call after
+  // materialize is the "login with a plan" moment and must not wait up to
+  // 45s. Sampling itself is cheap (Map lookups + a few inventory reads).
+  try {
+    tickIntents(player, brain, nowMs);
+  } catch {
+    // Intent failures never break the decision layer.
+  }
   // Stagger: each citizen re-evaluates every ~25-45s, not every brain tick.
   if (username) {
     const nextAt = nextDecisionAt.get(username) ?? 0;
