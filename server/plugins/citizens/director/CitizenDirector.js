@@ -129,6 +129,7 @@ const { tickHuntfolk } = require("../lib/CitizenHunters2");
 const { tickCookfolk } = require("../lib/CitizenCooks2");
 const { tickSewfolk } = require("../lib/CitizenTailors2");
 const { tickSmithfolk } = require("../lib/CitizenBlacksmiths2");
+const { tickBrewfolk } = require("../lib/CitizenAlchemists2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2193,6 +2194,20 @@ class CitizenDirector {
       tickSmithfolk(this, nowMs);
     } catch (error) {
       this.log("smithfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen village brewfolk: hedge-witches, community potion-brewers,
+    // elixir-mixers and garden experimenters at community stillrooms.
+    // Hash-derived types, per-day stillrooms/brews, comic mishap crowd
+    // moments, 7-day-TTL ledgers for brew requests, potion buys and
+    // brewing lessons. Professional alchemists (CitizenAlchemists) and
+    // herbalists (CitizenHerbalists) are excluded — the trades own the
+    // potion/herb business; healers2 remedy-brewers own health cures,
+    // brewfolk brews are explicitly non-medical. Visibility throttled via
+    // chance + cooldown (smithfolk precedent), no hobby key. Data tier, zero LLM.
+    try {
+      tickBrewfolk(this, nowMs);
+    } catch (error) {
+      this.log("brewfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
