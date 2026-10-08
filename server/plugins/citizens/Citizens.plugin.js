@@ -44,6 +44,7 @@ const { tipPerformer } = require("./lib/CitizenStreetPerformers");
 const { tipBard } = require("./lib/CitizenBards");
 const { tipActor } = require("./lib/CitizenActors");
 const { tipPainter } = require("./lib/CitizenPainters");
+const { tipSculptor } = require("./lib/CitizenSculptors");
 const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
@@ -528,6 +529,7 @@ function onTipSeen(event) {
   if (!event.handled) tipBard(event);
   if (!event.handled) tipActor(event);
   if (!event.handled) tipPainter(event);
+  if (!event.handled) tipSculptor(event);
 }
 
 /** A player logged out: drop their idle-tracking state. */
