@@ -67,6 +67,7 @@ const CitizenCooks = require("../lib/CitizenCooks");
 const CitizenTailors = require("../lib/CitizenTailors");
 const CitizenBlacksmiths = require("../lib/CitizenBlacksmiths");
 const CitizenAlchemists = require("../lib/CitizenAlchemists");
+const CitizenHerbalists = require("../lib/CitizenHerbalists");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -871,6 +872,16 @@ class CitizenDirector {
       CitizenAlchemists.tickAlchemists(this, Date.now(), desync);
     } catch (error) {
       this.log("alchemists (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Herbalists: wildcrafters, gardeners, botanists and apothecary
+    // suppliers visibly gather and prepare herbs (engine-verified digging
+    // anim 830, herblore anim 363, herb hawking, rare-find unveilings,
+    // herblore lesson offers) — only while a real player is around to see
+    // them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenHerbalists.tickHerbalists(this, Date.now(), desync);
+    } catch (error) {
+      this.log("herbalists (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
