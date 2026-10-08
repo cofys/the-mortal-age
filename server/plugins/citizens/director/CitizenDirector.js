@@ -59,6 +59,7 @@ const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
+const CitizenFarmers = require("../lib/CitizenFarmers");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -787,6 +788,15 @@ class CitizenDirector {
       CitizenMarketStalls.tickMarketStalls(this, Date.now());
     } catch (error) {
       this.log("market stalls (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Farmers: crop/livestock/orchard/apiary citizens visibly work the
+    // land (seasonal cycles, daily livestock rhythm, weather-adjusted) and
+    // hawk fresh produce — only while a real player is around to see them.
+    // Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenFarmers.tickFarmers(this, Date.now());
+    } catch (error) {
+      this.log("farmers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
