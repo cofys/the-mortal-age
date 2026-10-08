@@ -79,6 +79,7 @@ const CitizenTeachers = require("../lib/CitizenTeachers");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const { tickPerformers } = require("../lib/CitizenStreetPerformers");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
+const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
@@ -922,6 +923,16 @@ class CitizenDirector {
       CitizenGuardPatrols.tickGuardPatrols(this, Date.now());
     } catch (error) {
       this.log("guard patrols (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Guards (deeper watch systems): guard types (city-watch, gate-guard,
+    // royal-guard, investigator), shift-change announcements, gate
+    // challenges for wanted/notorious players, investigator cold cases,
+    // scripted arrests, and watch-volunteer welcomes. Data tier, zero LLM,
+    // per-citizen try/catch inside.
+    try {
+      CitizenGuards.tickGuards(this, Date.now());
+    } catch (error) {
+      this.log("guards (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Caravan shouts: muster/departure/arrival announcements and
     // guard/trader invites, only where a real player can see them.
