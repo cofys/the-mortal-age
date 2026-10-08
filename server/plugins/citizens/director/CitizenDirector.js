@@ -59,6 +59,7 @@ const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
+const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
 const CitizenGiftGiving = require("../lib/CitizenGiftGiving");
@@ -708,6 +709,17 @@ class CitizenDirector {
       CitizenShopkeeping.tickShopkeeping(this, Date.now());
     } catch (error) {
       this.log("shopkeeping (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen healers: doctors, herbalists, surgeons, and midwives treat
+    // the sick and injured at their town-square clinics, contain rare plague
+    // outbreaks, and offer treatment to lingering players — visible work
+    // only while a real player is actually around to see it. Data tier
+    // (ailment sim, plague spread, births) runs free with zero players.
+    // Zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenHealers.tickHealers(this, Date.now());
+    } catch (error) {
+      this.log("healers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Citizen artisans: master craftspeople work visibly at their workshops,
     // reveal masterpieces, announce completed commissions, and offer new
