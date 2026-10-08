@@ -136,6 +136,7 @@ const { tickGuardfolk } = require("../lib/CitizenGuards2");
 const { tickHostfolk } = require("../lib/CitizenInnkeepers2");
 const { tickSongfolk } = require("../lib/CitizenBards2");
 const { tickFarmfolk } = require("../lib/CitizenFarmers2");
+const { tickMoneyfolk } = require("../lib/CitizenBankers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2302,6 +2303,18 @@ class CitizenDirector {
       tickFarmfolk(this, nowMs);
     } catch (error) {
       this.log("farmfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen moneyfolk (CitizenBankers2): street money-changers,
+    // coin-sorters for hire, market lenders and pawnbrokers — the informal
+    // money economy under the bank's nose. Professional bankers
+    // (CitizenBankers) are excluded; this owns street exchange pitches,
+    // daily rates, coin assaying, brass-note micro-loans, pawn tickets and
+    // assay-alert / lending-rush set-pieces. LOD-gated via brainTickDue
+    // inside (near-band citizens always due). Data tier, zero LLM.
+    try {
+      tickMoneyfolk(this, nowMs);
+    } catch (error) {
+      this.log("moneyfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
