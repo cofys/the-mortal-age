@@ -97,6 +97,7 @@ const CitizenLibrarians = require("../lib/CitizenLibrarians");
 const CitizenPriests = require("../lib/CitizenPriests");
 const CitizenTaxCollectors = require("../lib/CitizenTaxCollectors");
 const CitizenMessengers = require("../lib/CitizenMessengers");
+const { tickMessengers2 } = require("../lib/CitizenMessengers2");
 const CitizenCartographers = require("../lib/CitizenCartographers");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
@@ -1141,6 +1142,19 @@ class CitizenDirector {
       CitizenMessengers.tickMessengers(this, Date.now());
     } catch (error) {
       this.log("messengers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Runnerfolk (CitizenMessengers2): amateur word-carriers under the
+    // official post — gossip-carriers, word-runners and board-runners with
+    // post corners cross-read from the master post offices and gossip lines
+    // drawn from the real rumor pools; lost-satchel / misdelivered-note
+    // set-pieces and a breathless-runner crowd moment. Citizens claimed by
+    // the master's claimed-type function are excluded before the share roll
+    // inside the module. LOD-gated via brainTickDue inside (near-band
+    // citizens always due). Data tier, zero LLM.
+    try {
+      tickMessengers2(this, Date.now());
+    } catch (error) {
+      this.log("runnerfolk failed", { error: String(error?.message ?? error) });
     }
     // Cartographers: surveyors, mapmakers, chart-explorers and sellers map
     // the world (scripted survey work, map hawking, discovery announcements
