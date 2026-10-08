@@ -3,7 +3,7 @@
 /**
  * CitizenDecisions — the brain's decision layer (model doc build steps 1+2).
  *
- * The engine existed but wasn't connected: CitizenNeeds ticked hunger/energy/
+ * The engine existed but wasn't connected: CitizenNeeds ticked hp/energy/
  * mood, goals and personalities existed, the activity registry picked
  * sticky-random. This module connects them:
  *
@@ -13,10 +13,13 @@
  *      variety guard (never the same activity 3x in a row).
  *   2. decisionTick({player, state, brain, nowMs}) — installed as the brain
  *      world's decisionTick hook. Staggered per citizen (~25-45s): interrupts
- *      the current activity for critical needs (starving/exhausted), otherwise
- *      re-decides with hysteresis when a much better activity beckons.
+ *      the current activity for critical needs (badly hurt/exhausted),
+ *      otherwise re-decides with hysteresis when a much better activity
+ *      beckons.
  *
- * Drives FROM CitizenNeeds — there is no parallel needs system here.
+ * There is no hunger in RuneScape — food need is HP-driven (eat when hurt),
+ * energy is run energy. Drives FROM CitizenNeeds — there is no parallel
+ * needs system here.
  * Near-zero dead time: activities end into assignNext -> pick, and interrupts
  * fire within one decision cadence. No long cooldowns anywhere — needs are
  * the pacing. Zero LLM in this path: all arithmetic.
@@ -36,7 +39,9 @@
 
 const {
   needsFor,
-  HUNGRY_AT,
+  hpPercent,
+  breadCount,
+  HURT_AT,
   WEARY_AT,
 } = require("./CitizenNeeds");
 const {
@@ -57,8 +62,9 @@ const COINS_ID = 995;
 const INVENTORY_SIZE = 28;
 
 // Critical need thresholds — these ALWAYS interrupt, whatever the citizen
-// is doing (a starving guard leaves the patrol; players do the same).
-const CRITICAL_HUNGER = 15;
+// is doing (a badly hurt guard leaves the patrol; players do the same).
+// There is no hunger in RuneScape: food need is HP-driven.
+const CRITICAL_HP = 30;
 const CRITICAL_ENERGY = 10;
 
 // Non-critical re-decision needs the winner to beat the current activity by
@@ -181,6 +187,14 @@ function coinCount(player) {
   }
 }
 
+function foodCount(player) {
+  try {
+    return breadCount(player);
+  } catch {
+    return 0;
+  }
+}
+
 function freeSlots(player) {
   try {
     const inv = player?.getInventory?.();
@@ -218,12 +232,13 @@ function snapshot(player) {
     // Attributes unreadable — score with defaults.
   }
   return {
-    hunger: needs ? needs.hunger : 100,
+    hp: needs ? needs.hp : 100,
     energy: needs ? needs.energy : 100,
     mood: needs ? needs.mood : 80,
     goal,
     personality,
     coins: coinCount(player),
+    food: foodCount(player),
     freeSlots: freeSlots(player),
     nearby: nearbyCount(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
@@ -243,20 +258,20 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hunger, energy, mood, goal, personality, coins, freeSlots, nearby, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
-  const hungry = hunger < HUNGRY_AT;
+  const hurt = hp < HURT_AT;
   const weary = energy < WEARY_AT;
-  const starving = hunger < CRITICAL_HUNGER;
+  const criticalHp = hp < CRITICAL_HP;
   const exhausted = energy < CRITICAL_ENERGY;
 
   switch (activityId) {
     case ACT_ROUTINE: {
       // Work: the commoner's living. Broke + industrious citizens grind;
-      // the weary and hungry stay away until fed and rested.
+      // the weary stay away until rested. Hurt citizens eat first.
       let s = 45;
       if (goalType === GOAL_MASTER_TRADE) s += 18;
       else if (goalType === GOAL_SAVE_GOLD) s += 14;
@@ -268,14 +283,18 @@ function scoreActivity(activityId, snap) {
       if (coins < 60) s += 22;
       else if (coins < 250) s += 8;
       if (weary) s -= 55;
-      if (hungry) s -= 25;
+      if (hurt) s -= 30;
       if (mood < 20) s -= 8;
       if (freeSlots <= 2) s += 10; // full inventory: the routine's bank leg handles it
       return s;
     }
     case ACT_MEAL: {
-      if (!hungry) return 4;
-      return 58 + (HUNGRY_AT - hunger) * 1.1;
+      // No hunger in RuneScape — eat when HP is low, from inventory, on the
+      // spot. No food and hurt? Still go (the eat activity resupplies).
+      if (!hurt) return 4;
+      let s = 58 + (HURT_AT - hp) * 1.1;
+      if (food <= 0) s += 10; // out of food and hurt: resupply is urgent
+      return s;
     }
     case ACT_REST: {
       if (!weary) return 4;
@@ -287,7 +306,7 @@ function scoreActivity(activityId, snap) {
       if (freeSlots <= 2) s = 70;
       else if (freeSlots <= 6) s = 40;
       if (goalType === GOAL_MASTER_TRADE || goalType === GOAL_SAVE_GOLD) s += 10;
-      if (starving || exhausted) s -= 40;
+      if (criticalHp || exhausted) s -= 40;
       return s;
     }
     case ACT_SOCIAL: {
@@ -296,7 +315,7 @@ function scoreActivity(activityId, snap) {
       if (hour >= 17 || hour <= 1) s += 8; // evenings are tavern time
       if (goalType === GOAL_MAKE_FRIENDS) s += 18;
       if (nearby >= 3) s += 6; // a crowd is already there
-      if (hunger < 20) s -= 25;
+      if (hp < 50) s -= 25;
       if (energy < 15) s -= 25;
       return s;
     }
@@ -309,15 +328,15 @@ function scoreActivity(activityId, snap) {
       if (goalType === GOAL_SAVE_GOLD) s += 8;
       if (goalType === GOAL_MAKE_FRIENDS) s -= 10;
       if (coins < 60) s += 12;
-      if (starving || exhausted) s -= 70; // critical needs beat duty
-      else if (hungry) s -= 20;
+      if (criticalHp || exhausted) s -= 70; // critical needs beat duty
+      else if (hurt) s -= 20;
       else if (weary) s -= 30;
       return s;
     }
     case "courtier_attend":
     case "leisure_stroll": {
       let s = 40 + sociable * 15;
-      if (starving || exhausted) s -= 70;
+      if (criticalHp || exhausted) s -= 70;
       return s;
     }
     case "refugee_flight": {
@@ -439,10 +458,10 @@ function interruptTarget(player, brain, nowMs) {
   const snap = snapshot(player);
   // Critical needs: interrupt whatever they're doing (with a short
   // re-arm guard so a failed meal doesn't spin).
-  if (snap.hunger < CRITICAL_HUNGER && currentId !== ACT_MEAL && MEAL_ROLES.has(role)) {
+  if (snap.hp < CRITICAL_HP && currentId !== ACT_MEAL && MEAL_ROLES.has(role)) {
     const target = byId.get(ACT_MEAL);
     if (target) {
-      return { activity: target, reason: "starving" };
+      return { activity: target, reason: "hurt" };
     }
   }
   if (snap.energy < CRITICAL_ENERGY && currentId !== ACT_REST && REST_ROLES.has(role)) {
@@ -543,7 +562,7 @@ function decisionTick(args) {
   if (!target) {
     return;
   }
-  const critical = target.reason === "starving" || target.reason === "exhausted";
+  const critical = target.reason === "hurt" || target.reason === "exhausted";
   try {
     doInterrupt(player, brain, target, nowMs, critical);
   } catch {
@@ -595,7 +614,7 @@ module.exports = {
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,
-  CRITICAL_HUNGER,
+  CRITICAL_HP,
   CRITICAL_ENERGY,
   SWITCH_MARGIN,
   EPSILON,

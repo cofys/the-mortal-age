@@ -23,7 +23,7 @@ const { siteTile, kingdomIdOf } = require("../CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
 const {
   agentRng,
-  noisyTile,
+  personalSpot,
   humanizerProfile,
 } = require("../../lib/humanizer");
 
@@ -39,9 +39,11 @@ function atTile(player, tile, radius) {
   );
 }
 
-function walkTo(player, tile) {
-  const noisy = noisyTile(tile.x, tile.y, 3, null);
-  requestMovement(player, noisy.x, noisy.y, {
+function walkTo(player, tile, username) {
+  // Personal spot near the bank — eighteen citizens banking should not
+  // stand on the same tile. Stable per citizen, like a favorite booth.
+  const spot = personalSpot(username, tile.x, tile.y, 4, 10);
+  requestMovement(player, spot.x, spot.y, {
     reason: "citizen_bank",
     basicPather: true,
     z: tile.z ?? 0,
@@ -79,7 +81,7 @@ function createCitizenBankAction(spec, world) {
       }
       if (!state.started) {
         if (!atTile(player, bank, ARRIVE_RADIUS)) {
-          walkTo(player, bank);
+          walkTo(player, bank, player.getUsername?.() ?? "unknown");
           return "running";
         }
         state.started = true;

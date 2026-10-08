@@ -23,7 +23,7 @@ const { needsFor, addEnergy } = require("../CitizenNeeds");
 const {
   agentRng,
   logNormalJitter,
-  noisyTile,
+  personalSpot,
   humanizerProfile,
 } = require("../../lib/humanizer");
 
@@ -53,9 +53,11 @@ function atTile(player, tile, radius) {
   );
 }
 
-function walkTo(player, tile) {
-  const noisy = noisyTile(tile.x, tile.y, 3, null);
-  requestMovement(player, noisy.x, noisy.y, {
+function walkTo(player, tile, username) {
+  // Home is already per-citizen, but the exact home tile still stacks when
+  // citizens share a household. Personal offset keeps them apart.
+  const spot = personalSpot(username, tile.x, tile.y, 1, 4);
+  requestMovement(player, spot.x, spot.y, {
     reason: "citizen_rest",
     basicPather: true,
     z: tile.z ?? 0,
@@ -89,7 +91,7 @@ function createCitizenRestAction(spec, world) {
         state.giveUpAt = nowMs + GIVE_UP_MS;
       }
       if (!atTile(player, home, ARRIVE_RADIUS)) {
-        walkTo(player, home);
+        walkTo(player, home, player.getUsername?.() ?? "unknown");
         return "running";
       }
       const needs = needsFor(player);

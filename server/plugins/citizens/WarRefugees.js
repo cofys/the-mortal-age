@@ -99,11 +99,11 @@ function spawnColumn(attackerId, defenderId) {
       if (!bot) continue;
       bot.setAttribute?.(ATTR_REFUGEE_ROUTE, route);
       bot.setAttribute?.(ATTR_REFUGEE_WAR, warKey);
-      // Hungry and scared: starving, broke, frightened. The director's
-      // feeding pass finds no coins, so they stay visibly hungry.
+      // Battered and scared: hurt, broke, frightened. The director's
+      // feeding pass finds no coins, so they stay visibly hurt.
       const needs = needsFor(record.username);
       if (needs) {
-        needs.hunger = 5 + Math.random() * 15;
+        needs.hp = 30 + Math.random() * 20;
         needs.energy = 40 + Math.random() * 20;
       }
       addMood(bot, -30);

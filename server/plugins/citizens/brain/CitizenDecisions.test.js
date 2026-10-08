@@ -7,6 +7,9 @@
  * driven through the real CitizenNeeds registry (ensureNeeds + direct
  * mutation) so the tests prove the "drives FROM CitizenNeeds" contract.
  *
+ * Jon's correction (2026-10-08): no hunger in RuneScape — food need is
+ * HP-driven. Tests use hp (hitpoints percent), not hunger.
+ *
  * Timezone rule: no wall-clock-hour assertions (server-local time varies).
  */
 
@@ -19,14 +22,14 @@ const {
   sociabilityOf,
   decisionTick,
   resetForTests,
-  CRITICAL_HUNGER,
+  CRITICAL_HP,
   CRITICAL_ENERGY,
   _interruptTarget,
   _directedPick,
   _recentByUser,
   _nextDecisionAt,
 } = require("./CitizenDecisions");
-const { ensureNeeds, HUNGRY_AT, WEARY_AT } = require("./CitizenNeeds");
+const { ensureNeeds, HURT_AT, WEARY_AT } = require("./CitizenNeeds");
 
 let userSeq = 0;
 function freshUser() {
@@ -51,10 +54,20 @@ function mockPlayer(opts = {}) {
     getY: () => opts.y ?? 3360,
     getZ: () => opts.z ?? 0,
   };
+  const bread = opts.bread ?? 3;
+  let hpCur = opts.hpAbs ?? 100;
+  const hpMax = opts.hpMax ?? 100;
+  let breadLeft = bread;
   const inventory = {
-    getAmount: (id) => (id === 995 ? (opts.coins ?? 500) : 0),
+    getAmount: (id) => {
+      if (id === 995) return opts.coins ?? 500;
+      if (id === 2309) return breadLeft;
+      return 0;
+    },
     getItems: () => new Array(Math.max(0, 28 - (opts.freeSlots ?? 28))).fill({}),
     getFreeSlots: () => opts.freeSlots ?? 28,
+    deleteNumber: (id, n) => { if (id === 2309) breadLeft = Math.max(0, breadLeft - n); },
+    adds: () => {},
   };
   return {
     getUsername: () => username,
@@ -64,14 +77,19 @@ function mockPlayer(opts = {}) {
     getLocalPlayers: () => opts.localPlayers ?? [],
     getMovementQueue: () => ({ size: () => 0 }),
     getForceMovement: () => null,
+    getHitpoints: () => hpCur,
+    getSkillManager: () => ({ getMaxLevel: () => hpMax }),
+    getRunEnergy: () => opts.runEnergy ?? 100,
+    setRunEnergy: () => {},
+    heal: (n) => { hpCur = Math.min(hpMax, hpCur + (n ?? 0)); },
     forceChat: () => {},
     isPlayerBot: () => true,
   };
 }
 
-function setNeeds(username, { hunger = 100, energy = 100, mood = 80 } = {}) {
+function setNeeds(username, { hp = 100, energy = 100, mood = 80 } = {}) {
   const needs = ensureNeeds(username);
-  needs.hunger = hunger;
+  needs.hp = hp;
   needs.energy = energy;
   needs.mood = mood;
   return needs;
@@ -102,53 +120,63 @@ function run(name, fn) {
 
 // --- scoring ---------------------------------------------------------------
 
-run("hungry citizen picks meal", () => {
-  const p = mockPlayer({ freeSlots: 28 });
-  setNeeds(p.getUsername(), { hunger: 20, energy: 90, mood: 70 });
+run("hurt citizen picks meal (eat on the spot)", () => {
+  const p = mockPlayer({ freeSlots: 28, bread: 3 });
+  setNeeds(p.getUsername(), { hp: 50, energy: 90, mood: 70 });
   const picked = pick(p, candidates("citizen_routine", "citizen_meal", "citizen_rest", "citizen_bank", "tavern_social"), Date.now(), noEpsilon);
   assert.equal(picked.id, "citizen_meal");
 });
 
+run("full-HP citizen does NOT pick meal", () => {
+  const p = mockPlayer({ freeSlots: 28, bread: 3 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 90, mood: 70 });
+  const mealScore = scoreActivity("citizen_meal", {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, food: 3, freeSlots: 28, nearby: 0, hour: 12,
+  });
+  assert.ok(mealScore < 10, `full HP should score meal near-zero, got ${mealScore}`);
+});
+
 run("weary citizen picks rest", () => {
   const p = mockPlayer({ freeSlots: 28 });
-  setNeeds(p.getUsername(), { hunger: 90, energy: 12, mood: 70 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 12, mood: 70 });
   const picked = pick(p, candidates("citizen_routine", "citizen_meal", "citizen_rest", "citizen_bank", "tavern_social"), Date.now(), noEpsilon);
   assert.equal(picked.id, "citizen_rest");
 });
 
 run("full inventory picks bank", () => {
   const p = mockPlayer({ freeSlots: 0 });
-  setNeeds(p.getUsername(), { hunger: 90, energy: 90, mood: 70 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 90, mood: 70 });
   const picked = pick(p, candidates("citizen_routine", "citizen_meal", "citizen_rest", "citizen_bank", "tavern_social"), Date.now(), noEpsilon);
   assert.equal(picked.id, "citizen_bank");
 });
 
 run("broke + industrious picks work", () => {
   const p = mockPlayer({ coins: 10, traits: ["dutiful", "methodical"], freeSlots: 28 });
-  setNeeds(p.getUsername(), { hunger: 90, energy: 90, mood: 70 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 90, mood: 70 });
   const picked = pick(p, candidates("citizen_routine", "tavern_social"), Date.now(), noEpsilon);
   assert.equal(picked.id, "citizen_routine");
 });
 
-run("starving beats everything (critical hunger)", () => {
+run("critical HP beats everything", () => {
   const p = mockPlayer({ coins: 10000, traits: ["dutiful"], freeSlots: 28 });
-  setNeeds(p.getUsername(), { hunger: 5, energy: 90, mood: 70 });
+  setNeeds(p.getUsername(), { hp: 20, energy: 90, mood: 70 });
   const mealScore = scoreActivity("citizen_meal", {
-    hunger: 5, energy: 90, mood: 70, goal: null, personality: { traits: [] },
-    coins: 10000, freeSlots: 28, nearby: 0, hour: 12,
+    hp: 20, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 10000, food: 3, freeSlots: 28, nearby: 0, hour: 12,
   });
   const workScore = scoreActivity("citizen_routine", {
-    hunger: 5, energy: 90, mood: 70, goal: null,
-    personality: { traits: ["dutiful"] }, coins: 10000, freeSlots: 28, nearby: 0, hour: 12,
+    hp: 20, energy: 90, mood: 70, goal: null,
+    personality: { traits: ["dutiful"] }, coins: 10000, food: 3, freeSlots: 28, nearby: 0, hour: 12,
   });
   assert.ok(mealScore > workScore, `meal ${mealScore} should beat work ${workScore}`);
-  assert.ok(mealScore > 90, "critical hunger scores near-max");
+  assert.ok(mealScore > 90, "critical HP scores near-max");
 });
 
 // --- personality changes picks ---------------------------------------------
 
 run("personality changes social scoring (chatty vs taciturn)", () => {
-  const base = { hunger: 90, energy: 90, mood: 70, goal: null, coins: 500, freeSlots: 28, nearby: 0, hour: 12 };
+  const base = { hp: 100, energy: 90, mood: 70, goal: null, coins: 500, food: 3, freeSlots: 28, nearby: 0, hour: 12 };
   const chatty = scoreActivity("tavern_social", { ...base, personality: { traits: ["chatty"] } });
   const taciturn = scoreActivity("tavern_social", { ...base, personality: { traits: ["taciturn"] } });
   assert.ok(chatty > taciturn, `chatty ${chatty} should outscore taciturn ${taciturn}`);
@@ -164,7 +192,7 @@ run("industriousness ranks dutiful above daydreamer", () => {
 
 run("variety guard blocks the same pick 3x in a row", () => {
   const p = mockPlayer({ coins: 10, traits: ["dutiful"] }); // routine scores top
-  setNeeds(p.getUsername(), { hunger: 90, energy: 90, mood: 70 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 90, mood: 70 });
   const cands = candidates("citizen_routine", "tavern_social");
   const first = pick(p, cands, Date.now(), noEpsilon);
   assert.equal(first.id, "citizen_routine");
@@ -176,7 +204,7 @@ run("variety guard blocks the same pick 3x in a row", () => {
 
 run("epsilon-greedy sometimes picks non-best", () => {
   const p = mockPlayer({ freeSlots: 28 });
-  setNeeds(p.getUsername(), { hunger: 90, energy: 90, mood: 70 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 90, mood: 70 });
   const cands = candidates("citizen_routine", "tavern_social", "citizen_bank");
   const picked = pick(p, cands, Date.now(), forceEpsilon);
   assert.notEqual(picked.id, "citizen_routine", "forced epsilon must avoid the greedy pick");
@@ -221,9 +249,9 @@ function mockBrain(currentId, availableIds) {
   };
 }
 
-run("critical hunger interrupts work -> meal (directed pick handoff)", () => {
+run("critical HP interrupts work -> meal (directed pick handoff)", () => {
   const p = mockPlayer({ role: "commoner" });
-  setNeeds(p.getUsername(), { hunger: CRITICAL_HUNGER - 1, energy: 90, mood: 70 });
+  setNeeds(p.getUsername(), { hp: CRITICAL_HP - 1, energy: 90, mood: 70 });
   const holder = mockBrain("citizen_routine", ["citizen_routine", "citizen_meal"]);
   const nowMs = Date.now();
   decisionTick({ player: p, brain: holder.brain, nowMs });
@@ -236,7 +264,7 @@ run("critical hunger interrupts work -> meal (directed pick handoff)", () => {
 
 run("critical energy interrupts work -> rest", () => {
   const p = mockPlayer({ role: "commoner" });
-  setNeeds(p.getUsername(), { hunger: 90, energy: CRITICAL_ENERGY - 1, mood: 70 });
+  setNeeds(p.getUsername(), { hp: 100, energy: CRITICAL_ENERGY - 1, mood: 70 });
   const holder = mockBrain("citizen_routine", ["citizen_routine", "citizen_rest"]);
   decisionTick({ player: p, brain: holder.brain, nowMs: Date.now() });
   assert.ok(holder.ended, "interrupt must end the current frame");
@@ -245,7 +273,7 @@ run("critical energy interrupts work -> rest", () => {
 
 run("no interrupt when needs are fine", () => {
   const p = mockPlayer({ role: "commoner", coins: 500 });
-  setNeeds(p.getUsername(), { hunger: 90, energy: 90, mood: 70 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 90, mood: 70 });
   const holder = mockBrain("citizen_routine", ["citizen_routine", "tavern_social"]);
   decisionTick({ player: p, brain: holder.brain, nowMs: Date.now() });
   assert.equal(holder.ended, null, "comfortable citizen keeps working");
@@ -253,7 +281,7 @@ run("no interrupt when needs are fine", () => {
 
 run("hysteresis: broke industrious citizen leaves the tavern for work", () => {
   const p = mockPlayer({ role: "commoner", coins: 5, traits: ["dutiful", "greedy"] });
-  setNeeds(p.getUsername(), { hunger: 80, energy: 80, mood: 80 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 80, mood: 80 });
   const holder = mockBrain("tavern_social", ["citizen_routine", "tavern_social"]);
   decisionTick({ player: p, brain: holder.brain, nowMs: Date.now() });
   assert.ok(holder.ended, "much better work option should interrupt social");
@@ -262,7 +290,7 @@ run("hysteresis: broke industrious citizen leaves the tavern for work", () => {
 
 run("decisionTick staggers (second immediate call is a no-op)", () => {
   const p = mockPlayer({ role: "commoner" });
-  setNeeds(p.getUsername(), { hunger: CRITICAL_HUNGER - 1, energy: 90, mood: 70 });
+  setNeeds(p.getUsername(), { hp: CRITICAL_HP - 1, energy: 90, mood: 70 });
   const holder = mockBrain("citizen_routine", ["citizen_routine", "citizen_meal"]);
   const nowMs = Date.now();
   decisionTick({ player: p, brain: holder.brain, nowMs });
@@ -281,7 +309,7 @@ run("decisionTick no-ops for non-citizens", () => {
   assert.equal(holder.ended, null);
 });
 
-// --- real destinations ---------------------------------------------------------
+// --- real destinations + anti-stacking ----------------------------------------
 //
 // The action modules pull BotNavigation (and the bank delegate pulls engine
 // TS). Stub them in the require cache so plain-node tests stay engine-free;
@@ -326,60 +354,45 @@ function spyMovement() {
   return () => walkedTo;
 }
 
-run("meal walks to the REAL market anchor, not an invented tile", () => {
+run("hurt citizen with food eats ON THE SPOT (no market walk)", () => {
   const getWalkedTo = spyMovement();
   const { createCitizenMealAction } = require("./actions/CitizenMeal");
-  // Far from the Asgarnia market anchor (2945, 3369 per sites.json).
-  const p = mockPlayer({ kingdomId: "asgarnia", x: 2900, y: 3300 });
-  setNeeds(p.getUsername(), { hunger: 20, energy: 90, mood: 70 });
+  // Far from any market — should NOT walk there when food is on hand.
+  // HP 50 -> needs 4 bread (5 HP each) to reach HURT_AT 70; give 5.
+  const p = mockPlayer({ kingdomId: "asgarnia", x: 2900, y: 3300, bread: 5, hpAbs: 50, hpMax: 100 });
+  const action = createCitizenMealAction({}, {});
+  let result = "running";
+  for (let i = 0; i < 10 && result === "running"; i++) {
+    result = action.update({ player: p, nowMs: Date.now() + i * 1000, state: {} });
+  }
+  assert.equal(result, "success", "eating on the spot completes");
+  assert.equal(getWalkedTo(), null, "must NOT request movement when food is in inventory");
+});
+
+run("hurt citizen WITHOUT food walks to a personal market spot", () => {
+  const getWalkedTo = spyMovement();
+  const { createCitizenMealAction } = require("./actions/CitizenMeal");
+  const p = mockPlayer({ kingdomId: "asgarnia", x: 2900, y: 3300, bread: 0, hpAbs: 50, hpMax: 100 });
   const action = createCitizenMealAction({}, {});
   const result = action.update({ player: p, nowMs: Date.now(), state: {} });
   assert.equal(result, "running");
   const walkedTo = getWalkedTo();
-  assert.ok(walkedTo, "must request movement toward the market");
+  assert.ok(walkedTo, "must request movement toward the market for resupply");
+  // Asgarnia market anchor (2945,3369): personal spot within 4-10 tiles.
   const cheb = Math.max(Math.abs(walkedTo.x - 2945), Math.abs(walkedTo.y - 3369));
-  assert.ok(cheb <= 5, `walk target must be the real Asgarnia market (2945,3369), got ${walkedTo.x},${walkedTo.y}`);
-  assert.equal(walkedTo.opts && walkedTo.opts.reason, "citizen_meal");
+  assert.ok(cheb >= 2 && cheb <= 12, `walk target must be a spread spot near the market, got ${walkedTo.x},${walkedTo.y} (cheb ${cheb})`);
 });
 
-run("meal completes when fed (non-repeat hinge)", () => {
-  const p = mockPlayer({ kingdomId: "asgarnia", x: 2945, y: 3369 }); // at the market
-  setNeeds(p.getUsername(), { hunger: 95, energy: 90, mood: 70 });
+run("full-HP citizen skips the meal entirely", () => {
+  const p = mockPlayer({ kingdomId: "asgarnia", x: 2945, y: 3369, hpAbs: 100, hpMax: 100 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 90, mood: 70 });
   const { createCitizenMealAction } = require("./actions/CitizenMeal");
   const action = createCitizenMealAction({}, {});
   const result = action.update({ player: p, nowMs: Date.now(), state: {} });
-  assert.equal(result, "success", "fed citizen finishes the meal immediately");
+  assert.equal(result, "success", "full HP finishes the meal immediately");
 });
 
-run("rest walks home (the citizen's real home tile)", () => {
-  const getWalkedTo = spyMovement();
-  const { createCitizenRestAction } = require("./actions/CitizenRest");
-  const home = { x: 3000, y: 3400, z: 0 };
-  const p = mockPlayer({ x: 2900, y: 3300 });
-  setNeeds(p.getUsername(), { hunger: 90, energy: 10, mood: 70 });
-  const action = createCitizenRestAction({}, {});
-  const result = action.update({ player: p, nowMs: Date.now(), state: { home } });
-  assert.equal(result, "running");
-  const walkedTo = getWalkedTo();
-  assert.ok(walkedTo, "must request movement toward home");
-  const cheb = Math.max(Math.abs(walkedTo.x - home.x), Math.abs(walkedTo.y - home.y));
-  assert.ok(cheb <= 5, `walk target must be the real home tile, got ${walkedTo.x},${walkedTo.y}`);
-});
-
-run("rest completes when rested", () => {
-  const p = mockPlayer({ x: 3000, y: 3400 });
-  setNeeds(p.getUsername(), { hunger: 90, energy: 80, mood: 70 });
-  const { createCitizenRestAction } = require("./actions/CitizenRest");
-  const action = createCitizenRestAction({}, {});
-  const result = action.update({
-    player: p,
-    nowMs: Date.now(),
-    state: { home: { x: 3000, y: 3400, z: 0 } },
-  });
-  assert.equal(result, "success", "rested citizen finishes the rest break");
-});
-
-run("bank walks to the REAL bank anchor", () => {
+run("bank walks to a PERSONAL spot near the real bank anchor (anti-stack)", () => {
   const getWalkedTo = spyMovement();
   const { createCitizenBankAction } = require("./actions/CitizenBank");
   // Asgarnia bank anchor: 3012, 3355 per sites.json.
@@ -390,13 +403,56 @@ run("bank walks to the REAL bank anchor", () => {
   const walkedTo = getWalkedTo();
   assert.ok(walkedTo, "must request movement toward the bank");
   const cheb = Math.max(Math.abs(walkedTo.x - 3012), Math.abs(walkedTo.y - 3355));
-  assert.ok(cheb <= 5, `walk target must be the real Asgarnia bank (3012,3355), got ${walkedTo.x},${walkedTo.y}`);
+  assert.ok(cheb >= 2 && cheb <= 12, `walk target must be a spread spot near the bank, got ${walkedTo.x},${walkedTo.y}`);
+});
+
+run("two citizens get DIFFERENT bank spots (spread)", () => {
+  const { personalSpot } = require("../lib/humanizer");
+  const a = personalSpot("Alice Test", 3012, 3355, 4, 10);
+  const b = personalSpot("Bob Test", 3012, 3355, 4, 10);
+  const cheb = Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+  assert.ok(cheb > 0, `different citizens must get different spots, got ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
+});
+
+run("personalSpot is stable per citizen", () => {
+  const { personalSpot } = require("../lib/humanizer");
+  const a1 = personalSpot("Alice Test", 3012, 3355, 4, 10);
+  const a2 = personalSpot("Alice Test", 3012, 3355, 4, 10);
+  assert.deepEqual(a1, a2, "same citizen must always get the same spot");
+});
+
+run("rest walks home with personal offset", () => {
+  const getWalkedTo = spyMovement();
+  const { createCitizenRestAction } = require("./actions/CitizenRest");
+  const home = { x: 3000, y: 3400, z: 0 };
+  const p = mockPlayer({ x: 2900, y: 3300, username: "rest-test-user" });
+  setNeeds(p.getUsername(), { hp: 100, energy: 10, mood: 70 });
+  const action = createCitizenRestAction({}, {});
+  const result = action.update({ player: p, nowMs: Date.now(), state: { home } });
+  assert.equal(result, "running");
+  const walkedTo = getWalkedTo();
+  assert.ok(walkedTo, "must request movement toward home");
+  const cheb = Math.max(Math.abs(walkedTo.x - home.x), Math.abs(walkedTo.y - home.y));
+  assert.ok(cheb <= 5, `walk target must be near the real home tile, got ${walkedTo.x},${walkedTo.y}`);
+});
+
+run("rest completes when rested", () => {
+  const p = mockPlayer({ x: 3000, y: 3400 });
+  setNeeds(p.getUsername(), { hp: 100, energy: 80, mood: 70 });
+  const { createCitizenRestAction } = require("./actions/CitizenRest");
+  const action = createCitizenRestAction({}, {});
+  const result = action.update({
+    player: p,
+    nowMs: Date.now(),
+    state: { home: { x: 3000, y: 3400, z: 0 } },
+  });
+  assert.equal(result, "success", "rested citizen finishes the rest break");
 });
 
 // --- thresholds ---------------------------------------------------------------
 
 run("threshold constants match CitizenNeeds", () => {
-  assert.ok(CRITICAL_HUNGER < HUNGRY_AT, "critical hunger is below the hungry line");
+  assert.ok(CRITICAL_HP < HURT_AT, "critical HP is below the hurt line");
   assert.ok(CRITICAL_ENERGY < WEARY_AT, "critical energy is below the weary line");
 });
 

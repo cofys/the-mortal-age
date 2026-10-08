@@ -1,15 +1,19 @@
 "use strict";
 
 /**
- * CitizenMeal — the meal break as a first-class activity.
+ * CitizenMeal — eating as a first-class activity.
  *
- * Hungry -> the decision layer picks citizen_meal -> walk to the kingdom
- * market (a real sites.json anchor, never an invented tile) -> eat from own
- * inventory or buy a loaf from a bread-selling merchant citizen (real coin
- * and item transfer via CitizenNeeds.attemptFeed) -> done.
+ * Jon's correction (2026-10-08): there is no hunger in RuneScape, there's
+ * just hitpoints. Citizens eat when HP is low — from inventory, on the spot,
+ * like a player clicking food mid-fight. No mandatory walk to the market;
+ * no meal-break timer.
  *
- * Non-repeat: it completes (fed, or gave up after a few minutes hungry and
- * broke — the needs lines make that visible) and the brain re-decides.
+ * Flow: hurt -> decision layer picks citizen_meal -> eat bread from own
+ * inventory right where they stand (visible eat lines) -> done. Out of
+ * food? Walk to a personal spot near the market and buy a loaf from a
+ * bread-selling merchant citizen (real coin/item transfer) -> eat -> done.
+ *
+ * Non-repeat: it completes and the brain re-decides.
  */
 
 const { playerState } = require("../../../bots/brain/ActionState");
@@ -17,34 +21,41 @@ const {
   requestMovement,
   clearMovementRequest,
 } = require("../../../bots/behaviours/navigation/BotNavigation");
-const { siteTile, kingdomIdOf } = require("../CitizenSites");
+const { siteTile } = require("../CitizenSites");
 const {
   ATTR_CITIZEN_PERSONALITY,
   ATTR_CITIZEN_ROLE,
   ROLE_MERCHANT,
 } = require("../../constants");
 const {
-  needsFor,
+  hpPercent,
+  breadCount,
+  eat,
   attemptFeed,
   sellsFood,
-  HUNGRY_AT,
+  HURT_AT,
 } = require("../CitizenNeeds");
 const {
   agentRng,
   logNormalJitter,
-  noisyTile,
+  personalSpot,
   humanizerProfile,
 } = require("../../lib/humanizer");
 
 const ARRIVE_RADIUS = 6;
-// A meal break that can't complete (no bread, no sellers, no coins) still
-// ends — standing at the market forever is the old bug in a new coat.
+// If resupply can't complete (no sellers, no coins) the activity still ends.
 const GIVE_UP_MS = 3 * 60 * 1000;
 
-const FULL_LINES = Object.freeze([
+const EAT_LINES = Object.freeze([
+  "*munches*",
+  "Nothing like food when you're hurting.",
+  "That'll patch me up.",
+]);
+
+const FULL_HP_LINES = Object.freeze([
   "Good. Back to it.",
   "Right — where was I?",
-  "That'll keep me going.",
+  "Patched up.",
 ]);
 
 function atTile(player, tile, radius) {
@@ -55,16 +66,18 @@ function atTile(player, tile, radius) {
   );
 }
 
-function walkTo(player, tile) {
-  const noisy = noisyTile(tile.x, tile.y, 3, null);
-  requestMovement(player, noisy.x, noisy.y, {
+function walkTo(player, tile, username) {
+  // Personal spot near the market — not the anchor tile itself. Eighteen
+  // citizens buying bread should not stand on the same tile.
+  const spot = personalSpot(username, tile.x, tile.y, 4, 10);
+  requestMovement(player, spot.x, spot.y, {
     reason: "citizen_meal",
     basicPather: true,
     z: tile.z ?? 0,
   });
 }
 
-/** Bread-selling merchant citizens in view — the meal's food source. */
+/** Bread-selling merchant citizens in view — the resupply source. */
 function localProvisioners(player) {
   const out = [];
   for (const local of player.getLocalPlayers?.() ?? []) {
@@ -94,6 +107,7 @@ function createCitizenMealAction(spec, world) {
         human: humanizerProfile(personality),
         giveUpAt: 0,
         saidFull: false,
+        saidEat: false,
       };
     });
   }
@@ -103,23 +117,14 @@ function createCitizenMealAction(spec, world) {
     update(ctx) {
       const { player, nowMs } = ctx;
       const state = botState(player);
-      const market = siteTile(player, "market");
-      if (!market) {
-        return "failed"; // no market anchor for this kingdom
-      }
-      if (!state.giveUpAt) {
-        state.giveUpAt = nowMs + GIVE_UP_MS;
-      }
-      if (!atTile(player, market, ARRIVE_RADIUS)) {
-        walkTo(player, market);
-        return "running";
-      }
-      const needs = needsFor(player);
-      if (!needs || needs.hunger >= HUNGRY_AT) {
-        if (!state.saidFull && needs) {
+      const username = player.getUsername?.() ?? "unknown";
+
+      // Not hurt? Nothing to do — like a player with full HP.
+      if (hpPercent(player) >= HURT_AT) {
+        if (!state.saidFull) {
           state.saidFull = true;
           try {
-            const line = FULL_LINES[Math.floor(state.rng() * FULL_LINES.length)];
+            const line = FULL_HP_LINES[Math.floor(state.rng() * FULL_HP_LINES.length)];
             player.forceChat?.(line);
           } catch {
             // Cosmetic only.
@@ -127,10 +132,41 @@ function createCitizenMealAction(spec, world) {
         }
         return "success";
       }
+
+      if (!state.giveUpAt) {
+        state.giveUpAt = nowMs + GIVE_UP_MS;
+      }
+
+      // Have food? Eat on the spot — no walk, like clicking food mid-fight.
+      if (breadCount(player) > 0) {
+        if (!state.saidEat) {
+          state.saidEat = true;
+          try {
+            const line = EAT_LINES[Math.floor(state.rng() * EAT_LINES.length)];
+            player.forceChat?.(line);
+          } catch {
+            // Cosmetic only.
+          }
+        }
+        eat(player);
+        // Eat until patched up or out of food.
+        if (hpPercent(player) >= HURT_AT || breadCount(player) <= 0) {
+          return "success";
+        }
+        return "running";
+      }
+
+      // Out of food and hurt: resupply at the market, then eat.
+      const market = siteTile(player, "market");
+      if (!market) {
+        return "success"; // no market — nothing we can do
+      }
+      if (!atTile(player, market, ARRIVE_RADIUS)) {
+        walkTo(player, market, username);
+        return "running";
+      }
       if (nowMs >= state.giveUpAt) {
-        // Hungry and broke, sellers nowhere — the needs system already says
-        // so out loud. End the activity; the citizen gets on with their day.
-        return "success";
+        return "success"; // no sellers, no coins — day goes on
       }
       attemptFeed(player, localProvisioners(player));
       return "running";

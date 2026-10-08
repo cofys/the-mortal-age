@@ -34,7 +34,7 @@ const {
   ensureNeeds,
   needsFor,
   eat,
-  HUNGRY_AT,
+  HURT_AT,
   BREAD_ID,
   BRONZE_SWORD_ID,
   COINS_ID,
@@ -78,9 +78,9 @@ const BARGAIN_FLOCK_MULT = 3;
 const WALK_PAST_RATIO = 1.5;
 // Ratio at/below which a price reads as "a deal" — flock, remember, journal.
 const DEAL_RATIO = 0.9;
-// Citizens keep a coin reserve; the hungry spend deeper.
+// Citizens keep a coin reserve; the hurt spend deeper.
 const RESERVE_FRACTION = 0.5;
-const HUNGRY_RESERVE_FRACTION = 0.1;
+const HURT_RESERVE_FRACTION = 0.1;
 // Max units per purchase — stalls are for daily needs, not bulk trade.
 const MAX_QTY = 3;
 
@@ -145,14 +145,14 @@ function referencePrice(itemId) {
 /**
  * Max price ratio this citizen will pay, from personality + circumstance.
  * Greedy citizens won't pay over reference; easygoing ones don't fuss;
- * hunger and loyalty stretch the purse.
+ * being hurt and needing food stretches the purse.
  */
 function maxPayRatio(bot, record, ownerName, needy) {
   const traits = new Set(personalityOf(bot)?.traits ?? []);
   let ratio = 1.15;
   if (traits.has("greedy")) ratio = 1.0;
   else if (traits.has("easygoing") || traits.has("cheerful")) ratio = 1.3;
-  if (needy) ratio += 0.25; // hunger is a powerful negotiator
+  if (needy) ratio += 0.25; // being hurt and needing food is a powerful negotiator
   const role = roleOf(record, bot);
   if (role === ROLE_COURTIER) ratio += 0.2; // the rich don't haggle over bread
   if (role === ROLE_REFUGEE) ratio -= 0.2; // the poor count every coin
@@ -285,7 +285,7 @@ function considerStall(director, bot, record, stall, rng) {
       return null;
     }
   })();
-  const hungry = (needs?.hunger ?? 100) < HUNGRY_AT;
+  const hurt = (needs?.hp ?? 100) < HURT_AT;
   const coins = coinCountOf(bot);
   if (coins <= 0) return false;
 
@@ -301,7 +301,7 @@ function considerStall(director, bot, record, stall, rng) {
     if (!ref) continue;
     const ratio = price / ref;
     if (ratio >= WALK_PAST_RATIO) continue; // walk past, no second glance
-    const needy = hungry && Number(itemId) === BREAD_ID;
+    const needy = hurt && Number(itemId) === BREAD_ID;
     const threshold = maxPayRatio(bot, record, ownerName, needy);
     const isDeal = ratio <= DEAL_RATIO;
     if (ratio <= threshold || isDeal) {
@@ -314,7 +314,7 @@ function considerStall(director, bot, record, stall, rng) {
   if (!best) return false;
 
   // Quantity: 1-3, bounded by stock, affordability, and the coin reserve.
-  const reserveFrac = best.needy ? HUNGRY_RESERVE_FRACTION : RESERVE_FRACTION;
+  const reserveFrac = best.needy ? HURT_RESERVE_FRACTION : RESERVE_FRACTION;
   const spendable = Math.max(0, coins - Math.floor(coins * reserveFrac));
   const afford = Math.floor(spendable / best.price);
   if (afford <= 0) return false;

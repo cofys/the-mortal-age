@@ -176,7 +176,7 @@ const {
   tickNeeds,
   attemptFeed,
   sellsFood,
-  HUNGRY_AT,
+  HURT_AT,
 } = require("../brain/CitizenNeeds");
 const KingdomStore = require("../../kingdoms/KingdomStore");
 const {
@@ -1845,9 +1845,9 @@ class CitizenDirector {
         bot.setAttribute?.(ATTR_KINGDOM_ID, record.kingdomId);
       }
       this.tickGoals(record, bot, phase);
-      // Hungry citizens feed themselves: own bread first, then buy a loaf
-      // from a nearby bread merchant. The broke go visibly hungry.
-      if (needs && needs.hunger < HUNGRY_AT) {
+      // Hurt citizens feed themselves: own bread first, then buy a loaf
+      // from a nearby bread merchant. The broke stay visibly hurt.
+      if (needs && needs.hp < HURT_AT) {
         attemptFeed(bot, this.foodSellersNear(record, bot));
       }
     }
