@@ -25,6 +25,38 @@
 
 const { normalizeName } = require("./CitizenBonds");
 
+// Hoisted exclusion-chain requires (was: lazy require per citizen per tick).
+// The chain is linear with no back-references, so top-level is safe.
+function safeRequire(path) {
+  try { return require(path); } catch { return null; }
+}
+const _engineers = safeRequire("./CitizenEngineers");
+const _architects = safeRequire("./CitizenArchitects");
+const _builders = safeRequire("./CitizenBuilders");
+const _smiths = safeRequire("./CitizenBlacksmiths");
+const _jewelers = safeRequire("./CitizenJewelers");
+const _performers = safeRequire("./CitizenStreetPerformers");
+const _bards = safeRequire("./CitizenBards");
+const _actors = safeRequire("./CitizenActors");
+const _innkeepers = safeRequire("./CitizenInnkeepers");
+const _painters = safeRequire("./CitizenPainters");
+const _sculptors = safeRequire("./CitizenSculptors");
+
+// Memoization: type checks are pure (deterministic from username), so cache
+// per-username results. The roster is bounded (~170), so the cache stays small.
+const _typeCache = new Map(); // normName -> type|null
+const _TYPE_CACHE_MAX = 1000;
+function memoizedTypeOf(name, compute) {
+  if (_typeCache.has(name)) return _typeCache.get(name);
+  const result = compute();
+  if (_typeCache.size >= _TYPE_CACHE_MAX) {
+    const firstKey = _typeCache.keys().next().value;
+    _typeCache.delete(firstKey);
+  }
+  _typeCache.set(name, result);
+  return result;
+}
+
 // === Tuning ===
 const CLOCKMAKER_RADIUS = 14; // tiles — close enough to see/hear
 const CLOCKMAKER_CITIZEN_COOLDOWN_MS = 3 * 60 * 60 * 1000; // a citizen fires at most every 3h
@@ -297,52 +329,27 @@ function clockmakerTypeOf(record) {
   try {
     const name = normalizeName(record?.username);
     if (!name) return null;
+    return memoizedTypeOf(name, () => computeClockmakerType(record, name));
+  } catch {
+    return null;
+  }
+}
+
+function computeClockmakerType(record, name) {
+  try {
     // No overlap: engineers own machines, architects own designs, builders own
     // construction, smiths own metalwork, jewelers own gems.
-    try {
-      const engineers = require("./CitizenEngineers");
-      if (typeof engineers.engineerTypeOf === "function" && engineers.engineerTypeOf(record)) return null;
-    } catch { /* module absent */ }
-    try {
-      const arch = require("./CitizenArchitects");
-      if (typeof arch.architectTypeOf === "function" && arch.architectTypeOf(record)) return null;
-    } catch { /* module absent */ }
-    try {
-      const builders = require("./CitizenBuilders");
-      if (typeof builders.getBuilderInfo === "function" && builders.getBuilderInfo(name)) return null;
-    } catch { /* module absent */ }
-    try {
-      const smiths = require("./CitizenBlacksmiths");
-      if (typeof smiths.smithTypeFor === "function" && smiths.smithTypeFor(name)) return null;
-    } catch { /* module absent */ }
-    try {
-      const jewelers = require("./CitizenJewelers");
-      if (typeof jewelers.jewelerTypeFor === "function" && jewelers.jewelerTypeFor(name)) return null;
-    } catch { /* module absent */ }
-    try {
-      const perf = require("./CitizenStreetPerformers");
-      if (typeof perf.performerTypeOf === "function" && perf.performerTypeOf(record)) return null;
-    } catch { /* module absent */ }
-    try {
-      const bards = require("./CitizenBards");
-      if (typeof bards.bardTypeOf === "function" && bards.bardTypeOf(record)) return null;
-    } catch { /* module absent */ }
-    try {
-      const actors = require("./CitizenActors");
-      if (typeof actors.actorTypeOf === "function" && actors.actorTypeOf(record)) return null;
-    } catch { /* module absent */ }
-    try {
-      const inn = require("./CitizenInnkeepers");
-      if (typeof inn.innTypeFor === "function" && inn.innTypeFor(name) === "bard") return null;
-    } catch { /* module absent */ }
-    try {
-      const painters = require("./CitizenPainters");
-      if (typeof painters.painterTypeOf === "function" && painters.painterTypeOf(record)) return null;
-    } catch { /* module absent */ }
-    try {
-      const sculptors = require("./CitizenSculptors");
-      if (typeof sculptors.sculptorTypeOf === "function" && sculptors.sculptorTypeOf(record)) return null;
-    } catch { /* module absent */ }
+    if (typeof _engineers?.engineerTypeOf === "function" && _engineers.engineerTypeOf(record)) return null;
+    if (typeof _architects?.architectTypeOf === "function" && _architects.architectTypeOf(record)) return null;
+    if (typeof _builders?.getBuilderInfo === "function" && _builders.getBuilderInfo(name)) return null;
+    if (typeof _smiths?.smithTypeFor === "function" && _smiths.smithTypeFor(name)) return null;
+    if (typeof _jewelers?.jewelerTypeFor === "function" && _jewelers.jewelerTypeFor(name)) return null;
+    if (typeof _performers?.performerTypeOf === "function" && _performers.performerTypeOf(record)) return null;
+    if (typeof _bards?.bardTypeOf === "function" && _bards.bardTypeOf(record)) return null;
+    if (typeof _actors?.actorTypeOf === "function" && _actors.actorTypeOf(record)) return null;
+    if (typeof _innkeepers?.innTypeFor === "function" && _innkeepers.innTypeFor(name) === "bard") return null;
+    if (typeof _painters?.painterTypeOf === "function" && _painters.painterTypeOf(record)) return null;
+    if (typeof _sculptors?.sculptorTypeOf === "function" && _sculptors.sculptorTypeOf(record)) return null;
     const roll = hashStr("clockmaker:" + name) % 100;
     if (roll >= CLOCKMAKER_SHARE) return null;
     return clockmakerTypeFromRoll(hashStr("clockmakertype:" + name) % 100);
