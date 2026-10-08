@@ -33,7 +33,8 @@
  * says so out loud.
  */
 
-const { ATTR_CITIZEN_NEEDS, ATTR_WARE_ITEM } = require("../constants");
+const { ATTR_CITIZEN_NEEDS, ATTR_WARE_ITEM, ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("../lib/citizenVoice");
 
 const BREAD_ID = 2309; // ItemIds.BREAD
 const BRONZE_SWORD_ID = 1277; // ItemIds.BRONZE_SWORD
@@ -59,38 +60,53 @@ const LINE_COOLDOWN_MS = 20 * 60 * 1000;
 const FEED_COOLDOWN_MS = 10 * 60 * 1000;
 const BROKE_LINE_COOLDOWN_MS = 30 * 60 * 1000;
 
-const HURT_LINES = Object.freeze([
-  "I'm hurt... need a minute.",
-  "That one stung.",
-  "Patch me up... anyone got food?",
-  "I'm not looking so good.",
-]);
+const HURT_LINES = Object.freeze({
+  plain: Object.freeze([
+    "I'm hurt... need a minute.",
+    "That one stung.",
+    "Patch me up... anyone got food?",
+    "I'm not looking so good.",
+  ]),
+  terse: Object.freeze(["hurt.", "need food.", "patch me up.", "not good."]),
+});
 
-const ENERGY_LINES = Object.freeze([
-  "Out of breath...",
-  "Need to catch my breath.",
-  "My legs are giving out.",
-  "Can't keep running like this.",
-]);
+const ENERGY_LINES = Object.freeze({
+  plain: Object.freeze([
+    "Out of breath...",
+    "Need to catch my breath.",
+    "My legs are giving out.",
+    "Can't keep running like this.",
+  ]),
+  terse: Object.freeze(["winded.", "need a sec.", "legs are gone.", "can't run."]),
+});
 
-const GRUMPY_LINES = Object.freeze([
-  "Everything's gone wrong today.",
-  "Bah. People.",
-  "Not in the mood. Not ever, lately.",
-  "Mind your own business.",
-]);
+const GRUMPY_LINES = Object.freeze({
+  plain: Object.freeze([
+    "Everything's gone wrong today.",
+    "Bah. People.",
+    "Not in the mood. Not ever, lately.",
+    "Mind your own business.",
+  ]),
+  terse: Object.freeze(["bah.", "leave me be.", "not today.", "hmph."]),
+});
 
-const ATE_LINES = Object.freeze([
-  "That hit the spot.",
-  "Good bread. Good day.",
-  "Mmm. Needed that.",
-]);
+const ATE_LINES = Object.freeze({
+  plain: Object.freeze([
+    "That hit the spot.",
+    "Good bread. Good day.",
+    "Mmm. Needed that.",
+  ]),
+  terse: Object.freeze(["better.", "needed that.", "good."]),
+});
 
-const BROKE_LINES = Object.freeze([
-  "Can't even afford bread...",
-  "Hurt and broke. Story of my life.",
-  "My purse is as empty as my stomach.",
-]);
+const BROKE_LINES = Object.freeze({
+  plain: Object.freeze([
+    "Can't even afford bread...",
+    "Hurt and broke. Story of my life.",
+    "My purse is as empty as my stomach.",
+  ]),
+  terse: Object.freeze(["broke.", "no coins.", "can't afford it."]),
+});
 
 /** username -> { hp, energy, mood, lastTickMs, lastLineAt, lastFeedAt } */
 const registry = new Map();
@@ -180,8 +196,9 @@ function isMoving(player) {
   }
 }
 
-/** Overhead line, throttled per key so one citizen doesn't spam. */
-function say(player, key, lines, cooldownMs = LINE_COOLDOWN_MS) {
+/** Overhead line, throttled per key so one citizen doesn't spam. Voice-aware:
+ * the line is picked and styled for the citizen's personality. */
+function say(player, key, pool, cooldownMs = LINE_COOLDOWN_MS) {
   const needs = needsFor(player);
   if (!needs || !player) {
     return;
@@ -192,7 +209,8 @@ function say(player, key, lines, cooldownMs = LINE_COOLDOWN_MS) {
   }
   needs.lastLineAt[key] = now;
   try {
-    player.forceChat?.(lines[Math.floor(Math.random() * lines.length)]);
+    const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+    player.forceChat?.(voiceLine(voiceFor(personality), pool));
   } catch (error) {
     // Cosmetic only.
   }

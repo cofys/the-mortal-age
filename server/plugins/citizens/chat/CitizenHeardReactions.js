@@ -26,6 +26,7 @@
 
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { humanizerProfile } = require("../lib/humanizer");
+const { voiceFor, voiceLine } = require("../lib/citizenVoice");
 
 // Per-citizen throttle: username -> timestamp of last scripted reaction.
 const lastReactionAt = new Map();
@@ -57,6 +58,7 @@ const POOLS = Object.freeze({
 });
 
 // Terse variants for gruff/taciturn citizens (they don't exclaim).
+// Kept as explicit pools (not generated) so the lines read naturally.
 const TERSE = Object.freeze({
   greeting: Object.freeze(["hey.", "hi.", "yo."]),
   farewell: Object.freeze(["cya.", "later.", "bye."]),
@@ -67,6 +69,11 @@ const TERSE = Object.freeze({
   gl: Object.freeze(["gl."]),
   agree: Object.freeze(["yeah.", "true."]),
 });
+
+/** Combine plain + terse into a voice-aware pool for voiceLine(). */
+function voicePool(key) {
+  return { plain: POOLS[key], terse: TERSE[key] };
+}
 
 // --- Pattern matchers -----------------------------------------------------
 // Each returns the pool key or null. Ordered by specificity.
@@ -143,20 +150,6 @@ function reactionChance(personality) {
   }
 }
 
-function isTerse(personality) {
-  try {
-    const traits = personality?.traits ?? [];
-    const set = new Set(Array.isArray(traits) ? traits : []);
-    return set.has("gruff") || set.has("taciturn");
-  } catch {
-    return false;
-  }
-}
-
-function pick(pool, rng = Math.random) {
-  return pool[Math.floor(rng() * pool.length)];
-}
-
 // --- Main entry ------------------------------------------------------------
 
 /**
@@ -208,9 +201,10 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
     }
   }
 
-  // Pick line (terse variants for gruff/taciturn).
-  const pool = isTerse(personality) ? TERSE[key] : POOLS[key];
-  const line = pick(pool);
+  // Pick line through the shared voice module (terse variants for
+  // gruff/taciturn, lowercase/punctuation styling per voice profile).
+  const voice = voiceFor(personality);
+  const line = voiceLine(voice, voicePool(key));
 
   // Speak.
   try {

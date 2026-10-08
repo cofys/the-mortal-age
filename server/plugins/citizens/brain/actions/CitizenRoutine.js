@@ -41,6 +41,7 @@ const {
   chance,
   humanizerProfile,
 } = require("../../lib/humanizer");
+const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
 
 const KIND_HOME = "home";
 const KIND_WORK = "work";
@@ -62,14 +63,24 @@ const CATCH_PRICE = 4;
 const COINS_ID = 995;
 const BREAD_ID = 2309;
 
-const FISHING_LINES = Object.freeze([
-  "Come on, bite...",
-  "The river's generous today.",
-  "Caught a boot last week. A BOOT.",
-  "Quiet water, full net. That's the way.",
-  "My father fished this same spot.",
-  "Shh — you'll scare them off.",
-]);
+const FISHING_LINES = Object.freeze({
+  plain: Object.freeze([
+    "Come on, bite...",
+    "The river's generous today.",
+    "Caught a boot last week. A BOOT.",
+    "Quiet water, full net. That's the way.",
+    "My father fished this same spot.",
+    "Shh — you'll scare them off.",
+  ]),
+  terse: Object.freeze([
+    "bite...",
+    "good water today.",
+    "caught a boot once.",
+    "quiet. good.",
+    "dad fished here.",
+    "shh.",
+  ]),
+});
 
 function minutesNow() {
   const now = new Date();
@@ -319,8 +330,9 @@ function createCitizenRoutineAction(spec, world) {
     state.casts += 1;
     if (chance(state.rng, 0.5 * state.human.chatRate)) {
       try {
+        const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
         player.forceChat?.(
-          FISHING_LINES[Math.floor(state.rng() * FISHING_LINES.length)]
+          voiceLine(voiceFor(personality), FISHING_LINES, state.rng)
         );
       } catch (error) {
         // Cosmetic only.
