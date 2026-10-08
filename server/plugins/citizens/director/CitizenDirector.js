@@ -64,6 +64,7 @@ const CitizenMiners = require("../lib/CitizenMiners");
 const CitizenFishers = require("../lib/CitizenFishers");
 const CitizenHunters = require("../lib/CitizenHunters");
 const CitizenCooks = require("../lib/CitizenCooks");
+const CitizenTailors = require("../lib/CitizenTailors");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -838,6 +839,16 @@ class CitizenDirector {
       CitizenCooks.tickCooks(this, Date.now(), desync);
     } catch (error) {
       this.log("cooks (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Tailors: clothiers, armorers, weavers and embroiderers visibly work
+    // their workshops (engine-verified needlework anim 885, season-style
+    // announcements in kingdom colors, garment hawking, commission
+    // offers, masterpiece unveilings) — only while a real player is around
+    // to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenTailors.tickTailors(this, Date.now(), desync);
+    } catch (error) {
+      this.log("tailors (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
