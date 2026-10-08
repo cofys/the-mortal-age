@@ -36,7 +36,7 @@ const { initPlayerShops } = require("./shop/PlayerShops");
 const { initMarketBoard } = require("./shop/MarketBoard.Shops");
 const { initMarketRegistrar } = require("./shop/MarketRegistrar.Shops");
 const attachWarRefugees = require("./WarRefugees");
-const { onPlayerLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
+const { onPlayerLevelUpNotice, onCitizenLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
 const { onNpcKillWitnessed } = require("./StreetSpectacle");
 const { onLogoutFarewell } = require("./StreetFarewells");
 const { onIdleSeen, clearIdleOnLogout } = require("./StreetIdle");
@@ -506,6 +506,7 @@ function onKingdomWarEndedRelief(event) {
 
 function onLevelUpHeard(event) {
   onPlayerLevelUpNotice(event);
+  onCitizenLevelUpNotice(event);
   onMentorLevelUpNotice(event);
 }
 
