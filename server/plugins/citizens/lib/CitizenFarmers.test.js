@@ -187,21 +187,22 @@ const citizenPlayer = {
   getLocation: () => ({ getX: () => 100, getY: () => 100, getZ: () => 0 }),
   forceChat: (msg) => chatLines.push(msg),
 };
+const realPlayer = {
+  getUsername: () => "Cofy",
+  getLocation: () => ({ getX: () => 105, getY: () => 105, getZ: () => 0 }),
+};
+citizenPlayer.getLocalPlayers = () => [citizenPlayer, realPlayer];
 // Find a username that is a farmer.
 let farmerName = null;
 for (let i = 0; i < 500 && !farmerName; i++) {
   if (farmerTypeFor("tickfarm" + i)) farmerName = "tickfarm" + i;
 }
 assert.ok(farmerName, "found farmer for tick test");
-const realPlayer = {
-  getUsername: () => "Cofy",
-  getLocation: () => ({ getX: () => 105, getY: () => 105, getZ: () => 0 }),
-};
 const roster = new Map([[farmerName, { username: farmerName, role: "commoner" }]]);
 const director = {
   roster,
-  playerFor: (rec) => (rec.username === farmerName ? citizenPlayer : null),
-  onlinePlayers: () => [realPlayer],
+  isOnline: (rec) => rec.username === farmerName,
+  getBot: (rec) => (rec.username === farmerName ? citizenPlayer : null),
 };
 // Force the chance gate: run many ticks until one fires (cooldown starts clear).
 let fired = false;
@@ -221,10 +222,12 @@ for (let i = 0; i < 500 && !plainJoe; i++) {
   if (farmerTypeFor("plainjoe" + i) === null) plainJoe = "plainjoe" + i;
 }
 assert.ok(plainJoe, "found a non-farmer commoner name");
+const citizen2 = { ...citizenPlayer, forceChat: (m) => chat2.push(m) };
+citizen2.getLocalPlayers = () => [citizen2, realPlayer];
 const director2 = {
   roster: new Map([[plainJoe, { username: plainJoe, role: "commoner" }]]),
-  playerFor: () => ({ ...citizenPlayer, forceChat: (m) => chat2.push(m) }),
-  onlinePlayers: () => [realPlayer],
+  isOnline: () => true,
+  getBot: () => citizen2,
 };
 for (let i = 0; i < 5; i++) tickFarmers(director2, Date.now() + i * 5 * 60 * 60 * 1000);
 assert.equal(chat2.length, 0, "non-farmer commoner never fires");
@@ -232,10 +235,12 @@ assert.equal(chat2.length, 0, "non-farmer commoner never fires");
 // --- tick: no real players nearby -> silence ---
 _resetState();
 const chat3 = [];
+const citizen3 = { ...citizenPlayer, forceChat: (m) => chat3.push(m) };
+citizen3.getLocalPlayers = () => [citizen3, { isPlayerBot: () => true }]; // only bots around
 const director3 = {
   roster,
-  playerFor: () => ({ ...citizenPlayer, forceChat: (m) => chat3.push(m) }),
-  onlinePlayers: () => [{ isPlayerBot: () => true }], // only bots around
+  isOnline: () => true,
+  getBot: () => citizen3,
 };
 for (let i = 0; i < 5; i++) tickFarmers(director3, Date.now() + i * 5 * 60 * 60 * 1000);
 assert.equal(chat3.length, 0, "no output when only bots are near");
@@ -243,10 +248,12 @@ assert.equal(chat3.length, 0, "no output when only bots are near");
 // --- tick: guards never farm ---
 _resetState();
 const chat4 = [];
+const citizen4 = { ...citizenPlayer, forceChat: (m) => chat4.push(m) };
+citizen4.getLocalPlayers = () => [citizen4, realPlayer];
 const director4 = {
   roster: new Map([[farmerName, { username: farmerName, role: "guard" }]]),
-  playerFor: () => ({ ...citizenPlayer, forceChat: (m) => chat4.push(m) }),
-  onlinePlayers: () => [realPlayer],
+  isOnline: () => true,
+  getBot: () => citizen4,
 };
 for (let i = 0; i < 5; i++) tickFarmers(director4, Date.now() + i * 5 * 60 * 60 * 1000);
 assert.equal(chat4.length, 0, "guard role never farms");

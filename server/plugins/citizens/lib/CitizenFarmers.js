@@ -390,11 +390,11 @@ function tickFarmers(director, nowMs) {
         if (nowMs - last < FARMER_WORK_COOLDOWN_MS) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the farm work.
-        if (!anyRealPlayerNear(director, citizen, FARMER_RADIUS)) continue;
+        if (!anyRealPlayerNear(citizen, FARMER_RADIUS)) continue;
 
         // 5. Chance gate, then do the visible work (scripted, zero LLM).
         if (Math.random() >= FARMER_WORK_CHANCE) continue;
@@ -414,9 +414,9 @@ function tickFarmers(director, nowMs) {
         if (!hasProduceReady(record.username, nowMs)) continue;
         const last = lastPitchByCitizen.get(record.username) || 0;
         if (nowMs - last < PITCH_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
-        if (!anyRealPlayerNear(director, citizen, PITCH_RADIUS)) continue;
+        if (!anyRealPlayerNear(citizen, PITCH_RADIUS)) continue;
         if (Math.random() >= PITCH_CHANCE) continue;
         doProducePitch(citizen, record.username, nowMs);
         lastPitchByCitizen.set(record.username, nowMs);
@@ -462,11 +462,20 @@ function doProducePitch(citizen, username, nowMs) {
   journalEvent(username, "Took fresh produce to sell.");
 }
 
-/** True if any real (non-bot) player is within radius tiles of the citizen. */
-function anyRealPlayerNear(director, citizen, radius) {
+/** Materialized bot for a record via the canonical director API (isOnline + getBot). */
+function materializedBot(director, record) {
   try {
-    const players = director.onlinePlayers?.() ?? [];
-    for (const p of players) {
+    return director?.isOnline?.(record) ? director.getBot?.(record) ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True if any real (non-bot) player is within radius tiles of the citizen. */
+function anyRealPlayerNear(citizen, radius) {
+  try {
+    for (const p of citizen.getLocalPlayers?.() ?? []) {
+      if (p === citizen) continue;
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
     }
