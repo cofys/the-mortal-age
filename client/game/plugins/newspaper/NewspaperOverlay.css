@@ -1,0 +1,205 @@
+/* The Mortal Age — newspaper overlay.
+ * Built on the heraldic template: tall dark-bronze panel, ornate gold frame,
+ * corner brackets, gold section headers, parchment body.
+ * Class prefix: tma-newspaper- (rename to tma-newspaper- throughout). */
+
+.tma-newspaper-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(11, 8, 5, 0.72) 0%, rgba(11, 8, 5, 0.9) 100%);
+    animation: tma-newspaper-fadein 0.35s ease-out;
+}
+
+@keyframes tma-newspaper-fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tma-newspaper-panel {
+    position: relative;
+    width: min(480px, 92vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+    border: 1px solid #6b5a3a;
+    outline: 3px solid #14100b;
+    box-shadow:
+        0 0 0 4px #6b5a3a,
+        0 0 40px rgba(201, 162, 39, 0.15),
+        0 20px 60px rgba(0, 0, 0, 0.8);
+    padding: 28px 24px 16px;
+    animation: tma-newspaper-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes tma-newspaper-rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Corner brackets — L-shaped bright gold */
+.tma-newspaper-panel::before,
+.tma-newspaper-panel::after {
+    content: "";
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid #c9a227;
+    pointer-events: none;
+}
+.tma-newspaper-panel::before {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+}
+.tma-newspaper-panel::after {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+}
+
+.tma-newspaper-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #9a8f7d;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.15s ease;
+    z-index: 1;
+}
+
+.tma-newspaper-close:hover {
+    color: #d9b45b;
+}
+
+.tma-newspaper-kicker {
+    margin: 0 0 2px;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+}
+
+.tma-newspaper-name {
+    margin: 0;
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #d9b45b;
+}
+
+.tma-newspaper-header-rule {
+    flex: 0 0 auto;
+    height: 1px;
+    margin: 12px 40px 14px;
+    background: linear-gradient(90deg, transparent, #6b5a3a, transparent);
+}
+
+.tma-newspaper-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-right: 2px;
+}
+
+.tma-newspaper-section {
+    flex: 0 0 auto;
+}
+
+.tma-newspaper-section-title {
+    margin: 0 0 6px 2px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #d9b45b;
+}
+
+.tma-newspaper-inset {
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    padding: 12px 14px;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* TODO: add your row/text/button styles here, following the palette:
+ *   body text #e8ded0, gold highlights #d9b45b, muted #9a8f7d */
+
+/* Themed scrollbar */
+.tma-newspaper-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+.tma-newspaper-scroll::-webkit-scrollbar-track {
+    background: #14100b;
+    border-radius: 4px;
+}
+.tma-newspaper-scroll::-webkit-scrollbar-thumb {
+    background: #3a2f22;
+    border-radius: 4px;
+}
+.tma-newspaper-scroll::-webkit-scrollbar-thumb:hover {
+    background: #6b5a3a;
+}
+
+/* Newspaper-specific: edition dateline, story styles */
+.tma-newspaper-edition {
+    margin: 4px 0 0;
+    font-size: 12px;
+    font-style: italic;
+    color: #9a8f7d;
+    text-align: center;
+}
+
+.tma-newspaper-headline {
+    margin: 0 0 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #e8ded0;
+    line-height: 1.45;
+}
+
+.tma-newspaper-headline:first-child {
+    font-size: 17px;
+    color: #d9b45b;
+}
+
+.tma-newspaper-gossip {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-style: italic;
+    color: #cfc4b0;
+    line-height: 1.5;
+}
+
+.tma-newspaper-announcement {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: #e8ded0;
+    line-height: 1.5;
+}
+
+.tma-newspaper-obituary {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: #9a8f7d;
+    line-height: 1.5;
+    border-left: 2px solid #6b5a3a;
+    padding-left: 10px;
+}

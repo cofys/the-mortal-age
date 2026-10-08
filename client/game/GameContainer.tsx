@@ -20,6 +20,7 @@ import { QuestOverlay } from "./plugins/quests/QuestOverlay";
 import { WarTableOverlay } from "./plugins/wartable/WarTableOverlay";
 import { ExamineOverlay } from "./plugins/examine/ExamineOverlay";
 import { ShopOverlay } from "./plugins/shop/ShopOverlay";
+import { NewspaperOverlay } from "./plugins/newspaper/NewspaperOverlay";
 import { SidebarShell } from "./sidebar/SidebarShell";
 
 interface OsrsContainerProps {
@@ -389,6 +390,8 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                         <ExamineOverlay osrsClient={osrsClient} />
 
                         <ShopOverlay osrsClient={osrsClient} />
+
+                        <NewspaperOverlay osrsClient={osrsClient} />
 
                         <div className="hud right-top">
                             <div className="fps-counter content-text">{fps}</div>

@@ -70,6 +70,7 @@ const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
 const { tickFestivals } = require("../lib/CitizenFestivals");
+const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickCaravans } = require("../lib/CitizenTradeCaravans");
 const { tickCaravanShouts } = require("../lib/CitizenTradeCaravans");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
@@ -755,6 +756,15 @@ class CitizenDirector {
     } catch (error) {
       this.log("retirement (proximity) failed", { error: String(error?.message ?? error) });
     }
+    // Town crier: the designated crier per kingdom shouts the week's top
+    // headline and hands nearby real players a copy of the paper (opens the
+    // heraldic overlay, once per edition per player). Data tier, zero LLM,
+    // per-crier try/catch inside.
+    try {
+      tickCrier(this, Date.now());
+    } catch (error) {
+      this.log("crier (proximity) failed", { error: String(error?.message ?? error) });
+    }
   }
 
   isOnline(record) {
@@ -1399,6 +1409,14 @@ class CitizenDirector {
       tickFestivals(this, nowMs);
     } catch (error) {
       this.log("festivals failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen newspaper: once a week, compile the paper from journals,
+    // rumors, festivals, elections, and retirements — headlines, gossip
+    // column, announcements, obituaries. Data tier, zero LLM.
+    try {
+      tickNewspaper(this, nowMs);
+    } catch (error) {
+      this.log("newspaper failed", { error: String(error?.message ?? error) });
     }
     // Trade caravans: merchant-led expeditions between capitals on a
     // staggered schedule — muster, travel (data-tier), bandit risk on
