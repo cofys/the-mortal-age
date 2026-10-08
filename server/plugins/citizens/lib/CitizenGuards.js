@@ -354,6 +354,22 @@ function forceSay(bot, line) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Real director API: isOnline(record) + getBot(record)
+ * (director/CitizenDirector.js:1374/1379). `director.playerFor` does not
+ * exist — any call to it returns undefined forever, silently disabling the
+ * whole interaction tier, so it is never used here.
+ */
+function materializedBot(director, record) {
+  try {
+    if (director.isOnline?.(record)) return director.getBot?.(record) ?? null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Real (non-bot) players within N tiles of this bot. */
 function realPlayersWithin(bot, tiles) {
   const out = [];
@@ -434,7 +450,7 @@ function tickRoyalGuard(director, record, bot, nowMs, rng, seen) {
     for (const other of director.roster?.values?.() ?? []) {
       if (other.username === username) continue;
       if (other.role !== "courtier" && other.role !== "merchant") continue;
-      const otherBot = director.playerFor?.(other);
+      const otherBot = materializedBot(director, other);
       if (!otherBot || !withinTiles(bot, otherBot, 8)) continue;
       bowed = other.username;
       break;
@@ -505,7 +521,7 @@ function tickArrest(director, record, bot, nowMs, rng, seen) {
     for (const other of director.roster?.values?.() ?? []) {
       if (other.username === username) continue;
       if (!isWanted(other.username, nowMs)) continue;
-      const otherBot = director.playerFor?.(other);
+      const otherBot = materializedBot(director, other);
       if (!otherBot || !withinTiles(bot, otherBot, ARREST_RADIUS)) continue;
       forceSay(bot, fillLine(pickOne(rng, ARREST_LINES), { name: other.username }));
       forceSay(otherBot, pickOne(rng, SURRENDER_LINES));
@@ -577,7 +593,7 @@ function tickGuards(director, nowMs, rng) {
       if (record.role !== "guard") continue;
       let bot = null;
       try {
-        bot = director.playerFor?.(record);
+        bot = materializedBot(director, record);
       } catch {
         continue;
       }
