@@ -53,13 +53,21 @@ function mockRecord(username, role = "commoner", kingdomId = "misthalin") {
 
 function mockDirector(records, players = []) {
   const bots = new Map();
+  const getBot = (record) => {
+    if (!bots.has(record.username)) {
+      const bot = mockCitizenBot(record.username);
+      bot.getLocalPlayers = () => players;
+      bots.set(record.username, bot);
+    }
+    return bots.get(record.username);
+  };
   return {
     roster: new Map(records.map((r) => [r.username, r])),
-    playerFor: (record) => {
-      if (!bots.has(record.username)) bots.set(record.username, mockCitizenBot(record.username));
-      return bots.get(record.username);
-    },
-    onlinePlayers: () => players,
+    // Real director API (director/CitizenDirector.js: isOnline + getBot).
+    // playerFor/onlinePlayers never existed on the real director — the old
+    // mock encoded dead APIs, which is why the militia tick was mute in prod.
+    isOnline: (record) => true,
+    getBot,
     _bots: bots,
   };
 }

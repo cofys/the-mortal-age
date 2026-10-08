@@ -39,8 +39,8 @@ const STUCK_CHECK_TILES = 2; // moved less than this = didn't move
 const IDLE_FACE_CHANCE = 0.3; // per tick: turn to face a nearby player
 const IDLE_EMOTE_CHANCE = 0.08; // per tick: play an idle emote/animation
 const IDLE_OBSERVE_CHANCE = 0.12; // per tick: voice a small observation
-const IDLE_WANDER_CHANCE = 0.15; // per tick: take a few steps (stretch legs)
-const IDLE_WANDER_RADIUS = 5; // tiles: how far a wander goes
+const IDLE_WANDER_CHANCE = 0.4; // per tick: take a few steps (stretch legs)
+const IDLE_WANDER_RADIUS = 10; // tiles: how far a wander goes
 const SOCIAL_GREET_RADIUS = 4; // tiles: citizens this close may greet
 const SOCIAL_GREET_CHANCE = 0.15; // per eligible pair per tick
 const SOCIAL_GREET_COOLDOWN_MS = 5 * 60 * 1000; // per citizen
@@ -197,12 +197,102 @@ function faceToward(bot, targetTile) {
   }
 }
 
-function requestMovement(bot, x, y, z, reason) {
+// --- movement instrumentation --------------------------------------------------
+//
+// Honest, throttled evidence that citizen movement dispatch fires and that
+// citizens actually change tiles. Every movement request flows through
+// requestMovement() below (queue -> immediate dispatch), and every tile
+// change is observed by tickStuckDetection() via positionHistory. These lines
+// are the ground truth for "are citizens moving?" — never assumptions.
+//
+// Volume: dispatches log at most once per citizen per minute; failures always
+// log (they are the diagnostic signal). tickAlive adds one summary line per
+// slow tick: online / moved-since-last-tick / with-active-movement-queue.
+
+const MOVE_LOG_COOLDOWN_MS = 60 * 1000;
+const moveLogAt = new Map(); // username -> lastMs
+
+function movementLogAllowed(username, nowMs) {
+  const last = moveLogAt.get(username) ?? 0;
+  if (nowMs - last < MOVE_LOG_COOLDOWN_MS) return false;
+  moveLogAt.set(username, nowMs);
+  return true;
+}
+
+function logDispatch(director, username, fields) {
   try {
-    const { requestMovement: rm } = require("../../bots/behaviours/navigation/BotNavigation");
-    rm(bot, x, y, { reason: reason ?? "citizen_alive", basicPather: true, z: z ?? 0 });
-    return true;
+    director?.log?.("movement dispatch", { citizen: username, ...fields });
   } catch {
+    // Logging must never break movement.
+  }
+}
+
+function requestMovement(director, bot, x, y, z, reason) {
+  const name = bot?.getUsername?.() ?? "?";
+  let from = null;
+  try {
+    from = botTile(bot);
+  } catch {
+    // Cosmetic.
+  }
+  const to = { x, y, z: z ?? 0 };
+  try {
+    const {
+      requestMovement: rm,
+      peekMovementRequest,
+      dispatchMovementRequest,
+    } = require("../../bots/behaviours/navigation/BotNavigation");
+    const queued = rm(bot, x, y, {
+      reason: reason ?? "citizen_alive",
+      basicPather: true,
+      z: z ?? 0,
+    });
+    if (queued !== true) {
+      logDispatch(director, name, { phase: "queue_failed", reason, from, to });
+      return false;
+    }
+    // Dispatch immediately: citizen bots may not have an active BotBrain
+    // ticking to dispatch queued movements. Without this, requests queue
+    // up but never execute, leaving citizens frozen.
+    try {
+      const req = peekMovementRequest(bot);
+      if (!req) {
+        logDispatch(director, name, { phase: "peek_empty", reason, from, to });
+        return true;
+      }
+      const result = dispatchMovementRequest(bot, req);
+      if (movementLogAllowed(name, Date.now())) {
+        logDispatch(director, name, {
+          phase: "dispatched",
+          reason,
+          from,
+          target: { x: req.x, y: req.y, z: req.z },
+          segment: result?.segmentTarget ?? null,
+          hasRoute: result?.hasRoute === true,
+          steps: Number.isFinite(result?.steps) ? result.steps : 0,
+          skippedByCooldown: result?.skippedByCooldown === true,
+        });
+      }
+      return true;
+    } catch (dispatchErr) {
+      // Dispatch is best-effort; the request is queued.
+      logDispatch(director, name, {
+        phase: "dispatch_error",
+        reason,
+        from,
+        to,
+        error: String(dispatchErr?.message ?? dispatchErr),
+      });
+      return true;
+    }
+  } catch (err) {
+    logDispatch(director, name, {
+      phase: "queue_error",
+      reason,
+      from,
+      to,
+      error: String(err?.message ?? err),
+    });
     return false;
   }
 }
@@ -226,25 +316,34 @@ function isMoving(bot) {
  */
 const positionHistory = new Map(); // username -> { x, y, checkedAt }
 
+/**
+ * Track each citizen's position over time. If they haven't meaningfully
+ * moved in STUCK_THRESHOLD_MS while their brain is active, they're stuck —
+ * force a recovery: clear the movement queue and re-request their home
+ * (which unsticks pathing deadlocks and unreachable destinations).
+ *
+ * Returns true when the citizen actually changed tiles since the last check
+ * (honest movement evidence, used by tickAlive's summary), false otherwise.
+ */
 function tickStuckDetection(director, record, bot, nowMs) {
   const name = record.username;
   const tile = botTile(bot);
-  if (!tile) return;
+  if (!tile) return false;
 
   const prev = positionHistory.get(name);
   if (!prev) {
     positionHistory.set(name, { x: tile.x, y: tile.y, checkedAt: nowMs });
-    return;
+    return false;
   }
 
   const moved = chebyshev(tile, prev) > STUCK_CHECK_TILES;
   if (moved) {
     positionHistory.set(name, { x: tile.x, y: tile.y, checkedAt: nowMs });
-    return;
+    return true;
   }
 
   // Hasn't moved. Check if it's been long enough to call it stuck.
-  if (nowMs - prev.checkedAt < STUCK_THRESHOLD_MS) return;
+  if (nowMs - prev.checkedAt < STUCK_THRESHOLD_MS) return false;
 
   // Stuck! But don't "fix" citizens who are supposed to be stationary
   // (tending a stall, sleeping at home during off-hours).
@@ -255,7 +354,7 @@ function tickStuckDetection(director, record, bot, nowMs) {
   if (stationaryOk) {
     // Refresh the timestamp so we don't spam; merchants stand still legitimately.
     positionHistory.set(name, { x: tile.x, y: tile.y, checkedAt: nowMs });
-    return;
+    return false;
   }
 
   // Recovery: clear any wedged movement state and walk to a nearby tile.
@@ -267,7 +366,7 @@ function tickStuckDetection(director, record, bot, nowMs) {
     const home = record.home ?? tile;
     const nx = home.x + Math.floor(rng() * 7) - 3;
     const ny = home.y + Math.floor(rng() * 7) - 3;
-    requestMovement(bot, nx, ny, home.z ?? 0, "citizen_alive_stuck_recovery");
+    requestMovement(director, bot, nx, ny, home.z ?? 0, "citizen_alive_stuck_recovery");
     journalEvent(name, "Got turned around for a moment — back on my way.", "alive");
   } catch {
     // Non-fatal.
@@ -332,7 +431,7 @@ function tickIdleLife(director, record, bot, nowMs) {
       const nx = tile.x + Math.floor(rng() * (IDLE_WANDER_RADIUS * 2 + 1)) - IDLE_WANDER_RADIUS;
       const ny = tile.y + Math.floor(rng() * (IDLE_WANDER_RADIUS * 2 + 1)) - IDLE_WANDER_RADIUS;
       if (nx !== tile.x || ny !== tile.y) {
-        requestMovement(bot, nx, ny, tile.z, "citizen_alive_wander");
+        requestMovement(director, bot, nx, ny, tile.z, "citizen_alive_wander");
       }
     }
   }
@@ -425,7 +524,7 @@ function tickImperfections(director, record, bot, nowMs) {
         bot.getMovementQueue?.()?.clear?.();
         const nx = tile.x + Math.floor(rng() * 11) - 5;
         const ny = tile.y + Math.floor(rng() * 11) - 5;
-        requestMovement(bot, nx, ny, tile.z, "citizen_alive_changed_mind");
+        requestMovement(director, bot, nx, ny, tile.z, "citizen_alive_changed_mind");
         journalEvent(record.username, "Changed my mind about where I was headed.", "alive");
       }
     } catch {
@@ -615,14 +714,26 @@ function tickEmoteReactions(director, record, bot, nowMs) {
  */
 function tickAlive(director, nowMs, desync = null) {
   if (!director?.roster) return;
+  // Honest movement evidence for the live log: citizens online, citizens
+  // that actually changed tiles since the last slow tick, citizens with a
+  // non-empty engine movement queue right now.
+  let onlineCount = 0;
+  let movedCount = 0;
+  let queueActiveCount = 0;
   for (const record of director.roster.values()) {
     if (!director.isOnline(record)) continue;
     const bot = director.getBot(record);
     if (!bot) continue;
+    onlineCount++;
     try {
-      tickStuckDetection(director, record, bot, nowMs);
+      if (tickStuckDetection(director, record, bot, nowMs)) movedCount++;
     } catch {
       // One bad citizen never breaks the tick.
+    }
+    try {
+      if (isMoving(bot)) queueActiveCount++;
+    } catch {
+      // Cosmetic.
     }
     // LOD brain gate: distant citizens skip visible-life work on most
     // cycles. Near-band (and unclassified) citizens are always due, so
@@ -665,13 +776,23 @@ function tickAlive(director, nowMs, desync = null) {
     for (const record of director.roster.values()) {
       if (director.isOnline(record)) onlineNames.add(record.username);
     }
-    for (const map of [positionHistory, lastGreetAt, lastEmoteReactAt]) {
+    for (const map of [positionHistory, lastGreetAt, lastEmoteReactAt, moveLogAt]) {
       for (const name of [...map.keys()]) {
         if (!onlineNames.has(name)) map.delete(name);
       }
     }
   } catch {
     // Non-fatal.
+  }
+  // One summary line per slow tick — the honest "are citizens moving?" answer.
+  try {
+    director?.log?.("alive tick summary", {
+      online: onlineCount,
+      movedSinceLastTick: movedCount,
+      withActiveMovementQueue: queueActiveCount,
+    });
+  } catch {
+    // Logging must never break the tick.
   }
 }
 

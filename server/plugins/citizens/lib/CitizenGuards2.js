@@ -415,22 +415,56 @@ function drillFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
+/**
+ * Canonical journal write: getJournal().log(name, kind, text)
+ * (CitizenJournal.js:79 — `log` normalizes names internally). The old
+ * appendEntry/addEntry names do not exist on the journal, so any write
+ * through them silently never happened.
+ */
+function journalize(username, kind, text) {
   try {
     const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+    if (typeof journal.getJournal === "function") {
+      // Returns the event, or null when the write didn't happen — honest
+      // evidence for the live log (see doGuardfolkWork).
+      return journal.getJournal().log(username, kind, text);
     }
-  } catch { /* journal absent */ }
+  } catch { /* journal must never break the watch */ }
+  return null;
 }
 
-function seedRumor(text) {
+/**
+ * Honest evidence that the militia tick fires: one line per guardfolk
+ * action, including whether the journal write and rumor seed actually
+ * succeeded. Fires at most once per citizen per 3h (cooldown), so this is
+ * cheap. The old code called dead APIs here and the whole tick was mute.
+ */
+function logGuardfolk(director, record, type, action, ground, journalEvent, rumor) {
+  try {
+    director?.log?.("guardfolk", {
+      citizen: record.username,
+      type,
+      action,
+      ground: ground?.name ?? null,
+      journaled: journalEvent != null,
+      rumorSeeded: rumor != null,
+    });
+  } catch {
+    // Logging must never break the watch.
+  }
+}
+
+/**
+ * Canonical rumor seed: seedRumor(rng, event) with event.what present
+ * (CitizenRumors.js:101 — a missing `what` returns null). The old
+ * seedRumor(text) string form silently seeded nothing.
+ */
+function seedRumor(rng, event) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
+    if (typeof rumors.seedRumor === "function") return rumors.seedRumor(rng, event);
   } catch { /* rumors absent */ }
+  return null;
 }
 
 // ============================================================================
@@ -454,7 +488,7 @@ function tickGuardfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Duty hours only
@@ -480,10 +514,31 @@ function tickGuardfolk(director, nowMs, desync = 0) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Real director API: isOnline(record) + getBot(record)
+ * (director/CitizenDirector.js:1374/1379). `director.playerFor` does not
+ * exist — any call to it returns undefined forever, silently disabling the
+ * whole militia tick, so it is never used here.
+ */
+function materializedBot(director, record) {
+  try {
+    if (director.isOnline?.(record)) return director.getBot?.(record) ?? null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    // Real engine API: Player.getLocalPlayers() (Player.ts:796). The citizen
+    // bot's local players are the only players that can possibly be near.
+    // `director.onlinePlayers` does not exist — calling it silently returned
+    // nothing and kept the whole tick mute.
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -507,8 +562,16 @@ function doGuardfolkWork(director, record, citizen, type, nowMs) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(ceremony, { ground: ground.name });
       citizen.forceChat?.(line);
-      journalize(citizen, `stood the honor guard at ${ground.name}`);
-      seedRumor(`Honor guard ceremony at ${ground.name}!`);
+      const journalEvent = journalize(record.username, "patrol", `stood the honor guard at ${ground.name}`);
+      const rumor = seedRumor(Math.random, {
+        kind: "ceremony",
+        who: record.username,
+        whoDisplay: record.username,
+        what: `Honor guard ceremony at ${ground.name}`,
+        where: ground.name,
+        whereDisplay: ground.name,
+      });
+      logGuardfolk(director, record, type, "ceremony", ground, journalEvent, rumor);
       return;
     }
   }
@@ -518,15 +581,18 @@ function doGuardfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.45) {
     const line = pickOne(Math.random, DRILL_LINES[type]);
     citizen.forceChat?.(line);
-    journalize(citizen, `drilled at ${ground.name}`);
+    const journalEvent = journalize(record.username, "patrol", `drilled at ${ground.name}`);
+    logGuardfolk(director, record, type, "drill", ground, journalEvent, null);
   } else if (roll < 0.75) {
     const line = fill(pickOne(Math.random, MUSTER_LINES), { ground: ground.name });
     citizen.forceChat?.(line);
-    journalize(citizen, `called the muster at ${ground.name}`);
+    const journalEvent = journalize(record.username, "patrol", `called the muster at ${ground.name}`);
+    logGuardfolk(director, record, type, "muster", ground, journalEvent, null);
   } else {
     const line = pickOne(Math.random, MILITIA_JOIN_LINES);
     citizen.forceChat?.(line);
-    journalize(citizen, `recruited for the levy at ${ground.name}`);
+    const journalEvent = journalize(record.username, "patrol", `recruited for the levy at ${ground.name}`);
+    logGuardfolk(director, record, type, "recruit", ground, journalEvent, null);
   }
 }
 
