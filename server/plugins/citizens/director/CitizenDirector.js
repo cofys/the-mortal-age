@@ -60,6 +60,7 @@ const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenRumors = require("../lib/CitizenRumors");
+const CitizenMystery = require("../lib/CitizenMystery");
 const CitizenMarketStalls = require("../lib/CitizenMarketStalls");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
@@ -702,6 +703,15 @@ class CitizenDirector {
       CitizenRumors.tickRumors(this, Date.now());
     } catch (error) {
       this.log("rumors (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Mysteries: a monthly town mystery (missing person, theft, strange
+    // lights) citizens whisper about; players find scattered clues and the
+    // town reacts when it's solved. Data tier, zero LLM, per-citizen
+    // try/catch inside.
+    try {
+      CitizenMystery.tickMystery(this, Date.now());
+    } catch (error) {
+      this.log("mystery (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Market stalls: merchants claim a pitch during market hours, set up
     // 3-5 wares with personality-driven prices, haggle with liked
