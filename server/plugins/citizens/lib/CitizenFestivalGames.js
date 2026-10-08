@@ -212,16 +212,17 @@ function chance(rng, p) {
 
 /**
  * The active festival today, or null. Reads the real CitizenFestivals
- * calendar via lazy require (with a static fallback) so games only run
+ * calendar (activeFestival is the verified export) so games only run
  * during actual festivals.
  */
 function festivalToday(nowMs) {
   try {
     const festivals = require("./CitizenFestivals");
-    if (typeof festivals.festivalToday === "function") {
-      return festivals.festivalToday(nowMs);
+    if (typeof festivals.activeFestival === "function") {
+      return festivals.activeFestival(nowMs);
     }
-    // Fallback: check the FESTIVALS array directly
+    // Fallback: check the FESTIVALS array directly (3-day festivals,
+    // matching CitizenFestivals' FESTIVAL_DURATION_DAYS).
     if (Array.isArray(festivals.FESTIVALS)) {
       const d = new Date(nowMs);
       const month = d.getMonth();
@@ -352,15 +353,16 @@ function betFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
+/**
+ * Journal a games event for the LLM foreground tier (it reads the journal
+ * when a player asks what happened). Uses the real CitizenJournal API:
+ * getJournal().log(citizenName, kind, text). Same "social" kind as the
+ * other activity systems (CitizenActivityParties). Never breaks the tick.
+ */
+function journalize(citizenName, kind, text) {
   try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
-    }
-  } catch { /* journal absent */ }
+    require("./CitizenJournal").getJournal().log(citizenName, kind, text);
+  } catch { /* journal absent — never break the tick */ }
 }
 
 function seedRumor(text) {
@@ -450,7 +452,7 @@ function doGameWork(director, record, citizen, festival, nowMs) {
       announcedToday.set(key, nowMs);
       const line = fill(pickOne(Math.random, ANNOUNCE_LINES), slots);
       citizen.forceChat?.(line);
-      journalize(citizen, `announced ${GAME_NAMES[game]} at the festival`);
+      journalize(record.username, "social", `announced ${GAME_NAMES[game]} at the festival`);
       return;
     }
   }
@@ -478,7 +480,7 @@ function doGameWork(director, record, citizen, festival, nowMs) {
         winner,
       });
       citizen.forceChat?.(line);
-      journalize(citizen, `cheered ${winner}'s victory at ${GAME_NAMES[game]}`);
+      journalize(record.username, "social", `cheered ${winner}'s victory at ${GAME_NAMES[game]}`);
       // Seed the win into rumors once per game per day.
       const rkey = "win:" + kingdomId + ":" + day + ":" + game;
       if (!announcedToday.has(rkey)) {
