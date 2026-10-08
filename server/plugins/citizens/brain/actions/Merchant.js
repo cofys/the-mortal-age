@@ -35,6 +35,7 @@ const {
   chance,
   humanizerProfile,
 } = require("../../lib/humanizer");
+const { hawkerLine } = require("../../lib/CitizenHawker");
 
 const COINS = 995; // ItemIds.COINS, verified in ItemIdentifiers.ts
 
@@ -46,22 +47,10 @@ const PHASE_CLOSED = "closed";
 
 const ARRIVE_RADIUS = 2;
 
-const AD_LINES = Object.freeze([
-  "Fresh bread! Warm from the oven!",
-  "Bread, bread! Best in the city, only twelve coins!",
-  "Hungry, friend? You look hungry.",
-  "Come see, come see — fresh loaves!",
-  "Bread for the road, bread for the table!",
-]);
-
-const SWORD_AD_LINES = Object.freeze([
-  "Bronze swords! Honest steel for honest coin!",
-  "Swords, swords — arm yourself today!",
-  "A blade for every belt, fairly priced!",
-]);
-
-function adLinesFor(wareId) {
-  return wareId === ItemIds.BRONZE_SWORD ? SWORD_AD_LINES : AD_LINES;
+// Ad lines live in the pure CitizenHawker module, picked by poolKey + stock tier
+// so merchants never hawk wares they don't have (empty shelves => silence).
+function poolKeyForWare(wareId) {
+  return wareId === ItemIds.BRONZE_SWORD ? "bronze_sword" : "bread";
 }
 
 function resolveWareId(name) {
@@ -249,12 +238,17 @@ function createMerchantAction(spec, world) {
     if (!chance(state.rng, 0.75)) {
       return; // Sometimes they just tend the stall quietly.
     }
-    const pool = adLinesFor(state.wareId);
-    say(
-      player,
-      state,
-      pool[Math.floor(state.rng() * pool.length)]
+    const poolKey = poolKeyForWare(state.wareId);
+    const line = hawkerLine(
+      poolKey,
+      stockCount(player, state.wareId),
+      restockThreshold,
+      state.rng
     );
+    if (!line) {
+      return; // Shelves empty: never advertise wares we don't have.
+    }
+    say(player, state, line);
   }
 
   const action = {
