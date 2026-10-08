@@ -59,6 +59,7 @@ const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
+const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
 const CitizenGiftGiving = require("../lib/CitizenGiftGiving");
 const CitizenMystery = require("../lib/CitizenMystery");
@@ -809,6 +810,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("crier (proximity) failed", { error: String(error?.message ?? error) });
     }
+    // Scholar lectures and studying aloud: visible only near real players,
+    // desync-spread across the tick cycle. Data tier, zero LLM.
+    try {
+      CitizenScholars.tickLectures(this, Date.now(), desync);
+    } catch (error) {
+      this.log("scholars (proximity) failed", { error: String(error?.message ?? error) });
+    }
   }
 
   isOnline(record) {
@@ -1298,6 +1306,15 @@ class CitizenDirector {
       CitizenKinship.tickKinship(this, hour, nowMs);
     } catch (error) {
       this.log("kinship failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen scholars: historians, naturalists, inventors and philosophers
+    // research topics on the slow tick, publish discoveries to the journal
+    // and the kingdom library, and fire a scholars:discovery event for
+    // quests/lore plugins. Data tier, zero LLM.
+    try {
+      CitizenScholars.tickResearch(this, Math.random, nowMs);
+    } catch (error) {
+      this.log("scholars research failed", { error: String(error?.message ?? error) });
     }
     // Foreground social: citizen-to-citizen LLM dialogue, ONLY when a real
     // player is nearby to overhear (Jon's two-tier rule). Otherwise the
