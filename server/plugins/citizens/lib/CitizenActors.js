@@ -318,7 +318,8 @@ function actorTypeOf(record) {
     } catch { /* module absent */ }
     const roll = hashStr("actor:" + name) % 100;
     if (roll >= 30) return null;
-    return actorTypeFromRoll(hashStr("actortype:" + name) % 100);
+    // Name-first salt avoids FNV-1a prefix correlation with the "actor:" gate above.
+    return actorTypeFromRoll(hashStr(name + "|actor-type") % 100);
   } catch {
     return null;
   }
