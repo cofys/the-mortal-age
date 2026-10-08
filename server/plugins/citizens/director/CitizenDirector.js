@@ -700,6 +700,14 @@ class CitizenDirector {
     const desync = { tick: this.aiTickCount, spread: this.desyncSpread() };
     const hour = hourNow();
     const positions = this.realPlayerPositions();
+    // LOD bands must update on the fast tick, not just the slow 60s tick.
+    // Otherwise citizens stay "asleep" for up to a minute after a player
+    // arrives, appearing frozen. This is cheap distance math.
+    try {
+      tickLodBands(this, Date.now());
+    } catch (error) {
+      this.log("tick-lod-proximity failed", { error: String(error?.message ?? error) });
+    }
     for (const record of this.roster.values()) {
       try {
         const phase = desiredPhase(record, hour);
