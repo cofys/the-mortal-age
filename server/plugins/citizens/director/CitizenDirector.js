@@ -97,6 +97,7 @@ const CitizenStablehands = require("../lib/CitizenStablehands");
 const CitizenLibrarians = require("../lib/CitizenLibrarians");
 const { tickBookfolk } = require("../lib/CitizenLibrarians2");
 const { tickEngineerfolk } = require("../lib/CitizenEngineers2");
+const { tickMentorfolk } = require("../lib/CitizenMentors2");
 const CitizenPriests = require("../lib/CitizenPriests");
 const CitizenTaxCollectors = require("../lib/CitizenTaxCollectors");
 const CitizenMessengers = require("../lib/CitizenMessengers");
@@ -2192,6 +2193,24 @@ class CitizenDirector {
       tickEducators(this, nowMs);
     } catch (error) {
       this.log("teachers2 failed", { error: String(error?.message ?? error) });
+    }
+    // Mentorfolk: the apprenticeship-and-morals street layer under the
+    // professional masters — guild apprentice recruiters hawk indenture
+    // contracts, journeyman taskmasters set apprentice day-chores,
+    // soapbox preachers scold the town's vices (never clergy), and
+    // oath-wardens keep the apprentice oath book at the market crosses.
+    // Street hiring pitches (not schools, temples or workshops), per-day
+    // trades/chores/vices, oath-ceremony / taskmaster-scene /
+    // soapbox-crowd / signing-haul set-pieces. Level-60+ masters (the
+    // master's real criterion via skillStore) are excluded before the
+    // share roll inside the module. Mentorfolk never teach, never pair
+    // apprentices, never grant XP — lessons stay with the educators and
+    // the masters. LOD-gated via brainTickDue inside (near-band citizens
+    // always due). Data tier, zero LLM.
+    try {
+      tickMentorfolk(this, nowMs, desync);
+    } catch (error) {
+      this.log("mentorfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen community caregivers: neighbors who sit vigil with the sick,
     // bonesetters who splint breaks, midwives who tend new mothers, and
