@@ -82,6 +82,7 @@ const { tickBards } = require("../lib/CitizenBards");
 const { tickActors } = require("../lib/CitizenActors");
 const { tickPainters } = require("../lib/CitizenPainters");
 const { tickSculptors } = require("../lib/CitizenSculptors");
+const { tickArchitects } = require("../lib/CitizenArchitects");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenJudges = require("../lib/CitizenJudges");
@@ -974,6 +975,19 @@ class CitizenDirector {
       tickSculptors(this, Date.now(), desync);
     } catch (error) {
       this.log("sculptors (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Architects: master architects, draftsmen, surveyors and inspectors
+    // visibly work the kingdom drafting studios during daylight hours —
+    // scripted drafting/survey work, blueprint hawking, grand-design
+    // unveilings, inspection sign-offs, commission offers and coin tips
+    // ("use coins on architect"). No overlap with builders (construction
+    // projects), sculptors (carving), painters (studios), actors
+    // (theaters), bards (music), street performers (squares) or inn bards.
+    // Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      tickArchitects(this, Date.now(), desync);
+    } catch (error) {
+      this.log("architects (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Guard patrols: the visible watch — checkpoint check-ins, disturbance
     // response, escort offers and follows, night-watch torch announcements,
