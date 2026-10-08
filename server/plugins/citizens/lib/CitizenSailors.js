@@ -132,6 +132,16 @@ function pickOne(rng, arr) {
   return arr[Math.floor(rng() * arr.length)];
 }
 
+/** Materialized citizen bot for a roster record, or null when offline. */
+function materializedBot(director, record) {
+  try {
+    if (!director?.isOnline?.(record)) return null;
+    return director.getBot?.(record) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** True only for real human players (not bots, not logged-out). */
 function isRealPlayer(player) {
   if (!player) return false;
@@ -403,7 +413,7 @@ function tickSailors(director, nowMs, desync) {
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the docks.
@@ -426,7 +436,7 @@ function tickSailors(director, nowMs, desync) {
         if (sailorTypeFor(record.username) !== SAILOR_CAPTAIN) continue;
         const last = lastOfferByCitizen.get(record.username) || 0;
         if (nowMs - last < OFFER_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, OFFER_RADIUS)) continue;
         if (Math.random() >= OFFER_CHANCE) continue;
@@ -446,7 +456,7 @@ function tickSailors(director, nowMs, desync) {
         if (!shipInPortFor(record.username, nowMs)) continue;
         const last = lastArrivalByCitizen.get(record.username) || 0;
         if (nowMs - last < ARRIVAL_COOLDOWN_MS) continue;
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, SAILOR_RADIUS)) continue;
         if (Math.random() >= ARRIVAL_CHANCE) continue;
@@ -473,7 +483,7 @@ function doSailorWork(director, record, citizen, type, nowMs) {
     // forceChat is best-effort.
   }
   playAnim(director, citizen, animFor(type));
-  const port = portFor(record.username, record.kingdom);
+  const port = portFor(record.username, record.kingdomId ?? record.kingdom);
   // One journal line per loop — the LLM's source of truth. Includes the
   // port and the ship, so "what have you been up to?" is answerable, and
   // a note that deckhands look for ships to crew (the sailing design's
@@ -489,8 +499,8 @@ function doSailorWork(director, record, citizen, type, nowMs) {
 /** Passage offer from a captain to a lingering player. */
 function doPassageOffer(director, citizen, record, nowMs) {
   void director;
-  const ship = shipFor(record.username, record.kingdom);
-  const dest = destinationFor(record.username, record.kingdom, nowMs);
+  const ship = shipFor(record.username, record.kingdomId ?? record.kingdom);
+  const dest = destinationFor(record.username, record.kingdomId ?? record.kingdom, nowMs);
   const line = offerLineFor(Math.random, ship, dest);
   try {
     citizen.forceChat?.(line);
@@ -506,7 +516,7 @@ function doPassageOffer(director, citizen, record, nowMs) {
 /** Ship-arrival announcement — the crowd moment. */
 function doArrival(director, citizen, record, nowMs) {
   void director;
-  const ship = shipFor(record.username, record.kingdom);
+  const ship = shipFor(record.username, record.kingdomId ?? record.kingdom);
   const line = arrivalLineFor(Math.random, ship, ship.port);
   try {
     citizen.forceChat?.(line);
@@ -536,8 +546,9 @@ function voyageFor(username, kingdom, dateMs) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = citizen?.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

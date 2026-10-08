@@ -243,6 +243,16 @@ function dockfolkTypeFromRoll(roll) {
   return DOCKFOLK_DOCKHAND;
 }
 
+/** Materialized citizen bot for a roster record, or null when offline. */
+function materializedBot(director, record) {
+  try {
+    if (!director?.isOnline?.(record)) return null;
+    return director.getBot?.(record) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** True only for real human players (not bots, not logged-out). */
 function isRealPlayer(player) {
   if (!player) return false;
@@ -464,21 +474,33 @@ function taleFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// Journal access (lazy require — CitizenJournal may not load in tests).
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
+  }
+  return _journal || null;
+}
+
+/** Journal a dockfolk event — best-effort, never breaks the tick. */
+function journalize(citizenName, text) {
+  try {
+    journal()?.log(citizenName, "work", text);
   } catch { /* journal absent */ }
 }
 
-function seedRumor(text) {
+/** Seed a ship-arrival rumor into the real rumor graph — best-effort. */
+function seedArrivalRumor(who, what, where) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
+    if (typeof rumors.seedRumor === "function") {
+      rumors.seedRumor(Math.random, { kind: "ship-arrival", who, what, where });
+    }
   } catch { /* rumors absent */ }
 }
 
@@ -503,7 +525,7 @@ function tickDockfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = director.playerFor?.(record);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Dock hours only
@@ -531,8 +553,9 @@ function tickDockfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = director.onlinePlayers?.() ?? [];
+    const players = citizen?.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -556,8 +579,8 @@ function doDockfolkWork(director, record, citizen, type, nowMs) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(pickOne(Math.random, ARRIVAL_LINES), { ship, dock: dock.name });
       citizen.forceChat?.(line);
-      journalize(citizen, `${ship} arrived at ${dock.name}`);
-      seedRumor(`${ship} makes harbor at ${dock.name}!`);
+      journalize(name, `${ship} arrived at ${dock.name}`);
+      seedArrivalRumor(record.username, `${ship} makes harbor at ${dock.name}`, dock.name);
       return;
     }
   }
@@ -567,22 +590,22 @@ function doDockfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.4) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     citizen.forceChat?.(line);
-    journalize(citizen, `worked at ${dock.name}`);
+    journalize(name, `worked at ${dock.name}`);
   } else if (roll < 0.6) {
     if (type === DOCKFOLK_FISHER) {
       const line = `*hauls in the line* — ${catchFor(name, nowMs)}. The pot's fed tonight.`;
       citizen.forceChat?.(line);
-      journalize(citizen, `caught ${catchFor(name, nowMs)} at ${dock.name}`);
+      journalize(name, `caught ${catchFor(name, nowMs)} at ${dock.name}`);
     } else if (type === DOCKFOLK_SALT) {
       const line = yarnFor(name, nowMs);
       citizen.forceChat?.(`"${line}"`);
-      journalize(citizen, `spun a yarn at ${dock.name}`);
+      journalize(name, `spun a yarn at ${dock.name}`);
     } else {
       const jobs = jobsFor(name, type, nowMs);
       const job = jobs.length ? jobs[0] : "a dock job";
       const line = fill(pickOne(Math.random, FINISH_LINES), { job });
       citizen.forceChat?.(line);
-      journalize(citizen, `finished ${job} at ${dock.name}`);
+      journalize(name, `finished ${job} at ${dock.name}`);
     }
   } else if (roll < 0.8) {
     if (type === DOCKFOLK_DOCKHAND) {
@@ -598,11 +621,11 @@ function doDockfolkWork(director, record, citizen, type, nowMs) {
       const line = `*baits the hook* — the sea's in a ${weatherFor(nowMs)} mood today.`;
       citizen.forceChat?.(line);
     }
-    journalize(citizen, `offered services at ${dock.name}`);
+    journalize(name, `offered services at ${dock.name}`);
   } else {
     const line = `*looks out past the breakwater* — ${weatherFor(nowMs)} seas and a fair tide.`;
     citizen.forceChat?.(line);
-    journalize(citizen, `read the weather at ${dock.name}`);
+    journalize(name, `read the weather at ${dock.name}`);
   }
 }
 
