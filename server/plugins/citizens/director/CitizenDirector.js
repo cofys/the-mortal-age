@@ -99,6 +99,7 @@ const CitizenTaxCollectors = require("../lib/CitizenTaxCollectors");
 const CitizenMessengers = require("../lib/CitizenMessengers");
 const { tickMessengers2 } = require("../lib/CitizenMessengers2");
 const CitizenCartographers = require("../lib/CitizenCartographers");
+const { tickMapfolk } = require("../lib/CitizenCartographers2");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
@@ -1167,6 +1168,20 @@ class CitizenDirector {
       CitizenCartographers.tickCartographers(this, Date.now());
     } catch (error) {
       this.log("cartographers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen mapfolk (CitizenCartographers2): amateur map-sketchers,
+    // chart-hawkers and rough-drafters under the professional chart houses —
+    // corner kiosks (not the pro studios), daily rough sketches (never fine
+    // charts or masterworks), the pro-charts small-talk bridge, the
+    // copy-dispute crowd moment and the ink-spill / wrong-way set-pieces.
+    // Citizens claimed by the master's real claimed-type function
+    // (cartographerTypeFor) and by CitizenHawkers2 are excluded before the
+    // share roll inside the module. LOD-gated via brainTickDue inside
+    // (near-band citizens always due). Data tier, zero LLM.
+    try {
+      tickMapfolk(this, Date.now());
+    } catch (error) {
+      this.log("mapfolk failed", { error: String(error?.message ?? error) });
     }
     // Bankers: tellers, vault-keepers, loan officers and auditors visibly
     // run the banks (engine-free scripted service lines, vault open/seal
