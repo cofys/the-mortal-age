@@ -88,6 +88,7 @@ const CitizenLibrarians = require("../lib/CitizenLibrarians");
 const CitizenPriests = require("../lib/CitizenPriests");
 const CitizenTaxCollectors = require("../lib/CitizenTaxCollectors");
 const CitizenMessengers = require("../lib/CitizenMessengers");
+const CitizenCartographers = require("../lib/CitizenCartographers");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
@@ -972,6 +973,17 @@ class CitizenDirector {
       CitizenMessengers.tickMessengers(this, Date.now());
     } catch (error) {
       this.log("messengers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Cartographers: surveyors, mapmakers, chart-explorers and sellers map
+    // the world (scripted survey work, map hawking, discovery announcements
+    // seeded into CitizenRumors, commissions and survey-hire ledgers) — only
+    // while a real player is around to see them. Data tier, zero LLM,
+    // per-citizen try/catch inside. Reads the real CitizenExplorers
+    // discoveries and CitizenSailors ports.
+    try {
+      CitizenCartographers.tickCartographers(this, Date.now());
+    } catch (error) {
+      this.log("cartographers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Bankers: tellers, vault-keepers, loan officers and auditors visibly
     // run the banks (engine-free scripted service lines, vault open/seal
