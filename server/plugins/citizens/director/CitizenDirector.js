@@ -109,6 +109,7 @@ const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
 const { tickTavernGames } = require("../lib/CitizenTavernGames");
 const { tickFestivals } = require("../lib/CitizenFestivals");
+const { tickFestivalGames } = require("../lib/CitizenFestivalGames");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -1930,6 +1931,15 @@ class CitizenDirector {
       tickFestivals(this, nowMs);
     } catch (error) {
       this.log("festivals failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen festival games: wrestling, archery, pie-eating, dance
+    // competitions during festivals. Citizens announce games, cheer
+    // competitors, and celebrate winners near real players. Data tier,
+    // zero LLM.
+    try {
+      tickFestivalGames(this, nowMs);
+    } catch (error) {
+      this.log("festival games failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
