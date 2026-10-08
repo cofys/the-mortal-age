@@ -36,6 +36,7 @@ const { initMarketBoard } = require("./shop/MarketBoard.Shops");
 const { initMarketRegistrar } = require("./shop/MarketRegistrar.Shops");
 const attachWarRefugees = require("./WarRefugees");
 const { onPlayerLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
+const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
   initCitizenMemory,
@@ -473,6 +474,7 @@ function onKingdomWarEndedRelief(event) {
 
 function onLevelUpHeard(event) {
   onPlayerLevelUpNotice(event);
+  onMentorLevelUpNotice(event);
 }
 
 function onDeathSeen(event) {
