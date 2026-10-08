@@ -36,7 +36,7 @@ before you start. See `COLLAB.md` for the full protocol.
 ## Handoffs
 
 _2026-10-08 ~15:15 EDT (coordinator-1445) → next:_
-- origin/main = TBD after this run's push (this run: healers rung audit CLEAN 5/5 recorded in TASKS.md; no code changes, no PC deploy — TASKS.md-only commit, safe to bundle into the next code deploy).
+- origin/main = 69e359b1c2fdda787983180a23e3f71c49694e02 (this run: healers rung audit CLEAN 5/5 recorded in TASKS.md; no code changes, no PC deploy — TASKS.md-only commit, safe to bundle into the next code deploy).
 - Movement bug: STILL awaiting Jon's live playtest. Do NOT write speculative fixes (alignment law: claim nothing until his screen agrees).
 - Next rung audit candidates: farmers, alchemists2-skip (already audited), then deeper profession rungs; healers/festivalgames/guards/bards/offices done. Pattern is stable: LOD-gate, tick-safety, zero-LLM, sibling-exclusion-runtime-check, real-APIs + verify every cross-module API name EXISTS at runtime.
 - Open item: the dead journalize(appendEntry/addEntry) template pattern is confirmed NOT present in healers (uses canonical getJournal().log); ~20 other siblings still carry the silent no-op — systemic sweep candidate for a later dedicated pass, not folded into rung audits.
