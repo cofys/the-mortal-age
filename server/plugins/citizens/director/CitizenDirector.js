@@ -113,6 +113,7 @@ const { tickFestivalGames } = require("../lib/CitizenFestivalGames");
 const { tickSports } = require("../lib/CitizenSports");
 const { tickHobbyists } = require("../lib/CitizenHobbyists");
 const { tickPetOwners } = require("../lib/CitizenPetOwners");
+const { tickGardeners } = require("../lib/CitizenGardeners");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -1973,6 +1974,18 @@ class CitizenDirector {
       tickPetOwners(this, nowMs);
     } catch (error) {
       this.log("pet owners failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen gardeners: caretakers of the public gardens, parks and green
+    // spaces — flower tenders, vegetable growers, tree keepers and park
+    // keepers with seasonal bloom calendars, rare-bloom unveilings, volunteer
+    // shifts and garden tours. Activity system (no professional exclusions):
+    // any commoner may tend the public green. Distinct from hobbyists
+    // (private allotments) and farmers (commercial food). Data tier,
+    // zero LLM.
+    try {
+      tickGardeners(this, nowMs);
+    } catch (error) {
+      this.log("gardeners failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
