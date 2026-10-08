@@ -137,6 +137,7 @@ const { tickHostfolk } = require("../lib/CitizenInnkeepers2");
 const { tickSongfolk } = require("../lib/CitizenBards2");
 const { tickFarmfolk } = require("../lib/CitizenFarmers2");
 const { tickMoneyfolk } = require("../lib/CitizenBankers2");
+const { tickErrandfolk } = require("../lib/CitizenCouriers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2315,6 +2316,19 @@ class CitizenDirector {
       tickMoneyfolk(this, nowMs);
     } catch (error) {
       this.log("moneyfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen errand-runners (CitizenCouriers2): street errand boys,
+    // grocery carriers, water fetchers and neighborhood note-lads — the
+    // amateur fetch-and-carry side of the courier's trade. Professional
+    // couriers (CitizenCouriers) and the official post (messengers) are
+    // excluded; this owns errand beats, fetch requests, short notes,
+    // courier-corner gossip and market-rush / spilled-basket set-pieces.
+    // LOD-gated via brainTickDue inside (near-band citizens always due).
+    // Data tier, zero LLM.
+    try {
+      tickErrandfolk(this, nowMs);
+    } catch (error) {
+      this.log("errandfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
