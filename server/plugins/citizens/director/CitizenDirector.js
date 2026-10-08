@@ -80,6 +80,7 @@ const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
 const { tickCaravans } = require("../lib/CitizenTradeCaravans");
 const { tickCaravanShouts } = require("../lib/CitizenTradeCaravans");
+const { tickExplorers } = require("../lib/CitizenExplorers");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -1525,6 +1526,16 @@ class CitizenDirector {
       tickCaravans(this, nowMs);
     } catch (error) {
       this.log("trade caravans failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen explorers: scouts, treasure hunters, naturalists, and
+    // pathfinders form expeditions on a slow per-kingdom cadence — muster,
+    // journey (data-tier, abstracted), return with discoveries and dangers.
+    // Muster shouts, departure calls, and tavern tales are player-visible
+    // only near a real player; everything is journaled. Data tier, zero LLM.
+    try {
+      tickExplorers(this, nowMs);
+    } catch (error) {
+      this.log("explorers failed", { error: String(error?.message ?? error) });
     }
     // Citizen relationships: friend citizens hail friend players passing
     // nearby, by name. Data tier, zero LLM.
