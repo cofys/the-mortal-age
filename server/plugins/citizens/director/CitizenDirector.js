@@ -84,6 +84,7 @@ const CitizenBankers = require("../lib/CitizenBankers");
 const CitizenInnkeepers = require("../lib/CitizenInnkeepers");
 const CitizenStablehands = require("../lib/CitizenStablehands");
 const CitizenLibrarians = require("../lib/CitizenLibrarians");
+const CitizenPriests = require("../lib/CitizenPriests");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
@@ -977,6 +978,17 @@ class CitizenDirector {
       CitizenLibrarians.tickLibrarians(this, Date.now());
     } catch (error) {
       this.log("librarians (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Priests: high priests, chaplains, monks and oracles visibly keep the
+    // kingdom temples (scripted services during service hours, blessings,
+    // confessions, shrine-tending, evening prophecies, memorial rites for
+    // the recently dead, wedding-officiant offers) — only while a real
+    // player is around to see them. Data tier, zero LLM, per-citizen
+    // try/catch inside.
+    try {
+      CitizenPriests.tickPriests(this, Date.now(), desync);
+    } catch (error) {
+      this.log("priests (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Caravan shouts: muster/departure/arrival announcements and
     // guard/trader invites, only where a real player can see them.
