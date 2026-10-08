@@ -35,7 +35,7 @@ before you start. See `COLLAB.md` for the full protocol.
 ## Handoffs
 
 _2026-10-08 ~15:00 EDT (coordinator-1440) → next:_
-- origin/main = <SHA — filled after push> (this run: festivalgames rung audit found + fixed 2 real bugs — journalize→getJournal().log rewrite and festivalToday→activeFestival; pushed + deployed to PC, see runlog-2026-10-08-1440).
+- origin/main = 3e7caab70962e5bebf728366799d008d2fe04c2b (this run: festivalgames rung audit found + fixed 2 real bugs — journalize→getJournal().log rewrite and festivalToday→activeFestival; pushed + deployed to PC, see runlog-2026-10-08-1440).
 - Movement bug: STILL awaiting Jon's live playtest. Do NOT write speculative fixes (alignment law: claim nothing until his screen agrees).
 - Next rung audit candidates: healers, farmers (untouched today); festivalgames/guards/bards/offices done. Pattern is stable: LOD-gate, tick-safety, zero-LLM, sibling-exclusion-runtime-check, real-APIs — and now also: verify every cross-module API name EXISTS at runtime (festivalgames journal miss was silently no-op'ing).
 - Parked stash untouched (other-agents-work-20261007).
