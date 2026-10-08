@@ -115,6 +115,7 @@ const { tickHobbyists } = require("../lib/CitizenHobbyists");
 const { tickPetOwners } = require("../lib/CitizenPetOwners");
 const { tickGardeners } = require("../lib/CitizenGardeners");
 const { tickVolunteers } = require("../lib/CitizenVolunteers");
+const { tickStorytellers } = require("../lib/CitizenStorytellers");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -1999,6 +2000,18 @@ class CitizenDirector {
       tickVolunteers(this, nowMs);
     } catch (error) {
       this.log("volunteers failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen storytellers: elders, travelers, grandparents and
+    // epic-performers keeping oral tales and legends at the gathering
+    // places, with tale-request and story-share ledgers. Activity system
+    // (no professional exclusions): any commoner may tell tales.
+    // Distinct from bards (professional performers) and librarians
+    // (written catalogs) — this module owns oral lore. Data tier,
+    // zero LLM.
+    try {
+      tickStorytellers(this, nowMs);
+    } catch (error) {
+      this.log("storytellers failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
