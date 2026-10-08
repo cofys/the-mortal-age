@@ -145,6 +145,7 @@ const { tickWoodfolk } = require("../lib/CitizenArtisans2");
 const { tickLaborfolk } = require("../lib/CitizenBuilders2");
 const { tickTimefolk } = require("../lib/CitizenClockmakers2");
 const { tickHawker } = require("../lib/CitizenHawkers2");
+const { tickStallfolk } = require("../lib/CitizenMarketStalls2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2423,6 +2424,20 @@ class CitizenDirector {
       tickHawker(this, nowMs);
     } catch (error) {
       this.log("hawkerfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen stallfolk (CitizenMarketStalls2): amateur market-stall
+    // keepers — barrow-folk, blanket-folk and crate-folk running rough
+    // provisional stalls under the professional merchants (CitizenMarketStalls,
+    // excluded via the role gate, and CitizenHawkers2, excluded via its real
+    // claim function, both before the share roll); this owns fringe pitches,
+    // daily goods, morning setup flavor, the master day-wares bridge, the
+    // haggle-crowd moment and the wheel-off / moved-along set-pieces.
+    // LOD-gated via brainTickDue inside (near-band citizens always due).
+    // Data tier, zero LLM.
+    try {
+      tickStallfolk(this, nowMs);
+    } catch (error) {
+      this.log("stallfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
