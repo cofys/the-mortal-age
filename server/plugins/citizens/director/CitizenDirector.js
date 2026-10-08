@@ -81,6 +81,7 @@ const { tickPerformers } = require("../lib/CitizenStreetPerformers");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenBankers = require("../lib/CitizenBankers");
+const CitizenInnkeepers = require("../lib/CitizenInnkeepers");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
@@ -944,6 +945,16 @@ class CitizenDirector {
       CitizenBankers.tickBankers(this, Date.now());
     } catch (error) {
       this.log("bankers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Innkeepers: hosts, cooks, stablehands and bards visibly run the inns
+    // (scripted welcomes and room offers, meal hawking from the real
+    // CitizenCooks tables, stable offers, evening bard verses, inn rumors
+    // seeded into CitizenRumors) — only while a real player is around to
+    // see them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenInnkeepers.tickInnkeepers(this, Date.now(), desync);
+    } catch (error) {
+      this.log("innkeepers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Caravan shouts: muster/departure/arrival announcements and
     // guard/trader invites, only where a real player can see them.
