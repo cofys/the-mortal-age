@@ -131,6 +131,7 @@ const { tickSewfolk } = require("../lib/CitizenTailors2");
 const { tickSmithfolk } = require("../lib/CitizenBlacksmiths2");
 const { tickBrewfolk } = require("../lib/CitizenAlchemists2");
 const { tickGemfolk } = require("../lib/CitizenJewelers2");
+const { tickDockfolk } = require("../lib/CitizenSailors2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2223,6 +2224,20 @@ class CitizenDirector {
       tickGemfolk(this, nowMs);
     } catch (error) {
       this.log("gemfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen dockside folk: cargo dockhands, sail menders, shore fishers
+    // and old salts spinning sea yarns at the community docks, piers and
+    // quays. Hash-derived types, per-day jobs, ship-arrival crowd moments,
+    // 7-day-TTL ledgers for hiring hands, buying supplies and requesting
+    // yarns. Professional sailors (CitizenSailors) are excluded — the trade
+    // owns ships and voyages; fisherfolk own dockside fishing; the old
+    // salt's yarns are dockside flavor, not the gathered crowd. Visibility
+    // throttled via chance + cooldown (gemfolk precedent), no hobby key.
+    // Data tier, zero LLM.
+    try {
+      tickDockfolk(this, nowMs);
+    } catch (error) {
+      this.log("dockfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
