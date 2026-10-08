@@ -84,6 +84,7 @@ const { tickPainters } = require("../lib/CitizenPainters");
 const { tickSculptors } = require("../lib/CitizenSculptors");
 const { tickArchitects } = require("../lib/CitizenArchitects");
 const { tickEngineers } = require("../lib/CitizenEngineers");
+const { tickClockmakers } = require("../lib/CitizenClockmakers");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenJudges = require("../lib/CitizenJudges");
@@ -1003,6 +1004,20 @@ class CitizenDirector {
       tickEngineers(this, Date.now(), desync);
     } catch (error) {
       this.log("engineers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Clockmakers: horologists, assemblers, repairers and sellers visibly
+    // work the kingdom clock workshops during daylight hours — scripted
+    // precision-assembly work, timepiece hawking, masterwork unveilings,
+    // great-work unveilings, repair/commission offers and coin tips
+    // ("use coins on clockmaker"). No overlap with engineers (machines),
+    // architects (designs), jewelers (gems), blacksmiths (metalwork),
+    // builders (construction), sculptors (carving), painters (studios),
+    // actors (theaters), bards (music), street performers (squares) or inn
+    // bards. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      tickClockmakers(this, Date.now(), desync);
+    } catch (error) {
+      this.log("clockmakers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Guard patrols: the visible watch — checkpoint check-ins, disturbance
     // response, escort offers and follows, night-watch torch announcements,
