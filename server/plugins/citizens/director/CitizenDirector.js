@@ -117,6 +117,7 @@ const { tickGardeners } = require("../lib/CitizenGardeners");
 const { tickVolunteers } = require("../lib/CitizenVolunteers");
 const { tickStorytellers } = require("../lib/CitizenStorytellers");
 const { tickHistorians } = require("../lib/CitizenHistorians");
+const { tickMenders } = require("../lib/CitizenMenders");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2025,6 +2026,18 @@ class CitizenDirector {
       tickHistorians(this, nowMs);
     } catch (error) {
       this.log("historians failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen menders: seamstresses, tinkers, cobblers and handymen who
+    // repair clothes, tools, shoes and household goods. Hash-derived daily
+    // repair jobs, 7-day-TTL ledgers for repair requests, pickups and
+    // apprentice lessons; masterwork restorations as the crowd moment.
+    // Activity system (no professional exclusions): any commoner may mend.
+    // Distinct from tailors (making) and blacksmiths (forging) — this module
+    // owns REPAIR only. Data tier, zero LLM.
+    try {
+      tickMenders(this, nowMs);
+    } catch (error) {
+      this.log("menders failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
