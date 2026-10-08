@@ -133,6 +133,7 @@ const { tickBrewfolk } = require("../lib/CitizenAlchemists2");
 const { tickGemfolk } = require("../lib/CitizenJewelers2");
 const { tickDockfolk } = require("../lib/CitizenSailors2");
 const { tickGuardfolk } = require("../lib/CitizenGuards2");
+const { tickHostfolk } = require("../lib/CitizenInnkeepers2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -2251,6 +2252,17 @@ class CitizenDirector {
       tickGuardfolk(this, nowMs);
     } catch (error) {
       this.log("guardfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen community hospitality (CitizenInnkeepers2): spare-room hosts,
+    // home brewers, feast organizers and tavern regulars — hospitality as a
+    // way of life, not a trade. Professional innkeepers are excluded; this
+    // owns spare rooms, home brew, feast nights and traded gossip. Visibility
+    // throttled via chance + cooldown (guardfolk precedent), no hobby key.
+    // Data tier, zero LLM.
+    try {
+      tickHostfolk(this, nowMs);
+    } catch (error) {
+      this.log("hostfolk failed", { error: String(error?.message ?? error) });
     }
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
