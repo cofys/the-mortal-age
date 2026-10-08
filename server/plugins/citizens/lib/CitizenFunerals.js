@@ -33,6 +33,7 @@ const path = require("path");
 const { getJournal } = require("./CitizenJournal");
 const { normalizeName, isFriend } = require("./CitizenBonds");
 const { agentRng, chance } = require("./humanizer");
+const { brainTickDue } = require("./CitizenTickLod");
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-funerals.json");
 
@@ -611,6 +612,9 @@ function maybeGrieve(director, nowMs, rng, desync) {
     if (m.until <= nowMs) continue;
     const record = director.roster?.get?.(username);
     if (!record) continue;
+    // LOD brain gate: distant mourners voice grief less often (near-band
+    // and unclassified citizens always due: unchanged).
+    if (!brainTickDue(director, record, desync?.tick)) continue;
     if (desyncGate && !desyncGate(record, desync.tick, desync.spread)) continue;
     const last = lastGriefByCitizen.get(username) || 0;
     if (!shouldFire(rng, last, nowMs, GRIEF_COOLDOWN_MS, 0.4)) continue;
@@ -635,6 +639,9 @@ function maybeVisitMemorial(director, nowMs, rng, desync) {
     if (!cur || d.diedAt > cur.diedAt) latestByKingdom.set(d.kingdomId, d);
   }
   for (const record of director?.roster?.values?.() ?? []) {
+    // LOD brain gate: distant citizens visit the memorial less often
+    // (near-band and unclassified always due: unchanged).
+    if (!brainTickDue(director, record, desync?.tick)) continue;
     if (desyncGate && !desyncGate(record, desync.tick, desync.spread)) continue;
     const last = lastMemorialByCitizen.get(record.username) || 0;
     if (!shouldFire(rng, last, nowMs, MEMORIAL_COOLDOWN_MS, 0.25)) continue;
@@ -653,6 +660,9 @@ function maybeVisitMemorial(director, nowMs, rng, desync) {
 function maybeRemember(director, nowMs, rng, desync) {
   const desyncGate = desync ? require("./CitizenTimingDesync").isCitizenDue : null;
   for (const record of director?.roster?.values?.() ?? []) {
+    // LOD brain gate: distant citizens share remembrances less often
+    // (near-band and unclassified always due: unchanged).
+    if (!brainTickDue(director, record, desync?.tick)) continue;
     if (desyncGate && !desyncGate(record, desync.tick, desync.spread)) continue;
     const d = [...deceased.values()].find(
       (x) => x.kingdomId === record.kingdomId && nowMs - x.diedAt > 30 * 24 * 3600 * 1000

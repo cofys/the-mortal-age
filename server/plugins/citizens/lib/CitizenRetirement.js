@@ -27,6 +27,7 @@
 const { getJournal } = require("./CitizenJournal");
 const { normalizeName } = require("./CitizenBonds");
 const { agentRng, chance } = require("./humanizer");
+const { brainTickDue } = require("./CitizenTickLod");
 
 // === Tuning ===
 const RETIREMENT_AGE = 60; // matches the "elderly" cutoff in movementStyleFor
@@ -345,6 +346,9 @@ function tickRetirement(director, nowMs, desync, rng) {
   try {
     for (const record of director.roster?.values?.() ?? []) {
       try {
+        // LOD brain gate: distant citizens process retirement less often
+        // (near-band and unclassified always due: unchanged).
+        if (!brainTickDue(director, record, desync?.tick)) continue;
         // Desync: spread citizen processing across the tick cycle.
         if (desyncGate && !desyncGate(record, desync.tick, desync.spread)) continue;
 

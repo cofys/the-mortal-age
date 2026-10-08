@@ -53,6 +53,7 @@ const { agentRng, chance } = require("./humanizer");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { normalizeName } = require("./CitizenBonds");
 const TimingDesync = require("./CitizenTimingDesync");
+const { brainTickDue } = require("./CitizenTickLod");
 
 // --- tuning --------------------------------------------------------------------
 
@@ -542,6 +543,12 @@ function tickCitizenWork(director, record, nowMs) {
 function tickWorkLoops(director, nowMs = Date.now(), desync = null) {
   if (!director?.roster) return;
   for (const record of director.roster.values()) {
+    // LOD brain gate: distant citizens skip visible work loops on most
+    // cycles. Near-band (and unclassified) citizens are always due, so
+    // behavior near players is unchanged.
+    if (!brainTickDue(director, record, desync?.tick)) {
+      continue;
+    }
     // Timing desync: only the citizens whose hash slot matches this tick's
     // phase are evaluated — no synchronized wave of loop starts.
     if (

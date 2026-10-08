@@ -31,6 +31,7 @@
 const { agentRng, chance, logNormalJitter, humanizerProfile } = require("./humanizer");
 const { getJournal } = require("./CitizenJournal");
 const TimingDesync = require("./CitizenTimingDesync");
+const { brainTickDue } = require("./CitizenTickLod");
 
 // --- tuning ------------------------------------------------------------------
 
@@ -612,6 +613,13 @@ function tickAlive(director, nowMs, desync = null) {
       tickStuckDetection(director, record, bot, nowMs);
     } catch {
       // One bad citizen never breaks the tick.
+    }
+    // LOD brain gate: distant citizens skip visible-life work on most
+    // cycles. Near-band (and unclassified) citizens are always due, so
+    // behavior near players is unchanged. Runs before the desync hash —
+    // a single Map lookup short-circuits the rest for distant citizens.
+    if (!brainTickDue(director, record, desync?.tick)) {
+      continue;
     }
     // Timing desync: only the citizens whose hash slot matches this tick's
     // phase do the visible-life work — this breaks the synchronized wave

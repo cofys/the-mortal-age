@@ -253,6 +253,52 @@ function clearBands() {
 }
 
 /**
+ * Gate for foreground per-citizen work in a feature tick.
+ *
+ * Returns true when this citizen's visible-life work should run this cycle:
+ * - No band recorded (offline, or the LOD scan hasn't classified them yet):
+ *   true — never gate blind. Newly spawned citizens (a player just walked
+ *   into range) have no band until the next LOD scan, so spawn
+ *   responsiveness is preserved by construction.
+ * - Asleep band: false — no real player within 240 tiles, so nothing they
+ *   do is visible. (The data tier — needs, journal, kinship, the slow tick —
+ *   keeps simulating them; this gate is foreground-only.)
+ * - Near band: always true — a player may be watching; identical to the
+ *   pre-LOD desync gate.
+ * - Mid/far band: true on the citizen's desync-phased slice of the band
+ *   stride (every 3rd / 12th cycle). Slots spread the due citizens evenly
+ *   so distant citizens don't pulse in lockstep.
+ *
+ * Compose with the feature's existing desync gate (LOD first — it's a single
+ * Map lookup; the desync hash runs only for citizens the LOD keeps):
+ *
+ *   const { brainTickDue } = require("./CitizenTickLod");
+ *   if (!brainTickDue(director, record, desync?.tick)) continue;
+ *   if (desync && !isCitizenDue(record, desync.tick, desync.spread)) continue;
+ *
+ * tickCount should be the director's fast-tick counter (aiTickCount) — the
+ * same counter the desync gate uses — so both gates advance together. When
+ * omitted it falls back to director.aiTickCount.
+ *
+ * NOTE (band upgrades): a citizen that just upgraded toward near is always
+ * LOD-due (stride 1), so no force-tick is needed here — the lodForceTickAt
+ * stamp exists for the bot-brain layer, whose own observer scan can miss
+ * web-client sessions.
+ */
+function brainTickDue(director, record, tickCount) {
+  const band = bandOf(record);
+  if (!isKnownBand(band)) return true;
+  if (band === BAND_ASLEEP) return false;
+  let t = tickCount;
+  if (t == null) {
+    t = Math.floor(Number(director?.aiTickCount));
+    if (!Number.isFinite(t)) t = 0;
+  }
+  const username = record?.username ?? record?.name ?? "";
+  return isDueOnCycle(username, band, t);
+}
+
+/**
  * Recompute LOD bands for every online citizen. Called once per director
  * proximity-tick cycle, before the feature ticks run. Stamps
  * state.lodBand / state.lodStride / state.lodForceTickAt on each citizen's
@@ -347,4 +393,6 @@ module.exports = {
   tickLodBands,
   bandOf,
   clearBands,
+  // foreground gate for feature ticks
+  brainTickDue,
 };

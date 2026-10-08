@@ -31,6 +31,7 @@ const {
   tickLodBands,
   bandOf,
   clearBands,
+  brainTickDue,
 } = require("./CitizenTickLod");
 
 // Deterministic roster of N citizens.
@@ -399,5 +400,109 @@ describe("tickLodBands", () => {
     assert.deepEqual(summary, { near: 0, mid: 0, far: 0, asleep: 0, forced: 0 });
     const summary2 = tickLodBands({}, Date.now());
     assert.deepEqual(summary2, { near: 0, mid: 0, far: 0, asleep: 0, forced: 0 });
+  });
+});
+
+describe("brainTickDue", () => {
+  beforeEach(() => clearBands());
+
+  // Four citizens at fixed distances from a real player; the LOD scan
+  // classifies them once, then brainTickDue gates per cycle.
+  function bandedDirector() {
+    const records = [
+      { username: "due_near", x: 100, y: 100 },
+      { username: "due_mid", x: 500, y: 500 },
+      { username: "due_far", x: 900, y: 900 },
+      { username: "due_alone", x: 2000, y: 2000 },
+    ];
+    const director = mockDirector(records);
+    director._bots.get("due_near")._locals = [mockPlayer("Jon", 105, 103)];
+    director._bots.get("due_mid")._locals = [mockPlayer("Jon", 540, 520)];
+    director._bots.get("due_far")._locals = [mockPlayer("Jon", 1000, 1000)];
+    tickLodBands(director, Date.now());
+    return director;
+  }
+
+  it("never gates blind: unknown band (no scan yet) is always due", () => {
+    const director = mockDirector([{ username: "unscanned", x: 0, y: 0 }]);
+    // No tickLodBands call — the band map is empty.
+    for (let tick = 0; tick < 24; tick++) {
+      assert.equal(
+        brainTickDue(director, { username: "unscanned" }, tick),
+        true
+      );
+    }
+    assert.equal(brainTickDue(director, null, 0), true);
+    assert.equal(brainTickDue(null, null, 0), true);
+  });
+
+  it("asleep citizens are never due (data tier still simulates them)", () => {
+    const director = bandedDirector();
+    assert.equal(bandOf({ username: "due_alone" }), BAND_ASLEEP);
+    for (let tick = 0; tick < 48; tick++) {
+      assert.equal(
+        brainTickDue(director, { username: "due_alone" }, tick),
+        false
+      );
+    }
+  });
+
+  it("near citizens are due on every cycle", () => {
+    const director = bandedDirector();
+    assert.equal(bandOf({ username: "due_near" }), BAND_NEAR);
+    for (let tick = 0; tick < 48; tick++) {
+      assert.equal(
+        brainTickDue(director, { username: "due_near" }, tick),
+        true
+      );
+    }
+  });
+
+  it("mid/far citizens follow their stride slice exactly", () => {
+    const director = bandedDirector();
+    assert.equal(bandOf({ username: "due_mid" }), BAND_MID);
+    assert.equal(bandOf({ username: "due_far" }), BAND_FAR);
+    for (let tick = 0; tick < 48; tick++) {
+      assert.equal(
+        brainTickDue(director, { username: "due_mid" }, tick),
+        isDueOnCycle("due_mid", BAND_MID, tick)
+      );
+      assert.equal(
+        brainTickDue(director, { username: "due_far" }, tick),
+        isDueOnCycle("due_far", BAND_FAR, tick)
+      );
+    }
+    // And the slices are actually sparse, not accidentally always-due.
+    let midDue = 0;
+    let farDue = 0;
+    for (let tick = 0; tick < 120; tick++) {
+      if (brainTickDue(director, { username: "due_mid" }, tick)) midDue++;
+      if (brainTickDue(director, { username: "due_far" }, tick)) farDue++;
+    }
+    assert.equal(midDue, 40); // stride 3 -> exactly 1/3
+    assert.equal(farDue, 10); // stride 12 -> exactly 1/12
+  });
+
+  it("falls back to director.aiTickCount when tickCount is omitted", () => {
+    const director = bandedDirector();
+    director.aiTickCount = 7;
+    assert.equal(
+      brainTickDue(director, { username: "due_mid" }),
+      isDueOnCycle("due_mid", BAND_MID, 7)
+    );
+    assert.equal(
+      brainTickDue(null, { username: "due_mid" }),
+      isDueOnCycle("due_mid", BAND_MID, 0)
+    );
+  });
+
+  it("matches bands case-insensitively like the rest of the module", () => {
+    const director = bandedDirector();
+    for (let tick = 0; tick < 12; tick++) {
+      assert.equal(
+        brainTickDue(director, { username: "DUE_MID" }, tick),
+        isDueOnCycle("DUE_MID", BAND_MID, tick)
+      );
+    }
   });
 });

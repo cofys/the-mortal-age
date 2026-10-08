@@ -48,6 +48,7 @@ const { agentRng, chance } = require("./humanizer");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { normalizeName } = require("./CitizenBonds");
 const TimingDesync = require("./CitizenTimingDesync");
+const { brainTickDue } = require("./CitizenTickLod");
 
 // === Tuning: all magic numbers here ===
 const PROXIMITY_TILES = 40; // a real player must be this close for visible work
@@ -630,7 +631,13 @@ function tickBuilderLife(director, nowMs = Date.now(), desync) {
         const last = lastWorkedAt.get(name) ?? 0;
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
-        // 2. Desync gate — stagger the visible-life wave
+        // 2. LOD brain gate — distant citizens skip visible builder life on
+        // most cycles (near-band and unclassified always due: unchanged).
+        if (!brainTickDue(director, record, desync?.tick)) {
+          continue;
+        }
+
+        // 3. Desync gate — stagger the visible-life wave
         if (
           desync &&
           !TimingDesync.isCitizenDue({ username: name }, desync.tick, desync.spread)
@@ -638,14 +645,14 @@ function tickBuilderLife(director, nowMs = Date.now(), desync) {
           continue;
         }
 
-        // 3. Citizen must be materialized (near a player already)
+        // 4. Citizen must be materialized (near a player already)
         const bot = director.getBot?.(record);
         if (!bot) continue;
 
-        // 4. A real player must be close enough to see the work
+        // 5. A real player must be close enough to see the work
         if (realPlayersWithin(bot, PROXIMITY_TILES).length === 0) continue;
 
-        // 5. Chance gate + do the thing (scripted, zero LLM)
+        // 6. Chance gate + do the thing (scripted, zero LLM)
         if (!chance(Math.random, WORK_CHANCE)) continue;
         if (info.trade === "architect") {
           doSupervise(director, name, info, bot, nowMs);
