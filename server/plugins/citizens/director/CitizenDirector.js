@@ -76,6 +76,7 @@ const { tickTavernGames } = require("../lib/CitizenTavernGames");
 const { tickFestivals } = require("../lib/CitizenFestivals");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
+const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
 const { tickCaravans } = require("../lib/CitizenTradeCaravans");
 const { tickCaravanShouts } = require("../lib/CitizenTradeCaravans");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
@@ -790,6 +791,15 @@ class CitizenDirector {
     } catch (error) {
       this.log("retirement (proximity) failed", { error: String(error?.message ?? error) });
     }
+    // Funerals (rites): the visible ceremony for the recently dead —
+    // eulogist and mourners gather, grief lines, memorial visits, and
+    // remembrance stories — only while a real player is around to witness.
+    // Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      tickFuneralRites(this, Date.now(), desync);
+    } catch (error) {
+      this.log("funerals (proximity) failed", { error: String(error?.message ?? error) });
+    }
     // Town crier: the designated crier per kingdom shouts the week's top
     // headline and hands nearby real players a copy of the paper (opens the
     // heraldic overlay, once per edition per player). Data tier, zero LLM,
@@ -1472,6 +1482,16 @@ class CitizenDirector {
     } catch (error) {
       this.log("fishing tournaments failed", { error: String(error?.message ?? error) });
     }
+    // Citizen funerals (mortality): elders die of old age, anyone can die
+    // in an accident, guards can fall in battle. Deaths are journaled,
+    // the close circle grieves, funerals are scheduled, and the deceased
+    // feed the newspaper obituaries. Data tier, zero LLM. Runs before the
+    // newspaper so this week's deaths make this week's paper.
+    try {
+      tickMortality(this, nowMs);
+    } catch (error) {
+      this.log("funerals (mortality) failed", { error: String(error?.message ?? error) });
+    }
     // Citizen newspaper: once a week, compile the paper from journals,
     // rumors, festivals, elections, and retirements — headlines, gossip
     // column, announcements, obituaries. Data tier, zero LLM.
@@ -1517,6 +1537,15 @@ class CitizenDirector {
       CitizenBonds.save();
     } catch (error) {
       this.log("citizen bonds save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (saveFuneralsIfDirty()) {
+        this.log("citizen funerals saved");
+      }
+    } catch (error) {
+      this.log("citizen funerals save failed", {
         error: String(error?.message ?? error),
       });
     }

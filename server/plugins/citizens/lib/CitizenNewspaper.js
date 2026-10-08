@@ -182,6 +182,13 @@ function compileEdition(sources, kingdomId, nowMs) {
   }
 
   const obituaries = [];
+  for (const d of src.deceased || []) {
+    if (obituaries.length >= MAX_OBITUARIES) break;
+    const name = d.display || d.username || "A citizen";
+    const role = d.role ? `, ${d.role}` : "";
+    const cause = d.cause ? ` — ${d.cause}` : "";
+    obituaries.push(`${name}${role}${cause}. The town mourns.`);
+  }
   for (const o of src.retired || []) {
     if (obituaries.length >= MAX_OBITUARIES) break;
     const name = o.display || o.username || "An elder";
@@ -294,6 +301,7 @@ function gatherSources(director, nowMs) {
   const journalEvents = [];
   const announcements = [];
   const retired = [];
+  const deceased = [];
   const since = nowMs - EDITION_INTERVAL_MS;
 
   try {
@@ -349,7 +357,17 @@ function gatherSources(director, nowMs) {
     }
   } catch { /* no obituaries */ }
 
-  return { journalEvents, rumors, announcements, retired };
+  try {
+    const Funerals = require("./CitizenFunerals");
+    for (const d of Funerals.getDeceased?.() ?? []) {
+      if (deceased.length >= MAX_OBITUARIES) break;
+      if (d.diedAt >= since) {
+        deceased.push({ username: d.username, display: d.display, role: d.role, cause: d.cause });
+      }
+    }
+  } catch { /* no death notices */ }
+
+  return { journalEvents, rumors, announcements, retired, deceased };
 }
 
 // ============================================================================
