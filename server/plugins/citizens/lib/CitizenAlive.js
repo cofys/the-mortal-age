@@ -634,7 +634,7 @@ function tickAlive(director, nowMs, desync = null) {
     // cycles. Near-band (and unclassified) citizens are always due, so
     // behavior near players is unchanged. Runs before the desync hash —
     // a single Map lookup short-circuits the rest for distant citizens.
-    const due = brainTickDue(director, record, desync?.tick);
+    const due = true; // BYPASS LOD for diagnostic - remove after testing
     // DEBUG: Track LOD gate decisions
     if (Math.random() < 0.01) {
       try {
