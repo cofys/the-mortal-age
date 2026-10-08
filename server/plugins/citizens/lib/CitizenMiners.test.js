@@ -160,6 +160,7 @@ check("tickMiners: miner citizen near a real player does visible work", () => {
     forceChat: (line) => spoken.push(line),
     performAnimation: () => {},
     getLocation: () => ({ getX: () => 3000, getY: () => 3000, getZ: () => 0 }),
+    getLocalPlayers: () => [player],
   };
   const player = {
     getUsername: () => "RealPlayer",
@@ -167,8 +168,8 @@ check("tickMiners: miner citizen near a real player does visible work", () => {
   };
   const director = {
     roster: new Map([[miner, { username: miner, role: "commoner", kingdom: "asgarnia" }]]),
-    playerFor: () => citizen,
-    onlinePlayers: () => [player],
+    isOnline: () => true,
+    getBot: () => citizen,
     api: { core: { Animation: class { constructor(id) { this.id = id; } } } },
   };
 
@@ -188,6 +189,7 @@ check("tickMiners: non-commoner and non-miner records are skipped", () => {
     forceChat: () => { throw new Error("should not fire"); },
     performAnimation: () => {},
     getLocation: () => ({ getX: () => 3000, getY: () => 3000, getZ: () => 0 }),
+    getLocalPlayers: () => [player],
   };
   const player = {
     getUsername: () => "RealPlayer",
@@ -203,8 +205,8 @@ check("tickMiners: non-commoner and non-miner records are skipped", () => {
       ["guard-bob", { username: "guard-bob", role: "guard", kingdom: "asgarnia" }],
       [nonMiner, { username: nonMiner, role: "commoner", kingdom: "asgarnia" }],
     ]),
-    playerFor: () => citizen,
-    onlinePlayers: () => [player],
+    isOnline: () => true,
+    getBot: () => citizen,
   };
   M.tickMiners(director, Date.now()); // must not throw, must not fire
 });
@@ -220,6 +222,7 @@ check("tickMiners: silent with no real player near", () => {
     forceChat: () => { spoke = true; },
     performAnimation: () => {},
     getLocation: () => ({ getX: () => 3000, getY: () => 3000, getZ: () => 0 }),
+    getLocalPlayers: () => [bot],
   };
   // bot players don't count
   const bot = {
@@ -230,8 +233,8 @@ check("tickMiners: silent with no real player near", () => {
   };
   const director = {
     roster: new Map([[miner, { username: miner, role: "commoner", kingdom: "asgarnia" }]]),
-    playerFor: () => citizen,
-    onlinePlayers: () => [bot],
+    isOnline: () => true,
+    getBot: () => citizen,
   };
   for (let i = 0; i < 10; i++) {
     M._resetState();

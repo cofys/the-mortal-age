@@ -199,23 +199,8 @@ function faceToward(bot, targetTile) {
 
 function requestMovement(bot, x, y, z, reason) {
   try {
-    const {
-      requestMovement: rm,
-      peekMovementRequest,
-      dispatchMovementRequest,
-    } = require("../../bots/behaviours/navigation/BotNavigation");
+    const { requestMovement: rm } = require("../../bots/behaviours/navigation/BotNavigation");
     rm(bot, x, y, { reason: reason ?? "citizen_alive", basicPather: true, z: z ?? 0 });
-    // Dispatch immediately: citizen bots may not have an active BotBrain
-    // ticking to dispatch queued movements. Without this, requests queue
-    // up but never execute, leaving citizens frozen.
-    try {
-      const req = peekMovementRequest(bot);
-      if (req) {
-        dispatchMovementRequest(bot, req);
-      }
-    } catch {
-      // Dispatch is best-effort; the request is queued.
-    }
     return true;
   } catch {
     return false;
