@@ -63,6 +63,7 @@ const CitizenFarmers = require("../lib/CitizenFarmers");
 const CitizenMiners = require("../lib/CitizenMiners");
 const CitizenFishers = require("../lib/CitizenFishers");
 const CitizenHunters = require("../lib/CitizenHunters");
+const CitizenCooks = require("../lib/CitizenCooks");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -827,6 +828,16 @@ class CitizenDirector {
       CitizenHunters.tickHunters(this, Date.now(), desync);
     } catch (error) {
       this.log("hunters (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Cooks: tavern keepers, bakers, chefs and street vendors visibly work
+    // their kitchens (engine-verified cooking anims 896/897, meal-of-the-day
+    // announcements, fresh-food hawking, recipe lesson offers) — only while
+    // a real player is around to see them. Data tier, zero LLM,
+    // per-citizen try/catch inside.
+    try {
+      CitizenCooks.tickCooks(this, Date.now(), desync);
+    } catch (error) {
+      this.log("cooks (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
