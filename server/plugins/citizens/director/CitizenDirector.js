@@ -64,6 +64,7 @@ const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
+const { tickFestivals } = require("../lib/CitizenFestivals");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
@@ -1323,6 +1324,15 @@ class CitizenDirector {
       tickWeatherReactions(this, nowMs);
     } catch (error) {
       this.log("weather reactions failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen festivals: realm-wide seasonal festivals (5 annual, 3-day
+    // windows). Citizens journal their participation (shared history) and,
+    // when a real player is near, celebrate with personality-gated lines,
+    // dancing, and player invites. Data tier, zero LLM.
+    try {
+      tickFestivals(this, nowMs);
+    } catch (error) {
+      this.log("festivals failed", { error: String(error?.message ?? error) });
     }
     // Citizen relationships: friend citizens hail friend players passing
     // nearby, by name. Data tier, zero LLM.
