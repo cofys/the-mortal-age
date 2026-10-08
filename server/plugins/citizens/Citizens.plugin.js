@@ -48,6 +48,7 @@ const { tipSculptor } = require("./lib/CitizenSculptors");
 const { tipArchitect } = require("./lib/CitizenArchitects");
 const { tipEngineer } = require("./lib/CitizenEngineers");
 const { tipClockmaker } = require("./lib/CitizenClockmakers");
+const { tipGlassblower } = require("./lib/CitizenGlassblowers");
 const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
@@ -526,7 +527,7 @@ function onGiftSeen(event) {
   onGiftGiven(event);
 }
 
-/** A player used coins on a citizen bot: a tip for a street performer, bard, actor, painter, sculptor, architect, engineer or clockmaker. */
+/** A player used coins on a citizen bot: a tip for a street performer, bard, actor, painter, sculptor, architect, engineer, clockmaker or glassblower. */
 function onTipSeen(event) {
   tipPerformer(event);
   if (!event.handled) tipBard(event);
@@ -536,6 +537,7 @@ function onTipSeen(event) {
   if (!event.handled) tipArchitect(event);
   if (!event.handled) tipEngineer(event);
   if (!event.handled) tipClockmaker(event);
+  if (!event.handled) tipGlassblower(event);
 }
 
 /** A player logged out: drop their idle-tracking state. */

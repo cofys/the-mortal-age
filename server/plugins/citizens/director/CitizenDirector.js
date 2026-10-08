@@ -85,6 +85,7 @@ const { tickSculptors } = require("../lib/CitizenSculptors");
 const { tickArchitects } = require("../lib/CitizenArchitects");
 const { tickEngineers } = require("../lib/CitizenEngineers");
 const { tickClockmakers } = require("../lib/CitizenClockmakers");
+const { tickGlassblowers } = require("../lib/CitizenGlassblowers");
 const CitizenGuardPatrols = require("../lib/CitizenGuardPatrols");
 const CitizenGuards = require("../lib/CitizenGuards");
 const CitizenJudges = require("../lib/CitizenJudges");
@@ -1018,6 +1019,23 @@ class CitizenDirector {
       tickClockmakers(this, Date.now(), desync);
     } catch (error) {
       this.log("clockmakers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Glassblowers: vessel makers, window makers, ornament makers and
+    // furnace tenders visibly work the kingdom glasshouses during furnace
+    // hours — scripted glassblowing emotes, glassware hawking, masterwork
+    // unveilings, great-work unveilings, commission offers and coin tips
+    // ("use coins on glassblower"). Glassware demand is read from the real
+    // CitizenAlchemists tables and ornament settings from the real
+    // CitizenJewelers tables. No overlap with clockmakers (timepieces),
+    // engineers (machines), architects (designs), jewelers (gems),
+    // blacksmiths (metalwork), builders (construction), sculptors
+    // (carving), painters (studios), actors (theaters), bards (music),
+    // street performers (squares) or inn bards. Data tier, zero LLM,
+    // per-citizen try/catch inside.
+    try {
+      tickGlassblowers(this, Date.now(), desync);
+    } catch (error) {
+      this.log("glassblowers (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Guard patrols: the visible watch — checkpoint check-ins, disturbance
     // response, escort offers and follows, night-watch torch announcements,
