@@ -96,6 +96,7 @@ const CitizenInnkeepers = require("../lib/CitizenInnkeepers");
 const CitizenStablehands = require("../lib/CitizenStablehands");
 const CitizenLibrarians = require("../lib/CitizenLibrarians");
 const { tickBookfolk } = require("../lib/CitizenLibrarians2");
+const { tickEngineerfolk } = require("../lib/CitizenEngineers2");
 const CitizenPriests = require("../lib/CitizenPriests");
 const CitizenTaxCollectors = require("../lib/CitizenTaxCollectors");
 const CitizenMessengers = require("../lib/CitizenMessengers");
@@ -1063,6 +1064,23 @@ class CitizenDirector {
       tickEngineers(this, Date.now(), desync);
     } catch (error) {
       this.log("engineers (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Engineerfolk: amateur engineering-life folk under the professional
+    // engineers — tinkers mend kettles/locks on the street corners,
+    // grease-monkeys run errands for the workshops, rivet-hands do grunt
+    // machine repairs, and signalers keep the flag/whistle patter going.
+    // Street repair corners (not the pro workshops), per-day mending cries
+    // and errand calls (never devices, commissions, great works or
+    // breakthroughs), the pro-workshop small-talk bridge, the gear-spill /
+    // whistle-gag set-pieces and the fix-crowd moment. Citizens claimed by
+    // the master's real claimed-type function (engineerTypeOf) and by
+    // CitizenBlacksmiths2 (smithfolkTypeOf) are excluded before the share
+    // roll inside the module. LOD-gated via brainTickDue inside (near-band
+    // citizens always due). Data tier, zero LLM.
+    try {
+      tickEngineerfolk(this, Date.now(), desync);
+    } catch (error) {
+      this.log("engineerfolk failed", { error: String(error?.message ?? error) });
     }
     // Clockmakers: horologists, assemblers, repairers and sellers visibly
     // work the kingdom clock workshops during daylight hours — scripted
