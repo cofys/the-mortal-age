@@ -65,6 +65,7 @@ const CitizenFishers = require("../lib/CitizenFishers");
 const CitizenHunters = require("../lib/CitizenHunters");
 const CitizenCooks = require("../lib/CitizenCooks");
 const CitizenTailors = require("../lib/CitizenTailors");
+const CitizenBlacksmiths = require("../lib/CitizenBlacksmiths");
 const CitizenHealers = require("../lib/CitizenHealers");
 const CitizenScholars = require("../lib/CitizenScholars");
 const CitizenRumors = require("../lib/CitizenRumors");
@@ -849,6 +850,16 @@ class CitizenDirector {
       CitizenTailors.tickTailors(this, Date.now(), desync);
     } catch (error) {
       this.log("tailors (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Blacksmiths: weaponsmiths, armorsmiths, farriers and bladesmiths
+    // visibly work their forges (engine-verified smithing anim 898,
+    // smelting anim 899, wares hawking, masterwork unveilings,
+    // commission offers) — only while a real player is around to see
+    // them. Data tier, zero LLM, per-citizen try/catch inside.
+    try {
+      CitizenBlacksmiths.tickSmiths(this, Date.now(), desync);
+    } catch (error) {
+      this.log("blacksmiths (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
