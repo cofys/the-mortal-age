@@ -278,8 +278,15 @@ test("steward grant-treasury moves coins to a named player", () => {
   alice.getInventory = () => ({
     getAmount: () => 0,
     delete: () => {},
-    add: (id, n) => {
+    // Faithful to the core: adds(id, amount) is the id/amount form;
+    // add(item, refresh) takes an Item object and throws on a raw id.
+    adds: (id, n) => {
       alice._paid = (alice._paid ?? 0) + n;
+    },
+    add: (item, refresh) => {
+      if (!item || typeof item.getId !== "function") {
+        throw new TypeError("item.getId is not a function");
+      }
     },
     refreshItems: () => {},
   });

@@ -823,6 +823,31 @@ function priceStall(api, player, itemArg, priceArg) {
   console.info("[player-shops] price set", { stall: stall.owner, item: itemId, price: clamped });
 }
 
+/** Bot objects eligible to mind a stall (unemployed commoners of its kingdom). */
+function candidateBots(stall) {
+  if (!stall || stall.employee) return [];
+  const director = getDirector();
+  if (!director) return [];
+  try {
+    return (director.onlineBotsForKingdom(stall.kingdomId, ROLE_COMMONER) ?? []).filter(
+      (bot) =>
+        bot.getAttribute?.(ATTR_CITIZEN_ROLE) === ROLE_COMMONER &&
+        !bot.getAttribute?.(ATTR_STALL_EMPLOYEE) &&
+        !Store.isEmployed(bot.getUsername?.() ?? "")
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Usernames of hireable citizens, for the marketplace manage UI. */
+function hireCandidates(stall) {
+  return candidateBots(stall)
+    .map((bot) => bot.getUsername?.() ?? "")
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
 function hireEmployee(api, player, nameArg) {
   const stall = requireStall(player);
   if (!stall) return;
@@ -835,17 +860,7 @@ function hireEmployee(api, player, nameArg) {
     player.sendMessage("The citizen population isn't awake right now — try again later.");
     return;
   }
-  let candidates = [];
-  try {
-    candidates = (director.onlineBotsForKingdom(stall.kingdomId, ROLE_COMMONER) ?? []).filter(
-      (bot) =>
-        bot.getAttribute?.(ATTR_CITIZEN_ROLE) === ROLE_COMMONER &&
-        !bot.getAttribute?.(ATTR_STALL_EMPLOYEE) &&
-        !Store.isEmployed(bot.getUsername?.() ?? "")
-    );
-  } catch {
-    candidates = [];
-  }
+  const candidates = candidateBots(stall);
   if (nameArg) {
     const want = String(nameArg).toLowerCase();
     const chosen = candidates.find(
@@ -1238,4 +1253,8 @@ module.exports = {
   showInfo,
   closeOwnStall,
   wareName: itemName,
+  // Exported for the marketplace web overlay (ShopApi.js).
+  kingdomName,
+  executePlayerSale,
+  hireCandidates,
 };

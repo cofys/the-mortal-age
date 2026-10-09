@@ -215,6 +215,19 @@ function onlinePlayer(director, name) {
   }
 }
 
+/** Inventory room for the purchase: stackables need one slot unless held. */
+function inventoryHasRoom(inv, itemId, qty, core) {
+  try {
+    const def = core?.ItemDefinition?.forId?.(Number(itemId));
+    if (def?.isStackable?.() === true) {
+      return inv.containsNumber(Number(itemId)) || inv.getFreeSlots() > 0;
+    }
+    return inv.getFreeSlots() >= qty;
+  } catch {
+    return true; // best-effort; the transfer try/catch below is the backstop
+  }
+}
+
 /**
  * Execute the sale. Mirrors PlayerShops' buyWare math: stock down, till up
  * minus the 5% crown market tax (granted before the notification event),
@@ -230,6 +243,17 @@ function executeSale(director, bot, record, stall, itemId, qty, price) {
   const stock = stall.stock?.[itemId] ?? 0;
   if (stock < qty) return false;
 
+  // Move the buyer's coins and goods FIRST. The old order mutated the stall
+  // (stock down, till up, saved) before the transfer — a failed transfer
+  // then destroyed the stock and minted till coins from nothing.
+  if (!inventoryHasRoom(buyerInv, Number(itemId), qty, director?.api?.core)) return false;
+  try {
+    buyerInv.deleteNumber(COINS_ID, cost);
+    buyerInv.adds(Number(itemId), qty);
+  } catch {
+    return false;
+  }
+
   const tax = Math.floor(cost * Store.MARKET_TAX_RATE);
   stall.stock[itemId] = stock - qty;
   stall.till = (stall.till ?? 0) + (cost - tax);
@@ -237,12 +261,6 @@ function executeSale(director, bot, record, stall, itemId, qty, price) {
     Store.save();
   } catch {
     // The trade stands; persistence retries next mutation.
-  }
-  try {
-    buyerInv.deleteNumber(COINS_ID, cost);
-    buyerInv.adds(itemId, qty);
-  } catch {
-    return false;
   }
   if (tax > 0) {
     try {
@@ -519,6 +537,8 @@ module.exports = {
   referencePrice,
   maxPayRatio,
   considerStall,
+  executeSale,
+  inventoryHasRoom,
   BASE_SHOP_CHANCE,
   BARGAIN_FLOCK_MULT,
   WALK_PAST_RATIO,

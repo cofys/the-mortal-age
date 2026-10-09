@@ -940,7 +940,10 @@ function deliverSupplies(player, kingdomId, itemId, qty) {
   if (!Store.spendTax(kingdomId, payout)) return fail("The coffers cannot pay for this delivery.");
   inventory.delete(itemId, count);
   inventory.refreshItems?.();
-  inventory.add(COINS_ID, payout);
+  // NOTE: ItemContainer.add takes an Item object, NOT (id, amount) —
+  // the id/amount form is adds(). Using add() here threw, so the supplier
+  // lost their goods AND the payout — items and coins both destroyed.
+  inventory.adds(COINS_ID, payout);
   const stockpile = Math.floor(flagOf(kingdomId, STOCKPILE_FLAG) ?? 0);
   Store.setFlag(kingdomId, STOCKPILE_FLAG, stockpile + units);
   const remaining = order.units - units;

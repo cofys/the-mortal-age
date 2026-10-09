@@ -33,8 +33,16 @@ function mockPlayer({ coins = 0, bot = false, username = "test-player" } = {}) {
     delete: (id, n) => {
       if (id === Treasury.COINS_ID) inv.coins = Math.max(0, inv.coins - n);
     },
-    add: (id, n) => {
+    // Faithful to the core ItemContainer: adds(id, amount) is the id/amount
+    // form; add(item, refresh) takes an Item object and throws on a raw id.
+    adds: (id, n) => {
       if (id === Treasury.COINS_ID) inv.coins += n;
+    },
+    add: (item, refresh) => {
+      if (!item || typeof item.getId !== "function") {
+        throw new TypeError("item.getId is not a function");
+      }
+      if (item.getId() === Treasury.COINS_ID) inv.coins += item.getAmount();
     },
     refreshItems: () => {},
   };

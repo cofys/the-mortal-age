@@ -137,10 +137,23 @@ function grantFromTreasury(kingdomId, granter, target, amount) {
   }
   try {
     const inventory = target.getInventory?.();
-    inventory?.add?.(COINS_ID, cost);
-    inventory?.refreshItems?.();
+    // NOTE: ItemContainer.add takes an Item object, NOT (id, amount) —
+    // the id/amount form is adds(). Using add() here used to throw and
+    // silently delete the grant (treasury debited, player never paid).
+    if (!inventory || typeof inventory.adds !== "function") {
+      throw new Error("recipient has no inventory");
+    }
+    inventory.adds(COINS_ID, cost);
+    inventory.refreshItems?.();
   } catch {
-    // The treasury already paid; a failed purse write must not un-pay it.
+    // The treasury already paid; refund it rather than deleting the coins.
+    try {
+      Store.grantTax(kingdomId, cost);
+      Store.save();
+    } catch {
+      // Best effort — the failure is already logged by the caller.
+    }
+    return { ok: false, message: "The grant failed to reach them — the treasury was refunded." };
   }
   Store.save();
   return { ok: true, granted: cost };
