@@ -253,11 +253,27 @@ function activeIntentsFor(player) {
 /** The arrived skilling session this citizen is a member of, if any. */
 function skillingSessionFor(sessions, username) {
   const key = normalizeName(username);
-  for (const session of sessions.values()) {
+  for (const [mapKey, session] of sessions.entries()) {
     if (!session || !session.arrived) continue;
     const members = session.members ?? [];
     for (const m of members) {
-      if (normalizeName(m) === key) return session;
+      if (normalizeName(m) === key) {
+        // Real sessions from CitizenSkilling are keyed by leader normalized
+        // name in the Map but carry no sessionId on the object. Attach a
+        // stable unique identifier so session-scoped features (goal
+        // announcements) work in production, not just in tests with mock
+        // sessionIds. The ID combines the map key with the session's endsAt
+        // so a leader's NEXT session gets a fresh ID (not the same as the
+        // previous session's).
+        if (session.sessionId == null && session.key == null && session._mapKey == null) {
+          try {
+            session._mapKey = `${mapKey}:${session.endsAt ?? "0"}`;
+          } catch {
+            // Non-extensible session object — goal announcements skip.
+          }
+        }
+        return session;
+      }
     }
   }
   return null;
@@ -366,7 +382,7 @@ function pickGoalLine(intents, personality, rng = Math.random) {
 
 function sessionIdOf(session) {
   try {
-    return session?.sessionId ?? session?.key ?? null;
+    return session?.sessionId ?? session?.key ?? session?._mapKey ?? null;
   } catch {
     return null;
   }
