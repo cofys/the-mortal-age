@@ -768,6 +768,44 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a school" — player asks about the town schoolhouse.
+  if (/\b(is there a school|where is the school|schoolhouse|where do children learn)\b/.test(said)) {
+    try {
+      const Schools = require("../lib/CitizenSchools");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      if (!record?.kingdomId) return false;
+      const school = Schools.schoolOfKingdom(record.kingdomId);
+      if (!school) return false;
+      const pupils = Schools.pupilsOfKingdom(record.kingdomId).length;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "school_describe", {
+        name: school.name,
+        pupils,
+        teacher: school.teacher ?? null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "did you go to school" — player asks about the citizen's own schooling.
+  if (/\b(did you go to school|are you educated|were you schooled|can you read)\b/.test(said)) {
+    try {
+      const Schools = require("../lib/CitizenSchools");
+      const bonus = Schools.xpBonusFor(citizenUsername);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "school_educated", {
+        educated: bonus > 0,
+        bonus: Math.round(bonus * 100),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where is the temple" — player asks about the local temple.
   if (/\b(where is the temple|is there a temple|where do you pray|where is the chapel)\b/.test(said)) {
     try {
@@ -839,6 +877,12 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, extra) {
       festival_next: extra
         ? `${display}: ${extra.days === 0 ? `${extra.name} is happening right now` : `${extra.name} starts in ${extra.days} day${extra.days === 1 ? "" : "s"}`} — ${extra.blurb}${extra.more > 0 ? `, and ${extra.more} more after that` : ""}.`
         : `${display} shrugs.`,
+      school_describe: extra
+        ? `${display}: The ${extra.name} — ${extra.pupils} young ones learning their letters${extra.teacher ? ` under ${extra.teacher}` : ""}.`
+        : `${display} shrugs.`,
+      school_educated: extra?.educated
+        ? `${display}: Aye, I went to school as a child. It serves me well — I pick things up ${extra.bonus}% faster.`
+        : `${display}: No schooling for me, I'm afraid. I learned what I know the hard way.`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM

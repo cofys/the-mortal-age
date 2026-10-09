@@ -94,6 +94,13 @@ const LAWS = {
     dislikes: [],
     unrestDelta: -5,
   },
+  "school-funding": {
+    name: "Free Schooling",
+    description: "The town covers school tuition; parents pay nothing.",
+    likes: ["commoner"],
+    dislikes: ["merchant"],
+    unrestDelta: -6,
+  },
 };
 
 const LAW_IDS = Object.keys(LAWS);

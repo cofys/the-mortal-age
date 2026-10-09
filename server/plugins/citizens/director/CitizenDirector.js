@@ -185,6 +185,8 @@ const {
   tickFestivalLife,
   registerFeastSource,
 } = require("../lib/CitizenFestivalLife");
+const { tickSchools } = require("../lib/CitizenSchoolLife");
+const CitizenSchools = require("../lib/CitizenSchools");
 // Religious feasts join the seasonal calendar so the festival games,
 // celebration chatter, and participation journaling all fire for them.
 registerFeastSource();
@@ -2816,6 +2818,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("festival life failed", { error: String(error?.message ?? error) });
     }
+    // Citizen schools: schoolhouses, family-children pupils, tuition,
+    // graduation. Data tier, zero LLM.
+    try {
+      tickSchools(this, nowMs);
+    } catch (error) {
+      this.log("schools failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -2892,6 +2901,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen faith save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenSchools.save()) {
+        this.log("citizen schools saved");
+      }
+    } catch (error) {
+      this.log("citizen schools save failed", {
         error: String(error?.message ?? error),
       });
     }

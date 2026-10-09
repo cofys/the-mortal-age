@@ -426,6 +426,12 @@ function grantXpWithCelebration(director, record, skillId, amount) {
   } catch {
     bonus = 0;
   }
+  // Schooled citizens learn faster: graduates earn up to +15% XP.
+  try {
+    bonus += require("./CitizenSchools").xpBonusFor(record.username);
+  } catch {
+    // School records are garnish; the base XP always lands.
+  }
   const boosted = bonus > 0 ? Math.max(1, Math.round(amount * (1 + bonus))) : amount;
   const { leveled, level } = skillStore.addXp(record.username, skillId, boosted);
   if (leveled) {
