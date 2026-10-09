@@ -305,6 +305,8 @@ const { tickArtGuildLife } = require("../lib/CitizenArtGuildLife");
 const CitizenArtGuilds = require("../lib/CitizenArtGuilds");
 const { tickLibrarianGuildLife } = require("../lib/CitizenLibrarianGuildLife");
 const CitizenLibrarianGuilds = require("../lib/CitizenLibrarianGuilds");
+const { tickObservatoryGuildLife } = require("../lib/CitizenObservatoryGuildLife");
+const CitizenObservatoryGuilds = require("../lib/CitizenObservatoryGuilds");
 const { tickCivilLife } = require("../lib/CitizenCivilLife");
 const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -3405,6 +3407,17 @@ class CitizenDirector {
     } catch (error) {
       this.log("librarian guild failed", { error: String(error?.message ?? error) });
     }
+    // Astronomers' Guild: dues, chart certification, fabrication tribunal,
+    // celestial-standard audits, eclipse predictions, silver orrery,
+    // star-chart school. Data tier, zero LLM. (CitizenAstronomy owns
+    // astronomers/observatories/charts/events; CitizenObservatories owns
+    // public visits/tours/parties; this owns the profession's guild layer
+    // only.)
+    try {
+      tickObservatoryGuildLife(this, nowMs);
+    } catch (error) {
+      this.log("observatory guild failed", { error: String(error?.message ?? error) });
+    }
     // Bar association: dues, case reviews, pro bono, disciplinary board,
     // legal school. Data tier, zero LLM. (CitizenCivilLaw owns contracts/
     // disputes/judgments; this owns the profession's guild layer only.)
@@ -3916,6 +3929,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen librarian guild save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenObservatoryGuilds.save()) {
+        this.log("citizen observatory guild saved");
+      }
+    } catch (error) {
+      this.log("citizen observatory guild save failed", {
         error: String(error?.message ?? error),
       });
     }

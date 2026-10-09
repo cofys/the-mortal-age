@@ -1726,6 +1726,37 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "astronomers' guild" / "certify my chart" / "silver orrery" /
+  // "eclipse prediction" / "starmaster" / "celestial audit" — player asks
+  // about the astronomers' association. (CitizenAstronomy owns astronomers/
+  // observatories/charts/events; CitizenObservatories owns visits/tours/
+  // parties; CitizenScience owns discoveries; this owns the guild layer
+  // only.) Placed before the map-guild block so the more specific
+  // chart-certification phrasing wins.
+  if (/\b(astronomers'? guild|certify (a|my) chart|certified chart|silver orrery|eclipse prediction|predict the eclipse|starmaster|celestial audit|fabricated chart|star-chart school)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenObservatoryGuilds");
+      let kingdomId = null;
+      try {
+        kingdomId = Guilds.memberOf(citizenUsername)?.kingdomId || null;
+      } catch { /* no guild */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "obsguild_status", {
+        username: citizenUsername,
+        exists: desc.exists ?? false,
+        memberCount: desc.memberCount ?? 0,
+        certified: desc.certified ?? 0,
+        treasury: desc.treasury ?? 0,
+        prestige: desc.prestige ?? 0,
+        accuracy: desc.accuracy ?? 0,
+        openPredictions: desc.openPredictions ?? 0,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "map guild" / "certify my map" / "guild hall" — cartographers' guild.
   if (/\b(map guild|cartographers'? guild|guild hall|certify|certification|guild seal|surveyor|guildmaster)\b/.test(said)) {
     try {
