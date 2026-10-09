@@ -124,6 +124,7 @@ const ACT_ENGINEER = "citizen_engineerwork";
 const ACT_OBSERVE = "citizen_observe";
 const ACT_CHART = "citizen_chart";
 const ACT_REPORT = "citizen_report";
+const ACT_BANKERWORK = "citizen_bankerwork";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -157,7 +158,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1340,6 +1341,27 @@ function pressInfo(player) {
 }
 
 /**
+ * Banking readiness: is this citizen a banker, and does the branch exist?
+ * Defensive: a missing/broken banking module scores as unable to bank.
+ */
+function bankInfo(player) {
+  try {
+    const Banking = require("../lib/CitizenBanking");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isBanker = !!Banking.bankerFor(username);
+    let kingdomId = null;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      kingdomId = kingdomIdOf(player);
+    } catch { /* sites unreadable */ }
+    const hasBranch = kingdomId ? !!Banking.branchFor(kingdomId) : false;
+    return { isBanker, hasBranch, kingdomId };
+  } catch {
+    return { isBanker: false, hasBranch: false, kingdomId: null };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1762,6 +1784,7 @@ compete: competeInfo(player),
     astro: astroInfo(player),
     maps: mapInfo(player),
     press: pressInfo(player),
+    bank: bankInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1783,7 +1806,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1827,7 +1850,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (night?.isNight) s += 20;
       return s;
     }
-    case ACT_BANK: {
+    case ACT_BANKERWORK: {
       // The inventory clock: a full pack forces the hinge trip.
       let s = 6;
       if (freeSlots <= 2) s = 70;
@@ -2431,6 +2454,22 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_BANKERWORK: {
+      // Banking: bankers serve real customers at the branch — processing
+      // real deposits, withdrawals, and loans. A human banker works when
+      // the branch is open and there are customers to serve. Non-bankers
+      // have no business behind the counter.
+      const bk = bank ?? { isBanker: false, hasBranch: false };
+      if (!bk.isBanker) return 4; // not a banker
+      if (!bk.hasBranch) return 4; // honest — no branch, no work
+      let s = 24;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 40; // drunk bankers are a liability
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_SCIENCE: {
       // Science: scientists run real experiments in the kingdom lab. A human
       // researcher works when they have a running experiment — and starts a
@@ -2940,7 +2979,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

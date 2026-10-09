@@ -245,6 +245,8 @@ const { tickMapLife } = require("../lib/CitizenMapLife");
 const CitizenMaps = require("../lib/CitizenMaps");
 const { tickPress } = require("../lib/CitizenPressLife");
 const CitizenPress = require("../lib/CitizenPress");
+const { tickBankingLife } = require("../lib/CitizenBankingLife");
+const CitizenBanking = require("../lib/CitizenBanking");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -3095,6 +3097,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("press failed", { error: String(error?.message ?? error) });
     }
+    // Citizen banking: real accounts, deposits, withdrawals, interest, loans.
+    // Data tier, zero LLM. (CitizenBankers owns hash-derived banker flavor;
+    // CitizenBankers2 owns hash-derived moneyfolk flavor.)
+    try {
+      tickBankingLife(this, nowMs);
+    } catch (error) {
+      this.log("banking failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3441,6 +3451,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen press save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenBanking.save()) {
+        this.log("citizen banking saved");
+      }
+    } catch (error) {
+      this.log("citizen banking save failed", {
         error: String(error?.message ?? error),
       });
     }

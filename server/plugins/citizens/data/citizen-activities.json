@@ -1096,6 +1096,27 @@
           "type": "citizenReport"
         }
       ]
+    },
+    {
+      "id": "citizen_bankerwork",
+      "mode": "citizen_bankerwork",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenBankerWork"
+        }
+      ]
     }
   ]
 }

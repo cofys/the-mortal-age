@@ -683,6 +683,32 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a bank" / "my balance" / "open account" — banking.
+  if (/\b(is there a bank|any bankers?|my balance|open an? account|bank balance|any loans?|borrow coins|deposit coins|withdraw coins)\b/.test(said)) {
+    try {
+      const Banking = require("../lib/CitizenBanking");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Banking.describe(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "banking_status", {
+        username: citizenUsername,
+        hasBranch: !!desc,
+        branchName: desc?.name ?? null,
+        bankerCount: desc?.bankerCount ?? 0,
+        yourBalance: citizenUsername ? Banking.balanceOf(citizenUsername) : 0,
+        yourLoan: citizenUsername ? (Banking.loanFor(citizenUsername)?.owed ?? 0) : 0,
+        isBanker: citizenUsername ? !!Banking.bankerFor(citizenUsername) : false,
+        moneySupply: Banking.moneySupply(),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "publish: <headline>" — a real player files a story.
   if (/^publish:\s*/.test(said)) {
     try {
