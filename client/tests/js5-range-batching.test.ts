@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Js5RangeClient } from "../rs/cache/js5/Js5RangeClient";
+import { SparseDat2 } from "../rs/cache/store/SparseDat2";
 import { SparseMemoryStore } from "../rs/cache/store/SparseMemoryStore";
 import { PresenceBitset } from "../rs/cache/js5/PresenceBitset";
 
@@ -11,7 +12,7 @@ async function main() {
         idx.setUint8(id * 6 + 4, sector >> 8);
         idx.setUint8(id * 6 + 5, sector & 255);
     }
-    const store = new SparseMemoryStore(new ArrayBuffer(600 * 520), [index], PresenceBitset.forSectorCount(600, false));
+    const store = new SparseMemoryStore(new SparseDat2(600 * 520, false), [index], PresenceBitset.forSectorCount(600, false));
     const originalFetch = globalThis.fetch;
     let requests = 0;
     globalThis.fetch = async (_url, options) => {
@@ -20,7 +21,7 @@ async function main() {
         const [, start, end] = /bytes=(\d+)-(\d+)/.exec(range)!;
         return new Response(new Uint8Array(Number(end) - Number(start) + 1), {
             status: 206,
-            headers: { "Content-Range": `bytes ${start}-${end}/${store.dataFile.byteLength}` },
+            headers: { "Content-Range": `bytes ${start}-${end}/${store.dat2.byteLength}` },
         });
     };
     try {

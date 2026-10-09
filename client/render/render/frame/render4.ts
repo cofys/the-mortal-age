@@ -26,6 +26,7 @@ import {
     sendInteractStop,
     subscribeTick,
 } from "../../../network/ServerConnection";
+import { isLowEndDevice } from "../../../common/utils/DeviceUtil";
 import { sendLogin } from "../../../network/ServerConnection";
 import { flushPackets } from "../../../network/packet";
 import { createTextureArray } from "../../../picogl/PicoTexture";
@@ -456,6 +457,13 @@ export function renderOpaqueActorPass(host: WebGLOsrsRendererHost,
         }
 
         if (dynamicNpcs.length > 0 && actorDataTexture) {
+            // One shared geometry buffer: group identical poses so each is uploaded once, not per NPC.
+            // Opaque only, so draw order is irrelevant.
+            if (isLowEndDevice) {
+                dynamicNpcs.sort((a, b) =>
+                    a.geometry.key < b.geometry.key ? -1 : a.geometry.key > b.geometry.key ? 1 : 0,
+                );
+            }
             for (const dyn of dynamicNpcs) {
                 const indexCount = host.uploadDynamicNpcGeometry(dyn.geometry, false);
                 if (indexCount <= 0 || !host.dynamicNpcDrawCall) {

@@ -15,7 +15,7 @@ struct HdUniforms {
     u_hdAmbient: vec4<f32>,
     u_hdDirectional: vec4<f32>,
     u_hdFogColor: vec4<f32>,
-    u_hdFog: vec4<f32>,          // depth, scale, draw distance in tiles
+    u_hdFog: vec4<f32>,          // start, end (tiles), curve exponent
     u_hdGroundFog: vec4<f32>,    // start, end, opacity
     u_hdGrading: vec4<f32>,      // saturation, contrast, brightness, rim
     u_hdSpecular: f32,
@@ -24,6 +24,7 @@ struct HdUniforms {
     u_hdEnabled: f32,
     u_hdLightPositions: array<vec4<f32>, 16>,
     u_hdLightColors: array<vec4<f32>, 16>,
+    u_hdMist: vec4<f32>,         // mist level (tiles, y down), strength, wind x, wind z (HdMist.ts)
 };
 
 @group(1) @binding(6) var<uniform> hd: HdUniforms;
@@ -32,29 +33,53 @@ struct HdUniforms {
 @group(1) @binding(9) var u_hdShadowMap: texture_depth_2d;
 `;
 
-export const HD_LIGHTING_WGSL = `
-fn hdSaturation(color: vec3<f32>, amount: f32) -> vec3<f32> {
-    return mix(vec3<f32>(dot(color, vec3<f32>(0.299, 0.587, 0.114))), color, amount);
+/**
+ * Low-lying mist (as hdMistAmount in ../hd-lighting.glsl), reading its HdMist.ts uniform from
+ * `mist`; shared by the scene and the grass so both sit in the same mist. Needs `scene`.
+ * It pools below the area's mist level (y grows downwards) and thickens with how far the view
+ * travels through it, so the ground nearby stays readable while a valley fills.
+ */
+export function hdMistWgsl(mist: string): string {
+    return `
+fn hdMistHash(p: vec2<f32>) -> f32 {
+    return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453);
 }
 
-fn hdFogAmount(position: vec2<f32>) -> f32 {
-    let depth = clamp(hd.u_hdFog.x / 5.0, 0.0, 1.0);
-    if (depth <= 0.0002) {
+fn hdMistNoise(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    var f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hdMistHash(i), hdMistHash(i + vec2<f32>(1.0, 0.0)), f.x),
+        mix(hdMistHash(i + vec2<f32>(0.0, 1.0)), hdMistHash(i + vec2<f32>(1.0, 1.0)), f.x), f.y);
+}
+
+fn hdMistAmount(position: vec3<f32>) -> f32 {
+    if (${mist}.y <= 0.0) {
         return 0.0;
     }
-    let scale = clamp(hd.u_hdFog.y, 0.0, 16.0);
-    let distance = hd.u_hdFog.z;
-    let delta = abs(position - scene.u_playerPos);
-    let squareDist = max(delta.x, delta.y);
-    let reach = clamp((scale - 1.0) / 15.0, 0.0, 1.0);
-    let rimWidth = max(8.0, distance * 0.18) * mix(1.0, 3.0, reach);
-    let rim = pow(smoothstep(distance - rimWidth, distance, squareDist), mix(0.72, 0.42, depth));
-    let wallBand = max(3.0, distance * 0.06) * mix(1.0, 2.0, reach);
-    let wall = 1.0 - smoothstep(0.0, wallBand, distance - squareDist);
-    let nearAttenuation = smoothstep(0.0, distance * mix(0.18, 0.34, reach), squareDist);
-    return clamp((rim * (1.0 + 0.55 * depth) + wall * (0.9 + 0.5 * depth)) * scale * pow(depth, 0.55) * 1.25 * nearAttenuation, 0.0, 1.0);
+    let low = smoothstep(${mist}.x - 1.0, ${mist}.x + 2.0, position.y);
+    let depth = 1.0 - exp(-length(position.xz - scene.u_cameraPos) * 0.07);
+    let drift = position.xz * 0.07 + ${mist}.zw * scene.u_currentTime;
+    let banks = hdMistNoise(drift) * 0.65 + hdMistNoise(drift * 2.3 + 17.0) * 0.35;
+    // Clear around the player: none within 4 tiles, full by 14 (mirrored in hd-lighting.glsl).
+    let clear = smoothstep(4.0, 14.0, length(position.xz - scene.u_playerPos));
+    return clamp(low * depth * clear * mix(0.4, 1.0, banks) * ${mist}.y, 0.0, 1.0);
+}
+`;
 }
 
+export const HD_LIGHTING_WGSL = `
+// Unlit HD materials (lava, fire, the infernal cape) are emissive: they bypass lighting and
+// feed the HDR target above 1 so bloom catches them.
+const HD_EMISSIVE_GAIN: f32 = 2.2;
+
+fn hdFogAmount(position: vec2<f32>) -> f32 {
+    let delta = abs(position - scene.u_playerPos);
+    let squareDist = max(delta.x, delta.y);
+    return pow(smoothstep(hd.u_hdFog.x, hd.u_hdFog.y, squareDist), hd.u_hdFog.z);
+}
+
+${hdMistWgsl("hd.u_hdMist")}
 fn hdShadow(position: vec3<f32>, normal: vec3<f32>) -> f32 {
     let projected = hd.u_hdShadowMatrix * vec4<f32>(position, 1.0);
     let p = projected.xyz / projected.w * 0.5 + 0.5;
@@ -122,8 +147,14 @@ fn hdShade(
     let dy = dpdy(position);
     let ux = dpdx(uv);
     let uy = dpdy(uv);
-    if (metadata.y > 0.5) {
-        return surfaceIn;
+    // metadata.y is a bitfield (HdMaterials.ts): bit 0 unlit, bit 1 worldUv.
+    if ((i32(metadata.y) & 1) != 0) {
+        // Linear HDR, no lighting. The gain only lifts near-white emissive cores (lava, the
+        // infernal cape) into bloom range; mid-tone unlit surfaces (foliage, wood) keep the
+        // WebGL brightness instead of washing out.
+        let base = pow(max(surfaceIn, vec3<f32>(0.0)), vec3<f32>(2.2));
+        let peak = max(base.r, max(base.g, base.b));
+        return base * mix(1.0, HD_EMISSIVE_GAIN, smoothstep(0.6, 0.95, peak));
     }
     // Architecture/effects use face normals; actors and terrain interpolate
     // their own vertex normals to avoid visible triangle seams.
@@ -173,16 +204,32 @@ fn hdShade(
     let baseLuma = dot(base, vec3<f32>(0.2126, 0.7152, 0.0722));
     let additiveFloor = mix(0.035, 0.085, smoothstep(0.10, 0.45, baseLuma));
     var color = base * (hd.u_hdAmbient.xyz + hd.u_hdDirectional.xyz * diffuse * shadow + pointLight) + pointLight * additiveFloor;
-    // Upstream gloss is a Phong exponent. A half-vector here spreads the
-    // highlight across roofs and terrain, making dry materials look wet.
+    // Upstream gloss (material.y) is a Blinn-Phong specular exponent; map it to a
+    // Cook-Torrance GGX roughness with the standard conversion
+    // roughness = sqrt(2 / (exponent + 2)), clamped away from a perfect mirror.
     if (material.x > 0.0 && diffuse > 0.0) {
-        let reflected = reflect(-hd.u_hdLightDirection.xyz, normal);
-        let specular = pow(max(dot(viewDir, reflected), 0.0), max(material.y, 1.0));
-        color += hd.u_hdDirectional.xyz * specular * material.x * hd.u_hdSpecular * shadow;
+        let roughness = clamp(sqrt(2.0 / (max(material.y, 1.0) + 2.0)), 0.05, 1.0);
+        let lightDir = hd.u_hdLightDirection.xyz;
+        let half = normalize(lightDir + viewDir);
+        let ndl = diffuse;
+        let ndv = max(dot(normal, viewDir), 1e-4);
+        let ndh = max(dot(normal, half), 0.0);
+        // Trowbridge-Reitz (GGX) normal distribution.
+        let a = roughness * roughness;
+        let a2 = a * a;
+        let d = a2 / (3.141592653589793 * pow(ndh * ndh * (a2 - 1.0) + 1.0, 2.0));
+        // Smith-Schlick visibility term for direct lighting.
+        let k = a * 0.5;
+        let gv = ndv / (ndv * (1.0 - k) + k);
+        let gl = ndl / (ndl * (1.0 - k) + k);
+        // Schlick Fresnel with a dielectric F0.
+        let f = vec3<f32>(0.04) + vec3<f32>(0.96) * pow(1.0 - max(dot(viewDir, half), 0.0), 5.0);
+        let specular = d * gv * gl * f / max(4.0 * ndv * ndl, 1e-4);
+        color += hd.u_hdDirectional.xyz * specular * ndl * material.x * hd.u_hdSpecular * shadow;
     }
     color += vec3<f32>(pow(1.0 - max(dot(normal, viewDir), 0.0), 2.0) * hd.u_hdGrading.w);
-    color = hdSaturation(color, hd.u_hdGrading.x);
-    color = (color - 0.5) * hd.u_hdGrading.y + 0.5;
-    return pow(max(color * hd.u_hdGrading.z, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.2));
+    // Linear HDR: saturation/contrast/exposure and the display encode moved to the HDR
+    // tonemap pass (hd-tonemap), which replaces the old per-surface grade that clipped.
+    return color;
 }
 `;

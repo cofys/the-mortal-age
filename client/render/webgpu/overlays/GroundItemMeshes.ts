@@ -376,7 +376,15 @@ export class GroundItemMeshes {
             mapData.waterMaskTextureData ?? new Uint8Array(0),
             heightMapSize,
         );
-        this.ownedTextures.set(mapId, [heightTexture, waterTexture]);
+        // Ground items never read the HD ground-recipe texture (v_hdGroundMaterial is 0), but
+        // the shared map-textures layout requires the binding to be present.
+        const groundMaterialTexture = device.createTexture({
+            label: "webgpu ground item ground material placeholder",
+            size: [1, 1, 1],
+            format: "r8uint",
+            usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING,
+        });
+        this.ownedTextures.set(mapId, [heightTexture, waterTexture, groundMaterialTexture]);
 
         const createBatch = (
             modelInfoData: Uint16Array,
@@ -405,6 +413,10 @@ export class GroundItemMeshes {
                     {
                         binding: MAP_TEXTURE_BINDINGS.waterMask,
                         resource: waterTexture.createView({ dimension: "2d-array" }),
+                    },
+                    {
+                        binding: MAP_TEXTURE_BINDINGS.groundMaterial,
+                        resource: groundMaterialTexture.createView({ dimension: "2d-array" }),
                     },
                 ],
             });

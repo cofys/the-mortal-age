@@ -158,6 +158,30 @@ function mapProfilingRequiresExplicitFlag(): void {
     }
 }
 
+function lowEndGridDropsOutOfRangeSquares(): void {
+    const cam = { getPosX: () => 3205, getPosZ: () => 3205 } as any;
+    const run = (lowEnd: boolean, x: number, z: number) => {
+        const maps = new MapManager<any>(4, () => {});
+        maps.loadMap = () => {};
+        MapManager.lowEnd = lowEnd;
+        maps.update(x, z, cam, 1, 1, 3200, 3200, 0, 10);
+        return maps;
+    };
+    try {
+        const own = getMapSquareId(Math.floor(3205 / 64), Math.floor(3205 / 64));
+        const full = run(false, 3205, 3205);
+        const low = run(true, 3205, 3205);
+        assert.ok(low.gridMapCount < full.gridMapCount, "low-end builds fewer squares");
+        assert.equal(low.gridMapIds[0], own, "the player's own square is first");
+        // Walking far enough re-culls the grid (the squares ahead enter range).
+        const before = new Set(low.gridMapIds.slice(0, low.gridMapCount));
+        low.update(3205 + 40, 3205, cam, 2, 1, 3200, 3200, 0, 10);
+        assert.notDeepEqual(new Set(low.gridMapIds.slice(0, low.gridMapCount)), before);
+    } finally {
+        MapManager.lowEnd = false;
+    }
+}
+
 function editorWaitsForRenderableRegion(): void {
     const maps = new MapManager<any>(4, () => {});
     const progress = { pending: 3, active: 1, downloadedBytes: 2.5 * 1048576 };
@@ -449,6 +473,7 @@ function regionReplacementUsesNativeMapData(): void {
 mapLoadBackoff();
 mapProfilingRequiresExplicitFlag();
 editorWaitsForRenderableRegion();
+lowEndGridDropsOutOfRangeSquares();
 multipartLocsRequestAllMissingModelsTogether();
 incomingMapsRenderBeforeTheWholeGridIsReady();
 duplicateLocReplayIsIgnored();

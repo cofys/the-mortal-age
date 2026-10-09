@@ -140,18 +140,20 @@ export class RangedData {
 export class Ammunition {
     private static rangedAmmunition: Map<number, Ammunition> = new Map<number, Ammunition>();
 
-    public static readonly BRONZE_ARROW = new Ammunition(882, new Graphic(19, 0, GraphicHeight.HIGH), 10, 7)
-    public static readonly IRON_ARROW = new Ammunition(884, new Graphic(18, 0, GraphicHeight.HIGH), 9, 10)
-    public static readonly STEEL_ARROW = new Ammunition(886, new Graphic(20, 0, GraphicHeight.HIGH), 11, 16)
-    public static readonly MITHRIL_ARROW = new Ammunition(888, new Graphic(21, 0, GraphicHeight.HIGH), 12, 22)
-    public static readonly ADAMANT_ARROW = new Ammunition(890, new Graphic(22, 0, GraphicHeight.HIGH), 13, 31)
-    public static readonly RUNE_ARROW = new Ammunition(892, new Graphic(24, 0, GraphicHeight.HIGH), 15, 50)
-    public static readonly ICE_ARROW = new Ammunition(78, new Graphic(25, 0, GraphicHeight.HIGH), 16, 58)
-    public static readonly BROAD_ARROW = new Ammunition(4160, new Graphic(20, 0, GraphicHeight.HIGH), 11, 58)
+    public static readonly BRONZE_ARROW = new Ammunition(882, new Graphic(19, 0, GraphicHeight.HIGH), 10, 7, new Graphic(1104, 0, GraphicHeight.HIGH))
+    public static readonly IRON_ARROW = new Ammunition(884, new Graphic(18, 0, GraphicHeight.HIGH), 9, 10, new Graphic(1105, 0, GraphicHeight.HIGH))
+    public static readonly STEEL_ARROW = new Ammunition(886, new Graphic(20, 0, GraphicHeight.HIGH), 11, 16, new Graphic(1106, 0, GraphicHeight.HIGH))
+    public static readonly MITHRIL_ARROW = new Ammunition(888, new Graphic(21, 0, GraphicHeight.HIGH), 12, 22, new Graphic(1107, 0, GraphicHeight.HIGH))
+    public static readonly ADAMANT_ARROW = new Ammunition(890, new Graphic(22, 0, GraphicHeight.HIGH), 13, 31, new Graphic(1108, 0, GraphicHeight.HIGH))
+    public static readonly RUNE_ARROW = new Ammunition(892, new Graphic(24, 0, GraphicHeight.HIGH), 15, 50, new Graphic(1109, 0, GraphicHeight.HIGH))
+    public static readonly ICE_ARROW = new Ammunition(78, new Graphic(25, 0, GraphicHeight.HIGH), 16, 58, new Graphic(1110, 0, GraphicHeight.HIGH))
+    public static readonly BROAD_ARROW = new Ammunition(4160, new Graphic(20, 0, GraphicHeight.HIGH), 11, 58, new Graphic(1112, 0, GraphicHeight.HIGH))
     // RuneLite names these AIDE_ARROW_LAUNCH/TRAVEL; their recolours match the training
     // arrow item's palette [61,57,5012,926] -> [127,111,41366,41282].
     public static readonly TRAINING_ARROWS = new Ammunition(ItemIdentifiers.TRAINING_ARROWS, new Graphic(806, 0, GraphicHeight.HIGH), 805, 7)
-    public static readonly DRAGON_ARROW = new Ammunition(11212, new Graphic(1111, 0, GraphicHeight.HIGH), 1120, 65)
+    // The launch graphics are the cache's <ammo>_arrow_launch (one arrow drawn) and
+    // double_<ammo>_arrow_launch (two, for the dark bow). Dragon arrows were double for every bow.
+    public static readonly DRAGON_ARROW = new Ammunition(11212, new Graphic(1116, 0, GraphicHeight.HIGH), 1120, 65, new Graphic(1111, 0, GraphicHeight.HIGH))
 
     public static readonly BRONZE_BOLT = new Ammunition(877, new Graphic(955, 0, GraphicHeight.HIGH), 27, 13)
     public static readonly OPAL_BOLT = new Ammunition(879, new Graphic(955, 0, GraphicHeight.HIGH), 27, 20)
@@ -333,14 +335,16 @@ export class Ammunition {
     public static readonly TONALZTICS_OF_RALOS = new Ammunition(ItemIdentifiers.TONALZTICS_OF_RALOS, null, 2729, 0) // PROJANIM_GLAIVE_01_REGULAR
 
     private readonly startGfx: Graphic;
+    private readonly doubleStartGfx: Graphic | null;
     private readonly itemId: number;
     private readonly projectileId: number;
     private readonly strength: number;
 
 
-    constructor(itemId: number, startGfx: Graphic, projectileId: number, strength: number) {
+    constructor(itemId: number, startGfx: Graphic, projectileId: number, strength: number, doubleStartGfx: Graphic | null = null) {
         this.itemId = itemId;
         this.startGfx = startGfx;
+        this.doubleStartGfx = doubleStartGfx;
         this.projectileId = projectileId;
         this.strength = strength;
         Ammunition.rangedAmmunition.set(itemId, this);
@@ -403,6 +407,11 @@ export class Ammunition {
 
     public getStartGraphic(): Graphic {
         return this.startGfx;
+    }
+
+    /** The launch graphic with two arrows drawn (a weapon that fires two), or the usual one. */
+    public getDoubleStartGraphic(): Graphic {
+        return this.doubleStartGfx ?? this.startGfx;
     }
 
     public getProjectileId(): number {

@@ -1,6 +1,5 @@
 uniform int u_sceneBorderSize;
 const int tileSize = 128;
-const int tileSizeShift = 7;
 
 int getTileHeight(int x, int z, uint plane) {
     return texelFetch(u_heightMap, ivec3(u_sceneBorderSize + x, u_sceneBorderSize + z, plane), 0).r * 8;
@@ -15,33 +14,30 @@ int getTileHeight(int x, int z, uint plane) {
 // regardless of the actual diagonal — a small upward bias on mismatched
 // tiles is far less noticeable than clipping underground.
 float getHeightInterp(vec2 pos, uint plane) {
-    ivec2 ipos = ivec2(pos);
-    int tileX = ipos.x >> tileSizeShift;
-    int tileZ = ipos.y >> tileSizeShift;
-    int offsetX = ipos.x & (tileSize - 1);
-    int offsetZ = ipos.y & (tileSize - 1);
-    int hSW = getTileHeight(tileX, tileZ, plane);
-    int hSE = getTileHeight(tileX + 1, tileZ, plane);
-    int hNW = getTileHeight(tileX, tileZ + 1, plane);
-    int hNE = getTileHeight(tileX + 1, tileZ + 1, plane);
+    vec2 tilePos = pos / float(tileSize);
+    ivec2 tile = ivec2(floor(tilePos));
+    vec2 offset = fract(tilePos);
+    float hSW = float(getTileHeight(tile.x, tile.y, plane));
+    float hSE = float(getTileHeight(tile.x + 1, tile.y, plane));
+    float hNW = float(getTileHeight(tile.x, tile.y + 1, plane));
+    float hNE = float(getTileHeight(tile.x + 1, tile.y + 1, plane));
 
-    // SE-NW diagonal (offsetX + offsetZ = 128)
-    int h0;
-    if (offsetX + offsetZ <= tileSize) {
-        h0 = (hSW * tileSize + (hSE - hSW) * offsetX + (hNW - hSW) * offsetZ) >> tileSizeShift;
+    // SE-NW diagonal (offset.x + offset.y = 1)
+    // Match BridgeHeightSampler without rounding the actor's height to whole units.
+    float h0;
+    if (offset.x + offset.y <= 1.0) {
+        h0 = hSW + (hSE - hSW) * offset.x + (hNW - hSW) * offset.y;
     } else {
-        int rx = tileSize - offsetX;
-        int rz = tileSize - offsetZ;
-        h0 = (hNE * tileSize + (hNW - hNE) * rx + (hSE - hNE) * rz) >> tileSizeShift;
+        h0 = hNE + (hNW - hNE) * (1.0 - offset.x) + (hSE - hNE) * (1.0 - offset.y);
     }
 
-    // SW-NE diagonal (offsetX = offsetZ)
-    int h1;
-    if (offsetX <= offsetZ) {
-        h1 = (hSW * tileSize + (hNW - hSW) * offsetZ + (hNE - hNW) * offsetX) >> tileSizeShift;
+    // SW-NE diagonal (offset.x = offset.y)
+    float h1;
+    if (offset.x <= offset.y) {
+        h1 = hSW + (hNW - hSW) * offset.y + (hNE - hNW) * offset.x;
     } else {
-        h1 = (hSW * tileSize + (hSE - hSW) * offsetX + (hNE - hSE) * offsetZ) >> tileSizeShift;
+        h1 = hSW + (hSE - hSW) * offset.x + (hNE - hSE) * offset.y;
     }
 
-    return float(max(h0, h1));
+    return max(h0, h1);
 }

@@ -96,7 +96,7 @@ export { clearPlayerGeometryRuntimeState } from "./init/npcAnimInit";
 export { disposeDynamicNpcAnimState } from "./init/npcAnimInit";
 export { initDynamicNpcAnimLoader } from "./init/npcAnimInit";
 export { initPlayerGeometry } from "./init/npcAnimInit";
-export { initShaders } from "./init/shaders";
+export { initShaders, rebuildScenePrograms } from "./init/shaders";
 export { _resolvePlayerSeqIdForMode } from "./anim/player";
 export { _buildAnimClipMeta } from "./anim/player2";
 export { _resolveNpcAnimation } from "./anim/npc";

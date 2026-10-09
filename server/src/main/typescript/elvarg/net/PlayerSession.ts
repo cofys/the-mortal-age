@@ -1,3 +1,4 @@
+import { PluginManager } from "../plugins/PluginManager";
 import { MAX_GAME_MESSAGE_BYTES } from "./BinaryChannel";
 import { BoatManager } from "../game/content/sailing/BoatManager";
 import { TemplatedInstanceArea } from "../game/model/areas/impl/TemplatedInstanceArea";
@@ -472,7 +473,7 @@ export class PlayerSession {
     if (forceMovementDirty && forceMovement && !updates.animation && forceMovement.getAnimation() > 0) {
       updates.animation = { id: forceMovement.getAnimation(), delay: 0 };
     }
-    return {
+    const view: import("./protocol/ClientProtocol").PlayerView = {
       ...updates,
       // Always resolve the current interacting target (like npcViews below), instead of
       // only when Flag.ENTITY_INTERACTION fired this tick - otherwise a player who becomes
@@ -514,6 +515,8 @@ export class PlayerSession {
           }
         : undefined,
     };
+    PluginManager.emitCustomEvent("player:sync-view", { player, view });
+    return view;
   }
 
   /** An NPC's glide, from the tile it left to the one it stands on. */

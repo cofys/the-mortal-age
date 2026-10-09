@@ -91,10 +91,28 @@ export class GfxRenderer {
         if (!prog) return;
         const programKey = transparent ? "npc-alpha" : "npc-opaque";
 
+        // A boat deck's overlay map is drawn where the boat is: its world graphics take the map's
+        // render position, the boat's transform and the deck's height, as players aboard do.
+        const mapPos = vec2.fromValues(map.mapX, map.mapY);
+        const r: any = this.renderer;
+        const deckView = r.osrsClient?.worldViewManager?.getWorldViewByOverlayMapId?.(map.id);
+        const deckEntity = deckView ? r.getWorldEntityIndexForMapId?.(map.id) : undefined;
+        const deck =
+            deckView && deckEntity !== undefined
+                ? {
+                      mapPos: vec2.fromValues(map.renderPosX, map.renderPosY),
+                      transform:
+                          r.worldEntityAnimator?.getTransform(deckEntity) ??
+                          WebGLMapSquare.IDENTITY_MAT4,
+                      yOffset: (r.getWorldEntityDeckHeight?.(0, 0) ?? 0) | 0,
+                  }
+                : undefined;
+
         const renderAttachments = <T extends { inst: GfxInstance; slot: number }>(
             entries: T[],
             baseOffset: number | undefined,
             resolveYOffset: (entry: T) => number,
+            onDeck = false,
         ) => {
             if (baseOffset === undefined) return;
             if (entries.length === 0) return;
@@ -201,9 +219,12 @@ export class GfxRenderer {
                     .texture("u_textureMaterials", (this.renderer as any).textureMaterials)
                     .texture("u_waterTextures", (this.renderer as any).waterTextures)
                     .uniform("u_worldEntityOpacity", 1.0)
-                    .uniform("u_mapPos", vec2.fromValues(map.mapX, map.mapY))
+                    .uniform("u_mapPos", onDeck && deck ? deck.mapPos : mapPos)
                     .uniform("u_npcDataOffset", baseOffset | 0)
-                    .uniform("u_worldEntityTransform", WebGLMapSquare.IDENTITY_MAT4)
+                    .uniform(
+                        "u_worldEntityTransform",
+                        onDeck && deck ? deck.transform : WebGLMapSquare.IDENTITY_MAT4,
+                    )
                     .texture("u_npcDataTexture", actorDataTexture)
                     .texture("u_heightMap", map.heightMapTexture)
                     .texture("u_waterMask", map.waterMaskTexture)
@@ -223,7 +244,7 @@ export class GfxRenderer {
                 }
 
                 for (const [yOff, groupInstances] of yOffsetGroups) {
-                    dc.uniform("u_modelYOffset", yOff | 0);
+                    dc.uniform("u_modelYOffset", (yOff + (onDeck && deck ? deck.yOffset : 0)) | 0);
                     for (const inst of groupInstances) {
                         dc.uniform("u_drawIdOverride", inst.slot | 0);
                         dc.draw();
@@ -268,7 +289,7 @@ export class GfxRenderer {
                     return units + TILE_GFX_LIFT_UNITS;
                 }
                 return TILE_GFX_LIFT_UNITS;
-            });
+            }, true);
         }
     }
 

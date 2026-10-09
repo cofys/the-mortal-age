@@ -51,6 +51,11 @@ export class MemoryStore implements CacheStore<ApiType.SYNC> {
         return this.indexFiles[indexId];
     }
 
+    /** The dat2 bytes of one sector (header and data) at `offset`. */
+    protected sectorBytes(offset: number, length: number): Int8Array {
+        return new Int8Array(this.dataFile, offset, length);
+    }
+
     getSectorIndexId(indexId: number): number {
         if (this.metaFile) {
             return indexId;
@@ -97,11 +102,7 @@ export class MemoryStore implements CacheStore<ApiType.SYNC> {
 
             const actualDataSize = Math.min(dataSize, remaining);
 
-            sectorBuffer._data = new Int8Array(
-                this.dataFile,
-                sectorPtr,
-                headerSize + actualDataSize,
-            );
+            sectorBuffer._data = this.sectorBytes(sectorPtr, headerSize + actualDataSize);
             sectorBuffer.offset = 0;
 
             if (extended) {

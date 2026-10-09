@@ -76,3 +76,49 @@ test('Quests.plugin lists every quest file on disk', () => {
     .sort();
   assert.deepEqual(listed, onDisk, 'Quests.plugin.js must require every quests/*.Quest.js');
 });
+
+test('each quest varp is sent again on login, so quest-gated locs show after a relog', () => {
+  // The Grand Exchange spirit tree only has Travel once varp 111 (Tree Gnome Village) is 9.
+  const { api } = mockApi();
+  const { getRegisteredQuests, sendQuestVarps } = require('../plugins/quests/QuestRuntime');
+  if (!getRegisteredQuests().some((quest) => quest.name === 'Tree Gnome Village')) require('../plugins/quests/Quests.plugin').register(api);
+  const village = getRegisteredQuests().find((quest) => quest.name === 'Tree Gnome Village');
+  const attributes = new Map();
+  const varps = new Map();
+  const sender = new Proxy({}, { get: (t, key) => (key === 'sendConfig' ? (id, value) => (varps.set(id, value), sender) : () => sender) });
+  const player = { getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value), getPacketSender: () => sender };
+  village.setStage(player, village.completionValue);
+  varps.clear();
+  sendQuestVarps({ player });
+  assert.equal(varps.get(village.varpId), village.completionValue);
+  assert.equal(varps.size, 1, 'quests not started send nothing');
+});
+
+test("Tree Gnome Village sends King Bolren's orbs (varbit 598): the village's spirit tree has Travel at 2", () => {
+  const custom = new Map();
+  const logins = [];
+  const { api: base } = mockApi();
+  const api = new Proxy(base, {
+    get: (target, prop) => {
+      if (prop === 'onPlayerLogin') return (h) => logins.push(h);
+      if (prop === 'onCustomEvent') return (name, h) => custom.set(name, [...(custom.get(name) ?? []), h]);
+      if (prop === 'emitCustomEvent') return (name, payload) => (custom.get(name) ?? []).forEach((h) => h(payload));
+      return target[prop];
+    },
+  });
+  delete require.cache[require.resolve('../plugins/quests/quests/TreeGnomeVillage.Quest')];
+  require('../plugins/quests/quests/TreeGnomeVillage.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const village = getRegisteredQuests().filter((quest) => quest.name === 'Tree Gnome Village').at(-1);
+  const attributes = new Map();
+  const varbits = new Map();
+  const sender = new Proxy({}, { get: (t, key) => (key === 'sendVarbit' ? (id, value) => (varbits.set(id, value), sender) : () => sender) });
+  const player = { getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value), getPacketSender: () => sender };
+  village.setStage(player, village.completionValue);
+  assert.equal(varbits.get(598), 2, "on completing it");
+  varbits.clear();
+  for (const login of logins) {
+    try { login({ player }); } catch (error) { /* other login hooks want a real player */ }
+  }
+  assert.equal(varbits.get(598), 2, "and on every login");
+});

@@ -30,10 +30,14 @@ test("data-only weapon families carry a real weapon interface instead of unarmed
   expectInterface([7140, 7141], "SCIMITAR");
   expectInterface([2961, 2963, 3899], "SCIMITAR");
   expectInterface([10440, 10442, 10444, 12199, 12200, 12263, 12264, 12275, 12276, 9084], "STAFF");
-  expectInterface([6760, 6762, 6764, 7804, 9013, 9044, 9050, 13074, 13078, 12439, 20251, 20254, 13141, 13144], "POLESTAFF");
+  expectInterface([6760, 6762, 6764, 7804, 9044, 9050, 13074, 13078, 12439, 20251, 20254, 13141, 13144], "POLESTAFF");
+  // Wiki (Skull sceptre): "changed from a polestaff to a staff".
+  expectInterface([9013, 21276], "STAFF");
   expectInterface([4037, 4039, 8650, 8680, 11891, 11892], "BANNER");
   expectInterface([25979, 25981, 27287, 27288, 27291, 27292], "PARTISAN");
-  expectInterface([12373, 12375, 12377, 12379], "MACE");
+  expectInterface([12375, 12377, 12379], "MACE");
+  // Wiki: the Dragon cane is a polestaff; the other canes are spiked.
+  expectInterface([12373], "POLESTAFF");
   expectInterface([4827, 10280, 10282, 10284], "SHORTBOW");
   expectInterface([10033, 10034, 11959], "CHINCHOMPA");
   expectInterface([10146, 10147, 10148, 10149], "SALAMANDER");

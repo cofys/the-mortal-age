@@ -11,7 +11,7 @@ import { MenuTargetType } from "../../../rs/MenuEntry";
 import { IndexType } from "../../../rs/cache/IndexType";
 import { packWorldMapCoord } from "../../../rs/map/WorldMapArea";
 import { SpriteLoader } from "../../../rs/sprite/SpriteLoader";
-import { DIRECTION_TO_ORIENTATION } from "../../../common/Direction";
+import { DIRECTION_TO_ORIENTATION, MovementDirection } from "../../../common/Direction";
 import { InteractType } from "../../../render/InteractType";
 import type { MinimapIcon } from "../../../render/loader/SdMapData";
 import { isDoorLocType } from "../../../render/loc/SceneLocs";
@@ -2101,6 +2101,9 @@ function frameCameraOnTile(
 
 let nextEditorNpcServerId = EDITOR_NPC_SERVER_ID_BASE;
 
+/** The cache's spawnDirection (counted from north-west) in a spawn's direction numbering. */
+const CACHE_TO_SPAWN_DIRECTION: ReadonlyArray<number> = [5, 6, 7, 3, 4, 0, 1, 2];
+
 /** Browser-host spawn records are static editor scenery, never part of gameplay movement. */
 function spawnStaticEditorNpc(
     client: OsrsClient,
@@ -2113,11 +2116,13 @@ function spawnStaticEditorNpc(
     } catch {
         return undefined;
     }
+    // The cache's spawnDirection counts from north-west (its default, 6, is south); a spawn's
+    // direction counts from south-west, as Direction does.
     const direction = Number.isInteger(spawn.direction)
         ? spawn.direction!
         : Number.isInteger(cacheDirection)
-          ? cacheDirection
-          : 6;
+          ? CACHE_TO_SPAWN_DIRECTION[cacheDirection! & 7]
+          : MovementDirection.South;
     return spawnEditorNpcWithOrientation(
         client,
         spawn.id,

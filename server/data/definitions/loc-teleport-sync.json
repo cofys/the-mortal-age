@@ -1,0 +1,19 @@
+{
+  "$comment": "Lasting decisions for scripts/sync-loc-teleports.cjs (docs/loc-teleports.md): captured loc teleports to leave out, by tile (one placement of a name many locs share), exact gameval name or pattern, with the reason.",
+  "skip": {
+    "locs": [
+      {"name": "ladder", "x": 3284, "y": 3165, "z": 0, "why": "Only seen on a Leagues world, from Al Kharid to Varlamore; not the normal game's."}
+    ],
+    "names": {
+      "sailing_gangplank_shipyard": "In the shipyard; Sailing handles it."
+    },
+    "patterns": [
+      {"pattern": "^sailing_", "why": "Sailing content (boats, docks, the shipyard)."},
+      {"pattern": "^(tob|gotr|soul|sepulchre|roguesden|magearena|brimstone|cof|pmoon|bloodtemple|abyss|rcu|ntk)_", "why": "A minigame, raid or boss area; its plugin owns the way in and out."},
+      {"pattern": "^(tempoross|giants_foundry)_", "why": "A minigame; its plugin owns the way in and out."},
+      {"pattern": "^xmas\\d*_|^easter\\d*_|^halloween\\d*_", "why": "A holiday event."},
+      {"pattern": "^dagexp_bossroom", "why": "The Dagannoth Kings' ladder picks a boss instance (Standard or Slayer)."},
+      {"pattern": "^fossil_underwater_", "why": "Fossil Island's underwater caves need diving gear."}
+    ]
+  }
+}

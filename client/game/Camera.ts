@@ -165,7 +165,7 @@ export class Camera {
 
     setViewPitchOverride(pitch: number | undefined): void {
         this.viewPitchOverride =
-            pitch === undefined ? undefined : clamp(Math.trunc(pitch), -256, 256);
+            pitch === undefined ? undefined : clamp(pitch, -480, 480);
         this.updated = true;
     }
 

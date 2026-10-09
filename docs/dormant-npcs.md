@@ -1,8 +1,14 @@
-# Disguised crabs and aggression tolerance
+# Dormant NPCs and aggression tolerance
+
+`server/plugins/npcs/DormantNpcs.plugin.js`, with data in `server/data/definitions/dormant-npcs.json`: NPCs that lie dormant until woken, rise as their awake form, fight, and sink back after resting. Each family in the data has its dormant and awake ids, its rise and sink animations (with their lengths in ticks), and what wakes it:
+- `approach`: the disguised crabs below, woken by a player stepping next to them;
+- `attacked`: wyrms and wyrmlings, woken when a player attacks them ([wyrms.md](wyrms.md)).
+
+Anything still rising can't attack (a `canAttack` check). Before this, the plugin only handled crabs (`DisguisedCrabs`); the persisted rock-crab kill count keeps its old name, `disguised-crabs:rock-crab-kills`.
 
 ## Crabs
 
-`server/plugins/npcs/DisguisedCrabs.plugin.js`, with data in `server/data/definitions/disguised-crabs.json`. It replaces the old rock-crab-only plugin.
+It replaces the old rock-crab-only plugin.
 
 | Disguise (spawns as) | Crab | Ids (cache) |
 | --- | --- | --- |
@@ -20,10 +26,10 @@ Diagonal counts as next to.
 3. It stands still while it rises: 1316 lasts 74 client cycles, so 3 ticks.
 4. Then it attacks. Whether each crab may attack (single-way or multi) is the normal combat rules' call.
 
-**Resting.**
+**Resting** (every family):
 1. Out of combat for 20 ticks, a crab walks back to where it lay.
-2. Back home, or after 10 more ticks, it sinks (seq 1314).
-3. The next tick it is its disguise again, healed.
+2. Back home, or after 10 more ticks, it sinks (seq 1314; a wyrm's 8269).
+3. When the sink is over (1 tick for crabs, as before; 2 for wyrms), it's dormant again, healed.
 
 The 20 ticks aren't documented anywhere: they're an estimate, kept in the data file.
 

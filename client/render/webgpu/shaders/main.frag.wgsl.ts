@@ -285,7 +285,10 @@ fn shadeWater(
 
     baseColor = mix(underwater, baseColor, alpha);
 
-    return clamp(baseColor, vec3<f32>(0.0), vec3<f32>(1.0));
+    // An extension's unclamped pipeline needs specular water highlights above 1 for HDR bloom.
+    return ${ext
+        ? "max(baseColor, vec3<f32>(0.0))"
+        : "clamp(baseColor, vec3<f32>(0.0), vec3<f32>(1.0))"};
 }
 
 // brightness.glsl: the Settings "Screen brightness" on a lit surface (texel x vertex colour).
@@ -359,7 +362,11 @@ ${slots?.palette ?? ""}
 ${slots?.shade ?? ""}
     let finalRgb = mix(surface, fogColor, fog);
 
-    return vec4<f32>(clamp(finalRgb, vec3<f32>(0.0), vec3<f32>(1.0)), alpha * mapU.u_worldEntityOpacity);
+    // The extended (scene-extension) pipeline feeds an offscreen HDR target the extension
+    // tonemaps, so it must not clip highlights; the base pipeline writes the canvas as before.
+    return vec4<f32>(${ext
+        ? "finalRgb"
+        : "clamp(finalRgb, vec3<f32>(0.0), vec3<f32>(1.0))"}, alpha * mapU.u_worldEntityOpacity);
 }
 ${depth && ext?.depth ? ext.depth(alpha) : ""}`;
 }

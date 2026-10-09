@@ -28,6 +28,7 @@ import { DrawRange, NULL_DRAW_RANGE, newDrawRange } from "../DrawRange";
 import { ModelHashBuffer, getModelHash } from "../buffer/ModelHashBuffer";
 import { buildActorNormals } from "../buffer/ActorNormals";
 import {
+    ContourGroundType,
     DrawCommand,
     ModelFace,
     ModelMergeGroup,
@@ -51,6 +52,7 @@ import { isKnownWaterTextureId } from "../water/WaterTextureIds";
 import { NpcGeometryData } from "./NpcGeometryData";
 import { type LocGeometryData, type MinimapIcon, SdMapData } from "./SdMapData";
 import { SdMapLoaderInput } from "./SdMapLoaderInput";
+import { simplifyFarModel } from "./FarScene";
 
 function loadHeightMapTextureData(scene: Scene): Int16Array {
     const heightMapTextureData = new Int16Array(Scene.MAX_LEVELS * scene.sizeX * scene.sizeY);
@@ -582,7 +584,7 @@ function createMapFunctionResolver(
 }
 
 function createModelGroups(
-    modelGroupMap: Map<number, ModelMergeGroup>,
+    modelGroupMap: Map<string, ModelMergeGroup>,
     sceneModels: SceneModel[],
     transparent: boolean,
 ): void {
@@ -595,11 +597,12 @@ function createModelGroups(
             (sceneModel.priority << 4) |
             (planeCullLevel << 7);
 
-        const group = modelGroupMap.get(key);
+        const chunkKey = `${key}:${Math.floor(sceneModel.sceneX / 1024)}:${Math.floor(sceneModel.sceneZ / 1024)}`;
+        const group = modelGroupMap.get(chunkKey);
         if (group) {
             group.models.push(sceneModel);
         } else {
-            modelGroupMap.set(key, {
+            modelGroupMap.set(chunkKey, {
                 transparent,
                 lowDetail: sceneModel.lowDetail,
                 level: sceneModel.level,
@@ -647,11 +650,12 @@ function addSceneModels(
     sceneBuf: SceneBuffer,
     sceneModels: SceneModel[],
     minimizeDrawCalls: boolean,
+    far: boolean = false,
 ): void {
     const groupedModels = new Map<string, SceneModel[]>();
     for (const sceneModel of sceneModels) {
         const model = sceneModel.model;
-        const hash = `${getModelHash(modelHashBuf, model)}:${Number(!!sceneModel.doubleSided)}`;
+        const hash = `${getModelHash(modelHashBuf, model)}:${Number(!!sceneModel.doubleSided)}:${Math.floor(sceneModel.sceneX / 1024)}:${Math.floor(sceneModel.sceneZ / 1024)}`;
         const locs = groupedModels.get(hash);
         if (locs) {
             locs.push(sceneModel);
@@ -660,7 +664,7 @@ function addSceneModels(
         }
     }
 
-    const modelGroupMap: Map<number, ModelMergeGroup> = new Map();
+    const modelGroupMap: Map<string, ModelMergeGroup> = new Map();
     for (const sceneModels of groupedModels.values()) {
         const model = sceneModels[0].model;
         const doubleSided = sceneModels[0].doubleSided;
@@ -825,11 +829,24 @@ function addSceneModels(
     for (const group of modelGroupMap.values()) {
         sceneBuf.addModelGroup(group);
     }
+    if (!far) {
+        const simplified = new Map<Model, Model>();
+        const farModels = sceneModels.filter(model => !model.lowDetail).map(model => {
+            if (model.groundConforming || model.priority === 3 || model.contourGround === ContourGroundType.VERTEX)
+                return { ...model, forceMerge: true };
+            let mesh = simplified.get(model.model);
+            if (!mesh) { mesh = simplifyFarModel(model.model); simplified.set(model.model, mesh); }
+            return { ...model, model: mesh, forceMerge: true };
+        });
+        const farBuffer = new SceneBuffer(textureLoader, sceneBuf.textureIdIndexMap, 1024);
+        addSceneModels(modelHashBuf, textureLoader, farBuffer, farModels, true, true);
+        sceneBuf.appendFarScenery(farBuffer);
+    }
 }
 
 function buildLocGeometryData(sceneBuf: SceneBuffer): LocGeometryData {
     const drawRanges = (commands: DrawCommand[]): DrawRange[] =>
-        commands.map((cmd) => newDrawRange(cmd.offset, cmd.elements, cmd.instances.length));
+        commands.map((cmd) => sceneBuf.createDrawRange(cmd));
     const drawRangePlanes = (commands: DrawCommand[]): Uint8Array =>
         new Uint8Array(
             commands.map((cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level),
@@ -1018,6 +1035,7 @@ export function addLocEntities(
                     ...sceneLocEntity,
 
                     model,
+                    groundConforming: locType.contourGroundType > 0,
                     sceneHeight: centerHeight,
                     lowDetail,
                     forceMerge: locType.contourGroundType > 1,
@@ -1064,6 +1082,7 @@ export function addLocEntities(
                 ...sceneLocEntity,
 
                 model,
+                groundConforming: locType.contourGroundType > 0,
                 sceneHeight: centerHeight,
                 lowDetail,
                 forceMerge: locType.contourGroundType > 1,
@@ -1188,6 +1207,22 @@ function collectNpcPrebakedMovementSeqs(npcType: NpcType, basTypeLoader: BasType
     unique.delete(movementSet.idle | 0);
     unique.delete(movementSet.walk | 0);
     return Array.from(unique.values());
+}
+
+/** The NPCs a map square draws: its own (or its world view's overlay square), up to maxLevel. */
+export function squareNpcInstances(all: NpcInstance[], mapX: number, mapY: number, maxLevel: number): NpcInstance[] {
+    const maxPlane = Math.max(0, maxLevel | 0);
+    const currentMapId = getMapSquareId(mapX, mapY);
+    return all.filter((instance) => {
+        if ((instance.level | 0) > maxPlane) return false;
+        const worldViewId = instance.worldViewId;
+        if (typeof worldViewId === "number" && worldViewId >= 0) {
+            const overlayMapX = 200 + (worldViewId | 0);
+            const overlayMapY = 200 + (worldViewId | 0);
+            return getMapSquareId(overlayMapX, overlayMapY) === currentMapId;
+        }
+        return npcOwnerMapId(instance) === currentMapId;
+    });
 }
 
 function createNpcRenderBundles(
@@ -1560,6 +1595,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         const sceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, 100000);
         const locSceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, 100000);
         const doorSceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, 20000);
+        locSceneBuf.setHeightBounds(scene);
+        doorSceneBuf.setHeightBounds(scene);
         const coreSize = isInstance ? INSTANCE_SIZE : Scene.MAP_SQUARE_SIZE;
         if (!shouldLoadPartial) {
             sceneBuf.addTerrain(scene, usedBorderSize, maxLevel, coreSize, usedBorderSize);
@@ -1636,18 +1673,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
         let npcInstances: NpcInstance[] = [];
         if (!shouldLoadPartial && loadNpcs) {
-            const maxPlane = Math.max(0, maxLevel | 0);
-            const currentMapId = getMapSquareId(mapX, mapY);
-            npcInstances = state.npcInstances.filter((instance) => {
-                if ((instance.level | 0) > maxPlane) return false;
-                const worldViewId = instance.worldViewId;
-                if (typeof worldViewId === "number" && worldViewId >= 0) {
-                    const overlayMapX = 200 + (worldViewId | 0);
-                    const overlayMapY = 200 + (worldViewId | 0);
-                    return getMapSquareId(overlayMapX, overlayMapY) === currentMapId;
-                }
-                return npcOwnerMapId(instance) === currentMapId;
-            });
+            npcInstances = squareNpcInstances(state.npcInstances, mapX, mapY, maxLevel);
         }
         if (!shouldLoadPartial && extraNpcsInput) {
             for (const npc of extraNpcsInput) {
@@ -1789,18 +1815,14 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         // Draw ranges
 
         // Normal (merged)
-        const drawRanges = sceneBuf.drawCommands.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const drawRanges = sceneBuf.drawCommands.map(cmd => sceneBuf.createDrawRange(cmd));
         const drawRangesPlanes = new Uint8Array(
             sceneBuf.drawCommands.map((cmd) => {
                 const planeCull = cmd.instances[0].planeCullLevel ?? cmd.instances[0].level;
                 return planeCull;
             }),
         );
-        const drawRangesAlpha = sceneBuf.drawCommandsAlpha.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const drawRangesAlpha = sceneBuf.drawCommandsAlpha.map(cmd => sceneBuf.createDrawRange(cmd));
         const drawRangesAlphaPlanes = new Uint8Array(
             sceneBuf.drawCommandsAlpha.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
@@ -1814,17 +1836,13 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         );
 
         // Lod (merged)
-        const drawRangesLod = sceneBuf.drawCommandsLod.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const drawRangesLod = sceneBuf.drawCommandsLod.map(cmd => sceneBuf.createDrawRange(cmd));
         const drawRangesLodPlanes = new Uint8Array(
             sceneBuf.drawCommandsLod.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
-        const drawRangesLodAlpha = sceneBuf.drawCommandsLodAlpha.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const drawRangesLodAlpha = sceneBuf.drawCommandsLodAlpha.map(cmd => sceneBuf.createDrawRange(cmd));
         const drawRangesLodAlphaPlanes = new Uint8Array(
             sceneBuf.drawCommandsLodAlpha.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
@@ -1838,17 +1856,13 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         );
 
         // Interact (non merged)
-        const drawRangesInteract = sceneBuf.drawCommandsInteract.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const drawRangesInteract = sceneBuf.drawCommandsInteract.map(cmd => sceneBuf.createDrawRange(cmd));
         const drawRangesInteractPlanes = new Uint8Array(
             sceneBuf.drawCommandsInteract.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
-        const drawRangesInteractAlpha = sceneBuf.drawCommandsInteractAlpha.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const drawRangesInteractAlpha = sceneBuf.drawCommandsInteractAlpha.map(cmd => sceneBuf.createDrawRange(cmd));
         const drawRangesInteractAlphaPlanes = new Uint8Array(
             sceneBuf.drawCommandsInteractAlpha.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
@@ -1858,81 +1872,63 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         if (mapProfileEnabled) console.log(`draw ranges interact: ${drawRangesInteract.length}`, mapX, mapY);
 
         // Interact Lod (non merged)
-        const drawRangesInteractLod = sceneBuf.drawCommandsInteractLod.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const drawRangesInteractLod = sceneBuf.drawCommandsInteractLod.map(cmd => sceneBuf.createDrawRange(cmd));
         const drawRangesInteractLodPlanes = new Uint8Array(
             sceneBuf.drawCommandsInteractLod.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
-        const drawRangesInteractLodAlpha = sceneBuf.drawCommandsInteractLodAlpha.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const drawRangesInteractLodAlpha = sceneBuf.drawCommandsInteractLodAlpha.map(cmd => sceneBuf.createDrawRange(cmd));
         const drawRangesInteractLodAlphaPlanes = new Uint8Array(
             sceneBuf.drawCommandsInteractLodAlpha.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
 
-        const doorDrawRanges = doorSceneBuf.drawCommands.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const doorDrawRanges = doorSceneBuf.drawCommands.map(cmd => doorSceneBuf.createDrawRange(cmd));
         const doorDrawRangesPlanes = new Uint8Array(
             doorSceneBuf.drawCommands.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
-        const doorDrawRangesAlpha = doorSceneBuf.drawCommandsAlpha.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const doorDrawRangesAlpha = doorSceneBuf.drawCommandsAlpha.map(cmd => doorSceneBuf.createDrawRange(cmd));
         const doorDrawRangesAlphaPlanes = new Uint8Array(
             doorSceneBuf.drawCommandsAlpha.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
-        const doorDrawRangesLod = doorSceneBuf.drawCommandsLod.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const doorDrawRangesLod = doorSceneBuf.drawCommandsLod.map(cmd => doorSceneBuf.createDrawRange(cmd));
         const doorDrawRangesLodPlanes = new Uint8Array(
             doorSceneBuf.drawCommandsLod.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
-        const doorDrawRangesLodAlpha = doorSceneBuf.drawCommandsLodAlpha.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const doorDrawRangesLodAlpha = doorSceneBuf.drawCommandsLodAlpha.map(cmd => doorSceneBuf.createDrawRange(cmd));
         const doorDrawRangesLodAlphaPlanes = new Uint8Array(
             doorSceneBuf.drawCommandsLodAlpha.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
-        const doorDrawRangesInteract = doorSceneBuf.drawCommandsInteract.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const doorDrawRangesInteract = doorSceneBuf.drawCommandsInteract.map(cmd => doorSceneBuf.createDrawRange(cmd));
         const doorDrawRangesInteractPlanes = new Uint8Array(
             doorSceneBuf.drawCommandsInteract.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
-        const doorDrawRangesInteractAlpha = doorSceneBuf.drawCommandsInteractAlpha.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const doorDrawRangesInteractAlpha = doorSceneBuf.drawCommandsInteractAlpha.map(cmd => doorSceneBuf.createDrawRange(cmd));
         const doorDrawRangesInteractAlphaPlanes = new Uint8Array(
             doorSceneBuf.drawCommandsInteractAlpha.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
-        const doorDrawRangesInteractLod = doorSceneBuf.drawCommandsInteractLod.map((cmd) =>
-            newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
-        );
+        const doorDrawRangesInteractLod = doorSceneBuf.drawCommandsInteractLod.map(cmd => doorSceneBuf.createDrawRange(cmd));
         const doorDrawRangesInteractLodPlanes = new Uint8Array(
             doorSceneBuf.drawCommandsInteractLod.map(
                 (cmd) => cmd.instances[0].planeCullLevel ?? cmd.instances[0].level,
             ),
         );
         const doorDrawRangesInteractLodAlpha = doorSceneBuf.drawCommandsInteractLodAlpha.map(
-            (cmd) => newDrawRange(cmd.offset, cmd.elements, cmd.instances.length),
+            (cmd) => doorSceneBuf.createDrawRange(cmd),
         );
         const doorDrawRangesInteractLodAlphaPlanes = new Uint8Array(
             doorSceneBuf.drawCommandsInteractLodAlpha.map(
@@ -2114,6 +2110,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
         const transferables = [
             ...scene.tileRenderFlags.flat().map((buf) => buf.buffer),
+            ...(sceneBuf.groundMaterials?.flat().map((column) => column.buffer) ?? []),
+            ...(sceneBuf.groundColors?.flat().map((column) => column.buffer) ?? []),
             ...scene.collisionMaps.map((map) => map.flags.buffer),
             ...Array.from(loadedTextures.values()).map((pixels) => pixels.buffer),
 
@@ -2220,6 +2218,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                 renderPosX,
                 renderPosY,
                 tileRenderFlags: scene.tileRenderFlags,
+                groundMaterials: sceneBuf.groundMaterials,
+                groundColors: sceneBuf.groundColors,
                 collisionDatas: scene.collisionMaps,
 
                 minimapBlobs,

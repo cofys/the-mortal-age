@@ -122,13 +122,17 @@ function facilityNamed(name) {
  * over it (those with column 23: cannons, hooks, nets, chum stations, wind catchers) face out,
  * rotation `side`; the rest (a range, a keg) face in towards the deck, the opposite way.
  * Placeholders face 1 on either side. As captured: a hook on a west hotspot at 1, a range on
- * an east one at 1, cargo holds and the inoculation station on the centre line at 0.
+ * an east one at 1, cargo holds and the inoculation station on the centre line at 0. Chum
+ * stations and spreaders face in like a range although they work over the side (rsprox: every
+ * placement, 431 across both boats and both sides, at the side's opposite).
  */
 function rotationOf(hotspot, facilityRow) {
   if (hotspot.side === 0) return 0;
   if (facilityRow === undefined) return 1;
-  const overSide = (CacheDefinitions.getDbRow(facilityRow)?.column(FACILITY.overSide)?.length ?? 0) > 0;
-  return overSide ? hotspot.side : (hotspot.side + 2) & 3;
+  const row = CacheDefinitions.getDbRow(facilityRow);
+  const overSide = (row?.column(FACILITY.overSide)?.length ?? 0) > 0;
+  const facesIn = !overSide || /chum/i.test(row?.string(FACILITY.name) ?? "");
+  return facesIn ? (hotspot.side + 2) & 3 : hotspot.side;
 }
 
 /**
@@ -150,7 +154,18 @@ function hotspotLocs(boat, placeholders = false) {
   });
 }
 
+/**
+ * A boat's teleport focus, as its `sailing_boat_N_teleport_focus` varbit holds it (rsprox: 1, or
+ * 2 once greater): 0 without one, 1 for a teleport focus, 2 for a greater teleport focus.
+ */
+function teleportFocusOf(boat) {
+  const built = hotspotsOf(boat.type).map((hotspot) => facilityAt(boat, hotspot.id));
+  if (built.includes(facilityNamed("Greater teleport focus"))) return 2;
+  return built.includes(facilityNamed("Teleport focus")) ? 1 : 0;
+}
+
 module.exports = {
+  teleportFocusOf,
   TYPE_HOTSPOTS,
   HOTSPOT_FACILITIES,
   FACILITY,

@@ -47,6 +47,7 @@ class FightTypeClass {
         private readonly style: FightStyle,
         private readonly attackSound: Sound,
         private readonly rapid: boolean,
+        private readonly npcAnimation: number = -1,
     ) {}
 
     static {
@@ -59,6 +60,7 @@ class FightTypeClass {
                 STYLE_BY_NAME[definition.style] ?? FightStyle.ACCURATE,
                 (Sound as any)[definition.sound] ?? Sound.WEAPON,
                 definition.rapid === true,
+                definition.npcAnimation ?? -1,
             );
             (FightTypeClass as any)[key] = fightType;
             FightTypeClass.valuesList.push(fightType);
@@ -110,6 +112,11 @@ class FightTypeClass {
 
     public getAnimation(): number {
         return this.animation;
+    }
+
+    /** The animation for an attack on an NPC (`npcAnimation` where the style has one) or a player. */
+    public getAnimationAgainst(npc: boolean): number {
+        return npc && this.npcAnimation > 0 ? this.npcAnimation : this.animation;
     }
 
     /**

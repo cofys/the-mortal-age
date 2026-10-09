@@ -6,7 +6,12 @@ import { ItemIdentifiers } from "../../util/ItemIdentifiers";
 
 const EQUIPMENT_SLOTS = new Set([0, 1, 2, 3, 4, 5, 7, 9, 10, 12, 13]);
 
+export type AttackTypeName = "stab" | "slash" | "crush" | "magic" | "range";
+
 export class ItemDefinition {
+    /** The cache's item param for a weapon's attack speed in ticks (the "attack rate"). */
+    public static readonly ATTACK_SPEED_PARAM = 14;
+
     public static definitions: Map<number, ItemDefinition> = new Map<number, ItemDefinition>();
     public static DEFAULT = new ItemDefinition();
 
@@ -22,7 +27,7 @@ export class ItemDefinition {
         for (const key of ["equipmentType", "weaponInterface", "doubleHanded", "stackable",
             "tradeable", "dropable", "sellable", "value", "grandExchangeValue", "highAlch", "lowAlch", "dropValue",
             "bloodMoneyValue", "blockAnim", "standAnim", "walkAnim", "runAnim", "standTurnAnim",
-            "turn180Anim", "turn90CWAnim", "turn90CCWAnim", "bonuses", "requirements"]) {
+            "turn180Anim", "turn90CWAnim", "turn90CCWAnim", "attackAnim", "equipSound", "bonuses", "requirements"]) {
             const value = raw[key];
             if (value !== undefined) {
                 (definition as any)[key] = Array.isArray(value) ? [...value] : value;
@@ -58,7 +63,18 @@ export class ItemDefinition {
     private standTurnAnim: number = 823;
     private turn180Anim: number = 820;
     private turn90CWAnim: number = 821;
-    private turn90CCWAnim: number = 821;
+    private turn90CCWAnim: number = 822;
+    /**
+     * This weapon's own attack animation where it differs from its type's: one for every style, or
+     * one per attack type ({ "slash": ..., "crush": ... }). -1 or a missing type: the type's.
+     */
+    private attackAnim: number | Partial<Record<AttackTypeName, number>> = -1;
+    /** The sound for wearing or removing it, recorded from live OSRS (-1: by its kind, EquipmentSounds). */
+    private equipSound: number = -1;
+    /** Tradeable items it splits into when lost to a player in the Wilderness (an upgraded staff: staff and orb). */
+    private deathComponents: number[] = [];
+    /** Ticks between attacks from the cache (ATTACK_SPEED_PARAM), or -1 when the cache has none. */
+    private attackSpeed: number = -1;
     private weight: number;
     private bonuses: number[];
     private requirements: number[];
@@ -93,6 +109,8 @@ export class ItemDefinition {
         this.placeholderId = cached.placeholderTemplate === -1 ? cached.placeholder : -1;
         this.value = cached.price;
         this.weight = cached.weight;
+        const attackSpeed = cached.params?.get(ItemDefinition.ATTACK_SPEED_PARAM);
+        this.attackSpeed = typeof attackSpeed === "number" && attackSpeed > 0 ? attackSpeed : -1;
         if (this.equipmentType.getSlot() === -1 && EQUIPMENT_SLOTS.has(cached.wearPos)) {
             this.equipmentType = new EquipmentType(cached.wearPos);
         }
@@ -211,6 +229,24 @@ export class ItemDefinition {
 
     public getRequirements(): number[] {
         return this.requirements;
+    }
+
+    /** This weapon's own animation for an attack of `attackType`, or -1 for its type's. */
+    public getAttackAnim(attackType?: AttackTypeName): number {
+        if (typeof this.attackAnim === "number") return this.attackAnim;
+        return (attackType && this.attackAnim?.[attackType]) || -1;
+    }
+
+    public getEquipSound(): number {
+        return this.equipSound;
+    }
+
+    public getDeathComponents(): number[] {
+        return this.deathComponents;
+    }
+
+    public getAttackSpeed(): number {
+        return this.attackSpeed;
     }
 
     public getWeaponInterface(): WeaponInterfaces {

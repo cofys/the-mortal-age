@@ -247,9 +247,10 @@ export class Player extends Mobile {
         return this.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
     }
 
-    public getAttackAnim(): number {
+    public getAttackAnim(target?: Mobile): number {
         const fightType = FightType.resolve(this.getFightType()) ?? FightType.UNARMED_KICK;
-        return WeaponProfiles.attackAnimation(this, fightType.getAnimation());
+        const againstNpc = target?.isNpc?.() === true;
+        return WeaponProfiles.attackAnimation(this, fightType.getAnimationAgainst(againstNpc), againstNpc);
     }
 
     public getAttackSound(): Sound {

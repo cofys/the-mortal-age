@@ -1,14 +1,19 @@
 {
-  "$comment": "Spirit tree network, transcribed from https://oldschool.runescape.wiki/w/Spirit_tree. Quest-locked entries only enforce when the quest is registered in this server.",
-  "source": "https://oldschool.runescape.wiki/w/Spirit_tree",
-  "destinations": [
-    {"name": "Tree Gnome Village", "x": 2539, "y": 3166, "z": 0},
-    {"name": "Gnome Stronghold", "x": 2460, "y": 3446, "z": 0, "requires": "The Grand Tree"},
-    {"name": "Battlefield of Khazard", "x": 2555, "y": 3259, "z": 0},
-    {"name": "Grand Exchange", "x": 3185, "y": 3510, "z": 0},
-    {"name": "Feldip Hills", "x": 2486, "y": 2850, "z": 0},
-    {"name": "Incomitatus", "x": 2339, "y": 3111, "z": 0, "requires": "The Path of Glouphrie"},
-    {"name": "Prifddinas", "x": 3275, "y": 6124, "z": 0, "requires": "Song of the Elves"},
-    {"name": "Laguna Aurorae", "x": 1202, "y": 2786, "z": 0, "requires": "Pandemonium"}
+  "$comment": "The spirit tree network, played by plugins/world/SpiritTrees.plugin.js (docs/spirit-trees.md). `trees` are in the menu's order, as live OSRS lists them (rsprox capture database, https://rsprox.net/database, rev 237-238). `tree` is where the tree stands (Wiki); `landing` where travelling there puts the player (captured where recorded, else beside the tree). Permanent trees may need a quest (`requires`, enforced only for quests this server has) or a skill (`skills`); `grown` trees are farming patches, usable once grown and checked; `house` is a player-owned house's tree. Requirements from https://oldschool.runescape.wiki/w/Spirit_tree.",
+  "trees": [
+    {"name": "Tree Gnome Village", "tree": [2539, 3166, 0], "landing": [2542, 3170, 0]},
+    {"name": "Gnome Stronghold", "tree": [2460, 3446, 0], "landing": [2461, 3444, 0], "leaveRequires": "The Grand Tree"},
+    {"name": "Battlefield of Khazard", "tree": [2555, 3260, 0], "landing": [2555, 3259, 0]},
+    {"name": "Grand Exchange", "tree": [3184, 3509, 0], "landing": [3185, 3508, 0]},
+    {"name": "Feldip Hills", "tree": [2486, 2850, 0], "landing": [2488, 2850, 0]},
+    {"name": "Prifddinas", "tree": [3274, 6124, 0], "landing": [3274, 6123, 0], "requires": "Song of the Elves"},
+    {"name": "Port Sarim", "grown": [3060, 3258, 0], "landing": [3058, 3257, 0]},
+    {"name": "Etceteria", "grown": [2613, 3858, 0]},
+    {"name": "Brimhaven", "grown": [2802, 3203, 0]},
+    {"name": "Hosidius", "grown": [1693, 3542, 0]},
+    {"name": "Farming Guild", "grown": [1253, 3750, 0], "skills": {"Farming": 85}},
+    {"name": "Your house", "house": true},
+    {"name": "Poison Waste", "tree": [2339, 3111, 0], "landing": [2339, 3109, 0], "requires": "The Path of Glouphrie"},
+    {"name": "Laguna Aurorae", "tree": [1202, 2786, 0], "landing": [1203, 2785, 0], "requires": "Pandemonium", "skills": {"Sailing": 58}}
   ]
 }

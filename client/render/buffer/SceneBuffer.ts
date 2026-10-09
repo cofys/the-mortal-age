@@ -4,9 +4,9 @@ import { Model, computeTextureCoords } from "../../rs/model/Model";
 import { Scene } from "../../rs/scene/Scene";
 import { SceneTile } from "../../rs/scene/SceneTile";
 import { TextureLoader } from "../../rs/texture/TextureLoader";
-import { packHsl } from "../../rs/util/ColorUtil";
+import { HSL_RGB_MAP, INVALID_HSL_COLOR, packHsl } from "../../rs/util/ColorUtil";
 import { clamp } from "../../common/utils/MathUtil";
-import { getBridgeLinkedBelow, isBridgeSurfaceTile } from "../../game/scene/BridgeTiles";
+import { addTerrainCell, addFarTerrainChunk, SCENERY_CHUNK_SIZE } from "../loader/FarScene";
 import { DrawRange, newDrawRange } from "../DrawRange";
 import { InteractType } from "../InteractType";
 import { LocAnimatedData } from "../loc/LocAnimatedData";
@@ -41,10 +41,14 @@ export type DrawCommand = {
     offset: number;
     elements: number;
     instances: ModelInfo[];
+    chunk?: [number, number];
 };
 
 export type SceneModel = {
     model: Model;
+    // ModelData can bake contouring directly into verticesY before lighting,
+    // leaving contourVerticesY unset. Keep that classification for far meshes.
+    groundConforming?: boolean;
     sceneHeight: number;
     lowDetail: boolean;
     forceMerge: boolean;
@@ -76,6 +80,15 @@ export class SceneBuffer {
     drawCommandsInteractLodAlpha: DrawCommand[] = [];
 
     usedTextureIds = new Set<number>();
+
+    /**
+     * Full-heightmap [level][x][y] HD ground recipe grid (0 = none), border included.
+     * Populated by addTerrain; the HD terrain shader blends neighbours across tile borders.
+     */
+    groundMaterials?: Uint8Array[][];
+
+    /** [level][x][y] average colour (0xRRGGBB, 0 = none) of each tile's untextured faces, for ground clutter. */
+    groundColors?: Uint32Array[][];
 
     constructor(
         readonly textureLoader: TextureLoader,
@@ -179,90 +192,96 @@ export class SceneBuffer {
         }
     }
 
-    addTerrain(
-        scene: Scene,
-        borderSize: number,
-        maxLevel: number,
-        coreSize: number = Scene.MAP_SQUARE_SIZE,
-        worldTileOffset: number = borderSize,
-    ): number {
-        const startX = borderSize;
-        const startY = borderSize;
-        const endX = borderSize + coreSize;
-        const endY = borderSize + coreSize;
+    private heightBounds: number[][] = [];
+    private rangeCache = new WeakMap<DrawCommand, DrawRange>();
 
-        const vertexOffset = worldTileOffset * -128;
+    setHeightBounds(scene: Scene): void {
+        this.heightBounds = scene.tileHeights.map(columns => {
+            let min = Infinity, max = -Infinity;
+            for (const column of columns) for (const height of column) {
+                min = Math.min(min, height); max = Math.max(max, height);
+            }
+            return [min, max];
+        });
+    }
 
-        const terrainStartVertexCount = this.vertexCount();
-        for (let level = 0; level < scene.levels; level++) {
-            const indexOffset = this.indexByteOffset();
-            for (let x = startX; x < endX; x++) {
-                for (let y = startY; y < endY; y++) {
-                    // Always honor force-visible-from-base (0x8 at plane 1) in base pass,
-                    // regardless of the base tile presence/minLevel.
-                    if (level === 0 && (scene.tileRenderFlags[1][x][y] & 0x8) !== 0) {
-                        const upper = scene.tiles[1][x][y];
-                        if (upper) this.addTerrainTile(upper, vertexOffset, vertexOffset);
-                    }
-
-                    const tile = scene.tiles[level][x][y];
-                    if (!tile || tile.skipRender || !scene.isPlayerLevel(level, x, y, maxLevel)) {
-                        continue;
-                    }
-
-                    if (level === 0 && isBridgeSurfaceTile(tile)) {
-                        this.addTerrainTile(tile, vertexOffset, vertexOffset);
-                        const linked = getBridgeLinkedBelow(tile);
-                        if (linked) {
-                            this.addTerrainTile(linked, vertexOffset, vertexOffset);
-                        }
-                        continue;
-                    }
-                    // Skip drawing plane-1 tiles that are force-visible from base (0x8);
-                    // they are emitted in the base pass above to respect roof clamping.
-                    if (level === 1 && (scene.tileRenderFlags[1][x][y] & 0x8) !== 0) {
-                        continue;
-                    }
-                    // Add primary tile model
-                    this.addTerrainTile(tile, vertexOffset, vertexOffset);
-                    // OSRS bridge: draw the original ground tile beneath the shifted bridge tile
-                    if (level === 0) {
-                        const linked = getBridgeLinkedBelow(tile);
-                        if (linked) {
-                            this.addTerrainTile(linked, vertexOffset, vertexOffset);
-                        }
-                    }
+    createDrawRange(command: DrawCommand): DrawRange {
+        const cached = this.rangeCache.get(command);
+        if (cached) return cached;
+        const range = newDrawRange(command.offset, command.elements, command.instances.length);
+        // Terrain ranges share identical instance data within each plane, so
+        // contiguous visible chunks may be coalesced on the single-draw backend.
+        if (command.instances.length === 1 && command.instances[0].contourGround === ContourGroundType.TERRAIN)
+            range.batchKey = command.instances[0].level;
+        range.chunk = command.chunk ?? [Math.floor(command.instances[0].sceneX / 1024) * 8, Math.floor(command.instances[0].sceneZ / 1024) * 8];
+        if (command.elements > 0) {
+            const base = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+            for (let i = command.offset / 4; i < command.offset / 4 + command.elements; i++) {
+                const offset = this.indices[i] * this.vertexBuf.stride;
+                const x = (this.vertexBuf.view.getUint32(offset, true) >>> 17) - 16384;
+                const y = 16384 - (this.vertexBuf.view.getUint32(offset + 4, true) & 32767);
+                const z = (this.vertexBuf.view.getUint32(offset + 8, true) >>> 17) - 16384;
+                base[0] = Math.min(base[0], x); base[1] = Math.min(base[1], y); base[2] = Math.min(base[2], z);
+                base[3] = Math.max(base[3], x); base[4] = Math.max(base[4], y); base[5] = Math.max(base[5], z);
+            }
+            const bounds = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+            for (const instance of command.instances) {
+                const heights = instance.contourGround < ContourGroundType.NONE ? this.heightBounds[instance.level] ?? [-16384, 16384] : [0, 0];
+                const height = Math.round(instance.heightOffset / 8) * 8;
+                const shift = [instance.sceneX, -height, instance.sceneZ];
+                for (let axis = 0; axis < 3; axis++) {
+                    bounds[axis] = Math.min(bounds[axis], (base[axis] + shift[axis] + (axis === 1 ? heights[0] : 0)) / 128 - 0.05);
+                    bounds[axis + 3] = Math.max(bounds[axis + 3], (base[axis + 3] + shift[axis] + (axis === 1 ? heights[1] : 0)) / 128 + 0.05);
                 }
             }
+            range.bounds = bounds;
+        }
+        this.rangeCache.set(command, range);
+        return range;
+    }
 
-            const levelVertexCount = (this.indexByteOffset() - indexOffset) / 4;
+    appendFarScenery(far: SceneBuffer): void {
+        const vertexOffset = this.vertexCount(), indexOffset = this.indexByteOffset();
+        this.vertexBuf.ensureSize(far.vertexCount());
+        this.vertexBuf.bytes.set(far.vertexBuf.byteArray(), this.vertexBuf.byteOffset());
+        this.vertexBuf.offset += far.vertexCount();
+        for (const index of far.indices) this.indices.push(index + vertexOffset);
+        for (const texture of far.usedTextureIds) this.usedTextureIds.add(texture);
+        const commands = (items: DrawCommand[]) => items.map(command => ({ ...command, offset: command.offset + indexOffset }));
+        this.drawCommandsLod = commands(far.drawCommands);
+        this.drawCommandsLodAlpha = commands(far.drawCommandsAlpha);
+    }
 
-            if (levelVertexCount > 0) {
-                const command: DrawCommand = {
-                    offset: indexOffset,
-                    elements: levelVertexCount,
-                    instances: [
-                        {
-                            sceneX: 0,
-                            sceneZ: 0,
-                            heightOffset: 0,
-                            level,
-                            contourGround: ContourGroundType.TERRAIN,
-                            priority: 0,
-                            interactType: InteractType.NONE,
-                            interactId: 0xffff,
-                        },
-                    ],
-                };
-
-                this.drawCommands.push(command);
-                this.drawCommandsLod.push(command);
-                this.drawCommandsInteract.push(command);
-                this.drawCommandsInteractLod.push(command);
+    addTerrain(scene: Scene, borderSize: number, maxLevel: number, coreSize: number = Scene.MAP_SQUARE_SIZE, worldTileOffset: number = borderSize): number {
+        this.setHeightBounds(scene);
+        // The grid covers the whole scene (border included), not just the meshed core, so
+        // fragments at the edge of the visible core can still sample their border neighbours.
+        this.groundMaterials = buildGroundMaterialGrid(scene);
+        this.groundColors = buildGroundColorGrid(scene);
+        const before = this.vertexCount(), offset = -worldTileOffset * 128;
+        const endX = borderSize + coreSize, endY = borderSize + coreSize;
+        for (let level = 0; level < scene.levels; level++) for (let detail = 0; detail < 2; detail++) {
+            for (let cx = borderSize; cx < endX; cx += SCENERY_CHUNK_SIZE) for (let cy = borderSize; cy < endY; cy += SCENERY_CHUNK_SIZE) {
+                const ex = Math.min(cx + SCENERY_CHUNK_SIZE, endX), ey = Math.min(cy + SCENERY_CHUNK_SIZE, endY);
+                const instance: ModelInfo = { sceneX: 0, sceneZ: 0, heightOffset: 0, level,
+                    contourGround: ContourGroundType.TERRAIN, priority: 0, interactType: InteractType.NONE, interactId: 0xffff };
+                const chunk: [number, number] = [cx - worldTileOffset, cy - worldTileOffset];
+                const start = this.indexByteOffset();
+                if (detail === 0) {
+                    for (let x = cx; x < ex; x++) for (let y = cy; y < ey; y++) addTerrainCell(this, scene, level, x, y, maxLevel, offset);
+                } else {
+                    addFarTerrainChunk(this, scene, level, cx, cy, ex, ey, maxLevel, offset);
+                }
+                const command: DrawCommand = { offset: start, elements: (this.indexByteOffset() - start) / 4, instances: [instance], chunk };
+                if (command.elements === 0) continue;
+                if (detail === 0) {
+                    this.drawCommands.push(command); this.drawCommandsInteract.push(command);
+                } else {
+                    this.drawCommandsLod.push(command); this.drawCommandsInteractLod.push(command);
+                }
             }
         }
-
-        return this.vertexCount() - terrainStartVertexCount;
+        return this.vertexCount() - before;
     }
 
     addModelAnimFrame(
@@ -416,6 +435,7 @@ export class SceneBuffer {
             const drawCommand: DrawCommand = {
                 offset: offset,
                 elements: elements,
+                chunk: [Math.floor(sceneModel.sceneX / 1024) * 8, Math.floor(sceneModel.sceneZ / 1024) * 8],
                 instances: [
                     {
                         sceneX: 0,
@@ -449,6 +469,7 @@ export class SceneBuffer {
             const drawCommand: DrawCommand = {
                 offset: groupOffset,
                 elements: groupElements,
+                chunk: [Math.floor(group.models[0].sceneX / 1024) * 8, Math.floor(group.models[0].sceneZ / 1024) * 8],
                 instances: [
                     {
                         sceneX: 0,
@@ -638,6 +659,83 @@ export class SceneBuffer {
             if (doubleSided) this.indices.push(index2, index1, index0);
         }
     }
+}
+
+/** HD ground recipe of the tile's dominant face: overlay when it has one, else underlay. */
+function tileGroundMaterial(tile: SceneTile | undefined): number {
+    const tileModel = tile?.tileModel;
+    if (!tileModel || tile.skipRender) {
+        return 0;
+    }
+    let underlayMaterial = 0;
+    for (const face of tileModel.faces) {
+        const material = hdGroundMaterial(
+            face.isOverlay ? tileModel.overlayId : tileModel.underlayId,
+            face.isOverlay,
+            face.isOverlay ? tileModel.overlayHsl : tileModel.blendUnderlayHslSw,
+        );
+        if (face.isOverlay) {
+            if (material > 0) return material;
+        } else if (material > 0) {
+            underlayMaterial = material;
+        }
+    }
+    return underlayMaterial;
+}
+
+/**
+ * [level][x][y] HD ground recipe grid over the scene's full heightmap (border included).
+ * Same coordinate space as heightMapTextureData so the shader can look up tile borders.
+ */
+function buildGroundMaterialGrid(scene: Scene): Uint8Array[][] {
+    const grid: Uint8Array[][] = new Array(Scene.MAX_LEVELS);
+    for (let level = 0; level < Scene.MAX_LEVELS; level++) {
+        const columns: Uint8Array[] = new Array(scene.sizeX);
+        for (let x = 0; x < scene.sizeX; x++) {
+            const column = new Uint8Array(scene.sizeY);
+            for (let y = 0; y < scene.sizeY; y++) {
+                column[y] = tileGroundMaterial(scene.tiles[level]?.[x]?.[y]);
+            }
+            columns[x] = column;
+        }
+        grid[level] = columns;
+    }
+    return grid;
+}
+
+/** Average shaded colour of a tile's untextured faces (0xRRGGBB), or 0 when it has none. */
+function tileGroundColor(tile: SceneTile | undefined): number {
+    const tileModel = tile?.tileModel;
+    if (!tileModel || tile.skipRender) return 0;
+    let r = 0, g = 0, b = 0, count = 0;
+    for (const face of tileModel.faces) {
+        for (const vertex of face.vertices) {
+            if (vertex.textureId !== -1 || vertex.hsl === INVALID_HSL_COLOR || vertex.hsl < 0) continue;
+            const rgb = HSL_RGB_MAP[vertex.hsl & 0xffff];
+            r += (rgb >> 16) & 0xff;
+            g += (rgb >> 8) & 0xff;
+            b += rgb & 0xff;
+            count++;
+        }
+    }
+    if (count === 0) return 0;
+    // Never 0, which means "no colour".
+    return ((Math.round(r / count) << 16) | (Math.round(g / count) << 8) | Math.round(b / count)) || 1;
+}
+
+/** [level][x][y] tile colour grid over the scene's full heightmap, like buildGroundMaterialGrid. */
+function buildGroundColorGrid(scene: Scene): Uint32Array[][] {
+    const grid: Uint32Array[][] = new Array(Scene.MAX_LEVELS);
+    for (let level = 0; level < Scene.MAX_LEVELS; level++) {
+        const columns: Uint32Array[] = new Array(scene.sizeX);
+        for (let x = 0; x < scene.sizeX; x++) {
+            const column = new Uint32Array(scene.sizeY);
+            for (let y = 0; y < scene.sizeY; y++) column[y] = tileGroundColor(scene.tiles[level]?.[x]?.[y]);
+            columns[x] = column;
+        }
+        grid[level] = columns;
+    }
+    return grid;
 }
 
 export type ModelFace = {

@@ -19,6 +19,7 @@ import {
 import {
     checkMobile,
     isIos,
+    isLowEndDevice,
     isStandaloneDisplayMode,
     isTouchDevice,
 } from "../common/utils/DeviceUtil";
@@ -189,6 +190,8 @@ function OsrsClientApp() {
     const workerPoolNonce = readWorkerPoolNonce();
     const workerCount = useMemo(() => {
         const cores = navigator.hardwareConcurrency || 2;
+        // Each worker builds scenes in its own memory: a low-end device (phone, tablet) gets one.
+        if (isLowEndDevice) return 1;
         return checkMobile() || isIos ? 2 : Math.max(2, Math.min(4, cores - 1));
     }, []);
 

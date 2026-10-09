@@ -275,6 +275,11 @@ export class ClientConnection {
         }
       }
       switch (packet.type) {
+        case "movement_input":
+          if (this.player && this.player.getStatus() !== PlayerStatus.TRADING) {
+            PluginManager.emitCustomEvent("player:movement-input", { player: this.player, packet });
+          }
+          continue;
         case "move":
           this.walk(packet.worldX, packet.worldY, packet.modifierFlags, packet.run === true);
           continue;
@@ -759,6 +764,8 @@ export class ClientConnection {
           continue;
         case "interaction_stop":
           if (this.player) {
+            this.player.getMovementQueue().reset();
+            this.player.getMovementQueue().walkToReset();
             this.player.getCombat().reset();
             this.player.setFollowing(null);
             this.player.setMobileInteraction(null);

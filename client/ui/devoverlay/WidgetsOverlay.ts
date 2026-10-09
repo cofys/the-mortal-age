@@ -4,7 +4,7 @@ import { CacheIndex } from "../../rs/cache/CacheIndex";
 import { CacheSystem } from "../../rs/cache/CacheSystem";
 import { BitmapFont } from "../../rs/font/BitmapFont";
 import { ClientState } from "../../game/ClientState";
-import { isTouchDevice } from "../../common/utils/DeviceUtil";
+import { isLowEndDevice, isTouchDevice } from "../../common/utils/DeviceUtil";
 import { getUiScale } from "../UiScale";
 import { FONT_BOLD_12, FONT_VERDANA_13 } from "../fonts";
 import { getChooseOptionMenuRect } from "../../widgets/gl/choose-option";
@@ -19,6 +19,7 @@ import {
 } from "../../widgets/gl/widgets-gl";
 import { drawTextGL } from "../../widgets/components/TextRenderer";
 import type { WidgetManager } from "../../widgets/WidgetManager";
+import type { WidgetNode } from "../../widgets/WidgetNode";
 import type { GameFrameDrawContext, WidgetOverlay } from "../../game/plugins/ClientPluginManager";
 import { Overlay, OverlayInitArgs, OverlayUpdateArgs, RenderPhase } from "./Overlay";
 import { CLIENT_TYPE_ENHANCED, reportedClientType } from "../../rs/cs2/ClientType";
@@ -75,6 +76,14 @@ type MouseOverTextVisualState = {
 };
 
 export class WidgetsOverlay implements Overlay {
+    getWidgetInputPoint(widget: WidgetNode): { x: number; y: number } | undefined {
+        if (widget._absX === undefined || widget._absY === undefined) return undefined;
+        return {
+            x: (widget._absX + (widget._absWidth ?? widget.width) / 2) / this.overlayScaleX,
+            y: (widget._absY + (widget._absHeight ?? widget.height) / 2) / this.overlayScaleY,
+        };
+    }
+
     private app!: PicoApp;
     private glRenderer?: GLRenderer;
     private overlayCanvas?: HTMLCanvasElement;
@@ -454,7 +463,26 @@ export class WidgetsOverlay implements Overlay {
         parent.appendChild(overlayCanvas);
     }
 
+    private sizeCache: { w: number; h: number; at: number; size: { width: number; height: number } } | null =
+        null;
+    private lastDrawAt = 0;
+    private lastDrawMouse = -1;
+
     private getOverlayRenderSize(): { width: number; height: number } {
+        // Low-end: clientWidth/getBoundingClientRect force layout every frame; the host
+        // size only changes on resize, so re-read at most twice a second.
+        if (isLowEndDevice) {
+            const now = performance.now();
+            const c = this.sizeCache;
+            if (c && c.w === this.app.width && c.h === this.app.height && now - c.at < 500) return c.size;
+            const size = this.computeOverlayRenderSize();
+            this.sizeCache = { w: this.app.width, h: this.app.height, at: now, size };
+            return size;
+        }
+        return this.computeOverlayRenderSize();
+    }
+
+    private computeOverlayRenderSize(): { width: number; height: number } {
         const hostCanvas = this.app?.gl?.canvas as HTMLCanvasElement | undefined;
         const cssWidth =
             hostCanvas?.clientWidth ||
@@ -693,6 +721,19 @@ export class WidgetsOverlay implements Overlay {
 
         if (!this.glRenderer || !this.overlayCanvas) {
             return;
+        }
+
+        // Low-end: cap the HUD at ~25 redraws/s. Dirty state stays queued in the widget
+        // manager, so skipping loses nothing; an open menu or a moved mouse (hover,
+        // mouse-over text, clicks) redraws immediately.
+        if (isLowEndDevice) {
+            const now = performance.now();
+            const im: any = this.ctx.getGameContext?.()?.osrsClient?.inputManager;
+            const mouse = im ? ((im.mouseX | 0) << 16) | (im.mouseY | 0) : 0;
+            const urgent = (this.app.gl.canvas as any)?.__ui?.menu?.open || mouse !== this.lastDrawMouse;
+            if (!urgent && this.hasPresentedFrame && now - this.lastDrawAt < 40) return;
+            this.lastDrawAt = now;
+            this.lastDrawMouse = mouse;
         }
 
         // A plugin may supply an alternate gameframe (e.g. the classic 317 frame).

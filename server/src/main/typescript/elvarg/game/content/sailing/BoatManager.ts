@@ -33,6 +33,8 @@ interface ActiveBoat {
  */
 export class BoatManager {
     private static readonly boats = new Map<number, ActiveBoat>();
+    /** The index handed out last; the next boat takes the next free one after it. */
+    private static lastEntityIndex = LAST_ENTITY_INDEX;
     private static readonly headingListeners: HeadingListener[] = [];
     private static readonly afterTickListeners: Array<() => void> = [];
 
@@ -82,6 +84,20 @@ export class BoatManager {
         active.spec = { ...active.spec, locs: [...active.spec.locs.filter((other) => !replaced(other)), loc] };
         active.deck.setLoc(loc);
         active.locChanges.push(loc);
+    }
+
+    /**
+     * Swaps a deck loc as setDeckLoc does, but without queueing it for WorldEntitySync: for a
+     * caller that has already sent it, so that it reaches viewers before that tick's loc
+     * animations (a loc sent after them would start over without its animation).
+     */
+    public static updateDeckLoc(boat: Boat, loc: BoatDeckLoc): void {
+        const active = BoatManager.boats.get(boat.entityIndex);
+        if (!active || active.boat !== boat) return;
+        const replaced = (other: BoatDeckLoc) =>
+            other.x === loc.x && other.y === loc.y && other.level === loc.level && other.shape === loc.shape;
+        active.spec = { ...active.spec, locs: [...active.spec.locs.filter((other) => !replaced(other)), loc] };
+        active.deck.setLoc(loc);
     }
 
     /** How many deck loc changes a boat has had, and those from `since` on. */
@@ -196,9 +212,18 @@ export class BoatManager {
         for (const listener of BoatManager.headingListeners) listener(player, boat);
     }
 
+    /**
+     * The next free index after the last one handed out, wrapping round: a boat replaced by a new
+     * one (a part swapped) gets a new index, as live does, so viewers despawn the old and spawn the
+     * new in the same update rather than a tick apart (an index can't be both in one update).
+     */
     private static allocateEntityIndex(): number | undefined {
-        for (let index = FIRST_ENTITY_INDEX; index <= LAST_ENTITY_INDEX; index++) {
-            if (!BoatManager.boats.has(index)) return index;
+        const count = LAST_ENTITY_INDEX - FIRST_ENTITY_INDEX + 1;
+        for (let step = 1; step <= count; step++) {
+            const index = FIRST_ENTITY_INDEX + ((BoatManager.lastEntityIndex - FIRST_ENTITY_INDEX + step) % count);
+            if (BoatManager.boats.has(index)) continue;
+            BoatManager.lastEntityIndex = index;
+            return index;
         }
         return undefined;
     }

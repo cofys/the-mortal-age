@@ -175,11 +175,56 @@ function createWaterMaskTexture(
     return texture;
 }
 
+function createGroundMaterialTexture(
+    device: GPUDevice,
+    data: Uint8Array[][] | undefined,
+    size: number,
+): GPUTexture {
+    const expected = size * size * Scene.MAX_LEVELS;
+    const usable = !!data && data.length > 0 && size > 0;
+    const texture = device.createTexture({
+        size: usable ? [size, size, Scene.MAX_LEVELS] : [1, 1, 1],
+        format: "r8uint",
+        usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING | GPU_TEXTURE_USAGE.COPY_DST,
+    });
+    if (usable) {
+        // Grid is [level][x][y]; the GPU texture is layer-major rows of y then x, matching
+        // the height map upload so texel (x, y) is tile (x, y).
+        const flat = new Uint8Array(expected);
+        for (let level = 0; level < Math.min(Scene.MAX_LEVELS, data.length); level++) {
+            const columns = data[level];
+            if (!columns) continue;
+            const layerBase = level * size * size;
+            for (let x = 0; x < Math.min(size, columns.length); x++) {
+                const column = columns[x];
+                if (!column) continue;
+                const count = Math.min(size, column.length);
+                for (let y = 0; y < count; y++) flat[layerBase + y * size + x] = column[y];
+            }
+        }
+        device.queue.writeTexture(
+            { texture },
+            flat,
+            { bytesPerRow: size, rowsPerImage: size },
+            { width: size, height: size, depthOrArrayLayers: Scene.MAX_LEVELS },
+        );
+    } else {
+        device.queue.writeTexture(
+            { texture },
+            new Uint8Array(1),
+            { bytesPerRow: 1 },
+            { width: 1, height: 1, depthOrArrayLayers: 1 },
+        );
+    }
+    return texture;
+}
+
 function createPendingGeometry(
     device: GPUDevice,
     resources: WorldResources,
     heightMapTexture: GPUTexture,
     waterMaskTexture: GPUTexture,
+    groundMaterialTexture: GPUTexture,
     input: GeometryInput,
 ): PendingGeometry | undefined {
     if (input.opaqueRanges.length === 0 && input.alphaRanges.length === 0) return undefined;
@@ -210,6 +255,10 @@ function createPendingGeometry(
                 {
                     binding: MAP_TEXTURE_BINDINGS.waterMask,
                     resource: waterMaskTexture.createView({ dimension: "2d-array" }),
+                },
+                {
+                    binding: MAP_TEXTURE_BINDINGS.groundMaterial,
+                    resource: groundMaterialTexture.createView({ dimension: "2d-array" }),
                 },
             ],
         });
@@ -267,6 +316,9 @@ export class WebGPUMapSquare implements MapSquare {
 
     /** CPU-side height/flag data other systems sample (bridge camera, route finding). */
     tileRenderFlags!: Uint8Array[][];
+    /** HD ground recipe grid copied from SdMapData, [level][x][y], full heightmap grid incl. border. */
+    tileGroundMaterials?: Uint8Array[][];
+    tileGroundColors?: Uint32Array[][];
     bridgeSurfaceFlags?: Uint8Array[][];
     heightMapData!: Int16Array;
 
@@ -296,6 +348,7 @@ export class WebGPUMapSquare implements MapSquare {
     readonly heightMapSize: number;
     private readonly heightMapTexture: GPUTexture;
     private readonly waterMaskTexture: GPUTexture;
+    private readonly groundMaterialTexture: GPUTexture;
     private readonly opaqueBatches: MapDrawBatch[] = [];
     private readonly alphaBatches: MapDrawBatch[] = [];
     private readonly groups = new Map<GeometryGroupKind, GeometryGroup>();
@@ -313,6 +366,7 @@ export class WebGPUMapSquare implements MapSquare {
         frameLoaded: number,
         heightMapTexture: GPUTexture,
         waterMaskTexture: GPUTexture,
+        groundMaterialTexture: GPUTexture,
     ) {
         this.device = device;
         this.resources = resources;
@@ -327,6 +381,7 @@ export class WebGPUMapSquare implements MapSquare {
         this.frameLoaded = frameLoaded;
         this.heightMapTexture = heightMapTexture;
         this.waterMaskTexture = waterMaskTexture;
+        this.groundMaterialTexture = groundMaterialTexture;
     }
 
     static load(
@@ -351,6 +406,11 @@ export class WebGPUMapSquare implements MapSquare {
             mapData.waterMaskTextureData ?? new Uint8Array(0),
             heightMapSize,
         );
+        const groundMaterialTexture = createGroundMaterialTexture(
+            device,
+            mapData.groundMaterials,
+            heightMapSize,
+        );
 
         const square = new WebGPUMapSquare(
             device,
@@ -365,9 +425,12 @@ export class WebGPUMapSquare implements MapSquare {
             frame,
             heightMapTexture,
             waterMaskTexture,
+            groundMaterialTexture,
         );
         for (const kind of GROUP_ORDER) square.setGroup(kind, mapData);
         square.tileRenderFlags = mapData.tileRenderFlags;
+        square.tileGroundMaterials = mapData.groundMaterials;
+        square.tileGroundColors = mapData.groundColors;
         square.bridgeSurfaceFlags = mapData.bridgeSurfaceFlags;
         square.heightMapData = mapData.heightMapTextureData;
         square.tileLocOffsetsByLevel = mapData.tileLocOffsetsByLevel;
@@ -425,7 +488,14 @@ export class WebGPUMapSquare implements MapSquare {
         if (kind === "loc") this.locRanges = undefined;
         const input = WebGPUMapSquare.groupInput(kind, mapData);
         const geometry = input
-            ? createPendingGeometry(this.device, this.resources, this.heightMapTexture, this.waterMaskTexture, input)
+            ? createPendingGeometry(
+                  this.device,
+                  this.resources,
+                  this.heightMapTexture,
+                  this.waterMaskTexture,
+                  this.groundMaterialTexture,
+                  input,
+              )
             : undefined;
         if (geometry) {
             const entries = geometry.opaqueRanges.length + geometry.alphaRanges.length;
@@ -573,6 +643,18 @@ export class WebGPUMapSquare implements MapSquare {
     getTileRenderFlag(level: number, tileX: number, tileY: number): number {
         const row = this.tileRenderFlags[level]?.[tileX + this.borderSize];
         return row ? row[tileY + this.borderSize] | 0 : 0;
+    }
+
+    /** Ground recipe at local tile coords (border applied internally); 0 = none. */
+    getGroundMaterial(level: number, tileX: number, tileY: number): number {
+        const row = this.tileGroundMaterials?.[level]?.[tileX + this.borderSize];
+        return row ? row[tileY + this.borderSize] | 0 : 0;
+    }
+
+    /** Tile colour (0xRRGGBB) at local tile coords (border applied internally); 0 = none. */
+    getGroundColor(level: number, tileX: number, tileY: number): number {
+        const row = this.tileGroundColors?.[level]?.[tileX + this.borderSize];
+        return row ? row[tileY + this.borderSize] >>> 0 : 0;
     }
 
     isBridgeSurface(level: number, tileX: number, tileY: number): boolean {
@@ -725,6 +807,7 @@ export class WebGPUMapSquare implements MapSquare {
         for (const kind of GROUP_ORDER) this.destroyGroup(kind);
         this.heightMapTexture.destroy();
         this.waterMaskTexture.destroy();
+        this.groundMaterialTexture.destroy();
         this.opaqueBatches.length = 0;
         this.alphaBatches.length = 0;
     }

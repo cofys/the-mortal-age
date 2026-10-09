@@ -20,11 +20,15 @@ If the map has nothing at the other end, the click does nothing.
 
 These come from a survey of every placed object in the cache with a climb option.
 
+## Captured destinations first
+
+Where the [rsprox capture database](https://rsprox.net/database) shows where a ladder or staircase goes, that wins: the LocTeleports plugin answers `ladders:climb` for it, with the captured destination, animation and timing. This fixes ladders the map gets wrong (a cellar ladder that went up a floor underground instead of to the surface) or can't pair, and a "Climb" that goes one way in the game where Ladders would ask. The same data covers caves, holes and tunnels. See [loc-teleports.md](loc-teleports.md).
+
 ## Not covered
 
-These lead somewhere content decides, so they belong in area, minigame and quest plugins (issue #119):
+These lead somewhere content decides, so they belong in area, minigame and quest plugins (issue #119), unless the captures cover them ([loc-teleports.md](loc-teleports.md)):
 - "Enter", "Exit", "Leave-area", "Pass", "Jump" and "Squeeze-through" (cave entrances, portals, agility obstacles, minigame objects);
-- trapdoors' and manholes' "Open", which swaps in an open object the cache doesn't link to.
+- trapdoors' and manholes' "Open", which swaps in an open object the cache doesn't link to. The captured trapdoors open as in the game ([loc-teleports.md](loc-teleports.md#trapdoors)), and Varrock's manholes in Misthalin.
 
 ## When content knows better
 

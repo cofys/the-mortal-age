@@ -96,6 +96,7 @@ import {
     getCanvasCssSize,
     isIos,
     isMobileMode,
+    isLowEndDevice,
     isWebGL2Supported,
 } from "../../common/utils/DeviceUtil";
 import { clamp } from "../../common/utils/MathUtil";
@@ -188,6 +189,8 @@ import {
 import { KNOWN_WATER_TEXTURE_IDS } from "../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "./hostInterface";
 import { RENDER_CONSTANTS, BrowserQualityProfile, DESKTOP_QUALITY_PROFILE, IOS_SAFARI_QUALITY_PROFILE, MOBILE_TOUCH_QUALITY_PROFILE } from "./constants";
+
+const LOW_END_SCENE_SCALE = 0.6;
 
 /** OSRS fixed-mode toplevel; its gameframe renders at a fixed 765x503. */
 const FIXED_GAMEFRAME_ROOT = 548;
@@ -377,8 +380,9 @@ export function getCanvasResolutionScale(host: WebGLOsrsRendererHost, cssWidth: 
 export function resolveBrowserQualityProfile(host: WebGLOsrsRendererHost, ): BrowserQualityProfile {
 
         // The platform, not touch hardware: a touchscreen laptop on the desktop layout is a
-        // desktop (#358), and must not get the handheld profile's half-resolution scene.
-        if (!isMobileMode) {
+        // desktop (#358), and must not get the handheld profile's half-resolution scene. A low-end
+        // device (a tablet on "desktop site") gets the handheld's view distance.
+        if (!isMobileMode && !isLowEndDevice) {
             return DESKTOP_QUALITY_PROFILE;
         }
         if (isIos) {
@@ -415,6 +419,13 @@ export function getActiveQualityProfileLabel(host: WebGLOsrsRendererHost, ): str
 
 export function getSceneResolutionScale(host: WebGLOsrsRendererHost, ): number {
 
+        // A low-end device draws the 3D view at reduced resolution (an iPhone's profile at half):
+        // the GPU budget goes further and the UI stays sharp.
+        if (isLowEndDevice && !host.osrsClient.isOnLoginScreen()) {
+            const scale = Math.min(LOW_END_SCENE_SCALE, host.syncBrowserQualityProfile().defaultSceneScale || 1);
+            host.osrsClient.mobileEffectiveResolutionScale = scale;
+            return scale;
+        }
         if (!isMobileMode || host.osrsClient.isOnLoginScreen()) {
             host.osrsClient.mobileEffectiveResolutionScale = 1;
             if (host.osrsClient.isOnLoginScreen()) return 1;

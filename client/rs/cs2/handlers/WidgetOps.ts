@@ -6,7 +6,7 @@ import {
     markWidgetsLoaded,
 } from "../../../game/TransmitCycles";
 import { markWidgetInteractionDirty } from "../../../widgets/WidgetInteraction";
-import type { WidgetNode } from "../../../widgets/WidgetManager";
+import { SCRIPT_LAYOUT, type WidgetNode } from "../../../widgets/WidgetManager";
 import { getViewportSize } from "../../../common/utils/DeviceUtil";
 import { Cs2ArrayObject } from "../Cs2ArrayObject";
 import { applyNpcRowIcon } from "../spawnSearch";
@@ -460,7 +460,7 @@ function cloneWidgetForCopy(src: any): any {
  * The actual layout will happen lazily when a getter reads computed values.
  */
 function invalidateWidgetLayout(ctx: HandlerContext, w: WidgetNode): void {
-    ctx.widgetManager.invalidateWidget(w);
+    ctx.widgetManager.invalidateWidget(w, SCRIPT_LAYOUT);
 }
 
 /**
@@ -1273,6 +1273,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
                 w.xPositionMode !== xMode ||
                 w.yPositionMode !== yMode)
         ) {
+            ctx.widgetManager.beforeScriptLayoutChange(w);
             w.rawX = correctedX;
             w.rawY = y;
             w.xPositionMode = xMode;
@@ -1301,6 +1302,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
             w &&
             (w.rawX !== x || w.rawY !== y || w.xPositionMode !== xMode || w.yPositionMode !== yMode)
         ) {
+            ctx.widgetManager.beforeScriptLayoutChange(w);
             w.rawX = x;
             w.rawY = y;
             w.xPositionMode = xMode;
@@ -1331,6 +1333,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
                 w.widthMode !== wMode ||
                 w.heightMode !== hMode)
         ) {
+            ctx.widgetManager.beforeScriptLayoutChange(w);
             w.rawWidth = width;
             w.rawHeight = h;
             w.widthMode = wMode;
@@ -1359,6 +1362,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
                 w.widthMode !== wMode ||
                 w.heightMode !== hMode)
         ) {
+            ctx.widgetManager.beforeScriptLayoutChange(w);
             w.rawWidth = width;
             w.rawHeight = h;
             w.widthMode = wMode;

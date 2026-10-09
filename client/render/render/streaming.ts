@@ -188,6 +188,7 @@ import {
 import { KNOWN_WATER_TEXTURE_IDS } from "../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "./hostInterface";
 import { RENDER_CONSTANTS, StreamMapBatch } from "./constants";
+import { isLowEndDevice } from "../../common/utils/DeviceUtil";
 import { logMapApplied } from "./mapLoadProfile";
 
 export function getPendingStreamMapCount(host: WebGLOsrsRendererHost, ): number {
@@ -340,6 +341,12 @@ export function applyReadyStreamGenerationBatch(host: WebGLOsrsRendererHost, tim
                 continue;
             }
             if (!host.isValidMapData(mapData)) continue;
+            // Low-end: one square per frame (nearest first, player's chunk first) so
+            // GPU uploads don't stall a frame; the rest stay queued for later frames.
+            if (isLowEndDevice && applied > 0) {
+                allReady = false;
+                break;
+            }
             pending.delete(mapId);
             applied++;
             const applyStartedAt = performance.now();

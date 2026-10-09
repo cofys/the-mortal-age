@@ -1,3 +1,4 @@
+import type { SparseDat2 } from "./store/SparseDat2";
 import { StringUtil } from "../util/StringUtil";
 import { ApiType } from "./ApiType";
 import { Archive } from "./Archive";
@@ -103,8 +104,9 @@ export class CacheSystem<A extends ApiType = ApiType.SYNC> {
         cacheInfo: CacheInfo,
         cacheFiles: CacheFiles,
         indicesToLoad: number[] = [],
-        /** When set, builds a SparseMemoryStore over a partially-downloaded dat2. */
+        /** When set (with `dat2`), builds a SparseMemoryStore over a partially-downloaded dat2. */
         presence?: PresenceBitset,
+        dat2?: SparseDat2,
     ): CacheSystem {
         const cacheType = detectCacheType(cacheInfo);
         switch (cacheType) {
@@ -113,8 +115,8 @@ export class CacheSystem<A extends ApiType = ApiType.SYNC> {
             case "dat":
             case "dat2":
                 const store =
-                    presence && cacheType === "dat2"
-                        ? SparseMemoryStore.fromSparseFiles(cacheFiles, presence, indicesToLoad)
+                    presence && dat2 && cacheType === "dat2"
+                        ? SparseMemoryStore.fromSparseFiles(cacheFiles, presence, dat2, indicesToLoad)
                         : MemoryStore.fromFiles(cacheFiles, indicesToLoad);
                 const indices = CacheSystem.loadIndicesFromStore(cacheType, store);
                 return new CacheSystem(indices, store, cacheType, cacheInfo);

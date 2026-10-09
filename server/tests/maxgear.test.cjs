@@ -98,8 +98,8 @@ test("mage gets a fully charged Tumeken's shadow", () => {
   commands.get('maxgear').handler({ player, parts: ['maxgear', 'magic'] });
   const staff = player.worn[Equipment.WEAPON_SLOT];
   assert.equal(staff.getId(), I.TUMEKENS_SHADOW);
-  const { SHADOW_CHARGES_KEY } = require('../plugins/minigames/toa/Items.TombsOfAmascut');
-  assert.equal(staff.getMetaValue(SHADOW_CHARGES_KEY), 20000);
+  const { CHARGES_KEY } = require('../plugins/items/TumekensShadow.plugin');
+  assert.equal(staff.getMetaValue(CHARGES_KEY), 20000);
 });
 
 test('a wrong style or flag only explains the usage', () => {

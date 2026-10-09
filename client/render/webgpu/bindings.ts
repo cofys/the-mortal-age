@@ -7,7 +7,8 @@
  *                                       u_heightMap, u_waterMask, filtering sampler; a scene
  *                                       extension's pipelines also get its bindings from 6
  * group(2) MapUniforms dynamic uniform  per draw range, MAP_UNIFORM_STRIDE-byte stride
- * group(3) map textures                 u_modelInfoTexture, u_heightMap, u_waterMask
+ * group(3) map textures                 u_modelInfoTexture, u_heightMap, u_waterMask,
+ *                                       u_mapGroundMaterial
  *
  * Chrome's adapter caps maxBindGroups at 4, so a scene extension's resources (sceneExtension.ts)
  * extend group(1) instead of taking a fifth group; only its pipelines use the extended layout.
@@ -19,6 +20,13 @@ export const MAP_TEXTURES_GROUP = 3;
 
 /** SceneUniforms: 3 mat4 + 2 vec4 + 2 vec2 + 6 floats = 66 floats = 264 bytes. */
 export const SCENE_UNIFORM_FLOATS = 66;
+
+/**
+ * Depth attachment of the world pass. depth32float (not depth24plus) so scene extensions can
+ * bind it as a sampleable depth texture (SSAO); all world/actor/overlay pipelines that use the
+ * scene depth must compile against it.
+ */
+export const SCENE_DEPTH_FORMAT: GPUTextureFormat = "depth32float";
 
 /** MapUniforms: mat4 + vec2 + 2 f32/i32 + 4 f32/u32 = 96 bytes, padded to one alignment. */
 export const MAP_UNIFORM_STRIDE = 256;
@@ -37,6 +45,7 @@ export const MAP_TEXTURE_BINDINGS = {
     modelInfo: 0,
     heightMap: 1,
     waterMask: 2,
+    groundMaterial: 3,
 } as const;
 
 /**

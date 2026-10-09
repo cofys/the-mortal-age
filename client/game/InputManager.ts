@@ -146,7 +146,7 @@ export class InputManager {
     enablePointerLock: boolean = false;
     private readonly keyHandlers = new Set<InputKeyHandler>();
     private readonly mouseHandlers = new Set<InputMouseHandler>();
-    private interactionPointerOverride?: { x: number; y: number };
+    private interactionPointerOverride?: { x: number; y: number; widgets: boolean };
     private contextMenuAnchorOverride?: { x: number; y: number };
 
     // === OSRS Mouse State ===
@@ -490,8 +490,8 @@ export class InputManager {
         return () => this.mouseHandlers.delete(handler);
     }
 
-    setInteractionPointerOverride(x: number, y: number): void {
-        this.interactionPointerOverride = { x, y };
+    setInteractionPointerOverride(x: number, y: number, widgets = false): void {
+        this.interactionPointerOverride = { x, y, widgets };
     }
 
     clearInteractionPointerOverride(): void {
@@ -500,6 +500,10 @@ export class InputManager {
 
     hasInteractionPointerOverride(): boolean {
         return this.interactionPointerOverride !== undefined;
+    }
+
+    isWidgetInteractionPointer(): boolean {
+        return this.interactionPointerOverride?.widgets === true;
     }
 
     setContextMenuAnchorOverride(x: number, y: number): void {
@@ -768,8 +772,12 @@ export class InputManager {
         this.shiftDown = event.shiftKey === true;
         this.idleTime = 0;
         this.lastInputTimeMs = this.nowMs();
-        this.mouseX = x;
-        this.mouseY = y;
+        // A locked pointer reports the spot it was locked at. While a plugin aims with its own
+        // pointer (the backquote crosshair), keep the mouse there, so scripts that read the mouse
+        // (the game's mouseover tooltip) and widget hover follow the crosshair between frames.
+        const aim = this.isPointerLock() ? this.interactionPointerOverride : undefined;
+        this.mouseX = aim?.x ?? x;
+        this.mouseY = aim?.y ?? y;
 
         if (this.isPointerLock()) {
             this.deltaMouseX -= event.movementX;

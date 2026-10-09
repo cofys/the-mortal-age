@@ -485,7 +485,12 @@ export function addProjectileRenderData(host: WebGLOsrsRendererHost, map: WebGLM
 export function addWorldGfxRenderData(host: WebGLOsrsRendererHost, map: WebGLMapSquare): void {
 
         if (!host.gfxManager) return;
-        const instances = host.gfxManager.listWorldInstancesForMap(map.mapX, map.mapY);
+        // A world entity's overlay map (a boat deck) draws the graphics on its own tiles, placed
+        // from where it's drawn, as its NPCs are.
+        const overlayView = host.osrsClient.worldViewManager.getWorldViewByOverlayMapId(map.id);
+        const instances = overlayView
+            ? host.gfxManager.listWorldInstancesInView(overlayView)
+            : host.gfxManager.listWorldInstancesForMap(map.mapX, map.mapY);
         // Always use slot 0 for double-buffered actor data
         const sampleIdx = 0;
         if (instances.length === 0) {
@@ -500,8 +505,9 @@ export function addWorldGfxRenderData(host: WebGLOsrsRendererHost, map: WebGLMap
             host.actorRenderData = newData;
         }
         map.worldGfxDataTextureOffsets[sampleIdx] = baseOffset;
-        const mapBaseX = map.mapX * 64;
-        const mapBaseY = map.mapY * 64;
+        const mapBaseX = overlayView ? map.getRenderBaseTileX() : map.mapX * 64;
+        const mapBaseY = overlayView ? map.getRenderBaseTileY() : map.mapY * 64;
+        const maxLocal = overlayView ? Math.max(0, map.getLocalTileSpan() - 1) : 63;
         for (let i = 0; i < instances.length; i++) {
             const inst = instances[i];
             const world = inst.world;
@@ -510,8 +516,8 @@ export function addWorldGfxRenderData(host: WebGLOsrsRendererHost, map: WebGLMap
             const worldY = (world.tileY | 0) * 128 + 64;
             const localX = worldX - mapBaseX * 128;
             const localY = worldY - mapBaseY * 128;
-            const localTileX = clamp((world.tileX | 0) - mapBaseX, 0, 63);
-            const localTileY = clamp((world.tileY | 0) - mapBaseY, 0, 63);
+            const localTileX = clamp((world.tileX | 0) - mapBaseX, 0, maxLocal);
+            const localTileY = clamp((world.tileY | 0) - mapBaseY, 0, maxLocal);
             const renderPlane = resolveHeightSamplePlaneForLocal(
                 map,
                 world.level | 0,

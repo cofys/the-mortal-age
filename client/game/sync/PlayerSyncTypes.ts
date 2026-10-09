@@ -171,6 +171,7 @@ export interface PlayerSyncFrame {
     removals: PlayerRemovalEvent[];
     updateBlocks: Map<number, PlayerUpdateBlock>;
     sourcePacketSize?: number;
+    finePositions?: import("../../common/movement/ContinuousMovementTypes").ContinuousMovementPosition[];
 }
 
 export interface PlayerSpotAnimationEvent {

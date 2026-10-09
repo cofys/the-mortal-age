@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { SparseDat2 } from "../rs/cache/store/SparseDat2";
 import { prefetchIndexRegions, startSparsePrefetch } from "../game/Caches";
 import { PresenceBitset } from "../rs/cache/js5/PresenceBitset";
 import { Sector } from "../rs/cache/store/Sector";
@@ -52,7 +53,7 @@ async function prefetchChunksAndMarksPresence(): Promise<void> {
     const regionSectors = Math.ceil((10 * 1024 * 1024) / Sector.SIZE);
     const totalSize = (startSector + regionSectors + 50) * Sector.SIZE;
 
-    const buffer = new ArrayBuffer(totalSize);
+    const buffer = new SparseDat2(totalSize, false);
     const presence = PresenceBitset.forSectorCount(Math.ceil(totalSize / Sector.SIZE), false);
     const queued: Range[] = [];
     const served = stubFetch(totalSize, 0xab);
@@ -82,7 +83,7 @@ async function prefetchChunksAndMarksPresence(): Promise<void> {
     assert.equal(served[served.length - 1].end, (startSector + regionSectors) * Sector.SIZE);
 
     // Bytes landed in the buffer, presence marked, persistence queued.
-    assert.equal(new Uint8Array(buffer)[startSector * Sector.SIZE], 0xab);
+    assert.equal(buffer.read(startSector * Sector.SIZE, 1)[0], 0xab);
     assert.ok(presence.hasSectors(startSector, regionSectors), "region marked present");
     assert.ok(!presence.hasSectors(startSector - 1, 1), "must not mark outside the region");
     assert.equal(queued.length, served.length, "every chunk queued for persistence");
@@ -94,7 +95,7 @@ async function skipsChunksAlreadyPresent(): Promise<void> {
     const regionSectors = CHUNK_SECTORS * 3;
     const totalSize = (startSector + regionSectors + 10) * Sector.SIZE;
 
-    const buffer = new ArrayBuffer(totalSize);
+    const buffer = new SparseDat2(totalSize, false);
     const presence = PresenceBitset.forSectorCount(Math.ceil(totalSize / Sector.SIZE), false);
     // A previous session already stored the middle chunk.
     presence.markSectors(startSector + CHUNK_SECTORS, CHUNK_SECTORS);
@@ -119,7 +120,7 @@ async function abortStopsMidRegion(): Promise<void> {
     const startSector = 8;
     const regionSectors = CHUNK_SECTORS * 3;
     const totalSize = (startSector + regionSectors + 10) * Sector.SIZE;
-    const buffer = new ArrayBuffer(totalSize);
+    const buffer = new SparseDat2(totalSize, false);
     const presence = PresenceBitset.forSectorCount(Math.ceil(totalSize / Sector.SIZE), false);
     const served = stubFetch(totalSize, 0x01);
     const controller = new AbortController();
@@ -146,7 +147,7 @@ async function abortStopsMidRegion(): Promise<void> {
 
 async function ignoresRegionsBeyondTheFile(): Promise<void> {
     const totalSize = 100 * Sector.SIZE;
-    const buffer = new ArrayBuffer(totalSize);
+    const buffer = new SparseDat2(totalSize, false);
     const presence = PresenceBitset.forSectorCount(Math.ceil(totalSize / Sector.SIZE), false);
     const served = stubFetch(totalSize, 0x02);
 

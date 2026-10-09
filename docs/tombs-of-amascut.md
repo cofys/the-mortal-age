@@ -20,8 +20,9 @@ The whole raid, from the Jaltevas pyramid lobby to Osmumten's burial chamber. It
 | `Apmeken.*`, `BaBa.*` | Path of Apmeken: Apmeken's Sight and Ba-Ba. |
 | `Wardens.*`, `ToaWardensData.js` | The Wardens: obelisk and core phases (WARDENS_P1) and the final phase (WARDENS_P3). |
 | `Rewards.*`, `ToaRewards.js` | The burial chamber, loot rolls, the loot interface (771) and the lobby retrieval chest. |
-| `Items.*` | Masori fortifying, Armadyl to Armadylean plates, Elidinis' ward (f), Thread of Elidinis, keris jewels and Tumeken's shadow charges. |
-| `Shadow.*` | Tumeken's shadow in combat: its built-in spell and its passive. |
+| `Items.*` | Masori fortifying, Armadyl to Armadylean plates, Elidinis' ward (f), Thread of Elidinis and keris jewels. |
+
+Tumeken's shadow is a weapon used everywhere, so it lives in `plugins/items/TumekensShadow.plugin.js` ([tumekens-shadow.md](tumekens-shadow.md)). The raid only answers its `toa:in-tombs` question (`Raid.*`), for the passive's ×4.
 
 ## Instancing
 
@@ -58,7 +59,7 @@ The OSRS Wiki and the cache weren't reachable when this was first written, so Ne
 - Wardens phase two: only the Warden's current style (magic or ranged) breaks its shield. Core damage passes through ×5, and the core stays out for 21/29/37/45/53 ticks depending on remaining health.
 - Points multipliers on Warden NPCs: obelisk 1.5, Warden 2, final Warden 2.5.
 - The common loot table's items and divisors, fossilised dung below 1,500 points, and the deathless kits and remnants. (The quantity factor above raid level 300 matches the Wiki.)
-- Tumeken's shadow charge cost (2 soul + 5 chaos per charge, 20,000 maximum), the Masori and Armadyl plate counts and experience, and the ward's 10,000 soul runes.
+- The Masori and Armadyl plate counts and experience, and the ward's 10,000 soul runes.
 - The lobby scoreboard (46071, interface 775), filled as OpenRune does:
   - A tab per mode (`TOA_SCOREBOARD_TAB`) shows your attempts, completions and deaths, and your best overall and challenge times for each team size.
   - These are recorded from now on: an attempt when a raid starts, a death on each death, and times on completion.
@@ -118,7 +119,6 @@ Checked against OpenRune-Server #274, which was built against a live capture, wi
 
 ## Simplifications
 
-- **Tumeken's shadow:** it plays no cast or impact sound (the ids aren't known), and it refuses every player target rather than only those outside minigames. Accurate's invisible +3 Magic isn't applied.
 - **Apmeken:** the corruption special is disabled, as it is in Near-Reality.
 - **Wardens phase three floor:** collapsed rows push players back onto the remaining floor rather than becoming unwalkable.
 - **The pet:** the Wiki gives its formula but not its exact raid level scaling beyond thresholds at 400 and 550; it uses a third of the levels between them.
@@ -163,12 +163,7 @@ The first version was written without access to the Wiki or the cache, so it fol
   - The help invocations cut supplies to 66%, 33% and 10%.
 - **Supplies:** the helpful spirit's chaos pack is rolled (1–8 nectar, 0–6 tears, 0–2 salts, with rare ambrosia and adrenaline), and the power pack has 1 liquid adrenaline. A supply used on the bag goes back in (from OpenRune).
 - **The Wardens' void art:** the map keeps the collapsed floor's "Void" pieces (45726–45738) on plane 2, above the final arena. OSRS builds the room without them. The final room hides them, so they no longer show before the floor starts falling.
-- **Tumeken's shadow (Wiki):**
-  - It casts only its built-in spell: max hit floor(Magic / 3) + 1, every 5 ticks, from 8 tiles (10 on Longrange), one charge a cast, with the usual damage-based Magic experience.
-  - Its definition (`item-gameplay.json`): +35 magic attack, +20 magic defence and +1 prayer, two-handed, 85 Magic to wield. It uses the powered staff's styles (`POWERED_STAFF`, cache weapon category 24: Accurate, Accurate, Longrange). Before, it had no entry, so it fell back to unarmed with no bonuses.
-  - Its passive multiplies the worn gear's magic attack and magic damage bonuses by 3, or by 4 in the tombs. Magic damage is capped at 100%.
-  - It can't be used against players.
-  - The cast is OpenRune's: `TOA_SOT_CAST_B` (9493) with `TUMEKENS_SHADOW_CASTING` / `_TRAVEL` / `_IMPACT` (2125–2127). The hit lands as the projectile arrives.
+- **Tumeken's shadow:** see [tumekens-shadow.md](tumekens-shadow.md).
 - **Ghosts:** a ghost's inventory and worn equipment tabs close until it's revived (from OpenRune).
 - **Raid items:** logging in outside a raid strips raid supplies.
 - **The chest:** the unique chance and weights, the pet, the Thread of Elidinis, the four keris jewels and the elite clue now use the Wiki's rates.

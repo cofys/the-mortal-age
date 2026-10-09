@@ -54,10 +54,20 @@ const REBUILD_SIGNATURE_SKIP = new Set([
     "modelFrameCycle",
 ]);
 
+/** The invalidation source of a script's layout ops (rs/cs2/handlers/WidgetOps.ts). */
+export const SCRIPT_LAYOUT = "script-layout";
+
+/** What a script's position, size and hide ops change on a widget. */
+function layoutInputs(w: WidgetNode): string {
+    return `${w.rawX},${w.rawY},${w.rawWidth},${w.rawHeight},${w.xPositionMode},${w.yPositionMode},${w.widthMode},${w.heightMode},${w.isHidden}`;
+}
+
 export class WidgetManager {
     private loader: WidgetLoader;
     private groups: Map<number, WidgetGroupInstance> = new Map();
     private widgetByUid: Map<number, WidgetNode> = new Map();
+    /** The model (type-6) widgets in widgetByUid; dropped whenever widgetByUid changes. */
+    private modelWidgets?: WidgetNode[];
     private widgetUidsByGroup: Map<number, Set<number>> = new Map();
     /**
      * Dynamic UID allocator per group for CC_CREATE/CC_COPY.
@@ -211,6 +221,17 @@ export class WidgetManager {
     private batchDepth: number = 0;
     /** Widgets that need invalidation when batch ends */
     private pendingInvalidations: Set<WidgetNode> = new Set();
+    /**
+     * Layout inputs of the widgets a script's position/size ops changed in the current batch, from
+     * before the first change. Timer scripts often move a widget away and back in one run (the
+     * wilderness, XP drop and HP overlays do, every few ticks): with nothing changed by the end,
+     * the widget and its children skip layout and redraw.
+     */
+    private readonly batchLayoutBefore = new Map<WidgetNode, string>();
+    /** Widgets invalidated in this batch by anything but those ops. */
+    private readonly batchForced = new Set<WidgetNode>();
+    /** Whether layout was computed mid-batch (from in-between values that a skip would keep). */
+    private batchLayoutRead = false;
 
     // ========== PERF: Frame-local layout validation ==========
     /** Widgets with invalid layout that need validation this frame */
@@ -448,8 +469,12 @@ export class WidgetManager {
         for (const parent of this.interfaceParents.values()) {
             if (parent) openGroups.add(parent.group | 0);
         }
-        for (const w of this.widgetByUid.values()) {
-            if (!w || ((w.type ?? 0) | 0) !== 6) continue;
+        // Thousands of widgets stay loaded and few are models: scanning them all every 20 ms cost
+        // an Xbox ~6% of its main thread. ponytail: a widget turned into a model after it was
+        // registered (spawn search rows) is missed until the next change; none of those animate.
+        this.modelWidgets ??= [...this.widgetByUid.values()].filter((w) => w && ((w.type ?? 0) | 0) === 6);
+        for (const w of this.modelWidgets) {
+            if (((w.type ?? 0) | 0) !== 6) continue;
             const groupId = typeof w.groupId === "number" ? w.groupId | 0 : ((w.uid ?? 0) >>> 16) & 0xffff;
             if (!openGroups.has(groupId)) continue;
             const seqId0 = (w.sequenceId ?? -1) | 0;
@@ -638,10 +663,16 @@ export class WidgetManager {
         // PERF: If batching, defer the cascading invalidation
         if (this.batchDepth > 0) {
             this.pendingInvalidations.add(w);
+            if (source !== SCRIPT_LAYOUT) this.batchForced.add(w);
             return;
         }
 
         this.invalidateWidgetDirect(w, source);
+    }
+
+    /** Called by a script's position/size op just before it changes `w` (see batchLayoutBefore). */
+    beforeScriptLayoutChange(w: WidgetNode): void {
+        if (this.batchDepth > 0 && !this.batchLayoutBefore.has(w)) this.batchLayoutBefore.set(w, layoutInputs(w));
     }
 
     /**
@@ -722,8 +753,15 @@ export class WidgetManager {
             this.pendingInvalidations.clear();
 
             for (const w of pending) {
+                const before = this.batchLayoutBefore.get(w);
+                if (!this.batchLayoutRead && !this.batchForced.has(w) && before === layoutInputs(w)) continue;
                 this.invalidateWidgetDirect(w, "batch");
             }
+        }
+        if (this.batchDepth === 0) {
+            this.batchLayoutBefore.clear();
+            this.batchForced.clear();
+            this.batchLayoutRead = false;
         }
     }
 
@@ -775,6 +813,7 @@ export class WidgetManager {
                 return; // Still valid in this batch
             }
         }
+        if (this.batchDepth > 0) this.batchLayoutRead = true;
 
         // 1. Validate Parent First (Recursive Upward)
         // We cannot calculate our position until our parent's position is known.
@@ -1170,6 +1209,7 @@ export class WidgetManager {
     registerWidget(widget: WidgetNode): void {
         if (widget && typeof widget.uid === "number") {
             this.widgetByUid.set(widget.uid, widget);
+            this.modelWidgets = undefined;
             this.maybeInvalidateDynamicChildrenCache(widget);
         }
     }
@@ -1181,6 +1221,7 @@ export class WidgetManager {
         const widget = this.widgetByUid.get(uid);
         this.maybeInvalidateDynamicChildrenCache(widget);
         this.widgetByUid.delete(uid);
+        this.modelWidgets = undefined;
     }
 
     /**
@@ -1191,6 +1232,7 @@ export class WidgetManager {
         this.maybeInvalidateDynamicChildrenCache(widget);
         if (typeof widget.uid === "number") {
             this.widgetByUid.delete(widget.uid);
+            this.modelWidgets = undefined;
         }
         if (Array.isArray(widget.children)) {
             for (const child of widget.children) {
@@ -1247,6 +1289,7 @@ export class WidgetManager {
         // Clear all widget group data
         this.groups.clear();
         this.widgetByUid.clear();
+        this.modelWidgets = undefined;
         this.widgetUidsByGroup.clear();
         this.staticChildrenByParent.clear();
         this.rootsByGroup.clear();
@@ -1493,6 +1536,7 @@ export class WidgetManager {
             if (typeof uid === "number") {
                 widgetsByUid.set(uid, node);
                 this.widgetByUid.set(uid, node);
+                this.modelWidgets = undefined;
                 uids.add(uid);
             }
             const nodeGroupId = typeof node.groupId === "number" ? node.groupId | 0 : groupId;
@@ -1561,6 +1605,7 @@ export class WidgetManager {
                 this.dynamicChildrenByParent.delete(widget.parentUid);
             }
             this.widgetByUid.delete(uid);
+            this.modelWidgets = undefined;
         }
         this.widgetUidsByGroup.delete(groupId);
         // PERF: Clear roots cache for this group

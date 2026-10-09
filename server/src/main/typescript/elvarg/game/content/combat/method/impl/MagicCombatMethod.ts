@@ -182,7 +182,7 @@ export class MagicCombatMethod extends CombatMethod {
         }
 
         if (spell != null) {
-            const castSound = MagicCombatMethod.resolveCastSound(spell.spellId());
+            const castSound = spell.castSound?.() ?? MagicCombatMethod.resolveCastSound(spell.spellId());
             if (castSound != null) {
                 Sounds.sendSound(character, castSound);
             }

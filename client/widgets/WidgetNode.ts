@@ -108,6 +108,10 @@ export interface WidgetNode {
     text?: string;
     text2?: string; // hover/alternate text (IF1)
     textColor?: number;
+    /** Keyboard selection takes precedence over script hover colours. */
+    keyboardTextColor?: number;
+    /** White focus border for keyboard item and interface navigation. */
+    keyboardOutline?: boolean;
     textShadow?: boolean;
     textShadowed?: boolean; // alias used by cache loader
     fontId?: number;
@@ -309,6 +313,8 @@ export interface WidgetNode {
     // Computed absolute position (set during hit detection)
     _absX?: number;
     _absY?: number;
+    _absWidth?: number;
+    _absHeight?: number;
 
     // PARITY: Layout validity flag for lazy evaluation pattern
     // True if x/y/width/height are current with raw values

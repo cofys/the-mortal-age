@@ -134,4 +134,53 @@ assert.equal(client.deferredWidgetAction, null);
 assert.equal(menuInput.clickMode2, ClickMode.NONE);
 assert.equal(renders, 1);
 
+// Keyboard selection uses the shared menu invocation and click-consumption
+// path, even at a scaled viewport edge and while navigating a scrolling list.
+let keyboardPicked = -1;
+const keyboardEntries = Array.from({ length: 60 }, (_, index) => ({
+    option: `Option ${index}`,
+    menuStateIndex: index,
+}));
+canvas.__uiRenderScale = 2;
+canvas.__uiInputScaleX = 2;
+canvas.__uiInputScaleY = 2;
+const drawKeyboardMenu = () => drawChooseOptionMenu(
+    { canvas, width: 800, height: 600, drawRect() {} } as any,
+    { fontLoader: () => undefined, requestRender: () => renders++ },
+);
+client.menuKeyboardIndex = 0;
+client.menuKeyboardSelect = false;
+menuInput.mouseX = -100;
+menuInput.mouseY = -100;
+menuUi.menu = {
+    open: true, source: "map", follow: false, x: 395, y: 295,
+    entries: keyboardEntries,
+    menuState: { invoke: (index: number) => { keyboardPicked = index; } },
+};
+drawKeyboardMenu();
+assert.equal(menuUi.menu.open, true, "keyboard selection keeps the menu open despite the physical mouse position");
+assert.ok(menuInput.mouseY >= 0 && menuInput.mouseY < 300, "first selection uses scaled, clamped menu coordinates");
+client.menuKeyboardIndex = 59;
+drawKeyboardMenu();
+assert.ok(menuUi.__menuRt.menuScroll > 0, "arrow selection reveals a row below the viewport");
+assert.ok(menuInput.mouseY >= 0 && menuInput.mouseY < 300, "the highlighted scrolling row remains on screen");
+client.menuKeyboardSelect = true;
+drawKeyboardMenu();
+assert.equal(keyboardPicked, 59, "Space invokes exactly the highlighted menu state entry");
+assert.equal(consumedMenuClicks, 2, "keyboard confirmation is consumed like a mouse selection");
+assert.equal(menuUi.menu, undefined, "keyboard confirmation closes the menu");
+assert.equal(client.menuKeyboardSelect, false, "confirmation cannot repeat on another frame");
+
+client.menuKeyboardIndex = 1;
+client.menuKeyboardSelect = true;
+menuUi.menu = {
+    open: true, source: "widgets", follow: false, x: 700, y: 500,
+    entries: keyboardEntries.slice(0, 3),
+    menuState: { invoke: (index: number) => { keyboardPicked = index; } },
+};
+drawKeyboardMenu();
+assert.equal(keyboardPicked, 1, "Space also invokes the selected inventory context menu action");
+assert.equal(menuUi.menu, undefined, "widget menu selection closes the native menu");
+assert.equal(consumedMenuClicks, 3, "an inventory keyboard menu selection cannot click through");
+
 console.log("menu click consumption test passed");

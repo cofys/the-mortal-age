@@ -268,11 +268,11 @@ export const DebugControls = memo(
                         View: {
                             value: osrsClient.renderDistance,
                             min: 25,
-                            max: 90,
+                            max: 160,
                             step: 1,
                             label: "Draw distance",
                             onChange: (v: number) => {
-                                const clampedDistance = Math.max(25, Math.min(90, v | 0));
+                                const clampedDistance = Math.max(25, Math.min(160, v | 0));
                                 osrsClient.renderDistance = clampedDistance;
                                 // Tile-based LOD threshold.
                                 osrsClient.lodDistance = Math.max(0, clampedDistance - 2);
@@ -283,13 +283,13 @@ export const DebugControls = memo(
                                 Render: {
                                     value: osrsClient.renderDistance,
                                     min: 25,
-                                    max: 90,
+                                    max: 160,
                                     step: 1,
                                     label: "Draw distance",
                                     onChange: (v: number) => {
                                         osrsClient.renderDistance = Math.max(
                                             25,
-                                            Math.min(90, v | 0),
+                                            Math.min(160, v | 0),
                                         );
                                     },
                                 },

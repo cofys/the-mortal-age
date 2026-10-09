@@ -559,7 +559,9 @@ ${slots?.palette ?? ""}
 ${slots?.shade ?? ""}
     let finalRgb = mix(surface, fogColor, fog);
 
-    return vec4<f32>(clamp(finalRgb, vec3<f32>(0.0), vec3<f32>(1.0)), alpha);
+    // The extended pipeline feeds the extension's offscreen HDR target and must not clip;
+    // the base pipeline writes the canvas display-referred as before.
+    return vec4<f32>(${ext ? "finalRgb" : "clamp(finalRgb, vec3<f32>(0.0), vec3<f32>(1.0))"}, alpha);
 }
 `;
 }

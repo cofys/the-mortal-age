@@ -59,6 +59,21 @@ export interface WebGPUSceneShaders {
     depth?: (alpha: boolean) => string;
 }
 
+/**
+ * Offscreen targets of an active extension frame. With `sceneColorFormat` set, the world pass
+ * renders into `colorTexture` (e.g. rgba16float HDR, unclamped by the extended shaders) with
+ * `depthTexture` attached; `afterScene` must then composite the frame into `canvasView`.
+ */
+export interface WebGPUSceneFrameTargets {
+    colorTexture: GPUTexture;
+    colorView: GPUTextureView;
+    /** depth32float, sampleable by post passes (SSAO). */
+    depthTexture: GPUTexture;
+    depthView: GPUTextureView;
+    /** The frame's swapchain view; write the composited image here exactly once. */
+    canvasView: GPUTextureView;
+}
+
 export interface WebGPUSceneExtension {
     shaders: WebGPUSceneShaders;
     layoutEntries: GPUBindGroupLayoutEntry[];
@@ -66,10 +81,21 @@ export interface WebGPUSceneExtension {
     /** group(1) entries while drawing depth: a pass cannot sample its own depth attachment. */
     depthBindGroupEntries?: GPUBindGroupEntry[];
     depthFormat?: GPUTextureFormat;
+    /**
+     * When set, the world pass renders into a texture of this format and `afterScene` runs
+     * afterwards to composite it to the canvas (e.g. "rgba16float" + HDR tonemapping). The
+     * extension's extended pipelines are compiled against it.
+     */
+    sceneColorFormat?: GPUTextureFormat;
     /** Checked once per frame; the base pipelines draw while false. */
     isActive(): boolean;
     /** Runs on active, logged-in frames before the scene pass, in the frame's encoder. */
     beforeScene?(renderer: WebGPURenderer, encoder: GPUCommandEncoder): void;
+    /**
+     * Runs on active frames after the world pass ended and before the screen/HUD pass, in the
+     * frame's encoder. With `sceneColorFormat` set, `frame` carries the HDR scene and depth.
+     */
+    afterScene?(renderer: WebGPURenderer, encoder: GPUCommandEncoder, frame: WebGPUSceneFrameTargets): void;
     dispose(): void;
 }
 

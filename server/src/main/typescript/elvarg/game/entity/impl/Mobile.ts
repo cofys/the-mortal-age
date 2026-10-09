@@ -429,7 +429,8 @@ export abstract class Mobile extends Entity {
 
     public abstract getBaseAttackSpeed(): number;
 
-    public abstract getAttackAnim(): number;
+    /** The animation for an attack, on `target` where it matters (players animate some attacks on NPCs differently). */
+    public abstract getAttackAnim(target?: Mobile): number;
 
     public abstract getAttackSound(): Sound;
 

@@ -396,7 +396,7 @@ function objectInteraction(event) {
     else if (action === "cure" || action === "prune") cure(player, patch);
     else if (action === "clear" && state.hesporiLoot) Hespori.harvestHespori(player, patch);
     else if (["clear", "dig-up", "dig", "remove"].includes(action)) dig(player, patch);
-    else if (action === "travel" && state.checked) spiritTravel(player);
+    else if (action === "travel" && state.checked) spiritTravel(player, patch);
     else if (action === "chop-down" && patch.type === "CRYSTAL_TREE") startWork(player, patch, "harvest");
     else if (action === "chop" && patch.type === "CELASTRUS" && state.status === "grown" && !state.lives && requireAxe(player)) {
         state.stump = true; state.nextAt = Number.MAX_SAFE_INTEGER; animate(player, 879);
@@ -484,10 +484,16 @@ function spellOnObject(event) {
     const patch = findPatch(event.object.getId(), event.location);
     if (patch) Spells.farmingSpell(event, patch);
 }
-function spiritTravel(player) {
-    const farm = farmFor(player);
-    choose(player, Data.CACHE.patches.filter(p => p.type === "SPIRIT_TREE" && farm.patches[Data.patchKey(p)]?.checked)
-        .map(p => [`Spirit tree (${p.x}, ${p.y})`, () => player.moveTo(new core.Location(p.x - 1, p.y, p.z))]));
+/** A grown tree's Travel opens the spirit tree network's menu (SpiritTrees). */
+function spiritTravel(player, patch) {
+    core.PluginManager.emitCustomEvent("spirit-trees:open", { player, x: patch.x, y: patch.y, z: patch.z });
+}
+/** SpiritTrees asks which spirit tree patches the player has grown and checked. */
+function grownSpiritTrees(request) {
+    const farm = farmFor(request.player);
+    for (const p of Data.CACHE.patches.filter(p => p.type === "SPIRIT_TREE" && farm.patches[Data.patchKey(p)]?.checked)) {
+        request.patches.push({ x: p.x, y: p.y, z: p.z });
+    }
 }
 function validateTree(event) {
     const pos = event.object.getLocation();
@@ -665,6 +671,7 @@ function attach(api) {
     api.onSpellOnObject(spellOnObject);
     api.onButtonClick(Spells.farmingButton);
     api.onCustomEvent("woodcutting:validate-tree", validateTree);
+    api.onCustomEvent("spirit-trees:grown", grownSpiritTrees);
     api.onCustomEvent("farming:check-health", Guild.completeContract);
     api.onCustomEvent("farming:harvest", Guild.harvestContract);
     api.onCustomEvent("woodcutting:deplete-tree", depleteTree);

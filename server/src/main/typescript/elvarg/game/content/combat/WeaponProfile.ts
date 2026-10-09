@@ -5,6 +5,10 @@ import { FightType } from "./FightType";
 import { WeaponInterfaces } from "./WeaponInterfaces";
 import { BOW_OF_FAERDHINEN_IDS, CRYSTAL_BOW_ALL_WEAPON_IDS } from "./ranged/CrystalBow";
 import { ItemIdentifiers } from "../../../util/ItemIdentifiers";
+import type { AttackTypeName } from "../../definition/ItemDefinition";
+
+/** FightType bonus types (stab 0 ... range 4) by the names item data uses. */
+const ATTACK_TYPE_NAMES: AttackTypeName[] = ["stab", "slash", "crush", "magic", "range"];
 
 export type HitDelayProfile = { base: number; distanceOffset: number; divisor: number };
 export type ProjectileProfile = { delay: number; speed?: number; startHeight: number; endHeight: number; lengthAdjustment?: number; stepMultiplier?: number };
@@ -13,6 +17,8 @@ export interface WeaponCombatProfile {
     itemIds?: number[];
     weapon?: WeaponInterfaces;
     attackAnimation?: number;
+    /** The cache's separate animation against NPCs ("..._pvn"), where it has one. */
+    npcAttackAnimation?: number;
     attackSpeed?: number;
     attackDistance?: number;
     longRangeDistance?: number;
@@ -20,6 +26,8 @@ export interface WeaponCombatProfile {
     hitDelays?: HitDelayProfile[];
     projectiles?: ProjectileProfile[];
     startGraphic?: boolean;
+    /** Fires two arrows: the ammunition's double launch graphic (double_<ammo>_arrow_launch). */
+    doubleStartGraphic?: boolean;
     attackSound?: Sound;
     fireSound?: Sound;
     ammoRequired?: number;
@@ -62,12 +70,38 @@ export class WeaponProfiles {
         return this.get(player) ?? DEFAULT_RANGED;
     }
 
-    public static attackAnimation(player: Player, fallback: number): number {
-        return this.get(player)?.attackAnimation ?? fallback;
+    /**
+     * A profile registered for the item, then the item's own data (`attackAnim` in
+     * item-gameplay.json), then its weapon type's profile, then `fallback` (the style's). A
+     * profile's NPC animation is used for an attack on an NPC.
+     */
+    public static attackAnimation(player: Player, fallback: number, againstNpc = false): number {
+        const weapon = this.equippedWeapon(player);
+        const attackType = ATTACK_TYPE_NAMES[FightType.resolve(player.getFightType())?.getBonusType() ?? -1];
+        const itemAnimation = weapon.getId() > 0 ? weapon.getDefinition().getAttackAnim(attackType) : -1;
+        const fromProfile = (profile: WeaponCombatProfile | undefined) =>
+            (againstNpc ? profile?.npcAttackAnimation : undefined) ?? profile?.attackAnimation;
+        return fromProfile(this.byItem.get(weapon.getId()))
+            ?? (itemAnimation > 0 ? itemAnimation : undefined)
+            ?? fromProfile(this.byWeapon.get(player.getWeapon()))
+            ?? fallback;
     }
 
+    /**
+     * A profile registered for the item, then the cache's attack speed for the item
+     * (ItemDefinition.ATTACK_SPEED_PARAM), then its weapon type's profile, then `fallback`.
+     */
     public static attackSpeed(player: Player, fallback: number): number {
-        return this.get(player)?.attackSpeed ?? fallback;
+        const weapon = this.equippedWeapon(player);
+        const cacheSpeed = weapon.getId() > 0 ? weapon.getDefinition().getAttackSpeed() : -1;
+        return this.byItem.get(weapon.getId())?.attackSpeed
+            ?? (cacheSpeed > 0 ? cacheSpeed : undefined)
+            ?? this.byWeapon.get(player.getWeapon())?.attackSpeed
+            ?? fallback;
+    }
+
+    private static equippedWeapon(player: Player) {
+        return player.getEquipment().getItems()[Equipment.WEAPON_SLOT];
     }
 
     public static attackDistance(player: Player, fallback: number): number {
@@ -115,6 +149,7 @@ export class WeaponProfiles {
         });
         this.add(WeaponInterfaces.CROSSBOW, {
             attackAnimation: 4230,
+            npcAttackAnimation: 7552,
             attackSpeed: 6,
             attackDistance: 7,
             longRangeDistance: 9,
@@ -204,6 +239,7 @@ export class WeaponProfiles {
             projectiles: [DEFAULT_PROJECTILE, { delay: 41, lengthAdjustment: 14, stepMultiplier: 10, startHeight: 48, endHeight: 31 }],
             fireSound: Sound.SHOOT_BOW_QUIET,
             ammoRequired: 2,
+            doubleStartGraphic: true,
             specialDamage: { minimum: 8, maximum: 48 },
         });
         this.register({
@@ -249,7 +285,8 @@ export class WeaponProfiles {
         });
         this.register({
             itemIds: [21902],
-            attackAnimation: 7552,
+            attackAnimation: 4230,
+            npcAttackAnimation: 7552,
             attackSpeed: 6,
             attackDistance: 7,
             longRangeDistance: 9,

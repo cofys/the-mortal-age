@@ -29,8 +29,19 @@ interface RawNpcSpawnDefinition {
 export class NpcSpawnDefinitionLoader extends DefinitionLoader {
     public static readonly DEFINITION_TYPE = "npc_spawns";
     private static readonly DEFAULT_WANDER_RADIUS = 5;
-    private static readonly DEFAULT_CLIENT_DIRECTION = 6;
+    /** South: how live OSRS NPCs stand when nothing turns them (rsprox captures). */
+    private static readonly DEFAULT_CLIENT_DIRECTION = 1;
+    /**
+     * A spawn's `direction` counts from south-west (0 south-west, 1 south, ... 6 north, 7
+     * north-east), as the client's Direction does; this gives the server's Direction id.
+     */
     private static readonly CLIENT_TO_SERVER_DIRECTION = [5, 6, 7, 3, 4, 0, 1, 2];
+    /**
+     * The cache's spawnDirection counts from north-west, as the game does (0 north-west,
+     * 1 north, ... 6 south, 7 south-east): its default, 6, is south. This gives the spawn
+     * numbering. Read the other way, every NPC without a direction faced north.
+     */
+    private static readonly CACHE_TO_CLIENT_DIRECTION = [5, 6, 7, 3, 4, 0, 1, 2];
     private static readonly spawnedNpcs = new Set<NPC>();
 
     public load(): boolean {
@@ -106,7 +117,7 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
         const clientDirection = Number.isFinite(raw.direction)
             ? Math.trunc(raw.direction as number) & 7
             : id < CacheDefinitions.getCounts().npcs
-              ? CacheDefinitions.getNpc(id).spawnDirection & 7
+              ? NpcSpawnDefinitionLoader.CACHE_TO_CLIENT_DIRECTION[CacheDefinitions.getNpc(id).spawnDirection & 7]
               : NpcSpawnDefinitionLoader.DEFAULT_CLIENT_DIRECTION;
         const facingId = NpcSpawnDefinitionLoader.CLIENT_TO_SERVER_DIRECTION[clientDirection];
         const radius = Number.isFinite(raw.wanderRadius)

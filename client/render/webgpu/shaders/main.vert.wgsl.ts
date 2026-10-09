@@ -130,10 +130,11 @@ struct MapUniforms {
 @group(2) @binding(0) var<uniform> mapU: MapUniforms;
 
 @group(3) @binding(0) var u_modelInfoTexture: texture_2d<u32>;
-// The main pass reads the map square's own height map / water mask (group 3), matching
-// WebGLMapSquare's per-map .texture("u_heightMap"/"u_waterMask") bindings.
+// The main pass reads the map square's own height map / water mask / HD ground recipes
+// (group 3), matching WebGLMapSquare's per-map .texture("u_heightMap"/"u_waterMask") bindings.
 @group(3) @binding(1) var u_mapHeightMap: texture_2d_array<i32>;
 @group(3) @binding(2) var u_mapWaterMask: texture_2d_array<f32>;
+@group(3) @binding(3) var u_mapGroundMaterial: texture_2d_array<u32>;
 
 // ── Constants (main.vert.glsl, height-map.glsl, material.glsl) ────────────────────────────────
 

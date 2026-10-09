@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { headingIndexToward, steerFromHelm } from "../game/sailing/HelmSteering";
+import { createHelmSteeringDeps, headingIndexToward, steerFromHelm } from "../game/sailing/HelmSteering";
 import { WorldEntity } from "../game/worldview/WorldEntity";
 
 const tile = (t: number) => t * 128 + 64;
@@ -49,6 +49,28 @@ function setup(atHelm: boolean, deckTile = false) {
     const { deps, sent } = setup(true, true);
     assert.equal(steerFromHelm(deps, 9603, 9604), true, "deck-scene clicks aim at the sea point");
     assert.deepEqual(sent, [8]);
+}
+
+{
+    // A click on the deck scene's drawn border, just outside its world view (as reported: tile
+    // 10058,9565 for a scene from 10064), is still a deck-scene click aimed at the sea point.
+    const { deps: base, sent } = setup(true);
+    const view = { baseX: 10064, baseY: 9552, sizeX: 104, sizeY: 104 };
+    const deps = createHelmSteeringDeps(
+        {
+            varManager: { getVarbit: () => 1 },
+            controlledPlayerServerId: 1,
+            playerEcs: { getIndexForServerId: () => 0, getWorldViewId: () => 3000 },
+            worldViewManager: { getWorldEntity: () => base.getWorldEntity(), getWorldView: () => view },
+            renderer: { pickSeaPointAt: () => ({ x: tile(100), y: tile(105) }) },
+            inputManager: { leftClickX: 0, leftClickY: 0 },
+        },
+        (heading) => sent.push(heading),
+    );
+    assert.equal(deps.isDeckTile(3000, 10058, 9565), true);
+    assert.equal(deps.isDeckTile(3000, 1853, 3968), false, "a real world tile");
+    assert.equal(steerFromHelm(deps, 10058, 9565), true);
+    assert.deepEqual(sent, [8], "toward the sea point, not toward tile 10058");
 }
 
 console.log("helm-steering: ok");

@@ -12,6 +12,7 @@ import { MapManager, MapSquare } from "./MapManager";
 import { OsrsClient } from "./OsrsClient";
 import { IProjectileManager } from "./interfaces/IProjectileManager";
 import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
+import type { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
 import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
 
 /** Optional details of a LOC change (moves, rotations, shape changes). */
@@ -67,6 +68,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
 
     mapManager: MapManager<T>;
     uiHidden: boolean = false;
+    widgetsOverlay?: WidgetsOverlay;
 
     /** Drops any cached roof visibility state so the next frame recomputes it. */
     invalidateRoofState(): void {}
@@ -209,10 +211,15 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         this.handleKeyInput(deltaTime);
         this.handleControllerInput(deltaTime);
 
-        if (!this.uiHidden && !this.osrsClient.inputManager.hasInteractionPointerOverride()) {
+        if (!this.uiHidden && (!this.osrsClient.inputManager.hasInteractionPointerOverride() ||
+            this.osrsClient.inputManager.isWidgetInteractionPointer())) {
             // Process UI interaction BEFORE mouse input so widgets can consume scroll
             // before camera zoom uses it
             this.osrsClient.handleUiInput();
+        } else if (!this.uiHidden) {
+            // A pointer aimed at the world (the backquote crosshair) still drives widget hover,
+            // so the game's mouseover tooltip follows it; its clicks stay with the world.
+            this.osrsClient.handleUiHover();
         }
         if (!this.uiHidden) {
             // Update widget layout (CS2 positioning/sizing)
@@ -412,6 +419,10 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         const gamepad = inputManager.getGamepad();
 
         if (gamepad && gamepad.connected && gamepad.mapping === "standard") {
+            // A plugin (Backquote's controller play) takes the controller over from the debug camera.
+            if (this.osrsClient.clientPlugins.handleGamepad({ gamepad, camera, input: inputManager, deltaTime })) {
+                return;
+            }
             let cameraSpeedMult = 0.01;
             // X, R1
             if (gamepad.buttons[0].pressed || gamepad.buttons[5].pressed) {

@@ -16,9 +16,7 @@ const {
   content,
   boatType,
   setVarbit,
-  animateDeckLocs,
-  isSail,
-  boatAnim,
+  animateSails,
 } = require("./sailingContent");
 const { repairKitUses } = require("./cargo");
 const { specFor } = require("./boatParts");
@@ -90,9 +88,8 @@ function onBoarded({ player, boat, owned }) {
     execute() {
       if (player.getArea()?.boat !== boat) return this.stop();
       applyBoarded(player, owned);
-      // Boarding lowers the sails to rest.
-      const sailDown = boatAnim(boat, "sailDown");
-      if (sailDown !== undefined) animateDeckLocs(player, boat, isSail, sailDown);
+      // Boarding shows the sails at rest, on the mast and the sail cloth (rsprox).
+      animateSails(player, boat, "down", "down", { settle: false });
       this.stop();
     }
   })());

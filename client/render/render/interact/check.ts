@@ -938,10 +938,12 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                         continue;
                     }
 
-                    // LOC actions inserted 4..0, then Examine.
+                    // LOC actions inserted 4..0, then Examine; op flags from the server hide ops.
+                    const opFlags = host.osrsClient.locOpFlagsAt?.(worldTileX, worldTileY, interactId);
                     for (let actionIdx = 4; actionIdx >= 0; actionIdx--) {
                         const option = resolvedLocType.actions?.[actionIdx];
                         if (!option) continue;
+                        if (opFlags !== undefined && (opFlags & (1 << actionIdx)) === 0) continue;
                         menuEntries.push({
                             option,
                             targetId: interactId,

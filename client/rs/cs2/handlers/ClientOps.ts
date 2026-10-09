@@ -990,14 +990,20 @@ export function registerClientOps(handlers: HandlerMap): void {
 
     const getMinMenuSnapshot = (ctx: any): MinMenuSnapshot => {
         const osrsClient = getOsrsClient(ctx);
-        const hoverTarget = getHoverTarget(osrsClient);
+        // A plugin pointer aimed at the world (the backquote crosshair) clicks the world, never
+        // the UI, so its mouseover text is the world option. UI hover state can also be stale
+        // under it: the locked pointer holds still, so nothing re-picks the widget under it.
+        const input = (osrsClient as any)?.inputManager;
+        const aimsAtWorld =
+            input?.hasInteractionPointerOverride?.() === true && input?.isWidgetInteractionPointer?.() !== true;
+        const hoverTarget = aimsAtWorld ? undefined : getHoverTarget(osrsClient);
 
         const hoverId = typeof hoverTarget?.id === "string" ? hoverTarget.id : "";
         const componentTargetFromClicks =
             hoverId.startsWith("widget:") || hoverId.startsWith("__menu_opt_");
         const hoveredWidgetsByUid: Map<number, any> | undefined = (osrsClient as any)
             ?.hoveredWidgetsByUid as Map<number, any> | undefined;
-        const hasHoveredWidgetState = !!(hoveredWidgetsByUid && hoveredWidgetsByUid.size > 0);
+        const hasHoveredWidgetState = !aimsAtWorld && !!(hoveredWidgetsByUid && hoveredWidgetsByUid.size > 0);
         const hasComponentHover = componentTargetFromClicks || hasHoveredWidgetState;
         const primaryOption = hoverTarget?.primaryOption;
         let componentOption = typeof primaryOption?.option === "string" ? primaryOption.option : "";

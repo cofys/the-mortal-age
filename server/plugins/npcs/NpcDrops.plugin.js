@@ -4,6 +4,8 @@
  * Regenerate in ../osrsreboxed-db with `python -m scripts.drops.update`, then copy:
  *   docs/drops-json/npc-drops.json -> data/definitions/npc-drops.json
  *   docs/drops-json/subtables.json -> data/definitions/npc-drop-subtables.json
+ * Hand edits live in data/definitions/npc-drop-overrides.json, applied on top of the dump, never
+ * in the generated files (docs/npc-drops.md).
  *
  * Shape: { tables: { "<tableId>": { label, main_max_roll, rolls?, entries[], tertiary[] } },
  *           npcs:   { "<npcId>": { name, tables: ["<tableId>"] } } }
@@ -27,6 +29,7 @@ const {
 
 const DROPS_FILE = "npc-drops.json";
 const SUBTABLES_FILE = "npc-drop-subtables.json";
+const OVERRIDES_FILE = "npc-drop-overrides.json";
 const CURRENCY_IDS = new Set([995, 6529, 21555]);
 const RING_OF_WEALTH_TABLES = new Set(["rareDrop", "gem", "megaRare"]);
 const KALPHITE_QUEEN_NOTED_ITEMS = new Set([
@@ -87,6 +90,32 @@ function parseQuantityRaw(raw) {
 
 function isNotedQuantity(raw) {
   return typeof raw === "string" && /\(noted\)/i.test(raw);
+}
+
+/**
+ * npc-drop-overrides.json on top of the dump: NPCs removed or added, entries added to tables, and
+ * shared tables the dumper doesn't export. Where the dump already has an NPC or shared table, the
+ * dump's wins, so a dumper that learns to export it makes the override a no-op.
+ */
+function applyOverrides(dump, subtables, overrides) {
+  for (const id of Object.keys(overrides.removeNpcs ?? {})) delete dump.npcs[id];
+  for (const [id, npc] of Object.entries(overrides.addNpcs ?? {})) {
+    if (id !== "$comment" && !dump.npcs[id]) dump.npcs[id] = npc;
+  }
+  for (const [tableId, change] of Object.entries(overrides.tables ?? {})) {
+    const table = dump.tables[tableId];
+    if (!table) {
+      console.error(`[NpcDrops] npc-drop-overrides.json changes unknown table '${tableId}'`);
+      continue;
+    }
+    for (const [key, field] of [["addEntries", "entries"], ["addTertiary", "tertiary"]]) {
+      for (const entry of change[key] ?? []) {
+        table[field] ??= [];
+        if (!table[field].some((existing) => existing.item_id === entry.item_id)) table[field].push(entry);
+      }
+    }
+  }
+  for (const [name, table] of Object.entries(overrides.subtables ?? {})) subtables[name] ??= table;
 }
 
 function applyWikiCorrections(tableById) {
@@ -164,6 +193,8 @@ function loadDrops() {
     );
     return { npcs: 0, tables: 0, shared: 0, unusableSubtableRows: 0 };
   }
+  const subtables = readJson(SUBTABLES_FILE) || {};
+  applyOverrides(dump, subtables, readJson(OVERRIDES_FILE) || {});
   applyWikiCorrections(tableById);
 
   for (const [npcId, npc] of Object.entries(dump.npcs)) {
@@ -186,7 +217,6 @@ function loadDrops() {
   }
   const tableCount = Object.keys(tableById).length;
 
-  const subtables = readJson(SUBTABLES_FILE) || {};
   for (const [name, table] of Object.entries(subtables)) {
     const entries = [];
     for (const entry of table.entries || []) {
@@ -513,6 +543,7 @@ module.exports = {
 
     api.log("registered", { lazy: true });
   },
+  _test: { loadDrops, tablesByNpc, sharedTables },
 
   // Exposed for the smoke test.
   __internals: { loadDrops, rollTable, rollSharedTable, tablesByNpc, sharedTables },

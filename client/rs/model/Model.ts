@@ -1026,6 +1026,11 @@ export class Model extends Entity {
         mask: number,
         alpha: number,
     ): void {
+        // Use the exact endpoint: sparse zero transforms can otherwise change origin rounding.
+        if (nextFrame && alpha >= 1) {
+            frame = nextFrame;
+            nextFrame = undefined;
+        }
         if (!nextFrame || !(alpha > 0)) {
             for (let i = 0; i < frame.transformCount; i++) {
                 const group = frame.transformGroups[i];

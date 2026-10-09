@@ -110,6 +110,10 @@
     "dump:spotanim": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/dump-spotanim.ts",
     "dump:widget": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/dump-widget.ts",
     "dump:item-combat-styles": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/dump-item-combat-styles.ts",
+    "refine:npc-spawns": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/refine-npc-spawns.ts",
+    "sync:loc-teleports": "node ./scripts/sync-loc-teleports.cjs",
+    "sync:npc-spawns": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/sync-npc-spawns.ts",
+    "sync:weapon-types": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/sync-weapon-types.ts",
     "fetch:prices": "node ./scripts/fetch-prices.mjs",
     "compare:cache": "tsx scripts/compare-cache.ts"
   },

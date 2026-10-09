@@ -94,6 +94,7 @@ import { collectWidgetsAtPoint } from "../../../widgets/menu/utils";
 import {
     getCanvasCssSize,
     isIos,
+    isLowEndDevice,
     isMobileMode,
     isTouchDevice,
     isWebGL2Supported,
@@ -368,6 +369,18 @@ export function drawSceneTileOverlays(host: WebGLOsrsRendererHost, time: number,
         args.state.overheadTexts = undefined;
         args.state.overheadPrayers = undefined;
         args.state.groundItems = undefined;
+        if (isLowEndDevice) {
+            // Hover outline is cosmetic. Only the tile marker draws in this phase, so skip
+            // updating every other overlay (the main pass updates them) and bail when idle.
+            args.state.hoverEnabled = false;
+            args.state.hoverTile = undefined;
+            if (!args.state.destTile && !args.state.currentTile && !args.state.tileHighlights) {
+                return;
+            }
+            host.tileMarkerOverlay.update(args);
+            host.tileMarkerOverlay.draw(RenderPhase.ToSceneFramebuffer);
+            return;
+        }
         host.overlayManager.update(args);
         host.overlayManager.draw(RenderPhase.ToSceneFramebuffer);
     

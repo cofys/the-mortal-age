@@ -15,17 +15,24 @@ import {
     GPU_TEXTURE_USAGE,
 } from "../../../../render/webgpu/bindings";
 import { resolveWebGPURenderDistance } from "../../../../render/webgpu/frameConfig";
+import { resolveFogRange } from "../../../../render/RenderDistancePolicy";
+import { HD_AUTO_FOG_DEPTH_FACTOR } from "../../../../render/render/constants";
 import {
     SCENE_EXTENSION_FIRST_BINDING,
     type WebGPUSceneExtension,
     type WebGPUSceneExtensionContext,
+    type WebGPUSceneFrameTargets,
 } from "../../../../render/webgpu/sceneExtension";
 import type { WebGPURenderer } from "../../../../render/webgpu/WebGPURenderer";
 import { environmentAt } from "../../../../render/render/environment";
 import { collectHdLights } from "../HdLights";
 import { HD_GROUND_MATERIALS, HD_MATERIALS, type HdMaterial } from "../HdMaterialData";
 import { HD_LOOKUP_WIDTH, HD_TEXTURE_FILES, HD_TEXTURE_SIZE } from "../HdMaterials";
+import { HdClutterLayer } from "./hd-clutter";
 import { HD_SCENE_SHADERS } from "./hdSceneShaders";
+import type { HdOptions } from "../HdConfig";
+import { HdMist } from "../HdMist";
+import { HdPostProcess } from "./hdPostProcess";
 
 /** group(1) bindings, matching HD_BINDINGS_WGSL. */
 const HD_BINDINGS = {
@@ -36,7 +43,7 @@ const HD_BINDINGS = {
 } as const;
 
 /** HdUniforms: 2 mat4 + 7 vec4 + 4 scalars + 2 vec4[16] = 192 floats = 768 bytes. */
-const HD_UNIFORM_FLOATS = 192;
+const HD_UNIFORM_FLOATS = 196;
 const HD_UNIFORM_BYTES = HD_UNIFORM_FLOATS * 4;
 const LIGHT_LIMIT = 16;
 const LIGHT_INTERVAL_MS = 1000 / 30;
@@ -44,6 +51,9 @@ const SHADOW_MAP_SIZE = 2048;
 const SHADER_STAGES = GPU_SHADER_STAGE.VERTEX | GPU_SHADER_STAGE.FRAGMENT;
 
 // Field offsets in the uniform buffer, matching HdUniforms in hd-lighting.wgsl.ts.
+const resolveHdFogRange = (renderDistance: number) => resolveFogRange({ renderDistance, autoFogDepth: true,
+    autoFogDepthFactor: HD_AUTO_FOG_DEPTH_FACTOR, manualFogDepth: 0, hd: true });
+
 const OFF_INVERSE_VIEW = 0;
 const OFF_SHADOW_MATRIX = 16;
 const OFF_LIGHT_DIRECTION = 32;
@@ -59,6 +69,7 @@ const OFF_LIGHT_COUNT = 62; // i32 bit pattern
 const OFF_ENABLED = 63;
 const OFF_LIGHT_POSITIONS = 64;
 const OFF_LIGHT_COLORS = 128;
+const OFF_MIST = 192;
 
 /** Port of HdMaterials: the 2-row RGBA32F lookup plus the HD texture array. */
 class HdMaterialsGpu {
@@ -134,8 +145,14 @@ class HdMaterialsGpu {
             file && this.loaded.has(file) ? HD_TEXTURE_FILES.indexOf(file) + 1 : 0;
         const write = (material: HdMaterial, layer: number) => {
             this.lookupData.set(material.params, layer * 4);
+            // metadata.y is a bitfield, matching HdMaterials.ts: bit 0 unlit, bit 1 worldUv.
             this.lookupData.set(
-                [readyLayer(material.file), material.unlit ? 1 : 0, readyLayer(material.normal), material.brightness],
+                [
+                    readyLayer(material.file),
+                    (material.unlit ? 1 : 0) | (material.worldUv ? 2 : 0),
+                    readyLayer(material.normal),
+                    material.brightness,
+                ],
                 (HD_LOOKUP_WIDTH + layer) * 4,
             );
         };
@@ -165,6 +182,8 @@ class HdMaterialsGpu {
 class HdWebGPUExtension implements WebGPUSceneExtension {
     readonly shaders = HD_SCENE_SHADERS;
     readonly depthFormat: GPUTextureFormat = "depth32float";
+    /** The world pass renders linear HDR here; afterScene tonemaps it to the canvas. */
+    readonly sceneColorFormat: GPUTextureFormat = "rgba16float";
 
     readonly layoutEntries: GPUBindGroupLayoutEntry[];
     readonly bindGroupEntries: GPUBindGroupEntry[];
@@ -174,6 +193,7 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
     private readonly materials: HdMaterialsGpu;
     private readonly uniformBuffer: GPUBuffer;
     private readonly uniforms = new Float32Array(HD_UNIFORM_FLOATS);
+    private readonly mist = new HdMist();
     private readonly uniformInts = new DataView(this.uniforms.buffer);
     private readonly lightPositions = new Float32Array(LIGHT_LIMIT * 4);
     private readonly lightColors = new Float32Array(LIGHT_LIMIT * 4);
@@ -187,10 +207,13 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
     private readonly shadowPlaceholder: GPUTexture;
     private lightCount = 0;
     private lastLights?: { time: number; x: number; z: number; plane: number };
+    private post?: HdPostProcess;
+    private clutter?: HdClutterLayer;
     private destroyed = false;
 
     constructor(
         private readonly isEnabled: () => boolean,
+        private readonly options: () => HdOptions,
         { device, textureIdIndexMap }: WebGPUSceneExtensionContext,
     ) {
         this.device = device;
@@ -281,6 +304,36 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
         pass.end();
     }
 
+    /**
+     * HdPlugin's grade, finally done on the assembled frame: SSAO, bloom and the ACES tonemap
+     * (hd-tonemap) replace the display-referred per-surface grade that clipped highlights.
+     */
+    afterScene(renderer: WebGPURenderer, encoder: GPUCommandEncoder, frame: WebGPUSceneFrameTargets): void {
+        if (this.destroyed) return;
+        const post = (this.post ??= new HdPostProcess(this.device, renderer.format));
+        // Ground clutter draws into the HDR scene before it is tonemapped. Only in game: the
+        // world pass has nothing to stand the blades on at the login screen.
+        this.clutter ??= new HdClutterLayer(this.device);
+        const options = this.options();
+        if (options.grass && renderer.osrsClient.isLoggedIn()) {
+            try {
+                const u = this.uniforms;
+                this.clutter.setLight(
+                    u.subarray(OFF_AMBIENT, OFF_AMBIENT + 3),
+                    u.subarray(OFF_DIRECTIONAL, OFF_DIRECTIONAL + 3),
+                    u.subarray(OFF_LIGHT_DIRECTION, OFF_LIGHT_DIRECTION + 3),
+                    u.subarray(OFF_FOG_COLOR, OFF_FOG_COLOR + 3),
+                    u.subarray(OFF_FOG, OFF_FOG + 3),
+                    u.subarray(OFF_MIST, OFF_MIST + 4),
+                );
+                if (this.clutter.update(renderer)) this.clutter.draw(encoder, frame);
+            } catch (error) {
+                console.warn("117 HD: ground clutter unavailable", error);
+            }
+        }
+        post.encode(renderer, encoder, frame, options);
+    }
+
     /** Port of HdPlugin.beforeSceneRender's uniform + shadow matrix block. */
     private update(renderer: WebGPURenderer): void {
         if (this.destroyed) return;
@@ -303,6 +356,8 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
         const plane = renderer.getPlayerRawPlane();
 
         const target = vec3.fromValues(x, renderer.sampleHeightAtExactPlane(x, z, plane), z);
+        this.uniforms.set(this.mist.uniform(x, z, (mx, mz) => renderer.sampleHeightAtExactPlane(mx, mz, plane),
+            performance.now(), this.options().surfaceFog), OFF_MIST);
         const eye = vec3.scaleAndAdd(vec3.create(), target, direction, 100);
         const view = mat4.lookAt(mat4.create(), eye, target, Math.abs(direction[1]) > 0.99 ? [0, 0, 1] : [0, -1, 0]);
         const extent = Math.min(48, fogEnd);
@@ -324,16 +379,25 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
         this.uniforms[OFF_DIRECTIONAL] = environment.directionalColor[0] * environment.lightStrength * 0.9;
         this.uniforms[OFF_DIRECTIONAL + 1] = environment.directionalColor[1] * environment.lightStrength * 0.9;
         this.uniforms[OFF_DIRECTIONAL + 2] = environment.directionalColor[2] * environment.lightStrength * 0.9;
-        this.uniforms.set(environment.fogColor, OFF_FOG_COLOR);
-        this.uniforms[OFF_FOG] = environment.fogDepth;
-        this.uniforms[OFF_FOG + 1] = environment.fogScale;
-        this.uniforms[OFF_FOG + 2] = fogEnd;
+        // The extended pipeline is linear HDR, so the display-referred fog colour is linearised
+        // here; hdSceneShaders' fog blend re-encodes nothing.
+        this.uniforms[OFF_FOG_COLOR] = Math.pow(Math.max(environment.fogColor[0], 0), 2.2);
+        this.uniforms[OFF_FOG_COLOR + 1] = Math.pow(Math.max(environment.fogColor[1], 0), 2.2);
+        this.uniforms[OFF_FOG_COLOR + 2] = Math.pow(Math.max(environment.fogColor[2], 0), 2.2);
+        this.uniforms[OFF_FOG_COLOR + 3] = 1;
+        // Same haze as the WebGL path (HdPlugin): one range for both backends.
+        const fog = resolveHdFogRange(fogEnd);
+        this.uniforms[OFF_FOG] = fog.fogDepth;
+        this.uniforms[OFF_FOG + 1] = fog.fogEnd;
+        this.uniforms[OFF_FOG + 2] = Math.max(0.6, Math.min(1.2, 1.2 - environment.fogDepth * environment.fogScale * 0.08));
         this.uniforms[OFF_GROUND_FOG] = environment.groundFogStart / 128;
         this.uniforms[OFF_GROUND_FOG + 1] = environment.groundFogEnd / 128;
         this.uniforms[OFF_GROUND_FOG + 2] = environment.groundFogOpacity;
-        this.uniforms[OFF_GRADING] = 1.12;
+        // Saturation/contrast/exposure moved to the tonemap pass (hd-tonemap); only the rim
+        // term is still applied per-surface in hdShade.
+        this.uniforms[OFF_GRADING] = 1;
         this.uniforms[OFF_GRADING + 1] = 1;
-        this.uniforms[OFF_GRADING + 2] = 0.6;
+        this.uniforms[OFF_GRADING + 2] = 1;
         this.uniforms[OFF_GRADING + 3] = 0;
         this.uniforms[OFF_SPECULAR] = 1;
         this.uniforms[OFF_SHADOW_STRENGTH] = 0.5;
@@ -356,6 +420,10 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
     dispose(): void {
         if (this.destroyed) return;
         this.destroyed = true;
+        this.post?.dispose();
+        this.post = undefined;
+        this.clutter?.dispose();
+        this.clutter = undefined;
         this.uniformBuffer.destroy();
         this.shadowTexture.destroy();
         this.shadowPlaceholder.destroy();
@@ -365,7 +433,8 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
 
 export function createHdWebGPUExtension(
     isEnabled: () => boolean,
+    options: () => HdOptions,
     context: WebGPUSceneExtensionContext,
 ): WebGPUSceneExtension {
-    return new HdWebGPUExtension(isEnabled, context);
+    return new HdWebGPUExtension(isEnabled, options, context);
 }

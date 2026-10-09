@@ -1,0 +1,17 @@
+These material maps are adapted from Poly Haven assets released under CC0 1.0.
+CC0 summary: https://creativecommons.org/publicdomain/zero/1.0/
+CC0 legal text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+Provider licence: https://polyhaven.com/license
+
+Source assets, direct map URLs, material assignments and output hashes are recorded
+in sources.json. The bundled files are resized and encoded for this renderer;
+normal vectors are softened, renormalised and converted to its 117 HD convention.
+Natural ground albedo is neutralised because terrain already supplies its hue.
+
+Credits:
+sand_02: Charlotte Baglioni
+sparse_grass: Amal Kumar
+grass_path_2, gravel_ground_01, red_brick_03, castle_brick_01, roof_slates_02,
+roof_09, cobblestone_floor_02: Rob Tuytel
+weathered_planks: Dimitrios Savva (photography), Dario Barresi (processing)
+thatch_roof_angled: Dimitrios Savva (photography), Rob Tuytel (processing)

@@ -100,6 +100,10 @@ export function handleInboundSync(msg: any): boolean {
         } catch {}
         return true;
     }
+    if (msg.type === "movement_position") {
+        for (const cb of state.movementPositionListeners) cb(msg.payload);
+        return true;
+    }
     if (msg.type === "player_sync") {
         if (!state.playerSyncContext || !state.playerUpdateDecoder) return true;
         try {
@@ -144,6 +148,7 @@ export function handleInboundSync(msg: any): boolean {
                 },
             );
             (frame as any).sourcePacketSize = buffer?.length ?? 0;
+            frame.finePositions = payload.finePositions;
             try {
                 if ((globalThis as any).__syncDebug === true) {
                     const localState = state.playerSyncContext.stateFor(localIndex);

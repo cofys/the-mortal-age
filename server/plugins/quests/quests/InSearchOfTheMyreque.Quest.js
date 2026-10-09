@@ -125,7 +125,6 @@ module.exports = function registerInSearchOfTheMyrequeQuest(api) {
   const BRIDGE_RUNG_VARBITS = { 26245: 176, 26246: 177, 26247: 178 };
   const BRIDGE_TREE_IDS = new Set([ObjectIdentifiers.TREE_117, ObjectIdentifiers.TREE_118]); // 26248, 26249
   const STALAGMITE_ID = ObjectIdentifiers.STALAGMITE_3; // 5050
-  const CAVE_TUNNEL_ID = ObjectIdentifiers.CAVE_ENTRANCE_27; // 5046
   const FAKE_WALL_ID = ObjectIdentifiers.WALL_17; // 5052
   const TAVERN_LADDER_ID = ObjectIdentifiers.LADDER_54; // 5054
   const TAVERN_TRAPDOOR_ID = ObjectIdentifiers.TRAPDOOR_23; // 5055
@@ -607,11 +606,6 @@ module.exports = function registerInSearchOfTheMyrequeQuest(api) {
     }
     if (objectId === STALAGMITE_ID) {
       useStalagmite(event);
-      return;
-    }
-    if (objectId === CAVE_TUNNEL_ID) {
-      event.handled = true;
-      player.moveTo(new api.core.Location(3491, 9824, 0));
       return;
     }
     if (objectId === FAKE_WALL_ID) {

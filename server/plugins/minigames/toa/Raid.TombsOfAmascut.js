@@ -196,6 +196,11 @@ function ghostsCantTeleport(event) {
   }
 }
 
+/** Tumeken's shadow asks: its passive is stronger inside the tombs. */
+function answerInTombs(query) {
+  if (query?.player && Shared.inTombs(query.player.getLocation())) query.inside = true;
+}
+
 function ghostsCantEquip(event) {
   if (isGhost(event.player)) event.allow = false;
 }
@@ -219,4 +224,5 @@ module.exports = function registerTombsRaid(api) {
   Raid.onRaidArea("canTeleport", ghostsCantTeleport);
   api.onCanEquip(ghostsCantEquip);
   api.onCanUnequip(ghostsCantEquip);
+  api.onCustomEvent("toa:in-tombs", answerInTombs);
 };

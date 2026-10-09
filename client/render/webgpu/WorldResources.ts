@@ -19,6 +19,7 @@ import {
     GPU_SHADER_STAGE,
     GPU_TEXTURE_USAGE,
     MAP_TEXTURE_BINDINGS,
+    SCENE_DEPTH_FORMAT,
     SCENE_UNIFORM_FLOATS,
     WORLD_TEXTURE_BINDINGS,
 } from "./bindings";
@@ -234,6 +235,11 @@ export class WorldResources {
                     binding: MAP_TEXTURE_BINDINGS.waterMask,
                     visibility: SHADER_STAGES,
                     texture: { sampleType: "float", viewDimension: "2d-array" },
+                },
+                {
+                    binding: MAP_TEXTURE_BINDINGS.groundMaterial,
+                    visibility: SHADER_STAGES,
+                    texture: { sampleType: "uint", viewDimension: "2d-array" },
                 },
             ],
         });
@@ -535,7 +541,12 @@ export class WorldResources {
                           entryPoint: MAIN_FRAGMENT_ENTRY,
                           targets: [
                               {
-                                  format: canvasFormat,
+                                  // Extended pipelines write the extension's offscreen HDR
+                                  // target when it declares one.
+                                  format:
+                                      mode === "extended"
+                                          ? extension!.sceneColorFormat ?? canvasFormat
+                                          : canvasFormat,
                                   blend: alpha
                                       ? {
                                             color: {
@@ -555,7 +566,7 @@ export class WorldResources {
                       },
                 primitive: { topology: "triangle-list", cullMode: "back", frontFace: "ccw" },
                 depthStencil: {
-                    format: depth ? extension!.depthFormat ?? "depth32float" : "depth24plus",
+                    format: depth ? extension!.depthFormat ?? SCENE_DEPTH_FORMAT : SCENE_DEPTH_FORMAT,
                     depthWriteEnabled: true,
                     depthCompare: "less-equal",
                 },

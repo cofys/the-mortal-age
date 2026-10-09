@@ -2018,6 +2018,8 @@ export class PluginManager {
       Sound: require("../game/Sound").Sound,
       Sounds: require("../game/Sounds").Sounds,
       Location: require(`${model}/Location`).Location,
+      Mobile: require("../game/entity/impl/Mobile").Mobile,
+      encodeFinePosition: require("../net/protocol/ClientProtocol").encodeFinePosition,
       Boundary: require(`${model}/Boundary`).Boundary,
       PolygonalBoundary: require(`${model}/PolygonalBoundary`).PolygonalBoundary,
       Area: require(`${model}/areas/Area`).Area,

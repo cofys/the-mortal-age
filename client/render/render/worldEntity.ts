@@ -251,6 +251,10 @@ export async function loadWorldEntityScene(host: WebGLOsrsRendererHost,
             extraLocs,
             extraNpcs,
             basePlane,
+            // The deck's height is worked out once its map is applied; a rebuild of the same boat
+            // keeps it meanwhile, or the helmsman and the deck's animated locs, which are raised
+            // by it, drop to the water for as long as the new deck builds.
+            deckHeight: rebuilding && previous.configId === configId ? previous.deckHeight : undefined,
         });
 
         // Register with WorldViewManager

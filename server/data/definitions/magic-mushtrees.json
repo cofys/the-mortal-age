@@ -1,0 +1,9 @@
+{
+  "$comment": "Fossil Island's Mycelium Transportation System, played by plugins/world/MagicMushtrees.plugin.js (docs/spirit-trees.md). In the interface's order (buttons 1-4); `tree` is the mushtree's loc tile, `landing` where travelling there puts the player, both from the rsprox capture database (https://rsprox.net/database). Names and order as the game writes them into fossil_mushtrees (608).",
+  "mushtrees": [
+    {"name": "House on the Hill", "tree": [3764, 3880, 1], "landing": [3764, 3879, 1]},
+    {"name": "Verdant Valley", "tree": [3758, 3756, 0], "landing": [3760, 3758, 0]},
+    {"name": "Sticky Swamp", "tree": [3677, 3755, 0], "landing": [3676, 3755, 0]},
+    {"name": "Mushroom Meadow", "tree": [3674, 3871, 0], "landing": [3676, 3871, 0]}
+  ]
+}

@@ -275,6 +275,22 @@ function registerQuestWidgets(api) {
   api.onCustomEvent("quest:is-started", answerIsStarted);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
+  api.onPlayerLogin(sendQuestVarps);
+}
+
+/**
+ * Sends each quest's saved stage in its varp on login. The client reads them for more than the
+ * quest list: the cache shows locs and NPCs by quest progress (the Grand Exchange spirit tree
+ * only has Travel once Tree Gnome Village's varp says complete). setStage sends a varp only
+ * when it changes, so without this a relog left them all at 0.
+ */
+function sendQuestVarps({ player }) {
+  const sender = player.getPacketSender();
+  for (const quest of quests) {
+    if (!Number.isInteger(quest.varpId) || quest.varpId < 0) continue;
+    const stage = quest.getStage(player);
+    if (stage !== 0) sender.sendConfig(quest.varpId, stage);
+  }
 }
 
 // ============================================================================
@@ -306,6 +322,8 @@ function registerQuest(api, def) {
       player.setAttribute(stageKey, value | 0);
       player.getPacketSender().sendConfig(def.varpId, value | 0);
       refreshQuestList(player);
+      // Quests whose progress shows in more than their varp (a varbit the cache reads) follow it.
+      api.emitCustomEvent?.("quest:stage-changed", { player, key: def.key, stage: value | 0 });
     },
     isStarted(player) {
       return quest.getStage(player) >= (def.startedValue ?? 1);
@@ -454,6 +472,7 @@ module.exports = {
   QUEST_COMPLETE_JINGLE,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
+  sendQuestVarps,
   refreshQuestList,
   openJournal,
   openJournalBySlot,

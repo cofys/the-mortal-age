@@ -80,7 +80,12 @@ fn hdActorColor(vertex: Vertex, hslOverride: vec4<f32>, normalWord: u32) -> vec3
 }
 `;
 
-/** HD material lookup + texture replacement; `groundUv` maps untextured terrain recipes. */
+/**
+ * HD material lookup + texture replacement; `groundUv` maps untextured terrain recipes.
+ * The terrain variant also blends the neighbouring tile's HD ground texture into the albedo
+ * near tile borders (117HD TerrainDataGenerator's overlay/underlay blending, done per-pixel
+ * here): grass fades into dirt instead of swapping per tile. Water keeps its own path.
+ */
 function materialSetup(groundUv: boolean): string {
     const index = groundUv
         ? `var hdMaterialIndex = i32(input.v_texId);
@@ -91,6 +96,67 @@ function materialSetup(groundUv: boolean): string {
     const uv = groundUv
         ? `select((input.v_texCoord - 0.5) / hdScale + 0.5, input.v_hdPosition.xz / hdScale, input.v_hdGroundMaterial > 0u)`
         : `(input.v_texCoord - 0.5) / hdScale + 0.5`;
+    // HdShader.ts's terrain block: worldUv materials (castle/red brick) map walls to world
+    // space so masonry courses stay level and continuous across cache model faces. Without
+    // this, wall textures follow the cache face UVs and come out rotated on some faces.
+    const masonry = groundUv
+        ? `
+    let hdFaceDx = dpdx(input.v_hdPosition);
+    let hdFaceDy = dpdy(input.v_hdPosition);
+    if (hd.u_hdEnabled > 0.5 && input.v_hdGroundMaterial == 0u && (i32(hdMetadata.y) & 2) != 0) {
+        let hdFace = abs(normalize(cross(hdFaceDx, hdFaceDy)));
+        hdUv = select(
+            vec2<f32>(select(input.v_hdPosition.x, input.v_hdPosition.z, hdFace.x > hdFace.z), -input.v_hdPosition.y) / hdScale,
+            input.v_hdPosition.xz / hdScale,
+            hdFace.y > 0.7,
+        );
+    }
+`
+        : "";
+    // Ground blend (terrain variant only): within a 0.35-tile band of the closest tile border,
+    // mix the neighbouring tile's HD ground recipe into the albedo. The 0.5 border weight is
+    // equal from both sides, so the seam stays continuous while grass fades into dirt.
+    // textureLoad/textureSampleLevel are branch-safe; no derivatives are added in here.
+    const groundBlend = groundUv
+        ? `
+    if (hd.u_hdEnabled > 0.5 && hdLayer > 0.0 && input.v_hdGroundMaterial > 0u) {
+        let gmSize = vec2<i32>(textureDimensions(u_mapGroundMaterial, 0));
+        let gmPos = input.v_hdPosition.xz - mapU.u_mapPos * 64.0 + vec2<f32>(f32(mapU.u_sceneBorderSize));
+        let gmTexel = vec2<i32>(floor(gmPos));
+        let gmFract = fract(gmPos);
+        let gmEdgeX = min(gmFract.x, 1.0 - gmFract.x);
+        let gmEdgeY = min(gmFract.y, 1.0 - gmFract.y);
+        var gmNeighbor = gmTexel;
+        var gmDist = gmEdgeX;
+        if (gmEdgeX < gmEdgeY) {
+            gmNeighbor += vec2<i32>(select(1, -1, gmFract.x < 0.5), 0);
+        } else {
+            gmNeighbor += vec2<i32>(0, select(1, -1, gmFract.y < 0.5));
+            gmDist = gmEdgeY;
+        }
+        if (gmDist < 0.35) {
+            let gmLayers = i32(textureNumLayers(u_mapGroundMaterial));
+            let gmLayer = clamp(i32(floor(input.v_plane + 0.5)), 0, gmLayers - 1);
+            let gmNeighborMaterial = textureLoad(
+                u_mapGroundMaterial,
+                clamp(gmNeighbor, vec2<i32>(0), gmSize - vec2<i32>(1)),
+                gmLayer,
+                0,
+            ).r;
+            if (gmNeighborMaterial > 0u && gmNeighborMaterial != input.v_hdGroundMaterial) {
+                let gmNeighborLayer = i32(
+                    textureLoad(u_hdMaterials, vec2<i32>(1024 + i32(gmNeighborMaterial), 1), 0).x,
+                );
+                if (gmNeighborLayer > 0) {
+                    let gmWeight = 0.5 * (1.0 - smoothstep(0.0, 0.35, gmDist));
+                    let gmNeighborColor = textureSampleLevel(u_hdTextures, u_sampler, hdUv, gmNeighborLayer, 0.0);
+                    textureColor = vec4<f32>(mix(textureColor.rgb, gmNeighborColor.rgb, gmWeight), textureColor.a);
+                }
+            }
+        }
+    }
+`
+        : "";
     return `
     ${index}
     var hdMaterial = vec4<f32>(0.0, 1.0, 1.0, 1.0);
@@ -105,10 +171,11 @@ function materialSetup(groundUv: boolean): string {
         select(0.0, 1.0, abs(hdScale.x) > 0.001),
         select(0.0, 1.0, abs(hdScale.y) > 0.001),
     ));
-    let hdUv = ${uv};
+    var hdUv = ${uv};${masonry}
     if (hdLayer > 0.0) {
         textureColor = textureSampleLevel(u_hdTextures, u_sampler, hdUv, i32(hdLayer), 0.0);
     }
+${groundBlend}
 `;
 }
 
@@ -120,7 +187,11 @@ const PALETTE = `
     }
 `;
 
-/** hdShade plus HD fog; `skip` is a WGSL bool for surfaces that keep their own shading. */
+/**
+ * hdShade plus HD fog; `skip` is a WGSL bool for surfaces that keep their own shading.
+ * The extended pipeline writes the linear HDR target the tonemap pass consumes, so every
+ * path leaves `surface` and `fogColor` linear (hdShade already returns linear HDR).
+ */
 function shade(skip: string): string {
     return `
     if (hd.u_hdEnabled > 0.5) {
@@ -131,8 +202,15 @@ function shade(skip: string): string {
             let hdFog = hdFogAmount(input.v_hdPosition.xz);
             let groundFog = smoothstep(0.0, 1.0, (input.v_hdPosition.y - hd.u_hdGroundFog.x) / min(-0.001, hd.u_hdGroundFog.y - hd.u_hdGroundFog.x)) * hd.u_hdGroundFog.z;
             fog = max(fog, max(hdFog, groundFog));
-            fogColor = hd.u_hdFogColor.rgb;
+            // The uniform is linearised on the CPU; the scene sky is display-referred.
+            fogColor = mix(hd.u_hdFogColor.rgb, pow(max(scene.u_skyColor.rgb, vec3<f32>(0.0)), vec3<f32>(2.2)), hdFog);
+        } else {
+            // Floor water keeps its own shading: bring it into the same linear space.
+            surface = pow(max(surface, vec3<f32>(0.0)), vec3<f32>(2.2));
+            fogColor = pow(max(fogColor, vec3<f32>(0.0)), vec3<f32>(2.2));
         }
+        // Low-lying mist settles over everything in the hollow, floor water included.
+        surface = mix(surface, hd.u_hdFogColor.rgb, hdMistAmount(input.v_hdPosition));
     }
 `;
 }

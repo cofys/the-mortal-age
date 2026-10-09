@@ -48,6 +48,8 @@ export class Js5RangeClient {
 
     rangeUnsupported = false;
     onRangeUnsupported?: () => void;
+    /** Bytes stored by an earlier session (Js5Persistence.read), tried before the network. */
+    readStored?: (start: number, length: number) => Promise<Uint8Array | undefined>;
 
     constructor(
         readonly dat2Url: string,
@@ -200,7 +202,7 @@ export class Js5RangeClient {
         const blockBytes = Js5RangeClient.BLOCK_SECTORS * Sector.SIZE;
         return {
             start: Math.floor(start / blockBytes) * blockBytes,
-            end: Math.min(Math.ceil(end / blockBytes) * blockBytes, this.store.dataFile.byteLength),
+            end: Math.min(Math.ceil(end / blockBytes) * blockBytes, this.store.dat2.byteLength),
         };
     }
 
@@ -263,15 +265,15 @@ export class Js5RangeClient {
      * fragmented repack silently corrupting reads.
      */
     private isChainContiguous(span: GroupSpan): boolean {
-        const u8 = new Uint8Array(this.store.dataFile);
         const nextSectorOffset = span.archiveId > 0xffff ? 6 : 4;
         let sector = span.startSector;
         for (let i = 0; i < span.sectorCount - 1; i++) {
             const base = sector * Sector.SIZE + nextSectorOffset;
-            if (base + 3 > u8.byteLength) {
+            if (base + 3 > this.store.dat2.byteLength) {
                 return false;
             }
-            const next = (u8[base] << 16) | (u8[base + 1] << 8) | u8[base + 2];
+            const u8 = this.store.dat2.read(base, 3);
+            const next = (u8[0] << 16) | (u8[1] << 8) | u8[2];
             if (next !== sector + 1) {
                 return false;
             }
@@ -321,7 +323,9 @@ export class Js5RangeClient {
     }
 
     private async fetchRange(start: number, length: number): Promise<Uint8Array> {
-        const end = Math.min(start + length, this.store.dataFile.byteLength);
+        const end = Math.min(start + length, this.store.dat2.byteLength);
+        const stored = await this.readStored?.(start, end - start);
+        if (stored) return stored;
         const resp = await fetch(this.dat2Url, {
             headers: { Range: `bytes=${start}-${end - 1}` },
         });

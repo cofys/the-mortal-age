@@ -93,6 +93,7 @@ export class MovementQueue {
      */
     private isMoving = false;
     private movedThisCycle = false;
+    private externalMovementUntil = 0;
     private lastMoveCycle = -2;
     private blockedByDynamicOccupancy = false;
     private routeEvaluated = false;
@@ -433,7 +434,16 @@ export class MovementQueue {
         this.lastSentDestY = Number.MIN_SAFE_INTEGER;
     }
 
+    public setExternalMovement(moving: boolean, tileChanged = false): void {
+        this.externalMovementUntil = moving ? Date.now() + 250 : 0;
+        if (tileChanged && this.player) {
+            this.handleRegionChange();
+            this.syncWildernessStateForMovedPlayer();
+        }
+    }
+
     public hasPendingWork(): boolean {
+        if (this.externalMovementUntil > Date.now()) return true;
         if (this.points.length > 0 || this.isMoving) {
             return true;
         }
@@ -445,6 +455,12 @@ export class MovementQueue {
 
     public process() {
         this.movedThisCycle = false;
+        if (this.externalMovementUntil > Date.now()) {
+            this.isMoving = this.getMobility().canMove();
+            this.movedThisCycle = this.isMoving;
+            if (this.isMoving) this.lastMoveCycle = World.getProcessCycle();
+            return;
+        }
         const ownerLabel = this.ownerLabel();
         if (
             this.points.length === 0 &&
@@ -706,6 +722,7 @@ export class MovementQueue {
     }
 
     public reset(clearDestination = true): MovementQueue {
+        this.externalMovementUntil = 0;
         this.points.clear();
         this.followX = -1;
         this.followY = -1;

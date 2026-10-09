@@ -1,4 +1,4 @@
-import { isSafari } from "../common/utils/DeviceUtil";
+import { isLowEndDevice, isSafari } from "../common/utils/DeviceUtil";
 import { getCacheBaseUrl } from "../config/clientEnv";
 import { CacheFiles, ProgressListener } from "../rs/cache/CacheFiles";
 import { CacheInfo, getLatestCache } from "../rs/cache/CacheInfo";
@@ -9,6 +9,7 @@ import { Js5Persistence } from "../rs/cache/js5/Js5Persistence";
 import { PresenceBitset } from "../rs/cache/js5/PresenceBitset";
 import { Sector } from "../rs/cache/store/Sector";
 import { SectorCluster } from "../rs/cache/store/SectorCluster";
+import { SparseDat2 } from "../rs/cache/store/SparseDat2";
 import { SparseMemoryStore, computeIndexRegion } from "../rs/cache/store/SparseMemoryStore";
 
 const CACHE_PATH = getCacheBaseUrl();
@@ -83,6 +84,8 @@ export async function fetchCacheList(): Promise<CacheList | undefined> {
  */
 export type SparseCacheState = {
     presenceBits: Uint8Array;
+    /** The dat2 as chunks allocated on first write (a plain clone of it in render workers). */
+    dat2: SparseDat2;
     dat2Url: string;
     /** Per-client channel used to centralise worker group misses in the main thread. */
     fetchChannel?: string;
@@ -357,7 +360,7 @@ async function fetchRangeStreaming(
     url: string,
     startByte: number,
     endByte: number,
-    buffer: ArrayBuffer,
+    dat2: SparseDat2,
     signal: AbortSignal | undefined,
     onChunk: (byteLength: number) => void,
 ): Promise<number> {
@@ -372,19 +375,18 @@ async function fetchRangeStreaming(
         throw new Error(`Range fetch failed (${resp.status}) for ${url}`);
     }
     validatePartialContentResponse(resp, startByte, endByte, url);
-    const target = new Uint8Array(buffer);
     let offset = startByte;
     if (!resp.body) {
         const data = new Uint8Array(await resp.arrayBuffer());
         const chunk = data.subarray(0, endByte - offset);
-        target.set(chunk, offset);
+        dat2.write(offset, chunk);
         onChunk(chunk.byteLength);
         return chunk.byteLength;
     }
     const reader = resp.body.getReader();
     for (let res = await reader.read(); !res.done && res.value; res = await reader.read()) {
         const chunk = res.value.subarray(0, Math.max(0, endByte - offset));
-        target.set(chunk, offset);
+        dat2.write(offset, chunk);
         offset += chunk.byteLength;
         onChunk(chunk.byteLength);
     }
@@ -398,15 +400,15 @@ async function fetchRangeStreaming(
 const PREFETCH_CHUNK_SECTORS = Math.ceil((512 * 1024) / Sector.SIZE);
 // Don't compete with the first scene's foreground JS5 reads.
 /**
- * Stream whole deferred index regions into the sparse buffer in the background.
- * Writes land in the shared buffer and presence bitset, so render workers pick
- * them up with no message passing and simply stop missing.
+ * Stream whole deferred index regions into the sparse dat2 in the background.
+ * Writes land in its shared chunks and the presence bitset; new chunks reach the
+ * render workers through the pool, so they simply stop missing.
  *
  * Best-effort: on any failure the on-demand Js5RangeClient still services reads.
  */
 export async function prefetchIndexRegions(
     dat2Path: string,
-    buffer: ArrayBuffer,
+    dat2: SparseDat2,
     totalSize: number,
     presence: PresenceBitset,
     persistence: Pick<Js5Persistence, "queue">,
@@ -446,7 +448,7 @@ export async function prefetchIndexRegions(
                 dat2Path,
                 startByte,
                 endByte,
-                buffer,
+                dat2,
                 signal,
                 () => {},
             );
@@ -470,7 +472,7 @@ export async function prefetchIndexRegions(
 /**
  * Sparse startup: download only the idx files, the reference tables and the
  * eager index regions (~33MB, maps included) via Range requests into a
- * full-size sparse dat2 buffer. Deferred groups (models, animations, audio,
+ * sparse dat2 (chunks allocated as data lands). Deferred groups (models, animations, audio,
  * worldmap) are fetched on demand by the Js5RangeClient and persisted so they
  * are only ever downloaded once; the biggest of those are also pulled in bulk
  * in the background by prefetchIndexRegions.
@@ -485,7 +487,9 @@ async function loadCacheFilesSparse(
 
     // A prior session already stored the complete dat2; the regular path
     // restores it from storage without any network traffic.
-    if (await Js5Persistence.hasFullDat2(info.name, dat2Path)) {
+    // Not on a low-end device: the full path holds the whole dat2 in memory, past a phone's or
+    // a tablet's tab limit.
+    if (!isLowEndDevice && await Js5Persistence.hasFullDat2(info.name, dat2Path)) {
         return undefined;
     }
 
@@ -572,23 +576,20 @@ async function loadCacheFilesSparse(
     const dat2Version =
         probe.headers.get("ETag") ?? probe.headers.get("Last-Modified") ?? String(totalSize);
 
-    const buffer = (
-        useSharedArrayBuffer ? new SharedArrayBuffer(totalSize) : new ArrayBuffer(totalSize)
-    ) as ArrayBuffer;
+    const dat2 = new SparseDat2(totalSize, useSharedArrayBuffer);
     const presence = PresenceBitset.forSectorCount(
         Math.ceil(totalSize / Sector.SIZE),
         useSharedArrayBuffer,
     );
     const totalSectors = Math.ceil(totalSize / Sector.SIZE);
     const files = new Map<string, ArrayBuffer>();
-    files.set(CacheFiles.DAT2_FILE_NAME, buffer);
     files.set(CacheFiles.META_FILE_NAME, metaData);
     for (const [id, data] of idxDatas) {
         files.set(CacheFiles.INDEX_FILE_PREFIX + id, data);
     }
     const cacheFiles = new CacheFiles(files);
-    const store = SparseMemoryStore.fromSparseFiles(cacheFiles, presence);
-    const persistence = new Js5Persistence(info.name, dat2Path, buffer);
+    const store = SparseMemoryStore.fromSparseFiles(cacheFiles, presence, dat2);
+    const persistence = new Js5Persistence(info.name, dat2Path, dat2);
 
     // Persisted ranges only apply to the exact dat2 they were fetched from; a
     // repacked/updated file relocates groups, so stale ranges must be dropped.
@@ -600,7 +601,10 @@ async function loadCacheFilesSparse(
     await persistence.writeManifest(dat2Version);
 
     // Restore ranges fetched in previous sessions.
-    const restored = await persistence.restore((offset, bytes) => store.applyRange(offset, bytes));
+    // A low-end device skips it: restoring brings back everything earlier sessions fetched,
+    // models and all, which its tab cannot hold. It reads stored ranges back as it needs them
+    // instead (the eager regions below, then Js5RangeClient.readStored).
+    const restored = isLowEndDevice ? 0 : await persistence.restore((offset, bytes) => store.applyRange(offset, bytes));
 
     // Eager regions: reference tables (idx255 meta region) + every
     // non-deferred index. Deferred indices only need their reference tables.
@@ -640,11 +644,16 @@ async function loadCacheFilesSparse(
     for (const run of missing) {
         const startByte = run.start * Sector.SIZE;
         const endByte = Math.min(run.end * Sector.SIZE, totalSize);
-        const delivered = await fetchRangeStreaming(
+        const stored = isLowEndDevice ? await persistence.read(startByte, endByte - startByte) : undefined;
+        if (stored) {
+            dat2.write(startByte, stored);
+            onEagerChunk(stored.byteLength);
+        }
+        const delivered = stored?.byteLength ?? await fetchRangeStreaming(
             dat2Path,
             startByte,
             endByte,
-            buffer,
+            dat2,
             signal,
             onEagerChunk,
         );
@@ -671,6 +680,7 @@ async function loadCacheFilesSparse(
         xteas: await xteasPromise,
         sparse: {
             presenceBits: presence.bits,
+            dat2,
             dat2Url: dat2Path,
             fetchChannel: `rsps-js5-${Math.random().toString(36).slice(2)}`,
         },
@@ -684,13 +694,14 @@ async function loadCacheFilesSparse(
     // (crossOriginIsolated); without it workers hold private copies and only
     // benefit from session 2 via Js5Persistence. Fix by routing worker misses
     // through the main thread's Js5RangeClient if Safari startup matters.
-    const prefetchIds = isPrefetchDisabled() ? [] : getPrefetchIndexIds(info);
+    // No background prefetch on a low-end device: it would fill the cache's chunks past the limit.
+    const prefetchIds = isPrefetchDisabled() || isLowEndDevice ? [] : getPrefetchIndexIds(info);
     if (prefetchIds.length > 0) {
         const startPrefetch = () => {
             if (signal?.aborted) return;
             void prefetchIndexRegions(
                 dat2Path,
-                buffer,
+                dat2,
                 totalSize,
                 presence,
                 persistence,

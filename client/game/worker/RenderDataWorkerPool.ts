@@ -49,6 +49,11 @@ export class RenderDataWorkerPool {
         }
     }
 
+    /** A dat2 chunk the main thread created after initCache (sparse caches). */
+    addCacheChunk(index: number, chunk: ArrayBuffer): void {
+        for (const worker of this.workers) void worker.init.then((w) => w.addCacheChunk(index, chunk));
+    }
+
     setNpcInstances(instances: NpcInstance[]): Promise<void> {
         const copy = Array.isArray(instances) ? instances.slice() : [];
         return this.runAll((w) => w.setNpcInstances(copy));

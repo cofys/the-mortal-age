@@ -17,6 +17,18 @@ export interface BridgeHeightSample {
     valid: boolean;
 }
 
+/** Matches height-map.glsl: sit above either terrain diagonal without integer stair steps. */
+export function interpolateActorHeight(h00: number, h10: number, h01: number, h11: number,
+    x: number, y: number): number {
+    const first = x + y <= 1
+        ? h00 + (h10 - h00) * x + (h01 - h00) * y
+        : h11 + (h01 - h11) * (1 - x) + (h10 - h11) * (1 - y);
+    const second = x <= y
+        ? h00 + (h01 - h00) * y + (h11 - h01) * x
+        : h00 + (h10 - h00) * x + (h11 - h10) * y;
+    return Math.max(first, second);
+}
+
 export function sampleBridgeHeightForWorldTile<T extends MapSquare>(
     mapManager: MapManager<T>,
     worldX: number,
@@ -36,8 +48,8 @@ export function sampleBridgeHeightForWorldTile<T extends MapSquare>(
 
     const mapWorldX = map.getRenderBaseTileX?.() ?? map.mapX * Scene.MAP_SQUARE_SIZE;
     const mapWorldY = map.getRenderBaseTileY?.() ?? map.mapY * Scene.MAP_SQUARE_SIZE;
-    const localPxX = Math.floor((worldX - mapWorldX) * 128);
-    const localPxY = Math.floor((worldY - mapWorldY) * 128);
+    const localPxX = (worldX - mapWorldX) * 128;
+    const localPxY = (worldY - mapWorldY) * 128;
 
     let tileX = localPxX >> 7;
     let tileY = localPxY >> 7;
@@ -45,8 +57,8 @@ export function sampleBridgeHeightForWorldTile<T extends MapSquare>(
     tileX = Math.max(0, Math.min(maxTileIndex, tileX));
     tileY = Math.max(0, Math.min(maxTileIndex, tileY));
 
-    const offX = localPxX & 0x7f;
-    const offY = localPxY & 0x7f;
+    const offX = localPxX / 128 - Math.floor(localPxX / 128);
+    const offY = localPxY / 128 - Math.floor(localPxY / 128);
 
     const resolvedPlane = resolveBridgePlaneForLocal(map, basePlane, tileX, tileY, strategy);
 
@@ -62,16 +74,12 @@ export function sampleBridgeHeightForWorldTile<T extends MapSquare>(
     const data = map.heightMapData;
     // Height map stores magnitude values in units of (Scene.UNITS_TILE_HEIGHT_BASIS),
     // mirroring the GPU shader path (see `height-map.glsl`: texel * 8).
-    // The >>7 interpolation truncates, so scale into world units *before* dividing;
-    // scaling afterwards loses precision.
     const h00 = ((data[base + iz * size + ix] || 0) * Scene.UNITS_TILE_HEIGHT_BASIS) | 0;
     const h10 = ((data[base + iz * size + ix1] || 0) * Scene.UNITS_TILE_HEIGHT_BASIS) | 0;
     const h01 = ((data[base + iz1 * size + ix] || 0) * Scene.UNITS_TILE_HEIGHT_BASIS) | 0;
     const h11 = ((data[base + iz1 * size + ix1] || 0) * Scene.UNITS_TILE_HEIGHT_BASIS) | 0;
 
-    const delta0 = (h00 * (128 - offX) + h10 * offX) >> 7;
-    const delta1 = (h01 * (128 - offX) + h11 * offX) >> 7;
-    const hWorld = (delta0 * (128 - offY) + delta1 * offY) >> 7;
+    const hWorld = interpolateActorHeight(h00, h10, h01, h11, offX, offY);
 
     return {
         plane: resolvedPlane,

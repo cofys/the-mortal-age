@@ -49,7 +49,7 @@ export class RangedCombatMethod extends CombatMethod {
     start(character: Mobile, target: Mobile) {
         const ammo = character.getCombat().getAmmunition();
         const rangedWeapon = character.getCombat().getRangedWeapon();
-        const animation = character.getAttackAnim();
+        const animation = character.getAttackAnim(target);
 
         if (animation !== -1) {
             character.performAnimation(new Animation(animation));
@@ -57,7 +57,7 @@ export class RangedCombatMethod extends CombatMethod {
 
         const profile = character.isPlayer() ? WeaponProfiles.ranged(character.getAsPlayer()) : null;
         if (ammo?.getStartGraphic() && profile?.startGraphic !== false) {
-            character.performGraphic(ammo.getStartGraphic());
+            character.performGraphic(profile?.doubleStartGraphic ? ammo.getDoubleStartGraphic() : ammo.getStartGraphic());
         }
 
         if (character.isNpc()) {

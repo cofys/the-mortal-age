@@ -1,5 +1,6 @@
 import { CacheLike, openCache } from "../CacheFiles";
 import { Sector } from "../store/Sector";
+import type { SparseDat2 } from "../store/SparseDat2";
 import { PresenceBitset } from "./PresenceBitset";
 
 const RANGE_SEGMENT = "/range/";
@@ -9,6 +10,7 @@ const RANGE_KEY_HEADER = "Range-Key";
 const FLUSH_DELAY_MS = 1500;
 
 type SectorRun = { start: number; end: number };
+type StoredRange = { start: number; end: number; key: string };
 
 /**
  * Persists on-demand fetched dat2 ranges to the existing CacheStorage/IDB
@@ -23,6 +25,7 @@ export class Js5Persistence {
     private pendingRuns: SectorRun[] = [];
     private flushTimer: ReturnType<typeof setTimeout> | undefined;
     private flushChain: Promise<void> = Promise.resolve();
+    private storedRanges?: Promise<StoredRange[]>;
 
     static async readManifest(
         cacheName: string,
@@ -55,7 +58,7 @@ export class Js5Persistence {
     constructor(
         private readonly cacheName: string,
         private readonly dat2Path: string,
-        private readonly buffer: ArrayBuffer,
+        private readonly buffer: Pick<SparseDat2, "byteLength" | "read">,
     ) {
         this.cachePromise = openCache(cacheName);
         const sectorCount = Math.ceil(buffer.byteLength / Sector.SIZE);
@@ -123,6 +126,53 @@ export class Js5Persistence {
             console.warn("[js5] Failed restoring persisted ranges:", e);
         }
         return restored;
+    }
+
+    /**
+     * The bytes at [offset, offset + length) from a range an earlier session stored, or undefined
+     * when no stored range holds them all. A device that skips restore() (a phone's or a tablet's
+     * tab cannot hold everything ever fetched) reads them back from disk, not the network.
+     */
+    async read(offset: number, length: number): Promise<Uint8Array | undefined> {
+        const range = (await this.stored()).find((r) => r.start <= offset && offset + length <= r.end);
+        if (!range) return undefined;
+        try {
+            const resp = await (await this.cachePromise).match(range.key);
+            if (!resp) return undefined;
+            // A slice of the stored blob reads only that part from disk; ranges run to megabytes.
+            const from = offset - range.start;
+            const bytes = new Uint8Array(await (await resp.blob()).slice(from, from + length).arrayBuffer());
+            return bytes.byteLength === length ? bytes : undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
+    /**
+     * Every stored range, without reading its bytes; also marks their sectors persisted, so a
+     * session that skipped restore() does not store them again.
+     */
+    private stored(): Promise<StoredRange[]> {
+        this.storedRanges ??= (async () => {
+            const cache = await this.cachePromise;
+            if (!cache.matchAll) return [];
+            const ranges: StoredRange[] = [];
+            try {
+                for (const resp of await cache.matchAll(this.dat2Path + RANGE_SEGMENT, { ignoreSearch: true })) {
+                    const start = Number(resp.headers.get(RANGE_START_HEADER));
+                    const length = Number(resp.headers.get("Content-Length"));
+                    const key = resp.headers.get(RANGE_KEY_HEADER);
+                    void resp.body?.cancel();
+                    if (!key || !Number.isInteger(start) || start < 0 || !(length > 0)) continue;
+                    ranges.push({ start, end: start + length, key });
+                    this.markPersisted(start, length);
+                }
+            } catch (e) {
+                console.warn("[js5] Failed listing persisted ranges:", e);
+            }
+            return ranges;
+        })();
+        return this.storedRanges;
     }
 
     /** Queue a fetched byte range for persistence (write-behind, coalesced). */
@@ -204,6 +254,7 @@ export class Js5Persistence {
         }
         this.flushChain = this.flushChain.then(async () => {
             const cache = await this.cachePromise;
+            await this.stored();
             for (const run of runs) {
                 try {
                     await this.persistRun(cache, run);
@@ -229,8 +280,7 @@ export class Js5Persistence {
         }
         const startByte = start * Sector.SIZE;
         const endByte = Math.min(end * Sector.SIZE, this.buffer.byteLength);
-        const copy = new ArrayBuffer(endByte - startByte);
-        new Uint8Array(copy).set(new Uint8Array(this.buffer, startByte, endByte - startByte));
+        const copy = this.buffer.read(startByte, endByte - startByte);
 
         const url = `${this.dat2Path}${RANGE_SEGMENT}?s=${start}&n=${end - start}`;
         const resp = new Response(copy, {

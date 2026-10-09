@@ -1,0 +1,57 @@
+{
+  "$comment": "Decisions for scripts/sync-npc-spawns.ts (docs/npc-spawns.md): Wiki spawns it labels in its report, and leaves out of npc-spawns.json when `skip` is true. `categories` are cache NPC categories (opcode 18), `ids` cache NPC ids, `names` cache NPC names, `namePatterns` regular expressions on them, `pagePatterns` regular expressions on the Wiki page title, `boxes` areas (\"minX,minY,maxX,maxY[,plane]\") such as instance templates a plugin spawns itself.",
+  "categories": {
+    "2353": {"label": "Sailing sea creature", "skip": false, "why": "Sea encounters for Sailing (sharks, rays, krakens, seabirds) in open water; reachable only by boat."}
+  },
+  "ids": {
+    "12861": {"label": "Quest stage", "skip": true, "why": "Attala before Perilous Moons; after it she's in Cam Torum (13099)."},
+    "12876": {"label": "Quest stage", "skip": true, "why": "The builder before Perilous Moons; after it he's in Cam Torum (12877)."},
+    "14209": {"label": "Quest stage", "skip": true, "why": "Antos injured, during the quest; he's well (14211) after it."},
+    "14215": {"label": "Quest stage", "skip": true, "why": "Shas injured, during the quest; she's well (14216) after it."},
+    "14221": {"label": "Quest stage", "skip": true, "why": "Etz injured, during the quest; he's well (14219) after it."},
+    "12931": {"label": "Quest stage", "skip": true, "why": "Guild Hunter Fox injured in the Avium Savannah during At First Light; he's in the Hunter Guild (13426) after it."},
+    "12932": {"label": "Quest stage", "skip": true, "why": "Guild Hunter Fox injured, during At First Light."},
+    "13400": {"label": "Quest stage", "skip": true, "why": "Guild Hunter Fox injured, during At First Light."},
+    "13714": {"label": "Quest stage", "skip": true, "why": "Forebearer Janus as a cultist; after The Final Dawn he's a civilian in his Civitas home (14241)."},
+    "13766": {"label": "Quest stage", "skip": true, "why": "Forebearer Janus as a cultist."},
+    "14242": {"label": "Quest stage", "skip": true, "why": "Forebearer Janus captured, during a quest."},
+    "14243": {"label": "Quest stage", "skip": true, "why": "Forebearer Janus captured, during a quest."},
+    "14244": {"label": "Quest stage", "skip": true, "why": "Forebearer Janus captured, during a quest."},
+    "14245": {"label": "Quest stage", "skip": true, "why": "Forebearer Janus bound, during a quest."},
+    "13718": {"label": "Quest stage", "skip": true, "why": "Furia Tullus as a cultist, during Twilight's Promise; she's a royal servant (12653) otherwise."},
+    "14330": {"label": "Quest stage", "skip": true, "why": "Furia Tullus imprisoned, during Twilight's Promise."},
+    "14974": {"label": "Quest stage", "skip": true, "why": "Junior Jim during his quest; after it he's 14975."},
+    "15238": {"label": "Quest stage", "skip": true, "why": "Junior Jim in 'Limbo', a quest stage."}
+  },
+  "unalignedLayers": {"label": "Wiki map layer not aligned", "skip": true, "why": "The Wiki draws some dungeons on their own map layers with other coordinates; when too few of a layer's spawns line up with existing ones to work out the shift, its spawns could land in the wrong place."},
+  "names": {
+    "Gate of War": {"label": "Handled as an object", "skip": true, "why": "Stronghold of Security door: tsps opens it as a scenery object (StrongholdOfSecurity.plugin.js)."},
+    "Ricketty door": {"label": "Handled as an object", "skip": true, "why": "Stronghold of Security door: tsps opens it as a scenery object."},
+    "Oozing barrier": {"label": "Handled as an object", "skip": true, "why": "Stronghold of Security door: tsps opens it as a scenery object."},
+    "Portal of Death": {"label": "Handled as an object", "skip": true, "why": "Stronghold of Security door: tsps opens it as a scenery object."},
+    "Gemstone Crab": {"label": "Spawned by a plugin", "skip": true, "why": "GemstoneCrab.plugin.js spawns the timed world boss at one of its three spots itself."},
+    "Sol Heredit": {"label": "Spawned by a plugin", "skip": true, "why": "The Fortis Colosseum's final boss, spawned by the run in its arena (ColosseumRun.js)."},
+    "Tempoross": {"label": "Minigame", "skip": true, "why": "The Tempoross minigame's boss."},
+    "<col=00ffff>Ammunition crate</col>": {"label": "Minigame", "skip": true, "why": "A Tempoross minigame prop."},
+    "<col=00ffff>Inactive spirit pool</col>": {"label": "Minigame", "skip": true, "why": "A Tempoross minigame prop."},
+    "Avatar of Creation": {"label": "Minigame", "skip": true, "why": "A Soul Wars boss."},
+    "Blood Moon": {"label": "Boss without its fight", "skip": true, "why": "A Perilous Moons boss: no plugin gives it its mechanics yet."},
+    "Blue Moon": {"label": "Boss without its fight", "skip": true, "why": "A Perilous Moons boss: no plugin gives it its mechanics yet."},
+    "Eclipse Moon": {"label": "Boss without its fight", "skip": true, "why": "A Perilous Moons boss: no plugin gives it its mechanics yet."},
+    "Amoxliatl": {"label": "Boss without its fight", "skip": true, "why": "The Ruins of Tapoyauik's boss: no plugin gives it its mechanics yet."},
+    "Araxxor": {"label": "Boss without its fight", "skip": true, "why": "The Morytania Spider Cave's boss: no plugin gives it its mechanics yet."}
+  },
+  "namePatterns": [
+    {"pattern": "^<col=", "label": "Minigame or scenery prop", "skip": true, "why": "Coloured names mark NPCs that are props of a minigame, raid or quest (Tempoross's crates, the Theatre of Blood's pillars, the Nightmare's totems): their content spawns them."}
+  ],
+  "boxes": [
+    {"box": "2624,2560,2687,2623,0", "label": "Spawned by a plugin", "skip": true, "why": "Pest Control's game island: PestControl.plugin.js spawns the Void Knight and the squire there."},
+    {"box": "3072,3008,3135,3071,0", "label": "Group Ironman island", "skip": true, "why": "The Node, where Group Ironman accounts start; its tutors and fake players aren't for other accounts."}
+  ],
+  "pagePatterns": [
+    {"pattern": "^Armoured zombie \\(Defender of Varrock\\)$", "label": "Quest only", "skip": true, "why": "The zombies invading Varrock Palace exist only during Defender of Varrock."},
+    {"pattern": "League|Leagues", "label": "Leagues", "skip": true, "why": "Only on Leagues worlds."},
+    {"pattern": "Deadman", "label": "Deadman", "skip": true, "why": "Only on Deadman worlds."},
+    {"pattern": "\\bevent\\b|Birthday|Halloween|Christmas|Easter", "label": "Holiday event", "skip": true, "why": "Only during a holiday event."}
+  ]
+}

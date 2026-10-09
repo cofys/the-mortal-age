@@ -22,11 +22,12 @@ import { SdMapData } from "../loader/SdMapData";
 import { SdMapDataLoader } from "../loader/SdMapDataLoader";
 import { SdMapLoaderInput } from "../loader/SdMapLoaderInput";
 import { WebGPUMapSquare } from "./WebGPUMapSquare";
+import { resolveFogRange } from "../RenderDistancePolicy";
 import { WorldResources } from "./WorldResources";
 import { WebGPUActors } from "./actors/WebGPUActors";
 import { WebGPUInstances } from "./instances";
 import { environmentAt } from "../render/environment";
-import { GPU_TEXTURE_USAGE, SCENE_GROUP, WORLD_TEXTURES_GROUP } from "./bindings";
+import { GPU_TEXTURE_USAGE, SCENE_DEPTH_FORMAT, SCENE_GROUP, WORLD_TEXTURES_GROUP } from "./bindings";
 import { getControlledPlayerEcsIndex, updateFollowCamera } from "./camera";
 import { computeWebGPURoofPlaneLimit, resolveWebGPURenderDistance } from "./frameConfig";
 import { WebGPUOverlays } from "./overlays/WebGPUOverlays";
@@ -66,6 +67,11 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     private depthView?: GPUTextureView;
     private depthWidth: number = 0;
     private depthHeight: number = 0;
+    /** Offscreen HDR scene target, only when the scene extension declares `sceneColorFormat`. */
+    private sceneColorTexture?: GPUTexture;
+    private sceneColorView?: GPUTextureView;
+    private sceneColorWidth: number = 0;
+    private sceneColorHeight: number = 0;
 
     private dataLoader = new SdMapDataLoader();
 
@@ -99,6 +105,19 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     readonly followCamForward = vec3.create();
     heightValidAtTime: number | undefined;
     mapDataLoadedNotified: boolean = false;
+
+    // 117 HD follow-camera feel (updateFollowCamera): eased wheel zoom and yaw/pitch inertia.
+    // followCamZoom scales the follow distance (1 = the pre-feature distance).
+    followCamZoomTarget: number = 1;
+    followCamZoom: number = 1;
+    /** Wheel accumulated this frame while the pointer was over the scene (updateFollowCamera). */
+    followCamWheel: number = 0;
+    followCamSmoothedYaw: number = 0;
+    followCamRawYaw: number = 0;
+    followCamSmoothedPitch: number = 128;
+    followCamCameraFeelInitialized: boolean = false;
+    /** Follow camera-to-focal distance in tiles, read by the 117 HD DOF pass. */
+    followCamDistance: number = 12;
 
     /** Stage 3/4/5 systems, owned by client/render/webgpu/{actors,overlays,ui}/. */
     actors?: WebGPUActors;
@@ -140,7 +159,8 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         }
         this.device = await adapter.requestDevice();
         this.device.lost.then((info) => {
-            console.error("[webgpu] device lost", info);
+            // GPUDeviceLostInfo's fields are getters: logged as an object they print as {}.
+            console.error(`[webgpu] device lost (${info.reason}): ${info.message}`);
         });
         // WebGPU validation errors are reported asynchronously and do not throw; surface them
         // with the [webgpu] tag the smoke test scans for.
@@ -179,6 +199,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         if (this.world || !this.device || !this.osrsClient.loadedCache) return;
         try {
             this.world = await WorldResources.create(this.device, this.osrsClient, this.format);
+            this.ensureSceneColorTexture(this.canvas.width, this.canvas.height);
             this.actors = new WebGPUActors(this);
             this.overlays = new WebGPUOverlays(this);
             this.ui = new WebGPUUi(this);
@@ -192,6 +213,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     override onResize(width: number, height: number): void {
         this.ensureDepthTexture(width, height);
+        this.ensureSceneColorTexture(width, height);
     }
 
     private ensureDepthTexture(width: number, height: number): void {
@@ -202,12 +224,31 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.depthTexture?.destroy();
         this.depthTexture = this.device.createTexture({
             size: [w, h],
-            format: "depth24plus",
-            usage: GPU_TEXTURE_USAGE.RENDER_ATTACHMENT,
+            format: SCENE_DEPTH_FORMAT,
+            // TEXTURE_BINDING so a scene extension can sample it after the world pass (SSAO).
+            usage: GPU_TEXTURE_USAGE.RENDER_ATTACHMENT | GPU_TEXTURE_USAGE.TEXTURE_BINDING,
         });
         this.depthView = this.depthTexture.createView();
         this.depthWidth = w;
         this.depthHeight = h;
+    }
+
+    private ensureSceneColorTexture(width: number, height: number): void {
+        const format = this.world?.extension?.sceneColorFormat;
+        if (!this.device || !format) return;
+        const w = Math.max(1, width | 0);
+        const h = Math.max(1, height | 0);
+        if (this.sceneColorTexture && this.sceneColorWidth === w && this.sceneColorHeight === h) return;
+        this.sceneColorTexture?.destroy();
+        this.sceneColorTexture = this.device.createTexture({
+            label: "webgpu scene hdr target",
+            size: [w, h],
+            format,
+            usage: GPU_TEXTURE_USAGE.RENDER_ATTACHMENT | GPU_TEXTURE_USAGE.TEXTURE_BINDING,
+        });
+        this.sceneColorView = this.sceneColorTexture.createView();
+        this.sceneColorWidth = w;
+        this.sceneColorHeight = h;
     }
 
     override queueLoadMap(mapX: number, mapY: number, streamGeneration?: number): void {
@@ -399,8 +440,9 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.cameraPosUni[1] = camera.getPosZ();
 
         const renderDistance = resolveWebGPURenderDistance(this);
-        const fogEnd = renderDistance;
-        const fogDepth = Math.max(0, fogEnd * AUTO_FOG_DEPTH_FACTOR);
+        // HD spreads haze over long views, as on WebGL (render/render/frame/render.ts).
+        const { fogEnd, fogDepth } = resolveFogRange({ renderDistance, autoFogDepth: true,
+            autoFogDepthFactor: AUTO_FOG_DEPTH_FACTOR, manualFogDepth: 0, hd: this.osrsClient.hdPlugin?.isEnabled() });
 
         const data = this.world.sceneData;
         data.set(camera.viewProjMatrix as Float32Array, 0);
@@ -433,8 +475,23 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         const loggedIn = this.osrsClient.isLoggedIn();
 
         if (loggedIn) {
+            // 117 HD camera feel: the scene-viewport widget consumes wheel input before the
+            // camera could see it, so capture the raw wheel while the pointer is over the 3D
+            // viewport (the UI keeps its own scroll everywhere else). updateFollowCamera
+            // consumes and clears it.
+            const inputManager = this.osrsClient.inputManager;
+            if (
+                this.osrsClient.hdPlugin?.isEnabled() === true &&
+                this.osrsClient.followPlayerCamera &&
+                inputManager.wheelDeltaY !== 0 &&
+                inputManager.mouseX >= 0 &&
+                inputManager.mouseY >= 0 &&
+                this.osrsClient.camera.containsScreenPoint(inputManager.mouseX, inputManager.mouseY)
+            ) {
+                this.followCamWheel += inputManager.wheelDeltaY;
+            }
             this.handleInput(deltaTime);
-            updateFollowCamera(this, timeSec);
+            updateFollowCamera(this, timeSec, deltaTime);
             this.osrsClient.camera.update(width, height, 0, 0, width, height);
             // Swap in built squares before the visible list is made: replacing a square (a door
             // or loc rebuild) destroys the old one's buffers, and a frame that still draws it
@@ -485,16 +542,36 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         }
 
         const canvasView = this.context.getCurrentTexture().createView();
+        // An active extension that declares sceneColorFormat renders the world into the HDR
+        // target and composites to the canvas in afterScene (HDR tonemapping, bloom, SSAO).
+        const sceneExtension = world.extension;
+        const hdrTarget =
+            world.extensionActive &&
+            sceneExtension?.sceneColorFormat &&
+            sceneExtension.afterScene &&
+            this.sceneColorView
+                ? this.sceneColorView
+                : undefined;
+        // The HDR target holds linear light, so the display-referred sky clear is linearised;
+        // the tonemap pass re-encodes it.
+        const toLinear = (value: number) => Math.pow(Math.max(value, 0), 2.2);
         const pass = encoder.beginRenderPass({
             colorAttachments: [
                 {
-                    view: canvasView,
-                    clearValue: {
-                        r: this.skyColor[0],
-                        g: this.skyColor[1],
-                        b: this.skyColor[2],
-                        a: 1,
-                    },
+                    view: hdrTarget ?? canvasView,
+                    clearValue: hdrTarget
+                        ? {
+                              r: toLinear(this.skyColor[0]),
+                              g: toLinear(this.skyColor[1]),
+                              b: toLinear(this.skyColor[2]),
+                              a: 1,
+                          }
+                        : {
+                              r: this.skyColor[0],
+                              g: this.skyColor[1],
+                              b: this.skyColor[2],
+                              a: 1,
+                          },
                     loadOp: "clear",
                     storeOp: "store",
                 },
@@ -524,6 +601,16 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         }
 
         pass.end();
+
+        if (hdrTarget) {
+            sceneExtension!.afterScene!(this, encoder, {
+                colorTexture: this.sceneColorTexture!,
+                colorView: hdrTarget,
+                depthTexture: this.depthTexture!,
+                depthView: this.depthView!,
+                canvasView,
+            });
+        }
 
         // Overlays and UI that draw after the world, without depth (ToFrameTexture +
         // PostPresent until stage 5 adds an offscreen frame texture).
@@ -673,6 +760,11 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.mapsToLoad.clear();
         this.followCamFocalInitialized = false;
         this.followCamFocalLastClientCycle = -1;
+        this.followCamZoomTarget = 1;
+        this.followCamZoom = 1;
+        this.followCamWheel = 0;
+        this.followCamCameraFeelInitialized = false;
+        this.followCamDistance = 12;
         this.mapDataLoadedNotified = false;
         this.heightValidAtTime = undefined;
     }
@@ -691,5 +783,8 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.depthTexture?.destroy();
         this.depthTexture = undefined;
         this.depthView = undefined;
+        this.sceneColorTexture?.destroy();
+        this.sceneColorTexture = undefined;
+        this.sceneColorView = undefined;
     }
 }

@@ -96,6 +96,7 @@ import {
     isIos,
     isMobileMode,
     isTouchDevice,
+    isLowEndDevice,
     isWebGL2Supported,
 } from "../../common/utils/DeviceUtil";
 import { clamp } from "../../common/utils/MathUtil";
@@ -198,12 +199,13 @@ export function isSupported(): boolean{
 export function resolveEffectiveLodThresholdTiles(host: WebGLOsrsRendererHost, frameId: number): number {
 
         const renderDistance = host.getFrameRenderDistanceTiles() | 0;
-        const base = clamp(host.osrsClient.lodDistance | 0, 0, Math.max(0, renderDistance));
+        const base = clamp(host.osrsClient.lodDistance | 0, 0,
+            Math.min(renderDistance, host.osrsClient.hdPlugin?.isEnabled() ? 48 : renderDistance));
         if ((host.effectiveLodThresholdFrame | 0) === (frameId | 0)) {
             return host.effectiveLodThresholdTiles | 0;
         }
         const profile = host.syncBrowserQualityProfile();
-        const target = isTouchDevice
+        const target = isTouchDevice || isLowEndDevice
             ? Math.min(base, Math.max(0, Math.min(renderDistance, profile.lodThresholdCap | 0)))
             : base;
         host.effectiveLodThresholdTiles = Math.max(0, target | 0);

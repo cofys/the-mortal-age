@@ -327,6 +327,23 @@ export class GfxManager {
         return out;
     }
 
+    /**
+     * The world graphics on a world entity's own tiles (a boat deck's, such as the wind on its
+     * sails), which its overlay map draws: those tiles lie outside every normal map square.
+     */
+    listWorldInstancesInView(view: { containsTile(tileX: number, tileY: number): boolean }): GfxInstance[] {
+        const out = this.worldInstancesBuffer;
+        out.length = 0;
+        const nowCycle = getClientCycle() | 0;
+        for (const inst of this.instances.values()) {
+            if (!inst.world) continue;
+            if ((inst.startCycle | 0) > nowCycle) continue;
+            if (!view.containsTile(inst.world.tileX | 0, inst.world.tileY | 0)) continue;
+            out.push(inst);
+        }
+        return out;
+    }
+
     getWorldInstancesForMap(map: WebGLMapSquare): Array<{ inst: GfxInstance; slot: number }> {
         const out = this.worldInstancesWithSlotBuffer;
         let idx = 0;

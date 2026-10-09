@@ -5,6 +5,7 @@ import { Graphic } from "../../../model/Graphic";
 import { Projectile } from "../../../model/Projectile";
 import { Player } from "../../../entity/impl/player/Player";
 import { Item } from "../../../model/Item";
+import { Sound } from "../../../Sound";
 
 export interface CombatNormalSpellOptions {
     spellId: () => number
@@ -20,6 +21,8 @@ export interface CombatNormalSpellOptions {
     levelRequired?:() => number
     spellEffect?:(cast: Mobile, castOn: Mobile) => void 
     members?: boolean
+    /** Its own cast sound id (a built-in staff spell has no spellbook id to look it up by). */
+    castSound?: () => number
   }
 
 export class CombatNormalSpell extends CombatSpell {
@@ -33,6 +36,9 @@ export class CombatNormalSpell extends CombatSpell {
 
     spellId(): number {
         return this.options.spellId()
+    }
+    castSound(): Sound | null {
+        return this.options.castSound ? new Sound(this.options.castSound(), 1, 0, 0) : null;
     }
     maximumHit(): number {
         return this.options.maximumHit()

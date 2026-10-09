@@ -4,7 +4,7 @@
  * frame before drawing the scene.
  */
 import { clamp } from "../../common/utils/MathUtil";
-import { isIos, isMobileMode, isTouchDevice } from "../../common/utils/DeviceUtil";
+import { isIos, isLowEndDevice, isMobileMode, isTouchDevice } from "../../common/utils/DeviceUtil";
 import { computeRoofPlaneLimit } from "../../game/roof/RoofVisibility";
 import { resolveBridgePromotedPlane } from "../../game/scene/PlaneResolver";
 import { Scene } from "../../rs/scene/Scene";
@@ -35,13 +35,13 @@ interface TilePoint {
 export function resolveWebGPURenderDistance(renderer: WebGPURenderer): number {
     const base = clamp(renderer.osrsClient.renderDistance | 0, 25, 90);
     const profile = resolveQualityProfile();
-    const target = isTouchDevice ? Math.min(base, profile.renderDistanceCap | 0) : base;
+    const target = isTouchDevice || isLowEndDevice ? Math.min(base, profile.renderDistanceCap | 0) : base;
     return Math.max(0, target | 0);
 }
 
 function resolveQualityProfile(): BrowserQualityProfile {
     // Mirrors resolveBrowserQualityProfile (render/render/quality.ts).
-    if (!isMobileMode) {
+    if (!isMobileMode && !isLowEndDevice) {
         return DESKTOP_QUALITY_PROFILE;
     }
     if (isIos) {

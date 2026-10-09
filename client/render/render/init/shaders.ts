@@ -183,22 +183,81 @@ import { createWidgetsOverlay, getChatboxScreenRect } from "../../../widgets/gl/
 import type { WebGLOsrsRendererHost } from "../hostInterface";
 import { RENDER_CONSTANTS } from "../constants";
 
+/** The world and actor programs, as the plugins currently want them (order matches initShaders). */
+function sceneProgramSources(host: WebGLOsrsRendererHost) {
+        const supportsMultiDraw = host.drawBackend?.supportsMultiDraw ?? false;
+        return [
+            createMainProgram(false, supportsMultiDraw),
+            createMainProgram(true, supportsMultiDraw),
+            createNpcProgram(true, supportsMultiDraw),
+            createNpcProgram(false, supportsMultiDraw),
+            createProjectileProgram(true, supportsMultiDraw),
+            createProjectileProgram(false, supportsMultiDraw),
+            createPlayerProgram(true, supportsMultiDraw),
+            createPlayerProgram(false, supportsMultiDraw),
+        ].map((source) => host.osrsClient.clientPlugins.transformSceneProgram(source));
+}
+
+// PicoGL keeps these on every Program but leaves them out of its declarations.
+type LinkedProgram = Program & {
+    program: WebGLProgram;
+    vertexSource: string;
+    fragmentSource: string;
+    uniforms: Record<string, unknown>;
+    samplers: Record<string, number>;
+    samplerCount: number;
+    uniformBlocks: Record<string, number>;
+    uniformBlockCount: number;
+    appState: { program: unknown };
+};
+
+/**
+ * Recompiles the scene programs from the plugins' current sources (a plugin that changes what it
+ * adds, like 117 HD on toggle, calls this). Every draw call holds its Program object, so the
+ * objects stay and only their GL programs are swapped.
+ */
+export async function rebuildScenePrograms(host: WebGLOsrsRendererHost): Promise<void> {
+        const targets = [
+            host.mainProgram, host.mainAlphaProgram, host.npcProgram, host.npcProgramOpaque,
+            host.projectileProgram, host.projectileProgramOpaque, host.playerProgram, host.playerProgramOpaque,
+        ] as LinkedProgram[];
+        const fresh = (await host.app.createPrograms(...sceneProgramSources(host))) as LinkedProgram[];
+        targets.forEach((target, i) => adoptProgram(host.gl, target, fresh[i]));
+}
+
+/**
+ * Moves `fresh`'s GL program into `target`. Draw calls hold their textures and uniform buffers by
+ * unit, so a sampler or block keeps the unit `target` gave it by name, a new one takes the next
+ * free unit, and names the new program lacks keep theirs (their textures are still bound).
+ */
+function adoptProgram(gl: WebGL2RenderingContext, target: LinkedProgram, fresh: LinkedProgram): void {
+        const next = (units: Record<string, number>) => Math.max(-1, ...Object.values(units)) + 1;
+        gl.useProgram(fresh.program);
+        for (const name of Object.keys(fresh.samplers)) {
+            target.samplers[name] ??= next(target.samplers);
+            gl.uniform1i(gl.getUniformLocation(fresh.program, name), target.samplers[name]);
+        }
+        for (const name of Object.keys(fresh.uniformBlocks)) {
+            target.uniformBlocks[name] ??= next(target.uniformBlocks);
+            gl.uniformBlockBinding(fresh.program, gl.getUniformBlockIndex(fresh.program, name), target.uniformBlocks[name]);
+        }
+        target.samplerCount = next(target.samplers);
+        target.uniformBlockCount = next(target.uniformBlocks);
+        gl.deleteProgram(target.program);
+        target.program = fresh.program;
+        target.uniforms = fresh.uniforms;
+        target.vertexSource = fresh.vertexSource;
+        target.fragmentSource = fresh.fragmentSource;
+        // Neither PicoGL wrapper is current any more: the next bind() uses the new program.
+        target.appState.program = null;
+}
+
 export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Program[]> {
 
-        const supportsMultiDraw = host.drawBackend?.supportsMultiDraw ?? false;
         // Create FXAA separately so a Metal/ANGLE link failure on iOS Safari
         // cannot reject the entire program batch (player/NPC/etc.).
         const programs = await host.app.createPrograms(
-            ...[
-                createMainProgram(false, supportsMultiDraw),
-                createMainProgram(true, supportsMultiDraw),
-                createNpcProgram(true, supportsMultiDraw),
-                createNpcProgram(false, supportsMultiDraw),
-                createProjectileProgram(true, supportsMultiDraw),
-                createProjectileProgram(false, supportsMultiDraw),
-                createPlayerProgram(true, supportsMultiDraw),
-                createPlayerProgram(false, supportsMultiDraw),
-            ].map((source) => host.osrsClient.clientPlugins.transformSceneProgram(source)),
+            ...sceneProgramSources(host),
             FRAME_PROGRAM,
             // hover line program (added at end)
             [

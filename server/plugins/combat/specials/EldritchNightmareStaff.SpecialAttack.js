@@ -1,11 +1,17 @@
 // TODO: ported from xrsps-typescript; untested.
 module.exports = function registerEldritchNightmareStaffSpecialAttack(api) {
-  const { CombatMethod, CombatSpecial, CombatType, ItemIdentifiers, PendingHit, Skill } = api.core;
+  const { Animation, CombatMethod, CombatSpecial, CombatType, Graphic, ItemIdentifiers, MagicCombatMethod, PendingHit, Skill } = api.core;
 
   const DRAIN = 55;
   const BASE_MAX_HIT = 44;
   const PRAYER_RESTORE_FRACTION = 0.5;
   const MAXIMUM_PRAYER_LEVEL = 120;
+  // Invocate (cache): nightmare_staff_eldritch_cast_spotanim on the caster and
+  // nightmare_staff_eldritch_hit_spotanim on the target. The Wiki gives it its own attack animation;
+  // nightmare_staff_special is the staff's only special attack animation in the cache.
+  const CAST_ANIMATION = new Animation(8532);
+  const CAST_GRAPHIC = new Graphic(1762);
+  const HIT_GRAPHIC = new Graphic(1761);
 
   // TODO: core's magic hit path (getMagicMaxhit) ignores maximumHitSource /
   // visibleMagicMaximumHit and damageMultiplier, so the Invocate max hit is not
@@ -21,9 +27,12 @@ module.exports = function registerEldritchNightmareStaffSpecialAttack(api) {
 
     start(character, target) {
       CombatSpecial.drain(character, DRAIN);
+      character.performAnimation(CAST_ANIMATION);
+      character.performGraphic(CAST_GRAPHIC);
     }
 
     handleAfterHitEffects(hit) {
+      hit.getTarget().performGraphic(hit.isAccurate() ? HIT_GRAPHIC : MagicCombatMethod.SPLASH_GRAPHIC);
       if (!hit.isAccurate() || Math.floor(hit.getTotalDamage()) <= 0) {
         return;
       }

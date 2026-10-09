@@ -17,6 +17,7 @@ type FogRangeOptions = {
     autoFogDepth: boolean;
     autoFogDepthFactor: number;
     manualFogDepth: number;
+    hd?: boolean;
 };
 
 export function resolveNextEffectiveRenderDistanceTiles(
@@ -54,9 +55,14 @@ export function resolveNextEffectiveRenderDistanceTiles(
 }
 
 export function resolveFogRange(options: FogRangeOptions): { fogEnd: number; fogDepth: number } {
-    const fogEnd = options.renderDistance;
-    const fogDepth = options.autoFogDepth
-        ? Math.max(0, fogEnd * options.autoFogDepthFactor)
-        : options.manualFogDepth;
-    return { fogEnd, fogDepth };
+    // Short views keep most nearby scenery clear. Longer views spread haze
+    // over the distance and leave a larger obscured margin for cheap culling.
+    const longView = clamp((options.renderDistance - 25) / 135, 0, 1);
+    const fogEnd = options.renderDistance * (options.hd ? 0.75 + 0.24 * (1 - longView) : 1);
+    const autoDepth = options.hd
+        ? Math.min(36 - 12 * longView, options.renderDistance * (0.15 + 0.63 * (1 - longView)),
+            fogEnd * options.autoFogDepthFactor)
+        : fogEnd * options.autoFogDepthFactor;
+    const fogDepth = options.autoFogDepth ? Math.max(0, autoDepth) : options.manualFogDepth;
+    return { fogEnd, fogDepth: Math.min(fogDepth, Math.max(0, fogEnd - 1)) };
 }

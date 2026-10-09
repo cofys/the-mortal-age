@@ -404,7 +404,7 @@ type RootRenderTransform = {
     offsetY: number;
 };
 
-function getRootRenderTransform(root: any): RootRenderTransform {
+export function getRootRenderTransform(root: any): RootRenderTransform {
     const scaleXRaw = Number(
         (root as any)?.__widgetRenderScaleX ?? (root as any)?.__widgetRenderScale ?? 1.0,
     );

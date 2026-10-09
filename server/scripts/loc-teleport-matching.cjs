@@ -1,0 +1,128 @@
+"use strict";
+
+// Choosing which captured loc teleports (rsprox_index.py loc-teleports) become
+// data/definitions/loc-teleports.json entries, for scripts/sync-loc-teleports.cjs
+// (docs/loc-teleports.md). Plain JS so tests can load it.
+
+/**
+ * The kinds of loc taken so far, by the loc's name: ladders, stairs, trapdoors, ropes, caves,
+ * holes, tunnels and crevices. Boats, portals, doors, jumps and the like need more than a
+ * fixed move (fares, quests, agility), so they wait for their own work.
+ */
+const KINDS = /^(.*\bladder( top)?|stairs?|.*\bstaircase|steps|cellar stairs|trap ?door|manhole|rope|climbing rope|anchor rope|.*\bcave\b.*|cave opening|hole|.*\btunnel|.*\bcrevice|cracked wall|grotto|sewer entrance|smokey well|old ruin entrance|entrance|entry|crypt)$/i;
+
+/** Gameval names of content that only exists on Leagues worlds. */
+const LEAGUES_ONLY = /^league/;
+
+/**
+ * Messages of attempts without a teleport that aren't a refusal: the player doing something
+ * else meanwhile (a potion, poison, a chat channel, a music unlock, the desert's thirst) or the
+ * loc's own flavour text. Any other message ("That looks too steep to safely climb down with
+ * just your bare hands.", a guard turning the player away) is taken as a requirement.
+ */
+const NOISE = /^(You drink some of|You have # doses? of|You have been poisoned|You have been venomed|You are hit by|Now talking in|To talk, start each line|You have unlocked a new music track|You start dying of thirst|You should get a waterskin|You squeeze|You climb over|You nimbly|and continue|You swing your pickaxe|Your stamina|You feel)/;
+
+function refusals(entry) {
+  return (entry.failures ?? []).map(([message]) => message).filter((message) => !NOISE.test(message));
+}
+
+/** How far apart two destinations of one loc can be and still be one teleport (a side apart). */
+const NETWORK_SPREAD = 30;
+
+const distance = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+
+/**
+ * A travel network (spirit tree, magic mushtree, the shipyard portal): one loc, several
+ * far-apart destinations and no dialogue choice, so an interface picks the destination.
+ */
+function isNetwork(entry) {
+  const destinations = entry.destinations ?? [];
+  if (destinations.length < 2 || destinations.some((destination) => destination.choice)) return false;
+  return destinations.some((a) => destinations.some((b) => distance(a, b) > NETWORK_SPREAD));
+}
+
+/** Two destinations reached from the same tile: where the player stands doesn't pick one. */
+function sharesSide(entry) {
+  const sides = (entry.destinations ?? []).map((destination) => String(destination.from?.[0] ?? destination.teleported_from?.[0]));
+  return new Set(sides).size < sides.length;
+}
+
+/**
+ * The decision that leaves a loc out: by tile (one placement of a name many locs share), exact
+ * gameval name or pattern. { why } or null.
+ */
+function skipDecision(entry, decisions) {
+  const { name } = entry;
+  const placed = (decisions.skip?.locs ?? []).find((loc) => loc.name === name && loc.x === entry.x && loc.y === entry.y && (loc.z ?? 0) === entry.z);
+  if (placed) return { why: placed.why };
+  if (decisions.skip?.names?.[name]) return { why: decisions.skip.names[name] };
+  for (const { pattern, why } of decisions.skip?.patterns ?? []) {
+    if (new RegExp(pattern).test(name)) return { why };
+  }
+  return null;
+}
+
+/**
+ * Whether a captured loc becomes an entry. `probe` is what clicking it in tsps did, per
+ * destination side: { status: same | nothing | different | handled-no-move | ..., handledBy }.
+ * `display` is the loc's name in the rev 241 cache (for a multiloc, the variant with the option).
+ * Returns { take: true } or { take: false, reason }.
+ */
+function choose(entry, probe, display, decisions) {
+  // Leagues and event worlds move players the same way, apart from their own content.
+  const labels = (entry.labels ?? []).filter((label) => label !== "special-world");
+  if (labels.length) return { take: false, reason: `labelled ${entry.labels.join(", ")}` };
+  if (LEAGUES_ONLY.test(entry.name)) return { take: false, reason: "Leagues content" };
+  if (!entry.teleports) return { take: false, reason: "no teleport captured" };
+  const skipped = skipDecision(entry, decisions);
+  if (skipped) return { take: false, reason: skipped.why };
+  if (isNetwork(entry)) return { take: false, reason: "travel network (an interface picks the destination)" };
+  if (refusals(entry).length) return { take: false, reason: "live OSRS refused some attempts (a requirement)" };
+  if (entry.dialogue) return { take: false, reason: "dialogue choice" };
+  if (sharesSide(entry)) return { take: false, reason: "several destinations from one tile (something else decides)" };
+  if (!display || !KINDS.test(display)) return { take: false, reason: "not a ladder, stair, cave or hole" };
+  if (!probe?.length || probe.some((side) => ["not-on-map", "op-missing", "error"].includes(side.status))) {
+    return { take: false, reason: "not on the rev 241 map as captured" };
+  }
+  if (probe.every((side) => side.status === "same")) return { take: false, reason: "tsps already does this" };
+  // Clicks tsps leaves alone, or that Ladders takes (it asks other plugins first); another
+  // plugin's loc is that plugin's to fix.
+  const owner = probe.find((side) => side.status !== "same" && side.status !== "nothing" && side.handledBy !== "Ladders");
+  if (owner) return { take: false, reason: `handled by ${owner.handledBy ?? owner.status}` };
+  return { take: true };
+}
+
+/** "x,y,z:op", how entries are looked up from a click. */
+function keyOf(x, y, z, op) {
+  return `${x},${y},${z}:${op}`;
+}
+
+/**
+ * The data entry for a captured loc: its destination, or one per side when it depends on where
+ * the player stands (a staircase used from either end), and the captured animation, sound,
+ * fade and ticks (counted from arrival, as the captures count them).
+ */
+function toEntry(entry, { display, option, sequenceId }) {
+  const out = { name: entry.name, id: entry.id, display, option, op: entry.op, x: entry.x, y: entry.y, z: entry.z };
+  const destinations = entry.destinations ?? [];
+  if (destinations.length === 1) {
+    out.to = [destinations[0].x, destinations[0].y, destinations[0].z];
+  } else {
+    out.sides = destinations.map((destination) => ({
+      from: destination.from?.[0] ?? destination.teleported_from?.[0],
+      to: [destination.x, destination.y, destination.z],
+    }));
+  }
+  if (sequenceId !== null && sequenceId !== undefined) {
+    out.anim = sequenceId;
+    out.animTick = Math.round(entry.sequence_tick);
+  }
+  // Medians of an even number of attempts fall between ticks; ticks are whole.
+  out.tick = Math.round(entry.teleport_tick);
+  if (entry.sounds?.length) out.sound = entry.sounds[0][0];
+  if (entry.fade) out.fade = true;
+  out.recordings = entry.recordings;
+  return out;
+}
+
+module.exports = { KINDS, isNetwork, sharesSide, refusals, skipDecision, choose, keyOf, toEntry };

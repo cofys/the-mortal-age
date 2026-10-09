@@ -661,18 +661,22 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         // Aboard a boat, stream around the boat's projected position (playerPosUni) rather
         // than the server's scene base.
         const streamAroundPlayer = host.getControlledPlayerWorldViewId() >= 0;
+        const renderDistance = host.resolveEffectiveRenderDistanceTiles(frameCount | 0);
+        // Server scene rebases at local tile 16/88. Load enough static scenery
+        // beyond those edges for the requested HD view, without changing simulation.
+        const sceneryPadding = host.osrsClient.hdPlugin?.isEnabled() ? Math.ceil(Math.max(0, renderDistance - 16) / 8) : 0;
         host.mapManager.update(
             host.playerPosUni[0],
             host.playerPosUni[1],
             camera,
             frameCount,
-            host.osrsClient.mapRadius,
+            Math.max(host.osrsClient.mapRadius, Math.ceil((renderDistance + 32) / 64)),
             streamAroundPlayer ? -1 : ClientState.baseX | 0,
             streamAroundPlayer ? -1 : ClientState.baseY | 0,
-            host.osrsClient.expandedMapLoading | 0,
+            Math.max(host.osrsClient.expandedMapLoading | 0, sceneryPadding),
+            renderDistance,
         );
         host.syncStreamGenerationFromMapManager();
-        const renderDistance = host.resolveEffectiveRenderDistanceTiles(frameCount | 0);
         profiler.endPhase();
 
         // Keep fog tied to configured render distance.
@@ -682,6 +686,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             autoFogDepth: host.autoFogDepth,
             autoFogDepthFactor: host.autoFogDepthFactor,
             manualFogDepth: host.fogDepth,
+            hd: host.osrsClient.hdPlugin?.isEnabled(),
         });
 
         // Update scene uniform buffer

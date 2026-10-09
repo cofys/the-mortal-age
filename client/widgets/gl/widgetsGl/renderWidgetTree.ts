@@ -868,6 +868,8 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         );
     }
 
+    const keyboardOutlines: { x: number; y: number; width: number; height: number; clip: ClipRect }[] = [];
+
     // PERF: Cache debugRects array on canvas instead of creating new one each frame
     let debugRects: { x: number; y: number; w: number; h: number }[] = canvasAny.__debugRects;
     if (!debugRects) {
@@ -3562,6 +3564,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 if (w.text2) effectiveText = String(w.text2);
                 if (typeof w.mouseOverColor === "number") effectiveColor = w.mouseOverColor;
             }
+            effectiveColor = w.keyboardTextColor ?? effectiveColor;
 
             // Show "Please wait..." for the continue button being processed
             // NPC head widget rendering
@@ -3602,6 +3605,10 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         } else if (w.type === 2) {
             // no placeholder slot grid rendering for type-2 inventory widgets.
             // Visible cells/items are rendered by real widget content and scripts.
+        }
+
+        if (w.keyboardOutline) {
+            keyboardOutlines.push({ x, y, width, height, clip: widgetClip });
         }
 
         // Collect debug devoverlay bounds
@@ -3838,6 +3845,15 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             drawNode(d.w, useOx, useOy, d.parentVisible, d.inSelected, fullClip, false);
         }
 
+        sc.pop();
+    }
+    // Draw focus above decorative children/borders, preserving the widget's clip.
+    for (const { x, y, width, height, clip } of keyboardOutlines) {
+        sc.pushCanvasRect(clip.x0, clip.y0, clip.x1 - clip.x0, clip.y1 - clip.y0);
+        glr.drawRect(x, y, width, 1, [1, 1, 1, 1]);
+        glr.drawRect(x, y + height - 1, width, 1, [1, 1, 1, 1]);
+        glr.drawRect(x, y, 1, height, [1, 1, 1, 1]);
+        glr.drawRect(x + width - 1, y, 1, height, [1, 1, 1, 1]);
         sc.pop();
     }
     sc.pop();

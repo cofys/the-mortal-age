@@ -8,6 +8,8 @@ const { GameConstants } = require("../../../src/main/typescript/elvarg/game/Game
 const { BoatManager } = require("../../../src/main/typescript/elvarg/game/content/sailing/BoatManager");
 const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
+const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
+const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
 
 const VARBIT = {
   // The Pandemonium is done (50): the boat customisation refuses every build below it (9022).
@@ -103,9 +105,30 @@ function boatType(type) {
   return content().boats.find((boat) => boat.type === type);
 }
 
-/** A boat's animation by name from boats.json `anims` (sailDown, helmActive, …), if known. */
+/** A boat's animations by name from boats.json `anims` (helm, sail, trim), if known. */
 function boatAnim(boat, name) {
   return boatType(BoatManager.getSpec(boat)?.type)?.anims?.[name];
+}
+
+/**
+ * The dock or mooring point nearest the player within `range` tiles of its gangplank or landing,
+ * or undefined (the cache's dock zones are server side, so near is a distance here).
+ */
+function dockNear(player, range) {
+  const here = player.getLocation();
+  const distance = (tile) => (tile && tile.z === here.getZ()
+    ? Math.max(Math.abs(tile.x - here.getX()), Math.abs(tile.y - here.getY()))
+    : Infinity);
+  let best;
+  let bestDistance = range + 1;
+  for (const dock of content().docks) {
+    const d = Math.min(distance(dock.gangplank), distance(dock.landing));
+    if (d < bestDistance) {
+      best = dock;
+      bestDistance = d;
+    }
+  }
+  return best;
 }
 
 function dockById(id) {
@@ -178,6 +201,65 @@ function isSail(loc) {
   return loc.sail === true;
 }
 
+function isSailCloth(loc) {
+  return loc.sailCloth === true;
+}
+
+/**
+ * The sail cloth's op flags: only "Set" (op2) while the sails aren't set, only "Un-set" (op5)
+ * while they are, and "Trim" (op1) as well while a gust can be caught.
+ */
+const SAIL_CLOTH_OPS = Object.freeze({ set: 0b10000, unset: 0b10, trim: 0b1 });
+
+/**
+ * Re-sends the sail cloth with the options that fit the sails, as live does on every sail change
+ * (rsprox): sent straight to the viewers, before the change's animations, since a loc that arrives
+ * after its animation starts over without it. Set means moving under sail or reversing; stopped and
+ * moored are unset. `trim` adds Trim to set sails (a gust of wind).
+ */
+function setSailClothOps(player, boat, set, trim = false) {
+  const spec = BoatManager.getSpec(boat);
+  if (!spec) return;
+  const viewers = [player, ...player.getLocalPlayers().filter((other) => other.getLocalPlayers().includes(player))];
+  for (const loc of spec.locs.filter(isSailCloth)) {
+    const opFlags = set ? SAIL_CLOTH_OPS.set | (trim ? SAIL_CLOTH_OPS.trim : 0) : SAIL_CLOTH_OPS.unset;
+    const changed = { ...loc, opFlags };
+    BoatManager.updateDeckLoc(boat, changed);
+    const drawn = {
+      getId: () => changed.id,
+      getLocation: () => new Location(boat.deckBaseX + changed.x, boat.deckBaseY + changed.y, changed.level),
+      getType: () => changed.shape,
+      getFace: () => changed.rotation,
+      getOpFlags: () => changed.opFlags,
+    };
+    for (const viewer of viewers) viewer.getPacketSender().sendObject(drawn);
+  }
+}
+
+/**
+ * Sets the sails from one state to another (down, half or full), as live does (rsprox): the
+ * change's animation on the mast and, with its `_offset` twin, the sail cloth on the same tick
+ * (the state's own loop when it doesn't change), then the new state's loop on both a tick later.
+ * `settle: false` plays just the first part (boarding shows the sails at rest once).
+ */
+function animateSails(player, boat, from, to, { settle = true } = {}) {
+  const sail = boatAnim(boat, "sail");
+  if (!sail) return;
+  const play = (name) => {
+    if (sail.mast?.[name] !== undefined) animateDeckLocs(player, boat, isSail, sail.mast[name]);
+    if (sail.cloth?.[name] !== undefined) animateDeckLocs(player, boat, isSailCloth, sail.cloth[name]);
+  };
+  play(from === to ? to : `${from}_to_${to}`);
+  if (!settle) return;
+  TaskManager.submit(new (class extends Task {
+    constructor() { super(1, boat, false); }
+    execute() {
+      this.stop();
+      if (BoatManager.getSpec(boat)) play(to);
+    }
+  })());
+}
+
 /** Fades the screen out (or back in) with interface 174 and `fade_overlay` (script 948). */
 function fade(player, out) {
   const args = out ? [0, 255, 0, 0, FADE_CYCLES] : [0, 0, 0, 255, FADE_CYCLES];
@@ -188,6 +270,7 @@ function fade(player, out) {
 }
 
 module.exports = {
+  dockNear,
   VARBIT,
   VARP_SIDEPANEL_BOAT_TYPE,
   VARP_SIDEPANEL_DEFENCE,
@@ -216,4 +299,8 @@ module.exports = {
   animateDeckLoc,
   isHelm,
   isSail,
+  isSailCloth,
+  animateSails,
+  setSailClothOps,
+  SAIL_CLOTH_OPS,
 };

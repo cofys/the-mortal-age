@@ -88,6 +88,11 @@ export abstract class CombatSpell extends Spell {
     return null;
   }
 
+  /** The sound played as it's cast, when the spell has its own (null: by spell id, MagicCombatMethod). */
+  public castSound(): Sound | null {
+    return null;
+  }
+
   /** Ticks until the hit lands, when the spell has its own (null: the usual magic delay). */
   public hitDelay(): number | null {
     return null;

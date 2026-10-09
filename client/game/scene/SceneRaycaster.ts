@@ -11,7 +11,7 @@ import { OsrsClient } from "../OsrsClient";
 import { Ray, rayIntersectsBox } from "../math/Raycast";
 import { InteractType } from "../../render/InteractType";
 import { WebGLMapSquare } from "../../render/WebGLMapSquare";
-import { sampleBridgeHeightForWorldTile } from "./BridgeHeightSampler";
+import { interpolateActorHeight, sampleBridgeHeightForWorldTile } from "./BridgeHeightSampler";
 import {
     BridgePlaneStrategy,
     resolveGroundItemStackPlane,
@@ -191,8 +191,8 @@ export class SceneRaycaster {
             ).height;
         }
 
-        const localPxX = Math.floor((worldX - map.getRenderBaseWorldX()) * 128);
-        const localPxY = Math.floor((worldZ - map.getRenderBaseWorldY()) * 128);
+        const localPxX = (worldX - map.getRenderBaseWorldX()) * 128;
+        const localPxY = (worldZ - map.getRenderBaseWorldY()) * 128;
         const mapTileSpan = map.getLocalTileSpan();
         let localTileX = localPxX >> 7;
         let localTileY = localPxY >> 7;
@@ -211,8 +211,8 @@ export class SceneRaycaster {
             ).height;
         }
 
-        const offX = localPxX & 0x7f;
-        const offY = localPxY & 0x7f;
+        const offX = localPxX / 128 - Math.floor(localPxX / 128);
+        const offY = localPxY / 128 - Math.floor(localPxY / 128);
         localTileX = Math.max(0, Math.min(mapTileSpan - 1, localTileX));
         localTileY = Math.max(0, Math.min(mapTileSpan - 1, localTileY));
 
@@ -235,9 +235,7 @@ export class SceneRaycaster {
         const h10 = ((data[base + iy * size + ix1] || 0) * Scene.UNITS_TILE_HEIGHT_BASIS) | 0;
         const h01 = ((data[base + iy1 * size + ix] || 0) * Scene.UNITS_TILE_HEIGHT_BASIS) | 0;
         const h11 = ((data[base + iy1 * size + ix1] || 0) * Scene.UNITS_TILE_HEIGHT_BASIS) | 0;
-        const delta0 = (h00 * (128 - offX) + h10 * offX) >> 7;
-        const delta1 = (h01 * (128 - offX) + h11 * offX) >> 7;
-        const hWorld = (delta0 * (128 - offY) + delta1 * offY) >> 7;
+        const hWorld = interpolateActorHeight(h00, h10, h01, h11, offX, offY);
         return -(hWorld / 128.0);
     }
 

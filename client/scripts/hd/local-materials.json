@@ -1,0 +1,15 @@
+{
+  "assets": [
+    { "asset": "sparse_grass", "materials": ["GRASS_1"], "normal": false, "neutralGround": true, "colorSize": 512 },
+    { "asset": "grass_path_2", "materials": ["DIRT_1"], "neutralGround": true, "normalStrength": 0.35 },
+    { "asset": "sand_02", "materials": ["SAND_1"], "neutralGround": true, "normalStrength": 0.2 },
+    { "asset": "gravel_ground_01", "materials": ["GRAVEL"], "neutralGround": true, "normalStrength": 0.4 },
+    { "asset": "castle_brick_01", "materials": ["HD_BRICK"], "normalStrength": 0.4, "saturation": 0.1, "exposure": 0.85, "colorSize": 512, "worldUv": true, "textureScale": [2, 2] },
+    { "asset": "red_brick_03", "materials": ["HD_BRICK_BROWN"], "normalStrength": 0.45, "worldUv": true, "textureScale": [2, 2] },
+    { "asset": "weathered_planks", "materials": ["HD_WOOD_PLANKS_1"], "normalStrength": 0.35, "exposure": 1.2 },
+    { "asset": "thatch_roof_angled", "materials": ["HD_SIMPLE_GRAIN_WOOD"], "normalStrength": 0.25, "colorSize": 512, "exposure": 1.1 },
+    { "asset": "roof_slates_02", "materials": ["HD_ROOF_SHINGLES_GRAY"], "normalStrength": 0.35 },
+    { "asset": "roof_09", "materials": ["HD_ROOF_SHINGLES_RED", "HD_ROOF_BRICK_TILE"], "normalStrength": 0.35 },
+    { "asset": "cobblestone_floor_02", "materials": ["HD_STONE_PATTERN", "FALADOR_PATH_BRICK", "JAGGED_STONE_TILE"], "normalStrength": 0.45 }
+  ]
+}

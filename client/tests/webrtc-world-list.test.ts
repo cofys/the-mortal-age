@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { LoginState } from "../game/login/LoginState";
+import { resetClientPreferencesCache, setClientPreference } from "../game/preferences/ClientPreferences";
 
 import { getBrowserHostWorldConfig, getCacheBaseUrl, getServerListUrl, getWebRtcRelayConfig } from "../config/clientEnv";
 import { handleServerListClick } from "../game/login/renderer/input/mouseClick";
@@ -73,6 +75,35 @@ assert.deepEqual(refreshed.map((world) => world.worldId), ["toby", "alice"]);
 assert.equal(refreshed[0].name, "Toby's World");
 
 console.log("WebRTC relay world discovery test passed");
+
+// Explicit local dev worlds must not inherit the last selected main-server port.
+const devEnvKeys = ["NODE_ENV", "REACT_APP_DEFAULT_SERVER_ADDRESS", "REACT_APP_SERVERS_JSON"];
+const previousDevEnv = devEnvKeys.map(key => process.env[key]);
+const previousWindow = globalThis.window;
+(globalThis as any).window = { location: { hostname: "localhost", search: "", pathname: "/" } };
+process.env["NODE_ENV"] = "development";
+process.env.REACT_APP_DEFAULT_SERVER_ADDRESS = "localhost:43595";
+process.env.REACT_APP_SERVERS_JSON = JSON.stringify([{ name: "HD Worktree", address: "localhost:43595" }]);
+try {
+    for (const [saved, expected] of [
+        ["localhost:43594", "localhost:43595"],
+        ["localhost:43595", "localhost:43595"],
+        ["game.example.com", "game.example.com"],
+    ]) {
+        setClientPreference("lastServer", { name: "Saved", address: saved, secure: false });
+        assert.equal(new LoginState().serverAddress, expected);
+    }
+    process.env["NODE_ENV"] = "production";
+    setClientPreference("lastServer", { name: "Saved", address: "localhost:43594", secure: false });
+    assert.equal(new LoginState().serverAddress, "localhost:43594", "Production selections must remain unchanged");
+} finally {
+    devEnvKeys.forEach((key, index) => {
+        if (previousDevEnv[index] === undefined) delete process.env[key];
+        else process.env[key] = previousDevEnv[index];
+    });
+    (globalThis as any).window = previousWindow;
+    resetClientPreferencesCache();
+}
 
 async function checkDedicatedWorld(): Promise<void> {
     const payload = { worlds: [

@@ -5,6 +5,9 @@ import { Gzip } from "../compression/Gzip";
 import { Xtea } from "../crypto/Xtea";
 import { ByteBuffer } from "../io/ByteBuffer";
 
+/** Time spent decompressing cache data in this thread (read by `?map-profile=1` map timings). */
+export const decompressStats = { gzipMs: 0, gzipCount: 0, bzip2Ms: 0, bzip2Count: 0 };
+
 export class Container {
     static decode(buffer: ByteBuffer, key?: number[]): Container {
         if (buffer.remaining === 0) {
@@ -26,10 +29,15 @@ export class Container {
 
                 let decompressed: Int8Array;
 
+                const startedAt = performance.now();
                 if (compression === CompressionType.Bzip2) {
                     decompressed = Bzip2.decompress(data, actualSize);
+                    decompressStats.bzip2Ms += performance.now() - startedAt;
+                    decompressStats.bzip2Count++;
                 } else {
                     decompressed = Gzip.decompress(data);
+                    decompressStats.gzipMs += performance.now() - startedAt;
+                    decompressStats.gzipCount++;
                 }
 
                 if (decompressed.length !== actualSize) {

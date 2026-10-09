@@ -105,13 +105,29 @@ function specFor(boat, base) {
   const hull = tierOf(boat, "hull");
   const locs = base.locs.map((loc) => {
     if (loc.part === "trim") return { ...loc, id: loc.id + hull };
+    if (loc.part === "sailCloth") return { ...loc, id: sailClothFor(boat, base) ?? loc.id };
     const columns = PART_COLUMNS[loc.part];
     if (!columns?.loc) return loc;
     const id = builtPart(boat, loc.part)?.column(columns.loc[0])[columns.loc[1]];
     return typeof id === "number" ? { ...loc, id } : loc;
   });
-  const baseSpeed = boatStats(boat).baseSpeed || base.stats?.baseSpeed;
-  return { ...base, templateChunkX: base.templateChunkX + hull, locs, stats: { ...base.stats, baseSpeed } };
+  const stats = boatStats(boat);
+  const baseSpeed = stats.baseSpeed || base.stats?.baseSpeed;
+  return {
+    ...base,
+    templateChunkX: base.templateChunkX + hull,
+    locs,
+    stats: { ...base.stats, baseSpeed, speedCap: stats.speedCap || undefined, speedBoostDuration: stats.speedBoostDuration || undefined },
+  };
+}
+
+/**
+ * The sail cloth that goes with the built sails: the option's name says its material ("Teak mast
+ * and canvas sails"), and boats.json `sailCloths` has that material's cloth loc for the boat's size.
+ */
+function sailClothFor(boat, base) {
+  const material = /and (\w+) sails/i.exec(builtPart(boat, "sails")?.string(0) ?? "")?.[1]?.toLowerCase();
+  return material ? base.sailCloths?.[material] : undefined;
 }
 
 /** The part and tier a customisation option row (the Build trigger's argument) is for. */

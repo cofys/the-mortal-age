@@ -7,7 +7,7 @@ import { Animation } from "../../../../model/Animation";
 import { WeaponProfiles } from "../../WeaponProfile";
 export class MeleeCombatMethod extends CombatMethod {
     start(character: Mobile, target: Mobile) {
-        const animation = character.getAttackAnim();
+        const animation = character.getAttackAnim(target);
         if (animation !== -1) {
             character.performAnimation(new Animation(animation));
             Sounds.sendSound(character, character.getAttackSound());

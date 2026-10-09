@@ -79,6 +79,8 @@ export class Boat {
     /** Player steering from the helm; their world clicks set the heading. */
     helmPlayerId: number | undefined;
     speedMultiplier = 1;
+    /** While the sails are trimmed: the speed that replaces the base speed (the hull's cap). */
+    boostSpeed: number | undefined;
 
     constructor(init: BoatInit) {
         this.entityIndex = init.entityIndex;

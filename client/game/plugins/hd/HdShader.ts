@@ -65,6 +65,12 @@ void main()`);
     const declarations = fragment.slice(0, mainStart);
     fragment = fragment.slice(mainStart);
     fragment = fragment.replace("void main() {", `void main() {
+    // The shared vertex path leaves moving boat decks unfogged because they
+    // use their own coordinates. Honour that exemption in the HD path too.
+    float hdDistanceFog = u_hdEnabled && !u_hdShadowPass && v_fogAmount > 0.0 ? hdFogAmount(v_hdPosition.xz) : 0.0;
+    // Fully obscured fragments contribute exactly the clear colour. Skip
+    // texture/alpha/material work; nearer geometry still passes its depth test.
+    if (hdDistanceFog >= 1.0) discard;
     // Opaque shadows only need depth. Cutout textures still take the alpha
     // path below, preserving holes in foliage, fences and equipment.
     if (u_hdShadowPass) {
@@ -79,6 +85,11 @@ void main()`);
 #endif
     }
 `);
+    // The HD replacement already supplies albedo and alpha. Avoid sampling
+    // the cache texture as well when a replacement image is ready.
+    const cacheSample = water ? "sampleModelTexture(v_texId, v_texCoord)"
+        : "texture(u_textures, vec3(v_texCoord, v_texId), -2.0).bgra";
+    fragment = fragment.replace(`    vec4 textureColor = ${cacheSample};`, "    vec4 textureColor = vec4(1.0);");
     fragment = fragment.replace("    float alpha =", `
     int hdMaterialIndex = int(v_texId);
     if (v_texId == 0u && v_hdGroundMaterial > 0u) hdMaterialIndex = 1024 + int(v_hdGroundMaterial);
@@ -88,7 +99,20 @@ void main()`);
     vec2 scale = hdMaterial.zw;
     scale = mix(vec2(1.0), scale, greaterThan(abs(scale), vec2(0.001)));
     vec2 hdUv = v_hdGroundMaterial > 0u ? v_hdPosition.xz / scale : (v_texCoord - 0.5) / scale + 0.5;
-    if (hdLayer > 0.0) textureColor = texture(u_hdTextures, vec3(hdUv, hdLayer));
+    ${terrain ? `if (u_hdEnabled && v_hdGroundMaterial == 0u && (int(hdMetadata.y) & 2) != 0) {
+        // Masonry courses stay level and continuous across cache model faces.
+        vec3 face = abs(normalize(cross(dFdx(v_hdPosition), dFdy(v_hdPosition))));
+        hdUv = face.y > 0.7 ? v_hdPosition.xz / scale
+            : vec2(face.x > face.z ? v_hdPosition.z : v_hdPosition.x, -v_hdPosition.y) / scale;
+    }` : ""}
+    if (u_hdEnabled && v_hdGroundMaterial > 0u && v_hdGroundMaterial <= 5u) {
+        // Smooth, world-stable variation breaks the one-tile repeat on organic
+        // ground. It adds no texture samples and never randomises paved courses.
+        hdUv += 0.3 * sin(vec2(dot(hdUv, vec2(0.37, 0.61)), dot(hdUv, vec2(-0.53, 0.29))));
+    }
+    if (hdLayer < 0.0) textureColor = texture(u_hdDetailTextures, vec3(hdUv, -hdLayer), hdDistanceFog * 2.0);
+    else if (hdLayer > 0.0) textureColor = texture(u_hdTextures, vec3(hdUv, hdLayer), hdDistanceFog * 2.0);
+    else textureColor = ${cacheSample};
     float alpha =`);
     fragment = fragment.replace("frameCount > 1)", "frameCount > 1 && hdLayer == 0.0)");
     fragment = fragment.replace("    float banding =", `
@@ -103,17 +127,18 @@ void main()`);
     fragment = fragment.replace("    vec3 surface;", `
     // Like 117 HD, replace baked directional shading on textured faces with
     // neutral brightness. Otherwise brick walls are lit twice and lose detail.
-    if (u_hdEnabled && hdLayer > 0.0 && v_texId != 0u) paletteColor = vec3(90.0 / 127.0);
+    if (u_hdEnabled && hdLayer != 0.0 && v_texId != 0u) paletteColor = vec3(90.0 / 127.0);
     vec3 surface;`);
     fragment = fragment.replace("    vec3 finalRgb = mix(surface, u_skyColor.rgb, fog);", `
     vec3 fogColor = u_skyColor.rgb;
     if (u_hdEnabled && ${water ? "!isFloorWater" : "true"}) {
         surface = hdShade(surface * hdMetadata.w, v_hdPosition, hdMaterial, hdMetadata, hdUv);
-        float hdFog = hdFogAmount(v_hdPosition.xz);
         float groundFog = smoothstep(0.0, 1.0, (v_hdPosition.y - u_hdGroundFog.x) / min(-0.001, u_hdGroundFog.y - u_hdGroundFog.x)) * u_hdGroundFog.z;
-        fog = max(fog, max(hdFog, groundFog));
-        fogColor = u_hdFogColor;
+        fog = max(fog, max(hdDistanceFog, groundFog));
+        fogColor = mix(u_hdFogColor, u_skyColor.rgb, hdDistanceFog);
     }
+    // Low-lying mist settles over everything in the hollow, floor water included.
+    if (u_hdEnabled) surface = mix(surface, u_hdFogColor, hdMistAmount(v_hdPosition));
     vec3 finalRgb = mix(surface, fogColor, fog);`);
     return [vertex, declarations + fragment];
 }

@@ -3,16 +3,12 @@
 /**
  * Tombs of Amascut reward items: fortifying Masori with Armadylean plates (and chiselling
  * Armadyl armour into them), the arcane sigil on Elidinis' ward, the Thread of Elidinis on a
- * rune pouch, the keris partisan's jewels, and charging Tumeken's shadow.
+ * rune pouch and the keris partisan's jewels. Tumeken's shadow is plugins/items/TumekensShadow.plugin.js.
  */
 
 const Shared = require("./ToaShared");
 
 const ANIMATION = { FORTIFY: 3676, CHISEL: 8833, FUSE: 791 };
-const SHADOW_CHARGES_KEY = "tumekens-shadow-charges";
-const SHADOW_MAX_CHARGES = 20000;
-const SHADOW_SOULS_PER_CHARGE = 2;
-const SHADOW_CHAOS_PER_CHARGE = 5;
 const WARD_SOUL_RUNES = 10000;
 
 function ids() {
@@ -191,80 +187,6 @@ function attachJewel(player, jewel) {
   player.sendMessage(`You attach the ${jewel.name.toLowerCase()} to your keris partisan.`);
 }
 
-// ------------------------------------------------------------------ Tumeken's shadow
-
-function shadowCharges(item) {
-  return Math.max(0, Number(item?.getMetaValue?.(SHADOW_CHARGES_KEY)) || 0);
-}
-
-function setShadowCharges(player, item, charges) {
-  const I = ids();
-  item.setMetaValue(SHADOW_CHARGES_KEY, charges);
-  item.setId(charges > 0 ? I.TUMEKENS_SHADOW : I.TUMEKENS_SHADOW_UNCHARGED_);
-  player.getInventory().refreshItems();
-}
-
-/** Two soul runes and five chaos runes a charge, as many as the inventory affords. */
-function chargeShadow(event) {
-  const { player } = event;
-  const I = ids();
-  const shadowIds = [I.TUMEKENS_SHADOW, I.TUMEKENS_SHADOW_UNCHARGED_];
-  const staff = shadowIds.includes(event.usedItemId) ? event.usedItem : event.usedWithItem;
-  if (!staff) return false;
-  const inventory = player.getInventory();
-  const current = shadowCharges(staff);
-  if (current >= SHADOW_MAX_CHARGES) {
-    player.sendMessage("Your Tumeken's shadow is already fully charged.");
-    return true;
-  }
-  const affordable = Math.min(
-    Math.floor(inventory.getAmount(I.SOUL_RUNE) / SHADOW_SOULS_PER_CHARGE),
-    Math.floor(inventory.getAmount(I.CHAOS_RUNE) / SHADOW_CHAOS_PER_CHARGE),
-    SHADOW_MAX_CHARGES - current,
-  );
-  if (affordable < 1) {
-    player.sendMessage("You need two soul runes and five chaos runes for each charge.");
-    return true;
-  }
-  inventory.deleteNumber(I.SOUL_RUNE, affordable * SHADOW_SOULS_PER_CHARGE);
-  inventory.deleteNumber(I.CHAOS_RUNE, affordable * SHADOW_CHAOS_PER_CHARGE);
-  setShadowCharges(player, staff, current + affordable);
-  player.sendMessage(current === 0
-    ? `You apply ${plural(affordable, "charge")} to your Tumeken's shadow.`
-    : `You apply an additional ${plural(affordable, "charge")} to your Tumeken's shadow. It now has ${plural(current + affordable, "charge")} in total.`);
-  return true;
-}
-
-function checkShadow({ player, item }) {
-  player.sendMessage(`Your Tumeken's shadow has ${plural(shadowCharges(item), "charge")} remaining.`);
-  return true;
-}
-
-function unchargeShadow({ player, item }) {
-  const { Item } = Shared.core();
-  const I = ids();
-  const charges = shadowCharges(item);
-  if (charges <= 0) {
-    player.sendMessage("Your Tumeken's shadow has no charges to remove.");
-    return true;
-  }
-  const inventory = player.getInventory();
-  const needed = (inventory.contains(I.SOUL_RUNE) ? 0 : 1) + (inventory.contains(I.CHAOS_RUNE) ? 0 : 1);
-  if (inventory.getFreeSlots() < needed) {
-    player.sendMessage("Your inventory is too full to hold the runes.");
-    return true;
-  }
-  Shared.confirm(player, "Uncharge all the charges from your staff?", () => {
-    const left = shadowCharges(item);
-    if (left <= 0) return;
-    inventory.addItem(new Item(I.SOUL_RUNE, left * SHADOW_SOULS_PER_CHARGE));
-    inventory.addItem(new Item(I.CHAOS_RUNE, left * SHADOW_CHAOS_PER_CHARGE));
-    setShadowCharges(player, item, 0);
-    player.sendMessage(`You uncharge your Tumeken's shadow, regaining ${plural(left * SHADOW_SOULS_PER_CHARGE, "soul rune")} and ${plural(left * SHADOW_CHAOS_PER_CHARGE, "chaos rune")} in the process.`);
-  });
-  return true;
-}
-
 // ------------------------------------------------------------------ named wrappers
 
 function useArmadyleanPlate(event) {
@@ -301,6 +223,3 @@ module.exports = function registerTombsItems(api) {
   }
   api.onItemAction("Tumeken's shadow", { Check: checkShadow, Uncharge: unchargeShadow });
 };
-
-/** Where a staff keeps its charges, for the shadow's combat (Shadow.TombsOfAmascut.js). */
-module.exports.SHADOW_CHARGES_KEY = SHADOW_CHARGES_KEY;

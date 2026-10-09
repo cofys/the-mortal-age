@@ -143,6 +143,8 @@ function format(seq: SeqType): string {
         `priority=${seq.forcedPriority}`,
         `loops=${seq.maxLoops}`,
     ];
+    // Client cycles (20 ms) the frames last; a game tick is 30 cycles.
+    if (seq.frameLengths.length) bits.push(`length=${seq.frameLengths.reduce((sum, length) => sum + length, 0)}`);
     if (seq.skeletalId >= 0) bits.push(`skeletal=${seq.skeletalId}`);
     else bits.push(`frameIds=${seq.frameIds.join(",")}`);
     bits.push(`sounds=${seq.sounds.join(",") || "none"}`);

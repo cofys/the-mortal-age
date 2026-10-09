@@ -8,7 +8,7 @@ import { sampleBridgeHeightForWorldTile } from "../../../game/scene/BridgeHeight
 import { getMapSquareId } from "../../../rs/map/MapFileIndex";
 import type { SdMapData } from "../../loader/SdMapData";
 import { MAX_TEXTURES, RENDER_CONSTANTS } from "../../render/constants";
-import { GPU_SHADER_STAGE } from "../bindings";
+import { GPU_SHADER_STAGE, SCENE_DEPTH_FORMAT } from "../bindings";
 import type { WebGPUMapSquare } from "../WebGPUMapSquare";
 import type { WebGPURenderer } from "../WebGPURenderer";
 import type { WorldResources } from "../WorldResources";
@@ -286,11 +286,19 @@ export class WebGPUActors {
                         : {
                               module,
                               entryPoint: ACTOR_FRAGMENT_ENTRY,
-                              targets: [{ format: renderer.format, blend: alpha ? blend : undefined }],
+                              targets: [
+                                  {
+                                      format:
+                                          mode === "extended"
+                                              ? extension!.sceneColorFormat ?? renderer.format
+                                              : renderer.format,
+                                      blend: alpha ? blend : undefined,
+                                  },
+                              ],
                           },
                     primitive: { topology: "triangle-list", cullMode, frontFace: "ccw" },
                     depthStencil: {
-                        format: depth ? extension!.depthFormat ?? "depth32float" : "depth24plus",
+                        format: depth ? extension!.depthFormat ?? SCENE_DEPTH_FORMAT : SCENE_DEPTH_FORMAT,
                         depthWriteEnabled: true,
                         depthCompare: "less-equal",
                     },
@@ -826,7 +834,11 @@ export class WebGPUActors {
     private packMapWorldGfx(state: MapActorState, map: WebGPUMapSquare): void {
         const runtime = this.gfx;
         if (!runtime) return;
-        const instances = runtime.manager.listWorldInstancesForMap(map.mapX, map.mapY);
+        // A boat deck's overlay map draws the graphics on its own tiles (draw.ts addWorldGfxRenderData).
+        const overlayView = this.renderer.osrsClient?.worldViewManager?.getWorldViewByOverlayMapId?.(map.id);
+        const instances = overlayView
+            ? runtime.manager.listWorldInstancesInView(overlayView)
+            : runtime.manager.listWorldInstancesForMap(map.mapX, map.mapY);
         for (const inst of instances) {
             const world = inst.world;
             if (!world) continue;

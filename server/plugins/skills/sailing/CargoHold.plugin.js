@@ -6,6 +6,7 @@ const { ItemDefinition } = require("../../../src/main/typescript/elvarg/game/def
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
 const { VARBIT, content, setVarbit, playSound, boatName } = require("./sailingContent");
 const cargo = require("./cargo");
+const portTasks = require("./porttasks/Common.PortTasks");
 
 const HOLD = 943;
 const SIDE = 944;
@@ -45,6 +46,8 @@ const IF_EVENT_OP1 = 1 << 1;
 const HOLD_GRID_SLOTS = 239;
 
 const CANNOT_STORE = "The cargo hold cannot store that item.";
+/** Every tier of cargo hold: each is "<wood> cargo hold" in the cache. */
+const HOLD_NAMES = ["Basic", "Oak", "Teak", "Mahogany", "Camphor", "Ironwood", "Rosewood"].map((wood) => `${wood} cargo hold`);
 
 /** The boat whose hold the player has open (or is standing on), with its owner's state. */
 function heldBoat(player) {
@@ -118,6 +121,10 @@ function withdraw(player, slot, itemId, amount) {
   const boat = heldBoat(player);
   const entry = boat?.cargo[slot];
   if (!entry || entry.id !== itemId || amount <= 0) return;
+  if (portTasks.isCrate(itemId)) {
+    withdrawCrate(player, boat, slot, itemId);
+    return;
+  }
   const inventory = player.getInventory();
   const room = cargo.isStackable(itemId)
     ? (inventory.contains(itemId) || inventory.getFreeSlots() > 0 ? Number.MAX_SAFE_INTEGER : 0)
@@ -130,6 +137,34 @@ function withdraw(player, slot, itemId, amount) {
   const taken = cargo.take(boat, slot, itemId, wanted);
   inventory.add(new Item(itemId, taken), true);
   refresh(player, boat);
+}
+
+/**
+ * A courier crate comes out into the player's hands, one at a time, and the hold closes (rsprox:
+ * clicking it closes both interfaces and sets sailing_carrying_cargo).
+ */
+function withdrawCrate(player, boat, slot, itemId) {
+  if (portTasks.heldCrate(player) !== undefined || !portTasks.handsFree(player)) {
+    player.sendMessage("You cannot pick up any cargo as your hands are full.");
+    return;
+  }
+  if (cargo.take(boat, slot, itemId, 1) !== 1) return;
+  const taskSlot = portTasks.slots(player).findIndex((held) => held && portTasks.taskById(held.id)?.crate === itemId);
+  player.getPacketSender().sendInterfaceRemoval();
+  portTasks.carry(player, itemId, taskSlot);
+}
+
+/** Deposit-held (the hold while the player carries a crate): the crate goes into the hold. */
+function depositHeld({ player }) {
+  const boat = heldBoat(player);
+  const crate = portTasks.heldCrate(player);
+  if (!boat || crate === undefined) return;
+  if (cargo.store(boat, crate, 1) !== 1) {
+    player.sendMessage("Your cargo hold is too full to hold any more cargo.");
+    return;
+  }
+  portTasks.putDown(player);
+  player.sendMessage("You deposit some cargo into the cargo hold.");
 }
 
 function deposit(player, slot, itemId, amount) {
@@ -227,6 +262,8 @@ function examine(player, itemId) {
 
 function itemOp(player, op, slot, itemId, move) {
   if (op === 10) return examine(player, itemId);
+  // A courier crate's only op is Withdraw, one into the player's hands whatever the quantity mode.
+  if (move === withdraw && portTasks.isCrate(itemId)) return withdraw(player, slot, itemId, 1);
   if (isAmountPrompt(player, op)) return promptAmount(player, (amount) => move(player, slot, itemId, amount));
   const amount = opAmount(player, op);
   if (amount !== undefined) move(player, slot, itemId, amount);
@@ -249,8 +286,13 @@ function clickHold(event) {
   const { player, groupId, childId, slot, itemId, action } = event;
   if ((groupId !== HOLD && groupId !== SIDE) || !isOpen(player)) return;
   event.handled = true;
-  if (groupId === HOLD && childId === HOLD_ITEMS) return itemOp(player, action, slot, itemId, withdraw);
-  if (groupId === SIDE && childId === SIDE_ITEMS) return itemOp(player, action, slot, itemId, deposit);
+  // The client's click names the slot, not always the item: the item is what's in that slot.
+  if (groupId === HOLD && childId === HOLD_ITEMS) {
+    return itemOp(player, action, slot, itemId ?? heldBoat(player)?.cargo[slot]?.id, withdraw);
+  }
+  if (groupId === SIDE && childId === SIDE_ITEMS) {
+    return itemOp(player, action, slot, itemId ?? player.getInventory().getItems()[slot]?.getId(), deposit);
+  }
   if (groupId === SIDE && childId === SIDE_DISMISS) {
     player.setAttribute?.(WARNING_ATTRIBUTE, true);
     return setVarbit(player, VARBIT_WARNING_DISMISSED, 1);
@@ -263,6 +305,8 @@ function depositAllFromLoc({ player }) {
   depositAll(player, null);
 }
 
+const HOLD_ACTIONS = { Open: openHold, "Deposit-all": depositAllFromLoc, "Deposit-held": depositHeld };
+
 module.exports = {
   name: "SailingCargoHold",
   members: true,
@@ -271,7 +315,7 @@ module.exports = {
     content();
     api.persistAttribute(QUANTITY_ATTRIBUTE);
     api.persistAttribute(WARNING_ATTRIBUTE);
-    api.onObjectInteraction("Basic cargo hold", { Open: openHold, "Deposit-all": depositAllFromLoc });
+    for (const name of HOLD_NAMES) api.onObjectInteraction(name, HOLD_ACTIONS);
     api.onInterfaceActionClick(clickHold);
   },
 };

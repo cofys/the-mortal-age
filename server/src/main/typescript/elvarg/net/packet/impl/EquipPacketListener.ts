@@ -2,7 +2,7 @@ import { WeaponInterfaceManager } from "../../../game/content/combat/WeaponInter
 import { Misc } from "../../../util/Misc";
 import { Server } from "../../../Server";
 import { PluginManager } from "../../../plugins/PluginManager";
-import { Sound } from "../../../game/Sound";
+import { EquipmentSounds } from "../../../game/definition/EquipmentSounds";
 import { Sounds } from "../../../game/Sounds";
 import { Wilderness } from "../../../game/content/wilderness/Wilderness";
 
@@ -217,7 +217,7 @@ export class EquipPacketListener {
     equipment.refreshItems();
     inventory.refreshItems();
     player.getUpdateFlag().flag(Flag.APPEARANCE);
-    Sounds.sendSound(player, Sound.EQUIPMENT_ON);
+    Sounds.sendSound(player, EquipmentSounds.soundFor(item.getDefinition()));
   }
 
   public static unequip(player: any, slot: number): boolean {
@@ -254,7 +254,8 @@ export class EquipPacketListener {
     equipment.refreshItems();
     inventory.refreshItems();
     player.getUpdateFlag().flag(getFlagEnum().APPEARANCE);
-    Sounds.sendSound(player, Sound.EQUIPMENT_OFF);
+    // Live OSRS plays the item's own sound for removing it too.
+    Sounds.sendSound(player, EquipmentSounds.soundFor(item.getDefinition()));
     return true;
   }
 }

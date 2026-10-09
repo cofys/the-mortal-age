@@ -11,7 +11,7 @@ import { PlayerAnimController } from "../PlayerAnimController";
 import type { NpcEcs } from "../ecs/NpcEcs";
 import { PlayerEcs } from "../ecs/PlayerEcs";
 import type { ResolveTilePlaneFn } from "../scene/PlaneResolver";
-import type { MovementStep } from "./MovementPath";
+import type { MovementStep, TileCoord } from "./MovementPath";
 import { MovementPath } from "./MovementPath";
 import { MovementState, MovementStateInit } from "./MovementState";
 import type {
@@ -29,7 +29,8 @@ function toTileCoord(subCoord: number): number {
  * Server-authoritative player movement bridge.
  *
  * Translates per-tick server movement updates (directions / traversals / snap)
- * into ECS interpolation commands.  There is no intermediate waypoint queue;
+ * into ECS interpolation commands, with bounded local anticipation for WASD.
+ * There is no intermediate waypoint queue;
  * steps are pushed directly to the ECS ring buffer, matching the OSRS client's
  * `appendPathStep` / `setPathPosition` model.
  *
@@ -38,6 +39,14 @@ function toTileCoord(subCoord: number): number {
 export class PlayerMovementSync {
     private readonly states = new Map<number, MovementState>();
     private readonly routeFinder = new OsrsRouteFinder32();
+    private serverTickMs = 600;
+    private keyboardPrediction?: {
+        serverId: number;
+        steps: TileCoord[];
+        expiresAt: number;
+        expired: boolean;
+        stopped: boolean;
+    };
 
     constructor(
         private readonly playerEcs: PlayerEcs,
@@ -57,6 +66,7 @@ export class PlayerMovementSync {
      * Used by local actions (e.g. spell casts) that should immediately stop the player.
      */
     clearMovementFor(serverId: number): void {
+        if (this.keyboardPrediction?.serverId === serverId) this.keyboardPrediction = undefined;
         const state = this.states.get(serverId);
         if (!state) return;
         const ecsIndex = state.ecsIndex;
@@ -68,6 +78,7 @@ export class PlayerMovementSync {
     }
 
     setServerTickMs(ms: number): void {
+        this.serverTickMs = Math.max(1, ms | 0);
         try {
             this.playerEcs.setServerTickMs(ms | 0);
         } catch {}
@@ -94,6 +105,7 @@ export class PlayerMovementSync {
     }
 
     unregister(serverId: number): void {
+        if (this.keyboardPrediction?.serverId === serverId) this.keyboardPrediction = undefined;
         this.states.delete(serverId);
         try {
             this.animController?.release(serverId);
@@ -101,6 +113,101 @@ export class PlayerMovementSync {
     }
 
     // ── Server update entry point ───────────────────────────────────────
+
+    /** Anticipate at most one tick of checked WASD steps, without changing the server tile. */
+    predictKeyboardMovement(serverId: number, tiles: readonly TileCoord[], running: boolean): void {
+        const state = this.states.get(serverId);
+        if (!state || !tiles.length) return;
+        if (this.keyboardPrediction) {
+            if (this.keyboardPrediction.serverId === serverId) this.keyboardPrediction.stopped = false;
+            return;
+        }
+        const index = state.ecsIndex;
+        if (this.playerEcs.isForcedMovementActive(index, this.playerEcs.getClientCycle())) return;
+        // Use the route finder's tile order, as server movement reconstruction does.
+        const route = this.getKeyboardPath({ x: state.tileX, y: state.tileY }, tiles[tiles.length - 1], state.level, running);
+        const steps = route?.slice(0, running ? 2 : 1).map(step => step.tile);
+        if (!steps?.length) return;
+        if (!this.playerEcs.trimQueuedStepsAfter(index, state.subX, state.subY)) return;
+        let previous = { x: state.tileX, y: state.tileY };
+        for (const tile of steps) {
+            const direction = deltaToDirection(tile.x - previous.x, tile.y - previous.y);
+            if (direction === undefined) return;
+            if (!this.playerEcs.setServerPos(index, (tile.x << 7) + 64, (tile.y << 7) + 64,
+                running ? 2 : 1, directionToOrientation(direction))) return;
+            previous = tile;
+        }
+        this.playerEcs.setRunning(index, running);
+        this.keyboardPrediction = { serverId, steps, expiresAt: Date.now() + this.serverTickMs * 2,
+            expired: false, stopped: false };
+    }
+
+    stopKeyboardMovement(serverId: number): void {
+        const prediction = this.keyboardPrediction;
+        const state = this.states.get(serverId);
+        if (!state || prediction?.serverId !== serverId) return;
+        prediction.stopped = true;
+        if (prediction.expired) {
+            this.rewindKeyboardPrediction(state);
+            this.keyboardPrediction = undefined;
+            return;
+        }
+        if (this.playerEcs.trimQueuedStepsAfter(state.ecsIndex, state.subX, state.subY)) {
+            prediction.steps = [];
+            this.keyboardPrediction = undefined;
+            return;
+        }
+        // Finish the active tile, but discard speculative steps that haven't started.
+        const target = this.playerEcs.getMovementTarget(state.ecsIndex);
+        const active = prediction.steps.findIndex(tile =>
+            (tile.x << 7) + 64 === target.x && (tile.y << 7) + 64 === target.y);
+        prediction.steps = prediction.steps.slice(0, active + 1);
+        if (active < 0) {
+            this.playerEcs.trimQueuedStepsAfter(state.ecsIndex, state.subX, state.subY);
+            this.keyboardPrediction = undefined;
+        } else this.playerEcs.clearQueuedSteps(state.ecsIndex);
+    }
+
+    private rewindKeyboardPrediction(state: MovementState): void {
+        const prediction = this.keyboardPrediction;
+        if (!prediction) return;
+        const index = state.ecsIndex;
+        const target = this.playerEcs.getMovementTarget(index);
+        const active = prediction.steps.findIndex(tile =>
+            (tile.x << 7) + 64 === target.x && (tile.y << 7) + 64 === target.y);
+        this.playerEcs.clearServerQueue(index);
+        // Retrace the checked tiles when the server rejects a step; don't cut a corner.
+        for (const tile of prediction.steps.slice(0, Math.max(0, active)).reverse()) {
+            this.playerEcs.setServerPos(index, (tile.x << 7) + 64, (tile.y << 7) + 64);
+        }
+        if (this.playerEcs.getX(index) !== state.subX || this.playerEcs.getY(index) !== state.subY) {
+            this.playerEcs.setServerPos(index, state.subX, state.subY);
+        }
+        prediction.expired = true;
+    }
+
+    private getKeyboardPath(from: TileCoord, to: TileCoord, plane: number, running: boolean): MovementStep[] | undefined {
+        let count = 1;
+        if (this.getCollisionFlagAt) {
+            count = this.routeFinder.findRouteSize1(from.x, from.y, to.x, to.y,
+                plane, this.getCollisionFlagAt, false);
+            if (count < 0) return undefined;
+        }
+        const steps: MovementStep[] = [];
+        let x = from.x, y = from.y;
+        for (let n = 0; n < count; n++) {
+            const targetX = this.getCollisionFlagAt ? this.routeFinder.outX[n] : to.x;
+            const targetY = this.getCollisionFlagAt ? this.routeFinder.outY[n] : to.y;
+            while (x !== targetX || y !== targetY) {
+                const dx = Math.sign(targetX - x), dy = Math.sign(targetY - y);
+                x += dx;
+                y += dy;
+                steps.push({ tile: { x, y }, direction: deltaToDirection(dx, dy)!,
+                    run: running, traversal: running ? 2 : 1 });
+            }
+        }
+        return steps;
+    }
 
     receiveUpdate(update: MovementUpdate): { path: MovementPath; teleported: boolean } {
         const directions = Array.isArray(update.directions)
@@ -153,6 +260,12 @@ export class PlayerMovementSync {
             state.setEcsIndex(update.ecsIndex);
         }
 
+        if (this.playerEcs.isContinuousMovement?.(update.ecsIndex)) {
+            // Native tile sync still supplies interactions/appearance, but precise
+            // snapshots own movement while the actor is between tile centres.
+            state.setTile(initialTile, defaultSubX, defaultSubY, effectiveLevel);
+            return { path: new MovementPath(initialTile, initialTile, [], false), teleported: false };
+        }
         const running = !!update.running;
         const serverSubX = typeof subX === "number" ? (subX as number) | 0 : undefined;
         const serverSubY = typeof subY === "number" ? (subY as number) | 0 : undefined;
@@ -284,6 +397,7 @@ export class PlayerMovementSync {
 
         // ── Teleport / first appearance ─────────────────────────────────
         if (teleport) {
+            if (this.keyboardPrediction?.serverId === state.serverId) this.keyboardPrediction = undefined;
             this.playerEcs.teleport(ecsIndex, path.to.x, path.to.y, resolvedLevel);
             this.playerEcs.setRunning(ecsIndex, false);
             state.setTile(path.to, opts.subX, opts.subY, resolvedLevel);
@@ -311,18 +425,51 @@ export class PlayerMovementSync {
         // steps before appending the updated path.
         const fromSubX = (path.from.x << 7) + 64;
         const fromSubY = (path.from.y << 7) + 64;
-        const aligned = this.playerEcs.trimQueuedStepsAfter(ecsIndex, fromSubX, fromSubY);
+        if (this.keyboardPrediction?.serverId === state.serverId &&
+            this.playerEcs.isForcedMovementActive(ecsIndex, this.playerEcs.getClientCycle())) {
+            this.keyboardPrediction = undefined;
+        }
+        const prediction = this.keyboardPrediction?.serverId === state.serverId
+            ? this.keyboardPrediction : undefined;
+        const acknowledged = prediction ? prediction.steps.findIndex(tile =>
+            tile.x === path.to.x && tile.y === path.to.y) + 1 : 0;
+        const matched = prediction && (acknowledged > 0 || (prediction.steps.length > 0 &&
+            path.steps.slice(0, prediction.steps.length).every((step, n) =>
+                step.tile.x === prediction.steps[n].x && step.tile.y === prediction.steps[n].y)));
+        let stepsToQueue = path.steps;
+        if (matched) {
+            // Matching server steps acknowledge prediction, rather than replaying it backwards.
+            stepsToQueue = acknowledged ? [] : path.steps.slice(prediction.steps.length);
+            prediction.steps = prediction.steps.slice(acknowledged || path.steps.length);
+            if (!prediction.steps.length) this.keyboardPrediction = undefined;
+        } else if (prediction) {
+            // Rebase from the active visual tile to the newest server destination.
+            // Replaying the server path's old origin makes the player run backwards.
+            const target = this.playerEcs.getMovementTarget(ecsIndex);
+            const corrected = this.getKeyboardPath({ x: target.x >> 7, y: target.y >> 7 },
+                path.to, resolvedLevel, opts.running);
+            this.playerEcs.clearQueuedSteps(ecsIndex);
+            if (corrected) stepsToQueue = corrected;
+            else {
+                this.playerEcs.teleport(ecsIndex, path.to.x, path.to.y, resolvedLevel);
+                stepsToQueue = [];
+            }
+            this.keyboardPrediction = undefined;
+        }
+        const aligned = prediction || this.playerEcs.trimQueuedStepsAfter(ecsIndex, fromSubX, fromSubY);
         if (!aligned) {
-            try {
-                this.playerEcs.teleport(ecsIndex, path.from.x, path.from.y, resolvedLevel);
-            } catch {}
+            const sameOriginTile = (this.playerEcs.getX(ecsIndex) >> 7) === path.from.x &&
+                (this.playerEcs.getY(ecsIndex) >> 7) === path.from.y;
+            // A route can start anywhere within its first tile after free movement.
+            if (sameOriginTile) this.playerEcs.clearServerQueue(ecsIndex);
+            else this.playerEcs.teleport(ecsIndex, path.from.x, path.from.y, resolvedLevel);
         }
 
         const anyRun = path.steps.some((s) => !!s.run);
-        let lastOrientation = state.lastOrientation;
+        let lastOrientation = directionToOrientation(path.steps[path.steps.length - 1].direction) & 2047;
 
         let queueOverflowed = false;
-        for (const step of path.steps) {
+        for (const step of stepsToQueue) {
             const stepSubX = (step.tile.x << 7) + 64;
             const stepSubY = (step.tile.y << 7) + 64;
             const traversal =
@@ -390,6 +537,23 @@ export class PlayerMovementSync {
      * There is no waypoint queue to drain — all steps live in the ECS ring buffer.
      */
     updateInteractionRotations(): void {
+        const prediction = this.keyboardPrediction;
+        if (prediction && !prediction.expired && Date.now() >= prediction.expiresAt) {
+            const state = this.states.get(prediction.serverId);
+            if (state && this.playerEcs.isForcedMovementActive(state.ecsIndex, this.playerEcs.getClientCycle())) {
+                this.keyboardPrediction = undefined;
+            } else if (state && prediction.stopped) {
+                this.rewindKeyboardPrediction(state);
+                this.keyboardPrediction = undefined;
+            } else if (state) {
+                // A late reply isn't a rejection. Freeze further anticipation and
+                // let the next authoritative update reconcile the active tile.
+                this.stopKeyboardMovement(prediction.serverId);
+                prediction.stopped = false;
+                prediction.expired = true;
+                this.keyboardPrediction = prediction;
+            }
+        }
         for (const [, state] of this.states) {
             const ecsIndex = state.ecsIndex;
             if (!(ecsIndex >= 0)) continue;

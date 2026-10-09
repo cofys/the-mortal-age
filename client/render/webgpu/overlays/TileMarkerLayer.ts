@@ -1,5 +1,5 @@
 import type { TileHighlightRenderEntry } from "../../../game/highlights/TileHighlightManager";
-import { GPU_BUFFER_USAGE, GPU_SHADER_STAGE } from "../bindings";
+import { GPU_BUFFER_USAGE, GPU_SHADER_STAGE, SCENE_DEPTH_FORMAT } from "../bindings";
 import { WORLD_OVERLAY_WGSL } from "../shaders/overlay.wgsl";
 import type { OverlayHost } from "./OverlayHost";
 
@@ -28,8 +28,13 @@ export class TileMarkerLayer {
     private readonly sceneBindGroup: GPUBindGroup;
     private readonly sceneLayout: GPUBindGroupLayout;
 
+    private readonly extensionFormat?: GPUTextureFormat;
+
     private fillDepthPipeline!: GPURenderPipeline;
     private lineDepthPipeline!: GPURenderPipeline;
+    /** World-pass twins for an extension's HDR scene target; absent without `extensionFormat`. */
+    private fillDepthPipelineExt?: GPURenderPipeline;
+    private lineDepthPipelineExt?: GPURenderPipeline;
     private fillPipeline!: GPURenderPipeline;
     private linePipeline!: GPURenderPipeline;
 
@@ -67,12 +72,14 @@ export class TileMarkerLayer {
         format: GPUTextureFormat,
         sceneBindGroup: GPUBindGroup,
         sceneLayout: GPUBindGroupLayout,
+        extensionFormat?: GPUTextureFormat,
     ) {
         this.host = host;
         this.device = device;
         this.format = format;
         this.sceneBindGroup = sceneBindGroup;
         this.sceneLayout = sceneLayout;
+        this.extensionFormat = extensionFormat;
     }
 
     init(): void {
@@ -96,60 +103,56 @@ export class TileMarkerLayer {
                 },
             ],
         };
-        const fragment = {
+        const blend = {
+            color: {
+                srcFactor: "src-alpha" as const,
+                dstFactor: "one-minus-src-alpha" as const,
+                operation: "add" as const,
+            },
+            alpha: {
+                srcFactor: "src-alpha" as const,
+                dstFactor: "one-minus-src-alpha" as const,
+                operation: "add" as const,
+            },
+        };
+        const fragment = (format: GPUTextureFormat) => ({
             module,
             entryPoint: "fs_world",
-            targets: [
-                {
-                    format: this.format,
-                    blend: {
-                        color: {
-                            srcFactor: "src-alpha" as const,
-                            dstFactor: "one-minus-src-alpha" as const,
-                            operation: "add" as const,
-                        },
-                        alpha: {
-                            srcFactor: "src-alpha" as const,
-                            dstFactor: "one-minus-src-alpha" as const,
-                            operation: "add" as const,
-                        },
-                    },
-                },
-            ],
-        };
+            targets: [{ format, blend }],
+        });
         const depth = {
-            format: "depth24plus" as const,
+            format: SCENE_DEPTH_FORMAT,
             depthWriteEnabled: false,
             depthCompare: "less-equal" as const,
         };
-        this.fillDepthPipeline = device.createRenderPipeline({
-            label: "tile-marker-fill-depth",
-            layout,
-            vertex,
-            fragment,
-            primitive: { topology: "triangle-list", cullMode: "none" },
-            depthStencil: depth,
-        });
-        this.lineDepthPipeline = device.createRenderPipeline({
-            label: "tile-marker-line-depth",
-            layout,
-            vertex,
-            fragment,
-            primitive: { topology: "line-strip", cullMode: "none" },
-            depthStencil: depth,
-        });
+        const depthPipeline = (format: GPUTextureFormat, kind: "fill" | "line", label: string) =>
+            device.createRenderPipeline({
+                label,
+                layout,
+                vertex,
+                fragment: fragment(format),
+                primitive: { topology: kind === "fill" ? "triangle-list" : "line-strip", cullMode: "none" },
+                depthStencil: depth,
+            });
+        this.fillDepthPipeline = depthPipeline(this.format, "fill", "tile-marker-fill-depth");
+        this.lineDepthPipeline = depthPipeline(this.format, "line", "tile-marker-line-depth");
+        if (this.extensionFormat) {
+            // The extension's world pass targets its offscreen HDR format instead of the canvas.
+            this.fillDepthPipelineExt = depthPipeline(this.extensionFormat, "fill", "tile-marker-fill-depth-ext");
+            this.lineDepthPipelineExt = depthPipeline(this.extensionFormat, "line", "tile-marker-line-depth-ext");
+        }
         this.fillPipeline = device.createRenderPipeline({
             label: "tile-marker-fill",
             layout,
             vertex,
-            fragment,
+            fragment: fragment(this.format),
             primitive: { topology: "triangle-list", cullMode: "none" },
         });
         this.linePipeline = device.createRenderPipeline({
             label: "tile-marker-line",
             layout,
             vertex,
-            fragment,
+            fragment: fragment(this.format),
             primitive: { topology: "line-strip", cullMode: "none" },
         });
     }
@@ -190,8 +193,8 @@ export class TileMarkerLayer {
         this.buildGeometry();
     }
 
-    drawWorld(pass: GPURenderPassEncoder): void {
-        this.drawSegments(pass, this.worldSegments, true);
+    drawWorld(pass: GPURenderPassEncoder, useExtensionFormat: boolean = false): void {
+        this.drawSegments(pass, this.worldSegments, true, useExtensionFormat);
     }
 
     drawScreen(pass: GPURenderPassEncoder): void {
@@ -327,6 +330,7 @@ export class TileMarkerLayer {
         pass: GPURenderPassEncoder,
         segments: DrawSegment[],
         withDepth: boolean,
+        useExtensionFormat: boolean = false,
     ): void {
         if (segments.length === 0) return;
         const usedBytes = this.floats * 4;
@@ -352,13 +356,16 @@ export class TileMarkerLayer {
         pass.setBindGroup(0, this.sceneBindGroup);
         pass.setVertexBuffer(0, this.vertexBuffer);
         for (const segment of segments) {
+            const extensionPipelines = withDepth && useExtensionFormat;
             const pipeline =
                 segment.kind === "fill"
                     ? withDepth
-                        ? this.fillDepthPipeline
+                        ? (extensionPipelines ? this.fillDepthPipelineExt : this.fillDepthPipeline) ??
+                          this.fillDepthPipeline
                         : this.fillPipeline
                     : withDepth
-                      ? this.lineDepthPipeline
+                      ? (extensionPipelines ? this.lineDepthPipelineExt : this.lineDepthPipeline) ??
+                        this.lineDepthPipeline
                       : this.linePipeline;
             pass.setPipeline(pipeline);
             pass.draw(segment.count, 1, segment.first, 0);

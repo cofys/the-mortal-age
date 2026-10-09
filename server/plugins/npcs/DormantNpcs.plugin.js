@@ -1,13 +1,16 @@
 /**
- * Crabs that sit disguised as scenery (Rocks, Boulder, Sandy rocks, Fossil Rock, Swampy log,
- * Sandy Boulder), from data/definitions/disguised-crabs.json:
- * - a player who steps next to one wakes it, unless the crab has become tolerant of them
- *   (crabs can only be fought while they are aggressive, Wiki): it rises (1316) as its crab
- *   form, with that form's hitpoints, standing still until the rise is over, then attacks;
- * - out of combat for a while it walks back to where it lay, sinks (1314) and is scenery
- *   again, healed.
+ * NPCs that lie dormant until woken, from data/definitions/dormant-npcs.json. Each family has
+ * its dormant and awake ids, its rise and sink animations, and what wakes it:
+ * - "approach": crabs disguised as scenery (Rocks, Boulder, Sandy rocks, Fossil Rock, Swampy
+ *   log, Sandy Boulder). A player who steps next to one wakes it, unless the crab has become
+ *   tolerant of them (crabs can only be fought while they are aggressive, Wiki);
+ * - "attacked": wyrms and wyrmlings slithering on the ground rise when a player attacks them
+ *   (Wiki).
+ * Woken, it rises as its awake form, with that form's hitpoints, standing still and not
+ * attacking until the rise is over, then attacks whoever woke it. Out of combat for a while it
+ * walks back to where it lay, sinks and is dormant again, healed.
  * Crabs sit on coasts all over the map, so this follows players by map square and drives one
- * task each tick over the players in crab squares and the crabs awake right now.
+ * task each tick over the players in crab squares and the NPCs awake right now.
  */
 const fs = require("fs");
 const path = require("path");
@@ -20,11 +23,11 @@ let core = null;
 let DATA = null;
 /** Dormant npc id -> { family, awakeId }. */
 const dormantIds = new Map();
-/** "x,y,z" of each 64x64 map square that holds a dormant crab spawn. */
+/** "x,y,z" of each 64x64 map square that holds a dormant spawn woken by approach. */
 const crabSquares = new Set();
 /** Players standing in a crab square. */
 const watched = new Set();
-/** Awake crabs -> { idle, hiding, rising (ticks left), target }. */
+/** Awake NPCs -> { family, idle, hiding (ticks left), rising (ticks left), target }. */
 const awake = new Map();
 
 const squareKey = (location) => `${location.getX() >> 6},${location.getY() >> 6},${location.getZ()}`;
@@ -37,12 +40,12 @@ function readJson(file) {
 function start(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
-  DATA = readJson("disguised-crabs.json");
+  DATA = readJson("dormant-npcs.json");
   for (const family of DATA.families) {
     for (const id of family.dormant) dormantIds.set(id, { family, awakeId: family.awake[id] });
   }
   for (const spawn of readJson("npc-spawns.json")) {
-    if (!dormantIds.has(spawn.id)) continue;
+    if (dormantIds.get(spawn.id)?.family.trigger !== "approach") continue;
     crabSquares.add(`${spawn.x >> 6},${spawn.y >> 6},${spawn.level ?? spawn.z ?? 0}`);
   }
   core.TaskManager.submit(new (class CrabsTask extends core.Task {
@@ -69,7 +72,7 @@ function wakeNear(player) {
   if (!canBeWokenBy(player)) return;
   const at = player.getLocation();
   for (const npc of player.getLocalNpcs?.() ?? []) {
-    if (!npc || !dormantIds.has(npc.getId()) || npc.getHitpoints() <= 0) continue;
+    if (!npc || dormantIds.get(npc.getId())?.family.trigger !== "approach" || npc.getHitpoints() <= 0) continue;
     if (npc.getLocation().getZ() !== at.getZ() || npc.getLocation().getDistance(at) > DATA.wakeRange) continue;
     if (aggressiveTo(player, dormantIds.get(npc.getId()).awakeId)) wake(npc, player);
   }
@@ -86,16 +89,30 @@ function canBeWokenBy(player) {
 }
 
 function wake(npc, player) {
-  const { awakeId } = dormantIds.get(npc.getId());
+  const { family, awakeId } = dormantIds.get(npc.getId());
   const definition = core.NpcDefinition.forId(awakeId);
   npc.setNpcTransformationId(awakeId);
   npc.setMaxHitpoints(definition.getHitpoints());
   npc.setHitpoints(definition.getHitpoints());
-  npc.performAnimation(new core.Animation(DATA.revealAnim));
+  npc.performAnimation(new core.Animation(family.revealAnim));
   // It stays put while it rises: walking (to a side tile, say) would cut the rise short.
   npc.getMovementQueue().reset();
   npc.getMovementQueue().setBlockMovement(true);
-  awake.set(npc, { idle: 0, hiding: false, rising: DATA.revealTicks, target: player });
+  awake.set(npc, { family, idle: 0, hiding: 0, rising: family.revealTicks, target: player });
+}
+
+/**
+ * A player attacking a dormant "attacked" NPC wakes it; and nothing that is still rising
+ * attacks back.
+ */
+function onAttack(event) {
+  const { attacker, target } = event;
+  if (attacker?.isNpc?.() && (awake.get(attacker)?.rising ?? 0) > 0) {
+    event.allow = false;
+    return;
+  }
+  if (!attacker?.isPlayer?.() || !target?.isNpc?.() || awake.has(target) || target.getHitpoints() <= 0) return;
+  if (dormantIds.get(target.getId())?.family.trigger === "attacked") wake(target, attacker);
 }
 
 /** Risen: free to move, and goes for whoever woke it. */
@@ -124,8 +141,8 @@ function restTick(npc, state) {
     if (--state.rising === 0) risen(npc, state);
     return;
   }
-  if (state.hiding) {
-    sleep(npc);
+  if (state.hiding > 0) {
+    if (--state.hiding === 0) sleep(npc);
     return;
   }
   if (core.CombatFactory.inCombat(npc)) {
@@ -143,8 +160,8 @@ function restTick(npc, state) {
   }
   npc.getMovementQueue().reset();
   npc.setMobileInteraction?.(null);
-  npc.performAnimation(new core.Animation(DATA.hideAnim));
-  state.hiding = true;
+  npc.performAnimation(new core.Animation(state.family.hideAnim));
+  state.hiding = state.family.hideTicks;
 }
 
 function tick() {
@@ -169,7 +186,7 @@ function killed({ killer, npc }) {
 }
 
 module.exports = {
-  name: "DisguisedCrabs",
+  name: "DormantNpcs",
   members: true,
   register(pluginApi) {
     pluginApi.persistAttribute(ROCK_CRAB_KILLS_ATTRIBUTE);
@@ -179,6 +196,7 @@ module.exports = {
     pluginApi.onPlayerLogout(forget);
     pluginApi.onPlayerDisconnect(forget);
     pluginApi.onNpcDeath(killed);
+    pluginApi.onCanAttack(onAttack);
   },
-  _test: { start, track, tick, wake, sleep, killed, watched, awake, crabSquares, dormantIds },
+  _test: { start, track, tick, wake, sleep, killed, onAttack, watched, awake, crabSquares, dormantIds },
 };

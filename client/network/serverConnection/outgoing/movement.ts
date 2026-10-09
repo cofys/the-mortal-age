@@ -20,3 +20,7 @@ export function sendVarpTransmit(varpId: number, value: number): void {
     if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
     send({ type: "varp_transmit", payload: { varpId: varpId | 0, value: value | 0 } } as any);
 }
+
+export function sendMovementInput(input: import("../../../common/movement/ContinuousMovementTypes").ContinuousMovementInput): void {
+    send({ type: "movement_input", payload: input });
+}

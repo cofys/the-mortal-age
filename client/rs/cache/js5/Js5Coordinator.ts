@@ -60,6 +60,16 @@ export class WorkerJs5Coordinator {
         return promise;
     }
 
+    /** Resolves requests whose data has become readable here (its dat2 chunk arrived late). */
+    recheck(): void {
+        for (const [key, pending] of this.pending) {
+            const [indexId, archiveId] = key.split(":").map(Number);
+            if (!this.store.isGroupPresent(indexId, archiveId)) continue;
+            this.pending.delete(key);
+            pending.resolve();
+        }
+    }
+
     async settled(): Promise<void> {
         await Promise.allSettled(Array.from(this.pending.values(), (pending) => pending.promise));
     }

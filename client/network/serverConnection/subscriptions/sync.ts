@@ -41,6 +41,11 @@ export function subscribeWorldEntityInfo(fn: (payload: WorldEntityInfoPayload) =
     return () => state.worldEntityInfoListeners.delete(fn);
 }
 
+export function subscribeMovementPosition(cb: (position: import("../../../common/movement/ContinuousMovementTypes").ContinuousMovementPosition) => void): () => void {
+    state.movementPositionListeners.add(cb);
+    return () => state.movementPositionListeners.delete(cb);
+}
+
 export function subscribePlayerSync(cb: (frame: PlayerSyncFrame) => void): () => void {
     state.playerSyncListeners.add(cb);
     return () => state.playerSyncListeners.delete(cb);

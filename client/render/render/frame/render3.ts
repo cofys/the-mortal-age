@@ -215,6 +215,19 @@ export function renderTransparentNpcPass(host: WebGLOsrsRendererHost,
             geometry: DynamicNpcFrameGeometry;
         }> = [];
 
+        // A map without NPCs to draw (such as a boat deck with no crew) still draws its world
+        // graphics' alpha parts, which this pass otherwise draws after its NPCs.
+        const drawWorldGfxOnly = (map: WebGLMapSquare): void => {
+            const worldOffset = map.worldGfxDataTextureOffsets[npcDataTextureIndex];
+            if (!host.gfxRenderer || worldOffset === -1) return;
+            try {
+                host.gfxRenderPassOffsets.player = undefined;
+                host.gfxRenderPassOffsets.npc = undefined;
+                host.gfxRenderPassOffsets.world = worldOffset;
+                host.gfxRenderer.renderMapPass(map, npcDataTexture, "alpha", host.gfxRenderPassOffsets);
+            } catch {}
+        };
+
         for (let i = host.mapManager.visibleMapCount - 1; i >= 0; i--) {
             const map = host.mapManager.visibleMaps[i];
             if (
@@ -229,15 +242,22 @@ export function renderTransparentNpcPass(host: WebGLOsrsRendererHost,
                 continue;
             }
             const npcCount = map.npcEntityIds?.length ?? 0;
-            if (npcCount === 0) continue;
+            if (npcCount === 0) {
+                drawWorldGfxOnly(map);
+                continue;
+            }
 
             const dataOffset = map.npcDataTextureOffsets[npcDataTextureIndex];
             if (dataOffset === -1) {
+                drawWorldGfxOnly(map);
                 continue;
             }
 
             const npcBatch = map.drawCallNpc;
-            if (!npcBatch) continue;
+            if (!npcBatch) {
+                drawWorldGfxOnly(map);
+                continue;
+            }
             const { drawCall, drawRanges } = npcBatch;
 
             drawCall

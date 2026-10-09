@@ -932,7 +932,8 @@ export class PacketSender {
 
     const location = object.getLocation();
     this.player.getSession().sendClientPacket(encodeLocAddChange(
-      object.getId(), location.getX(), location.getY(), location.getZ(), object.getType(), object.getFace()
+      object.getId(), location.getX(), location.getY(), location.getZ(), object.getType(), object.getFace(),
+      object.getOpFlags?.()
     ));
     return this;
   }

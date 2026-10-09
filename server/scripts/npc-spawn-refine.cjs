@@ -1,0 +1,84 @@
+"use strict";
+
+// Matching npc-spawns.json entries with capture sites (rsprox_index.py npc-sites) and deciding
+// what the captures change, for scripts/refine-npc-spawns.ts (docs/npc-spawns.md). Plain JS so
+// tests can load it.
+
+/**
+ * Facing directions in the numbering spawn `direction` uses (NpcSpawnDefinitionLoader converts it):
+ * 1 is south and 6 north. Checked against the 68 spawns that already had a direction and a clear
+ * captured facing: 1 -> south 21 times, 6 -> north 18, 3 -> west 10, 4 -> east 7.
+ */
+const DIRECTIONS = ["south-west", "south", "south-east", "west", "east", "north-west", "north", "north-east"];
+
+/** "south" -> 1; null for anything else. */
+function directionOf(name) {
+  const index = DIRECTIONS.indexOf(String(name));
+  return index >= 0 ? index : null;
+}
+
+function distance(a, b) {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+/**
+ * Pairs each spawn with the capture site of the same NPC nearest to it on its plane, one site per
+ * spawn and one spawn per site, within `reach` tiles. Sites are matched on the rev 241 id, or on
+ * the display name when the ids differ (interchangeable copies such as mountain troll 936/937).
+ * Returns [{ spawn, site }].
+ */
+function pairSpawns(spawns, sites, reach) {
+  const byKey = new Map();
+  for (const site of sites) {
+    for (const key of [`id:${site.id}`, `name:${String(site.display ?? "").toLowerCase()}`]) {
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(site);
+    }
+  }
+  const candidates = [];
+  for (const spawn of spawns) {
+    const seen = new Set();
+    for (const key of [`id:${spawn.id}`, `name:${String(spawn.name ?? "").toLowerCase()}`]) {
+      for (const site of byKey.get(key) ?? []) {
+        if (seen.has(site) || site.z !== (spawn.level ?? 0)) continue;
+        seen.add(site);
+        const d = distance(spawn, site);
+        if (d <= reach) candidates.push({ spawn, site, d });
+      }
+    }
+  }
+  candidates.sort((a, b) => a.d - b.d);
+  const usedSpawns = new Set();
+  const usedSites = new Set();
+  const pairs = [];
+  for (const candidate of candidates) {
+    if (usedSpawns.has(candidate.spawn) || usedSites.has(candidate.site)) continue;
+    usedSpawns.add(candidate.spawn);
+    usedSites.add(candidate.site);
+    pairs.push(candidate);
+  }
+  return pairs;
+}
+
+/**
+ * What a reliable site changes on its spawn:
+ * - `wanderRadius: 0` when the NPC stood still in at least `still` of its watched sightings;
+ * - `direction` when, standing still, at least `facing` of them agree on a facing that differs
+ *   from what the spawn gets now (its own direction, else the cache's spawnDirection). Bankers
+ *   and clerks turn towards whoever uses them, so a majority is enough: the Grand Exchange's
+ *   north clerks agree on north in only 61-65% of sightings.
+ * Sites with labels (follower, roaming, prop, instance, special worlds…) or too few watched
+ * sightings change nothing.
+ */
+function changesFor(spawn, site, { minWatched = 3, still = 0.9, facing = 0.5, defaultDirection = 1 } = {}) {
+  if ((site.labels ?? []).length || (site.watched ?? 0) < minWatched || site.still_share == null) return {};
+  if (site.still_share < still) return {};
+  const changes = {};
+  if (spawn.wanderRadius !== 0) changes.wanderRadius = 0;
+  const captured = directionOf(site.facing);
+  const current = Number.isInteger(spawn.direction) ? spawn.direction : defaultDirection;
+  if (captured !== null && (site.facing_share ?? 0) >= facing && captured !== current) changes.direction = captured;
+  return changes;
+}
+
+module.exports = { DIRECTIONS, directionOf, pairSpawns, changesFor };

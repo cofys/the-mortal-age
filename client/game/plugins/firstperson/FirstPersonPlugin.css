@@ -18,3 +18,44 @@
     pointer-events: none;
     z-index: 1;
 }
+
+/* Taking a hit reddens the screen edge, poison pulses it green; the plugin sets
+   --first-person-hit and --first-person-poison (0..1). */
+.first-person-reticle::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse at center, transparent 55%, rgb(150 0 0 / calc(60% * var(--first-person-hit, 0))) 100%),
+        radial-gradient(ellipse at center, transparent 55%, rgb(20 150 40 / calc(60% * var(--first-person-poison, 0))) 100%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.first-person-chatting::before,
+.first-person-inventory::before,
+.first-person-interface::before {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgb(0 0 0 / 70%);
+    color: white;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.first-person-chatting::before {
+    content: "Chat typing · Tab for inventory";
+}
+
+.first-person-inventory::before {
+    content: "Inventory · Arrows select · Row edges / Tab switch focus · Space acts · Hold for options";
+}
+
+.first-person-interface::before {
+    content: "Interface · Arrows select · Row edges / Tab switch panels · Space acts · Hold for options";
+}

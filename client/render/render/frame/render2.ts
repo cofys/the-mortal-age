@@ -194,9 +194,12 @@ export function renderGeometryPass(host: WebGLOsrsRendererHost, transparent: boo
         const roofPlaneLimit = host.getRoofPlaneLimit();
         const cullTile = host.getRenderCullTile();
 
-        const count = host.mapManager.visibleMapCount;
+        const shadow = !!host.hdShadowFrustum;
+        // Shadow casters use the light volume, including loaded off-screen maps.
+        const maps = shadow ? Array.from(host.mapManager.mapSquares.values()).filter(map => map.canRender(host.stats.frameCount)) : host.mapManager.visibleMaps;
+        const count = shadow ? maps.length : host.mapManager.visibleMapCount;
         if (count === 0) {
-            if (!transparent) {
+            if (!transparent && !shadow) {
                 host.lastLodVisibleMapCount = 0;
                 host.lastFullDetailVisibleMapCount = 0;
                 host.lastDistanceCulledVisibleMapCount = 0;
@@ -216,10 +219,10 @@ export function renderGeometryPass(host: WebGLOsrsRendererHost, transparent: boo
         let distanceCulledVisibleMapCount = 0;
 
         for (let i = start; i !== end; i += step) {
-            const map = host.mapManager.visibleMaps[i];
+            const map = maps[i];
             const tileDistance = host.getMapTileDistanceFromPoint(map, cullTile.x, cullTile.y);
             if (
-                !host.isMapWithinRenderDistance(
+                !shadow && !host.isMapWithinRenderDistance(
                     map,
                     cullTile.x,
                     cullTile.y,
@@ -233,139 +236,144 @@ export function renderGeometryPass(host: WebGLOsrsRendererHost, transparent: boo
 
             // GPU interaction readback removed - always use non-interact draw calls
             const isInteract = false;
-            const isLod = tileDistance > lodThresholdTiles;
-            if (isLod) {
+            const mapLod = tileDistance > lodThresholdTiles;
+            if (mapLod) {
                 lodVisibleMapCount++;
             } else {
                 fullDetailVisibleMapCount++;
             }
 
-            const { drawCall, drawRanges } = map.getDrawCall(transparent, isInteract, isLod);
-            const drawRangePlanes = map.getDrawRangesPlanes(transparent, isInteract, isLod);
-
             const isWorldEntity = host.mapManager.worldEntityMapIds.has(map.id);
-            let weTransform: Float32Array = WebGLMapSquare.IDENTITY_MAT4;
-            let weEntityIndex: number | undefined;
-            if (isWorldEntity) {
-                weEntityIndex = host.getWorldEntityIndexForMapId(map.id);
-                if (weEntityIndex !== undefined) {
-                    weTransform =
-                        host.worldEntityAnimator?.getTransform(weEntityIndex) ??
-                        WebGLMapSquare.IDENTITY_MAT4;
+            // Full and cached far ranges share the same 8-tile chunk identities.
+            // The shared range filter selects exactly one mesh for each chunk.
+            for (let detail = 0; detail < (shadow || isWorldEntity ? 1 : 2); detail++) {
+                const isLod = !shadow && !isWorldEntity && (transparent ? detail === 0 : detail === 1);
+                const { drawCall, drawRanges } = map.getDrawCall(transparent, isInteract, isLod);
+                const drawRangePlanes = map.getDrawRangesPlanes(transparent, isInteract, isLod);
+
+                let weTransform: Float32Array = WebGLMapSquare.IDENTITY_MAT4;
+                let weEntityIndex: number | undefined;
+                if (isWorldEntity) {
+                    weEntityIndex = host.getWorldEntityIndexForMapId(map.id);
+                    if (weEntityIndex !== undefined) {
+                        weTransform =
+                            host.worldEntityAnimator?.getTransform(weEntityIndex) ??
+                            WebGLMapSquare.IDENTITY_MAT4;
+                    }
                 }
-            }
 
-            drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
-            drawCall.uniform("u_worldEntityTransform", weTransform);
-            drawCall.uniform("u_worldEntityOpacity", 1.0);
+                drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
+                drawCall.uniform("u_worldEntityTransform", weTransform);
+                drawCall.uniform("u_worldEntityOpacity", 1.0);
 
-            host.drawWithRoofPlaneFilter(drawCall, drawRanges, drawRangePlanes, roofPlaneLimit);
+                host.drawWithRoofPlaneFilter(drawCall, drawRanges, drawRangePlanes, roofPlaneLimit, map, isLod);
 
-            const locBatch = map.getLocDrawCall(transparent, isInteract, isLod);
-            if (locBatch) {
-                const locDrawRangePlanes = map.getLocDrawRangesPlanes(
-                    transparent,
-                    isInteract,
-                    isLod,
-                );
-                locBatch.drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
-                locBatch.drawCall.uniform("u_worldEntityTransform", weTransform);
-                locBatch.drawCall.uniform("u_worldEntityOpacity", 1.0);
-                host.updateAnimatedDrawRanges(
-                    map,
-                    locBatch.drawCall,
-                    locBatch.drawRanges,
-                    transparent,
-                    isInteract,
-                    isLod,
-                );
-                host.drawWithRoofPlaneFilter(
-                    locBatch.drawCall,
-                    locBatch.drawRanges,
-                    locDrawRangePlanes,
-                    roofPlaneLimit,
-                );
-            }
+                const locBatch = map.getLocDrawCall(transparent, isInteract, isLod);
+                if (locBatch) {
+                    const locDrawRangePlanes = map.getLocDrawRangesPlanes(
+                        transparent,
+                        isInteract,
+                        isLod,
+                    );
+                    locBatch.drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
+                    locBatch.drawCall.uniform("u_worldEntityTransform", weTransform);
+                    locBatch.drawCall.uniform("u_worldEntityOpacity", 1.0);
+                    host.updateAnimatedDrawRanges(
+                        map,
+                        locBatch.drawCall,
+                        locBatch.drawRanges,
+                        transparent,
+                        isInteract,
+                        isLod,
+                    );
+                    host.drawWithRoofPlaneFilter(
+                        locBatch.drawCall,
+                        locBatch.drawRanges,
+                        locDrawRangePlanes,
+                        roofPlaneLimit, map, isLod,
+                    );
+                }
 
-            const groundBatch = map.getGroundItemDrawCall(transparent, isInteract, isLod);
-            if (groundBatch) {
-                const groundDrawRangePlanes = map.getGroundItemDrawRangesPlanes(
-                    transparent,
-                    isInteract,
-                    isLod,
-                );
-                groundBatch.drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
-                groundBatch.drawCall.uniform("u_worldEntityTransform", weTransform);
-                groundBatch.drawCall.uniform("u_worldEntityOpacity", 1.0);
-                host.drawWithRoofPlaneFilter(
-                    groundBatch.drawCall,
-                    groundBatch.drawRanges,
-                    groundDrawRangePlanes,
-                    roofPlaneLimit,
-                );
-            }
+                const groundBatch = isLod ? undefined : map.getGroundItemDrawCall(transparent, isInteract, false);
+                if (groundBatch) {
+                    const groundDrawRangePlanes = map.getGroundItemDrawRangesPlanes(
+                        transparent,
+                        isInteract,
+                        isLod,
+                    );
+                    groundBatch.drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
+                    groundBatch.drawCall.uniform("u_worldEntityTransform", weTransform);
+                    groundBatch.drawCall.uniform("u_worldEntityOpacity", 1.0);
+                    host.drawWithRoofPlaneFilter(
+                        groundBatch.drawCall,
+                        groundBatch.drawRanges,
+                        groundDrawRangePlanes,
+                        roofPlaneLimit, map, isLod,
+                    );
+                }
 
-            const doorBatch = map.getDoorDrawCall(transparent, isInteract, isLod);
-            if (doorBatch) {
-                const doorDrawRangePlanes = map.getDoorDrawRangesPlanes(
-                    transparent,
-                    isInteract,
-                    isLod,
-                );
-                doorBatch.drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
-                doorBatch.drawCall.uniform("u_worldEntityTransform", weTransform);
-                host.drawWithRoofPlaneFilter(
-                    doorBatch.drawCall,
-                    doorBatch.drawRanges,
-                    doorDrawRangePlanes,
-                    roofPlaneLimit,
-                );
-            }
+                const doorBatch = map.getDoorDrawCall(transparent, isInteract, isLod);
+                if (doorBatch) {
+                    const doorDrawRangePlanes = map.getDoorDrawRangesPlanes(
+                        transparent,
+                        isInteract,
+                        isLod,
+                    );
+                    doorBatch.drawCall.uniform("u_roofPlaneLimit", roofPlaneLimit);
+                    doorBatch.drawCall.uniform("u_worldEntityTransform", weTransform);
+                    host.drawWithRoofPlaneFilter(
+                        doorBatch.drawCall,
+                        doorBatch.drawRanges,
+                        doorDrawRangePlanes,
+                        roofPlaneLimit, map, isLod,
+                    );
+                }
 
-            // Mode1 overlap ghost: redraw WE with tint + low opacity when actors overlap
-            if (isWorldEntity && weEntityIndex !== undefined && !transparent) {
-                const weEntity = host.osrsClient.worldViewManager.getWorldEntity(weEntityIndex);
-                if (weEntity && weEntity.drawMode === 1) {
-                    const weView = host.osrsClient.worldViewManager.getWorldView(weEntityIndex);
-                    const hasOverlap =
-                        weView && (weView.npcIds.size > 0 || weView.playerIds.size > 0);
-                    if (hasOverlap) {
-                        const overlay = host.worldEntityOverlays.get(weEntityIndex);
-                        const weType =
-                            overlay?.configId !== undefined && overlay.configId >= 0
-                                ? host.osrsClient.worldEntityTypeLoader?.load(overlay.configId)
-                                : undefined;
-                        if (weType && weType.sceneTintHsl > 0 && host.sceneUniformBuffer) {
-                            host.setSceneHslOverrideFromPacked(weType.sceneTintHsl, 127);
-                            host.sceneUniformBuffer
-                                .set(4, host.sceneHslOverride as Float32Array)
-                                .update();
+                // Mode1 overlap ghost: redraw WE with tint + low opacity when actors overlap
+                if (isWorldEntity && weEntityIndex !== undefined && !transparent) {
+                    const weEntity = host.osrsClient.worldViewManager.getWorldEntity(weEntityIndex);
+                    if (weEntity && weEntity.drawMode === 1) {
+                        const weView = host.osrsClient.worldViewManager.getWorldView(weEntityIndex);
+                        const hasOverlap =
+                            weView && (weView.npcIds.size > 0 || weView.playerIds.size > 0);
+                        if (hasOverlap) {
+                            const overlay = host.worldEntityOverlays.get(weEntityIndex);
+                            const weType =
+                                overlay?.configId !== undefined && overlay.configId >= 0
+                                    ? host.osrsClient.worldEntityTypeLoader?.load(overlay.configId)
+                                    : undefined;
+                            if (weType && weType.sceneTintHsl > 0 && host.sceneUniformBuffer) {
+                                host.setSceneHslOverrideFromPacked(weType.sceneTintHsl, 127);
+                                host.sceneUniformBuffer
+                                    .set(4, host.sceneHslOverride as Float32Array)
+                                    .update();
 
-                            host.app.enable(PicoGL.BLEND);
-                            host.app.blendFunc(PicoGL.SRC_ALPHA, PicoGL.ONE_MINUS_SRC_ALPHA);
+                                host.app.enable(PicoGL.BLEND);
+                                host.app.blendFunc(PicoGL.SRC_ALPHA, PicoGL.ONE_MINUS_SRC_ALPHA);
 
-                            drawCall.uniform("u_worldEntityOpacity", 0.01);
-                            host.drawWithRoofPlaneFilter(
-                                drawCall,
-                                drawRanges,
-                                drawRangePlanes,
-                                roofPlaneLimit,
-                            );
-                            drawCall.uniform("u_worldEntityOpacity", 1.0);
+                                drawCall.uniform("u_worldEntityOpacity", 0.01);
+                                host.drawWithRoofPlaneFilter(
+                                    drawCall,
+                                    drawRanges,
+                                    drawRangePlanes,
+                                    roofPlaneLimit, map, isLod,
+                                );
+                                drawCall.uniform("u_worldEntityOpacity", 1.0);
 
-                            host.app.disable(PicoGL.BLEND);
+                                host.app.disable(PicoGL.BLEND);
 
-                            host.clearSceneHslOverride();
-                            host.sceneUniformBuffer
-                                .set(4, host.sceneHslOverride as Float32Array)
-                                .update();
+                                host.clearSceneHslOverride();
+                                host.sceneUniformBuffer
+                                    .set(4, host.sceneHslOverride as Float32Array)
+                                    .update();
+                            }
                         }
                     }
                 }
             }
         }
 
-        if (!transparent) {
+        if (!transparent && !shadow) {
             host.lastLodVisibleMapCount = lodVisibleMapCount;
             host.lastFullDetailVisibleMapCount = fullDetailVisibleMapCount;
             host.lastLodThreshold = lodThresholdTiles | 0;

@@ -15,6 +15,7 @@ import { Animation } from "../../model/Animation";
 import { PluginManager } from "../../../plugins/PluginManager";
 import { ItemIdentifiers } from "../../../util/ItemIdentifiers";
 import { Barrows } from "../../content/combat/Barrows";
+import { Wilderness } from "../../content/wilderness/Wilderness";
 
 export class PlayerDeathTask extends Task {
     private player: Player;
@@ -76,7 +77,8 @@ export class PlayerDeathTask extends Task {
                             ? PlayerDeathTask.getItemsToKeep(this.player)
                             : [];
                         this.itemsToKeep = Array.isArray(itemsToKeep) ? itemsToKeep : [];
-                        const playerItems = this.player.getInventory().getValidItems().concat(this.player.getEquipment().getValidItems());
+                        const playerItems = PlayerDeathTask.splitIntoComponents(this.player, this.killer, this.itemsToKeep,
+                            this.player.getInventory().getValidItems().concat(this.player.getEquipment().getValidItems()));
                         const position = deathPosition;
                         let dropped = false;
                         let pluginHandledDrop = false;
@@ -255,15 +257,32 @@ export class PlayerDeathTask extends Task {
         return (player.getSkullTimer() > 0 ? 0 : 3) + (protectItem ? 1 : 0);
     }
 
+    /**
+     * Killed by a player in the Wilderness, an unkept item with tradeable components (an upgraded
+     * Nightmare staff: the staff and its orb, `deathComponents` in item-gameplay.json) drops as
+     * those components for the killer, and the item itself is gone (Wiki).
+     */
+    private static splitIntoComponents(player: Player, killer: Player | null | undefined, kept: Item[], items: Item[]): Item[] {
+        if (!killer || killer === player || !Wilderness.isIn(player)) return items;
+        if (player.getRights() === PlayerRights.OWNER || player.getRights() === PlayerRights.DEVELOPER) return items;
+        return items.flatMap((item) => {
+            const components = item.getDefinition().getDeathComponents();
+            if (components.length === 0 || kept.includes(item) || item.isLostOnDeath()) return [item];
+            return components.map((id) => new Item(id, item.getAmount()));
+        });
+    }
+
     private static getItemsToKeep(player: Player): Item[] {
         const items: Item[] = [];
         const alwaysKept: Item[] = [];
         for (const item of [...player.getInventory().getItems(), ...player.getEquipment().getItems()]) {
+            // Untradeable items compete for the kept slots too, by value (Wiki: Items Kept on
+            // Death). Preset items are always lost, so they never take one.
             if (
                 item == null ||
                 item.getId() <= 0 ||
                 item.getAmount() <= 0 ||
-                !item.isTradeable()
+                item.isLostOnDeath()
             ) {
                 continue;
             }

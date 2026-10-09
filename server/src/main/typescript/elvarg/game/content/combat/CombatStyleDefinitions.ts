@@ -7,6 +7,8 @@ export type CombatStyleKind = "ACCURATE" | "AGGRESSIVE" | "DEFENSIVE" | "CONTROL
 export interface FightTypeDefinition {
     name: string;
     animation: number;
+    /** The cache's separate animation against NPCs ("..._pvn"), where it has one. */
+    npcAnimation?: number;
     childId: number;
     attackType: CombatStyleAttackType;
     style: CombatStyleKind;

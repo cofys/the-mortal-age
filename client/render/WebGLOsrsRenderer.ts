@@ -164,6 +164,7 @@ import { InteractType } from "./InteractType";
 import { profiler } from "./PerformanceProfiler";
 import { PlayerChatheadFactory } from "./PlayerChatheadFactory";
 import { resolveFogRange } from "./RenderDistancePolicy";
+import { Frustum } from "../game/Frustum";
 import { WebGLMapSquare } from "./WebGLMapSquare";
 import { WorldEntityAnimator } from "./WorldEntityAnimator";
 import { SceneBuffer } from "./buffer/SceneBuffer";
@@ -638,6 +639,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public frameRoofFilteredRangeCount: number = 0;
     public frameRoofTotalRangeCount: number = 0;
     public roofFilteredDrawIndices: number[] = [];
+    public hdShadowFrustum?: Frustum;
 
     // OSRS raycast-all menu: SceneRaycaster for Physics.RaycastAll-like behavior
     public sceneRaycaster: SceneRaycaster | null = null;
@@ -1275,6 +1277,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     async initShaders(): Promise<Program[]> {
         return render.initShaders(this);
+    }
+
+    /** Recompiles the world and actor programs in place from the plugins' current sources. */
+    async rebuildScenePrograms(): Promise<void> {
+        return render.rebuildScenePrograms(this);
     }
 
     public _resolvePlayerSeqIdForMode(): number {
@@ -2365,8 +2372,10 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         drawRanges: DrawRange[],
         drawRangePlanes: Uint8Array | undefined,
         roofPlaneLimit: number,
+        map?: WebGLMapSquare,
+        lod: boolean = false,
     ): void {
-        return render.drawWithRoofPlaneFilter(this, drawCall, drawRanges, drawRangePlanes, roofPlaneLimit);
+        return render.drawWithRoofPlaneFilter(this, drawCall, drawRanges, drawRangePlanes, roofPlaneLimit, map, lod);
     }
 
     public getMapTileDistanceFromPoint(map: WebGLMapSquare, tileX: number, tileY: number): number {

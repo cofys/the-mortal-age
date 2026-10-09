@@ -1,0 +1,9 @@
+{
+  "meta": {"about": "Wyrms and wyrmlings in combat. Wiki (Wyrm, Wyrmling): wyrms attack with melee and magic, only magic when attacked from a distance; magic max hit 13, melee 10; wyrmlings slash only, max hit 5. Animations and graphics from the cache's names: wyrm_attack_melee 8270, wyrm_attack_magic 8271, wyrm_range_proj 1634, wyrm_range_impact 1635 (wyrmlings share the wyrm's animations). The projectile's timing and start height are estimates (the engine's usual magic values), its end height the drake's as captured (90 sent, 22 here: tsps sends heights x4): no capture of wyrms yet. Waking and sinking are dormant-npcs.json's."},
+  "families": [
+    {"name": "Wyrm", "ids": [8610, 8611], "magic": {"anim": 8271, "maxHit": 13, "projectile": 1634, "impact": 1635}, "melee": {"anim": 8270, "maxHit": 10}},
+    {"name": "Wyrmling", "ids": [13031, 13032, 16296, 16297], "melee": {"anim": 8270, "maxHit": 5}}
+  ],
+  "projectile": {"delay": 51, "length": -5, "perTile": 10, "startHeight": 43, "endHeight": 22},
+  "magicRange": 10
+}

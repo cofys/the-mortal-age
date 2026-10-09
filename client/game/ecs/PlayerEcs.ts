@@ -52,6 +52,9 @@ export class PlayerEcs {
     private level!: Uint8Array;
     private rotation!: Uint16Array; // 0..2047
     private targetRot!: Uint16Array; // desired orientation from path step
+    private rotationOverride?: { index: number; rotation: number };
+    private continuousPositions = new Map<number, { x: number; y: number; dx: number; dy: number;
+        running: boolean; moving: boolean; rotation: number }>();
     private stall!: Uint8Array; // consecutive ticks without movement toward target
     private rotationCounter!: Uint8Array; // consecutive ticks rotating (for turn anim delay)
     private movementDelayCounter!: Uint8Array; // accumulated movement delay from blocking sequences
@@ -368,6 +371,8 @@ export class PlayerEcs {
     deallocatePlayer(serverId: number): void {
         const index = this.serverIdToIndex.get(serverId);
         if (index === undefined) return;
+        this.setRotationOverride(index, undefined);
+        this.continuousPositions.delete(index);
 
         this.serverIdToIndex.delete(serverId);
         this.indexToServerId.delete(index);
@@ -656,7 +661,13 @@ export class PlayerEcs {
         return this.rotation[i] | 0;
     }
     getTargetRotation(i: number): number {
-        return this.targetRot[i] | 0;
+        return this.getRotationOverride(i) ?? (this.targetRot[i] | 0);
+    }
+    private getRotationOverride(i: number): number | undefined {
+        return this.rotationOverride?.index === i &&
+            this.getInteractionIndex(i) === NO_INTERACTION &&
+            !this.isForcedMovementActive(i, this.clientCycle)
+            ? this.rotationOverride.rotation : undefined;
     }
 
     // Rotation counter: tracks consecutive ticks rotating for turn animation delay
@@ -739,6 +750,7 @@ export class PlayerEcs {
         endY: number,
         targetRot: number,
     ): void {
+        this.clearContinuousPosition(i);
         this.clearServerQueue(i);
         // PlayerSlot.applyExactMove sets pathX/Y[0] to the landing tile without
         // moving the rendered actor there. Subsequent walks extend from it.
@@ -1556,7 +1568,35 @@ export class PlayerEcs {
         else if (currTileY > tileY) or = 0;
         this.targetRot[i] = or & 2047;
     }
+    isContinuousMovement(i: number): boolean { return this.continuousPositions.has(i); }
+
+    canContinuousMove(i: number): boolean {
+        return !this.isForcedMovementActive(i, this.clientCycle) && !this.isActionSequenceBlockingMovement(i, 1);
+    }
+
+    setContinuousPosition(i: number, x: number, y: number, dx: number, dy: number,
+        running: boolean, moving: boolean, rotation: number): void {
+        if (!this.continuousPositions.has(i)) this.clearServerQueue(i);
+        this.continuousPositions.set(i, { x, y, dx, dy, running, moving, rotation });
+        this.prevX[i] = this.x[i];
+        this.prevY[i] = this.y[i];
+        this.x[i] = Math.round(x);
+        this.y[i] = Math.round(y);
+        this.updateAnimDistance(i, this.x[i] - this.prevX[i], this.y[i] - this.prevY[i]);
+        this.targetX[i] = Math.round(x + (moving ? dx * 128 : 0));
+        this.targetY[i] = Math.round(y + (moving ? dy * 128 : 0));
+        this.running[i] = running ? 1 : 0;
+        if (this.getInteractionIndex(i) === NO_INTERACTION) {
+            this.setRotationImmediate(i, this.getRotationOverride(i) ?? rotation);
+            this.targetRot[i] = rotation & 2047;
+        }
+    }
+
+    clearContinuousPosition(i: number): void { this.continuousPositions.delete(i); }
+
     isMoving(i: number): boolean {
+        const continuous = this.continuousPositions.get(i);
+        if (continuous) return continuous.moving && this.canContinuousMove(i);
         const t = (this.srvT?.[i] as number) ?? 1.0;
         if (t < 0.999) return true; // mid-segment
         // Check if we have queued steps (OSRS behavior - no artificial delay)
@@ -1580,6 +1620,8 @@ export class PlayerEcs {
     // When server-authoritative, we derive run from segment tile span or segment speed factor.
     // Otherwise, fall back to the running flag.
     isRunVisual(i: number): boolean {
+        const continuous = this.continuousPositions.get(i);
+        if (continuous) return continuous.running;
         if (!this.serverInterpEnabled) return this.isRunning(i);
         try {
             const span = this.getServerSegTileSpan(i) | 0; // 1 or 2
@@ -1630,6 +1672,17 @@ export class PlayerEcs {
     }
     setTargetRot(i: number, rot: number): void {
         this.targetRot[i] = (rot | 0) & 2047;
+    }
+
+    setRotationOverride(index: number, rotation: number | undefined): void {
+        if (rotation === undefined) {
+            if (this.rotationOverride?.index === index) this.rotationOverride = undefined;
+            return;
+        }
+        this.rotationOverride = { index, rotation: rotation & 2047 };
+        if (this.getRotationOverride(index) !== undefined) {
+            this.setRotationImmediate(index, rotation);
+        }
     }
 
     setFaceTileSub(i: number, subX: number, subY: number): void {
@@ -1712,6 +1765,10 @@ export class PlayerEcs {
         this.srvQueueLen[i] = 0;
         this.srvQueueHead[i] = 0;
         this.srvQueueTail[i] = 0;
+    }
+
+    getMovementTarget(i: number): { x: number; y: number } {
+        return { x: this.srvNextX[i], y: this.srvNextY[i] };
     }
 
     trimQueuedStepsAfter(i: number, x: number, y: number): boolean {
@@ -1903,12 +1960,37 @@ export class PlayerEcs {
             }
 
             for (let i = 0; i < this.count; i++) {
+                const rotationOverride = this.getRotationOverride(i);
+                if (rotationOverride !== undefined) this.setRotationImmediate(i, rotationOverride);
                 // movementSequence resets to idleSequence each client cycle before
                 // the movement update selects walk/run/turn.
                 try {
                     const idle = this.animIdleSeq[i] | 0;
                     if (idle >= 0) this.animMovementSeqId[i] = idle | 0;
                 } catch {}
+                const continuous = this.continuousPositions.get(i);
+                if (continuous && !this.isForcedMovementActive(i, this.clientCycle)) {
+                    if (continuous.moving && this.canContinuousMove(i)) {
+                        const movementRotation = faceAngleRs(0, 0,
+                            Math.round(continuous.dx * 32767), Math.round(continuous.dy * 32767));
+                        let delta = (movementRotation - this.getRotation(i)) & 2047;
+                        if (delta > 1024) delta -= 2048;
+                        // Int16 input and integer yaw can differ by one angle unit.
+                        // Keep diagonal input on the same animation boundary while turning.
+                        delta = Math.round(delta / 4) * 4;
+                        const suffix = Math.abs(delta) <= 256 ? "" :
+                            delta >= 256 && delta < 768 ? "Right" :
+                            delta <= -256 && delta >= -768 ? "Left" : "Back";
+                        const walk = this.getAnimSeq(i, `walk${suffix}` as PlayerAnimKey);
+                        const run = this.getAnimSeq(i, `run${suffix}` as PlayerAnimKey);
+                        const sequence = continuous.running && run >= 0 ? run : walk;
+                        if (sequence >= 0) this.animMovementSeqId[i] = sequence;
+                    }
+                    if (this.getInteractionIndex(i) === NO_INTERACTION) {
+                        this.animTick[i] = (this.animTick[i] + 1) & 0xffff;
+                        continue;
+                    }
+                }
                 // `sequenceDelay` is decremented by the action-sequence controller
                 // after sequence stepping (see `PlayerAnimController.tick`).
 
@@ -2208,6 +2290,7 @@ export class PlayerEcs {
                                 // Base speed (var8)
                                 let var8 = 4;
                                 const turnPenalty =
+                                    rotationOverride === undefined &&
                                     rot !== movementOrientation &&
                                     !isInteracting &&
                                     ((this.rotationSpeed[i] | 0) as number) !== 0;
@@ -2396,7 +2479,7 @@ export class PlayerEcs {
                         this.clearFaceOverrides(i);
                     }
 
-                    const orientation = (this.targetRot[i] | 0) & 2047;
+                    const orientation = rotationOverride ?? ((this.targetRot[i] | 0) & 2047);
                     const rot0 = (this.rotation[i] | 0) & 2047;
                     const diff = (orientation - rot0) & 2047; // var7
                     if (diff !== 0) {
@@ -2756,6 +2839,7 @@ export class PlayerEcs {
     // Instantly move the player to a destination tile (teleport).
     // Updates current, previous, and target positions, clears path, and refreshes occupancy.
     teleport(i: number, tileX: number, tileY: number, plane?: number): void {
+        this.clearContinuousPosition(i);
         const sx = ((tileX | 0) << 7) + 64;
         const sy = ((tileY | 0) << 7) + 64;
         this.prevX[i] = sx;

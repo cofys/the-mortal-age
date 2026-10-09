@@ -77,6 +77,9 @@ export class Sound {
     public static WEAPON_SPEAR_CRUSH = new Sound(2547, 1, 0, 0)
     public static WEAPON_SCYTHE_STAB = new Sound(2525, 1, 0, 0)
     public static WEAPON_SCYTHE_SLASH = new Sound(2524, 1, 0, 0)
+    // rsprox captures: the Hallowed flail and Infernal tecpatl attack sounds.
+    public static WEAPON_HALLOWED_FLAIL = new Sound(1713, 1, 0, 0)
+    public static WEAPON_INFERNAL_TECPATL = new Sound(11456, 1, 0, 0)
     public static WEAPON_UNARMED_PUNCH = new Sound(2566, 1, 0, 0)
     public static WEAPON_UNARMED_KICK = new Sound(2565, 1, 0, 0)
     public static WEAPON_DHAROK_GREATAXE = new Sound(1321, 1, 0, 0)

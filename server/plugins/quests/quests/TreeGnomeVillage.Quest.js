@@ -30,6 +30,7 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
   const STAGE_RETURNED_FIRST_ORB = 7;
   const STAGE_DEFEATED_WARLORD = 8;
   const STAGE_COMPLETE = 9;
+  const VARBIT_BOLREN_GOT_ORBS = 598;
 
   const START_HOOK = "quest:tree-gnome-village:start";
   /** Condition branch that hands Montai the six logs. */
@@ -238,8 +239,23 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
     quest.complete(player);
   }
 
+  /**
+   * bolren_got_orbs (varbit 598): 1 once the first orb is back, 2 once all are. The cache shows
+   * the village's spirit tree with Travel only at 2.
+   */
+  function sendOrbs(player) {
+    const stage = quest.getStage(player);
+    const orbs = stage >= STAGE_COMPLETE ? 2 : stage >= STAGE_RETURNED_FIRST_ORB ? 1 : 0;
+    player.getPacketSender().sendVarbit(VARBIT_BOLREN_GOT_ORBS, orbs);
+  }
+
+  function handleStageChanged({ player, key }) {
+    if (key === "tree_gnome_village") sendOrbs(player);
+  }
+
   function handleLogin({ player }) {
     refreshQuestList(player);
+    sendOrbs(player);
   }
 
   quest = registerQuest(api, {
@@ -263,4 +279,5 @@ module.exports = function registerTreeGnomeVillageQuest(api) {
   api.onCustomEvent("npc-dialogue:condition", handleConditionStep);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onPlayerLogin(handleLogin);
+  api.onCustomEvent("quest:stage-changed", handleStageChanged);
 };

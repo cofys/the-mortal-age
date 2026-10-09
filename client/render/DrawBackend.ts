@@ -20,28 +20,28 @@ class SingleDrawBackend implements DrawBackend {
         return drawCall.uniform("u_drawIdOverride", -1);
     }
 
+    private readonly mergedRange: DrawRange = [0, 0, 1];
+
     draw(drawCall: DrawCall, drawRanges: DrawRange[], drawIndices?: number[]): void {
         this.configureDrawCall(drawCall);
-
-        if (drawIndices && drawIndices.length > 0) {
-            for (let i = 0; i < drawIndices.length; i++) {
-                const originalIndex = drawIndices[i] | 0;
-                const range = drawRanges[originalIndex];
-                if (!range || (range[1] | 0) <= 0 || (range[2] | 0) <= 0) continue;
-                drawCall.uniform("u_drawIdOverride", originalIndex);
-                (drawCall as any).drawRanges(range);
-                drawCall.draw();
+        const count = drawIndices?.length ?? drawRanges.length;
+        for (let i = 0; i < count; i++) {
+            const originalIndex = drawIndices ? drawIndices[i] : i;
+            const range = drawRanges[originalIndex];
+            if (!range || range[1] <= 0 || range[2] <= 0) continue;
+            let elements = range[1];
+            if (range.batchKey !== undefined && range[2] === 1) {
+                while (i + 1 < count) {
+                    const next = drawRanges[drawIndices ? drawIndices[i + 1] : i + 1];
+                    if (!next || next.batchKey !== range.batchKey || next[2] !== 1 || next[0] !== range[0] + elements * 4) break;
+                    elements += next[1]; i++;
+                }
             }
-        } else {
-            for (let i = 0; i < drawRanges.length; i++) {
-                const range = drawRanges[i];
-                if (!range || (range[1] | 0) <= 0 || (range[2] | 0) <= 0) continue;
-                drawCall.uniform("u_drawIdOverride", i);
-                (drawCall as any).drawRanges(range);
-                drawCall.draw();
-            }
+            this.mergedRange[0] = range[0]; this.mergedRange[1] = elements; this.mergedRange[2] = range[2];
+            drawCall.uniform("u_drawIdOverride", originalIndex);
+            (drawCall as any).drawRanges(this.mergedRange);
+            drawCall.draw();
         }
-
         drawCall.uniform("u_drawIdOverride", -1);
     }
 

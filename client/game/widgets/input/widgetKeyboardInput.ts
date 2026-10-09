@@ -168,25 +168,7 @@ export function processWidgetKeyboardInput(
             input.keyEvents.some((keyEvent) => keyEvent.keyTyped === OSRS_KEY_ESCAPE) &&
             deps.getVarManager().getVarbit(VARBIT_KEYBINDING_ESC_TO_CLOSE) !== 0
         ) {
-            let hasOpenModal = false;
-            for (const parent of widgetManager.interfaceParents.values()) {
-                if (parent && (parent.type === 0 || parent.type === 3)) {
-                    hasOpenModal = true;
-                    break;
-                }
-            }
-            if (hasOpenModal) {
-                // Same IF_CLOSE packet MenuAction.ts already sends for
-                // MenuOpcode.WidgetClose (verified against
-                // ClientBinaryEncoder.ts/ClientProtocol.ts - IF_CLOSE = 55,
-                // 0-byte payload, decodes server-side to {type:
-                // "interface_close"}, handled in NetworkBuilder.ts via
-                // Player.closeInterruptibleInterfaces()).
-                const pkt = createPacket(ClientPacket.IF_CLOSE);
-                queuePacket(pkt);
-                deps.getCs2Vm().deferIfClose();
-                return;
-            }
+            if (closeOpenModal(widgetManager, deps.getCs2Vm())) return;
         }
 
         // Collect ALL widgets with onKey handlers from all roots.
@@ -255,4 +237,28 @@ export function processWidgetKeyboardInput(
             widgetManager.invalidateAll();
         }
     }
+}
+
+/**
+ * Closes the open modal interface (bank, shop, ...) as the server expects, returning whether one
+ * was open. Shared by Esc and the controller's B button.
+ */
+export function closeOpenModal(
+    widgetManager: Pick<WidgetManager, "interfaceParents">,
+    cs2Vm: { deferIfClose(): void },
+): boolean {
+    let hasOpenModal = false;
+    for (const parent of widgetManager.interfaceParents.values()) {
+        if (parent && (parent.type === 0 || parent.type === 3)) {
+            hasOpenModal = true;
+            break;
+        }
+    }
+    if (!hasOpenModal) return false;
+    // Same IF_CLOSE packet MenuAction.ts already sends for MenuOpcode.WidgetClose (IF_CLOSE = 55,
+    // 0-byte payload, decodes server-side to {type: "interface_close"}, handled in
+    // NetworkBuilder.ts via Player.closeInterruptibleInterfaces()).
+    queuePacket(createPacket(ClientPacket.IF_CLOSE));
+    cs2Vm.deferIfClose();
+    return true;
 }

@@ -1,4 +1,4 @@
-// Run after `yarn build`: node --test tests/disguised-crabs.test.cjs
+// Run after `yarn build`: node --test tests/dormant-npcs.test.cjs
 const assert = require("node:assert/strict");
 const { test, before, beforeEach } = require("node:test");
 const path = require("node:path");
@@ -11,8 +11,8 @@ const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { Location } = require("../dist/game/model/Location");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { TaskManager } = require("../dist/game/task/TaskManager");
-const Crabs = require("../plugins/npcs/DisguisedCrabs.plugin");
-const { start, track, wake, killed, watched, awake, crabSquares, dormantIds } = Crabs._test;
+const Crabs = require("../plugins/npcs/DormantNpcs.plugin");
+const { start, track, wake, killed, onAttack, watched, awake, crabSquares, dormantIds } = Crabs._test;
 
 const core = PluginManager.getCoreApi();
 const events = [];
@@ -65,6 +65,8 @@ function createCrab(id, x, y) {
     isRegistered: () => hitpoints > 0,
     getCurrentDefinition: () => core.NpcDefinition.forId(crab.getId()),
     setMobileInteraction() {},
+    isNpc: () => true,
+    isPlayer: () => false,
   };
   return crab;
 }
@@ -85,10 +87,11 @@ function createPlayer(x, y, { tolerant = false, npcs = [] } = {}) {
 
 const runTicks = (n = 1) => { for (let i = 0; i < n; i++) TaskManager.process(); };
 
-test("the data: every pair as the cache names it", () => {
+test("the data: every crab pair as the cache names it", () => {
   const name = (id) => CacheDefinitions.getNpc(id).name;
   const disguises = { "Rock Crab": "Rocks", "Giant Rock Crab": "Boulder", "Sand Crab": "Sandy rocks", "Ammonite Crab": "Fossil Rock", "Swamp Crab": "Swampy log", "King Sand Crab": "Sandy Boulder" };
   for (const [dormant, { family, awakeId }] of dormantIds) {
+    if (family.trigger !== "approach") continue;
     assert.equal(name(dormant), disguises[family.name], `${dormant}`);
     assert.equal(name(awakeId), family.name, `${awakeId}`);
   }
@@ -96,7 +99,7 @@ test("the data: every pair as the cache names it", () => {
 
 test("disguises don't wander: every one spawns with wanderRadius 0", () => {
   const spawns = JSON.parse(require("node:fs").readFileSync(path.resolve(__dirname, "../data/definitions/npc-spawns.json"), "utf8"));
-  const roaming = spawns.filter((spawn) => dormantIds.has(spawn.id) && spawn.wanderRadius !== 0);
+  const roaming = spawns.filter((spawn) => dormantIds.get(spawn.id)?.family.trigger === "approach" && spawn.wanderRadius !== 0);
   assert.deepEqual(roaming, []);
 });
 
@@ -182,4 +185,51 @@ test("diary tasks: a sand crab kill, and the fifth rock crab", () => {
   rock.setNpcTransformationId(100);
   for (let i = 0; i < 5; i++) killed({ killer: player, npc: rock });
   assert.deepEqual(events.map((event) => `${event.diary}:${event.task}`), ["kourend:kill-a-sandcrab", "fremennik:kill-5-rock-crabs"]);
+});
+
+test("wyrms and wyrmlings: each dormant id rises as its awake form, as the cache names them", () => {
+  const name = (id) => CacheDefinitions.getNpc(id).name;
+  const pairs = [...dormantIds].filter(([, { family }]) => family.trigger === "attacked").map(([dormant, { awakeId }]) => [dormant, awakeId]);
+  assert.deepEqual(pairs, [[8610, 8611], [13031, 13032], [16297, 16296]]);
+  for (const [dormant, awakeId] of pairs) assert.equal(name(dormant), name(awakeId));
+  assert.ok(![...crabSquares].some((square) => square === "40,159,0"), "wyrms aren't watched by approach");
+});
+
+test("a wyrm rises when attacked, doesn't fight back while rising, then attacks; it sinks after resting", () => {
+  const wyrm = createCrab(8610, 1270, 10186);
+  const player = createPlayer(1268, 10186);
+  const event = { attacker: player, target: wyrm, allow: null };
+  onAttack(event);
+  assert.equal(event.allow, null, "the player's attack goes ahead");
+  assert.equal(wyrm.getId(), 8611);
+  assert.deepEqual(wyrm.log, ["anim 8268"], "wyrm_transition_up");
+  const back = { attacker: wyrm, target: player, allow: null };
+  onAttack(back);
+  assert.equal(back.allow, false, "no attacking while it rises");
+  runTicks(3);
+  assert.deepEqual(wyrm.attacked, [player], "risen after 3 ticks (90 client cycles)");
+  const later = { attacker: wyrm, target: player, allow: null };
+  onAttack(later);
+  assert.equal(later.allow, null);
+  onAttack({ attacker: player, target: wyrm, allow: null });
+  assert.equal(wyrm.log.length, 1, "an awake wyrm doesn't rise again");
+  runTicks(19);
+  wyrm.log.length = 0;
+  runTicks();
+  assert.deepEqual(wyrm.log, ["anim 8269"], "wyrm_transition_down after 20 ticks out of combat");
+  runTicks();
+  assert.equal(wyrm.getId(), 8611, "the sink lasts 2 ticks (60 client cycles)");
+  runTicks();
+  assert.equal(wyrm.getId(), 8610);
+});
+
+test("a dormant crab is not woken by an attack, and a wyrm not by walking past it", () => {
+  const crab = createCrab(5936, 1751, 3471);
+  onAttack({ attacker: createPlayer(1740, 3470), target: crab, allow: null });
+  assert.equal(crab.getId(), 5936);
+  const wyrm = createCrab(16297, 2600, 2203);
+  const player = createPlayer(2601, 2203, { npcs: [wyrm] });
+  track({ player });
+  runTicks();
+  assert.equal(wyrm.getId(), 16297);
 });

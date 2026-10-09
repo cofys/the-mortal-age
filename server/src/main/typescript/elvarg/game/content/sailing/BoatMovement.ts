@@ -41,7 +41,8 @@ export function tickBoat(boat: Boat, isSailable: SailableTileCheck): BoatStep {
         }
     }
 
-    const speed = boat.moveMode === BoatMoveMode.Full ? boat.baseSpeed : boat.baseSpeed / 2;
+    const sailSpeed = boat.boostSpeed ?? boat.baseSpeed;
+    const speed = boat.moveMode === BoatMoveMode.Full ? sailSpeed : sailSpeed / 2;
     const distance = speed * Math.max(1, boat.speedMultiplier);
     const startX = boat.fineX;
     const startY = boat.fineY;

@@ -6,6 +6,7 @@ import { PlayerAppearance } from "../../rs/config/player/PlayerAppearance";
 import { Model } from "../../rs/model/Model";
 import { ModelData } from "../../rs/model/ModelData";
 import { clamp } from "../../common/utils/MathUtil";
+import { isLowEndDevice } from "../../common/utils/DeviceUtil";
 import { ActorAnimationClip } from "../../game/actor/ActorAnimation";
 import type { PlayerAnimKey } from "../../game/ecs/PlayerEcs";
 import { resolveHeightSamplePlaneForLocal } from "../../game/scene/PlaneResolver";
@@ -21,7 +22,10 @@ import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
  * assembled by WebGLOsrsClientRenderer (dynamic or pre-baked).
  */
 const PLAYER_INTERACT_BASE = 0x8000;
-const UNANIMATED_PLAYER_COUNT = 200;
+// Low-end devices freeze idle bystanders in the default pose much sooner (crowds like Edgeville).
+const UNANIMATED_PLAYER_COUNT = isLowEndDevice ? 25 : 200;
+// Low-end devices draw only the nearest players per map square (self and combat target always kept).
+const LOW_END_MAX_PLAYERS_PER_MAP = 32;
 
 export function shouldUseUnanimatedIdlePlayer(
     activePlayerCount: number,
@@ -1272,15 +1276,18 @@ export class PlayerRenderer {
         return frameCycle | 0;
     }
 
-    /** The frame after `idx` and the current frame's length; none for the last frame. */
+    /** The frame after `idx` (wrapping like the sequence loops) and the current frame's length. */
     private smoothingTarget(
         seqType: any,
         idx: number,
         mv: any,
     ): { frame: any; length: number } | undefined {
         const ids = seqType.frameIds as number[];
-        if (idx + 1 >= ids.length) return undefined;
-        const frame = mv.seqFrameLoader.load(ids[idx + 1] | 0);
+        let next = idx + 1;
+        // A looping walk blends its last frame into the frame it restarts at.
+        if (next >= ids.length) next = seqType.frameStep > 0 ? next - seqType.frameStep : 0;
+        if (next < 0 || next >= ids.length) return undefined;
+        const frame = mv.seqFrameLoader.load(ids[next] | 0);
         const length = seqType.getFrameLength(mv.seqFrameLoader, idx) | 0;
         return frame && length > 0 ? { frame, length } : undefined;
     }
@@ -1304,7 +1311,7 @@ export class PlayerRenderer {
                 baseSeqId | 0,
                 baseFrameIdx | 0,
                 mv,
-                frameCycle | 0,
+                frameCycle,
             );
         }
 
@@ -1452,6 +1459,19 @@ export class PlayerRenderer {
         return true;
     }
 
+    private getMovementFrameCycle(pid: number, seqId: number, frameIdx: number): number {
+        const { playerEcs: ecs, playerAnimController: controller } = this.renderer.osrsClient;
+        // Resample the nearby local actor on client ticks; distant players keep cached keyframes.
+        if (!this.isControlledPid(pid) || !ecs.isMoving(pid) ||
+            seqId === ecs.getAnimSeq(pid, "idle") ||
+            (ecs.getAnimSeqId(pid) >= 0 && ecs.getAnimSeqDelay(pid) === 0)) {
+            return 0;
+        }
+        const serverId = ecs.getServerIdForIndex(pid);
+        const state = serverId === undefined ? undefined : controller?.getMovementSequenceState(serverId);
+        return state?.seqId === seqId && state.frame === frameIdx ? state.frameCycle : 0;
+    }
+
     private dynamicUpdateBuffersFor(
         baseModel: any,
         baseCenterX: number,
@@ -1470,6 +1490,10 @@ export class PlayerRenderer {
         if (!r.playerInterleavedBuffer || !r.playerIndexBuffer)
             return { countOpaque: 0, countAlpha: 0 };
         const controlled = this.isControlledPid(pid);
+        // Animation smoothing passes a cycle; otherwise the local mover still resamples its own walk.
+        if (!(frameCycle > 0) && overlaySeqId === undefined) frameCycle = this.getMovementFrameCycle(pid, seqId, frameIdx);
+        // Opaque, alpha and shadow passes must share the same resampled pose.
+        if (cacheKey && frameCycle > 0) cacheKey += `|cycle:${frameCycle}`;
         const uploadOpaque = uploadTarget === "both" || uploadTarget === "opaqueOnly";
         const uploadAlpha = uploadTarget === "both" || uploadTarget === "alphaOnly";
         const opaqueUploadKey = cacheKey && uploadOpaque ? `opaque:${cacheKey}` : undefined;
@@ -1549,7 +1573,7 @@ export class PlayerRenderer {
                     overlayId | 0,
                     overlayFrame | 0,
                     mv,
-                    frameCycle | 0,
+                    frameCycle,
                 );
             }
         } catch {}
@@ -2952,6 +2976,22 @@ export class PlayerRenderer {
             }
 
             out.push(pid | 0);
+        }
+
+        if (isLowEndDevice && out.length > LOW_END_MAX_PLAYERS_PER_MAP) {
+            const osrs = this.renderer.osrsClient;
+            const selfPid = osrs.playerEcs.getIndexForServerId(osrs.controlledPlayerServerId);
+            const targetPid = this.renderer.getCombatTargetPlayerEcsIndex() ?? -1;
+            const sx = selfPid !== undefined ? pe.getX(selfPid) : 0;
+            const sy = selfPid !== undefined ? pe.getY(selfPid) : 0;
+            const dist = (pid: number): number => {
+                if (pid === selfPid || pid === targetPid) return -1;
+                const dx = pe.getX(pid) - sx;
+                const dy = pe.getY(pid) - sy;
+                return dx * dx + dy * dy;
+            };
+            out.sort((a, b) => dist(a) - dist(b));
+            out.length = LOW_END_MAX_PLAYERS_PER_MAP;
         }
 
         this.frameRenderPlayersByMap.set(key, out);

@@ -23,6 +23,7 @@ export const enum ClientPacket {
   LOGOUT = 203,
   LOGIN = 204,
   FACE = 211,
+  MOVEMENT_INPUT = 215,
   LOC_INTERACT = 231,
 }
 
@@ -102,7 +103,30 @@ export type PlayerView = Tile & ActorUpdateView & {
   tint?: { startCycle: number; endCycle: number; hue: number; saturation: number; lightness: number; weight: number };
   /** The world entity (boat) whose deck the player stands on; the coordinates are deck coordinates. */
   worldView?: number;
+  finePosition?: FinePositionView;
 };
+
+export type FinePositionView = {
+  index: number; seq: number; x: number; y: number; rotation: number; level: number;
+  active: boolean; moving: boolean; running: boolean; blocked?: boolean; snap?: boolean;
+};
+
+function finePositionPayload(position: FinePositionView): Buffer {
+  const out = Buffer.alloc(18);
+  out.writeUInt16BE(position.index, 0);
+  out.writeInt32BE(position.seq | 0, 2);
+  out.writeUInt32BE(Math.round(position.x * 256), 6);
+  out.writeUInt32BE(Math.round(position.y * 256), 10);
+  out.writeUInt16BE(position.rotation & 2047, 14);
+  out[16] = position.level & 3;
+  out[17] = Number(position.active) | (Number(position.moving) << 1) | (Number(position.running) << 2)
+    | (Number(!!position.blocked) << 3) | (Number(!!position.snap) << 4);
+  return out;
+}
+
+export function encodeFinePosition(position: FinePositionView): Buffer {
+  return encodeServerPacket(ServerPacketId.MOVEMENT_POSITION, finePositionPayload(position));
+}
 
 export type PlayerSyncState = {
   flags: Uint8Array;
@@ -216,6 +240,7 @@ export type FriendsChatSnapshot = {
 
 export type ClientMessage =
   /** modifierFlags is the click's key byte (OSRS: 1 Ctrl, 2 Ctrl+Shift); run forces running. */
+  | { type: "movement_input"; seq: number; dx: number; dy: number; rotation: number; duration: number; active: boolean; running: boolean }
   | { type: "move"; worldX: number; worldY: number; modifierFlags: number; run?: boolean }
   | { type: "npc_option"; index: number; clickType: number }
   | { type: "object_option"; id: number; x: number; y: number; clickType?: number; action?: string }
@@ -673,6 +698,11 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
       const worldX = reader.short(), worldY = reader.short(), flags = reader.byte();
       return { type: "move", worldX, worldY, modifierFlags: flags >> 1, run: (flags & 1) !== 0 };
     }
+    case ClientPacket.MOVEMENT_INPUT: {
+      const seq = reader.int(), dx = reader.signedShort(), dy = reader.signedShort();
+      const rotation = reader.short(), duration = reader.byte(), flags = reader.byte();
+      return { type: "movement_input", seq, dx, dy, rotation, duration, active: (flags & 1) !== 0, running: (flags & 2) !== 0 };
+    }
     case ClientPacket.FACE: {
       const rotation = reader.byte() ? reader.short() : undefined;
       return reader.byte()
@@ -1085,13 +1115,18 @@ export function encodeGroundItemsDelta(serial: number, upserts: GroundItemView[]
   ]));
 }
 
-export function encodeLocAddChange(id: number, x: number, y: number, level: number, shape: number, rotation: number): Buffer {
-  const payload = Buffer.alloc(8);
+/**
+ * A loc added or changed. `opFlags` (live's loc_add_change_v2) shows only the ops whose bit is set
+ * (bit 0 is op1); without it the client shows every op.
+ */
+export function encodeLocAddChange(id: number, x: number, y: number, level: number, shape: number, rotation: number, opFlags?: number): Buffer {
+  const payload = Buffer.alloc(opFlags === undefined ? 8 : 9);
   payload.writeUInt16BE(id & 0xffff);
   payload.writeUInt16BE(x & 0xffff, 2);
   payload.writeUInt16BE(y & 0xffff, 4);
   payload[6] = level;
   payload[7] = (shape << 2) | (rotation & 3);
+  if (opFlags !== undefined) payload[8] = opFlags & 0xff;
   return encodeServerPacket(ServerPacketId.LOC_ADD_CHANGE, payload);
 }
 
@@ -2669,7 +2704,10 @@ export function encodePlayerSync(
   header.writeUInt16BE(localIndex, 4);
   header.writeInt32BE(loopCycle | 0, 6);
   header.writeUInt16BE(sync.length, 10);
-  return packet(ServerPacket.PLAYER_SYNC, Buffer.concat([header, sync]), 2);
+  const fine = views.flatMap(view => view.finePosition ? [finePositionPayload(view.finePosition)] : []);
+  const count = Buffer.alloc(2);
+  count.writeUInt16BE(fine.length);
+  return packet(ServerPacket.PLAYER_SYNC, Buffer.concat([header, sync, count, ...fine]), 2);
 }
 
 export function encodeNpcSync(

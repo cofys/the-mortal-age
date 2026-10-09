@@ -7,7 +7,7 @@
  * uncharging returns every rune. A successful hit has a 1/5 chance to deal 8
  * extra damage and heal the caster for half the damage dealt. Uncharged, it
  * cannot cast. Charging, checking and uncharging mirror Tumeken's shadow
- * (plugins/minigames/toa/Items.TombsOfAmascut.js); the cast reuses the trident
+ * (plugins/items/TumekensShadow.plugin.js); the cast reuses the trident
  * of the swamp's animations and graphics, which the Wiki does not specify.
  */
 const MAX_CHARGES = 20000;

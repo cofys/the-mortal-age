@@ -79,6 +79,7 @@ export class WebGPUOverlays {
                 format,
                 world.sceneBindGroup,
                 world.sceneUniformsLayout,
+                world.extension?.sceneColorFormat,
             );
             const interactHighlight = new InteractHighlightLayer(
                 host,
@@ -179,9 +180,11 @@ export class WebGPUOverlays {
     /** World pass (depth available): ground item meshes and depth-aware tile markers. */
     drawWorld(pass: GPURenderPassEncoder): void {
         if (!this.initialized) return;
+        const world = getWorldResources(this.renderer);
+        const hdrActive = !!world?.extensionActive && !!world.extension?.sceneColorFormat;
         try {
             this.groundMeshes?.drawWorld(pass);
-            this.tileMarker?.drawWorld(pass);
+            this.tileMarker?.drawWorld(pass, hdrActive);
         } catch (error) {
             console.warn("[webgpu] overlays world draw failed", error);
         }

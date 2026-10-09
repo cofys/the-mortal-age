@@ -10,13 +10,14 @@ const { Location } = require("../dist/game/model/Location");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 
 const teleports = [];
-const prompts = [];
 let allowTeleport = true;
 let breakTablet;
+let plugin;
 
 before(async () => {
   await CachePipeline.initialize();
-  require("../plugins/skills/sailing/BoatTeleport.plugin").register({
+  plugin = require("../plugins/skills/sailing/BoatTeleport.plugin");
+  plugin.register({
     core: {
       Location,
       TeleportHandler: {
@@ -27,27 +28,39 @@ before(async () => {
       TeleportType: { TELE_TAB: "TELE_TAB" },
     },
     onItemAction: (name, actions) => { breakTablet = actions.Break; },
-    sendMultiChatboxPrompt: (player, title, ...pairs) => prompts.push({ title, pairs }),
   });
 });
 
-const { facilityNamed, setFacility } = require("../plugins/skills/sailing/boatFacilities");
+const { facilityNamed, setFacility, teleportFocusOf } = require("../plugins/skills/sailing/boatFacilities");
+const { slotVarbits } = require("../plugins/skills/sailing/boatVarbits");
 
-function boat(slot, dock, { focus = true, kind = "docked" } = {}) {
-  const owned = { slot, type: "sloop", name: [], location: kind === "docked" ? { kind, dock } : { kind } };
-  if (focus) setFacility(owned, 0, facilityNamed("Greater teleport focus"));
+function boat(slot, dock, { focus = "Greater teleport focus", kind = "docked" } = {}) {
+  const owned = { slot, type: "sloop", name: [], cargo: [], location: kind === "docked" ? { kind, dock } : { kind } };
+  if (focus) setFacility(owned, 0, facilityNamed(focus));
   return owned;
 }
 
-function createPlayer(boats, activeBoatSlot = null) {
+function createPlayer(boats) {
   const items = [ItemIdentifiers.TELEPORT_TO_BOAT];
   const messages = [];
+  const sent = [];
+  const sender = new Proxy({}, {
+    get: (_target, key) => (...args) => {
+      if (key === "sendVarbit" || key === "sendConfig") sent.push(`${key} ${args[0]}=${args[1]}`);
+      if (key === "sendSubInterface") sent.push(`open ${args[1]}`);
+      return sender;
+    },
+  });
   return {
     items,
     messages,
-    getSailing: () => ({ boats, activeBoatSlot }),
+    sent,
+    getSailing: () => ({ boats, activeBoatSlot: null, lastDock: null }),
+    getLocation: () => new Location(3222, 3218, 0), // Lumbridge, near no dock
     getArea: () => null,
     getPrivateArea: () => null,
+    getPacketSender: () => sender,
+    setInterfaceId: () => {},
     getInventory: () => ({
       contains: (id) => items.includes(id),
       deleteNumber: (id) => items.splice(items.indexOf(id), 1),
@@ -60,46 +73,48 @@ function breakIt(player) {
   breakTablet({ player, itemId: ItemIdentifiers.TELEPORT_TO_BOAT });
 }
 
-test("a tablet takes you to the dock of your only boat with a greater teleport focus", () => {
-  teleports.length = 0;
-  allowTeleport = true;
-  const player = createPlayer([boat(0, "port_sarim"), boat(1, "the_pandemonium", { focus: false }), boat(2, null, { kind: "sunk" })]);
-  breakIt(player);
-  assert.equal(player.items.length, 1, "the tablet goes as it is absorbed, two ticks in");
-  teleports[0].onMiddle();
-  assert.equal(player.items.length, 0);
-  assert.equal(teleports.length, 1);
-  assert.equal(teleports[0].type, "TELE_TAB");
-  assert.equal(typeof teleports[0].onArrival, "function", "boards on arrival");
+test("each boat's teleport focus varbit: 1 for a teleport focus, 2 for a greater one (rsprox)", () => {
+  assert.equal(teleportFocusOf(boat(0, "port_sarim", { focus: null })), 0);
+  assert.equal(teleportFocusOf(boat(0, "port_sarim", { focus: "Teleport focus" })), 1);
+  assert.equal(teleportFocusOf(boat(0, "port_sarim")), 2);
+  // sailing_boat_1_teleport_focus is 19270, sailing_boat_3_teleport_focus 19346.
+  assert.equal(slotVarbits(0, boat(0, "port_sarim")).get(19270), 2);
+  assert.equal(slotVarbits(2, boat(2, "port_sarim", { focus: "Teleport focus" })).get(19346), 1);
+  assert.equal(slotVarbits(1, undefined).get(19308), 0);
 });
 
-test("no boat with a focus, or a refused teleport, keeps the tablet", () => {
+test("the tablet opens the boat selection's Teleport to Boat mode; the choice teleports to the boat's dock, not aboard", () => {
   teleports.length = 0;
   allowTeleport = true;
-  const none = createPlayer([boat(0, "port_sarim", { focus: false })]);
+  const player = createPlayer([boat(0, "port_sarim"), boat(1, "the_pandemonium", { focus: "Teleport focus" })]);
+  breakIt(player);
+  assert.ok(player.sent.includes("sendVarbit 18553=8") && player.sent.includes("open 934"));
+  // Script 8997 makes every boat "Boat Unavailable" without a current dock: here the boat's own.
+  assert.ok(player.sent.includes("sendConfig 5005=8587"), "Port Sarim's row as the current dock");
+  assert.equal(teleports.length, 0);
+  plugin._test.teleportToBoat(player, ItemIdentifiers.TELEPORT_TO_BOAT, 1);
+  assert.deepEqual(player.messages, ["You can't choose that boat at the moment."], "a teleport focus isn't enough");
+  plugin._test.teleportToBoat(player, ItemIdentifiers.TELEPORT_TO_BOAT, 0);
+  assert.equal(teleports.length, 1);
+  assert.equal(teleports[0].type, "TELE_TAB");
+  assert.deepEqual([teleports[0].destination.getX(), teleports[0].destination.getY()], [3050, 3193], "Port Sarim's landing");
+  assert.equal(teleports[0].onArrival, undefined, "the player isn't put aboard");
+  assert.equal(player.items.length, 1, "the tablet goes as it is absorbed");
+  teleports[0].onMiddle();
+  assert.equal(player.items.length, 0);
+});
+
+test("no moored boat with a greater focus, or a refused teleport, keeps the tablet", () => {
+  teleports.length = 0;
+  allowTeleport = true;
+  const none = createPlayer([boat(0, "port_sarim", { focus: "Teleport focus" }), boat(1, null, { kind: "sunk" })]);
   breakIt(none);
   assert.equal(none.items.length, 1);
   assert.match(none.messages[0], /greater teleport focus/);
 
   allowTeleport = false;
   const blocked = createPlayer([boat(0, "port_sarim")]);
-  breakIt(blocked);
+  plugin._test.teleportToBoat(blocked, ItemIdentifiers.TELEPORT_TO_BOAT, 0);
   assert.equal(blocked.items.length, 1);
   assert.equal(teleports.length, 0);
-});
-
-test("with several boats the player picks one, the last sailed first", () => {
-  prompts.length = 0;
-  teleports.length = 0;
-  allowTeleport = true;
-  const player = createPlayer([boat(0, "port_sarim"), boat(1, "the_pandemonium")], 1);
-  breakIt(player);
-  assert.equal(teleports.length, 0);
-  const { pairs } = prompts[0];
-  assert.match(pairs[0], /The Pandemonium/);
-  assert.match(pairs[2], /Port Sarim/);
-  pairs[1]();
-  assert.equal(teleports.length, 1);
-  teleports[0].onMiddle();
-  assert.equal(player.items.length, 0);
 });

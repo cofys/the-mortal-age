@@ -6,6 +6,7 @@ import {
 } from "../../common/authentication";
 import {
     getBrowserHostWorldConfig,
+    getConfiguredServers,
     getDefaultServerAddress,
     getDefaultServerName,
     getDefaultServerSecure,
@@ -78,6 +79,20 @@ export class LoginState {
         // A saved "localhost" target is only valid when the page itself is local.
         // Otherwise remote clients (e.g. iPhone on xrsps.online) dial ws://localhost and fail.
         if (isLocalOnlyServerAddress(lastServer.address) && !isPageRunningLocally()) {
+            updateClientPreferences({ lastServer: undefined });
+            return;
+        }
+
+        // A saved local server from another dev runner must not override this
+        // runner's explicit server list. Remote and browser-host choices stay valid.
+        const configured = process.env.NODE_ENV === "development" ? getConfiguredServers() : undefined;
+        if (
+            isPageRunningLocally() &&
+            isLocalOnlyServerAddress(lastServer.address) &&
+            lastServer.transport !== "webrtc" &&
+            configured?.length &&
+            !configured.some((server) => server.address === lastServer.address)
+        ) {
             updateClientPreferences({ lastServer: undefined });
             return;
         }

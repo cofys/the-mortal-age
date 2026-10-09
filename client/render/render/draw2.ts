@@ -96,6 +96,7 @@ import {
     isIos,
     isMobileMode,
     isTouchDevice,
+    isLowEndDevice,
     isWebGL2Supported,
 } from "../../common/utils/DeviceUtil";
 import { clamp } from "../../common/utils/MathUtil";
@@ -159,6 +160,7 @@ import { profiler } from "../PerformanceProfiler";
 import { PlayerChatheadFactory } from "../PlayerChatheadFactory";
 import { resolveFogRange } from "../RenderDistancePolicy";
 import { WebGLMapSquare } from "../WebGLMapSquare";
+import { sceneryRangeVisible } from "../SceneryVisibility";
 import { WorldEntityAnimator } from "../WorldEntityAnimator";
 import { SceneBuffer } from "../buffer/SceneBuffer";
 import { getModelFaces, isModelFaceTransparent } from "../buffer/SceneBuffer";
@@ -309,6 +311,8 @@ export function drawWithRoofPlaneFilter(host: WebGLOsrsRendererHost,
         drawRanges: DrawRange[],
         drawRangePlanes: Uint8Array | undefined,
         roofPlaneLimit: number,
+        map?: WebGLMapSquare,
+        lod: boolean = false,
     ): void {
 
         const totalRanges = drawRanges.length | 0;
@@ -321,6 +325,17 @@ export function drawWithRoofPlaneFilter(host: WebGLOsrsRendererHost,
         const cullLimit = roofPlaneLimit | 0;
         const filtered = host.roofFilteredDrawIndices;
         filtered.length = 0;
+        const moving = map && host.mapManager.worldEntityMapIds.has(map.id);
+        const point = map ? host.getRenderCullTile() : undefined;
+        let distance = map ? resolveFogRange({ renderDistance: host.getFrameRenderDistanceTiles(),
+            autoFogDepth: host.autoFogDepth, autoFogDepthFactor: host.autoFogDepthFactor,
+            manualFogDepth: host.fogDepth, hd: host.osrsClient.hdPlugin?.isEnabled() }).fogEnd : 0;
+        // Fog is centred on the shader's player position. Free-camera culling
+        // can use a different origin; pad conservatively rather than opening holes.
+        if (map && host.osrsClient.hdPlugin?.isEnabled()) distance += Math.max(
+            Math.abs(point!.x - host.playerPosUni[0]), Math.abs(point!.y - host.playerPosUni[1]));
+        const lodDistance = map ? host.getFrameLodThresholdTiles() : 0;
+        const baseX = map?.getRenderBaseTileX() ?? 0, baseZ = map?.getRenderBaseTileY() ?? 0;
 
         for (let i = 0; i < totalRanges; i++) {
             // An empty range (an animated loc on an empty frame) is still a draw call where
@@ -329,7 +344,8 @@ export function drawWithRoofPlaneFilter(host: WebGLOsrsRendererHost,
             // Missing plane metadata should never happen, but default to visible to avoid
             // accidentally dropping geometry.
             const plane = cullPlanes && i < drawRangePlanes!.length ? drawRangePlanes![i] : 0;
-            if (plane <= cullLimit) {
+            if (plane <= cullLimit && (!map || moving || sceneryRangeVisible(drawRanges[i], baseX, baseZ,
+                point!.x, point!.y, distance, lodDistance, lod, host.osrsClient.camera.frustum, host.hdShadowFrustum))) {
                 filtered.push(i);
             }
         }
@@ -422,12 +438,12 @@ export function isMapWithinRenderDistance(host: WebGLOsrsRendererHost,
 
 export function resolveEffectiveRenderDistanceTiles(host: WebGLOsrsRendererHost, frameId: number): number {
 
-        const base = clamp(host.osrsClient.renderDistance | 0, 25, 90);
+        const base = clamp(host.osrsClient.renderDistance | 0, 25, host.osrsClient.hdPlugin?.isEnabled() ? 160 : 90);
         if ((host.effectiveRenderDistanceFrame | 0) === (frameId | 0)) {
             return host.effectiveRenderDistanceTiles | 0;
         }
         const profile = host.syncBrowserQualityProfile();
-        const target = isTouchDevice ? Math.min(base, profile.renderDistanceCap | 0) : base;
+        const target = isTouchDevice || isLowEndDevice ? Math.min(base, profile.renderDistanceCap | 0) : base;
         host.effectiveRenderDistanceTiles = Math.max(0, target | 0);
         host.effectiveRenderDistanceFrame = frameId | 0;
         return host.effectiveRenderDistanceTiles | 0;
@@ -543,7 +559,12 @@ export function updateAnimatedDrawRanges(host: WebGLOsrsRendererHost,
 
             drawCall.offsets[index] = frame[0];
             (drawCall as any).numElements[index] = frame[1];
-            drawRanges[index] = frame;
+            // Frame geometry is shared by multiple loc instances. Keep each
+            // instance's chunk identity instead of replacing it with that frame.
+            const range = drawRanges[index];
+            range[0] = frame[0];
+            range[1] = frame[1];
+            range[2] = frame[2];
         }
     
 }

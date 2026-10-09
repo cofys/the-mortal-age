@@ -60,6 +60,25 @@ export class WidgetInputController {
         }
     }
 
+    /**
+     * Widget hover alone, for a plugin pointer that aims at the world (the backquote crosshair):
+     * hover listeners, including the game's mouseover tooltip, follow it, while clicks, keys and
+     * the wheel stay with the world.
+     */
+    handleUiHover(): void {
+        const input = this.deps.getInputManager();
+        const widgetManager = this.deps.getWidgetManager();
+        const widgetInteraction = this.deps.getWidgetInteraction();
+        widgetInteraction.clearStaleWidgetInteractionState();
+        const frame = buildWidgetInputFrame(this.deps, this.state, input, widgetManager, widgetInteraction);
+        if (!frame) return;
+        const hoverCycle = this.deps.getTransmitCycles().cycleCntr | 0;
+        if (this.state.lastHoverListenerCycle !== hoverCycle) {
+            this.state.lastHoverListenerCycle = hoverCycle;
+            processWidgetHoverInput(this.deps, this.state, frame, widgetManager, widgetInteraction);
+        }
+    }
+
     handleUiInput(): void {
         const input = this.deps.getInputManager();
         const widgetManager = this.deps.getWidgetManager();

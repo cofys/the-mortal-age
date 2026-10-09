@@ -61,6 +61,11 @@ module.exports = {
     },
     webpack: {
         configure: (webpackConfig) => {
+            // Share only the pure collision/motion helper with the server plugin.
+            const motionPath = path.resolve(appRoot, "../server/plugins/movement/ContinuousMotion.js");
+            for (const plugin of webpackConfig.resolve.plugins ?? []) {
+                if (plugin.constructor.name === "ModuleScopePlugin") plugin.allowedFiles.add(motionPath);
+            }
             const jsXxhashPath = path.resolve(appRoot, "node_modules/js-xxhash");
             const glslLoader = {
                 test: /\.(glsl|vs|fs)$/,

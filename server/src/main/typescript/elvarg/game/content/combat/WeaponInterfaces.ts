@@ -11,6 +11,7 @@ class WeaponInterfacesClass {
         private readonly specialBar: number,
         private readonly specialMeter: number,
         private readonly category: number,
+        private readonly name: string = "",
     ) {}
 
     static {
@@ -32,9 +33,15 @@ class WeaponInterfacesClass {
                 definition.specialBar ?? -1,
                 definition.specialMeter ?? -1,
                 definition.category,
+                key,
             );
             (WeaponInterfacesClass as any)[key] = weapon;
         }
+    }
+
+    /** The type's key in item-combat-styles.json ("STAFF", "WHIP", ...). */
+    public getName(): string {
+        return this.name;
     }
 
     public getInterfaceId(): number {

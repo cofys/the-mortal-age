@@ -291,8 +291,17 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
                 playerX,
                 playerY: playerHeightSample.valid ? playerHeightSample.height : undefined,
                 playerZ,
+                plane: basePlane,
+                groundHeightAt: (x, z) => {
+                    const sample = sampleBridgeHeightForWorldTile(host.mapManager, x, z, basePlane,
+                        BridgePlaneStrategy.RENDER);
+                    return sample.valid ? sample.height : undefined;
+                },
+                collisionFlagAt: (plane, tileX, tileY) => host.osrsClient.renderer.getCollisionFlagAt(plane, tileX, tileY),
             })
         ) {
+            // A plugin camera still has to let the login finish ("Loading - please wait").
+            if (playerHeightSample.valid) markMapDataLoaded(host, timeSec);
             return;
         }
         // OSRS uses the effective viewport height after viewport-shape clamping,
@@ -361,18 +370,7 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
             return;
         }
 
-        // Track when height data first became valid, then wait for fog animation to complete
-        // (fog fade-in takes 1 second: smoothstep over u_currentTime - u_timeLoaded)
-        if (!host.mapDataLoadedNotified && timeSec !== undefined) {
-            if (host.heightValidAtTime === undefined) {
-                // First frame with valid height - record the time
-                host.heightValidAtTime = timeSec;
-            } else if (timeSec - host.heightValidAtTime >= 1.0) {
-                // Fog animation complete (1 second elapsed) - notify loading tracker
-                host.mapDataLoadedNotified = true;
-                host.osrsClient.loadingTracker.markComplete(LoadingRequirement.MAP_DATA_LOADED);
-            }
-        }
+        markMapDataLoaded(host, timeSec);
 
         const focusHeightTiles = (host.osrsClient.camFollowHeight | 0) / 128.0;
         const targetY = playerHeightSample.height - focusHeightTiles;
@@ -383,4 +381,18 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
         // Tight follow: snap camera height to the computed orbit position to keep the target stable in view.
         camera.snapToPosition(undefined, desiredPosY, undefined);
     
+}
+
+/**
+ * Map data counts as loaded once the player's ground height has been valid for a second (the
+ * fog fade-in: smoothstep over u_currentTime - u_timeLoaded); then the loading tracker is told.
+ */
+function markMapDataLoaded(host: WebGLOsrsRendererHost, timeSec: number | undefined): void {
+    if (host.mapDataLoadedNotified || timeSec === undefined) return;
+    if (host.heightValidAtTime === undefined) {
+        host.heightValidAtTime = timeSec;
+    } else if (timeSec - host.heightValidAtTime >= 1.0) {
+        host.mapDataLoadedNotified = true;
+        host.osrsClient.loadingTracker.markComplete(LoadingRequirement.MAP_DATA_LOADED);
+    }
 }

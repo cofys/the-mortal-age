@@ -1,5 +1,7 @@
 export type SdMapLoaderInput = {
     mapProfileEnabled?: boolean;
+    /** Reuse/store this build in the browser's IndexedDB map square cache (low-end devices). */
+    persistentCache?: boolean;
     mapX: number;
     mapY: number;
 

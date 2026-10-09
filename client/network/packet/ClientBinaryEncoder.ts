@@ -211,6 +211,17 @@ export class ClientBinaryEncoder {
         return this.buffer.toPacket(ClientPacketId.WALK);
     }
 
+    encodeMovementInput(input: import("../../common/movement/ContinuousMovementTypes").ContinuousMovementInput): Uint8Array {
+        this.buffer.reset();
+        this.buffer.writeInt(input.seq);
+        this.buffer.writeShort(input.dx);
+        this.buffer.writeShort(input.dy);
+        this.buffer.writeShort(input.rotation);
+        this.buffer.writeByte(input.duration);
+        this.buffer.writeByte(Number(input.active) | (Number(input.running) << 1));
+        return this.buffer.toPacket(ClientPacketId.MOVEMENT_INPUT);
+    }
+
     encodeSetHeading(heading: number): Uint8Array {
         this.buffer.reset();
         this.buffer.writeByte(heading & 15);
@@ -529,6 +540,9 @@ export function encodeClientMessage(msg: { type: string; payload: any }): Uint8A
     const { type, payload } = msg;
 
     switch (type) {
+        case "movement_input":
+            return clientEncoder.encodeMovementInput(payload);
+
         case "hello":
             return clientEncoder.encodeHello(payload.client, payload.version);
 

@@ -627,6 +627,23 @@ export function drawChooseOptionMenu(
     rt.closeMargin = sp(MENU_CLOSE_MARGIN_PX, s);
     rt.mainRect = menuRect;
 
+    let keyboardPoint: { x: number; y: number } | undefined;
+    if (Number.isInteger(globalClient?.menuKeyboardIndex)) {
+        const index = Math.max(0, Math.min(menu.entries.length - 1, globalClient.menuKeyboardIndex));
+        globalClient.menuKeyboardIndex = index;
+        const rowHeight = sp(MENU_ROW_HEIGHT_PX, s);
+        const firstBaseline = top + sp(MENU_FIRST_ROW_BASELINE_OFFSET_PX, s);
+        const visibleRows = Math.max(1, Math.floor((hostH - firstBaseline - sp(MENU_ROW_HIT_BOTTOM_OFFSET_PX, s)) / rowHeight) + 1);
+        if (index < rt.menuScroll) rt.menuScroll = index;
+        else if (index >= rt.menuScroll + visibleRows) rt.menuScroll = index - visibleRows + 1;
+        rt.menuScroll = Math.max(0, Math.min(rt.menuScrollMax, rt.menuScroll));
+        keyboardPoint = { x: left + Math.floor(boxW / 2),
+            y: firstBaseline + (index - rt.menuScroll) * rowHeight - sp(5, s) };
+        const inputScale = getCanvasInputScale(canvas);
+        globalClient.inputManager.mouseX = keyboardPoint.x / inputScale.x;
+        globalClient.inputManager.mouseY = keyboardPoint.y / inputScale.y;
+    }
+
     // Drop submenu state if the entry no longer has one (entries can be repopulated),
     // then refresh the submenu rect (Menu.positionRelativeTo runs on open and reopen).
     const refreshSubMenu = (): MenuEntryLike | undefined => {
@@ -659,8 +676,10 @@ export function drawChooseOptionMenu(
     // Also: selecting an option happens on mousedown (lastPressedX/Y), not mouseup.
     if (!menu.follow && globalClient?.inputManager) {
         const inputManager: any = globalClient.inputManager;
-        const lastButton = (inputManager.clickMode3 | 0) as number;
-        const mousePoint = scaleInputPoint(
+        const keyboardSelect = !!keyboardPoint && !!globalClient.menuKeyboardSelect;
+        globalClient.menuKeyboardSelect = false;
+        const lastButton = keyboardSelect ? ClickMode.LEFT : (inputManager.clickMode3 | 0) as number;
+        const mousePoint = keyboardPoint ?? scaleInputPoint(
             canvas,
             (inputManager.mouseX | 0) as number,
             (inputManager.mouseY | 0) as number,
@@ -714,7 +733,7 @@ export function drawChooseOptionMenu(
         // Select/close on mousedown (OSRS: lastPressedX/Y). The open submenu is
         // hit-tested before the parent menu (Menu.handleClickAtInternal).
         if (lastButton === ClickMode.LEFT) {
-            const pressPoint = scaleInputPoint(
+            const pressPoint = keyboardSelect ? keyboardPoint! : scaleInputPoint(
                 canvas,
                 (inputManager.saveClickX | 0) as number,
                 (inputManager.saveClickY | 0) as number,
@@ -816,8 +835,8 @@ export function drawChooseOptionMenu(
         });
     }
 
-    const mouseX = (ui.mouseX | 0) as number;
-    const mouseY = (ui.mouseY | 0) as number;
+    const mouseX = keyboardPoint?.x ?? (ui.mouseX | 0) as number;
+    const mouseY = keyboardPoint?.y ?? (ui.mouseY | 0) as number;
 
     drawMenuLevel(glr, opts, menu, {
         rect: menuRect,

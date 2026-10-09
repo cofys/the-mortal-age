@@ -1,4 +1,5 @@
 import { vec3 } from "gl-matrix";
+import { closeOpenModal } from "./widgets/input/widgetKeyboardInput";
 import { getNpcMenuActions } from "./menu/WorldMenuBuilder";
 
 import { directionToDelta } from "../common/Direction";
@@ -84,6 +85,8 @@ import {
     subscribePlayJingle,
     subscribePlaySong,
     subscribePlayerSync,
+    subscribeMovementPosition,
+    sendMovementInput,
     subscribeRebuildNormal,
     subscribeRebuildRegion,
     subscribeRebuildWorldEntity,
@@ -119,6 +122,7 @@ import {
     sendEmote as netSendEmote,
     sendBankCustomQuantity,
     sendLogin,
+    sendInteractStop,
     sendLogout,
     sendResumeNameDialog,
     sendResumeStringDialog,
@@ -137,7 +141,7 @@ import {
     setServerUrl,
     subscribeProjectiles,
 } from "../network/ServerConnection";
-import { ClientPacketId, createPacket, queuePacket } from "../network/packet";
+import { ClientPacketId, createPacket, queuePacket, flushPackets } from "../network/packet";
 import { WebGLMapSquare } from "../render/WebGLMapSquare";
 import type { MinimapIcon } from "../render/loader/SdMapData";
 import { type NpcInstance, npcOwnerMapId } from "../render/npc/NpcRenderTemplate";
@@ -273,6 +277,7 @@ import {
     shouldStartScheduledLoginMusic,
 } from "./login";
 import { NpcMovementSync } from "./movement/NpcMovementSync";
+import { ContinuousMovement } from "./movement/ContinuousMovement";
 import { PlayerMovementSync } from "./movement/PlayerMovementSync";
 import { NpcInstanceFlushController } from "./npc/NpcInstanceFlushController";
 import { ClientPluginManager } from "./plugins/ClientPluginManager";
@@ -393,9 +398,9 @@ const DISPLAY_ENUM_BY_ROOT_INTERFACE: Readonly<Record<number, number>> = {
     164: 1131,
 };
 
-// OSRS draw distance is constrained in Scene.setDrawDistanceRaw(25..90).
+// The browser scenery budget can exceed the OSRS simulation scene window.
 const MIN_RENDER_DISTANCE = 25;
-const MAX_RENDER_DISTANCE = 90;
+const MAX_RENDER_DISTANCE = 160;
 const DEFAULT_RENDER_DISTANCE = MIN_RENDER_DISTANCE;
 const DEFAULT_FPS_LIMIT = 240;
 const MOBILE_MAX_RESIDENT_MAPS = 48;
@@ -476,6 +481,7 @@ export class OsrsClient {
     js5?: Js5RangeClient;
     private js5Coordinator?: BroadcastChannel;
     private js5SweepTimer?: ReturnType<typeof setInterval>;
+    private unsubscribeDat2Chunks?: () => void;
     loaderFactory!: CacheLoaderFactory;
     widgetManager!: WidgetManager;
     widgetSessionManager!: WidgetSessionManager;
@@ -600,7 +606,7 @@ export class OsrsClient {
 
     // Settings
 
-    // Scene draw distance (OSRS preference range 25..90), consumed as tile budget in this renderer.
+    // Browser scenery budget in tiles; HD supports up to 160, standard rendering 90.
     renderDistance: number = DEFAULT_RENDER_DISTANCE;
     // Map square radius around player to keep loaded (0 = 1 map, 1 = 3x3 grid, 2 = 5x5 grid)
     mapRadius: number = DEFAULT_MAP_RADIUS;
@@ -668,6 +674,8 @@ export class OsrsClient {
     menuOpen: boolean = false;
     menuOpenedFrame: number = 0;
     menuJustClosed: boolean = false; // Set when menu closes, cleared after one frame to skip input
+    menuKeyboardIndex?: number;
+    menuKeyboardSelect: boolean = false;
     menuX: number = -1;
     menuY: number = -1;
     menuTile?: { tileX: number; tileY: number; plane?: number };
@@ -785,6 +793,11 @@ export class OsrsClient {
     isTradeQuantityInputActive(): boolean {
         return this.pendingTradeQuantityAction !== null && this.cs2Vm.inputDialogType > 0;
     }
+
+    isWidgetTextInputActive(): boolean {
+        return (this.cs2Vm?.inputDialogType ?? 0) > 1 || this.pendingInputDialogAction !== null ||
+            this.pendingTradeQuantityAction !== null || this.customInterfaces?.isSearchFocused() === true;
+    }
     // Mobile soft-keyboard bridge.
     private mobileChatKeyboard!: MobileChatKeyboard;
     private playerDesign!: PlayerDesignController;
@@ -827,6 +840,7 @@ export class OsrsClient {
     // ECS stores
     npcEcs: NpcEcs = new NpcEcs();
     playerEcs: PlayerEcs = new PlayerEcs();
+    private continuousMovement?: ContinuousMovement;
     playerAnimController!: PlayerAnimController;
     npcMovementSync!: NpcMovementSync;
     playerMovementSync!: PlayerMovementSync;
@@ -839,6 +853,12 @@ export class OsrsClient {
     controlledPlayerServerId: number = -1;
     /** Per-tick active world entity IDs — maintained by WORLDENTITY_INFO packets. */
     private activeWorldEntityIds: number[] = [];
+    /**
+     * Boats despawned in the same update as a new one spawned where they were (a part swapped or
+     * a facility built replaces the boat, as live does): each stays drawn until its replacement's
+     * deck is built, so the boat doesn't vanish while the new deck loads.
+     */
+    private readonly replacedWorldEntities = new Map<number, { replacements: number[]; until: number }>();
 
     // Server-provided animation sequences for the controlled player (idle/walk/run/crawl + optional directional/turn)
     serverPlayerSeqs?: {
@@ -2303,6 +2323,8 @@ export class OsrsClient {
             (plane: number, x: number, y: number) =>
                 ClientState.isWorldEntityTile(x, y) ? 0 : this.renderer.getCollisionFlagAt(plane, x, y),
         );
+        this.continuousMovement = new ContinuousMovement(this.playerEcs, () => this.controlledPlayerServerId,
+            sendMovementInput, (plane, x, y) => this.renderer.getCollisionFlagAt(plane, x, y), this.resolvePlayerPlane);
         this.playerSyncManager = new PlayerSyncManager({
             ecs: this.playerEcs,
             movementSync: this.playerMovementSync,
@@ -2339,6 +2361,7 @@ export class OsrsClient {
                         );
                     } catch {}
                 }
+                this.clientPlugins.onHitsplat(payload as any);
                 if (this.renderer) this.renderer.registerHitsplat(payload as any);
                 else this.hitsplatFlush.queueHitsplat(payload as any);
             },
@@ -3378,6 +3401,9 @@ export class OsrsClient {
                         console.warn("[OsrsClient] player sync tick failed", err);
                     }
                     try {
+                        this.finishReplacedWorldEntities();
+                    } catch {}
+                    try {
                         (this.playerEcs as any).onServerTick?.();
                     } catch {}
                     // Prune walked waypoints from path debug overlay
@@ -3572,12 +3598,19 @@ export class OsrsClient {
                 }),
             );
 
+            this.trackServerSubscription(subscribeMovementPosition(position => this.continuousMovement?.receive(position)));
             this.unsubscribePlayerSync = subscribePlayerSync((frame) => {
                 try {
                     this.lastPlayerSyncLocalIndex = Number.isFinite(frame.localIndex)
                         ? frame.localIndex | 0
                         : this.lastPlayerSyncLocalIndex;
+                    for (const removal of frame.removals) this.continuousMovement?.remove(removal.index);
+                    // Activate precise actors before native movement can queue tile-centre steps.
+                    for (const position of frame.finePositions ?? []) this.continuousMovement?.receive(position);
                     this.playerSyncManager.handleFrame(frame);
+                    for (const position of frame.finePositions ?? []) {
+                        if (position.index !== this.controlledPlayerServerId) this.continuousMovement?.receive(position);
+                    }
                     this.syncLocalWorldView();
                 } catch (err) {
                     console.warn("[OsrsClient] player_sync frame error", err);
@@ -3735,8 +3768,38 @@ export class OsrsClient {
         } catch {}
     }
 
+    getControlledPlayerMovementTile(): { tileX: number; tileY: number } | undefined {
+        return this.playerSyncManager?.getServerTile(this.controlledPlayerServerId);
+    }
+
+    setKeyboardMovement(dx: number, dy: number, running: boolean, rotation: number): void {
+        if (isServerConnected()) this.continuousMovement?.setInput(dx, dy, running && this.runEnergyPercent > 0, rotation);
+    }
+
+    stopKeyboardMovement(deactivate = false): void { this.continuousMovement?.stop(deactivate); }
+
+    stopPlayerWalking(): void {
+        this.playerMovementSync?.stopKeyboardMovement(this.controlledPlayerServerId);
+        // Send a queued route before its cancellation, even between render frames.
+        flushPackets();
+        sendInteractStop();
+    }
+
+    predictKeyboardMovement(tiles: readonly { x: number; y: number }[], running: boolean): void {
+        if (isServerConnected()) {
+            this.playerMovementSync?.predictKeyboardMovement(this.controlledPlayerServerId, tiles, running);
+        }
+    }
+
+    setKeyboardRunMode(running: boolean): void {
+        if (running && this.runEnergyPercent <= 0) running = false;
+        if (this.runMode === running) return;
+        this.runMode = running;
+        sendVarpTransmit(VARP_OPTION_RUN, running ? 1 : 0);
+    }
+
     // Client-side local route prediction (server remains authoritative).
-    async routePlayerTo(tileX: number, tileY: number, running: boolean): Promise<void> {
+    async routePlayerTo(tileX: number, tileY: number, running: boolean, immediate = false): Promise<void> {
         const worldX = tileX | 0;
         const worldY = tileY | 0;
         const run = !!running;
@@ -3778,6 +3841,7 @@ export class OsrsClient {
             // Final shortAdd param; unused for ground clicks.
             node.packetBuffer.writeShortAdd(0);
             queuePacket(node);
+            if (immediate) flushPackets();
         }
     }
 
@@ -3886,7 +3950,8 @@ export class OsrsClient {
     }
 
     /** Switch the stock side panel through its cache script so all tab widgets update together. */
-    private switchToTab(tab: number): void {
+    switchToTab(tab: number, forceOpen = false): void {
+        if (forceOpen && this.varManager?.getVarcInt(VARC_ACTIVE_TAB) === tab) return;
         const rootInterface = this.widgetManager?.rootInterface ?? DEFAULT_ROOT_INTERFACE;
         const displayEnum = DISPLAY_ENUM_BY_ROOT_INTERFACE[rootInterface] ?? DEFAULT_DISPLAY_ENUM;
         const script = this.cs2Vm?.context?.loadScript?.(TAB_SWITCH_SCRIPT);
@@ -4109,6 +4174,15 @@ export class OsrsClient {
 
     handleUiInput() {
         this.widgetInputController.handleUiInput();
+    }
+
+    handleUiHover() {
+        this.widgetInputController.handleUiHover();
+    }
+
+    /** Closes the open modal interface (bank, shop, ...); false when none is open. */
+    closeModalInterface(): boolean {
+        return closeOpenModal(this.widgetManager, this.cs2Vm);
     }
 
     private executeWidgetOnLoad(widget: any, listener: any[]): void {
@@ -6046,7 +6120,9 @@ export class OsrsClient {
         this.setupVisibilityResync();
     }
 
-    stopClientTickLoop(): void {        this.clientTickLoopRunning = false;
+    stopClientTickLoop(): void {
+        this.clientTickLoopRunning = false;
+        this.continuousMovement?.reset();
         try {
             if (this.clientTickTimer) clearTimeout(this.clientTickTimer);
         } catch {}
@@ -6112,6 +6188,8 @@ export class OsrsClient {
                 this.playerMovementSync?.updateInteractionRotations?.();
             } catch {}
             try {
+                this.firstPersonPlugin?.tickMovement();
+                this.continuousMovement?.tick();
                 this.playerEcs.updateClient(1);
             } catch {}
             try {
@@ -6231,7 +6309,7 @@ export class OsrsClient {
         this.clientScripts.clear();
 
         const presence = cache.sparse ? new PresenceBitset(cache.sparse.presenceBits) : undefined;
-        this.cacheSystem = CacheSystem.fromFiles(cache.info, cache.files, [], presence);
+        this.cacheSystem = CacheSystem.fromFiles(cache.info, cache.files, [], presence, cache.sparse?.dat2);
 
         // On-demand group fetching over HTTP Range requests (js5-style):
         // reads of not-yet-downloaded groups queue a fetch and retry later.
@@ -6273,6 +6351,7 @@ export class OsrsClient {
                 }
                 const persistence = getSparsePersistence(cache);
                 if (persistence) {
+                    js5.readStored = (start, length) => persistence.read(start, length);
                     js5.onFetched((byteOffset, bytes) =>
                         persistence.queue(byteOffset, bytes.byteLength),
                     );
@@ -6288,6 +6367,12 @@ export class OsrsClient {
                 this.js5 = js5;
             }
         }
+
+        // New dat2 chunks reach the render workers, which read the same (shared) memory.
+        // Subscribed before initCache, so no chunk falls between its snapshot and this.
+        this.unsubscribeDat2Chunks?.();
+        this.unsubscribeDat2Chunks = cache.sparse?.dat2.onChunk((index, chunk) =>
+            this.workerPool.addCacheChunk(index, chunk));
 
         // Initialize worker pool early - it needs cache files but not indices
         this.workerPool.initCache(cache, []);
@@ -7048,13 +7133,27 @@ export class OsrsClient {
         }
     }
 
+    /** Op flags the server sent with added locs, by `x|y|locId`; a loc without any shows every op. */
+    private readonly locOpFlags = new Map<string, number>();
+
+    /** The op flags of the loc `locId` added at a tile, or undefined when it has none. */
+    locOpFlagsAt(x: number, y: number, locId: number): number | undefined {
+        return this.locOpFlags.get(`${x | 0}|${y | 0}|${locId | 0}`);
+    }
+
     onLocAddChange(
         locId: number,
         tile: { x: number; y: number },
         level: number,
         shape: number,
         rotation: number,
+        opFlags?: number,
     ): void {
+        const prefix = `${tile.x | 0}|${tile.y | 0}|`;
+        for (const key of this.locOpFlags.keys()) {
+            if (key.startsWith(prefix)) this.locOpFlags.delete(key);
+        }
+        if (opFlags !== undefined) this.locOpFlags.set(`${prefix}${locId | 0}`, opFlags);
         try {
             console.log(
                 `[OsrsClient] Loc add: ${locId} at (${tile.x}, ${tile.y}, ${level}) shape=${shape} rot=${rotation}`,
@@ -7068,6 +7167,10 @@ export class OsrsClient {
     }
 
     onLocDel(tile: { x: number; y: number }, level: number, shape: number, rotation: number): void {
+        const prefix = `${tile.x | 0}|${tile.y | 0}|`;
+        for (const key of this.locOpFlags.keys()) {
+            if (key.startsWith(prefix)) this.locOpFlags.delete(key);
+        }
         try {
             console.log(
                 `[OsrsClient] Loc del at (${tile.x}, ${tile.y}, ${level}) shape=${shape} rot=${rotation}`,
@@ -7788,6 +7891,8 @@ export class OsrsClient {
     // URL/search params are not supported
 
     closeMenu = () => {
+        this.menuKeyboardIndex = undefined;
+        this.menuKeyboardSelect = false;
         this.menuOpen = false;
         this.menuX = -1;
         this.menuY = -1;
@@ -7871,10 +7976,19 @@ export class OsrsClient {
     private handleWorldEntityInfo(payload: WorldEntityInfoPayload): void {
         const prev = this.activeWorldEntityIds;
         const { oldCount, oldUpdates, newSpawns } = payload;
+        this.finishReplacedWorldEntities();
+        const despawn = (entityIndex: number) => {
+            const replacements = this.replacementsFor(entityIndex, newSpawns);
+            if (replacements.length > 0) {
+                this.replacedWorldEntities.set(entityIndex, { replacements, until: Date.now() + 5000 });
+            } else {
+                this.despawnWorldEntity(entityIndex);
+            }
+        };
 
         // Phase 1: Truncation — despawn entities beyond oldCount
         for (let i = oldCount; i < prev.length; i++) {
-            this.despawnWorldEntity(prev[i]);
+            despawn(prev[i]);
         }
 
         // Phase 2: Process updates for surviving old entities
@@ -7883,7 +7997,7 @@ export class OsrsClient {
             const entityId = prev[i];
             const upd = oldUpdates[i];
             if (upd.updateType === 0) {
-                this.despawnWorldEntity(entityId);
+                despawn(entityId);
                 continue;
             }
 
@@ -7913,8 +8027,10 @@ export class OsrsClient {
             }
         }
 
-        // Phase 3: Register new spawns (scene data already loaded via REBUILD_WORLDENTITY)
+        // Phase 3: Register new spawns (scene data already loaded via REBUILD_WORLDENTITY). One
+        // reusing a replaced boat's index has already rebuilt its scene in place.
         for (const spawn of newSpawns) {
+            this.replacedWorldEntities.delete(spawn.entityIndex);
             next.push(spawn.entityIndex);
 
             const entity = this.worldViewManager.getWorldEntity(spawn.entityIndex);
@@ -7953,6 +8069,35 @@ export class OsrsClient {
                     entity.configId,
                     getClientCycle(),
                 );
+            }
+        }
+    }
+
+    /** New spawns within a few tiles of where a despawned entity was: its replacements. */
+    private replacementsFor(
+        entityIndex: number,
+        newSpawns: WorldEntityInfoPayload["newSpawns"],
+    ): number[] {
+        const entity = this.worldViewManager.getWorldEntity(entityIndex);
+        if (!entity) return [];
+        const near = 8 * 128;
+        return newSpawns
+            .filter((spawn) => spawn.entityIndex !== entityIndex && spawn.position)
+            .filter((spawn) =>
+                Math.abs(spawn.position!.x - entity.position.x) <= near &&
+                Math.abs(spawn.position!.z - entity.position.z) <= near)
+            .map((spawn) => spawn.entityIndex);
+    }
+
+    /** Removes replaced boats whose replacement's deck is drawn now (or that waited too long). */
+    private finishReplacedWorldEntities(): void {
+        for (const [entityIndex, { replacements, until }] of this.replacedWorldEntities) {
+            const drawn = replacements.some(
+                (replacement) => (this.renderer as any)?.getOverlayMapForEntity?.(replacement) !== undefined,
+            );
+            if (drawn || Date.now() > until) {
+                this.replacedWorldEntities.delete(entityIndex);
+                this.despawnWorldEntity(entityIndex);
             }
         }
     }
@@ -8001,6 +8146,7 @@ export class OsrsClient {
      * @param fullReset If true, also clears chat history, vars, and transmit cycles (for full logout to login screen)
      */
     resetWorld(fullReset: boolean = false): void {
+        this.continuousMovement?.reset();
         this.mobileChatKeyboard?.hide();
         console.log(`[OsrsClient] Resetting world state (fullReset=${fullReset})...`);
 
@@ -8049,6 +8195,7 @@ export class OsrsClient {
 
         // Clear map data
         this.activeWorldEntityIds = [];
+        this.replacedWorldEntities.clear();
         try {
             (this.renderer as any)?.clearAllWorldEntities?.();
         } catch (err) {

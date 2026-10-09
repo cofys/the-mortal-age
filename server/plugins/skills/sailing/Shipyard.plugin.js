@@ -335,6 +335,12 @@ function leaveOnMove(mobile, target) {
 }
 
 /** The boat a player is customising in the shipyard, if any. */
+/** Rebuilds the boat shown in the shipyard after it was changed elsewhere (::maxboat). */
+function refreshShownBoat(player) {
+  const visit = visits.get(player);
+  if (visit && !visit.aboard) showBoat(player, visit);
+}
+
 function visitedBoat(player) {
   const visit = visits.get(player);
   return visit ? ownedBoat(player, visit.slot) : undefined;
@@ -361,6 +367,7 @@ module.exports = {
   readOptionRow,
   beginVisit,
   visitedBoat,
+  refreshShownBoat,
   aboardVisit,
   ownedBoat,
   openCustomisation,

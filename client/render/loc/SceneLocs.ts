@@ -148,6 +148,7 @@ export function createSceneModel(
     return {
         model,
         doubleSided: isRoofLocModelType(type),
+        groundConforming: locType.contourGroundType > 0,
         sceneHeight,
         lowDetail: isLowDetail(scene, level, tileX, tileY, locType, type),
         forceMerge: locType.contourGroundType > 1,

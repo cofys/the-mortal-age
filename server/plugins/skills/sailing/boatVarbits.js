@@ -3,7 +3,7 @@
 // live login capture and cache scripts 9013/9088 (docs/sailing-osrs-reference.md).
 const { boatType, dockById, setVarbit } = require("./sailingContent");
 const { boatStats, partTiers } = require("./boatParts");
-const { facilitiesOf, facilitiesUnaltered } = require("./boatFacilities");
+const { facilitiesOf, facilitiesUnaltered, teleportFocusOf } = require("./boatFacilities");
 
 const MAX_BOATS = 5;
 /** Boat slot 0's block starts at 19258 (`sailing_boat_1_owned`); each slot is 38 ids on. */
@@ -20,6 +20,8 @@ const OFFSET = {
   hull: 9,
   sail: 10,
   steering: 11,
+  /** `sailing_boat_N_teleport_focus`: which boats Summon and Teleport to Boat can choose. */
+  teleportFocus: 12,
   hotspot: 15, // hotspot n: +15 + n
   trim: 26,
 };
@@ -73,6 +75,7 @@ function slotVarbits(slot, boat) {
   for (let word = 0; word < 3; word++) set(OFFSET.name + word, boat?.name?.[word] ?? 0);
   const tiers = boat ? partTiers(boat) : {};
   for (const part of ["keel", "hull", "sail", "steering", "trim"]) set(OFFSET[part], tiers[part] ?? 0);
+  set(OFFSET.teleportFocus, boat && type ? teleportFocusOf(boat) : 0);
   const facilities = boat && type ? facilitiesOf(boat) : [];
   for (let hotspot = 0; hotspot < MAX_HOTSPOTS; hotspot++) values.set(hotspotVarbit(slot, hotspot), facilities[hotspot] ?? 0);
   const hitpoints = boat ? boatStats(boat).hitpoints : 0;

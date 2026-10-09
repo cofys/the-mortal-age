@@ -1,8 +1,12 @@
 module.exports = function registerVolatileNightmareStaffSpecialAttack(api) {
-  const { Animation, CombatMethod, CombatSpecial, CombatType, DamageFormulas, ItemIdentifiers, Misc, PendingHit } = api.core;
+  const { Animation, CombatMethod, CombatSpecial, CombatType, DamageFormulas, Graphic, ItemIdentifiers, MagicCombatMethod, Misc, PendingHit } = api.core;
 
   const DRAIN = 55;
+  // Immolate (cache): nightmare_staff_special, nightmare_staff_volatile_cast_spotanim on the caster and
+  // nightmare_staff_volatile_hit_spotanim on the target. It has no projectile (Wiki).
   const CAST_ANIMATION = new Animation(8532);
+  const CAST_GRAPHIC = new Graphic(1760);
+  const HIT_GRAPHIC = new Graphic(1759);
 
   class VolatileNightmareStaffCombatMethod extends CombatMethod {
     hits(character, target) {
@@ -30,6 +34,11 @@ module.exports = function registerVolatileNightmareStaffSpecialAttack(api) {
     start(character, target) {
       CombatSpecial.drain(character, DRAIN);
       character.performAnimation(CAST_ANIMATION);
+      character.performGraphic(CAST_GRAPHIC);
+    }
+
+    handleAfterHitEffects(hit) {
+      hit.getTarget().performGraphic(hit.isAccurate() ? HIT_GRAPHIC : MagicCombatMethod.SPLASH_GRAPHIC);
     }
 
     attackSpeed(character) {
@@ -41,7 +50,8 @@ module.exports = function registerVolatileNightmareStaffSpecialAttack(api) {
     }
 
     finished(character, target) {
-      character.getCombat().reset();
+      // Without false, the reset animation would cancel the cast on the same tick.
+      character.getCombat().reset(false);
       // reset() clears the interaction; a resolved cast still faces its target.
       character.setMobileInteraction(target);
       character.getMovementQueue().reset();

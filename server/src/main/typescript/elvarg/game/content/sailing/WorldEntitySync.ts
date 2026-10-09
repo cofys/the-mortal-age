@@ -165,6 +165,6 @@ export class WorldEntitySync {
     }
 
     private static encodeDeckLoc(boat: Boat, loc: BoatDeckLoc): Buffer {
-        return encodeLocAddChange(loc.id, boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level, loc.shape, loc.rotation);
+        return encodeLocAddChange(loc.id, boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level, loc.shape, loc.rotation, loc.opFlags);
     }
 }

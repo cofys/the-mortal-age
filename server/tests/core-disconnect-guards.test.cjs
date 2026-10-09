@@ -70,6 +70,25 @@ function stubPersistence(overrides = {}) {
   };
 }
 
+test('interaction stop cancels queued walking without routing back to an old tile', async () => {
+  const connection = new net.ClientConnection(stubChannel());
+  const stopped = [];
+  connection.player = {
+    getAttribute: () => undefined,
+    getMovementQueue: () => ({
+      reset: () => stopped.push('route'),
+      walkToReset: () => stopped.push('walk-task'),
+    }),
+    getCombat: () => ({ reset() {} }),
+    setFollowing() {},
+    setMobileInteraction() {},
+    setPositionToFace() {},
+  };
+  connection.inject([{ type: 'interaction_stop' }]);
+  await connection.idle();
+  assert.deepEqual(stopped, ['route', 'walk-task']);
+});
+
 test('a throwing removal hook cannot corrupt list size or leak its slot', () => {
   const list = new MobileList(4);
   const doomed = stubMobile({ onRemove() { throw new Error('save failed'); } });

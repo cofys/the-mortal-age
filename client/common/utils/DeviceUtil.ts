@@ -128,6 +128,14 @@ export const isDebugMode = urlParams?.has("debug") ?? false;
 // not generic touch-capable desktop hardware.
 export const isMobileMode = checkAndroid() || isIos || forceMobileMode;
 
+/**
+ * Phones, tablets (including one on "desktop site": touch with a coarse main pointer) and iOS:
+ * tight tab memory and modest GPUs. They get the lean setup: one render worker, an
+ * on-demand-only cache, no 117 HD, a reduced 3D resolution and a capped view distance.
+ */
+export const isLowEndDevice = isMobileMode || isIos ||
+    (isTouchDevice && typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
+
 // Hover tooltips (and the world mouseover text they feed) are a desktop-mouse feature;
 // mobile opens the menu on tap. Touch hardware alone must not turn them off, or a
 // touchscreen laptop loses the world hover text while keeping the desktop layout (#358).

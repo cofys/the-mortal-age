@@ -148,6 +148,7 @@ export function handleInboundWorld(msg: any): boolean {
                     payload.level,
                     payload.shape,
                     payload.rotation,
+                    payload.opFlags,
                 );
             }
         } catch (err) {

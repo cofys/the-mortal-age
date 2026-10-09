@@ -10,6 +10,8 @@ export interface BoatDeckLoc {
     rotation: number;
     /** Blocks the tile on the deck (facilities); other locs are scenery or sound. */
     blocks?: boolean;
+    /** Which ops the client shows (bit 0 is op1), as live's loc_add_change_v2; all when absent. */
+    opFlags?: number;
 }
 
 /** Everything needed to build a boat of one type. Offsets are relative to the template zone. */
@@ -37,8 +39,11 @@ export interface BoatSpec {
     /** Where a player lands when boarding. */
     boardingTile: { x: number; y: number };
     locs: ReadonlyArray<BoatDeckLoc>;
-    /** Full sail speed in fine units a tick (the hull's base speed); 192 when absent. */
-    stats?: { baseSpeed?: number };
+    /**
+     * Full sail speed in fine units a tick (the hull's base speed; 192 when absent), the hull's
+     * speed cap (the trimmed sails' speed) and how long a trim lasts in ticks (the sails').
+     */
+    stats?: { baseSpeed?: number; speedCap?: number; speedBoostDuration?: number };
 }
 
 /** A boat's position in the main world: fine units (1/128 tile) and an angle out of 2048. */

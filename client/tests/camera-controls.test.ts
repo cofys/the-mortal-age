@@ -20,6 +20,12 @@ assert.equal(camera.getScenePitchAngle(), 128, "clearing terrain pressure should
 
 camera.setViewPitchOverride(-256);
 assert.equal(camera.getScenePitchAngle(), -256, "view plugins must support looking upward");
+camera.setViewPitchOverride(-0.25);
+assert.equal(camera.getScenePitchAngle(), -0.25, "small mouse deltas must accumulate without truncation");
+camera.setViewPitchOverride(-600);
+assert.equal(camera.getScenePitchAngle(), -480, "close camera can look nearly vertically upward");
+camera.setViewPitchOverride(600);
+assert.equal(camera.getScenePitchAngle(), 480, "close camera can look nearly vertically downward");
 camera.setViewPitchOverride(undefined);
 assert.equal(camera.getScenePitchAngle(), 128, "clearing a view override should restore camera controls");
 

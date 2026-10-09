@@ -18,6 +18,15 @@ import type { WorldEntityBuildArea } from "../../common/worldentity/WorldEntityT
 /**
  * Binary packet buffer for client decoding
  */
+function readFinePosition(reader: ServerPacketReader): import("../../common/movement/ContinuousMovementTypes").ContinuousMovementPosition {
+    const index = reader.readShort(), seq = reader.readInt();
+    const x = (reader.readInt() >>> 0) / 256, y = (reader.readInt() >>> 0) / 256;
+    const rotation = reader.readShort(), level = reader.readByte(), flags = reader.readByte();
+    return { index, seq, x, y, rotation, level, active: (flags & 1) !== 0,
+        moving: (flags & 2) !== 0, running: (flags & 4) !== 0,
+        blocked: (flags & 8) !== 0, snap: (flags & 16) !== 0 };
+}
+
 export class ServerPacketReader {
     readonly data: Uint8Array;
     offset: number = 0;
@@ -675,6 +684,9 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 },
             };
 
+        case ServerPacketId.MOVEMENT_POSITION:
+            return { type: "movement_position", payload: readFinePosition(reader) };
+
         case ServerPacketId.PLAYER_SYNC: {
             const baseX = reader.readShort();
             const baseY = reader.readShort();
@@ -682,9 +694,14 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             const loopCycle = reader.readInt();
             const packetLen = reader.readShort();
             const packet = reader.readBytes(packetLen);
+            const finePositions = [];
+            if (reader.remaining >= 2) {
+                const count = reader.readShort();
+                for (let i = 0; i < count; i++) finePositions.push(readFinePosition(reader));
+            }
             return {
                 type: "player_sync",
-                payload: { baseX, baseY, localIndex, loopCycle, packet },
+                payload: { baseX, baseY, localIndex, loopCycle, packet, finePositions },
             };
         }
 
@@ -1397,6 +1414,8 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             const addTile = { x: reader.readShort(), y: reader.readShort() };
             const addLevel = reader.readByte();
             const shapeRot = reader.readByte();
+            // Optional op flags (loc_add_change_v2): only the ops whose bit is set are shown.
+            const opFlags = packetLength >= 9 ? reader.readByte() : undefined;
             return {
                 type: "loc_add_change",
                 payload: {
@@ -1405,6 +1424,7 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                     level: addLevel,
                     shape: shapeRot >> 2,
                     rotation: shapeRot & 3,
+                    ...(opFlags !== undefined ? { opFlags } : {}),
                 },
             };
         }

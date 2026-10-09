@@ -22,6 +22,7 @@ export const enum ClientPacketId {
     FACE = 211,
     TELEPORT = 212,
     PATHFIND = 213,
+    MOVEMENT_INPUT = 215,
     /** Boat helm heading, 0-15 in 128-unit steps (OSRS SetHeading). */
     SET_HEADING = 214,
 
@@ -94,6 +95,7 @@ export const CLIENT_PACKET_LENGTHS: Record<ClientPacketId, number> = {
     [ClientPacketId.FACE]: -1,
     [ClientPacketId.TELEPORT]: 5, // x(2) + y(2) + level(1)
     [ClientPacketId.PATHFIND]: -1,
+    [ClientPacketId.MOVEMENT_INPUT]: 12, // seq(4), dx/dy(2 each), yaw(2), duration(1), flags(1)
     [ClientPacketId.SET_HEADING]: 1, // heading(1)
 
     [ClientPacketId.LOC_INTERACT]: -1,

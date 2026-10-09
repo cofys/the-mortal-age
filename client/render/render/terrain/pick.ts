@@ -461,7 +461,9 @@ export function worldToScreen(host: WebGLOsrsRendererHost, x: number, y: number,
         const out = vec4.create();
         vec4.transformMat4(out, p, camera.viewMatrix);
         vec4.transformMat4(out, out, camera.projectionMatrix);
-        if (out[3] === 0) return undefined;
+        // Behind the camera (or nearer than its near plane, 0.1) w is not positive: dividing would
+        // mirror the point onto the screen, putting head icons and hitsplats in the sky.
+        if (!(out[3] > 0.1)) return undefined;
         const ndcX = out[0] / out[3];
         const ndcY = out[1] / out[3];
         const screenWidth = camera.screenWidth || host.app.width;

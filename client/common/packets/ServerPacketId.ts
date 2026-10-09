@@ -21,6 +21,7 @@ export const enum ServerPacketId {
     PLAYER_SYNC = 20,
     NPC_INFO = 21,
     ANIM = 22,
+    MOVEMENT_POSITION = 23,
 
     // ========================================
     // VARPS/VARBITS (40-49)
@@ -173,6 +174,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.PATH_RESPONSE]: -1,
 
     [ServerPacketId.PLAYER_SYNC]: -2,
+    [ServerPacketId.MOVEMENT_POSITION]: 18,
     [ServerPacketId.NPC_INFO]: -2,
     [ServerPacketId.ANIM]: 22, // 11 shorts for animation IDs
 

@@ -2,6 +2,7 @@ import { GroupMissingError } from "../js5/GroupMissingError";
 import { PresenceBitset } from "../js5/PresenceBitset";
 import { CacheFiles } from "../CacheFiles";
 import { MemoryStore } from "./MemoryStore";
+import { SparseDat2 } from "./SparseDat2";
 import { Sector } from "./Sector";
 import { SectorCluster } from "./SectorCluster";
 
@@ -68,9 +69,8 @@ export function computeIndexRegion(
 }
 
 /**
- * A MemoryStore over a sparsely-populated dat2 buffer. The buffer is allocated
- * at full size but only downloaded regions contain data; a presence bitset
- * tracks which sectors are valid. Reading a group whose sectors are absent
+ * A MemoryStore over a sparsely-populated dat2, held as chunks allocated as data
+ * lands in them (SparseDat2); a presence bitset tracks which sectors are valid. Reading a group whose sectors are absent
  * notifies the miss listener (which queues a network fetch) and throws
  * GroupMissingError, mirroring the original client's "return null, request,
  * retry" pattern.
@@ -87,6 +87,7 @@ export class SparseMemoryStore extends MemoryStore {
     static fromSparseFiles(
         cacheFiles: CacheFiles,
         presence: PresenceBitset,
+        dat2: SparseDat2,
         indicesToLoad: number[] = [],
     ): SparseMemoryStore {
         const files = cacheFiles.files;
@@ -105,21 +106,29 @@ export class SparseMemoryStore extends MemoryStore {
             }
         }
 
-        const dataFile = files.get(CacheFiles.DAT2_FILE_NAME);
-        if (!dataFile) {
-            throw new Error("main_file_cache data file not found");
-        }
         const metaFile = files.get(CacheFiles.META_FILE_NAME);
-        return new SparseMemoryStore(dataFile, indexFiles, presence, metaFile);
+        return new SparseMemoryStore(dat2, indexFiles, presence, metaFile);
     }
 
     constructor(
-        dataFile: ArrayBuffer,
+        readonly dat2: SparseDat2,
         indexFiles: (ArrayBuffer | undefined)[],
         readonly presence: PresenceBitset,
         metaFile?: ArrayBuffer,
     ) {
-        super(dataFile, indexFiles, metaFile);
+        super(new ArrayBuffer(0), indexFiles, metaFile);
+    }
+
+    /** Present here: its sectors are marked and this context holds the chunks they live in. */
+    private hasSpan(span: GroupSpan): boolean {
+        return this.presence.hasSectors(span.startSector, span.sectorCount) &&
+            this.dat2.hasRange(span.startByte, span.byteLength);
+    }
+
+    protected override sectorBytes(offset: number, length: number): Int8Array {
+        const bytes = this.dat2.view(offset, length);
+        if (!bytes) throw new Error(`[js5] dat2 sector at ${offset} is not loaded`);
+        return bytes;
     }
 
     getGroupSpan(indexId: number, archiveId: number): GroupSpan | undefined {
@@ -153,7 +162,7 @@ export class SparseMemoryStore extends MemoryStore {
             // Nothing to fetch; let the base read path produce its natural error.
             return true;
         }
-        return this.presence.hasSectors(span.startSector, span.sectorCount);
+        return this.hasSpan(span);
     }
 
     setOverride(indexId: number, archiveId: number, data: Int8Array): void {
@@ -166,15 +175,15 @@ export class SparseMemoryStore extends MemoryStore {
             console.warn(`[js5] Ignoring unaligned range at ${byteOffset}`);
             return;
         }
-        const end = Math.min(byteOffset + bytes.byteLength, this.dataFile.byteLength);
+        const end = Math.min(byteOffset + bytes.byteLength, this.dat2.byteLength);
         if (end <= byteOffset) {
             return;
         }
-        new Uint8Array(this.dataFile).set(bytes.subarray(0, end - byteOffset), byteOffset);
+        this.dat2.write(byteOffset, bytes.subarray(0, end - byteOffset));
         // The final sector of the file may be truncated; treat reaching EOF as
         // completing that sector.
         const sectorCount =
-            end >= this.dataFile.byteLength
+            end >= this.dat2.byteLength
                 ? Math.ceil((end - byteOffset) / Sector.SIZE)
                 : Math.floor((end - byteOffset) / Sector.SIZE);
         this.presence.markSectors(byteOffset / Sector.SIZE, sectorCount);
@@ -186,7 +195,7 @@ export class SparseMemoryStore extends MemoryStore {
             return override;
         }
         const span = this.getGroupSpan(indexId, archiveId);
-        if (span && !this.presence.hasSectors(span.startSector, span.sectorCount)) {
+        if (span && !this.hasSpan(span)) {
             this.missCount++;
             this.onMiss?.(span);
             throw new GroupMissingError(indexId, archiveId, span.startByte, span.byteLength);

@@ -1,90 +1,210 @@
 // Run after `yarn build`: node --test tests/spirit-trees.test.cjs
+// The spirit tree network and Fossil Island's Magic Mushtrees (docs/spirit-trees.md), as the
+// rsprox captures show them: the menu, the choice, and the move.
 const assert = require("node:assert/strict");
-const { test } = require("node:test");
 const path = require("node:path");
+const { test, before } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
-const { Location } = require("../dist/game/model/Location");
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const { Player } = require("../dist/game/entity/impl/player/Player");
 const QuestRuntime = require("../plugins/quests/QuestRuntime");
 const SpiritTrees = require("../plugins/world/SpiritTrees.plugin");
+const MagicMushtrees = require("../plugins/world/MagicMushtrees.plugin");
 
 let quests = [];
 QuestRuntime.getRegisteredQuests = () => quests;
 
-const teleports = [];
-let prompt = null;
-SpiritTrees.register({
-  core: {
-    GameConstants: { DEFINITIONS_DIRECTORY: path.join(__dirname, "..", "data", "definitions") },
-    TeleportHandler: {
-      checkReqs: () => true,
-      teleport: (player, destination, type) => teleports.push({ destination, type }),
+let core;
+let grown = [];
+
+before(async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  core = PluginManager.getCoreApi();
+  core.RegionManager.init();
+  const api = {
+    core,
+    persistAttribute() {},
+    onObjectInteraction() {},
+    onInterfaceActionClick() {},
+    onCustomEvent() {},
+    emitCustomEvent: (name, request) => {
+      if (name === "spirit-trees:grown") request.patches.push(...grown);
     },
-    TeleportType: { NORMAL: "NORMAL" },
-  },
-  sendMultiChatboxPrompt: (player, title, ...options) => { prompt = { title, options }; },
-  onObjectInteraction() {},
-  log() {},
+  };
+  SpiritTrees.register(api);
+  MagicMushtrees.register(api);
 });
 
-function createPlayer() {
-  const messages = [];
-  return { messages, sendMessage: (message) => messages.push(message) };
+/** A real player whose packets are recorded per tick. */
+function traveller(at) {
+  const player = new Player(null);
+  player.setUsername(`traveller${Math.random()}`);
+  player.setLocation(new core.Location(...at));
+  const ticks = [[]];
+  const log = (entry) => ticks[ticks.length - 1].push(entry);
+  const sender = new Proxy({}, {
+    get: (target, key) => {
+      if (key === "sendClientScript") return (id, ...args) => (log(`script ${id} ${JSON.stringify(args)}`), sender);
+      if (key === "sendSubInterface") return (uid, id) => (log(`open ${id}`), sender);
+      if (key === "closeSubInterface") return (uid) => (log(`close ${uid >>> 16}:${uid & 0xffff}`), sender);
+      if (key === "sendChatboxInterface") return (id) => (log(`chatbox ${id}`), sender);
+      if (key === "sendString") return (text, uid) => (log(`text ${uid >>> 16}:${uid & 0xffff} ${text}`), sender);
+      if (key === "sendSound") return (id) => (log(`sound ${id}`), sender);
+      if (key === "sendInterfaceScript") return (id) => (id === 2158 && log("restore chat input"), sender);
+      if (key === "getVarbit" || key === "getVarp") return () => 0;
+      return () => sender;
+    },
+  });
+  player.getPacketSender = () => sender;
+  player.sendMessage = (text) => log(`message ${text}`);
+  player.performAnimation = (animation) => log(`anim ${animation.getId()}`);
+  player.isRegistered = () => true;
+  const moveTo = player.moveTo.bind(player);
+  player.moveTo = (location) => (log(`move ${location.getX()},${location.getY()},${location.getZ()}`), moveTo(location));
+  const spoken = [];
+  // What the tree says: each chain's lines, in order.
+  player.getDialogueManager().startDialogues = (chain) => spoken.push([...chain.getDialogues().values()].map((entry) => entry.text ?? "").join(" / "));
+  return { player, ticks, spoken, nextTick: () => ticks.push([]) };
 }
 
-const villageTree = { getLocation: () => new Location(2539, 3166, 0) };
-const strongholdTree = { getLocation: () => new Location(2460, 3446, 0) };
+function runTicks(visit, count) {
+  for (let i = 0; i < count; i++) {
+    visit.nextTick();
+    core.TaskManager.process();
+  }
+}
 
-test("the spirit tree table has the permanent network", () => {
-  const destinations = SpiritTrees._test.loadDestinations();
-  assert.equal(destinations.length, 8);
-  const ge = destinations.find((entry) => entry.name === "Grand Exchange");
-  assert.deepEqual([ge.destination.getX(), ge.destination.getY()], [3185, 3510]);
-  const stronghold = destinations.find((entry) => entry.name === "Gnome Stronghold");
-  assert.equal(stronghold.requires, "The Grand Tree");
+const tree = (x, y, z = 0) => ({ getLocation: () => new core.Location(x, y, z), getId: () => 0 });
+const choose = (visit, group, child, action) => {
+  const event = { player: visit.player, groupId: group, childId: child, action, handled: false };
+  (group === 187 ? SpiritTrees : MagicMushtrees)._test[group === 187 ? "chooseTree" : "chooseMushtree"](event);
+  return event.handled;
+};
+
+test("the menu lists every tree in the game's order, greying out those the player can't use", () => {
+  quests = [{ name: "Tree Gnome Village", isComplete: () => true }];
+  grown = [];
+  const visit = traveller([3185, 3508, 0]);
+  SpiritTrees._test.travelOption({ player: visit.player, object: tree(3184, 3509) });
+  const menu = visit.ticks[0].find((line) => line.startsWith("script 217"));
+  assert.equal(menu, `script 217 ${JSON.stringify(["Spirit Tree Locations", [
+    "Tree Gnome Village", "Gnome Stronghold", "Battlefield of Khazard", "Grand Exchange", "Feldip Hills", "Prifddinas",
+    "<col=5f5f5f>Port Sarim</col>", "<col=5f5f5f>Etceteria</col>", "<col=5f5f5f>Brimhaven</col>", "<col=5f5f5f>Hosidius</col>",
+    "<col=5f5f5f>Farming Guild</col>", "<col=5f5f5f>Your house</col>", "Poison Waste", "<col=5f5f5f>Laguna Aurorae</col>", "Cancel",
+  ].join("|"), 1])}`, "grown trees aren't grown; Laguna Aurorae needs 58 Sailing");
+  assert.ok(visit.ticks[0].includes("open 187"));
 });
 
-test("the network needs Tree Gnome Village, and travel from the Stronghold needs The Grand Tree", () => {
+test("choosing a tree: the bark message and the reach, then the move two ticks later", () => {
+  quests = [{ name: "Tree Gnome Village", isComplete: () => true }];
+  const visit = traveller([3185, 3508, 0]);
+  SpiritTrees._test.travelOption({ player: visit.player, object: tree(3184, 3509) });
+  visit.ticks.length = 0;
+  visit.nextTick();
+  assert.equal(choose(visit, 187, 3, 1), true, "slot 1: Gnome Stronghold");
+  runTicks(visit, 2);
+  assert.deepEqual(visit.ticks, [
+    ["close 161:16", "restore chat input", "chatbox 193", 'script 2868 [""]',
+      "text 193:2 You place your hands on the dry tough bark of the spirit tree, and feel a surge of energy run through your veins.", "anim 828"],
+    [],
+    ["move 2461,3444,0", "close 162:566"],
+  ]);
+});
+
+test("a greyed tree, or the tree the player is at, makes the tree speak instead", () => {
+  quests = [{ name: "Tree Gnome Village", isComplete: () => true }];
+  const visit = traveller([3185, 3508, 0]);
+  SpiritTrees._test.travelOption({ player: visit.player, object: tree(3184, 3509) });
+  choose(visit, 187, 3, 6);
+  SpiritTrees._test.travelOption({ player: visit.player, object: tree(3184, 3509) });
+  choose(visit, 187, 3, 3);
+  const lines = visit.spoken;
+  assert.match(lines[0], /You cannot travel to that land at this time\./, "Port Sarim isn't grown");
+  assert.match(lines[1], /You're already here\./, "at the Grand Exchange's tree");
+});
+
+test("a grown, checked spirit tree patch is offered, and lands where the capture shows", () => {
+  quests = [{ name: "Tree Gnome Village", isComplete: () => true }];
+  grown = [{ x: 3059, y: 3257, z: 0 }];
+  const visit = traveller([3185, 3508, 0]);
+  SpiritTrees._test.travelOption({ player: visit.player, object: tree(3184, 3509) });
+  assert.ok(!visit.ticks[0].find((line) => line.startsWith("script 217")).includes("5f5f5f>Port Sarim"));
+  choose(visit, 187, 3, 6);
+  runTicks(visit, 2);
+  assert.ok(visit.ticks.flat().includes("move 3058,3257,0"));
+  grown = [];
+});
+
+test("the network needs Tree Gnome Village; leaving the Stronghold needs The Grand Tree", () => {
   quests = [{ name: "Tree Gnome Village", isComplete: () => false }];
-  const locked = createPlayer();
-  assert.equal(SpiritTrees._test.canUseNetwork(locked, villageTree), false);
-  assert.match(locked.messages.at(-1), /Tree Gnome Village/);
-
-  const grandTree = { name: "The Grand Tree", isComplete: () => false };
-  quests = [{ name: "Tree Gnome Village", isComplete: () => true }, grandTree];
-  assert.equal(SpiritTrees._test.canUseNetwork(createPlayer(), villageTree), true);
-  const noGrandTree = createPlayer();
-  assert.equal(SpiritTrees._test.canUseNetwork(noGrandTree, strongholdTree), false);
-  assert.match(noGrandTree.messages.at(-1), /The Grand Tree/);
-
-  grandTree.isComplete = () => true;
-  assert.equal(SpiritTrees._test.canUseNetwork(createPlayer(), strongholdTree), true);
+  const locked = traveller([3185, 3508, 0]);
+  SpiritTrees._test.travelOption({ player: locked.player, object: tree(3184, 3509) });
+  assert.match(locked.ticks.flat().join("\n"), /Tree Gnome Village/);
+  quests = [{ name: "Tree Gnome Village", isComplete: () => true }, { name: "The Grand Tree", isComplete: () => false }];
+  const stronghold = traveller([2461, 3444, 0]);
+  SpiritTrees._test.travelOption({ player: stronghold.player, object: tree(2460, 3446) });
+  assert.match(stronghold.ticks.flat().join("\n"), /The Grand Tree/);
+  assert.ok(!stronghold.ticks.flat().includes("open 187"));
 });
 
-test("travelling checks the destination quest when it is registered", () => {
-  teleports.length = 0;
+test("Last-destination: the first time the tree asks; then straight to the last tree", () => {
   quests = [{ name: "Tree Gnome Village", isComplete: () => true }];
-  const player = createPlayer();
-  const ge = SpiritTrees._test.loadDestinations().find((entry) => entry.name === "Grand Exchange");
-  SpiritTrees._test.travel(player, ge);
-  assert.equal(teleports.length, 1);
-  assert.equal(teleports[0].destination.getX(), 3185);
-
-  quests.push({ name: "Song of the Elves", isComplete: () => false });
-  const prif = SpiritTrees._test.loadDestinations().find((entry) => entry.name === "Prifddinas");
-  SpiritTrees._test.travel(player, prif);
-  assert.equal(teleports.length, 1, "an incomplete registered quest blocks");
-  assert.match(player.messages.at(-1), /Song of the Elves/);
+  const visit = traveller([3185, 3508, 0]);
+  SpiritTrees._test.lastDestinationOption({ player: visit.player, object: tree(3184, 3509) });
+  assert.match(visit.spoken[0], /This once, you will have to tell me where you wish to go/);
+  SpiritTrees._test.travelOption({ player: visit.player, object: tree(3184, 3509) });
+  choose(visit, 187, 3, 4);
+  runTicks(visit, 2);
+  visit.player.setLocation(new core.Location(3185, 3508, 0));
+  visit.ticks.length = 0;
+  visit.nextTick();
+  SpiritTrees._test.lastDestinationOption({ player: visit.player, object: tree(3184, 3509) });
+  runTicks(visit, 2);
+  assert.ok(visit.ticks.flat().includes("move 2488,2850,0"), "Feldip Hills again");
 });
 
-test("the menu lists every destination", () => {
+test("every landing tile can be stood on", () => {
+  for (const entry of [...SpiritTrees._test.loadTrees(), ...MagicMushtrees._test.mushtrees]) {
+    if (!entry.landing) continue;
+    const [x, y, z] = entry.landing;
+    core.RegionManager.loadMapFiles(x, y);
+    assert.equal(core.RegionManager.blocked(new core.Location(x, y, z), null), false, `${entry.name} ${entry.landing}`);
+  }
+});
+
+test("a Magic Mushtree opens its interface with the four names, and crawls to the chosen one", () => {
+  const visit = traveller([3760, 3758, 0]);
+  MagicMushtrees._test.useMushtree({ player: visit.player, object: tree(3758, 3756) });
+  assert.deepEqual(visit.ticks[0].filter((line) => line.startsWith("text")), [
+    "text 608:5 <col=8f8f8f>1.</col> House on the Hill", "text 608:9 <col=8f8f8f>2.</col> Verdant Valley",
+    "text 608:13 <col=8f8f8f>3.</col> Sticky Swamp", "text 608:17 <col=8f8f8f>4.</col> Mushroom Meadow",
+  ]);
+  choose(visit, 608, 8, 0);
+  assert.deepEqual(visit.ticks[0].slice(-1), ["message You are already at that Magic Mushtree."], "Verdant Valley is this one");
+  visit.ticks.length = 0;
+  visit.nextTick();
+  assert.equal(choose(visit, 608, 16, 0), true, "Mushroom Meadow");
+  runTicks(visit, 6);
+  assert.deepEqual(visit.ticks, [["anim 844", "sound 2266", "open 174", "close 161:16", "restore chat input"], [], [], ["move 3676,3871,0"], ["open 174"], [], ["close 161:1"]]);
+});
+
+test("Talk-to: the tree greets the player, then the menu opens", () => {
   quests = [{ name: "Tree Gnome Village", isComplete: () => true }];
-  prompt = null;
-  SpiritTrees._test.openNetwork({ player: createPlayer(), object: villageTree });
-  assert.ok(prompt);
-  const labels = prompt.options.filter((option) => typeof option === "string");
-  assert.ok(labels.includes("Grand Exchange"));
-  assert.ok(labels.includes("Prifddinas"));
+  const visit = traveller([3185, 3508, 0]);
+  SpiritTrees._test.talkToOption({ player: visit.player, object: tree(3184, 3509) });
+  assert.match(visit.spoken[0], /Hello gnome friend\. Where would you like to go\?/);
+});
+
+test("\"Spirit Tree\" is the Poison Waste tree's name and the farming patches': only the listed tree is taken", () => {
+  quests = [{ name: "Tree Gnome Village", isComplete: () => true }];
+  const visit = traveller([2339, 3109, 0]);
+  const event = { player: visit.player, object: tree(2338, 3110), handled: false };
+  assert.equal(SpiritTrees._test.ownTreeTravel(event), true);
+  assert.ok(visit.ticks.flat().includes("open 187"));
+  const patch = { player: traveller([3061, 3257, 0]).player, object: tree(3060, 3258) };
+  assert.equal(SpiritTrees._test.ownTreeTravel(patch), false, "Port Sarim's patch stays Farming's");
 });

@@ -699,6 +699,9 @@ export class OverlayHost {
 
     /** Hover + world interaction pass, run every frame before entry population (WebGL order). */
     updateInteractionFrame(): void {
+        // As WebGL's frame does: plugins (the backquote crosshair) move the interaction point
+        // first, so hover, the mouseover text and clicks use it rather than a pointer-locked mouse.
+        this.osrsClient.clientPlugins.updateInteractionPointer(this.osrsClient.camera);
         if (!this.osrsClient.isLoggedIn()) return;
         try {
             updateHoveredTileViaHost(this.typedHost);

@@ -35,6 +35,57 @@ async function main(): Promise<void> {
         "../render/player/PlayerRenderer"
     );
 
+    // Walking poses must progress within a keyframe and through the last-to-first seam.
+    const { Model } = await import("../rs/model/Model");
+    const { SeqBase } = await import("../rs/model/seq/SeqBase");
+    const { SeqFrame } = await import("../rs/model/seq/SeqFrame");
+    const base = Object.assign(new Model(), {
+        verticesCount: 1, faceCount: 0,
+        verticesX: new Int32Array([128]), verticesY: new Int32Array([0]), verticesZ: new Int32Array([0]),
+        vertexLabels: [new Int32Array([0])],
+    });
+    const skeleton = new SeqBase(1, 3, [1, 2, 3], [true, true, true],
+        new Uint16Array([65535, 65535, 65535]), [[0], [0], [0]]);
+    const frame = (group: number, x: number, y = 0, z = 0) =>
+        new SeqFrame(5, skeleton, 1, [group], [x], [y], [z], [-1], false);
+    const start = frame(0, 0), end = frame(0, 100);
+    for (const [progress, expected] of [[0, 128], [0.5, 178], [1, 228]]) {
+        const pose = Model.copyAnimated(base, false, true);
+        pose.animateInterpolated(start, end, progress, false);
+        assert.equal(pose.verticesX[0], expected);
+    }
+    const wrapped = Model.copyAnimated(base, false, true);
+    wrapped.animateInterpolated(frame(1, 0, 250), frame(1, 0, 6), 0.5, false);
+    assert.equal(wrapped.verticesX[0], 128, "rotation crosses zero by the shortest arc");
+    assert.equal(wrapped.verticesZ[0], 0);
+    const absent = new SeqFrame(5, skeleton, 0, [], [], [], [], [], false);
+    const scaled = Model.copyAnimated(base, false, true);
+    scaled.animateInterpolated(absent, frame(2, 256, 128, 128), 0.5, false);
+    assert.equal(scaled.verticesX[0], 192, "missing scale uses the identity, 128");
+    assert.equal(base.verticesX[0], 128, "posed interpolation leaves the rest model intact");
+    const walkingRenderer = new PlayerRenderer({ osrsClient: {} } as any) as any;
+    const walkSeq = { frameIds: [1, 2], frameStep: -1, getFrameLength: () => 5 };
+    const loaders = { seqFrameLoader: { load: (id: number) => id === 1 ? start : end } };
+    const last = Model.copyAnimated(base, false, true);
+    walkingRenderer.applySingleSequenceToModel(last, walkSeq, 819, 1, loaders, 5);
+    assert.equal(last.verticesX[0], 128, "final frame blends into the first frame before wrapping");
+    const first = Model.copyAnimated(base, false, true);
+    walkingRenderer.applySingleSequenceToModel(first, walkSeq, 819, 0, loaders, 0);
+    assert.deepEqual(first.verticesX, last.verticesX, "the loop boundary does not snap the pose");
+    walkingRenderer.renderer.osrsClient = {
+        controlledPlayerServerId: 1,
+        playerEcs: {
+            getIndexForServerId: () => 0, getServerIdForIndex: () => 1,
+            isMoving: () => true, getAnimSeq: () => 808,
+            getAnimSeqId: () => -1, getAnimSeqDelay: () => 0,
+        },
+        playerAnimController: { getMovementSequenceState: () => ({ seqId: 819, frame: 0, frameCycle: 3 }) },
+    };
+    assert.equal(walkingRenderer.getMovementFrameCycle(0, 819, 0), 3);
+    assert.equal(walkingRenderer.getMovementFrameCycle(1, 819, 0), 0, "remote actors retain cheap cached poses");
+    assert.equal(walkingRenderer.getMovementFrameCycle(0, 819, 1), 0, "do not blend a stale frame");
+
+
     assert.equal(shouldUseUnanimatedIdlePlayer(200, true, false, false, 808, 808), false);
     assert.equal(shouldUseUnanimatedIdlePlayer(201, true, false, false, 808, 808), true);
     assert.equal(shouldUseUnanimatedIdlePlayer(300, true, true, false, 808, 808), false);
