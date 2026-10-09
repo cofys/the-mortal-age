@@ -100,6 +100,8 @@ const DEEDS = Object.freeze({
   betrayal: Object.freeze({ points: -6, label: "betrayal" }),
   relichunter: Object.freeze({ points: 8, label: "unearthed a major find" }),
   curator: Object.freeze({ points: 6, label: "donated to the museum" }),
+  standingovation: Object.freeze({ points: 8, label: "earned a standing ovation" }),
+  playwrightlaureate: Object.freeze({ points: 6, label: "wrote five plays" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),
 });
 

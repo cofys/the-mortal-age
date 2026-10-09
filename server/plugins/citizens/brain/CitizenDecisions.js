@@ -128,6 +128,7 @@ const ACT_BANKERWORK = "citizen_bankerwork";
 const ACT_INSURERWORK = "citizen_insurerwork";
 const ACT_SPY = "citizen_spymaster";
 const ACT_DIG = "citizen_excavate";
+const ACT_STAGE = "citizen_rehearse";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -161,7 +162,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1456,12 +1457,44 @@ function digInfo(player) {
 }
 
 /**
+ * Stage info: is this citizen a playwright or troupe member, and is there
+ * theatrical work in their kingdom? Defensive — missing modules degrade to
+ * the honest unable-to-perform shape.
+ */
+function stageInfo(player) {
+  try {
+    const Theater = require("../lib/CitizenTheater");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isPlaywright = Theater.isPlaywright(username);
+    let expressive = 0;
+    try {
+      const personality = player?.getAttribute?.("citizens:personality") ?? {};
+      expressive = personality.expressiveness ?? personality.creativity ?? personality.sociability ?? 0;
+    } catch { /* personality unreadable */ }
+    let inTroupe = false, upcomingShows = 0, openTheater = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      if (kid) {
+        openTheater = !!Theater.theaterFor(kid);
+        for (const t of Theater.troupesIn(kid)) {
+          if (t.members.includes(username)) { inTroupe = true; break; }
+        }
+        upcomingShows = Theater.upcomingPerformances(kid).length;
+      }
+    } catch { /* sites unreadable */ }
+    return { isPlaywright, expressive, inTroupe, upcomingShows, openTheater };
+  } catch {
+    return { isPlaywright: false, expressive: 0, inTroupe: false, upcomingShows: 0, openTheater: false };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
  */
-function jailPenalty(player) {
-  try {
+function jailPenalty(player) {  try {
     const Crime = require("../lib/CitizenCrime");
     const username = player?.username ?? player?.getUsername?.() ?? null;
     if (!username || typeof Crime.jailPenaltyFor !== "function") return 0;
@@ -1882,6 +1915,7 @@ compete: competeInfo(player),
     bank: bankInfo(player),
     ins: insurerInfo(player),
     dig: digInfo(player),
+    stage: stageInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1903,7 +1937,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2377,6 +2411,25 @@ case ACT_COMPETE: {
       if (d.isArchaeologist) s += 10; // the trade calls
       if ((d.richest ?? 0) >= 8) s += 8; // rich ground pulls diggers
       else if ((d.richest ?? 0) >= 5) s += 4;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_STAGE: {
+      // Theater: troupe members rehearse toward booked shows; playwrights
+      // write when the house is open. The expressive are drawn to the
+      // stage. The hurt and weary stay home.
+      const st = stage ?? { isPlaywright: false, expressive: 0, inTroupe: false, upcomingShows: 0, openTheater: false };
+      if (!st.inTroupe && !st.isPlaywright && (st.expressive ?? 0) < 0.5) return 4;
+      if (!st.openTheater) return 4; // honest — no theater, no rehearsal
+      let s = 16;
+      if (st.inTroupe) s += 10; // the troupe calls
+      if ((st.upcomingShows ?? 0) > 0) s += 8; // a booked show pulls rehearsers
+      if (st.isPlaywright) s += 6; // playwrights polish their work
+      if ((st.expressive ?? 0) >= 0.7) s += 4;
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -3140,7 +3193,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

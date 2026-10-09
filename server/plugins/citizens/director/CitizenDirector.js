@@ -233,6 +233,8 @@ const { tickTradeCharters } = require("../lib/CitizenTradeCharterLife");
 const CitizenTradeCharters = require("../lib/CitizenTradeCharters");
 const { tickArchLife } = require("../lib/CitizenArchaeologyLife");
 const CitizenArchaeology = require("../lib/CitizenArchaeology");
+const { tickTheaterLife } = require("../lib/CitizenTheaterLife");
+const CitizenTheater = require("../lib/CitizenTheater");
 const { tickLeagues } = require("../lib/CitizenLeagueLife");
 const CitizenLeagues = require("../lib/CitizenLeagues");
 const { tickDiscoveryLife } = require("../lib/CitizenDiscoveryLife");
@@ -3066,6 +3068,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("archaeology failed", { error: String(error?.message ?? error) });
     }
+    // Citizen theater: playwrights, plays, troupes, touring, ticketed
+    // performances, reviews. Data tier, zero LLM. (CitizenActors owns the
+    // scripted scenes; CitizenEntertainment owns the house shows.)
+    try {
+      tickTheaterLife(this, nowMs);
+    } catch (error) {
+      this.log("theater failed", { error: String(error?.message ?? error) });
+    }
     // Citizen team leagues: seasons, fixtures, standings, championships.
     // Data tier, zero LLM. (CitizenSports owns hash-derived spectator
     // fixtures; CitizenTournaments owns individual brackets.)
@@ -3573,6 +3583,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen archaeology save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenTheater.save()) {
+        this.log("citizen theater saved");
+      }
+    } catch (error) {
+      this.log("citizen theater save failed", {
         error: String(error?.message ?? error),
       });
     }

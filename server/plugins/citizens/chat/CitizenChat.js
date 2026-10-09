@@ -657,6 +657,27 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "playwright" / "troupe" / "touring" — player asks about theater
+  // production. (The entertainment theater block owns the house shows;
+  // this owns playwrights, troupes, and touring.)
+  if (/\b(playwright|playwrights|troupe|troupes|touring company|who wrote that play|standing ovation)\b/.test(said)) {
+    try {
+      const Theater = require("../lib/CitizenTheater");
+      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const troupes = Theater.troupesIn(kingdomId);
+      const plays = Theater.playsIn(kingdomId);
+      const upcoming = Theater.upcomingPerformances(kingdomId);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "theater_production", {
+        troupes: troupes.slice(0, 3).map((t) => ({ name: t.name, members: t.members.length })),
+        plays: plays.slice(0, 3).map((p) => ({ title: p.title, genre: p.genre })),
+        upcoming: upcoming.slice(0, 3).map((p) => ({ title: p.playTitle, troupe: p.troupe, price: p.ticketPrice })),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "any treaties" / "embassy" / "summit" / "ambassador" — citizen treaties.
   // (Excludes "marriage alliance" — that belongs to the dynastic block below.)
   if (/\b(any treaties?|peace treaty|trade treaty|any embass|ambassador|summit|foreign relations)\b/.test(said) ||
