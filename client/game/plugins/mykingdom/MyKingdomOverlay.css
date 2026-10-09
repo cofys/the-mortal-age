@@ -1,0 +1,247 @@
+/* The Mortal Age — My Kingdom overlay.
+ * Same heraldic template as the war table: tall panel, ornate gold
+ * frame, corner brackets, inset content boxes. Single-scroll, no tabs —
+ * this is a personal panel, not a campaign map. */
+
+.tma-mykingdom-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(11, 8, 5, 0.72), rgba(11, 8, 5, 0.9));
+    animation: tma-mykingdom-fadein 0.35s ease-out;
+}
+
+@keyframes tma-mykingdom-fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tma-mykingdom-panel {
+    position: relative;
+    width: min(480px, 94vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+    border: 1px solid #6b5a3a;
+    outline: 3px solid #14100b;
+    box-shadow: 0 0 0 4px #6b5a3a;
+    padding: 28px 24px 14px;
+    animation: tma-mykingdom-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes tma-mykingdom-rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Corner brackets — L-shaped bright gold */
+.tma-mykingdom-panel::before,
+.tma-mykingdom-panel::after {
+    content: "";
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid #c9a227;
+    pointer-events: none;
+}
+.tma-mykingdom-panel::before {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+}
+.tma-mykingdom-panel::after {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+}
+
+.tma-mykingdom-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: none;
+    color: #9a8f7d;
+    font-size: 16px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+.tma-mykingdom-close:hover {
+    color: #d9b45b;
+}
+
+.tma-mykingdom-kicker {
+    margin: 0 0 4px;
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+    text-align: center;
+}
+
+.tma-mykingdom-name {
+    margin: 0 0 6px;
+    font-size: 24px;
+    font-weight: bold;
+    color: #d9b45b;
+    text-align: center;
+}
+
+.tma-mykingdom-header-rule {
+    height: 1px;
+    margin: 0 40px 14px;
+    background: linear-gradient(90deg, transparent, #c9a227, transparent);
+}
+
+.tma-mykingdom-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.tma-mykingdom-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+.tma-mykingdom-scroll::-webkit-scrollbar-track {
+    background: #14100b;
+}
+.tma-mykingdom-scroll::-webkit-scrollbar-thumb {
+    background: #3a2f22;
+    border-radius: 4px;
+}
+
+.tma-mykingdom-section {
+    margin-bottom: 14px;
+}
+
+.tma-mykingdom-section-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #d9b45b;
+}
+
+.tma-mykingdom-inset {
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 3px;
+    padding: 10px 12px;
+}
+
+.tma-mykingdom-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 3px 0;
+}
+
+.tma-mykingdom-label {
+    font-size: 13px;
+    color: #9a8f7d;
+}
+
+.tma-mykingdom-value {
+    font-size: 13px;
+    color: #e8ded0;
+    text-align: right;
+}
+
+.tma-mykingdom-gold {
+    color: #d9b45b;
+}
+
+.tma-mykingdom-body {
+    margin: 0;
+    font-size: 13px;
+    color: #e8ded0;
+    line-height: 1.5;
+}
+
+.tma-mykingdom-note {
+    margin: 6px 0 0;
+    font-size: 12px;
+    font-style: italic;
+    color: #9a8f7d;
+    line-height: 1.45;
+}
+
+.tma-mykingdom-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.tma-mykingdom-badge {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    border: 1px solid;
+}
+
+.tma-mykingdom-badge-danger {
+    color: #e06a5a;
+    border-color: #7a2d24;
+    background: rgba(122, 45, 36, 0.25);
+}
+
+.tma-mykingdom-badge-warn {
+    color: #d9a45b;
+    border-color: #6b4a22;
+    background: rgba(107, 74, 34, 0.25);
+}
+
+.tma-mykingdom-badge-gold {
+    color: #d9b45b;
+    border-color: #6b5a3a;
+    background: rgba(107, 90, 58, 0.2);
+}
+
+.tma-mykingdom-news-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 0;
+    border-bottom: 1px solid #2a2218;
+}
+.tma-mykingdom-news-item:last-child {
+    border-bottom: none;
+}
+
+.tma-mykingdom-news-type {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+}
+
+.tma-mykingdom-news-text {
+    font-size: 13px;
+    color: #e8ded0;
+    line-height: 1.45;
+}
+
+.tma-mykingdom-news-date {
+    font-size: 11px;
+    color: #9a8f7d;
+}
+
+.tma-mykingdom-footnote {
+    margin: 10px 0 0;
+    font-size: 12px;
+    font-style: italic;
+    color: #9a8f7d;
+    text-align: center;
+}
