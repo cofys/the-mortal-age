@@ -92,7 +92,13 @@ function announce(director, kingdomId, text, nowMs) {
     const near = roster.find((r) => {
       try {
         const S = sitesApi();
-        return S && typeof S.kingdomIdOf === "function" && S.kingdomIdOf(r) === kingdomId;
+        // Roster records are plain objects WITH a kingdomId field — read it
+        // first. The brain's kingdomIdOf falls back to KINGDOM_IDS[0] for
+        // anything without the kingdom attribute, so it must only be the
+        // live-entity fallback, never the primary read.
+        const rkid = r?.kingdomId ||
+          (S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(r) : null);
+        return rkid === kingdomId;
       } catch { return false; }
     });
     const bot = near ? botFor(director, near) : null;
@@ -114,7 +120,11 @@ function tickLibrarianGuildLife(director, nowMs = Date.now()) {
         let rkid = null;
         try {
           const S = sitesApi();
-          rkid = S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(record) : null;
+          // Plain roster record: read its own kingdomId first; the brain
+          // read is the live-entity fallback (it pins to KINGDOM_IDS[0]
+          // for anything without the kingdom attribute).
+          rkid = record?.kingdomId ||
+            (S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(record) : null);
         } catch { rkid = null; }
         if (rkid !== kid) continue;
         const name = usernameOf(record);

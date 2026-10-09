@@ -826,8 +826,12 @@ function payBounty(bountyId) {
   if (pay > 0) {
     try {
       const B = bankingApi();
-      if (B && B.creditAccount) {
-        B.creditAccount(b.claimedBy, pay);
+      // CitizenBanking exposes accountFor, not creditAccount — credit the
+      // live account record directly (same pattern as CitizenCivilLaw).
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(b.claimedBy) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + pay;
+        if (typeof B.markDirty === "function") B.markDirty();
       }
     } catch { /* banking is best-effort */ }
   }
