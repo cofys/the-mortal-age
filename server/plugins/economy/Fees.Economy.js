@@ -22,6 +22,10 @@ const stats = { feesCollected: 0, feesValue: 0 };
 
 function onOfferCollected(event) {
   if (!event || event.itemId !== COINS_ID) return; // sell offers pay out in coins
+  // Only a completed SELL is taxed: sell === true and not aborted. An aborted
+  // BUY pays the player's own coins back — taxing those would take money the
+  // player never earned. Unknown offer shapes fail closed (no tax).
+  if (event.sell !== true || event.aborted) return;
   const amount = Math.floor(event.amount ?? 0);
   if (amount <= 0) return;
   const fee = Math.floor(amount * FEE_TUNING.geCompletionFee);

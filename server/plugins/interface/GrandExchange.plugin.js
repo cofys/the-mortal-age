@@ -308,7 +308,8 @@ function collect(player, action, slot = viewing.get(player)) {
     return;
   }
   destination.setItems(result.getItems());
-  if (action !== 3) inventory.refreshItems();
+  if (action === 3) destination.refreshItems();
+  else inventory.refreshItems();
   // Plugins may change what the collection hands over (e.g. a bought bond
   // arrives untradeable) before the offer is cleared and saved below.
   pluginApi.emitCustomEvent("ge:offer-collected", {
@@ -317,6 +318,10 @@ function collect(player, action, slot = viewing.get(player)) {
     amount: outputAmount,
     destination: action === 3 ? "bank" : "inventory",
     container: destination,
+    // The fee listener needs to know what kind of payout this is: only a
+    // completed SELL is taxed. An aborted BUY returns the player's own coins.
+    sell: offer.sell,
+    aborted: !!offer.aborted,
   });
   delete completedOffers(player)[slot];
   saveOffers(player);
