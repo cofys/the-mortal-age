@@ -565,9 +565,6 @@ module.exports = {
   STREET_GOSSIP,
   BOARD_NOTES,
   RUN_LINES,
-  SATCHEL_LINES,
-  MISDELIVERED_LINES,
-  BREATHLESS_LINES,
   POST_CORNER_LINES,
   // Tuning (tests pin the documented behavior):
   RUNNER_RADIUS,
