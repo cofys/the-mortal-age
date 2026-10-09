@@ -23,7 +23,8 @@ const { agentRng } = require("./humanizer");
 function journalEvent(citizenName, text, kind) {
   try {
     const { getJournal } = require("./CitizenJournal");
-    getJournal().log(citizenName, text, kind || "politics");
+    // Canonical signature: log(citizenName, kind, text, opts).
+    getJournal().log(citizenName, kind || "politics", text);
   } catch {
     // best-effort
   }
@@ -370,4 +371,5 @@ module.exports = {
   _gatherNominations: gatherNominations,
   _chooseLaw: chooseLaw,
   _recordsByKingdom: recordsByKingdom,
+  _journalEvent: journalEvent,
 };

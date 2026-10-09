@@ -53,6 +53,28 @@ function isCitizenBot(player) {
   return player?.getHostAddress?.() === BOT_HOST_ADDRESS;
 }
 
+/**
+ * citizenKingdomId — the canonical seam for chat call sites that need a
+ * citizen's kingdom from a username string. kingdomIdOf() reads
+ * player.getAttribute(ATTR_KINGDOM_ID) off the LIVE bot entity, so calling it
+ * with a bare username string (or a { getUsername } stub) silently falls back
+ * to the first kingdom and every reply names the wrong kingdom. Go through
+ * the roster record's real kingdomId instead; null when no record is found.
+ */
+function citizenKingdomId(citizenUsername) {
+  try {
+    const { normalizeName } = require("../lib/CitizenBonds");
+    const { getDirector } = require("../director/CitizenDirector");
+    const record = getDirector()?.roster?.get?.(normalizeName(citizenUsername));
+    if (record && typeof record.kingdomId === "string") {
+      return record.kingdomId;
+    }
+  } catch {
+    // No director / roster yet — caller treats null as "no sites".
+  }
+  return null;
+}
+
 let pluginApi = null;
 
 function initCitizenChat(api) {
@@ -663,11 +685,14 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   if (/\b(chefs'? guild|culinary code|recipe certification|certify (a|my) recipe|certified recipe|golden ladle|kitchen inspection|chef de cuisine|sous chef)\b/.test(said)) {
     try {
       const Guilds = require("../lib/CitizenCookGuilds");
+      // handleSocialKeyword only has the citizen's username (a string), and
+      // CitizenSites.kingdomIdOf needs a player entity (getAttribute) — a
+      // string silently yields KINGDOM_IDS[0]. The guild's own member record
+      // carries the citizen's real kingdom; non-members have no guild context.
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
-      } catch { /* no sites */ }
+        kingdomId = Guilds.memberOf(citizenUsername)?.kingdomId || null;
+      } catch { /* no guild */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
       notifyCitizenSpoke(citizenUsername, speakerUsername, "cookguild_status", {
         username: citizenUsername,
@@ -675,36 +700,6 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
         memberCount: desc.memberCount ?? 0,
         sealed: desc.sealed ?? 0,
         hygiene: desc.hygiene ?? 100,
-        treasury: desc.treasury ?? 0,
-        prestige: desc.prestige ?? 0,
-      });
-    } catch {
-      return false;
-    }
-    return true;
-  }
-
-  // "weavers' guild" / "collection certification" / "golden needle" /
-  // "knockoff" / "atelier inspection" — player asks about the designers'
-  // association. (CitizenRunways owns shows/designers/collections/ateliers;
-  // CitizenFashion owns trends/shops/competitions; this owns the guild
-  // layer only.) Placed before the runway/fashion blocks so the more
-  // specific guild phrasing wins.
-  if (/\b(weavers'? guild|collection certification|certify (a|my) collection|certified collection|golden needle|atelier inspection|grand couturier|knockoff)\b/.test(said)) {
-    try {
-      const Guilds = require("../lib/CitizenWeaverGuilds");
-      let kingdomId = null;
-      try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
-      } catch { /* no sites */ }
-      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
-      notifyCitizenSpoke(citizenUsername, speakerUsername, "weaverguild_status", {
-        username: citizenUsername,
-        exists: desc.exists ?? false,
-        memberCount: desc.memberCount ?? 0,
-        sealed: desc.sealed ?? 0,
-        inspection: desc.inspection ?? 100,
         treasury: desc.treasury ?? 0,
         prestige: desc.prestige ?? 0,
       });
@@ -741,8 +736,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Guilds = require("../lib/CitizenSportsGuilds");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
       notifyCitizenSpoke(citizenUsername, speakerUsername, "sportsguild_status", {
@@ -788,8 +782,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Guilds = require("../lib/CitizenStageGuilds");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
       notifyCitizenSpoke(citizenUsername, speakerUsername, "stageguild_status", {
@@ -837,8 +830,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Corps = require("../lib/CitizenDiplomaticCorps");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Corps.describe(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "diplocorps_status", {
@@ -866,8 +858,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Treaties = require("../lib/CitizenTreaties");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Treaties.describe(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "treaty_status", {
@@ -890,8 +881,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Guilds = require("../lib/CitizenTradeGuilds");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "tradeguild_status", {
@@ -918,8 +908,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Guilds = require("../lib/CitizenSpyGuilds");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "spyguild_status", {
@@ -945,8 +934,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Espionage = require("../lib/CitizenEspionage");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const net = kingdomId ? Espionage.networkFor(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "espionage_status", {
@@ -967,8 +955,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Press = require("../lib/CitizenPress");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Press.describe(kingdomId) : null;
       const ed = kingdomId ? Press.latestEdition(kingdomId) : null;
@@ -994,8 +981,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Guilds = require("../lib/CitizenPressGuilds");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "pressguild_status", {
@@ -1023,8 +1009,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Guilds = require("../lib/CitizenBankGuilds");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "bankguild_status", {
@@ -1053,8 +1038,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Guilds = require("../lib/CitizenInsureGuilds");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "insureguild_status", {
@@ -1080,8 +1064,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Banking = require("../lib/CitizenBanking");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Banking.describe(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "banking_status", {
@@ -1106,8 +1089,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Insurance = require("../lib/CitizenInsurance");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Insurance.describe(kingdomId) : null;
       const mine = citizenUsername ? Insurance.policiesOf(citizenUsername) : [];
@@ -1134,8 +1116,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Guilds = require("../lib/CitizenLawGuilds");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "lawguild_status", {
@@ -1161,8 +1142,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const CivilLaw = require("../lib/CitizenCivilLaw");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? CivilLaw.describe(kingdomId) : null;
       const mine = citizenUsername ? CivilLaw.disputesOf(citizenUsername) : [];
@@ -1192,8 +1172,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Press = require("../lib/CitizenPress");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(speakerUsername) ?? kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const headline = said.replace(/^publish:\s*/, "");
       // Beat guess from keywords, default culture.
@@ -1639,8 +1618,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Astro = require("../lib/CitizenAstronomy");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Astro.describe(kingdomId, Date.now()) : null;
       const reading = citizenUsername
@@ -1667,8 +1645,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Obs = require("../lib/CitizenObservatories");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Obs.describe(kingdomId, Date.now()) : null;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "observatory_visit", {
@@ -1690,11 +1667,14 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   if (/\b(map guild|cartographers'? guild|guild hall|certify|certification|guild seal|surveyor|guildmaster)\b/.test(said)) {
     try {
       const Guilds = require("../lib/CitizenMapGuilds");
+      // handleSocialKeyword only has the citizen's username (a string), and
+      // CitizenSites.kingdomIdOf needs a player entity (getAttribute) — a
+      // string silently yields KINGDOM_IDS[0]. The guild's own member record
+      // carries the citizen's real kingdom; non-members have no guild context.
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
-      } catch { /* no sites */ }
+        kingdomId = Guilds.memberOf(citizenUsername)?.kingdomId || null;
+      } catch { /* no guild */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
       notifyCitizenSpoke(citizenUsername, speakerUsername, "guild_status", {
         username: citizenUsername,
@@ -1719,8 +1699,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Maps = require("../lib/CitizenMaps");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Maps.describe(kingdomId) : null;
       const listings = kingdomId ? Maps.listingsFor(kingdomId).slice(0, 5).map((l) => ({
@@ -1796,8 +1775,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       // Find the citizen's kingdom for the judge lookup.
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf({ getUsername: () => citizenUsername, username: citizenUsername });
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch {
         // best-effort
       }
@@ -1829,8 +1807,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Surgery = require("../lib/CitizenSurgery");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf({ getUsername: () => citizenUsername, username: citizenUsername });
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch {
         // best-effort
       }
@@ -1924,8 +1901,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const Guilds = require("../lib/CitizenDigGuilds");
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
+        kingdomId = citizenKingdomId(citizenUsername);
       } catch { /* no sites */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
       notifyCitizenSpoke(citizenUsername, speakerUsername, "digguild_status", {
@@ -2508,4 +2484,6 @@ module.exports = {
   onCitizenChatHeard,
   onSocialPacket,
   chatHeardEventName,
+  // test seam: roster-backed kingdom lookup for username strings
+  citizenKingdomId,
 };

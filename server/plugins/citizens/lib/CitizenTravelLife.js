@@ -30,7 +30,8 @@ const { ATTR_KINGDOM_ID } = require("../constants");
 function journalEvent(citizenName, text, kind) {
   try {
     const { getJournal } = require("./CitizenJournal");
-    getJournal().log(citizenName, text, kind || "travel");
+    // Canonical signature: log(citizenName, kind, text, opts).
+    getJournal().log(citizenName, kind || "travel", text);
   } catch {
     // best-effort
   }
@@ -209,4 +210,6 @@ module.exports = {
   tickTravel,
   processArrival,
   displayName,
+  // test seam
+  _journalEvent: journalEvent,
 };

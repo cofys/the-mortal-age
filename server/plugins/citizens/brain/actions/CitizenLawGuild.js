@@ -62,7 +62,7 @@ function atTile(player, tile, radius = ARRIVE_RADIUS) {
 
 function walkTo(player, tile) {
   try {
-    requestMovement(player, { x: tile.x, y: tile.y, z: tile.z ?? 0 });
+    requestMovement(player, tile.x, tile.y, { z: tile.z ?? 0 });
   } catch {}
 }
 
@@ -157,8 +157,8 @@ function createCitizenLawGuildAction(spec, world) {
           try {
             if (state.roundsDone === SESSION_ROUNDS && state.rank === Guilds.RANK_COUNSELOR) {
               const { getJournal } = require("../../lib/CitizenJournal");
-              getJournal().log?.("lawguild-session", {
-                counselor: username, kingdomId: state.kingdomId,
+              getJournal().log(username, "lawguild", `${username} taught the final practice session at the ${state.kingdomId} law-guild hall.`, {
+                data: { rank: state.rank, kingdomId: state.kingdomId },
               });
             }
           } catch { /* journaling is optional */ }

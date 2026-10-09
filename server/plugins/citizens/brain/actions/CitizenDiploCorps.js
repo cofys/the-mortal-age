@@ -64,7 +64,7 @@ function atTile(player, tile, radius = ARRIVE_RADIUS) {
 
 function walkTo(player, tile) {
   try {
-    requestMovement(player, { x: tile.x, y: tile.y, z: tile.z ?? 0 });
+    requestMovement(player, tile.x, tile.y, { z: tile.z ?? 0 });
   } catch {}
 }
 
@@ -159,8 +159,8 @@ function createCitizenDiploCorpsAction(spec, world) {
           try {
             if (state.roundsDone === SESSION_ROUNDS && state.rank === Corps.RANK_AMBASSADOR) {
               const { getJournal } = require("../../lib/CitizenJournal");
-              getJournal().log?.("diplocorps-session", {
-                ambassador: username, kingdomId: state.kingdomId,
+              getJournal().log(username, "diplocorps", `${username} led the final protocol session at the ${state.kingdomId} diplomatic corps hall.`, {
+                data: { rank: state.rank, kingdomId: state.kingdomId },
               });
             }
           } catch { /* journaling is optional */ }

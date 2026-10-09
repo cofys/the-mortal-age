@@ -118,9 +118,13 @@ function recordDiscovery(type, x, y, z, discoverer, name) {
   dirty = true;
 
   try {
-    getJournal().log("discovery", {
-      id, type, name: d.name, discoverer: d.discoverer, x, y, z,
-    });
+    // Canonical signature: log(citizenName, kind, text, opts).
+    getJournal().log(
+      d.discoverer,
+      "discovery",
+      `${d.discoverer} discovered ${d.name} (${DISCOVERY_TYPES[type].label}) at ${x}, ${y}.`,
+      { data: { id, type, name: d.name, x, y, z } }
+    );
   } catch { /* journal is best-effort */ }
 
   return { ...d };
@@ -162,7 +166,14 @@ function claimDiscovery(id, kingdomId) {
   d.claimedBy = String(kingdomId);
   dirty = true;
   try {
-    getJournal().log("discovery-claimed", { id, kingdomId, type: d.type });
+    // Canonical signature: log(citizenName, kind, text, opts). No citizen
+    // claims a discovery — the kingdom does — so journal under "Realm".
+    getJournal().log(
+      "Realm",
+      "discovery-claimed",
+      `${kingdomId} claimed the discovery ${d.name}.`,
+      { data: { id, kingdomId, type: d.type } }
+    );
   } catch { /* best-effort */ }
   return true;
 }

@@ -38,6 +38,20 @@ const lastTourAdvance = new Map(); // "global" -> timestamp
 const lastAcquire = new Map(); // kingdomId -> timestamp
 const lastAnnounce = new Map(); // kingdomId -> timestamp
 
+/**
+ * journalGallery — scripted gallery events into the citizen journal.
+ * Canonical signature: log(citizenName, kind, text, opts). The director has no
+ * journal method, so director?.journal?.(...) was a silent no-op.
+ */
+function journalGallery(citizenName, text, data = {}) {
+  try {
+    const { getJournal } = require("./CitizenJournal");
+    getJournal().log(citizenName ?? "Realm", "galleries", text, { data });
+  } catch {
+    // journaling is best-effort
+  }
+}
+
 function cooled(map, key, ms, now) {
   const last = map.get(key) || 0;
   if (last > 0 && now - last < ms) return true;
@@ -196,7 +210,7 @@ function closeRipeAuctions(director, nowMs) {
         }
       }
       try {
-        director?.journal?.("galleries", `auction closed: ${auction.title}`, {
+        journalGallery(auction.seller, `auction closed: ${auction.title}`, {
           sold: res.sold,
           hammerPrice: res.hammerPrice ?? 0,
           kingdomId: auction.kingdomId,
@@ -245,12 +259,12 @@ function advanceTours(director, nowMs) {
     try {
       if (tour.status === "showing") {
         const stopKingdom = tour.kingdomIds[tour.currentIdx];
-        director?.journal?.("galleries", `tour arrived: ${tour.name}`, {
+        journalGallery(null, `tour arrived: ${tour.name}`, {
           kingdomId: stopKingdom,
           pieces: tour.pieces.length,
         });
       } else if (tour.status === "done") {
-        director?.journal?.("galleries", `tour home: ${tour.name}`, {
+        journalGallery(null, `tour home: ${tour.name}`, {
           kingdomId: tour.homeKingdom,
         });
       }
@@ -315,7 +329,7 @@ function ambientAcquisitions(director, nowMs) {
         if (res.ok) {
           ops.lastActivityAt = nowMs;
           Galleries.markDirty();
-          director?.journal?.("galleries", `acquired: ${best.title}`, {
+          journalGallery(curs[0].username, `acquired: ${best.title}`, {
             kingdomId: kid,
             price: best.price,
           });
@@ -356,4 +370,9 @@ function tickGalleriesLife(director, nowMs = Date.now()) {
   }
 }
 
-module.exports = { tickGalleriesLife, resetForTests };
+module.exports = {
+  tickGalleriesLife,
+  resetForTests,
+  // test seam
+  _journalGallery: journalGallery,
+};

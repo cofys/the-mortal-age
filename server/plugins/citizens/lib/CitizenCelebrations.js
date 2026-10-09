@@ -162,7 +162,7 @@ function appointPlanner(kingdomId, username, reputation, socialScore) {
   s.planners[kingdomId] = { username: norm, appointedAt: Date.now() };
   markDirty();
   try {
-    getJournal().log(kingdomId, `${norm} was appointed festival planner.`);
+    getJournal().log(norm, "celebration", `${norm} was appointed festival planner for ${kingdomId}.`);
   } catch { /* journal optional */ }
   return s.planners[kingdomId];
 }
@@ -204,7 +204,7 @@ function organizeFestival({ name, theme, kingdomId, organizer, budget, startsAt 
   s.customs.push(fest);
   markDirty();
   try {
-    getJournal().log(kingdomId, `${fest.organizer} organized "${fest.name}".`);
+    getJournal().log(fest.organizer, "celebration", `${fest.organizer} organized "${fest.name}" in ${kingdomId}.`);
   } catch { /* journal optional */ }
   return fest;
 }

@@ -34,9 +34,11 @@ function sayPublicTo(director, username, text) {
   }
 }
 
-function journal(director, text, data = {}) {
+function journal(director, username, text, data = {}) {
   try {
-    director?.journal?.("diplomacy", text, data);
+    const { getJournal } = require("./CitizenJournal");
+    // Canonical signature: log(citizenName, kind, text, opts).
+    getJournal().log(username ?? "Realm", "diplomacy", text, { data });
   } catch {
     // journaling is best-effort
   }
@@ -85,14 +87,14 @@ function advanceMarriages(director, nowMs) {
           // effects are best-effort; the alliance stands
         }
         const text = `Hear ye! A royal marriage seals an alliance between ${prettyKingdom(full.from)} and ${prettyKingdom(full.to)}.`;
-        journal(director, text, { marriage: full.id, effects });
+        journal(director, full.broker, text, { marriage: full.id, effects });
         if (full.broker) sayPublicTo(director, full.broker, text);
       } else if (outcome === "refused") {
-        journal(director, `${prettyKingdom(pending.to)} refused the marriage alliance from ${prettyKingdom(pending.from)}.`, {
+        journal(director, null, `${prettyKingdom(pending.to)} refused the marriage alliance from ${prettyKingdom(pending.from)}.`, {
           marriage: pending.id,
         });
       } else if (outcome === "expired") {
-        journal(director, `The marriage proposal between ${prettyKingdom(pending.from)} and ${prettyKingdom(pending.to)} died unanswered.`, {
+        journal(director, null, `The marriage proposal between ${prettyKingdom(pending.from)} and ${prettyKingdom(pending.to)} died unanswered.`, {
           marriage: pending.id,
         });
       }
@@ -116,7 +118,7 @@ function runEspionage(director, nowMs) {
       if (!mission.intel) {
         const intel = Dip.gatherIntel(mission.id, nowMs);
         if (intel) {
-          journal(director, `${mission.spy} returned from ${prettyKingdom(mission.targetKingdom)} with word of its levies.`, {
+          journal(director, mission.spy, `${mission.spy} returned from ${prettyKingdom(mission.targetKingdom)} with word of its levies.`, {
             mission: mission.id,
           });
         }
@@ -124,7 +126,7 @@ function runEspionage(director, nowMs) {
         const discovered = Dip.discoveryRoll(mission.id, nowMs);
         if (discovered) {
           const text = `A ${prettyKingdom(mission.homeKingdom)} spy was caught in ${prettyKingdom(mission.targetKingdom)}! The border seethes.`;
-          journal(director, text, { mission: mission.id });
+          journal(director, mission.spy, text, { mission: mission.id });
           sayPublicTo(director, mission.spy, "They caught me. Run.");
         }
       }
@@ -134,4 +136,8 @@ function runEspionage(director, nowMs) {
   }
 }
 
-module.exports = { tickCovertDiplomacy };
+module.exports = {
+  tickCovertDiplomacy,
+  // test seam
+  _journal: journal,
+};
