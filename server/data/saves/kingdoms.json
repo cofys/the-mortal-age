@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "kingdoms": {
+    "asgarnia": {
+      "id": "asgarnia",
+      "name": "Asgarnia",
+      "capital": "Falador",
+      "ruler": "Sir Amik Varze",
+      "rulerTitle": "Lord Regent, Steward of Falador",
+      "situation": "The kingdom with no king. King Vallance unseen for years; Crown Prince Anlaf holds Burthorpe with the Imperial Guard, fearing assassination; the Kinshra arm in the wilderness. The server's central plot engine.",
+      "hierarchy": [
+        "Outsider",
+        "Subject",
+        "Man-at-arms",
+        "Knight",
+        "Lord",
+        "Regent",
+        "Monarch"
+      ],
+      "treasury": 250000,
+      "flags": {
+        "asgarnia:regency": true,
+        "war:garrison": 60
+      },
+      "foundedAt": 1791314539099
+    },
+    "misthalin": {
+      "id": "misthalin",
+      "name": "Misthalin",
+      "capital": "Varrock",
+      "ruler": "Roald III",
+      "rulerTitle": "King of Misthalin",
+      "situation": "The heirless crown. Aging Roald III with no named heir; the Church rivals the monarchy; the Phoenix Gang and the Black Arm Gang feud in the streets; the Shield of Arrav is a legitimacy token waiting to matter.",
+      "hierarchy": [
+        "Outsider",
+        "Subject",
+        "Man-at-arms",
+        "Knight",
+        "Lord",
+        "Regent",
+        "Monarch"
+      ],
+      "treasury": 400000,
+      "flags": {
+        "misthalin:bastard-son-hidden": true,
+        "war:garrison": 60
+      },
+      "foundedAt": 1791314539100
+    },
+    "kandarin": {
+      "id": "kandarin",
+      "name": "Kandarin",
+      "capital": "East Ardougne",
+      "ruler": "King Lathas",
+      "rulerTitle": "King of Kandarin",
+      "situation": "The lie. Lathas sits the throne; the plague quarantine holds West Ardougne in misery. Our flagship custom questline exposes the lie and topples a king.",
+      "hierarchy": [
+        "Outsider",
+        "Subject",
+        "Man-at-arms",
+        "Knight",
+        "Lord",
+        "Regent",
+        "Monarch"
+      ],
+      "treasury": 300000,
+      "flags": {
+        "ardougne:plague-lie-active": true,
+        "war:garrison": 60
+      },
+      "foundedAt": 1791314539100
+    },
+    "morytania": {
+      "id": "morytania",
+      "name": "Morytania",
+      "capital": "Meiyerditch",
+      "ruler": "Lowerniel Drakan",
+      "rulerTitle": "Lord of Morytania",
+      "situation": "The dark. Lowerniel farms humans for blood; the Myreque is newly founded and desperate. The River Salve — ancient god-magic in an age of silence — is the server's doomsday clock.",
+      "hierarchy": [
+        "Outsider",
+        "Subject",
+        "Man-at-arms",
+        "Knight",
+        "Lord",
+        "Regent",
+        "Monarch"
+      ],
+      "treasury": 150000,
+      "flags": {
+        "morytania:salve-integrity": 100,
+        "war:garrison": 60
+      },
+      "foundedAt": 1791314539100
+    },
+    "keldagrim": {
+      "id": "keldagrim",
+      "name": "Keldagrim",
+      "capital": "Keldagrim",
+      "ruler": "The Consortium",
+      "rulerTitle": "The Eight Companies, in council",
+      "situation": "The company war. Eight mining companies rule as oligarchs; the exiled Red Axe builds a chaos-dwarf army in secret. The monarchy question is live.",
+      "hierarchy": [
+        "Outsider",
+        "Subject",
+        "Man-at-arms",
+        "Knight",
+        "Lord",
+        "Regent",
+        "Monarch"
+      ],
+      "treasury": 500000,
+      "flags": {
+        "keldagrim:red-axe-threat": "rising",
+        "war:garrison": 60
+      },
+      "foundedAt": 1791314539100
+    }
+  },
+  "wars": [],
+  "tension": {
+    "kandarin:morytania": 24,
+    "asgarnia:morytania": 72,
+    "misthalin:morytania": 68,
+    "keldagrim:morytania": 30,
+    "asgarnia:misthalin": 35,
+    "asgarnia:kandarin": 25,
+    "asgarnia:keldagrim": 15,
+    "kandarin:misthalin": 20,
+    "keldagrim:misthalin": 12,
+    "kandarin:keldagrim": 15
+  },
+  "alliances": []
+}

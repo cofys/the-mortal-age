@@ -345,6 +345,22 @@ function animFor(type) {
   return ANIM_NET; // ice fishers jig a line through the hole
 }
 
+/**
+ * The materialized player-bot for a roster record, or null when the citizen
+ * isn't online. Canonical director API: isOnline(record) + getBot(record)
+ * (CitizenDirector.js:1374/1379). director.playerFor / director.onlinePlayers
+ * do NOT exist — the fishers rung audit (2026-10-08) found them dead and the
+ * interaction tier dead-on-arrival because of it. Never call them.
+ */
+function materializedBot(director, record) {
+  try {
+    if (director.isOnline?.(record)) return director.getBot?.(record) ?? null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ============================================================================
 // The tick function — called from the director tick.
 // Gate order: cooldown (cheapest) → commoner → fisher type → materialized →
@@ -379,7 +395,7 @@ function tickFishers(director, nowMs, desync) {
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
         // 4. Citizen must be materialized (near a player already).
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 5. A real player must be within sight of the water.
@@ -406,7 +422,7 @@ function tickFishers(director, nowMs, desync) {
         if (!canFish(type, weather, season)) continue;
         const last = lastHawkByCitizen.get(record.username) || 0;
         if (nowMs - last < HAWK_COOLDOWN_MS) continue;
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -426,7 +442,7 @@ function tickFishers(director, nowMs, desync) {
           if (fisherTypeFor(record.username) !== FISHER_DEEPSEA) continue;
           const last = lastStormByCitizen.get(record.username) || 0;
           if (nowMs - last < STORM_COOLDOWN_MS) continue;
-          const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+          const citizen = materializedBot(director, record);
           if (!citizen) continue;
           if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
           if (Math.random() >= STORM_CHANCE) continue;
@@ -448,7 +464,7 @@ function doFishWork(director, record, citizen, type, nowMs) {
   const line = workLineFor(Math.random, type);
   if (!line) return;
   // Sometimes the loop lands a big one — the crowd moment.
-  const spot = spotFor(record.username, record.kingdom, type);
+  const spot = spotFor(record.username, record.kingdomId ?? record.kingdom, type);
   const fish = catchFor(record.username, spot, nowMs);
   if (Math.random() < BIG_CATCH_CHANCE) {
     try {
@@ -478,7 +494,7 @@ function doFishWork(director, record, citizen, type, nowMs) {
 /** Fresh-catch hawking: advertise the day's catch to nearby players. */
 function doCatchHawk(director, citizen, record, nowMs) {
   void director;
-  const spot = spotFor(record.username, record.kingdom, fisherTypeFor(record.username));
+  const spot = spotFor(record.username, record.kingdomId ?? record.kingdom, fisherTypeFor(record.username));
   const fish = catchFor(record.username, spot, nowMs);
   const line = hawkLineFor(Math.random, fish, spot);
   try {
@@ -514,8 +530,11 @@ function fishCatchFor(username, kingdom, dateMs) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    // Real engine API: Player.getLocalPlayers() (Player.ts:796). The citizen
+    // bot's local players are the only players that can possibly be near.
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

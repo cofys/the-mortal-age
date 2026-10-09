@@ -1,0 +1,12 @@
+{
+  "bindings": {
+    "asgarnia:marshal": {
+      "citizenName": "Rurik",
+      "kingdomId": "asgarnia",
+      "office": "marshal",
+      "title": "Marshal",
+      "boundAtMs": 1791482935718,
+      "lastDutyMs": 0
+    }
+  }
+}

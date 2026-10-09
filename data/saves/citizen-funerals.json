@@ -1,0 +1,25 @@
+{
+  "savedAt": 1791469590997,
+  "deceased": [
+    {
+      "username": "marta",
+      "display": "Marta",
+      "kingdomId": "asgarnia",
+      "role": "merchant",
+      "age": 80,
+      "cause": "passed peacefully in their sleep",
+      "diedAt": 3000000,
+      "legacy": [],
+      "home": {
+        "x": 1,
+        "y": 2,
+        "z": 0
+      },
+      "funeralAt": 89400000,
+      "funeralHeld": false,
+      "funeralHeldAt": null,
+      "eulogist": null,
+      "mourners": []
+    }
+  ]
+}

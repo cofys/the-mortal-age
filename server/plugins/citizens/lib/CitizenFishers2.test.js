@@ -23,13 +23,16 @@ function withFixedRandom(value, fn) {
 function loc(x, y, z = 0) {
   return { getX: () => x, getY: () => y, getZ: () => z };
 }
-function mockBot(name, x = 3000, y = 3000) {
+// Real engine API: Player.getLocalPlayers() (Player.ts:796). The director
+// mock uses the canonical isOnline/getBot; nearby players come from the bot.
+function mockBot(name, x = 3000, y = 3000, localPlayers = []) {
   const chats = [];
   return {
     getUsername: () => name,
     isPlayerBot: () => true,
     getHostAddress: () => "bot",
     getLocation: () => loc(x, y),
+    getLocalPlayers: () => localPlayers,
     forceChat: (m) => chats.push(m),
     _chats: chats,
   };
@@ -42,14 +45,14 @@ function mockPlayer(name, x = 3005, y = 3005) {
     getLocation: () => loc(x, y),
   };
 }
-function mockDirector(entries, players) {
+function mockDirector(entries, players = []) {
   const bots = new Map();
   return {
     roster: new Map(entries.map((r) => [r.username, r])),
-    playerFor: (record) => bots.get(record.username) || null,
-    onlinePlayers: () => players,
     isOnline: (record) => bots.has(record.username),
     getBot: (record) => bots.get(record.username) || null,
+    // Real director API (CitizenDirector.js:639): positions of real players.
+    // Bots are filtered out, exactly like the real implementation.
     realPlayerPositions: () => players.filter(p => {
       try { return p.isPlayerBot?.() !== true; } catch { return true; }
     }).map(p => {

@@ -1,0 +1,17 @@
+{
+ "version": 1,
+ "schools": {
+  "test-kingdom": {
+   "foundedAt": 1791475923848,
+   "teachers": [
+    {
+     "username": "test_cit_m9y5v",
+     "type": "schoolmaster"
+    }
+   ]
+  }
+ },
+ "students": {},
+ "playerTeachers": {},
+ "lastAssignAt": 1791475923848
+}
