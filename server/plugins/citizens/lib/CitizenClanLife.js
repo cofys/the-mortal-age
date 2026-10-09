@@ -177,19 +177,41 @@ function maybeFoundClan(director, record, rng) {
 
   // Seed with mutual friends: founder's friends who share the kind (or are
   // just close), up to 4. Friends accept — that's what friends do.
+  // Same-career friends get priority: trades stick together.
   const candidates = [];
+  let founderCareer = null;
+  try {
+    founderCareer = require("./CitizenCareers").careerFor(name)?.career ?? null;
+  } catch {
+    founderCareer = null;
+  }
   try {
     for (const f of bonds(name).friends ?? []) {
       if (!isRosterCitizen(director, f)) continue;
       if (Clans.clanOf(f)) continue;
       const fr = recordFor(director, f);
       if (!fr || String(fr.kingdomId) !== String(record.kingdomId)) continue;
-      candidates.push({ name: f, sameKind: Clans.kindForRecord(fr) === kind });
+      let sameCareer = false;
+      try {
+        sameCareer = founderCareer != null &&
+          require("./CitizenCareers").careerFor(f)?.career === founderCareer;
+      } catch {
+        sameCareer = false;
+      }
+      candidates.push({
+        name: f,
+        sameKind: Clans.kindForRecord(fr) === kind,
+        sameCareer,
+      });
     }
   } catch {
     // No candidates — founder goes solo for now.
   }
-  candidates.sort((a, b) => (b.sameKind ? 1 : 0) - (a.sameKind ? 1 : 0));
+  candidates.sort(
+    (a, b) =>
+      (b.sameCareer ? 1 : 0) - (a.sameCareer ? 1 : 0) ||
+      (b.sameKind ? 1 : 0) - (a.sameKind ? 1 : 0)
+  );
   for (const c of candidates.slice(0, 4)) {
     try {
       const id = Clans.inviteCitizen(name, c.name, clan.id);

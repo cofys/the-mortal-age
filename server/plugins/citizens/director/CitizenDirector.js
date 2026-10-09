@@ -171,6 +171,8 @@ const { tickClans } = require("../lib/CitizenClanLife");
 const CitizenClans = require("../lib/CitizenClans");
 const { tickHomes } = require("../lib/CitizenHomeLife");
 const CitizenHomes = require("../lib/CitizenHomes");
+const { tickCareers } = require("../lib/CitizenCareerLife");
+const CitizenCareers = require("../lib/CitizenCareers");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
@@ -2740,6 +2742,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("homes failed", { error: String(error?.message ?? error) });
     }
+    // Citizen careers: assignment, promotions, wages, changes, teaching.
+    // Data tier, zero LLM.
+    try {
+      tickCareers(this, nowMs);
+    } catch (error) {
+      this.log("careers failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -2771,6 +2780,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen homes save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenCareers.save()) {
+        this.log("citizen careers saved");
+      }
+    } catch (error) {
+      this.log("citizen careers save failed", {
         error: String(error?.message ?? error),
       });
     }

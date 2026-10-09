@@ -689,6 +689,18 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     }
   }
 
+  // "what do you do" — the citizen describes their real career.
+  if (/\b(what do you do|what's your (job|trade|profession|work)|what do you do for (a living|work))\b/.test(said)) {
+    try {
+      const Careers = require("../lib/CitizenCareers");
+      const desc = Careers.describeCareer(citizenUsername);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "career_describe", { careerDesc: desc });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // "where do you live" — the citizen describes their real home.
   if (/\b(where do you live|where's your house|where is your home|show me your home)\b/.test(said)) {
     try {
@@ -752,7 +764,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
  * from the citizen). The LLM will pick up the new relationship in context
  * on the next exchange.
  */
-function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
+function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, data) {
   if (!pluginApi) return;
   try {
     const { getDirector } = require("../director/CitizenDirector");
@@ -781,6 +793,7 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
       companion_decline: `${display}: Ah, that's a shame. Maybe another time.`,
       companion_invite: `${display}: Wonderful! Let's go — right now, while the mood's right.`,
       home_describe: `${display}: I've got a place of my own — come see it sometime.`,
+      career_describe: `${display}: I'm ${data?.careerDesc ?? "between jobs at the moment"}.`,
       home_visit_yes: `${display}: Of course — you're welcome at my place any time.`,
       home_visit_no: `${display}: I'd like to, but I don't really know you yet. Let's talk a while first.`,
     };
