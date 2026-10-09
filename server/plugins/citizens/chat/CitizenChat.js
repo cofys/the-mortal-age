@@ -1016,6 +1016,29 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "do you have a pet" / "what pets do you have" — player asks about pets.
+  if (/\b(do you have a pet|what pets do you have|do you own a pet|tell me about your pet|what is your pet|do you have any pets)\b/.test(said)) {
+    try {
+      const Pets = require("../lib/CitizenPets");
+      const pets = Pets.petsOf(citizenUsername);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "pet_status", {
+        username: citizenUsername,
+        hasPets: pets.length > 0,
+        count: pets.length,
+        pets: pets.map((p) => ({
+          type: p.type,
+          name: p.name,
+          happiness: Math.round(p.happiness),
+          hunger: Math.round(p.hunger),
+        })),
+        hasMount: pets.some((p) => Pets.PET_CATALOG[p.type]?.mount),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where is the prison" — player asks about the gaol.
   if (/\b(where is the prison|is there a jail|where is the gaol|who is in jail|is there a prison)\b/.test(said)) {
     try {

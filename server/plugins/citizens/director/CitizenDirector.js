@@ -205,6 +205,8 @@ const { tickReputation } = require("../lib/CitizenReputationLife");
 const CitizenReputation = require("../lib/CitizenReputation");
 const { tickGuilds } = require("../lib/CitizenGuildLife");
 const CitizenGuilds = require("../lib/CitizenGuilds");
+const { tickPets } = require("../lib/CitizenPetLife");
+const CitizenPets = require("../lib/CitizenPets");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -2901,6 +2903,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("guilds failed", { error: String(error?.message ?? error) });
     }
+    // Citizen pets: hunger/happiness decay, breeding, taming.
+    // Data tier, zero LLM.
+    try {
+      tickPets(this, nowMs);
+    } catch (error) {
+      this.log("pets failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3058,6 +3067,13 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen guilds save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      CitizenPets.save();
+    } catch (error) {
+      this.log("citizen pets save failed", {
         error: String(error?.message ?? error),
       });
     }

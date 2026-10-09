@@ -676,6 +676,27 @@
           "type": "citizenGuild"
         }
       ]
+    },
+    {
+      "id": "citizen_petcare",
+      "mode": "citizen_petcare",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenPetCare"
+        }
+      ]
     }
   ]
 }

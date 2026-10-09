@@ -284,13 +284,21 @@ function startJourney(username, from, to, nowMs, player) {
   }
 
   const now = nowMs ?? Date.now();
+  // Mounted citizens travel faster — horses are real transport.
+  let durationMs = route.durationMs;
+  try {
+    const Pets = require("./CitizenPets");
+    durationMs = Math.round(route.durationMs * Pets.travelSpeedFor(uname));
+  } catch {
+    // A missing/broken pets module never slows travel.
+  }
   const journey = {
     username: uname,
     from: route.from,
     to: route.to,
     mode: route.mode,
     departsAt: now,
-    arrivesAt: now + route.durationMs,
+    arrivesAt: now + durationMs,
     fare: route.fare,
     cargo: null, // optional trade manifest, set by setCargo
     announced: false,

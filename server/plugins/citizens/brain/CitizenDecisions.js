@@ -103,6 +103,7 @@ const ACT_BUILD = "citizen_build";
 const ACT_TRAVEL = "citizen_travel";
 const ACT_ENTERTAIN = "citizen_entertain";
 const ACT_GUILD = "citizen_guild";
+const ACT_PETCARE = "citizen_petcare";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -127,6 +128,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_THIEVE,
   ACT_TRAVEL,
   ACT_GUILD,
+  ACT_PETCARE,
   ACT_MINE,
   ACT_CHOP,
 ]);
@@ -613,6 +615,40 @@ function guildInfo(player) {
 }
 
 /**
+ * Pet mood bonus: happy pets lift mood, starving pets drag it down.
+ * Defensive: a missing/broken pets module contributes nothing.
+ */
+function petMoodBonus(player) {
+  try {
+    const Pets = require("../lib/CitizenPets");
+    const username = player?.username ?? player?.getUsername?.() ?? null;
+    if (!username) return 0;
+    return Pets.moodBonusFor(username) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Pet info: does this citizen own pets, and do they need care?
+ * Defensive: a missing/broken pets module scores as petless.
+ */
+function petInfo(player) {
+  try {
+    const Pets = require("../lib/CitizenPets");
+    const username = player?.username ?? player?.getUsername?.() ?? null;
+    if (!username) return { hasPets: false, needsCare: false, count: 0 };
+    const pets = Pets.petsOf(username);
+    if (!pets.length) return { hasPets: false, needsCare: false, count: 0 };
+    const needsCare = pets.some((p) => p.hunger < 70 || p.happiness < 80);
+    const hasMount = pets.some((p) => Pets.PET_CATALOG[p.type]?.mount);
+    return { hasPets: true, needsCare, count: pets.length, hasMount };
+  } catch {
+    return { hasPets: false, needsCare: false, count: 0 };
+  }
+}
+
+/**
  * Drunkenness check: is this citizen currently drunk?
  * Defensive: a missing/broken entertainment module scores as sober.
  */
@@ -1002,7 +1038,7 @@ function snapshot(player) {
   return {
     hp: needs ? needs.hp : 100,
     energy: needs ? needs.energy : 100,
-    mood: needs ? needs.mood : 80,
+    mood: (needs ? needs.mood : 80) + petMoodBonus(player),
     goal,
     personality,
     coins: coinCount(player),
@@ -1029,6 +1065,7 @@ function snapshot(player) {
     travel: travelInfo(player),
     entertain: entertainInfo(player),
     guild: guildInfo(player),
+    pets: petInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
@@ -1049,7 +1086,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, drunk, climate, night, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, drunk, climate, night, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1322,6 +1359,20 @@ function scoreActivity(activityId, snap) {
         if (goalType === GOAL_MASTER_TRADE) s += 6; // merchants guild calls
       }
       if (goalType === GOAL_SAVE_GOLD && !gd.member) s -= 8; // dues cost coins
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      return s;
+    }
+    case ACT_PETCARE: {
+      // Pet care: feed the hungry, play with the sad. A human with pets
+      // tends them — hungry pets are a real obligation, not optional.
+      const pi = pets ?? { hasPets: false };
+      if (!pi.hasPets) return 4; // no pets, no pet care
+      let s = 16;
+      if (pi.needsCare) s += 20; // hungry/sad pets are urgent
+      const nurturing = personality?.nurturing ?? personality?.kind ?? 0;
+      if (nurturing > 0.6) s += 8; // animal lovers seek it out
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1809,6 +1860,7 @@ module.exports = {
   ACT_TRAVEL,
   ACT_ENTERTAIN,
   ACT_GUILD,
+  ACT_PETCARE,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,
