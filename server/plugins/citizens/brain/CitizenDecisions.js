@@ -100,6 +100,7 @@ const ACT_HUNT = "citizen_hunt";
 const ACT_FARM = "citizen_farm";
 const ACT_THIEVE = "citizen_thieve";
 const ACT_BUILD = "citizen_build";
+const ACT_TRAVEL = "citizen_travel";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -122,6 +123,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,
+  ACT_TRAVEL,
   ACT_MINE,
   ACT_CHOP,
 ]);
@@ -489,6 +491,32 @@ function sickPenalty(player) {
     return Health.workPenaltyFor(username);
   } catch {
     return 0;
+  }
+}
+
+/**
+ * Travel readiness: can this citizen afford the cheapest open route?
+ * Returns { canTravel, cheapestFare, openCount }. Defensive: a
+ * missing/broken travel module scores as unable to travel.
+ */
+function travelInfo(player) {
+  try {
+    const Travel = require("../lib/CitizenTravel");
+    const { kingdomIdOf } = require("./CitizenSites");
+    const home = kingdomIdOf(player);
+    const coins = coinCount(player);
+    const routes = (Travel.routesFrom?.(home) ?? []).filter((r) =>
+      Travel.routeOpen?.(r.from, r.to)
+    );
+    if (!routes.length) return { canTravel: false, cheapestFare: 0, openCount: 0 };
+    const cheapestFare = Math.min(...routes.map((r) => r.fare));
+    return {
+      canTravel: coins >= cheapestFare,
+      cheapestFare,
+      openCount: routes.length,
+    };
+  } catch {
+    return { canTravel: false, cheapestFare: 0, openCount: 0 };
   }
 }
 
@@ -872,6 +900,7 @@ function snapshot(player) {
     sick: sickPenalty(player),
     jailed: jailPenalty(player),
     notoriety: notorietyOf(player),
+    travel: travelInfo(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -889,7 +918,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, travel, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1084,6 +1113,27 @@ function scoreActivity(activityId, snap) {
       if (builds >= 8) s += 8; // a real timber stockpile to work through
       if (homeFurnishable) s += 8; // building to furnish my own home
       if ((buildLevel ?? 1) >= 29) s += 6; // oak bookcases and up
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_TRAVEL: {
+      // Travel: ships and caravans between capitals. Costs real fare,
+      // takes real time, roads aren't safe. Merchants travel for trade,
+      // the curious for the world, the desperate to start over. No fare,
+      // no travel — a human can't board without paying. War closes routes.
+      const t = travel ?? { canTravel: false, cheapestFare: 0, openCount: 0 };
+      if (!t.canTravel || t.openCount <= 0) return 4;
+      let s = 22;
+      if (goalType === GOAL_MASTER_TRADE) s += 16; // new markets, better prices
+      else if (goalType === GOAL_SAVE_GOLD) s -= 10; // travel spends, not saves
+      const curious = personality?.curious ?? personality?.adventurous ?? 0;
+      if (curious > 0.6) s += 10;
+      if (sociable > 0.7) s += 6; // visiting friends in other cities
+      if (coins > t.cheapestFare * 5) s += 8; // comfortably afford it
+      if (mood > 75) s += 4; // good mood, wanderlust
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1553,6 +1603,7 @@ module.exports = {
   ACT_FARM,
   ACT_THIEVE,
   ACT_BUILD,
+  ACT_TRAVEL,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

@@ -613,6 +613,27 @@
           "type": "citizenBuild"
         }
       ]
+    },
+    {
+      "id": "citizen_travel",
+      "mode": "citizen_travel",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenTravel"
+        }
+      ]
     }
   ]
 }

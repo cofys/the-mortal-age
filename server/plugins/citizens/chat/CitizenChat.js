@@ -908,6 +908,34 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "where can I travel" / "take me to X" — player asks about ships/caravans.
+  if (/\b(where can i travel|how do i travel|is there a ship|is there a caravan|take me to|i want to travel|can you take me)\b/.test(said)) {
+    try {
+      const Travel = require("../lib/CitizenTravel");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const { kingdomIdOf } = require("../brain/CitizenSites");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? kingdomIdOf(player) ?? null;
+      const routes = kingdomId
+        ? Travel.routesFrom(kingdomId).filter((r) => Travel.routeOpen(r.from, r.to))
+        : [];
+      const destinations = routes.map((r) => ({
+        name: Travel.kingdomName(r.to),
+        fare: r.fare,
+        mode: r.mode,
+      }));
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "travel_routes", {
+        destinations,
+        closedCount: kingdomId ? Travel.routesFrom(kingdomId).length - routes.length : 0,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   return false;
 }
 
