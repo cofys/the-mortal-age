@@ -1346,6 +1346,32 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "telescope" / "sky tour" / "viewing party" / "buy a chart" — public observatory visits.
+  // (The astronomy block above owns "observatory"/"star chart"/omens; this owns the visitor layer.)
+  if (/\b(telescope|sky tour|stargazing tour|guided tour|viewing party|buy a chart|star chart copy|visit the observatory|look through the telescope)\b/.test(said)) {
+    try {
+      const Obs = require("../lib/CitizenObservatories");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Obs.describe(kingdomId, Date.now()) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "observatory_visit", {
+        username: citizenUsername,
+        open: desc?.open ?? false,
+        entryFee: desc?.entryFee ?? 0,
+        sky: desc?.sky ?? null,
+        eventActive: desc?.eventActive ?? null,
+        upcomingTours: desc?.upcomingTours ?? 0,
+        partyLive: desc?.partyLive ?? false,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a map shop" / "do you have a map" / "treasure map" — cartography.
   if (/\b(map shop|any maps?|buy a map|world map|city map|dungeon map|treasure map|any treasure|cartographer|mapmaker)\b/.test(said)) {
     try {

@@ -1035,6 +1035,27 @@
       ]
     },
     {
+      "id": "citizen_docent",
+      "mode": "citizen_docent",
+      "repeat": false,
+      "capacity": 6,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenDocent"
+        }
+      ]
+    },
+    {
       "id": "citizen_explore",
       "mode": "citizen_explore",
       "repeat": false,

@@ -247,6 +247,8 @@ const { tickGalleriesLife } = require("../lib/CitizenGalleriesLife");
 const CitizenGalleries = require("../lib/CitizenGalleries");
 const { tickLibrariesLife } = require("../lib/CitizenLibrariesLife");
 const CitizenLibraries = require("../lib/CitizenLibraries");
+const { tickObservatories } = require("../lib/CitizenObservatoriesLife");
+const CitizenObservatories = require("../lib/CitizenObservatories");
 const { tickLeagues } = require("../lib/CitizenLeagueLife");
 const CitizenLeagues = require("../lib/CitizenLeagues");
 const { tickDiscoveryLife } = require("../lib/CitizenDiscoveryLife");
@@ -3142,6 +3144,15 @@ class CitizenDirector {
     } catch (error) {
       this.log("libraries failed", { error: String(error?.message ?? error) });
     }
+    // Public observatory operations: viewing parties during celestial events,
+    // tour lifecycle, premiere announcements. (CitizenAstronomyLife owns the
+    // profession layer — observations and chart creation; this owns the
+    // visitor layer.)
+    try {
+      tickObservatories(this, nowMs);
+    } catch (error) {
+      this.log("observatories failed", { error: String(error?.message ?? error) });
+    }
     // Citizen team leagues: seasons, fixtures, standings, championships.
     // Data tier, zero LLM. (CitizenSports owns hash-derived spectator
     // fixtures; CitizenTournaments owns individual brackets.)
@@ -3715,7 +3726,17 @@ if (CitizenTournaments.save()) {
         error: String(error?.message ?? error),
       });
     }
-    try {      if (saveFuneralsIfDirty()) {
+    try {
+      if (CitizenObservatories.save()) {
+        this.log("citizen observatories saved");
+      }
+    } catch (error) {
+      this.log("citizen observatories save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (saveFuneralsIfDirty()) {
         this.log("citizen funerals saved");
       }
     } catch (error) {

@@ -112,6 +112,8 @@ const DEEDS = Object.freeze({
   artbroker: Object.freeze({ points: 6, label: "brokered five art commissions" }),
   bookkeeper: Object.freeze({ points: 8, label: "wrote ten books" }),
   archivist: Object.freeze({ points: 6, label: "recorded five histories" }),
+  tourguide: Object.freeze({ points: 8, label: "led five sky tours" }),
+  chartcollector: Object.freeze({ points: 6, label: "owns three star charts" }),
   ironchef: Object.freeze({ points: 8, label: "won a cook-off" }),
   recipehunter: Object.freeze({ points: 6, label: "invented three recipes" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),

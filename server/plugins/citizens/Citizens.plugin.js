@@ -35,6 +35,7 @@ const { onCookOffCommand, COOKOFF_USAGE } = require("./CitizenCookOffEvents");
 const { onFestivalCommand, FESTIVAL_USAGE } = require("./CitizenMusicFestivalEvents");
 const { onGalleryCommand, GALLERY_USAGE } = require("./CitizenGalleryEvents");
 const { onLibraryCommand, LIBRARY_USAGE } = require("./CitizenLibraryEvents");
+const { onObservatoryCommand, OBSERVATORY_USAGE } = require("./CitizenObservatoryEvents");
 const { onOfferConfirmed: onCharterOfferConfirmed } = require("./lib/CitizenCharterToll");
 const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
@@ -756,6 +757,12 @@ module.exports = {
       onLibraryCommand,
       PlayerRights.NONE,
       LIBRARY_USAGE
+    );
+    api.registerCommand(
+      "observatory",
+      onObservatoryCommand,
+      PlayerRights.NONE,
+      OBSERVATORY_USAGE
     );
   },
 };

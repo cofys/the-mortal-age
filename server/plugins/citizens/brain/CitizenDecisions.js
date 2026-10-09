@@ -135,6 +135,7 @@ const ACT_COOKOFF = "citizen_cookoff";
 const ACT_FESTIVAL = "citizen_promote";
 const ACT_CURATE = "citizen_curate";
 const ACT_LIBRARIAN = "citizen_librarian";
+const ACT_DOCENT = "citizen_docent";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -168,7 +169,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1685,6 +1686,43 @@ function libraryInfo(player) {
 }
 
 /**
+ * Docent info: is this citizen a registered astronomer, and is there
+ * visitor work at their kingdom's observatory? Defensive — missing modules
+ * degrade to the honest unable-to-work shape.
+ */
+function docentInfo(player) {
+  try {
+    const Obs = require("../lib/CitizenObservatories");
+    const Astro = require("../lib/CitizenAstronomy");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    let isAstronomer = false;
+    try {
+      isAstronomer = !!Astro.astronomerFor(username);
+    } catch { /* not an astronomer */ }
+    let curious = 0;
+    try {
+      const personality = player?.getAttribute?.("citizens:personality") ?? {};
+      curious = personality.curious ?? personality.curiosity ?? 0;
+    } catch { /* personality unreadable */ }
+    let hasObservatory = false, liveTour = false, partyLive = false, upcomingTours = 0;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      if (kid) {
+        hasObservatory = !!Obs.observatoryTile(kid);
+        const nowMs = Date.now();
+        liveTour = !!Obs.liveTourFor(kid, nowMs);
+        partyLive = !!Obs.partyFor(kid, nowMs);
+        upcomingTours = Obs.toursFor(kid, nowMs).length;
+      }
+    } catch { /* sites unreadable */ }
+    return { isAstronomer, curious, hasObservatory, liveTour, partyLive, upcomingTours };
+  } catch {
+    return { isAstronomer: false, curious: 0, hasObservatory: false, liveTour: false, partyLive: false, upcomingTours: 0 };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -2117,6 +2155,7 @@ compete: competeInfo(player),
     festival: festivalInfo(player),
     gallery: galleryInfo(player),
     library: libraryInfo(player),
+    docent: docentInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -2138,7 +2177,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, runway, train, cookoff, festival, gallery, library, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2257,6 +2296,28 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if ((l.overdueCount ?? 0) > 0) s += 8; // overdue loans need chasing
       if ((l.bookCount ?? 0) > 0) s += 4; // collection to tend
       if ((l.scholarly ?? 0) >= 0.7) s += 4;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_DOCENT: {
+      // Observatories: registered astronomers host visitors at night — they
+      // lead live tours and welcome viewing parties. Daytime is an honest
+      // no-op (the observatory is closed). No observatory, no hosting.
+      // The hurt and weary stay home.
+      const d = docent ?? { isAstronomer: false, curious: 0, hasObservatory: false, liveTour: false, partyLive: false, upcomingTours: 0 };
+      if (!d.hasObservatory) return 4; // honest — no observatory, no hosting
+      if (!night) return 4; // honest — observatory opens at night only
+      if (!d.isAstronomer && (d.curious ?? 0) < 0.5) return 4;
+      let s = 12;
+      if (d.isAstronomer) s += 10; // the observatory calls its astronomers
+      if (d.liveTour) s += 12; // a tour is running right now
+      if (d.partyLive) s += 8; // viewing party needs hosts
+      if ((d.upcomingTours ?? 0) > 0) s += 6; // tours to prepare
+      if ((d.curious ?? 0) >= 0.7) s += 4;
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -3505,7 +3566,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,
