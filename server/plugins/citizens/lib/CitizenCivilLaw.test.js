@@ -17,6 +17,31 @@ const CivilLaw = require("./CitizenCivilLaw");
 const SAVE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "civillaw-")), "civillaw.json");
 CivilLaw._setSavePathForTests(SAVE);
 
+// --- stub banking: hermetic in-memory accounts ---------------------------------
+// CitizenBanking is required lazily by CitizenCivilLaw, so injecting a stub
+// into the require cache keeps these tests off the real save file.
+const bankingPath = require.resolve("./CitizenBanking");
+const _origBanking = require.cache[bankingPath];
+const stubAccounts = Object.create(null);
+require.cache[bankingPath] = {
+  id: bankingPath, filename: bankingPath, loaded: true,
+  exports: {
+    accountFor: (username) => {
+      const k = String(username || "").toLowerCase();
+      if (!stubAccounts[k]) stubAccounts[k] = { balance: 0 };
+      return stubAccounts[k];
+    },
+    balanceOf: (username) => stubAccounts[String(username || "").toLowerCase()]?.balance || 0,
+    markDirty: () => {},
+  },
+};
+function resetStubBanking() {
+  for (const k of Object.keys(stubAccounts)) delete stubAccounts[k];
+}
+function bankBalanceOf(username) {
+  return stubAccounts[String(username || "").toLowerCase()]?.balance || 0;
+}
+
 // --- fake players ----------------------------------------------------------------
 
 function fakePlayer(coins) {
@@ -39,6 +64,7 @@ function fakePlayer(coins) {
 let passed = 0;
 function test(name, fn) {
   CivilLaw.resetForTests();
+  resetStubBanking();
   try {
     fn();
     passed++;
@@ -281,6 +307,49 @@ test("save: dirty-flag persistence round-trip", () => {
 test("will watermark get/set", () => {
   CivilLaw.setWillWatermarkMs(12345);
   assert.strictEqual(CivilLaw.willWatermarkMs, 12345);
+});
+
+test("fulfillContract: offline payee is credited to their bank account", () => {
+  const alice = fakePlayer(500);
+  const { contract } = CivilLaw.createContract({
+    type: "service", partyA: "Alice", partyB: "Bob", amount: 500,
+  });
+  // Bob is offline — playerFor only resolves Alice.
+  const res = CivilLaw.fulfillContract(contract.id, (n) => (n.toLowerCase() === "alice" ? alice : null));
+  assert(res.ok && res.paid === 500);
+  assert.strictEqual(alice.__balance(), 0, "payer's coins taken");
+  assert.strictEqual(bankBalanceOf("bob"), 500, "offline payee credited to bank — coins not destroyed");
+});
+
+test("enforceJudgment: offline loser is debited from their bank account", () => {
+  const { dispute } = CivilLaw.fileDispute({ type: "debt", plaintiff: "Alice", defendant: "Bob", claim: 300 });
+  CivilLaw.recordJudgment(dispute.id, "Alice", 300);
+  const alice = fakePlayer(0);
+  const bankingPath2 = require.resolve("./CitizenBanking");
+  require.cache[bankingPath2].exports.accountFor("bob").balance = 400;
+  // Bob offline: only Alice resolves.
+  const enf = CivilLaw.enforceJudgment(dispute.id, (n) => (n.toLowerCase() === "alice" ? alice : null));
+  assert(enf.ok && enf.paid === 300, `paid ${enf.paid}`);
+  assert.strictEqual(bankBalanceOf("bob"), 100, "loser's bank debited");
+  assert.strictEqual(alice.__balance(), 300, "winner collected");
+  assert.strictEqual(CivilLaw.judgmentFor(dispute.id).status, "paid");
+});
+
+test("executeWill: offline heir is credited to their bank account", () => {
+  CivilLaw.registerWill("Alice", [{ username: "Bob", share: 1 }]);
+  const res = CivilLaw.executeWill("Alice", 1000, () => null, []);
+  assert(res.ok && !res.intestate);
+  assert.strictEqual(bankBalanceOf("bob"), 1000, "offline heir credited — coins not destroyed");
+});
+
+test("courthouseFor: returns the kingdom's own market tile", () => {
+  const tile = CivilLaw.courthouseFor("kandarin");
+  assert(tile, "courthouse resolved");
+  assert.strictEqual(tile.kingdomId, "kandarin");
+  // Kandarin's market (not the default kingdom's tile).
+  assert.strictEqual(tile.x, 2657 + 2);
+  assert.strictEqual(tile.y, 3288);
+  assert.strictEqual(CivilLaw.courthouseFor(null), null);
 });
 
 console.log(`\n${passed} tests passed`);

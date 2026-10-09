@@ -20,7 +20,6 @@
 const CivilLaw = require("./CitizenCivilLaw");
 const { agentRng } = require("./humanizer");
 
-const KINGDOMS = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania"];
 // How often the heavier passes run (probability per slow tick).
 const MEDIATION_CHANCE = 0.6;
 const HEARING_CHANCE = 0.5;
@@ -80,21 +79,11 @@ function playerFor(director) {
   };
 }
 
-function kingdomIdOfRecord(record) {
-  const direct = record?.kingdomId ?? record?.kingdom ?? null;
-  if (typeof direct === "string" && direct) return direct.toLowerCase();
-  try {
-    const { kingdomIdOf } = require("../brain/CitizenSites");
-    return kingdomIdOf(record);
-  } catch {
-    return null;
-  }
-}
-
 function journalEvent(citizenName, text, kind) {
   try {
     const { getJournal } = require("./CitizenJournal");
-    getJournal().log(citizenName, text, kind || "civillaw");
+    // Canonical signature: log(citizenName, kind, text, opts).
+    getJournal().log(citizenName, kind || "civillaw", text);
   } catch { /* best-effort */ }
 }
 
@@ -104,21 +93,54 @@ function awardDeed(username, deedKind) {
   } catch { /* best-effort */ }
 }
 
+/**
+ * Resolve a username to its live bot via the canonical director path:
+ * roster record (keyed by normalized username) -> isOnline(record) ->
+ * getBot(record). director.getPlayer/players do NOT exist — this is the
+ * real shape.
+ */
+function botForUsername(director, username) {
+  try {
+    const norm = String(username || "").toLowerCase();
+    if (!norm) return null;
+    const roster = director?.roster;
+    let record = null;
+    if (roster instanceof Map) {
+      record = roster.get(norm) || null;
+    } else if (roster) {
+      const vals =
+        typeof roster.values === "function"
+          ? Array.from(roster.values())
+          : Array.isArray(roster)
+            ? roster
+            : Object.values(roster);
+      record = vals.find((r) => String(r?.username ?? r?.name ?? "").toLowerCase() === norm) || null;
+    }
+    if (record && director?.isOnline?.(record)) return director.getBot?.(record) ?? null;
+  } catch { /* best-effort */ }
+  return null;
+}
+
+/** Speak as the citizen (canonical: sayPublic(bot, text)). */
 function sayPublicTo(director, username, text) {
   try {
     const { sayPublic } = require("../chat/CitizenSayPublic");
-    const player = director?.getPlayer?.(username) ?? director?.players?.get?.(username);
-    if (player) sayPublic(player, text);
+    const bot = botForUsername(director, username);
+    if (bot) sayPublic(bot, text);
   } catch { /* best-effort */ }
 }
 
-/** True when a real (non-bot) player could hear this citizen. */
-function heardByPlayer(director, username, radius) {
+/**
+ * True when a real (non-bot) player could hear this citizen. Canonical
+ * proximity scan: bot.getLocalPlayers() filtered by isRealPlayer.
+ */
+function heardByPlayer(director, username) {
   try {
-    const { getLocalPlayers } = require("../chat/CitizenSayPublic");
-    const player = director?.getPlayer?.(username) ?? director?.players?.get?.(username);
-    if (!player || typeof getLocalPlayers !== "function") return false;
-    return getLocalPlayers(player, radius || 12).some((p) => !p?.isPlayerBot?.());
+    const bot = botForUsername(director, username);
+    if (!bot) return false;
+    const { isRealPlayer } = require("../chat/CitizenSayPublic");
+    const locals = bot.getLocalPlayers?.() ?? [];
+    return locals.some((p) => isRealPlayer(p));
   } catch {
     return false;
   }
@@ -134,8 +156,7 @@ function judgeFor(kingdomId, nowMs) {
 
 // --- 1. contract deadlines -----------------------------------------------------
 
-function passContractDeadlines(director, nowMs) {
-  const pf = playerFor(director);
+function passContractDeadlines(director, pf, nowMs) {
   for (const c of CivilLaw.activeContracts()) {
     if (c.deadlineMs && c.deadlineMs <= nowMs) {
       // Expired unfulfilled. The party who owed performance breaches.
@@ -160,14 +181,13 @@ function passContractDeadlines(director, nowMs) {
 
 // --- 2. dispute mediation ------------------------------------------------------
 
-function passMediation(director, nowMs, rng) {
+function passMediation(director, pf, nowMs, rng) {
   if (rng() > MEDIATION_CHANCE) return;
   for (const d of CivilLaw.openDisputes()) {
     if (d.status !== CivilLaw.DISPUTE_STATUS.filed) continue;
     CivilLaw.setDisputeStatus(d.id, CivilLaw.DISPUTE_STATUS.mediation);
     if (rng() < CivilLaw.MEDIATION_SETTLE_CHANCE) {
       // Settled: the defendant pays half the claim, honestly.
-      const pf = playerFor(director);
       const defendant = pf(d.displayDefendant || d.defendant);
       const plaintiff = pf(d.displayPlaintiff || d.plaintiff);
       let paid = 0;
@@ -247,9 +267,8 @@ function passHearings(director, nowMs, rng) {
 
 // --- 4. judgment enforcement -----------------------------------------------------
 
-function passEnforcement(director, nowMs, rng) {
+function passEnforcement(director, pf, nowMs, rng) {
   if (rng() > ENFORCE_CHANCE) return;
-  const pf = playerFor(director);
   for (const j of CivilLaw.unpaidJudgments()) {
     const res = CivilLaw.enforceJudgment(j.disputeId, pf);
     if (res.ok && res.paid > 0) {
@@ -270,12 +289,24 @@ function estateOf(player, username) {
     if (inv && typeof inv.count === "function") coins += inv.count(995) || 0;
   } catch { /* ignore */ }
   try {
+    // CitizenBanking exposes accountFor/balanceOf/deposit/withdraw —
+    // accountOf and creditAccount do not exist. withdraw's real shape is
+    // withdraw(player, username, amount).
     const Banking = require("./CitizenBanking");
-    const acct = Banking.accountOf?.(username);
+    const acct = Banking.accountFor?.(username);
     if (acct && acct.balance > 0) {
-      // Sweep the bank balance into the estate honestly.
-      const res = Banking.withdraw?.(username, acct.balance);
-      if (res && res.ok) coins += res.withdrew || 0;
+      if (player) {
+        // Online death: withdraw into the inventory so the inventory sweep
+        // below picks the coins up.
+        const res = Banking.withdraw?.(player, username, acct.balance);
+        if (res && res.ok) coins += res.withdrew || 0;
+        // On failure the balance stays put — not invented, not lost.
+      } else {
+        // Offline death: sweep the account straight into the estate.
+        coins += acct.balance;
+        acct.balance = 0;
+        Banking.markDirty?.();
+      }
     }
   } catch { /* banking unreadable */ }
   return coins;
@@ -283,11 +314,13 @@ function estateOf(player, username) {
 
 function closeBondsOf(username) {
   try {
+    // CitizenBonds exposes bonds(name) -> { friends: [...], enemies: [...] };
+    // closeBondsOf/bondsOf do not exist.
     const Bonds = require("./CitizenBonds");
-    if (typeof Bonds.closeBondsOf === "function") return Bonds.closeBondsOf(username) || [];
-    if (typeof Bonds.bondsOf === "function") {
-      return (Bonds.bondsOf(username) || []).map((b) => b.username || b.name).filter(Boolean);
-    }
+    const rec = Bonds.bonds?.(username);
+    const friends = rec && Array.isArray(rec.friends) ? rec.friends : [];
+    const norm = String(username || "").toLowerCase();
+    return friends.filter((b) => b && String(b).toLowerCase() !== norm);
   } catch { /* bonds unreadable */ }
   return [];
 }
@@ -344,10 +377,22 @@ function tickCivilLife(director, nowMs) {
   // Time-bucketed seed: each slow tick gets fresh rolls, but the sequence
   // is stable within the tick (matches CitizenJusticeLife's pattern).
   const rng = agentRng(`civillaw:${Math.floor((nowMs || Date.now()) / 60000)}`);
-  safeTick(director, (d) => passContractDeadlines(d, nowMs), "civil-law contracts");
-  safeTick(director, (d) => passMediation(d, nowMs, rng), "civil-law mediation");
-  safeTick(director, (d) => passHearings(d, nowMs, rng), "civil-law hearings");
-  safeTick(director, (d) => passEnforcement(d, nowMs, rng), "civil-law enforcement");
+  // LOD: with no live civil-law state, the deadline/mediation/hearing/
+  // enforcement passes are guaranteed no-ops — skip them outright instead
+  // of materializing the roster map. The will pass keeps its own cheap
+  // no-fresh-deaths early-out. The roster map is built once and shared by
+  // the passes that need it, not once per pass.
+  if (
+    CivilLaw.activeContracts().length > 0 ||
+    CivilLaw.openDisputes().length > 0 ||
+    CivilLaw.unpaidJudgments().length > 0
+  ) {
+    const pf = playerFor(director);
+    safeTick(director, (d) => passContractDeadlines(d, pf, nowMs), "civil-law contracts");
+    safeTick(director, (d) => passMediation(d, pf, nowMs, rng), "civil-law mediation");
+    safeTick(director, (d) => passHearings(d, nowMs, rng), "civil-law hearings");
+    safeTick(director, (d) => passEnforcement(d, pf, nowMs, rng), "civil-law enforcement");
+  }
   safeTick(director, (d) => passWills(d, nowMs), "civil-law wills");
 }
 

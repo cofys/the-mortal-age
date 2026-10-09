@@ -142,4 +142,138 @@ test("tick: enforcement collects unpaid judgments", () => {
   assert.strictEqual(bob.__balance(), 200, "loser paid");
 });
 
+test("tick: journal entries carry kind 'civillaw' (not the text)", () => {
+  // Regression: journalEvent once called log(name, text, kind) — the real
+  // signature is log(name, kind, text). The LLM prompt reads .text.
+  const { getJournal } = require("./CitizenJournal");
+  getJournal().resetForTests();
+  const alice = fakeBot("Alice", 1000, "misthalin");
+  const bob = fakeBot("Bob", 1000, "misthalin");
+  const director = fakeDirector([alice, bob]);
+  CivilLaw.createContract({
+    type: "service", partyA: "Alice", partyB: "Bob", amount: 500,
+    deadlineMs: Date.now() - 1000, // already expired
+  });
+  CivilLife.tickCivilLife(director, Date.now());
+  const recent = getJournal().recent("Alice", 10);
+  assert(recent.length > 0, "breach journaled");
+  const breach = recent.find((e) => e.text.includes("expired"));
+  assert(breach, `breach entry present, got ${JSON.stringify(recent.map((e) => e.text))}`);
+  assert.strictEqual(breach.kind, "civillaw", `kind is the kind, got ${JSON.stringify(breach.kind)}`);
+});
+
+test("tick: citizens speak via the canonical bot path when a real player is near", () => {
+  // Regression: sayPublicTo used director.getPlayer/players (do not exist)
+  // and heardByPlayer imported a getLocalPlayers the chat module never
+  // exported — civil-law speech never fired. Now: roster -> isOnline ->
+  // getBot(record) -> sayPublic(bot, text), gated on bot.getLocalPlayers().
+  const { resetForTests: resetSpeech } = require("../chat/CitizenSayPublic");
+  resetSpeech();
+  const spoken = [];
+  const realPlayer = {
+    isPlayerBot: () => false,
+    getUsername: () => "RealRon",
+    getIndex: () => 7,
+    getRelations: () => ({ canReceivePublicChatFrom: () => true }),
+    getPacketSender: () => ({ sendPublicChat: () => { spoken.push("[box]"); } }),
+  };
+  const bot = {
+    username: "Alice",
+    getUsername: () => "Alice",
+    getIndex: () => 3,
+    forceChat: (t) => spoken.push(t),
+    getLocalPlayers: () => [realPlayer],
+    getInventory() {
+      return { count: () => 1000, remove: () => {}, add: () => {} };
+    },
+  };
+  const record = { username: "Alice", __bot: bot };
+  const director = {
+    roster: new Map([["alice", record]]), // canonical key: normalized username
+    isOnline: () => true,
+    getBot: (r) => r.__bot, // canonical: takes the RECORD
+    log: () => {},
+  };
+  CivilLaw.createContract({
+    type: "service", partyA: "Alice", partyB: "Bob", amount: 500,
+    deadlineMs: Date.now() - 1000,
+  });
+  CivilLife.tickCivilLife(director, Date.now());
+  assert(
+    spoken.some((t) => String(t).includes("court")),
+    `citizen spoke about the breach, got ${JSON.stringify(spoken)}`
+  );
+});
+
+test("tick: silent when no real player is near", () => {
+  const { resetForTests: resetSpeech } = require("../chat/CitizenSayPublic");
+  resetSpeech();
+  const spoken = [];
+  const bot = {
+    username: "Alice",
+    getUsername: () => "Alice",
+    getIndex: () => 3,
+    forceChat: (t) => spoken.push(t),
+    getLocalPlayers: () => [], // nobody around
+    getInventory() {
+      return { count: () => 1000, remove: () => {}, add: () => {} };
+    },
+  };
+  const director = {
+    roster: new Map([["alice", { username: "Alice", __bot: bot }]]),
+    isOnline: () => true,
+    getBot: (r) => r.__bot,
+    log: () => {},
+  };
+  CivilLaw.createContract({
+    type: "service", partyA: "Alice", partyB: "Bob", amount: 500,
+    deadlineMs: Date.now() - 1000,
+  });
+  CivilLife.tickCivilLife(director, Date.now());
+  assert.strictEqual(spoken.length, 0, "no speech with no audience");
+  // The journal still records it — the event happened, just unheard.
+  const { getJournal } = require("./CitizenJournal");
+  assert(getJournal().recent("Alice").length > 0, "breach still journaled");
+});
+
+test("tick: offline citizen's bank balance is swept into the estate", () => {
+  // Regression: estateOf called Banking.accountOf (does not exist) and
+  // Banking.withdraw with the wrong arg order — bank balances were
+  // silently excluded from every will.
+  const bankingPath = require.resolve("./CitizenBanking");
+  const origBanking = require.cache[bankingPath];
+  const accounts = Object.create(null);
+  require.cache[bankingPath] = {
+    id: bankingPath, filename: bankingPath, loaded: true,
+    exports: {
+      accountFor: (username) => {
+        const k = String(username || "").toLowerCase();
+        if (!accounts[k]) accounts[k] = { balance: 0 };
+        return accounts[k];
+      },
+      markDirty: () => {},
+    },
+  };
+  const funeralsPath = require.resolve("./CitizenFunerals");
+  const origFunerals = require.cache[funeralsPath];
+  require.cache[funeralsPath] = {
+    id: funeralsPath, filename: funeralsPath, loaded: true,
+    exports: { getDeceased: () => [{ username: "zed", display: "Zed", diedAt: Date.now() }] },
+  };
+  try {
+    accounts["zed"] = { balance: 800 }; // bank only, no inventory (offline)
+    CivilLaw.registerWill("Zed", [{ username: "Bob", share: 1 }]);
+    const bob = fakeBot("Bob", 0, "misthalin");
+    const director = fakeDirector([bob]); // Zed has no bot — offline death
+    CivilLife.tickCivilLife(director, Date.now());
+    assert.strictEqual(bob.__balance(), 800, "heir receives the bank estate");
+    assert.strictEqual(accounts["zed"].balance, 0, "account swept");
+  } finally {
+    if (origBanking) require.cache[bankingPath] = origBanking;
+    else delete require.cache[bankingPath];
+    if (origFunerals) require.cache[funeralsPath] = origFunerals;
+    else delete require.cache[funeralsPath];
+  }
+});
+
 console.log(`\n${passed} tests passed`);

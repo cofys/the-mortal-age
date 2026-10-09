@@ -196,10 +196,18 @@ function takeCoinsAnywhere(player, username, amount) {
   let taken = takeCoins(player, amount);
   if (taken >= amount) return taken;
   try {
+    // Banking.withdraw(player, username, amount) needs a live inventory to
+    // receive the coins, so debit the account directly instead — this works
+    // for offline citizens too, and moves real coins, never invented ones.
     const Banking = require("./CitizenBanking");
     const remaining = amount - taken;
-    const res = Banking.withdraw?.(username, remaining);
-    if (res && res.ok) taken += res.withdrew || 0;
+    const acct = Banking.accountFor?.(username);
+    if (acct && acct.balance > 0) {
+      const take = Math.min(acct.balance, remaining);
+      acct.balance -= take;
+      Banking.markDirty?.();
+      taken += take;
+    }
   } catch {
     // banking unreadable — inventory coins only
   }
@@ -294,10 +302,20 @@ function fulfillContract(id, playerFor) {
       if (payee) {
         giveCoins(payee, paid);
       } else {
-        // Payee offline: bank it honestly so nothing is invented or lost.
+        // Payee offline: credit their real bank account so nothing is
+        // invented or lost. (CitizenBanking exposes accountFor, not
+        // creditAccount.)
         try {
           const Banking = require("./CitizenBanking");
-          Banking.creditAccount?.(payeeNorm, paid);
+          const acct = Banking.accountFor?.(payeeNorm);
+          if (acct) {
+            acct.balance += paid;
+            Banking.markDirty?.();
+          } else {
+            // banking unreadable — return the coins (honest)
+            giveCoins(payer, paid);
+            paid = 0;
+          }
         } catch {
           // banking unreadable — return the coins (honest)
           giveCoins(payer, paid);
@@ -432,11 +450,17 @@ function executeWill(testator, estate, playerFor, bondUsernames) {
     if (player) {
       giveCoins(player, p.amount);
     } else {
-      // Offline heir: deposit to their bank account so nothing is invented
-      // and nothing is lost.
+      // Offline heir: credit their real bank account so nothing is invented
+      // and nothing is lost. (CitizenBanking exposes accountFor, not
+      // creditAccount.)
       try {
         const Banking = require("./CitizenBanking");
-        Banking.creditAccount?.(p.username, p.amount);
+        const acct = Banking.accountFor?.(p.username);
+        if (acct) {
+          acct.balance += p.amount;
+          Banking.markDirty?.();
+        }
+        // else: banking unreadable — honest: coins undistributed
       } catch {
         // banking unreadable — honest: coins undistributed
       }
@@ -594,20 +618,29 @@ function enforceJudgment(disputeId, playerFor) {
   }
   const loser = playerFor ? playerFor(j.displayLoser || j.loser) : null;
   const winner = playerFor ? playerFor(j.displayWinner || j.winner) : null;
-  let moved = 0;
-  if (loser) {
-    moved = takeCoinsAnywhere(loser, j.loser, owed);
-    if (moved > 0 && winner) giveCoins(winner, moved);
-    else if (moved > 0) {
-      // Winner offline: bank it so nothing is invented or lost.
-      try {
-        const Banking = require("./CitizenBanking");
-        Banking.creditAccount?.(j.winner, moved);
-      } catch {
+  // takeCoinsAnywhere debits the loser's bank account directly, so this
+  // works even when the loser has no live bot — judgments follow the money.
+  let moved = takeCoinsAnywhere(loser, j.loser, owed);
+  if (moved > 0 && winner) {
+    giveCoins(winner, moved);
+  } else if (moved > 0) {
+    // Winner offline: credit their real bank account so nothing is
+    // invented or lost.
+    try {
+      const Banking = require("./CitizenBanking");
+      const acct = Banking.accountFor?.(j.winner);
+      if (acct) {
+        acct.balance += moved;
+        Banking.markDirty?.();
+      } else {
         // banking unreadable — return the coins (honest)
-        giveCoins(loser, moved);
+        if (loser) giveCoins(loser, moved);
         moved = 0;
       }
+    } catch {
+      // banking unreadable — return the coins (honest)
+      if (loser) giveCoins(loser, moved);
+      moved = 0;
     }
   }
   j.paid += moved;
@@ -622,8 +655,10 @@ function enforceJudgment(disputeId, playerFor) {
 function courthouseFor(kingdomId) {
   if (!kingdomId) return null;
   try {
-    const { siteTile } = require("../brain/CitizenSites");
-    const tile = siteTile ? siteTile(kingdomId, "market") : null;
+    // siteTileByKingdom (not siteTile, which takes a player entity and
+    // silently falls back to the default kingdom's tile).
+    const { siteTileByKingdom } = require("../brain/CitizenSites");
+    const tile = siteTileByKingdom ? siteTileByKingdom(kingdomId, "market") : null;
     if (tile) return { x: tile.x + 2, y: tile.y, z: tile.z ?? 0, kingdomId };
   } catch {
     // sites unreadable
