@@ -503,7 +503,7 @@ function tickTailors(director, nowMs, desync) {
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the workshop.
@@ -527,7 +527,7 @@ function tickTailors(director, nowMs, desync) {
         if (!type) continue;
         const last = lastHawkByCitizen.get(record.username) || 0;
         if (nowMs - last < HAWK_COOLDOWN_MS) continue;
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -547,7 +547,7 @@ function tickTailors(director, nowMs, desync) {
         if (type !== TAILOR_CLOTHIER && type !== TAILOR_EMBROIDERER) continue;
         const last = lastCommissionByCitizen.get(record.username) || 0;
         if (nowMs - last < COMMISSION_COOLDOWN_MS) continue;
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= COMMISSION_CHANCE) continue;
@@ -567,12 +567,12 @@ function tickTailors(director, nowMs, desync) {
 function doTailorWork(director, record, citizen, type, nowMs) {
   const line = workLineFor(Math.random, type);
   if (!line) return;
-  const workshop = workshopFor(record.username, record.kingdom, type);
+  const workshop = workshopFor(record.username, record.kingdomId ?? record.kingdom, type);
   const season = seasonFor(nowMs);
   const materials = materialsFor(season);
   // Rare masterpiece unveilings are the crowd moment.
   if (Math.random() < MASTERPIECE_CHANCE) {
-    const masterpiece = masterpieceFor(record.username, record.kingdom, nowMs);
+    const masterpiece = masterpieceFor(record.username, record.kingdomId ?? record.kingdom, nowMs);
     try {
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [masterpieceLineFor(Math.random, masterpiece, workshop)] })); }
     } catch {
@@ -603,8 +603,8 @@ function doTailorWork(director, record, citizen, type, nowMs) {
 /** Season-style announcement + garment hawking for nearby players. */
 function doTailorHawk(director, citizen, record, type, nowMs) {
   void director;
-  const workshop = workshopFor(record.username, record.kingdom, type);
-  const styleInfo = styleFor(record.kingdom, nowMs);
+  const workshop = workshopFor(record.username, record.kingdomId ?? record.kingdom, type);
+  const styleInfo = styleFor(record.kingdomId ?? record.kingdom, nowMs);
   const wares = waresFor(record.username, type, nowMs);
   // Armorers announce the army contract instead of fashion.
   let line;
@@ -631,8 +631,8 @@ function doTailorHawk(director, citizen, record, type, nowMs) {
 
 /** Commission offer — journal records the offer so the LLM tier knows. */
 function doCommissionOffer(citizen, record, nowMs) {
-  const workshop = workshopFor(record.username, record.kingdom, tailorTypeFor(record.username));
-  const styleInfo = styleFor(record.kingdom, nowMs);
+  const workshop = workshopFor(record.username, record.kingdomId ?? record.kingdom, tailorTypeFor(record.username));
+  const styleInfo = styleFor(record.kingdomId ?? record.kingdom, nowMs);
   const line = commissionLineFor(Math.random, styleInfo);
   try {
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
@@ -662,10 +662,32 @@ function garmentsFor(username, kingdom, dateMs) {
   };
 }
 
-/** True if any real (non-bot) player is within radius tiles of the citizen. */
-function anyRealPlayerNear(director, citizen, radius) {
+/**
+ * The materialized player-bot for a roster record, or null when the citizen
+ * isn't online. Canonical director API: isOnline(record) + getBot(record)
+ * (CitizenDirector.js:1374/1379). director.playerFor / director.onlinePlayers
+ * do NOT exist — optional-chained call sites were silent no-ops, so no
+ * tailor ever produced visible work in production. Never call them.
+ */
+function materializedBot(director, record) {
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    if (director.isOnline?.(record)) return director.getBot?.(record) ?? null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True if any real (non-bot) player is within radius tiles of the citizen.
+ * Real engine API: Player.getLocalPlayers() (Player.ts:796). The citizen
+ * bot's local players are the only players that can possibly be near —
+ * director.onlinePlayers does not exist and always yielded [].
+ */
+function anyRealPlayerNear(director, citizen, radius) {
+  void director;
+  try {
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;

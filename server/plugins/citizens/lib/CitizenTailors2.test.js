@@ -24,13 +24,14 @@ function withFixedRandom(value, fn) {
 function loc(x, y, z = 0) {
   return { getX: () => x, getY: () => y, getZ: () => z };
 }
-function mockBot(name, x = 3000, y = 3000) {
+function mockBot(name, x = 3000, y = 3000, localPlayers = []) {
   const chats = [];
   return {
     getUsername: () => name,
     isPlayerBot: () => true,
     getHostAddress: () => "bot",
     getLocation: () => loc(x, y),
+    getLocalPlayers: () => localPlayers, // real engine API (Player.ts:796)
     forceChat: (m) => chats.push(m),
     _chats: chats,
   };
@@ -43,12 +44,16 @@ function mockPlayer(name, x = 3005, y = 3005) {
     getLocation: () => loc(x, y),
   };
 }
-function mockDirector(entries, players) {
-  const bots = new Map();
+// Real-API director shape: isOnline/getBot (CitizenDirector.js:1374/1379).
+// The old mocks used playerFor/onlinePlayers, which do not exist
+// (tailors audit 2026-10-08) — the interaction tier was dead-on-arrival
+// because of them. The citizen bot carries getLocalPlayers (Player.ts:796).
+function mockDirector(entries, playersByName = {}) {
+  const bots = new Map(Object.entries(playersByName));
   return {
     roster: new Map(entries.map((r) => [r.username, r])),
-    playerFor: (record) => bots.get(record.username) || null,
-    onlinePlayers: () => players,
+    isOnline: (record) => bots.has(record.username),
+    getBot: (record) => bots.get(record.username) || null,
     _bots: bots,
   };
 }
@@ -287,9 +292,9 @@ function fresh() {
   fresh();
   SF._resetState();
   const rec = findSewfolk("tickf");
-  const bot = mockBot(rec.username);
-  const dir = mockDirector([rec], [mockPlayer("Jon")]);
-  dir._bots.set(rec.username, bot);
+  const players = [mockPlayer("Jon")];
+  const bot = mockBot(rec.username, 3000, 3000, players);
+  const dir = mockDirector([rec], { [rec.username]: bot });
   withFixedRandom(0.05, () => SF.tickSewfolk(dir, T0));
   assert.ok(bot._chats.length >= 1, "citizen spoke near a real player");
   console.log("tick fires: PASS");
@@ -300,9 +305,9 @@ function fresh() {
   fresh();
   SF._resetState();
   const rec = findSewfolk("tickb");
-  const bot = mockBot(rec.username);
-  const dir = mockDirector([rec], [mockBot("Other")]);
-  dir._bots.set(rec.username, bot);
+  const players = [mockBot("Other")];
+  const bot = mockBot(rec.username, 3000, 3000, players);
+  const dir = mockDirector([rec], { [rec.username]: bot });
   withFixedRandom(0.05, () => SF.tickSewfolk(dir, T0));
   assert.equal(bot._chats.length, 0, "silent when only bots near");
   console.log("tick silent near bots: PASS");
@@ -313,9 +318,9 @@ function fresh() {
   fresh();
   SF._resetState();
   const rec = findSewfolk("tickn");
-  const bot = mockBot(rec.username);
-  const dir = mockDirector([rec], [mockPlayer("Jon")]);
-  dir._bots.set(rec.username, bot);
+  const players = [mockPlayer("Jon")];
+  const bot = mockBot(rec.username, 3000, 3000, players);
+  const dir = mockDirector([rec], { [rec.username]: bot });
   withFixedRandom(0.05, () => SF.tickSewfolk(dir, NIGHT));
   assert.equal(bot._chats.length, 0, "silent at 03:00");
   console.log("tick silent at night: PASS");
@@ -327,7 +332,7 @@ function fresh() {
   SF._resetState();
   const proName = findProTailor("protick");
   const rec = { username: proName, role: "commoner", kingdomId: "misthalin" };
-  const dir = mockDirector([rec], [mockPlayer("Jon")]);
+  const dir = mockDirector([rec]);
   withFixedRandom(0.05, () => SF.tickSewfolk(dir, T0));
   assert.equal(dir._bots.size, 0, "pro tailor never materializes as sewfolk");
   console.log("pro tailor skipped: PASS");
