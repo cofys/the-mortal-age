@@ -1,5 +1,7 @@
 "use strict";
 
+const Relations = require("./Relations.Kingdoms");
+
 /**
  * Castle — the fortified heart of a kingdom.
  *
@@ -390,7 +392,9 @@ function collectTithes(kingdomId, citizenUsernames, store) {
     return { ok: false, reason: "too-soon" };
   }
   const bonuses = castleBonuses(castle);
-  const tithePerCitizen = Math.round(TITHE_BASE * (1 + bonuses.titheEff));
+  // Phase 4: pact roads carry goods — allied kingdoms boost tithe efficiency.
+  const tradeBonus = Relations.alliedTradeBonus(kingdomId, store);
+  const tithePerCitizen = Math.round(TITHE_BASE * (1 + bonuses.titheEff + tradeBonus));
   const collected = tithePerCitizen * citizenUsernames.length;
   const upkeep = totalUpkeep(castle);
   const net = collected - upkeep;
@@ -404,6 +408,7 @@ function collectTithes(kingdomId, citizenUsernames, store) {
     net,
     citizenCount: citizenUsernames.length,
     tithePerCitizen,
+    tradeBonus,
     warChest: castle.warChest,
   };
 }

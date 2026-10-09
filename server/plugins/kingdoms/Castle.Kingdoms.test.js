@@ -250,6 +250,16 @@ describe("tithe economy", () => {
     assert.equal(r.collected, 202);
   });
 
+  it("allied kingdoms boost tithes via pact-road trade", () => {
+    const state = store.load();
+    state.alliances = [{ a: "asgarnia", b: "misthalin", pactName: "test", strength: 1, betrayalRisk: 0 }];
+    const r = Castle.collectTithesForce("asgarnia", ["a", "b"], store);
+    // tithePerCitizen = 100 * (1 + 0 + 0.05) = 105
+    assert.equal(r.tradeBonus, 0.05);
+    assert.equal(r.tithePerCitizen, 105);
+    assert.equal(r.collected, 210);
+  });
+
   it("building upkeep reduces net income", () => {
     Castle.depositWarChest("asgarnia", 5000000, store);
     Castle.buildBuilding("asgarnia", "barracks", store); // upkeep 5000

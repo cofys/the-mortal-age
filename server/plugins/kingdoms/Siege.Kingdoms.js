@@ -34,6 +34,10 @@
  */
 
 const Castle = require("./Castle.Kingdoms");
+<<<<<<< HEAD
+=======
+const Relations = require("./Relations.Kingdoms");
+>>>>>>> 8c0dc6dc
 
 // ---------------------------------------------------------------------------
 // Tuning constants
@@ -153,6 +157,15 @@ function canDeclareSiege(attackerKingdomId, defenderKingdomId, store) {
     }
   }
 
+<<<<<<< HEAD
+=======
+  // Diplomacy gate (Phase 4): sieges need hostile borders or open war.
+  // Allies cannot be besieged; neutral powers must be escalated first
+  // (ultimatums) or fought in a declared war.
+  const rel = Relations.canSiegeRelation(attackerKingdomId, defenderKingdomId, store);
+  if (!rel.ok) return rel;
+
+>>>>>>> 8c0dc6dc
   return { ok: true };
 }
 
@@ -276,6 +289,43 @@ function tickSiege(defenderKingdomId, store) {
 }
 
 /**
+<<<<<<< HEAD
+=======
+ * Advance every active siege by one tick. Wired to the hourly siege task.
+ * Sieges past their per-tick time gate are skipped by tickSiege itself
+ * ("too-soon"), so this is safe to call on a fixed cadence.
+ *
+ * @param {object} store - KingdomStore
+ * @returns {Array} per-siege results for the sieges that ticked
+ */
+function tickAllSieges(store) {
+  const state = store.load();
+  const sieges = state.sieges ?? {};
+  const results = [];
+  for (const defenderKingdomId of Object.keys(sieges)) {
+    let r;
+    try {
+      r = tickSiege(defenderKingdomId, store);
+    } catch (error) {
+      console.warn("[siege] tick failed", defenderKingdomId, error?.message ?? error);
+      continue;
+    }
+    if (r && r.ok) {
+      results.push({ defenderKingdomId, outcome: r.outcome ?? null, progress: r.siege?.progress ?? 0 });
+      if (r.outcome) {
+        console.info("[siege] resolved", {
+          defenderKingdomId,
+          attacker: r.siege?.attackerKingdomId,
+          outcome: r.outcome,
+        });
+      }
+    }
+  }
+  return results;
+}
+
+/**
+>>>>>>> 8c0dc6dc
  * Victory: attacker breaches the walls.
  * - Loot 25% of defender war chest → attacker's war chest
  * - Damage 2 random buildings (lose a tier, or destroyed if tier 1)
@@ -417,6 +467,7 @@ function liftSiege(attackerKingdomId, defenderKingdomId, store) {
   return { ok: true };
 }
 
+<<<<<<< HEAD
 module.exports = {
   // Tuning
   SIEGE_DECLARE_COST,
@@ -448,3 +499,55 @@ module.exports = {
   // Attacker
   liftSiege,
 };
+=======
+// ---------------------------------------------------------------------------
+// Hourly siege task wiring
+// ---------------------------------------------------------------------------
+
+/** ~60 minutes at 600ms/tick — sieges grind on the realm clock. */
+const SIEGE_TASK_TICKS = 6000;
+
+function attachSiege(api) {
+  // Lazy: the Task class is TypeScript, only resolvable at server runtime.
+  const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
+  class SiegeTask extends Task {
+    execute() {
+      try {
+        const Store = require("./KingdomStore");
+        tickAllSieges(Store);
+      } catch (error) {
+        console.warn("[siege] task failed", error?.message ?? error);
+      }
+    }
+  }
+  api.getTaskManager()?.submit(new SiegeTask(SIEGE_TASK_TICKS));
+  console.info("[siege] siege engine armed", { tickTicks: SIEGE_TASK_TICKS });
+}
+
+module.exports = attachSiege;
+module.exports.attachSiege = attachSiege;
+module.exports.tickAllSieges = tickAllSieges;
+module.exports.SIEGE_TASK_TICKS = SIEGE_TASK_TICKS;
+module.exports.SIEGE_DECLARE_COST = SIEGE_DECLARE_COST;
+module.exports.SIEGE_COOLDOWN_MS = SIEGE_COOLDOWN_MS;
+module.exports.SIEGE_TICK_MS = SIEGE_TICK_MS;
+module.exports.SIEGE_MAX_TICKS = SIEGE_MAX_TICKS;
+module.exports.SIEGE_MIN_TICKS_BEFORE_DEFEAT = SIEGE_MIN_TICKS_BEFORE_DEFEAT;
+module.exports.SALLY_COST = SALLY_COST;
+module.exports.SALLY_COOLDOWN_MS = SALLY_COOLDOWN_MS;
+module.exports.SALLY_PROGRESS_HIT = SALLY_PROGRESS_HIT;
+module.exports.REPAIR_COST = REPAIR_COST;
+module.exports.REPAIR_PROGRESS_HIT = REPAIR_PROGRESS_HIT;
+module.exports.VICTORY_LOOT_PCT = VICTORY_LOOT_PCT;
+module.exports.VICTORY_BUILDINGS_DAMAGED = VICTORY_BUILDINGS_DAMAGED;
+module.exports.siegePower = siegePower;
+module.exports.defenderPower = defenderPower;
+module.exports.canDeclareSiege = canDeclareSiege;
+module.exports.declareSiege = declareSiege;
+module.exports.tickSiege = tickSiege;
+module.exports.getSiege = getSiege;
+module.exports.getSiegesByAttacker = getSiegesByAttacker;
+module.exports.sallyForth = sallyForth;
+module.exports.repairWalls = repairWalls;
+module.exports.liftSiege = liftSiege;
+>>>>>>> 8c0dc6dc

@@ -35,6 +35,13 @@ function forceTickReady(siege) {
   siege.lastTickAt = Date.now() - Siege.SIEGE_TICK_MS - 1000;
 }
 
+// Helper: make two kingdoms hostile (sieges require hostile/at-war relations).
+function makeHostile(store, a, b) {
+  const state = store.load();
+  if (!state.tension || typeof state.tension !== "object") state.tension = {};
+  state.tension[[a, b].sort().join(":")] = 70;
+}
+
 describe("siege declaration", () => {
   let store;
   beforeEach(() => { store = mockStore(); });
@@ -49,6 +56,7 @@ describe("siege declaration", () => {
   it("rejects without funds for declaration cost", () => {
     fundedCastle("asgarnia", store, 500_000); // less than 1M declare cost
     fundedCastle("misthalin", store);
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 0, store);
     assert.equal(r.ok, false);
     assert.equal(r.reason, "insufficient-funds");
@@ -58,6 +66,7 @@ describe("siege declaration", () => {
     fundedCastle("asgarnia", store, 5_000_000);
     fundedCastle("misthalin", store);
     const before = Castle.getCastle("asgarnia", store).warChest;
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 2_000_000, store);
     assert.equal(r.ok, true);
     assert.equal(r.siege.attackerKingdomId, "asgarnia");
@@ -73,6 +82,7 @@ describe("siege declaration", () => {
     fundedCastle("asgarnia", store, 5_000_000);
     fundedCastle("kandarin", store, 5_000_000);
     fundedCastle("misthalin", store);
+    makeHostile(store, "asgarnia", "misthalin");
     const r1 = Siege.declareSiege("asgarnia", "misthalin", 0, store);
     assert.equal(r1.ok, true);
     const r2 = Siege.declareSiege("kandarin", "misthalin", 0, store);
@@ -83,6 +93,7 @@ describe("siege declaration", () => {
   it("enforces cooldown after a resolved siege", () => {
     fundedCastle("asgarnia", store, 20_000_000);
     fundedCastle("misthalin", store);
+    makeHostile(store, "asgarnia", "misthalin");
     const r1 = Siege.declareSiege("asgarnia", "misthalin", 0, store);
     assert.equal(r1.ok, true);
     // Resolve it as lifted, just now
@@ -92,6 +103,34 @@ describe("siege declaration", () => {
     const r2 = Siege.declareSiege("asgarnia", "misthalin", 0, store);
     assert.equal(r2.ok, false);
     assert.equal(r2.reason, "on-cooldown");
+  });
+
+  it("rejects sieging an ally", () => {
+    fundedCastle("asgarnia", store, 5_000_000);
+    fundedCastle("misthalin", store);
+    const state = store.load();
+    state.alliances = [{ a: "asgarnia", b: "misthalin", pactName: "test", strength: 1, betrayalRisk: 0 }];
+    const r = Siege.declareSiege("asgarnia", "misthalin", 0, store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "allied-cannot-siege");
+  });
+
+  it("rejects sieging a neutral power (escalate first)", () => {
+    fundedCastle("asgarnia", store, 5_000_000);
+    fundedCastle("misthalin", store);
+    // Default tension (20) reads as neutral
+    const r = Siege.declareSiege("asgarnia", "misthalin", 0, store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "not-hostile");
+  });
+
+  it("allows sieging during a declared war", () => {
+    fundedCastle("asgarnia", store, 5_000_000);
+    fundedCastle("misthalin", store);
+    const state = store.load();
+    state.wars = [{ attackerId: "asgarnia", defenderId: "misthalin", active: true }];
+    const r = Siege.declareSiege("asgarnia", "misthalin", 0, store);
+    assert.equal(r.ok, true);
   });
 });
 
@@ -123,6 +162,7 @@ describe("siege tick", () => {
     fundedCastle("asgarnia", store, 50_000_000);
     fundedCastle("misthalin", store); // tier 0 camp, defense 0
     // 10M investment = 100 power vs ~1 defender power (camp)
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 10_000_000, store);
     assert.equal(r.ok, true);
     forceTickReady(r.siege);
@@ -139,6 +179,7 @@ describe("siege tick", () => {
     Castle.depositWarChest("misthalin", 0, store); // ensure exists
     def.fortTier = 3;
     // Minimal investment = 0 power + 0 infra vs 50 defense
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 0, store);
     assert.equal(r.ok, true);
     // Give it some progress first, then watch it get pushed back
@@ -156,6 +197,7 @@ describe("siege tick", () => {
     // Build a barracks to be damaged (tier 1 costs 1M from the war chest)
     Castle.buildBuilding("misthalin", "barracks", store);
     const warChestBefore = Castle.getCastle("misthalin", store).warChest;
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 20_000_000, store);
     assert.equal(r.ok, true);
     r.siege.progress = 95;
@@ -174,6 +216,7 @@ describe("siege tick", () => {
     fundedCastle("asgarnia", store, 5_000_000);
     const def = fundedCastle("misthalin", store);
     def.fortTier = 4; // citadel, 100 defense vs ~0 attacker power
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 0, store);
     assert.equal(r.ok, true);
     r.siege.ticksElapsed = Siege.SIEGE_MIN_TICKS_BEFORE_DEFEAT;
@@ -196,6 +239,7 @@ describe("siege tick", () => {
     const def = Castle.getCastle("misthalin", store);
     def.fortTier = 1; // 10 defense
     // Attacker: 1M investment = 10 power vs 10 defense → ratio 1.0 → +3/tick
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 1_000_000, store);
     assert.equal(r.ok, true);
     r.siege.ticksElapsed = Siege.SIEGE_MAX_TICKS - 1;
@@ -210,6 +254,7 @@ describe("siege tick", () => {
   it("refuses to tick too soon", () => {
     fundedCastle("asgarnia", store, 5_000_000);
     fundedCastle("misthalin", store);
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 0, store);
     assert.equal(r.ok, true);
     // Don't rewind lastTickAt — too soon
@@ -226,6 +271,7 @@ describe("defense actions", () => {
   it("sally forth reduces progress and costs funds", () => {
     fundedCastle("asgarnia", store, 50_000_000);
     fundedCastle("misthalin", store, 5_000_000);
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 10_000_000, store);
     assert.equal(r.ok, true);
     r.siege.progress = 50;
@@ -242,6 +288,7 @@ describe("defense actions", () => {
   it("sally has a cooldown", () => {
     fundedCastle("asgarnia", store, 50_000_000);
     fundedCastle("misthalin", store, 5_000_000);
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 10_000_000, store);
     r.siege.progress = 50;
     const s1 = Siege.sallyForth("misthalin", store);
@@ -255,6 +302,7 @@ describe("defense actions", () => {
     fundedCastle("asgarnia", store, 50_000_000);
     // Defender has just enough for declare but we drain it
     fundedCastle("misthalin", store, 100_000);
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 10_000_000, store);
     r.siege.progress = 50;
     const s = Siege.sallyForth("misthalin", store);
@@ -265,6 +313,7 @@ describe("defense actions", () => {
   it("repair walls reduces progress", () => {
     fundedCastle("asgarnia", store, 50_000_000);
     fundedCastle("misthalin", store, 5_000_000);
+    makeHostile(store, "asgarnia", "misthalin");
     const r = Siege.declareSiege("asgarnia", "misthalin", 10_000_000, store);
     r.siege.progress = 40;
     const before = Castle.getCastle("misthalin", store).warChest;
@@ -291,6 +340,7 @@ describe("lift siege", () => {
   it("attacker can lift their siege", () => {
     fundedCastle("asgarnia", store, 5_000_000);
     fundedCastle("misthalin", store);
+    makeHostile(store, "asgarnia", "misthalin");
     Siege.declareSiege("asgarnia", "misthalin", 0, store);
     const r = Siege.liftSiege("asgarnia", "misthalin", store);
     assert.equal(r.ok, true);
@@ -301,6 +351,7 @@ describe("lift siege", () => {
     fundedCastle("asgarnia", store, 5_000_000);
     fundedCastle("kandarin", store, 5_000_000);
     fundedCastle("misthalin", store);
+    makeHostile(store, "asgarnia", "misthalin");
     Siege.declareSiege("asgarnia", "misthalin", 0, store);
     const r = Siege.liftSiege("kandarin", "misthalin", store);
     assert.equal(r.ok, false);
@@ -321,9 +372,11 @@ describe("queries", () => {
     fundedCastle("misthalin", store);
     fundedCastle("kandarin", store);
     // Declare on misthalin, lift it (ends cooldown-free for test), then kandarin
+    makeHostile(store, "asgarnia", "misthalin");
     Siege.declareSiege("asgarnia", "misthalin", 0, store);
     Siege.liftSiege("asgarnia", "misthalin", store);
     // Cooldown blocks immediate re-declare on misthalin; kandarin is fine
+    makeHostile(store, "asgarnia", "kandarin");
     const r = Siege.declareSiege("asgarnia", "kandarin", 0, store);
     assert.equal(r.ok, true);
     const list = Siege.getSiegesByAttacker("asgarnia", store);
