@@ -276,12 +276,27 @@ export class Trading {
             this.sendState(false);
             interact_.getTrading().sendState(false);
             if (this.state === TradeState.ACCEPTED_CONFIRM_SCREEN && t_state === TradeState.ACCEPTED_CONFIRM_SCREEN) {
+                // Final safety net. The first-accept space check ran earlier,
+                // but add() below silently drops items when the inventory is
+                // full (and resetAttributes() then destroys the trade
+                // containers). Verify every item fits on both sides first;
+                // if anything changed, abort the trade and return the items
+                // instead of destroying them.
+                const myGiving = this.player.getTrading().getContainer().getValidItems();
+                const theirGiving = interact_.getTrading().getContainer().getValidItems();
+                if (!Trading.fitsAll(theirGiving, this.player.getInventory())
+                    || !Trading.fitsAll(myGiving, interact_.getInventory())) {
+                    this.player.sendMessage("Trade cannot be completed: not enough free inventory space.");
+                    interact_.sendMessage("Trade cannot be completed: not enough free inventory space.");
+                    this.closeTrade();
+                    return;
+                }
                 // Give items to both players...
-                const receivingItems = interact_.getTrading().getContainer().getValidItems();
+                const receivingItems = theirGiving;
                 for (const item of receivingItems) {
                     this.player.getInventory().addItem(item);
                 }
-                const givingItems = this.player.getTrading().getContainer().getValidItems();
+                const givingItems = myGiving;
                 for (const item of givingItems) {
                     interact_.getInventory().addItem(item);
                 }
@@ -365,34 +380,38 @@ export class Trading {
             }
             if (this.state === TradeState.TRADE_SCREEN && this.interact.getTrading().getState() === TradeState.TRADE_SCREEN) {
 
-                // Check if the item is in the right place
-                const offered = from.getItems()[slot];
-                if (offered.getId() === id) {
+                // Check if the item is in the right place. The slot comes from
+                // the client packet, so guard it: an out-of-range or empty
+                // slot is `undefined` and would throw on `.getId()`, killing
+                // the packet batch.
+                const offered = slot >= 0 ? from.getItems()[slot] : undefined;
+                if (offered == null || offered.getId() !== id) {
+                    return;
+                }
 
-                    if (!offered.isTradeable()) {
-                        this.player.sendMessage("You cannot trade that item.");
-                        return;
-                    }
+                if (!offered.isTradeable()) {
+                    this.player.sendMessage("You cannot trade that item.");
+                    return;
+                }
 
-                    // Make sure we can fit that amount in the trade
-                    if (from instanceof Inventory) {
-                        if (!ItemDefinition.forId(id).isStackable()) {
-                            if (amount > this.container.getFreeSlots()) {
-                                amount = this.container.getFreeSlots();
-                            }
+                // Make sure we can fit that amount in the trade
+                if (from instanceof Inventory) {
+                    if (!ItemDefinition.forId(id).isStackable()) {
+                        if (amount > this.container.getFreeSlots()) {
+                            amount = this.container.getFreeSlots();
                         }
                     }
+                }
 
-                    if (amount <= 0) {
-                        return;
-                    }
+                if (amount <= 0) {
+                    return;
+                }
 
-                    Trading.moveItems(from, to, slot, amount);
+                Trading.moveItems(from, to, slot, amount);
 
-                    if (this.interact.isPlayerBot && this.interact.isPlayerBot()) {
-                        // Automatically accept the trade whenever an item is added by the player
-                        this.interact.getTrading().acceptTrade();
-                    }
+                if (this.interact.isPlayerBot && this.interact.isPlayerBot()) {
+                    // Automatically accept the trade whenever an item is added by the player
+                    this.interact.getTrading().acceptTrade();
                 }
             } else {
                 this.player.getPacketSender().sendInterfaceRemoval();
@@ -411,6 +430,14 @@ export class Trading {
         const id = clicked.getId();
         if (clicked.getDefinition().isStackable()) {
             const moving = clicked.clone().setAmount(Math.min(amount, clicked.getAmount()));
+            // switchItem's full-check is id-only, but add() places stackables
+            // by id AND metadata. Without this guard, offering a stackable
+            // whose metadata matches no existing stack (and no free slot)
+            // deletes it from the source and then silently drops it in add().
+            if (!Trading.canHold(to, moving)) {
+                to.full();
+                return;
+            }
             from.switchItem(to, moving, false, slot, false);
         } else {
             const slots = [slot, ...from.getItems().map((_, index) => index).filter((index) => index !== slot)];
@@ -434,6 +461,35 @@ export class Trading {
         const meta = JSON.stringify(item.getMeta() ?? null);
         return container.getItems().some((held) => held != null && held.getId() === item.getId()
             && JSON.stringify(held.getMeta() ?? null) === meta);
+    }
+
+    /**
+     * Whether every item in `items` fits in `container`, accounting
+     * cumulatively: unstackables each take a slot, stackables merge into an
+     * existing id+metadata stack (or take one slot for the first of their
+     * kind). Mirrors ItemContainer.add() placement so the confirm-accept
+     * transfer below can never silently drop an item.
+     */
+    private static fitsAll(items: Item[], container: ItemContainer): boolean {
+        let free = container.getFreeSlots();
+        const held = new Set<string>();
+        for (const h of container.getItems()) {
+            if (h != null && h.getId() > 0) {
+                held.add(h.getId() + ":" + JSON.stringify(h.getMeta() ?? null));
+            }
+        }
+        for (const it of items) {
+            const key = it.getId() + ":" + JSON.stringify(it.getMeta() ?? null);
+            if (it.getDefinition().isStackable() && held.has(key)) {
+                continue;
+            }
+            if (free <= 0) return false;
+            free--;
+            if (it.getDefinition().isStackable()) {
+                held.add(key);
+            }
+        }
+        return true;
     }
 
     private static save(player: Player): void {
