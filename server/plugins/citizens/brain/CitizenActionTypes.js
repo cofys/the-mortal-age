@@ -52,6 +52,7 @@ const { createCitizenPhilosophizeAction } = require("./actions/CitizenPhilosophi
 const { createCitizenLawyerAction } = require("./actions/CitizenLawyer");
 const { createCitizenSurgeonAction } = require("./actions/CitizenSurgeon");
 const { createCitizenConstructAction } = require("./actions/CitizenConstruct");
+const { createCitizenTeamPlayAction } = require("./actions/CitizenTeamPlay");
 const { createIdleSocialAction } = require("./actions/IdleSocial");
 const { createRefugeeFlightAction } = require("./actions/RefugeeFlight");
 const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE } = require("../constants");
@@ -146,6 +147,7 @@ registerBotActionType("citizenCompete", createCitizenCompeteAction);
   registerBotActionType("citizenLawyer", createCitizenLawyerAction);
   registerBotActionType("citizenSurgeon", createCitizenSurgeonAction);
   registerBotActionType("citizenConstruct", createCitizenConstructAction);
+  registerBotActionType("citizenTeamPlay", createCitizenTeamPlayAction);
   registerBotActionType("idleSocial", createIdleSocialAction);
   registerBotActionType("refugeeFlight", createRefugeeFlightAction);
   registerBotConditionKind("citizen", createCitizenCondition);

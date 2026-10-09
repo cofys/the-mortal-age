@@ -1452,6 +1452,37 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a league" — player asks about team sports leagues.
+  if (/\b(is there a league|any leagues|what teams|join a team|i want to join|league standings|who won the league|when is the final|championship final|fan club|become a fan|buy merch|team scarf)\b/.test(said)) {
+    try {
+      const L = require("../lib/CitizenLeagues");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? null;
+      const username = speakerUsername ?? "";
+      // Default to the first sport for the summary.
+      const sportId = "football";
+      const summary = kingdomId ? L.leagueSummary(kingdomId, sportId) : null;
+      const myTeam = username && kingdomId ? L.teamOf(username, kingdomId, sportId) : null;
+      const fanOf = username ? L.fanTeamOf(username) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "league_status", {
+        hasLeague: !!summary,
+        sport: summary?.sport ?? null,
+        table: summary?.table ?? [],
+        champion: summary?.champion ?? null,
+        organizer: summary?.organizer ?? null,
+        myTeam: myTeam ? L.describeTeam(myTeam)?.name ?? null : null,
+        fanOf: fanOf ? fanOf.name : null,
+        sports: Object.keys(L.TEAM_SPORTS),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where can I travel" / "take me to X" — player asks about ships/caravans.
   if (/\b(where can i travel|how do i travel|is there a ship|is there a caravan|take me to|i want to travel|can you take me)\b/.test(said)) {
     try {

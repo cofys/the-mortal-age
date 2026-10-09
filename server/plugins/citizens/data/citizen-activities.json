@@ -970,6 +970,27 @@
           "type": "citizenConstruct"
         }
       ]
+    },
+    {
+      "id": "citizen_teamplay",
+      "mode": "citizen_teamplay",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenTeamPlay"
+        }
+      ]
     }
   ]
 }

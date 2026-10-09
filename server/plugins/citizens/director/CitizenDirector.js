@@ -225,6 +225,8 @@ const { tickTournaments } = require("../lib/CitizenTournamentLife");
 const CitizenTournaments = require("../lib/CitizenTournaments");
 const { tickCovertDiplomacy } = require("../lib/CitizenDiplomacyLife");
 const CitizenDiplomacy = require("../lib/CitizenDiplomacy");
+const { tickLeagues } = require("../lib/CitizenLeagueLife");
+const CitizenLeagues = require("../lib/CitizenLeagues");
 const { tickDiscoveryLife } = require("../lib/CitizenDiscoveryLife");
 const CitizenDiscovery = require("../lib/CitizenDiscovery");
 const { tickInventionLife } = require("../lib/CitizenInventionLife");
@@ -3008,6 +3010,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("diplomacy failed", { error: String(error?.message ?? error) });
     }
+    // Citizen team leagues: seasons, fixtures, standings, championships.
+    // Data tier, zero LLM. (CitizenSports owns hash-derived spectator
+    // fixtures; CitizenTournaments owns individual brackets.)
+    try {
+      tickLeagues(this, nowMs);
+    } catch (error) {
+      this.log("leagues failed", { error: String(error?.message ?? error) });
+    }
     // Citizen discoveries: trade-route adoption, fame deeds, announcements.
     // Data tier, zero LLM. (CitizenExplorers owns the expedition sim.)
     try {
@@ -3291,6 +3301,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen diplomacy save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenLeagues.save()) {
+        this.log("citizen leagues saved");
+      }
+    } catch (error) {
+      this.log("citizen leagues save failed", {
         error: String(error?.message ?? error),
       });
     }

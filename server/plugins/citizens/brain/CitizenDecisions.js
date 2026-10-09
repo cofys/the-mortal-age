@@ -117,7 +117,9 @@ const ACT_LAWYER = "citizen_lawyer";
 const ACT_INVENT = "citizen_invent";
 const ACT_PHILOSOPHIZE = "citizen_philosophize";
 const ACT_SURGEON = "citizen_surgeon";
-const ACT_CONSTRUCT = "citizen_construct";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
+const ACT_CONSTRUCT = "citizen_construct";
+const ACT_TEAMPLAY = "citizen_teamplay";
+// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
@@ -150,7 +152,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1116,6 +1118,45 @@ function philosophyInfo(player) {
 }
 
 /**
+ * Team-league readiness: is this citizen on a team, and is there league
+ * action in their kingdom? Team players train and play; fans follow.
+ * Defensive: a missing/broken leagues module scores as nothing.
+ */
+function leagueInfo(player) {
+  try {
+    const L = require("../lib/CitizenLeagues");
+    const { kingdomIdOf } = require("./CitizenSites");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const home = kingdomIdOf(player);
+    if (!home) {
+      return { onTeam: false, teamName: null, sportId: null, fanOf: null, hasLeague: false };
+    }
+    let onTeam = false;
+    let teamName = null;
+    let sportId = null;
+    for (const sid of Object.keys(L.TEAM_SPORTS)) {
+      const team = L.teamOf(username, home, sid);
+      if (team) {
+        onTeam = true;
+        teamName = team.name;
+        sportId = sid;
+        break;
+      }
+    }
+    const fanTeam = L.fanTeamOf(username);
+    return {
+      onTeam,
+      teamName,
+      sportId,
+      fanOf: fanTeam ? fanTeam.name : null,
+      hasLeague: true,
+    };
+  } catch {
+    return { onTeam: false, teamName: null, sportId: null, fanOf: null, hasLeague: false };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1532,6 +1573,7 @@ compete: competeInfo(player),
     construct: constructInfo(player),
     philosophy: philosophyInfo(player),
     legal: legalInfo(player),
+    league: leagueInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1553,7 +1595,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2106,6 +2148,27 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_TEAMPLAY: {
+      // Team leagues: citizens play for real teams in real seasons. A human
+      // athlete trains with their team when they're on one — and the
+      // competitive join a team when there's space. Fans follow their team.
+      // The hurt and weary stay home; nobody plays drunk well.
+      const lg = league ?? { onTeam: false, teamName: null, fanOf: null, hasLeague: false };
+      if (!lg.hasLeague) return 4; // no league in this kingdom
+      let s = 14;
+      if (lg.onTeam) s += 16; // on a team — training matters
+      else s += 4; // not on a team — might join, might just watch
+      const competitive = personality?.competitive ?? personality?.driven ?? 0;
+      if (competitive > 0.7) s += 10;
+      else if (competitive > 0.5) s += 5;
+      if (lg.fanOf) s += 4; // fans follow their team
+      if (goalType === GOAL_MAKE_FRIENDS) s += 8; // team sports are social
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      return s;
+    }
     case ACT_RC: {
       // Runecrafting: craft essence into runes for XP and coin. No essence
       // anywhere, no altar trip. Runecrafting is station work — the citizen
@@ -2596,7 +2659,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,
