@@ -112,14 +112,12 @@ check("nextStage grows camp -> hamlet -> village and caps", () => {
   assert.deepStrictEqual(SETTLEMENT_STAGES, ["camp", "hamlet", "village"]);
 });
 
-// --- priceForSketch ---
-check("priceForSketch is deterministic and within the coin range", () => {
+// --- priceForSketch: fixed 50-coin abstraction (hash-derived pricing removed 2026-10-08) ---
+check("priceForSketch is fixed and within the coin range", () => {
   const p = priceForSketch("42:0");
   assert.ok(p >= 25 && p <= 75, `price ${p} out of range`);
   assert.strictEqual(priceForSketch("42:0"), p);
-  const prices = new Set(["42:0", "42:1", "7:3", "99:0"].map(priceForSketch));
-  assert.ok(prices.size >= 2, "prices should vary across sketches");
-  for (const q of prices) assert.ok(q >= 25 && q <= 75, `price ${q} out of range`);
+  assert.strictEqual(priceForSketch("99:9"), 50, "fixed abstraction price");
 });
 
 // --- discoveryKey / shouldFoundSettlement ---

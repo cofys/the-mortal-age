@@ -54,6 +54,8 @@ const SETTLE_CHANCE = 0.6; // a fresh discovery gets a settlement attempt this o
 const SETTLE_STAGE_MS = 48 * 60 * 60 * 1000; // settlement grows a stage this often
 const SKETCH_PRICE_MIN = 25; // coins
 const SKETCH_PRICE_MAX = 75; // coins
+// Fixed sketch price (documented abstraction): hash-derived per-sketch pricing
+// was fabrication. A real stall/market price feed replaces this later.
 const FUND_MIN = 100; // coins — minimum expedition sponsorship
 const FUND_MAX = 100000; // coins — maximum expedition sponsorship
 const LEDGER_TTL_MS = 7 * 24 * 3600 * 1000; // purchases + funding remembered this long
@@ -221,10 +223,9 @@ function nextStage(stage) {
   return SETTLEMENT_STAGES[Math.min(i + 1, SETTLEMENT_STAGES.length - 1)];
 }
 
-/** Sketch price in coins, deterministic per sketch. Pure. */
+/** Fixed sketch price in coins (documented abstraction — was hash-derived). Pure. */
 function priceForSketch(sketchKey) {
-  const span = SKETCH_PRICE_MAX - SKETCH_PRICE_MIN + 1;
-  return SKETCH_PRICE_MIN + (hashName(sketchKey) % span);
+  return 50;
 }
 
 /** "expId:discoveryIdx" — the idempotency key for a discovery. Pure. */
