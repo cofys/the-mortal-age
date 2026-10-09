@@ -12,13 +12,16 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 const T = require("./CitizenTreaties");
+const Rep = require("./CitizenReputation");
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "ct-test-"));
 T._setSavePathForTests(path.join(TMP, "citizen-treaties.json"));
+Rep._setSavePathForTests(path.join(TMP, "citizen-reputation.json"));
 
 let passed = 0;
 function test(name, fn) {
   T.resetForTests();
+  Rep.resetForTests();
   try {
     fn();
     passed += 1;
@@ -109,6 +112,17 @@ test("proposeTreaty: fame gate for citizen brokers", () => {
   const r = T.proposeTreaty({ from: "asgarnia", to: "misthalin", type: "peace", broker: "Nobody Famous", nowMs: NOW });
   assert.equal(r.ok, false);
   assert.equal(r.reason, "fame-too-low");
+});
+
+test("proposeTreaty: a famous citizen broker passes the fame gate (real reputation read)", () => {
+  // Regression: fameOf() used to read Rep.fameOf/Rep.scoreOf, neither of
+  // which exists, so it always returned 0 and every citizen broker was
+  // rejected — only players could ever propose treaties.
+  Rep.addReputation("Famous Envoy", 50, "test");
+  assert.ok(Rep.reputationFor("Famous Envoy") >= 30);
+  const r = T.proposeTreaty({ from: "asgarnia", to: "misthalin", type: "peace", broker: "Famous Envoy", nowMs: NOW });
+  assert.equal(r.ok, true);
+  assert.equal(r.proposal.status, "pending");
 });
 
 test("proposeTreaty: rejects duplicates and active treaties", () => {

@@ -10,6 +10,29 @@ const os = require("node:os");
 const path = require("node:path");
 const fs = require("node:fs");
 
+// --- real-API-shape stubs (installed before the Life module's lazy requires)
+// The real journal seam is getJournal().log(citizenName, kind, text, opts)
+// (CitizenJournal.js:79) — NOT director.journal (doesn't exist on the real
+// director). The real speech seam is CitizenSayPublic.sayPublic(bot, text).
+const journaled = [];
+const said = [];
+const journalPath = path.resolve(__dirname, "./CitizenJournal.js");
+require.cache[journalPath] = {
+  id: journalPath, filename: journalPath, loaded: true,
+  exports: {
+    getJournal: () => ({
+      log: (name, kind, text, data) => { journaled.push({ name, kind, text, data }); },
+    }),
+  },
+};
+const sayPublicPath = path.resolve(__dirname, "../chat/CitizenSayPublic.js");
+require.cache[sayPublicPath] = {
+  id: sayPublicPath, filename: sayPublicPath, loaded: true,
+  exports: {
+    sayPublic: (bot, text) => { said.push({ bot, text }); return true; },
+  },
+};
+
 const T = require("./CitizenTreaties");
 const Life = require("./CitizenTreatyLife");
 
@@ -20,6 +43,8 @@ let passed = 0;
 function test(name, fn) {
   T.resetForTests();
   Life.setEmitter(null);
+  journaled.length = 0;
+  said.length = 0;
   try {
     fn();
     passed += 1;
@@ -35,19 +60,16 @@ const NOW = 1_700_000_000_000;
 const paid = () => true;
 
 function fakeDirector() {
-  const journaled = [];
-  const said = [];
+  // Real director shape: roster is a Map of plain data records,
+  // isOnline/getBot take the RECORD ({username}), log() is the server log.
+  // Speech and journaling go through the stubbed canonical seams above.
   const logs = [];
   return {
-    journaled,
-    said,
     logs,
-    roster: { get: () => null, values: () => [] },
+    roster: new Map(),
     isOnline: () => false,
     getBot: () => null,
-    journal: (kind, text, data) => journaled.push({ kind, text, data }),
     log: (msg, data) => logs.push({ msg, data }),
-    sayPublicTo: (username, text) => said.push({ username, text }),
   };
 }
 
@@ -55,18 +77,32 @@ test("tickTreaties: never throws on empty state", () => {
   const d = fakeDirector();
   Life.tickTreaties(d, NOW); // must not throw
   assert.equal(d.logs.length, 0);
+  assert.equal(journaled.length, 0);
 });
 
-test("tickTreaties: accepted proposal ratifies and journals", () => {
+test("tickTreaties: accepted proposal ratifies and journals via getJournal().log", () => {
   const d = fakeDirector();
-  const r = T.proposeTreaty({ from: "asgarnia", to: "misthalin", type: "peace", isPlayer: true, nowMs: NOW });
+  const r = T.proposeTreaty({ from: "asgarnia", to: "misthalin", type: "peace", broker: "Herald", isPlayer: true, nowMs: NOW });
   const p = T.proposalById(r.proposal.id);
   p.status = "accepted";
   const emitted = [];
   Life.setEmitter((name, payload) => emitted.push([name, payload]));
   Life.tickTreaties(d, NOW + 7 * 60 * 60 * 1000);
-  assert.ok(d.journaled.some((j) => j.kind === "treaties" && /peace treaty/.test(j.text)));
+  assert.ok(journaled.some((j) => j.kind === "treaty" && j.name === "Herald" && /peace treaty/.test(j.text)));
   assert.equal(T.proposalById(p.id).status, "ratified");
+});
+
+test("tickTreaties: broker speech uses the real director record + sayPublic seam", () => {
+  const d = fakeDirector();
+  d.roster.set("herald", { username: "Herald" });
+  d.isOnline = () => true;
+  const bot = { username: "Herald", forceChat() {}, getLocalPlayers: () => [] };
+  d.getBot = () => bot;
+  const r = T.proposeTreaty({ from: "asgarnia", to: "misthalin", type: "peace", broker: "Herald", isPlayer: true, nowMs: NOW });
+  const p = T.proposalById(r.proposal.id);
+  p.status = "accepted";
+  Life.tickTreaties(d, NOW + 7 * 60 * 60 * 1000);
+  assert.ok(said.some((s) => s.bot === bot && /peace treaty/.test(s.text)));
 });
 
 test("tickTreaties: alliance ratification emits kingdom:alliance-formed", () => {
@@ -86,12 +122,12 @@ test("tickTreaties: due summit is held and journaled", () => {
   const d = fakeDirector();
   T.buildEmbassy({ home: "asgarnia", host: "misthalin", nowMs: NOW, takeCoins: paid });
   T.buildEmbassy({ home: "misthalin", host: "asgarnia", nowMs: NOW, takeCoins: paid });
-  T.scheduleSummit({ a: "asgarnia", b: "misthalin", isPlayer: true, nowMs: NOW });
+  T.scheduleSummit({ a: "asgarnia", b: "misthalin", broker: "Envoy", isPlayer: true, nowMs: NOW });
   Life.tickTreaties(d, NOW + 25 * 60 * 60 * 1000);
-  assert.ok(d.journaled.some((j) => /summit/.test(j.text)));
+  assert.ok(journaled.some((j) => j.kind === "treaty" && j.name === "Envoy" && /summit/.test(j.text)));
 });
 
-test("tickTreaties: expired treaties lapse and journal", () => {
+test("tickTreaties: expired treaties lapse and journal under Realm", () => {
   const d = fakeDirector();
   T.buildEmbassy({ home: "asgarnia", host: "misthalin", nowMs: NOW, takeCoins: paid });
   T.buildEmbassy({ home: "misthalin", host: "asgarnia", nowMs: NOW, takeCoins: paid });
@@ -100,7 +136,7 @@ test("tickTreaties: expired treaties lapse and journal", () => {
   p.status = "accepted";
   const res = T.ratifyTreaty(p.id, null, NOW);
   Life.tickTreaties(d, res.treaty.expiresAt + 1000);
-  assert.ok(d.journaled.some((j) => /lapsed/.test(j.text)));
+  assert.ok(journaled.some((j) => j.kind === "treaty" && j.name === "Realm" && /lapsed/.test(j.text)));
 });
 
 test("tickTreaties: embassy pair cools the border", () => {

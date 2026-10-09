@@ -149,11 +149,15 @@ function pairKey(a, b) {
 
 function fameOf(username) {
   try {
+    // Canonical fame read: CitizenReputation.reputationFor(username) returns
+    // the citizen's score (same seam CitizenTradeCharters uses). The old
+    // code read Rep.fameOf / Rep.scoreOf — neither is exported, so this
+    // always returned 0 and EVERY citizen broker was rejected as
+    // "fame-too-low": only players could ever propose treaties.
     const Rep = require("./CitizenReputation");
-    if (typeof Rep.fameOf === "function") return Rep.fameOf(username) ?? 0;
-    if (typeof Rep.scoreOf === "function") return Rep.scoreOf(username) ?? 0;
+    if (typeof Rep.reputationFor === "function") return Rep.reputationFor(username) ?? 0;
   } catch {
-    // reputation unreachable — broker must be a player or fame check fails open
+    // reputation unreachable — fame check fails closed for citizens
   }
   return 0;
 }

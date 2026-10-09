@@ -48,11 +48,20 @@ function sayPublicTo(director, username, text) {
   }
 }
 
-function journal(director, text, data = {}) {
+function journal(director, username, text, data = {}) {
   try {
-    director?.journal?.("treaties", text, data);
+    // Canonical journal API: getJournal().log(citizenName, kind, text, opts)
+    // (CitizenJournal.js). The old code called director.journal(...), which
+    // does not exist on the real CitizenDirector, so every treaty journal
+    // entry silently died. Broker-less realm events journal under "Realm".
+    const { getJournal } = require("./CitizenJournal");
+    getJournal().log(username ?? "Realm", "treaty", text, data);
   } catch {
-    // journaling is best-effort
+    try {
+      director?.log?.(`[treaties] ${text}`, data);
+    } catch {
+      // journaling is best-effort
+    }
   }
 }
 
@@ -112,11 +121,11 @@ function advanceNegotiations(director, nowMs) {
       if (outcome === "accepted") {
         ratifyAndAnnounce(director, T.proposalById(pending.id) ?? pending, nowMs);
       } else if (outcome === "declined") {
-        journal(director, `${prettyKingdom(pending.to)} declined the ${label} from ${prettyKingdom(pending.from)}.`, {
+        journal(director, pending.broker, `${prettyKingdom(pending.to)} declined the ${label} from ${prettyKingdom(pending.from)}.`, {
           proposal: pending.id,
         });
       } else if (outcome === "expired") {
-        journal(director, `The ${label} talks between ${prettyKingdom(pending.from)} and ${prettyKingdom(pending.to)} died unanswered.`, {
+        journal(director, pending.broker, `The ${label} talks between ${prettyKingdom(pending.from)} and ${prettyKingdom(pending.to)} died unanswered.`, {
           proposal: pending.id,
         });
       }
@@ -138,7 +147,7 @@ function ratifyAndAnnounce(director, proposal, nowMs) {
   const text =
     `Hear ye! ${prettyKingdom(proposal.from)} and ${prettyKingdom(proposal.to)} have signed a ${label}.` +
     (result.effects?.length ? ` ${result.effects.join("; ")}.` : "");
-  journal(director, text, { treaty: result.treaty?.id ?? proposal.id, effects: result.effects });
+  journal(director, proposal.broker, text, { treaty: result.treaty?.id ?? proposal.id, effects: result.effects });
   if (proposal.broker) sayPublicTo(director, proposal.broker, text);
 }
 
@@ -161,7 +170,7 @@ function tendEmbassies(director) {
           T.sackEmbassy(e1.id, "war");
           T.sackEmbassy(e2.id, "war");
           const text = `War! The embassies of ${prettyKingdom(k)} and ${prettyKingdom(other)} have been sacked.`;
-          journal(director, text, { pair: [k, other] });
+          journal(director, null, text, { pair: [k, other] });
           continue;
         }
         // Standing pairs cool their border a little each tick.
@@ -193,7 +202,7 @@ function holdDueSummits(director, nowMs) {
     const text =
       `The rulers of ${prettyKingdom(s.a)} and ${prettyKingdom(s.b)} have met in summit.` +
       (result.effects?.length ? ` ${result.effects.join("; ")}.` : "");
-    journal(director, text, { summit: s.id, effects: result.effects });
+    journal(director, s.broker, text, { summit: s.id, effects: result.effects });
     if (s.broker) sayPublicTo(director, s.broker, text);
   }
 }
@@ -206,7 +215,7 @@ function expireOldTreaties(director, nowMs) {
     return;
   }
   for (const id of expired) {
-    journal(director, `A treaty has lapsed (id ${id}).`, { treaty: id });
+    journal(director, null, `A treaty has lapsed (id ${id}).`, { treaty: id });
   }
 }
 
