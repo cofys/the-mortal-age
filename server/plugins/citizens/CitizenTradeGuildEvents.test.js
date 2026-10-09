@@ -34,8 +34,7 @@ function makePlayer(username, opts = {}) {
   return {
     username,
     kingdomId: opts.kingdomId ?? "misthalin",
-    isBot: !!opts.bot,
-    isRealPlayer: () => !opts.bot,
+    isPlayerBot: () => !!opts.bot,
     getUsername: () => username,
     getInventory: () => ({
       // Real ItemContainer API: getAmount(id), deleteNumber(id, amount).

@@ -92,8 +92,7 @@ function stubPlayer(name, coins, isBot = false) {
     getInventory: () => inv,
     getUsername: () => name,
     username: name,
-    isBot,
-    isRealPlayer: () => !isBot,
+    isPlayerBot: () => isBot,
     sendMessage: (t) => messages.push(t),
   };
 }

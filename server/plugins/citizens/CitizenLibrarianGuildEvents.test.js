@@ -87,8 +87,7 @@ function makePlayer(username, opts = {}) {
   return {
     username,
     getUsername: () => username,
-    isBot: !!opts.isBot,
-    isRealPlayer: () => !opts.isBot,
+    isPlayerBot: () => !!opts.isBot,
     getInventory: () => ({
       // Real engine ItemContainer shape: getAmount(id), adds(id, amount),
       // delete(id, amount), deleteNumber(id, amount).

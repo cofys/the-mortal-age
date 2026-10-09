@@ -80,8 +80,7 @@ function stubPlayer(username, { bot = false, coins = 0 } = {}) {
   return {
     messages,
     getUsername: () => username,
-    isBot: bot,
-    isRealPlayer: () => !bot,
+    isPlayerBot: () => bot,
     getInventory: () => ({
       // Real ItemContainer API: getAmount(id), deleteNumber(id, amount).
       getAmount: (id) => (id === 995 ? coins : 0),

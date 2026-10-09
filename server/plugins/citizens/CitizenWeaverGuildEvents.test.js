@@ -56,7 +56,7 @@ function fakePlayer(username, coins) {
     player: {
       username,
       getUsername: () => username,
-      isRealPlayer: () => true,
+      isPlayerBot: () => false,
       sendMessage: (t) => messages.push(String(t)),
       // Real ItemContainer contract: getAmount(id), deleteNumber(id, amount).
       getInventory: () => ({

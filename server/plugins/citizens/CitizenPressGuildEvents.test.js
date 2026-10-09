@@ -49,8 +49,7 @@ function makePlayer(username, coins, isBot) {
     messages,
     getUsername: () => username,
     username,
-    isBot: !!isBot,
-    isRealPlayer: () => !isBot,
+    isPlayerBot: () => !!isBot,
     getInventory: () => ({
       // Real ItemContainer API: getAmount(id), deleteNumber(id, amount).
       getAmount: (id) => (id === 995 ? c : 0),
