@@ -108,6 +108,7 @@ const ACT_CREATEART = "citizen_createart";
 const ACT_PERFORM = "citizen_perform";
 const ACT_FASHION = "citizen_tailorwork";
 const ACT_CUISINE = "citizen_chefwork";
+const ACT_CELEBRATE = "citizen_celebrate";
 
 const ACT_COMPETE = "citizen_compete";
 const ACT_DIPLOMAT = "citizen_diplomat";
@@ -145,6 +146,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_PERFORM,
   ACT_FASHION,
   ACT_CUISINE,
+  ACT_CELEBRATE,
   ACT_CUISINE,
 
 ACT_COMPETE,
@@ -806,6 +808,33 @@ function isDrunk(player) {
     return Entertain.isDrunk(username);
   } catch {
     return false;
+  }
+}
+
+/**
+ * Celebration readiness: is there a custom festival to celebrate?
+ * Checks for active or upcoming custom festivals in the citizen's kingdom.
+ * Defensive: a missing/broken celebrations module scores as nothing.
+ */
+function celebrateInfo(player) {
+  try {
+    const C = require("../lib/CitizenCelebrations");
+    const { kingdomIdOf } = require("./CitizenSites");
+    const home = kingdomIdOf(player);
+    const now = Date.now();
+    const active = C.activeCustom(home, now);
+    const upcoming = C.upcomingCustoms(home, now);
+    const isPlanner = (C.plannerFor(home)?.username ?? "") ===
+      (player?.getUsername?.() ?? player?.username ?? "");
+    return {
+      hasFestival: !!(active || upcoming.length > 0),
+      isActive: !!active,
+      upcomingCount: upcoming.length,
+      isPlanner,
+      festivalName: active?.name ?? upcoming[0]?.name ?? null,
+    };
+  } catch {
+    return { hasFestival: false, isActive: false, upcomingCount: 0, isPlanner: false, festivalName: null };
   }
 }
 
@@ -1494,6 +1523,7 @@ function snapshot(player) {
     perform: performInfo(player),
     fashion: fashionInfo(player),
     cuisine: cuisineInfo(player),
+    celebrate: celebrateInfo(player),
 
 compete: competeInfo(player),
     diplomat: diplomatInfo(player),
@@ -1523,7 +1553,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1891,6 +1921,28 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // drunk chefs burn the roast
+      return s;
+    }
+
+    case ACT_CELEBRATE: {
+      // Celebrations: citizens join custom festivals, parades, fireworks,
+      // and carnival games. A human celebrates when there's a festival;
+      // the sociable love the crowd, the planner organizes. No festival,
+      // no celebration. Sick/hurt citizens stay home.
+      const cb = celebrate ?? { hasFestival: false, isActive: false, upcomingCount: 0, isPlanner: false };
+      if (!cb.hasFestival) return 4;
+      let s = 20;
+      if (cb.isActive) s += 10; // the festival is happening NOW
+      if (cb.isPlanner) s += 12; // planners lead the celebration
+      const sociable = personality?.sociable ?? personality?.sociability ?? 0.5;
+      const soc = typeof sociable === "number" && sociable <= 1 ? sociable : 0.5;
+      if (soc > 0.7) s += 8; // social butterflies love festivals
+      else if (soc < 0.3) s -= 10; // loners avoid crowds
+      if (mood != null && mood < 30) s += 6; // celebrations lift low mood
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 15; // drunk celebrants cause trouble
       return s;
     }
 
@@ -2541,6 +2593,7 @@ module.exports = {
   ACT_PERFORM,
   ACT_FASHION,
   ACT_CUISINE,
+  ACT_CELEBRATE,
 
 ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MEAL,

@@ -1421,6 +1421,37 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a festival" — player asks about custom festivals, parades, fireworks.
+  if (/\b(is there a festival|any festivals|when is the parade|is there a parade|fireworks tonight|any fireworks|what.s celebrating|custom festival|who plans festivals|carnival games)\b/.test(said)) {
+    try {
+      const C = require("../lib/CitizenCelebrations");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? "varrock";
+      const now = Date.now();
+      const active = C.activeCustom(kingdomId, now);
+      const upcoming = C.upcomingCustoms(kingdomId, now);
+      const planner = C.plannerFor(kingdomId);
+      const parades = C.activeParades(kingdomId, now);
+      const fireworks = C.tonightFireworks(kingdomId, now);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "celebration_status", {
+        activeFestival: active?.name ?? null,
+        activeTheme: active?.theme ?? null,
+        upcomingCount: upcoming.length,
+        upcoming: upcoming.slice(0, 3).map((f) => ({ name: f.name, theme: f.theme })),
+        planner: planner?.username ?? null,
+        paradeActive: parades.length > 0,
+        fireworksTonight: fireworks.length > 0,
+        boothTypes: C.BOOTH_TYPES,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where can I travel" / "take me to X" — player asks about ships/caravans.
   if (/\b(where can i travel|how do i travel|is there a ship|is there a caravan|take me to|i want to travel|can you take me)\b/.test(said)) {
     try {

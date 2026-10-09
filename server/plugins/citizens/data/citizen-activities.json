@@ -783,6 +783,27 @@
       ]
     },
     {
+      "id": "citizen_celebrate",
+      "mode": "citizen_celebrate",
+      "repeat": false,
+      "capacity": 16,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenCelebrate"
+        }
+      ]
+    },
+    {
       "id": "citizen_compete",
       "mode": "citizen_compete",
       "repeat": false,

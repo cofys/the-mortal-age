@@ -218,6 +218,8 @@ const { tickFashion } = require("../lib/CitizenFashionLife");
 const CitizenFashion = require("../lib/CitizenFashion");
 const { tickCuisine } = require("../lib/CitizenCuisineLife");
 const CitizenCuisine = require("../lib/CitizenCuisine");
+const { tickCelebrationLife } = require("../lib/CitizenCelebrationLife");
+const CitizenCelebrations = require("../lib/CitizenCelebrations");
 
 const { tickTournaments } = require("../lib/CitizenTournamentLife");
 const CitizenTournaments = require("../lib/CitizenTournaments");
@@ -2984,6 +2986,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("cuisine failed", { error: String(error?.message ?? error) });
     }
+    // Citizen celebrations: planners, custom festivals, parades, fireworks, carnival.
+    // Data tier, zero LLM.
+    try {
+      tickCelebrationLife(this, nowMs);
+    } catch (error) {
+      this.log("celebrations failed", { error: String(error?.message ?? error) });
+    }
 
 // Citizen tournaments: seasonal brackets, entries, payouts, betting.
     // Data tier, zero LLM.
@@ -3254,6 +3263,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen cuisine save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenCelebrations.save()) {
+        this.log("citizen celebrations saved");
+      }
+    } catch (error) {
+      this.log("citizen celebrations save failed", {
         error: String(error?.message ?? error),
       });
     }

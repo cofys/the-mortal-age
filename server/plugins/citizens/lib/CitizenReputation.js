@@ -77,6 +77,7 @@ const DEEDS = Object.freeze({
   virtuoso: Object.freeze({ points: 8, label: "headlined a concert" }),
   trendsetter: Object.freeze({ points: 8, label: "won a style competition" }),
   masterchef: Object.freeze({ points: 8, label: "won a culinary competition" }),
+  festival_organizer: Object.freeze({ points: 8, label: "organized a festival" }),
   betrayal: Object.freeze({ points: -6, label: "betrayal" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),
 });
