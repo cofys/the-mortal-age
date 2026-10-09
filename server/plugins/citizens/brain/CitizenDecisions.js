@@ -2507,7 +2507,7 @@ function seedCount(player) {
     if (!seeds) return 0;
     let level = 1;
     try {
-      const Skill = require("../../src/main/typescript/elvarg/game/model/Skill")
+      const Skill = require("../../../src/main/typescript/elvarg/game/model/Skill")
         .Skill;
       const mgr = player?.getSkillManager?.();
       if (mgr && Skill && typeof mgr.getCurrentLevel === "function") {

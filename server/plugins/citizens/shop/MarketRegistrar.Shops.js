@@ -32,7 +32,7 @@
  * till, close the stall), and confirm the outcomes match ::shop.
  */
 
-const { NpcIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
+const { NpcIds } = require("../../../src/main/typescript/elvarg/util/IdEnums");
 // DiegeticObjects may fail to resolve during parallel plugin loading; fall
 // back to inline capitals so the citizens plugin never dies on this import.
 let CAPITALS;

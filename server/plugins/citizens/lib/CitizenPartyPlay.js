@@ -199,7 +199,7 @@ function eatBestFood(bot) {
     }
     // Eat animation (829) — visible, like a player clicking food.
     try {
-      const { Animation } = require("../../../../src/main/typescript/elvarg/game/model/Animation");
+      const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
       bot.performAnimation?.(new Animation(829));
     } catch {
       // Animation is cosmetic.
@@ -611,7 +611,7 @@ function maybePartyChat(party, bot, record, lines, nowMs) {
 function findPlayerEntity(name) {
   try {
     // Real players via world.
-    const { World } = require("../../../../src/main/typescript/elvarg/game/World");
+    const { World } = require("../../../src/main/typescript/elvarg/game/World");
     const player = World.getPlayers?.()?.get?.(name) ?? null;
     if (player) return player;
   } catch {

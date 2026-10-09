@@ -75,7 +75,7 @@ function itemNameOf(itemId) {
   }
   try {
     // Same pattern as the GE plugin (server/plugins/interface/).
-    const { ItemDefinition } = require("../../../../src/main/typescript/elvarg/game/definition/ItemDefinition");
+    const { ItemDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ItemDefinition");
     return ItemDefinition.forId(itemId)?.getName?.() ?? null;
   } catch {
     return null;
