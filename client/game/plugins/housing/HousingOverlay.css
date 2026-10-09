@@ -1,0 +1,305 @@
+/* The Mortal Age — Housing overlay.
+ * Same heraldic template as the war table: tall panel, ornate gold
+ * frame, corner brackets, inset content boxes. Single-scroll, no tabs —
+ * this is a personal panel, not a campaign map. */
+
+.tma-housing-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(11, 8, 5, 0.72), rgba(11, 8, 5, 0.9));
+    animation: tma-housing-fadein 0.35s ease-out;
+}
+
+@keyframes tma-housing-fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tma-housing-panel {
+    position: relative;
+    width: min(480px, 94vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+    border: 1px solid #6b5a3a;
+    outline: 3px solid #14100b;
+    box-shadow: 0 0 0 4px #6b5a3a;
+    padding: 28px 24px 14px;
+    animation: tma-housing-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes tma-housing-rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Corner brackets — L-shaped bright gold */
+.tma-housing-panel::before,
+.tma-housing-panel::after {
+    content: "";
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid #c9a227;
+    pointer-events: none;
+}
+.tma-housing-panel::before {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+}
+.tma-housing-panel::after {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+}
+
+.tma-housing-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: none;
+    color: #9a8f7d;
+    font-size: 16px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+.tma-housing-close:hover {
+    color: #d9b45b;
+}
+
+.tma-housing-kicker {
+    margin: 0 0 4px;
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+    text-align: center;
+}
+
+.tma-housing-name {
+    margin: 0 0 6px;
+    font-size: 24px;
+    font-weight: bold;
+    color: #d9b45b;
+    text-align: center;
+}
+
+.tma-housing-header-rule {
+    height: 1px;
+    margin: 0 40px 14px;
+    background: linear-gradient(90deg, transparent, #c9a227, transparent);
+}
+
+.tma-housing-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.tma-housing-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+.tma-housing-scroll::-webkit-scrollbar-track {
+    background: #14100b;
+}
+.tma-housing-scroll::-webkit-scrollbar-thumb {
+    background: #3a2f22;
+    border-radius: 4px;
+}
+
+.tma-housing-section {
+    margin-bottom: 14px;
+}
+
+.tma-housing-section-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #d9b45b;
+}
+
+.tma-housing-inset {
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 3px;
+    padding: 10px 12px;
+}
+
+.tma-housing-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 3px 0;
+}
+
+.tma-housing-label {
+    font-size: 13px;
+    color: #9a8f7d;
+}
+
+.tma-housing-value {
+    font-size: 13px;
+    color: #e8ded0;
+    text-align: right;
+}
+
+.tma-housing-gold {
+    color: #d9b45b;
+}
+
+.tma-housing-body {
+    margin: 0;
+    font-size: 13px;
+    color: #e8ded0;
+    line-height: 1.5;
+}
+
+.tma-housing-note {
+    margin: 6px 0 0;
+    font-size: 12px;
+    font-style: italic;
+    color: #9a8f7d;
+    line-height: 1.45;
+}
+
+.tma-housing-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.tma-housing-badge {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    border: 1px solid;
+}
+
+.tma-housing-badge-danger {
+    color: #e06a5a;
+    border-color: #7a2d24;
+    background: rgba(122, 45, 36, 0.25);
+}
+
+.tma-housing-badge-warn {
+    color: #d9a45b;
+    border-color: #6b4a22;
+    background: rgba(107, 74, 34, 0.25);
+}
+
+.tma-housing-badge-gold {
+    color: #d9b45b;
+    border-color: #6b5a3a;
+    background: rgba(107, 90, 58, 0.2);
+}
+
+.tma-housing-news-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 0;
+    border-bottom: 1px solid #2a2218;
+}
+.tma-housing-news-item:last-child {
+    border-bottom: none;
+}
+
+.tma-housing-news-type {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+}
+
+.tma-housing-news-text {
+    font-size: 13px;
+    color: #e8ded0;
+    line-height: 1.45;
+}
+
+.tma-housing-news-date {
+    font-size: 11px;
+    color: #9a8f7d;
+}
+
+.tma-housing-footnote {
+    margin: 10px 0 0;
+    font-size: 12px;
+    font-style: italic;
+    color: #9a8f7d;
+    text-align: center;
+}
+
+/* Housing-specific: buttons, notices, room list. */
+.tma-housing-button {
+    display: block;
+    width: 100%;
+    margin: 8px 0 2px;
+    background: #241c13;
+    border: 1px solid #6b5a3a;
+    border-radius: 2px;
+    color: #d9b45b;
+    font-size: 13px;
+    padding: 9px 12px;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.tma-housing-button:hover {
+    background: #2e2417;
+    border-color: #c9a227;
+}
+.tma-housing-button-small {
+    width: auto;
+    flex: 1;
+    margin: 4px 2px;
+    padding: 7px 6px;
+    font-size: 12px;
+}
+.tma-housing-button.tma-housing-active {
+    border-color: #c9a227;
+    background: #33270f;
+    color: #f0d080;
+}
+.tma-housing-buttonrow {
+    display: flex;
+    margin: 4px -2px;
+}
+.tma-housing-notice {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid #7a3a2a;
+    background: rgba(90, 40, 25, 0.35);
+    color: #e0a080;
+    font-size: 13px;
+    border-radius: 2px;
+}
+.tma-housing-roomlist {
+    margin: 8px 0 2px;
+    padding-left: 18px;
+    color: #b8a888;
+    font-size: 13px;
+}
+.tma-housing-roomlist li {
+    margin: 2px 0;
+}
+.tma-housing-tier {
+    color: #f0d080;
+    font-weight: bold;
+}
