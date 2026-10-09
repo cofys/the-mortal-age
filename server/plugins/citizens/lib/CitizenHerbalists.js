@@ -320,9 +320,25 @@ function forceChat(citizen, line) {
 }
 
 /** Journal one line so the LLM dialogue tier has truthful source material. */
+// Canonical: getJournal().log(name, kind, text). The director.journal.addEntry
+// probe is dead — the real director has no journal property and CitizenJournal
+// has no addEntry; the ?. chain made this a silent no-op.
+let _journal = null;
+function journalStore() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
+    }
+  }
+  return _journal || null;
+}
+
 function journal(director, record, text) {
+  void director; // signature kept for the 3 call sites below
   try {
-    director.journal?.addEntry?.(record.username, text);
+    journalStore()?.log(record.username, "work", text);
   } catch { /* journaling must never break the tick */ }
 }
 

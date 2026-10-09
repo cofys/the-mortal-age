@@ -434,7 +434,9 @@ function journalize(citizen, text) {
   try {
     const j = journalEvent();
     const name = citizen?.getUsername?.() ?? citizen?.username;
-    if (j && name) j.addEntry?.(name, text);
+    // Canonical: journal.log(name, kind, text). The addEntry probe is dead —
+    // CitizenJournal has no addEntry; the ?. made this a silent no-op.
+    if (j && name) j.log?.(name, "work", text);
   } catch { /* cosmetic */ }
 }
 
@@ -495,7 +497,7 @@ function commissionTroup(playerName, kingdomId, occasion, nowMs = Date.now()) {
   commissions.set(key, rec);
   const seed = seedRumorFn();
   try {
-    seed?.(`{troupe} were commissioned for a {occasion}!`.replace("{troupe}", troupe.name).replace("{occasion}", rec.occasion));
+    seed?.(Math.random, { kind: "work", what: `{troupe} were commissioned for a {occasion}!`.replace("{troupe}", troupe.name).replace("{occasion}", rec.occasion) });
   } catch { /* cosmetic */ }
   return rec;
 }
@@ -690,7 +692,7 @@ function dailyRhythms(director, nowMs, rng) {
         const line = fill(pickOne(rng, TROUPE_ARRIVAL_LINES), { troupe: troupe.name, venue: venue.name });
         journalize({ username: troupe.name }, `${troupe.name} arrived in ${touring}: ${line}`);
         const seed = seedRumorFn();
-        try { seed?.(line); } catch { /* cosmetic */ }
+        try { seed?.(Math.random, { kind: "work", what: line }); } catch { /* cosmetic */ }
       }
       if ((lastPremiereByKingdom.get(troupe.kingdom) ?? -1) < day && chance(rng, 15)) {
         lastPremiereByKingdom.set(troupe.kingdom, day);
@@ -698,7 +700,7 @@ function dailyRhythms(director, nowMs, rng) {
         const line = fill(pickOne(rng, PREMIERE_LINES), { song, bard: troupe.name });
         journalize({ username: troupe.name }, line);
         const seed = seedRumorFn();
-        try { seed?.(line); } catch { /* cosmetic */ }
+        try { seed?.(Math.random, { kind: "work", what: line }); } catch { /* cosmetic */ }
       }
       if ((lastBalladByKingdom.get(troupe.kingdom) ?? -1) < day) {
         const eventDesc = balladEventFor(director);
@@ -708,7 +710,7 @@ function dailyRhythms(director, nowMs, rng) {
           const line = fill(pickOne(rng, BALLAD_TEMPLATES), { ballad: title, event: eventDesc });
           journalize({ username: troupe.name }, `composed ${title}: ${line}`);
           const seed = seedRumorFn();
-          try { seed?.(line); } catch { /* cosmetic */ }
+          try { seed?.(Math.random, { kind: "work", what: line }); } catch { /* cosmetic */ }
         }
       }
     }

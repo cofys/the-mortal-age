@@ -358,15 +358,19 @@ function journalize(citizen, text) {
   try {
     const j = journalEvent();
     const name = citizen?.getUsername?.() ?? citizen?.username;
-    if (j && name) j.addEntry?.(name, text);
+    // Canonical: journal.log(name, kind, text). The addEntry probe is dead —
+    // CitizenJournal has no addEntry; the ?. made this a silent no-op.
+    if (j && name) j.log?.(name, "work", text);
   } catch { /* cosmetic */ }
 }
 
 /** Best-effort rumor seed; never throws. */
-function seedRumor(text) {
+// Canonical: CitizenRumors.seedRumor(rng, event) — the bare-string call is
+// dead (returns null); pass an event object ({ kind, what, ... }).
+function seedRumor(event) {
   try {
     const fn = seedRumorFn();
-    if (fn) fn(text);
+    if (fn) fn(Math.random, event);
   } catch { /* cosmetic */ }
 }
 
@@ -586,7 +590,7 @@ function doStorytellerWork(director, record, citizen, type, nowMs) {
     const line = fill(pickOne(Math.random, LEGEND_LINES), { legend: legend.verse });
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `grew the legend at ${gathering.name}: ${legend.verse}`);
-    seedRumor(`The storytellers at ${gathering.name} have grown a new verse: ${legend.verse}`);
+    seedRumor({ kind: "work", what: `The storytellers at ${gathering.name} have grown a new verse: ${legend.verse}` });
     return;
   }
 

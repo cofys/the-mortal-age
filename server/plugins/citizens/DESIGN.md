@@ -5,6 +5,27 @@ real** — skilling, trading, guarding, socializing — instead of looping bot
 tasks. Scripted body (BotBrain activities) + LLM mouth (the llm-gateway
 plugin), per the world bible's "AI citizens" pillar.
 
+## The `lib/*2` layer is FROZEN (quarantine, 2026-10-08)
+
+The 32 `*2` flavor modules (`lib/CitizenMiners2.js`, `CitizenBards2.js`, ...)
+are a quarantined parallel behavior system. They were allowed to grow because
+they looked like harmless flavor — then the alignment review (2026-10-08)
+found them fabricating daily events from username hashes (rich-vein strikes,
+ore finds, ore *prices*) and journaling/speaking them as real, which the LLM
+mouth echoed as truth. That is the exact hash-fiction the human-player model
+(`files/human-player-model.md`) forbids.
+
+The fabrication lines were killed in `e61677c3`; the layer's speech was
+migrated to `sayPublic` + `citizenVoice`; its dead API probes were swept to
+the canonical `getJournal().log` form.
+
+**Rules, no exceptions:**
+- NEVER build new `*2`/`*3` modules or new hash-derived fictional systems.
+- New behavior goes in `brain/actions/` on real engine APIs.
+- Allowed work on the frozen layer: migrating their visible speech to
+  `sayPublic` + `citizenVoice`, and replacing hash-fiction reads with real
+  engine state over time. Nothing new gets added to it.
+
 ## Phase 1: make it feel like a world
 
 The wilderness PK population ships as-is; this system owns the **cities**.

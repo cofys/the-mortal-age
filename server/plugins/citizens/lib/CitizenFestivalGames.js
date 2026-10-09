@@ -369,10 +369,12 @@ function journalize(citizenName, kind, text) {
   } catch { /* journal absent — never break the tick */ }
 }
 
-function seedRumor(text) {
+// Canonical rumor seed: seedRumor(rng, event). The bare-string call is dead —
+// CitizenRumors.seedRumor requires an event object ({ kind, what, ... }).
+function seedRumor(event) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
+    if (typeof rumors.seedRumor === "function") rumors.seedRumor(Math.random, event);
   } catch { /* rumors absent */ }
 }
 
@@ -489,7 +491,7 @@ function doGameWork(director, record, citizen, festival, nowMs) {
       const rkey = "win:" + kingdomId + ":" + day + ":" + game;
       if (!announcedToday.has(rkey)) {
         announcedToday.set(rkey, nowMs);
-        seedRumor(`${winner} won ${GAME_NAMES[game]} at the ${festival.name}!`);
+        seedRumor({ kind: "work", what: `${winner} won ${GAME_NAMES[game]} at the ${festival.name}!` });
       }
       return;
     }

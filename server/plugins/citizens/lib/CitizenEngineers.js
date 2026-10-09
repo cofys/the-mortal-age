@@ -437,21 +437,36 @@ function breakthroughFor(workshop, dateMs) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method.
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch { /* journal absent */ }
+  }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+function journalize(citizen, text) {
+  try {
+    const name = citizen?.getUsername?.() ?? citizen?.username;
+    if (name) journal()?.log(name, "work", text);
+  } catch {
+    /* journal is best-effort; never break the tick */
+  }
+}
+
+// Canonical rumor seed: seedRumor(rng, event). The bare-string call is dead —
+// CitizenRumors.seedRumor requires an event object ({ kind, what, ... }).
+function seedRumor(event) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
+    if (typeof rumors.seedRumor === "function") rumors.seedRumor(Math.random, event);
   } catch { /* rumors absent */ }
 }
 
@@ -593,7 +608,7 @@ function doEngineerWork(director, record, citizen, type, nowMs) {
       });
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled ${gw.work} at ${workshop.name}`);
-      seedRumor(`${gw.work} stands complete at ${workshop.name}!`);
+      seedRumor({ kind: "work", what: `${gw.work} stands complete at ${workshop.name}!` });
       return;
     }
   }
@@ -607,7 +622,7 @@ function doEngineerWork(director, record, citizen, type, nowMs) {
         lastFiredByCitizen.set(key, nowMs);
         { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [bt] })); }
         journalize(citizen, `announced a breakthrough at ${workshop.name}: "${bt}"`);
-        seedRumor(`An inventor at ${workshop.name} claims a breakthrough!`);
+        seedRumor({ kind: "work", what: `An inventor at ${workshop.name} claims a breakthrough!` });
         return;
       }
     }

@@ -410,15 +410,19 @@ function journalize(citizen, text) {
   try {
     const j = journalEvent();
     const name = citizen?.getUsername?.() ?? citizen?.username;
-    if (j && name) j.addEntry?.(name, text);
+    // Canonical: journal.log(name, kind, text). The addEntry probe is dead —
+    // CitizenJournal has no addEntry; the ?. made this a silent no-op.
+    if (j && name) j.log?.(name, "work", text);
   } catch { /* cosmetic */ }
 }
 
 /** Best-effort rumor seed; never throws. */
-function seedRumor(text) {
+// Canonical: CitizenRumors.seedRumor(rng, event) — the bare-string call is
+// dead (returns null); pass an event object ({ kind, what, ... }).
+function seedRumor(event) {
   try {
     const fn = seedRumorFn();
-    if (fn) fn(text);
+    if (fn) fn(Math.random, event);
   } catch { /* cosmetic */ }
 }
 
@@ -530,10 +534,10 @@ function doCourierLoop(director, record, citizen, type, nowMs) {
     // Couriers overhear things — the juicy bits become rumors.
     const flight = pigeonFlightFor(record.username, nowMs);
     if ((flight.intercepted || fnv1a("intercept:" + normalizeName(record.username) + ":" + nowMs) % 100 < INTERCEPT_CHANCE * 100) && inDeliveryHours(nowMs)) {
-      seedRumor(fillLine(pickOne(Math.random, OVERHEARD_LINES), {
+      seedRumor({ kind: "work", what: fillLine(pickOne(Math.random, OVERHEARD_LINES), {
         destination: flight.destination,
         pickup: run.pickup,
-      }));
+      }) });
     }
   } catch { /* never crash */ }
 }
@@ -551,7 +555,7 @@ function doPigeonKeeper(director, record, citizen, run, nowMs) {
     // Crowd moment: the release fanfare.
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [fillLine(pickOne(rng, PIGEON_RELEASE_LINES), flight)] })); }
     journalize(citizen, `released ${flight.bird} with a message for ${flight.destination}`);
-    seedRumor(`${flight.bird}, a carrier pigeon from ${run.loft}, was seen winging toward ${flight.destination}.`);
+    seedRumor({ kind: "work", what: `${flight.bird}, a carrier pigeon from ${run.loft}, was seen winging toward ${flight.destination}.` });
     lastPigeonFanfareByCitizen.set(record.username, nowMs);
   } else {
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: ["Pigeons fed, wings checked. Who needs a message flown?"] })); }
