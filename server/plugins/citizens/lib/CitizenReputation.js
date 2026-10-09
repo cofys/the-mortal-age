@@ -118,6 +118,8 @@ const DEEDS = Object.freeze({
   cheater: Object.freeze({ points: -8, label: "was expelled from the Athletes' Guild for doping" }),
   guildchef: Object.freeze({ points: 8, label: "won the golden ladle of the Chefs' Guild" }),
   recipethief: Object.freeze({ points: -8, label: "was expelled from the Chefs' Guild for recipe theft" }),
+  needlegrand: Object.freeze({ points: 8, label: "won the golden needle of the Weavers' Guild" }),
+  knockoff: Object.freeze({ points: -8, label: "was expelled from the Weavers' Guild for counterfeiting" }),
   counselor: Object.freeze({ points: 6, label: "won a civil case as advocate" }),
   oathbreaker: Object.freeze({ points: -6, label: "broke a sworn contract" }),
   executor: Object.freeze({ points: 4, label: "settled an estate faithfully" }),

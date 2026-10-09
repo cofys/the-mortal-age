@@ -45,6 +45,7 @@ const { onDigGuildCommand, DIGGUILD_USAGE } = require("./CitizenDigGuildEvents")
 const { onStageGuildCommand, STAGEGUILD_USAGE } = require("./CitizenStageGuildEvents");
 const { onSportsGuildCommand, SPORTSGUILD_USAGE } = require("./CitizenSportsGuildEvents");
 const { onCookGuildCommand, COOKGUILD_USAGE } = require("./CitizenCookGuildEvents");
+const { onWeaverGuildCommand, WEAVERGUILD_USAGE } = require("./CitizenWeaverGuildEvents");
 const { onGalleryCommand, GALLERY_USAGE } = require("./CitizenGalleryEvents");
 const { onLibraryCommand, LIBRARY_USAGE } = require("./CitizenLibraryEvents");
 const { onObservatoryCommand, OBSERVATORY_USAGE } = require("./CitizenObservatoryEvents");
@@ -847,6 +848,12 @@ module.exports = {
       onCookGuildCommand,
       PlayerRights.NONE,
       COOKGUILD_USAGE
+    );
+    api.registerCommand(
+      "weaverguild",
+      onWeaverGuildCommand,
+      PlayerRights.NONE,
+      WEAVERGUILD_USAGE
     );
   },
 };
