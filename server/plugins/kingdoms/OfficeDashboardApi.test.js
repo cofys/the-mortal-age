@@ -30,6 +30,7 @@ const Store = require("./KingdomStore");
 const Offices = require("./Offices.Kingdoms");
 const OfficeTools = require("./OfficeTools.Kingdoms");
 const Api = require("./OfficeDashboardApi");
+const Treasury = require("./Treasury.Kingdoms");
 
 // --- save isolation ----------------------------------------------------------
 // Store.resetForTests() sets persist=false: no save file is written.
@@ -268,6 +269,96 @@ test("vacant offices listed for petition", () => {
   const out = api._endpoints.get("office-status")(makeQuery({ player: "ambitious_eve" }));
   assert.ok(out.vacantOffices.length >= 4);
   assert.ok(out.vacantOffices.every((v) => v.officeId && v.title));
+});
+
+test("steward grant-treasury moves coins to a named player", () => {
+  const api = makeApi();
+  const steward = makePlayer("steward_bob");
+  const alice = makePlayer("alice");
+  alice.getInventory = () => ({
+    getAmount: () => 0,
+    delete: () => {},
+    add: (id, n) => {
+      alice._paid = (alice._paid ?? 0) + n;
+    },
+    refreshItems: () => {},
+  });
+  Offices.assignOffice("asgarnia:steward", { kind: "player", ref: "steward_bob" });
+  api.core.World.getPlayerByName = (n) =>
+    n === "steward_bob" ? steward : n === "alice" ? alice : null;
+  Api.attach(api);
+  const out = api._endpoints.get("office-status")(
+    makeQuery({
+      player: "steward_bob",
+      action: "grant-treasury",
+      officeId: "asgarnia:steward",
+      to: "alice",
+      amount: "5000",
+    })
+  );
+  assert.strictEqual(out.actionResult.ok, true);
+  assert.strictEqual(alice._paid, 5000);
+  assert.strictEqual(Store.getKingdom("asgarnia").treasury, 45000);
+  assert.strictEqual(out.heldOffices[0].data.grantCap, Treasury.GRANT_MAX);
+});
+
+test("steward grant-treasury rejects non-holder, self-grant, and empty coffers", () => {
+  const api = makeApi();
+  const steward = makePlayer("steward_bob");
+  const mallory = makePlayer("mallory");
+  Offices.assignOffice("asgarnia:steward", { kind: "player", ref: "steward_bob" });
+  api.core.World.getPlayerByName = (n) =>
+    n === "steward_bob" ? steward : n === "mallory" ? mallory : null;
+  Api.attach(api);
+
+  // Non-holder cannot grant.
+  let out = api._endpoints.get("office-status")(
+    makeQuery({
+      player: "mallory",
+      action: "grant-treasury",
+      officeId: "asgarnia:steward",
+      to: "mallory",
+      amount: "100",
+    })
+  );
+  assert.strictEqual(out.actionResult.ok, false);
+
+  // Self-grant refused.
+  out = api._endpoints.get("office-status")(
+    makeQuery({
+      player: "steward_bob",
+      action: "grant-treasury",
+      officeId: "asgarnia:steward",
+      to: "steward_bob",
+      amount: "100",
+    })
+  );
+  assert.strictEqual(out.actionResult.ok, false);
+
+  // Offline recipient refused.
+  out = api._endpoints.get("office-status")(
+    makeQuery({
+      player: "steward_bob",
+      action: "grant-treasury",
+      officeId: "asgarnia:steward",
+      to: "ghost",
+      amount: "100",
+    })
+  );
+  assert.strictEqual(out.actionResult.ok, false);
+
+  // More than the treasury holds refused.
+  out = api._endpoints.get("office-status")(
+    makeQuery({
+      player: "steward_bob",
+      action: "grant-treasury",
+      officeId: "asgarnia:steward",
+      to: "mallory",
+      amount: "999999",
+    })
+  );
+  assert.strictEqual(out.actionResult.ok, false);
+  assert.strictEqual(Store.getKingdom("asgarnia").treasury, 50000);
 });
 
 test("unknown action returns null actionResult", () => {
