@@ -104,6 +104,8 @@ const DEEDS = Object.freeze({
   playwrightlaureate: Object.freeze({ points: 6, label: "wrote five plays" }),
   champion: Object.freeze({ points: 8, label: "won an athletic championship" }),
   recordbreaker: Object.freeze({ points: 6, label: "broke a kingdom sports record" }),
+  ironchef: Object.freeze({ points: 8, label: "won a cook-off" }),
+  recipehunter: Object.freeze({ points: 6, label: "invented three recipes" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),
 });
 

@@ -657,6 +657,25 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "cook-off" / "cooking competition" / "recipe" — player asks about the
+  // cooking circuit. (CitizenCuisine owns the monthly best-dish showcases;
+  // this owns live cook-offs, judging panels, and recipes.)
+  if (/\b(cook-off|cookoff|cooking competition|mystery ingredient|iron chef)\b/.test(said)) {
+    try {
+      const CookOffs = require("../lib/CitizenCookOffs");
+      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const open = CookOffs.openCookOff(kingdomId);
+      const season = CookOffs.seasonOf(Date.now());
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "cookoff", {
+        open: open ? { theme: open.theme, mystery: open.mystery, entries: open.entries.length, pot: open.pot } : null,
+        leaders: CookOffs.rankingsFor(kingdomId, season, 3).map((r) => ({ name: r.name, points: r.points })),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "athlete" / "stadium" / "training" — player asks about athletics.
   // (CitizenSports owns the leagues and fixtures; this owns athletes,
   // training, stadiums, and records.)

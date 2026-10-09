@@ -61,6 +61,11 @@ function branchTile(kingdomId) {
 let cache = null;
 let dirty = false;
 
+/** Mark the banking state dirty so the next save() persists it. */
+function markDirty() {
+  dirty = true;
+}
+
 function blankState() {
   return {
     accounts: {}, // norm -> { balance, lastInterest, createdAt }
@@ -415,6 +420,7 @@ module.exports = {
   describe,
   save,
   resetForTests,
+  markDirty,
   clearCacheForTests,
   _data: data,
 };

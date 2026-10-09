@@ -30,6 +30,7 @@ const { onCharterCommand, CHARTER_USAGE } = require("./CitizenTradeCharterEvents
 const { onDigCommand, DIG_USAGE } = require("./CitizenArchaeologyEvents");
 const { onStageCommand, STAGE_USAGE } = require("./CitizenTheaterEvents");
 const { onAthleticsCommand, ATHLETICS_USAGE } = require("./CitizenAthleticsEvents");
+const { onCookOffCommand, COOKOFF_USAGE } = require("./CitizenCookOffEvents");
 const { onOfferConfirmed: onCharterOfferConfirmed } = require("./lib/CitizenCharterToll");
 const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
@@ -721,6 +722,12 @@ module.exports = {
       onAthleticsCommand,
       PlayerRights.NONE,
       ATHLETICS_USAGE
+    );
+    api.registerCommand(
+      "cookoff",
+      onCookOffCommand,
+      PlayerRights.NONE,
+      COOKOFF_USAGE
     );
   },
 };

@@ -930,6 +930,27 @@
       ]
     },
     {
+      "id": "citizen_cookoff",
+      "mode": "citizen_cookoff",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenCookOff"
+        }
+      ]
+    },
+    {
       "id": "citizen_explore",
       "mode": "citizen_explore",
       "repeat": false,
