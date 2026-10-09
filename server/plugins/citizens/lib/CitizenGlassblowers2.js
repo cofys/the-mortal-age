@@ -497,21 +497,29 @@ function completePickup(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers (top-level requires; never throw).
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    if (Journal && typeof Journal.appendEntry === "function") {
-      Journal.appendEntry(citizen, text);
-    } else if (Journal && typeof Journal.addEntry === "function") {
-      Journal.addEntry(citizen, text);
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method.
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch { /* journal absent */ }
+  }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+function journalize(citizenName, text) {
   try {
-    if (Rumors && typeof Rumors.seedRumor === "function") Rumors.seedRumor(text);
-  } catch { /* rumors absent */ }
+    journal()?.log(citizenName, "work", text);
+  } catch {
+    /* journal is best-effort; never break the tick */
+  }
 }
+
 
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {

@@ -144,24 +144,11 @@ function fresh() {
 
 // --- jobs removed 2026-10-08: jobsFor was hash-derived fabrication. ---
 
-// --- metal pool correctness ---
-{
-  fresh();
-  const m = S.metalForToday("metaluser", T0);
-  assert.ok(["bronze", "iron", "steel", "mithril"].includes(m), `village metal ${m}`);
-  console.log("metal pool: PASS");
-}
+// --- metalForToday removed 2026-10-08: hash-derived fabrication, no production callers. ---
 
 // --- masterwork removed 2026-10-08: masterworkFor was hash-derived fabrication. ---
 
-// --- goods + pricing ---
-{
-  fresh();
-  const g = "a bundle of nails";
-  const p = S.priceFor(g, T0);
-  assert.ok(p >= 5 && p <= 40, `price ${p} in band`);
-  console.log("goods/pricing: PASS");
-}
+// --- priceFor removed 2026-10-08: hash-derived fabrication, no production callers. ---
 
 // --- all 3 ledgers round-trip + TTL expiry ---
 {

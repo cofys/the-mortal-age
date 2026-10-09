@@ -419,19 +419,7 @@ function pitchFor(record) {
 
 // (appraisalOf removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's assay alert at a pitch (~8%/day), or null: a changer caught a
- * bad coin in the wild. Journaled + rumor-seeded by dailyRhythms.
- */
-function assayAlertFor(pitch, dateMs) {
-  if (!pitch?.name) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(pitch.name + "|assay-alert:" + day));
-  if (rng() >= ASSAY_ALERT_CHANCE) return null;
-  const coin = pickOne(rng, ASSAY_COINS);
-  const bad = rng() < 0.5 ? "clipped" : "counterfeit";
-  return { coin, bad };
-}
+// (assayAlertFor removed 2026-10-08: hash-derived fabrication, no production callers.)
 
 // (lendingRushFor removed 2026-10-08: hash-derived fabrication.)
 
@@ -567,21 +555,29 @@ function redeemPawn(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers (top-level requires; never throw).
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    if (Journal && typeof Journal.appendEntry === "function") {
-      Journal.appendEntry(citizen, text);
-    } else if (Journal && typeof Journal.addEntry === "function") {
-      Journal.addEntry(citizen, text);
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method.
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch { /* journal absent */ }
+  }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+function journalize(citizenName, text) {
   try {
-    if (Rumors && typeof Rumors.seedRumor === "function") Rumors.seedRumor(text);
-  } catch { /* rumors absent */ }
+    journal()?.log(citizenName, "work", text);
+  } catch {
+    /* journal is best-effort; never break the tick */
+  }
 }
+
 
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
@@ -780,7 +776,6 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   moneyfolkTypeOf,
   pitchFor,
-  assayAlertFor,
   nearestBankFor,
   banksOpenAt,
   offerMicroLoan,

@@ -9,7 +9,6 @@ const {
   woodfolkTypeFromRoll,
   woodfolkTypeOf,
   woodlotFor,
-  priceFor,
   requestOrder,
   orderFor,
   orderReady,
@@ -145,14 +144,7 @@ console.log("commoner gating: PASS");
 
 // --- daily pools removed 2026-10-08: woodForToday/basketForToday/taskForToday were hash-derived fabrication. ---
 
-// --- goods + pricing ---
-{
-  const g = WOODEN_GOODS[0];
-  const p = priceFor(g, NOON);
-  assert.ok(p >= 2 && p <= 25, `price ${p} in band`);
-  assert.equal(priceFor(g, NOON), p, "price deterministic");
-  console.log("goods/pricing: PASS");
-}
+// --- priceFor removed 2026-10-08: hash-derived fabrication, no production callers. ---
 
 // --- showpiece removed 2026-10-08: showpieceFor was hash-derived fabrication. ---
 

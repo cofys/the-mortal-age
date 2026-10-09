@@ -412,32 +412,9 @@ const CONTEST_CHALLENGERS = [
   "a retired sailor with a concertina",
 ];
 
-/**
- * Today's rival ballad contest at a venue (~8%/day), or null.
- * Returns { a, b } — the two challengers.
- */
-function contestFor(venue, dateMs) {
-  if (!venue?.name) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(venue.name + "|ballad-contest:" + day));
-  if (rng() >= CONTEST_CHANCE) return null;
-  const a = pickOne(rng, CONTEST_CHALLENGERS);
-  let b = pickOne(rng, CONTEST_CHALLENGERS);
-  if (b === a) b = CONTEST_CHALLENGERS[(CONTEST_CHALLENGERS.indexOf(a) + 1) % CONTEST_CHALLENGERS.length];
-  return { a, b };
-}
+// (contestFor removed 2026-10-08: hash-derived fabrication, no production callers.)
 
-/**
- * Today's recovered legendary ballad for a kingdom (~3%/day), or null.
- */
-function legendFor(kingdomId, dateMs) {
-  const ballads = knownBallads();
-  if (!ballads.length) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(String(kingdomId ?? "anon") + "|ballad-legend:" + day));
-  if (rng() >= LEGEND_CHANCE) return null;
-  return pickOne(rng, ballads);
-}
+// (legendFor removed 2026-10-08: hash-derived fabrication, no production callers.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM).
@@ -493,21 +470,29 @@ function tuneExists(tune) {
 // Journal + rumor helpers (top-level requires; never throw).
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    if (Journal && typeof Journal.appendEntry === "function") {
-      Journal.appendEntry(citizen, text);
-    } else if (Journal && typeof Journal.addEntry === "function") {
-      Journal.addEntry(citizen, text);
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method.
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch { /* journal absent */ }
+  }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+function journalize(citizenName, text) {
   try {
-    if (Rumors && typeof Rumors.seedRumor === "function") Rumors.seedRumor(text);
-  } catch { /* rumors absent */ }
+    journal()?.log(citizenName, "work", text);
+  } catch {
+    /* journal is best-effort; never break the tick */
+  }
 }
+
 
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
@@ -710,8 +695,6 @@ module.exports = {
   songfolkTypeOf,
   venueFor,
   knownBallads,
-  contestFor,
-  legendFor,
   requestTune,
   requestFor,
   giveLesson,

@@ -9,13 +9,6 @@ const {
   moneyfolkTypeFromRoll,
   moneyfolkTypeOf,
   pitchFor,
-  rateForToday,
-  pawnItemForToday,
-  countJobForToday,
-  taskForToday,
-  appraisalOf,
-  assayAlertFor,
-  lendingRushFor,
   nearestBankFor,
   banksOpenAt,
   offerMicroLoan,
@@ -190,26 +183,7 @@ function findName(pred, prefix = "Coin") {
   console.log("  venues ok");
 }
 
-// --- rates, pawn items, count jobs, appraisals ---
-
-{
-  const q1 = rateForToday("sam", NOON);
-  assert.equal(q1.coin, rateForToday("sam", NOON).coin, "rate coin stable per day");
-  assert.equal(q1.rate, rateForToday("sam", NOON).rate, "rate stable per day");
-  assert.ok(/^3 [a-z ]+ to 10 coins$|^4 [a-z ]+ to 10 coins$|^5 [a-z ]+ to 10 coins$|^6 [a-z ]+ to 10 coins$|^7 [a-z ]+ to 10 coins$/.test(q1.rate), `rate format: ${q1.rate}`);
-  const q2 = rateForToday("sam", NOON + 24 * 3600 * 1000);
-  console.log(`  today's rate: ${q1.coin} at ${q1.rate}; tomorrow differs or not (seeded, fine)`);
-  const item = pawnItemForToday("sam", NOON);
-  assert.equal(item, pawnItemForToday("sam", NOON), "pawn item stable per day");
-  const job = countJobForToday("sam", NOON);
-  assert.equal(job, countJobForToday("sam", NOON), "count job stable per day");
-  const a = appraisalOf("a gold sovereign", NOON);
-  assert.equal(a.verdict, appraisalOf("a gold sovereign", NOON).verdict, "appraisal stable per day");
-  assert.ok(["genuine weight", "clipped — short by a hair", "counterfeit — brass under the wash"].includes(a.verdict), `verdict known: ${a.verdict}`);
-  const t1 = taskForToday("sam", MONEYFOLK_CHANGER, NOON);
-  assert.equal(t1, taskForToday("sam", MONEYFOLK_CHANGER, NOON), "task stable per day");
-  console.log(`  rate/pawn/count/appraisal/task all deterministic`);
-}
+// --- rates/pawn/appraisal removed 2026-10-08: rateForToday/pawnItemForToday/countJobForToday/appraisalOf/taskForToday were hash-derived fabrication. ---
 
 // --- real-data bridges to the pro bank module ---
 
@@ -221,32 +195,7 @@ function findName(pred, prefix = "Coin") {
   console.log("  pro-bank bridges ok");
 }
 
-// --- rhythms (deterministic) ---
-
-{
-  const pitch = MONEY_PITCHES[0];
-  assert.equal(assayAlertFor(pitch, NOON), assayAlertFor(pitch, NOON), "assay alert deterministic");
-  assert.equal(lendingRushFor("misthalin", NOON), lendingRushFor("misthalin", NOON), "lending rush deterministic");
-  // scan a year to prove both fire
-  const DAY = 24 * 3600 * 1000;
-  const base = new Date(2026, 6, 1, 12, 0).getTime();
-  let sawAssay = null, sawRush = null;
-  for (let d = 0; d < 365 && (!sawAssay || !sawRush); d++) {
-    const t = base + d * DAY;
-    if (!sawAssay) {
-      const p = MONEY_PITCHES.find((v) => assayAlertFor(v, t));
-      if (p) sawAssay = p.name;
-    }
-    if (!sawRush) {
-      const k = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"]
-        .find((kid) => lendingRushFor(kid, t));
-      if (k) sawRush = k;
-    }
-  }
-  assert.ok(sawAssay, "assay alerts occur");
-  assert.ok(sawRush, "lending rushes occur");
-  console.log(`  rhythms fire: assay alert at ${sawAssay}, lending rush in ${sawRush}`);
-}
+// --- rhythms removed 2026-10-08: assayAlertFor/lendingRushFor were hash-derived fabrication. ---
 
 // --- micro-loan ledger ---
 
@@ -306,10 +255,11 @@ function findName(pred, prefix = "Coin") {
   const citizen = makeCitizen(100, 100);
   citizen.forceChat = (t) => said.push(String(t));
   const player = makePlayer(105, 105);
+  const playerRec = { username: "TestPlayer", role: "player" };
   const director = {
-    roster: new Map([[changerName.toLowerCase(), r1], [lenderName.toLowerCase(), r2], ["notmoneyfolk", r3]]),
-    playerFor: (r) => (r === r1 || r === r2 ? citizen : null),
-    onlinePlayers: () => [player],
+    roster: new Map([[changerName.toLowerCase(), r1], [lenderName.toLowerCase(), r2], ["notmoneyfolk", r3], ["testplayer", playerRec]]),
+    isOnline: (r) => (r === r1 || r === r2 || r === playerRec),
+    getBot: (r) => (r === r1 || r === r2 ? citizen : r === playerRec ? player : null),
     aiTickCount: 0,
     log: () => {},
   };

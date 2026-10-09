@@ -25,7 +25,7 @@
  *    the nervous stops and looks around.
  *
  * Data tier, zero LLM. Everything is wrapped per-citizen in try/catch.
- * Wiring: CitizenDirector.tick() calls tickAlive(this, nowMs) once per tick.
+ * Wiring: CitizenDirector.tickProximity() calls tickAlive(this, nowMs, desync) once per fast tick.
  */
 
 const { agentRng, chance, logNormalJitter, humanizerProfile } = require("./humanizer");
@@ -614,7 +614,7 @@ function tickEmoteReactions(director, record, bot, nowMs) {
 // --- public tick ---------------------------------------------------------------------
 
 /**
- * The alive tick. Called from CitizenDirector.tick() once per ~60s tick.
+ * The alive tick. Called from CitizenDirector.tickProximity() once per ~10s fast tick.
  * All sub-ticks are data-tier, zero LLM, per-citizen try/catch.
  */
 function tickAlive(director, nowMs, desync = null) {

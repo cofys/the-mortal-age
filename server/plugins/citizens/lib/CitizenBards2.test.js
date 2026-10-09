@@ -9,11 +9,7 @@ const {
   songfolkTypeFromRoll,
   songfolkTypeOf,
   venueFor,
-  tuneForToday,
   knownBallads,
-  swappedBalladFor,
-  contestFor,
-  legendFor,
   requestTune,
   requestFor,
   giveLesson,
@@ -205,11 +201,8 @@ function findName(predicate, prefix = "Songfolk") {
   assert.equal(VENUES.length, 10, "ten venues");
 }
 
+// --- tuneForToday removed 2026-10-08: hash-derived fabrication. tuneExists stays. ---
 {
-  const t1 = tuneForToday("sam", NOON);
-  assert.equal(t1, tuneForToday("sam", NOON), "tune stable per day");
-  assert.ok(AMATEUR_SONGS.includes(t1), "tune from the amateur songbook");
-  assert.equal(tuneExists(t1), true);
   assert.equal(tuneExists("The King's Road"), false, "pro ballad not in amateur book");
   assert.equal(tuneExists("no such tune"), false);
 }
@@ -223,32 +216,11 @@ function findName(predicate, prefix = "Songfolk") {
     assert.ok(ballads.length === real.length, "reads the REAL pro repertoire table");
     assert.ok(ballads.includes("The Ballad of the Nameless King"), "real lore name present");
   } catch { /* pro module absent; fallback already asserted */ }
-  const b = swappedBalladFor("sam", NOON);
-  assert.equal(b, swappedBalladFor("sam", NOON), "swapped ballad stable per day");
-  assert.ok(knownBallads().includes(b), "swapped ballad from the real pool");
 }
 
 // --- rare set-pieces: deterministic, day-gated ---
 
-{
-  const v = VENUES[0];
-  const c = contestFor(v, NOON);
-  assert.equal(c === null || (typeof c.a === "string" && typeof c.b === "string" && c.a !== c.b), true, "contest shape");
-  assert.equal(JSON.stringify(contestFor(v, NOON)), JSON.stringify(c), "contest deterministic per day");
-  const l = legendFor("misthalin", NOON);
-  assert.equal(l === null || typeof l === "string", true, "legend shape");
-  assert.equal(legendFor("misthalin", NOON), l, "legend deterministic per day");
-  // scan a year to confirm both fire sometimes and not too often
-  let contests = 0, legends = 0;
-  for (let d = 0; d < 365; d++) {
-    const ms = NOON + d * 86400000;
-    if (contestFor(VENUES[0], ms)) contests++;
-    if (legendFor("misthalin", ms)) legends++;
-  }
-  assert.ok(contests > 5 && contests < 80, `contest fires ${contests}/365 venue-days`);
-  assert.ok(legends > 2 && legends < 40, `legend fires ${legends}/365 kingdom-days`);
-  console.log(`  rare set-pieces: ${contests}/365 contest days, ${legends}/365 legend days`);
-}
+// --- contestFor/legendFor removed 2026-10-08: hash-derived fabrication, no production callers. ---
 
 // --- ledgers ---
 
@@ -324,7 +296,12 @@ function findName(predicate, prefix = "Songfolk") {
   const citizen = makeCitizen(100, 100);
   const player = makePlayer(100, 101, "ReqPlayer");
   requestTune("ReqPlayer", "Cooper's Reel", NOON);
-  const director = { roster: new Map(), playerFor: () => citizen, onlinePlayers: () => [player] };
+  const playerRec = { username: "ReqPlayer", role: "player" };
+  const director = {
+    roster: new Map([["reqplayer", playerRec]]),
+    isOnline: (r) => r === playerRec,
+    getBot: (r) => (r === playerRec ? player : null),
+  };
   const req = nearbyRequest(director, citizen, NOON);
   assert.equal(req && req.tune, "Cooper's Reel", "nearby request found");
   const far = nearbyRequest(director, makeCitizen(500, 500), NOON);
@@ -340,10 +317,11 @@ function findName(predicate, prefix = "Songfolk") {
   const r2 = rec("notasongfolk", "guard"); // excluded by role
   const citizen = makeCitizen(100, 100);
   const player = makePlayer(100, 102);
+  const playerRec = { username: "TestPlayer", role: "player" };
   const director = {
-    roster: new Map([[buskerName.toLowerCase(), r1], ["notasongfolk", r2]]),
-    playerFor: (r) => (r === r1 ? citizen : null),
-    onlinePlayers: () => [player],
+    roster: new Map([[buskerName.toLowerCase(), r1], ["notasongfolk", r2], ["testplayer", playerRec]]),
+    isOnline: (r) => (r === r1 || r === playerRec),
+    getBot: (r) => (r === r1 ? citizen : r === playerRec ? player : null),
     aiTickCount: 0,
   };
   // force the chance gate to pass deterministically

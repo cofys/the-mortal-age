@@ -343,11 +343,7 @@ function workshopFor(record) {
 
 // (masterpieceFor removed 2026-10-08: hash-derived fabrication.)
 
-/** Coin price for a commissioned community piece (soup-kitchen precedent: fair, capped). */
-function priceFor(piece) {
-  const h = hashStr("gemfolkprice:" + String(piece));
-  return 25 + (h % 176); // 25-200 coins
-}
+// (priceFor removed 2026-10-08: hash-derived fabrication, no production callers.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM).
@@ -410,23 +406,29 @@ function cuttingFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method.
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch { /* journal absent */ }
+  }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+function journalize(citizenName, text) {
   try {
-    const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
-  } catch { /* rumors absent */ }
+    journal()?.log(citizenName, "work", text);
+  } catch {
+    /* journal is best-effort; never break the tick */
+  }
 }
+
 
 // ============================================================================
 // The tick function — called from the director tick.
@@ -523,7 +525,6 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   gemfolkTypeOf,
   workshopFor,
-  priceFor,
   commissionPiece,
   pieceFor,
   sellGem,

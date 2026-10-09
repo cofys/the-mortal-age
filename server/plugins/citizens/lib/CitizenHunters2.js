@@ -387,25 +387,26 @@ function trackingFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method.
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch {
-    /* journal absent */
   }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+function journalize(citizenName, text) {
   try {
-    const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
+    journal()?.log(citizenName, "work", text);
   } catch {
-    /* rumors absent */
+    /* journal is best-effort; never break the tick */
   }
 }
 

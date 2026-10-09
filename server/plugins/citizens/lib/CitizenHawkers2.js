@@ -464,20 +464,36 @@ function marketWaresFor(kingdomId, nowMs = Date.now()) {
 // Journal + rumor helpers (top-level requires; never throw).
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    if (Journal && typeof Journal.appendEntry === "function") {
-      Journal.appendEntry(citizen, text);
-    } else if (Journal && typeof Journal.addEntry === "function") {
-      Journal.addEntry(citizen, text);
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method.
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch { /* journal absent */ }
+  }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+function journalize(citizenName, text) {
   try {
-    if (Rumors && typeof Rumors.seedRumor === "function") Rumors.seedRumor(text);
-  } catch { /* rumors absent */ }
+    journal()?.log(citizenName, "work", text);
+  } catch {
+    /* journal is best-effort; never break the tick */
+  }
+}
+
+function seedRumor(event) {
+  try {
+    const rumors = require("./CitizenRumors");
+    if (typeof rumors.seedRumor === "function") rumors.seedRumor(Math.random, event);
+  } catch {
+    /* rumors absent */
+  }
 }
 
 /** Scripted speech via forceChat; never throws. */
@@ -575,7 +591,7 @@ function doHawkerWork(director, record, citizen, type, nowMs) {
   if (kid && heckledFor(kid, nowMs) && Math.random() < 0.5) {
     forceSay(citizen, fill(pickOne(Math.random, HECKLED_LINES), {}));
     journalize(citizen, `was heckled while hawking ${goods} at ${place}`);
-    seedRumor(`A hawker was heckled at ${place} — the crowd laughed at the ${goods}.`);
+    seedRumor({ kind: "work", what: `A hawker was heckled at ${place} — the crowd laughed at the ${goods}.` });
     return;
   }
 
@@ -586,7 +602,7 @@ function doHawkerWork(director, record, citizen, type, nowMs) {
       lastFiredByCitizen.set(key, nowMs);
       forceSay(citizen, fill(pickOne(Math.random, CROWD_LINES), { goods, pitch: place }));
       journalize(citizen, `drew a crowd hawking ${goods} at ${place}`);
-      seedRumor(`A crowd gathered round a hawker at ${place}!`);
+      seedRumor({ kind: "work", what: `A crowd gathered round a hawker at ${place}!` });
       return;
     }
   }

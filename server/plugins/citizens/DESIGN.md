@@ -135,11 +135,13 @@ Established contract (see `server/plugins/llm-gateway/LlmGateway.plugin.js`):
   private messages are already intercepted by llm-gateway's ChatInterceptor.
 - `llm:chat-response` — spoken by llm-gateway's Mouth (forceChat + packets).
 
-**Stubbed:** `citizens:chat-heard` `{citizenUsername, speakerUsername, text}`.
-Public chat near a bot cannot be intercepted today — core broadcasts it with
-no plugin hook (documented in `llm-gateway/ChatInterceptor.js`). The event,
-payload shape, and forwarder (`onCitizenChatHeard` → `llm:chat-request`,
-channel `public`) are defined and wired; nothing emits it in v1. Ambient
+**Shipped:** `citizens:chat-heard` `{citizenUsername, speakerUsername, text, shouldReply}`.
+Core's `ChatPacketListener` emits public-chat packets to plugins, and
+`chat/CitizenChat.js:onSocialPacket` (wired through `api.onSocialPacket`)
+turns them into `citizens:chat-heard` events for every citizen near the
+speaker; `onCitizenChatHeard` forwards the selected repliers to
+`llm:chat-request` (channel `public`). The event, payload shape, and
+forwarder are defined and wired; core now emits it. Citizens are not deaf. Ambient
 scripted speech (guard challenges, merchant ads, tavern lines) uses
 `forceChat` directly and needs no LLM.
 
@@ -229,16 +231,22 @@ riffs on them later) and lands in the citizen's journal. Unit checks:
 
 ## What's stubbed / deferred
 
-- **Fishing catches.** Fishers do the full visible behavior (dock shifts, cast
-  rhythm, chatter, hauls counted toward goals), but landing actual fish needs
-  a brain NPC-interaction path: the brain world has `objectSearch` but no NPC
-  search, and the plugin api exposes `emitObjectInteraction` but not
-  `emitNpcInteraction` (`PluginManager.emitNpcInteraction` exists in core —
-  it's just not on the api facade). Follow-up: expose it and add an
-  `npcSearch` to the brain world; then a `fishSpot` action can click real
-  "Fishing spot" NPCs through the Fishing skill plugin.
-- `citizens:chat-heard` emission (needs a core public-chat hook; one-line
-  proposal lives in llm-gateway's ChatInterceptor notes).
+- **Fishing catches.** (Done 2026-10-08, merged in 521cd833:
+  `brain/actions/CitizenFishing.js`.) Fishers near a real fishing-spot NPC
+  (resolved from the bot's local NPC list through the Fishing plugin's own
+  spot tables via `Fishing.getSpotTool`, preferring the small net) roll real
+  catches from the Fishing plugin's fish defs: real items land in the
+  citizen's inventory (`bot.getInventory().adds(fish.id, amount)`) and real
+  Fishing XP accrues (`bot.getSkillManager().addExperiences(Skill.FISHING,
+  fish.experience)`). No `npcSearch` / `emitNpcInteraction` was needed — the
+  spot is resolved by proximity, not clicked. Inventory-full grants nothing;
+  banking is handled by the decision layer's `citizen_bank` activity, so
+  nothing is ever conjured.
+- `citizens:chat-heard` (Done 2026-10-08: `chat/CitizenChat.js:onSocialPacket`
+  is wired through `api.onSocialPacket` — core's `ChatPacketListener` emits
+  public-chat packets to plugins, and every nearby citizen emits
+  `citizens:chat-heard`; only the selected repliers get `shouldReply`, the
+  rest are the crowd that heard and remembered).
 - Citizen death respawn (no persistent respawn resolver; cities are safe, but
   a killed citizen currently stays dead until its next scheduled wake).
 - Merchant customer side is abstract (sales tick, no real trade windows);
@@ -282,7 +290,7 @@ server/plugins/citizens/
   shop/MerchantShops.js         Trade option + stall UI on the merchant's live inventory
   brain/actions/CitizenRoutine.js
   brain/actions/IdleSocial.js
-  chat/CitizenChat.js           llm:citizen-register + chat-heard stub
+  chat/CitizenChat.js           llm:citizen-register + chat-heard emission (onSocialPacket)
   director/CitizenDirector.js   roster, spawn, circadian schedule, goals
 ```
 

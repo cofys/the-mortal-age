@@ -544,20 +544,36 @@ function cancelWakeup(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers (top-level requires; never throw).
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    if (Journal && typeof Journal.appendEntry === "function") {
-      Journal.appendEntry(citizen, text);
-    } else if (Journal && typeof Journal.addEntry === "function") {
-      Journal.addEntry(citizen, text);
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method.
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
-  } catch { /* journal absent */ }
+  }
+  return _journal || null;
 }
 
-function seedRumor(text) {
+function journalize(citizenName, text) {
   try {
-    if (Rumors && typeof Rumors.seedRumor === "function") Rumors.seedRumor(text);
-  } catch { /* rumors absent */ }
+    journal()?.log(citizenName, "work", text);
+  } catch {
+    /* journal is best-effort; never break the tick */
+  }
+}
+
+function seedRumor(event) {
+  try {
+    const rumors = require("./CitizenRumors");
+    if (typeof rumors.seedRumor === "function") rumors.seedRumor(Math.random, event);
+  } catch {
+    /* rumors absent */
+  }
 }
 
 /** Scripted speech via forceChat; never throws. */
@@ -663,7 +679,7 @@ function doTimefolkWork(director, record, citizen, type, nowMs) {
       lastFiredByCitizen.set(key, nowMs);
       forceSay(citizen, fill(pickOne(Math.random, PEAL_LINES), { bell: spot.name, kingdom: kid ?? "the kingdom" }));
       journalize(citizen, `rang the full peal at ${spot.name}`);
-      seedRumor(`A full peal rang out at ${spot.name}!`);
+      seedRumor({ kind: "work", what: `A full peal rang out at ${spot.name}!` });
       return;
     }
   }

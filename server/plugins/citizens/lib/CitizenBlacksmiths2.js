@@ -315,13 +315,7 @@ function smithyFor(record) {
   return pool[hashStr("smithfolksmithy:" + name) % pool.length];
 }
 
-/** The metal a smithfolk citizen is working today. */
-function metalForToday(username, dateMs) {
-  const name = (normalizeName(username) || "anon").toLowerCase();
-  const day = dayNumber(dateMs);
-  const metals = METALS.slice(0, 4); // bronze..mithril for village work
-  return metals[hashStr("smithfolkmetal:" + name + ":" + day) % metals.length];
-}
+// (metalForToday removed 2026-10-08: hash-derived fabrication, no production callers.)
 
 // === Per-type job pools ===
 const FARRIER_JOBS = [
@@ -369,11 +363,7 @@ const IRON_GOODS = [
 
 // (goodForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** A fair village price for a simple iron good (5-40 coins). */
-function priceFor(good, dateMs) {
-  const rng = seededRng(hashStr("smithfolkprice:" + good + ":" + dayNumber(dateMs)));
-  return 5 + Math.floor(rng() * 36);
-}
+// (priceFor removed 2026-10-08: hash-derived fabrication, no production callers.)
 
 // === Masterworks ===
 const MASTERWORK_PIECES = [
@@ -593,8 +583,6 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   smithfolkTypeOf,
   smithyFor,
-  metalForToday,
-  priceFor,
   requestRepair,
   repairFor,
   buyGoods,

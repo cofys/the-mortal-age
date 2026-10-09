@@ -154,14 +154,7 @@ function fresh() {
   console.log("kingdom-preferred workshops: PASS");
 }
 
-// --- price sanity ---
-{
-  fresh();
-  const p = S.priceFor("a polished opal pendant");
-  assert.ok(p >= 25 && p <= 200, `price in band, got ${p}`);
-  assert.equal(S.priceFor("a polished opal pendant"), p, "price deterministic");
-  console.log("price sanity: PASS");
-}
+// --- priceFor removed 2026-10-08: hash-derived fabrication, no production callers. ---
 
 // --- all 3 ledgers round-trip + TTL expiry ---
 {
