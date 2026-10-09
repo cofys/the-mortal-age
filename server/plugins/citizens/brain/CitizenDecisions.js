@@ -92,6 +92,7 @@ const ACT_SMELT = "citizen_smelt";
 const ACT_CRAFT = "citizen_craft";
 const ACT_COOK = "citizen_cook";
 const ACT_HERB = "citizen_herb";
+const ACT_FLETCH = "citizen_fletch";
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
 const ACT_CHOP = "citizen_chop";
@@ -397,9 +398,63 @@ function herbCount(player) {
   }
 }
 
-/** Raw food the citizen could cook right now (inventory, else bank). */
-function rawFoodCount(player) {
+/**
+ * Logs the citizen could fletch right now (inventory, else bank). Counts
+ * logs of level-gated recipes — the knife is the non-consumed partner, so
+ * it must be in the same place as the logs (pack or bank).
+ */
+function fletchCount(player) {
   try {
+    const Fletching = require("../../skills/Fletching.plugin");
+    const recipes = Fletching?.FLETCHING_RECIPES;
+    if (!Array.isArray(recipes) || !recipes.length) return 0;
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    const workable = (amount, recipe) =>
+      Number.isInteger(recipe.inputId) &&
+      amount(recipe.inputId) > 0 &&
+      (!recipe.needsId || amount(recipe.needsId) > 0);
+    // Inventory first (no trip needed), then bank.
+    let invTotal = 0;
+    for (const recipe of recipes) {
+      if (workable(invAmount, recipe)) invTotal += invAmount(recipe.inputId);
+    }
+    if (invTotal > 0) return invTotal;
+    let bankTotal = 0;
+    for (const recipe of recipes) {
+      if (workable(bankAmount, recipe)) bankTotal += bankAmount(recipe.inputId);
+    }
+    return bankTotal;
+  } catch {
+    return 0;
+  }
+}
+
+/** Raw food the citizen could cook right now (inventory, else bank). */
+function rawFoodCount(player) {  try {
     const Cooking = require("../../skills/Cooking.plugin");
     const recipes = Cooking?.COOKING_RECIPES;
     if (!Array.isArray(recipes) || !recipes.length) return 0;
@@ -470,6 +525,7 @@ function snapshot(player) {
     gems: gemCount(player),
     rawFood: rawFoodCount(player),
     herbs: herbCount(player),
+    fletchLogs: fletchCount(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -487,7 +543,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -549,6 +605,24 @@ function scoreActivity(activityId, snap) {
       if (goalType === GOAL_SAVE_GOLD) s += 4;
       if (nearby >= 2) s += 6;
       if (logs >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_FLETCH: {
+      // Fletching: cut logs into shafts and bows for XP and coin. No logs
+      // (or no knife) anywhere, no cutting. Fletching is inventory work —
+      // no station needed — so citizens pick it up whenever they've got
+      // logs from woodcutting. Shafts and bows sell steadily, so broke
+      // traders grind them; the weary and hurt stay away.
+      if ((fletchLogs ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // shafts sell steadily — a broke cutter grinds
+      if (fletchLogs >= 10) s += 8; // a real stockpile to work through
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -980,6 +1054,7 @@ module.exports = {
   ACT_CRAFT,
   ACT_COOK,
   ACT_HERB,
+  ACT_FLETCH,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

@@ -444,6 +444,27 @@
           "type": "citizenHerb"
         }
       ]
+    },
+    {
+      "id": "citizen_fletch",
+      "mode": "citizen_fletch",
+      "repeat": false,
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenFletch"
+        }
+      ]
     }
   ]
 }
