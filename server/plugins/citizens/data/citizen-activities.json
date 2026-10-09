@@ -423,6 +423,27 @@
           "type": "citizenCook"
         }
       ]
+    },
+    {
+      "id": "citizen_herb",
+      "mode": "citizen_herb",
+      "repeat": false,
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenHerb"
+        }
+      ]
     }
   ]
 }
