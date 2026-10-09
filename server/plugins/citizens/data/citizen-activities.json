@@ -909,6 +909,27 @@
       ]
     },
     {
+      "id": "citizen_train",
+      "mode": "citizen_train",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenTrain"
+        }
+      ]
+    },
+    {
       "id": "citizen_explore",
       "mode": "citizen_explore",
       "repeat": false,

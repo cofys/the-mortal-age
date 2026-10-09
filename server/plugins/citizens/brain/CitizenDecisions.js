@@ -129,6 +129,7 @@ const ACT_INSURERWORK = "citizen_insurerwork";
 const ACT_SPY = "citizen_spymaster";
 const ACT_DIG = "citizen_excavate";
 const ACT_STAGE = "citizen_rehearse";
+const ACT_TRAIN = "citizen_train";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -162,7 +163,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_TRAIN, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1489,6 +1490,34 @@ function stageInfo(player) {
   }
 }
 
+function trainInfo(player) {
+  try {
+    const Athletics = require("../lib/CitizenAthletics");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isAthlete = Athletics.isAthlete(username);
+    const info = Athletics.athleteInfo(username);
+    let athletic = 0;
+    try {
+      const personality = player?.getAttribute?.("citizens:personality") ?? {};
+      athletic = personality.strength ?? personality.agility ?? personality.athleticism ?? 0;
+    } catch { /* personality unreadable */ }
+    let openStadium = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      if (kid) openStadium = !!Athletics.stadiumFor(kid);
+    } catch { /* sites unreadable */ }
+    return {
+      isAthlete,
+      athletic,
+      fitness: info?.fitness ?? 0,
+      openStadium,
+    };
+  } catch {
+    return { isAthlete: false, athletic: 0, fitness: 0, openStadium: false };
+  }
+}
+
 /**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
@@ -1916,6 +1945,7 @@ compete: competeInfo(player),
     ins: insurerInfo(player),
     dig: digInfo(player),
     stage: stageInfo(player),
+    train: trainInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1937,7 +1967,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, train, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2004,6 +2034,23 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_TRAIN: {
+      // Athletics: athletes train at the stadium; the athletic are drawn
+      // to it. The hurt and weary stay home.
+      const t = train ?? { isAthlete: false, athletic: 0, fitness: 0, openStadium: false };
+      if (!t.isAthlete && (t.athletic ?? 0) < 0.5) return 4;
+      if (!t.openStadium) return 4; // honest — no stadium, no training
+      let s = 16;
+      if (t.isAthlete) s += 10; // athletes train on schedule
+      if ((t.fitness ?? 0) < 50) s += 8; // low fitness drives training
+      if ((t.athletic ?? 0) >= 0.7) s += 4;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
       if (mood < 20) s -= 8;
       return s;
     }
@@ -3193,7 +3240,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_TRAIN, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

@@ -200,6 +200,17 @@ function sicken(username, illnessKey, nowMs, opts = {}) {
     inHospital: false,
     kingdomId: opts.kingdomId ?? null,
   };
+  // Fitness seam: athletic citizens recover faster. Fit athletes (fitness
+  // 80+) shave up to 25% off the bout. Defensive: the athletics module
+  // may not be loaded.
+  try {
+    const Athletics = require("./CitizenAthletics");
+    const fitness = Athletics.fitnessFor(username);
+    if (fitness > 0.5) {
+      const bonus = Math.min(0.25, (fitness - 0.5) * 0.5);
+      rec.recoverAt = nowMs + Math.floor(days * DAY_MS * (1 - bonus));
+    }
+  } catch { /* athletics unreadable, no bonus */ }
   st.sick[norm] = rec;
   markDirty();
   return rec;

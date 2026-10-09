@@ -29,6 +29,7 @@ const { onSpyCommand, USAGE: SPY_USAGE } = require("./CitizenSpyEvents");
 const { onCharterCommand, CHARTER_USAGE } = require("./CitizenTradeCharterEvents");
 const { onDigCommand, DIG_USAGE } = require("./CitizenArchaeologyEvents");
 const { onStageCommand, STAGE_USAGE } = require("./CitizenTheaterEvents");
+const { onAthleticsCommand, ATHLETICS_USAGE } = require("./CitizenAthleticsEvents");
 const { onOfferConfirmed: onCharterOfferConfirmed } = require("./lib/CitizenCharterToll");
 const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
@@ -714,6 +715,12 @@ module.exports = {
       onStageCommand,
       PlayerRights.NONE,
       STAGE_USAGE
+    );
+    api.registerCommand(
+      "athletics",
+      onAthleticsCommand,
+      PlayerRights.NONE,
+      ATHLETICS_USAGE
     );
   },
 };

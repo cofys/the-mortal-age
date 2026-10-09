@@ -657,6 +657,25 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "athlete" / "stadium" / "training" — player asks about athletics.
+  // (CitizenSports owns the leagues and fixtures; this owns athletes,
+  // training, stadiums, and records.)
+  if (/\b(athlete|athletes|stadium|stadiums|training|fitness|sports record)\b/.test(said)) {
+    try {
+      const Athletics = require("../lib/CitizenAthletics");
+      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const stadium = Athletics.stadiumFor(kingdomId);
+      const athletes = Athletics.athletesIn(kingdomId, 3);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "athletics", {
+        stadium: stadium ? { capacity: stadium.capacity, condition: stadium.condition } : null,
+        athletes: athletes.map((a) => ({ name: a.name, sport: a.sport, fitness: a.fitness })),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "playwright" / "troupe" / "touring" — player asks about theater
   // production. (The entertainment theater block owns the house shows;
   // this owns playwrights, troupes, and touring.)
