@@ -88,6 +88,7 @@ const ACT_MEAL = "citizen_meal";
 const ACT_REST = "citizen_rest";
 const ACT_BANK = "citizen_bank";
 const ACT_SOCIAL = "tavern_social";
+const ACT_MINE = "citizen_mine";
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
 // re-decision. Short activities (meal/rest/bank) complete on their own.
 const ANCHOR_ACTIVITIES = new Set([
@@ -99,6 +100,7 @@ const ANCHOR_ACTIVITIES = new Set([
   "courtier_attend",
   "leisure_stroll",
   "refugee_flight",
+  ACT_MINE,
 ]);
 
 const MEAL_ROLES = new Set(["commoner", "merchant", "guard", "courtier"]);
@@ -343,6 +345,22 @@ function scoreActivity(activityId, snap) {
     case "refugee_flight": {
       let s = 55;
       if (exhausted) s -= 40;
+      return s;
+    }
+    case ACT_MINE: {
+      // Mining: ore for the smiths, coins for the miner. Industrious
+      // citizens with a trade goal pick up the pickaxe. Like the routine,
+      // it's work — the weary and hurt stay away.
+      let s = 38;
+      if (goalType === GOAL_MASTER_TRADE) s += 16;
+      else if (goalType === GOAL_SAVE_GOLD) s += 12;
+      s += urgent * 6;
+      s += industrious * 12;
+      if (coins < 60) s += 18;
+      else if (coins < 250) s += 6;
+      if (weary) s -= 50;
+      if (hurt) s -= 25;
+      if (freeSlots <= 2) s += 8; // full: bank hinge handles it
       return s;
     }
     default:
@@ -624,6 +642,7 @@ function resetForTests() {
 
 module.exports = {
   ACT_ROUTINE,
+  ACT_MINE,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

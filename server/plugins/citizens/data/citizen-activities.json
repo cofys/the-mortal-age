@@ -200,7 +200,7 @@
       ]
     },
     {
-      "_note": "Decision-layer hinge activities (CitizenDecisions): not repeat — they complete and the brain re-decides. Scored by needs, not schedules.",
+      "_note": "Decision-layer hinge activities (CitizenDecisions): not repeat \u2014 they complete and the brain re-decides. Scored by needs, not schedules.",
       "actions": [
         {
           "type": "citizenMeal"
@@ -266,6 +266,40 @@
               "courtier"
             ]
           }
+        }
+      ]
+    },
+    {
+      "id": "citizen_mine",
+      "mode": "citizen_mine",
+      "repeat": true,
+      "capacity": 32,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "equipTool",
+          "tool": "pickaxe"
+        },
+        {
+          "type": "interactObject",
+          "catalog": "rock",
+          "option": "Mine",
+          "until": {
+            "inventoryFull": true
+          },
+          "stallSeconds": 120
+        },
+        {
+          "type": "citizenBank"
         }
       ]
     }
