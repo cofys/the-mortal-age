@@ -77,7 +77,7 @@ function appointBankers(director, nowMs) {
           const Careers = require("./CitizenCareers");
           career = Careers.careerOf?.(record.username);
         } catch { /* careers optional */ }
-        if (career !== "banker") continue;
+        if (career?.career !== "banker") continue;
         try {
           const { kingdomIdOf } = require("../brain/CitizenSites");
           rKingdom = kingdomIdOf(record.username);

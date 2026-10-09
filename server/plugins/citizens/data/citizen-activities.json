@@ -1117,6 +1117,27 @@
           "type": "citizenBankerWork"
         }
       ]
+    },
+    {
+      "id": "citizen_insurerwork",
+      "mode": "citizen_insurerwork",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenInsurerWork"
+        }
+      ]
     }
   ]
 }

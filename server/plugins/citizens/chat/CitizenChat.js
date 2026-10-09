@@ -709,6 +709,32 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "insurance" / "buy a policy" / "file a claim" / "my policies" — insurance.
+  if (/\b(any insurance|buy (a|an) policy|insurance (policy|policies|quote|office)|file a claim|my polic(ies|y)|any insurers?)\b/.test(said)) {
+    try {
+      const Insurance = require("../lib/CitizenInsurance");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Insurance.describe(kingdomId) : null;
+      const mine = citizenUsername ? Insurance.policiesOf(citizenUsername) : [];
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "insurance_status", {
+        username: citizenUsername,
+        hasOffice: !!desc,
+        insurerCount: desc?.insurerCount ?? 0,
+        pool: desc?.pool ?? 0,
+        yourPolicies: mine.map((p) => ({ type: p.type, faceValue: p.faceValue, premium: p.premium })),
+        isInsurer: citizenUsername ? !!Insurance.insurerFor(citizenUsername) : false,
+        types: desc?.types ?? [],
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "publish: <headline>" — a real player files a story.
   if (/^publish:\s*/.test(said)) {
     try {

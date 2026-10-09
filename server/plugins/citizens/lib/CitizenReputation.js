@@ -87,6 +87,8 @@ const DEEDS = Object.freeze({
   muckraker: Object.freeze({ points: 6, label: "exposed three crimes" }),
   financier: Object.freeze({ points: 8, label: "built a banking fortune" }),
   defaulter: Object.freeze({ points: -8, label: "defaulted on a bank loan" }),
+  underwriter: Object.freeze({ points: 8, label: "underwrote a thriving insurance book" }),
+  uninsured: Object.freeze({ points: -4, label: "let every policy lapse" }),
   betrayal: Object.freeze({ points: -6, label: "betrayal" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),
 });

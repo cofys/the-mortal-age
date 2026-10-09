@@ -125,6 +125,7 @@ const ACT_OBSERVE = "citizen_observe";
 const ACT_CHART = "citizen_chart";
 const ACT_REPORT = "citizen_report";
 const ACT_BANKERWORK = "citizen_bankerwork";
+const ACT_INSURERWORK = "citizen_insurerwork";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -158,7 +159,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1362,6 +1363,27 @@ function bankInfo(player) {
 }
 
 /**
+ * Insurance readiness: is this citizen an insurer, and does the office exist?
+ * Defensive: a missing/broken insurance module scores as unable to insure.
+ */
+function insurerInfo(player) {
+  try {
+    const Insurance = require("../lib/CitizenInsurance");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isInsurer = !!Insurance.insurerFor(username);
+    let kingdomId = null;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      kingdomId = kingdomIdOf(player);
+    } catch { /* sites unreadable */ }
+    const hasOffice = kingdomId ? !!Insurance.officeTile(kingdomId) : false;
+    return { isInsurer, hasOffice, kingdomId };
+  } catch {
+    return { isInsurer: false, hasOffice: false, kingdomId: null };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1785,6 +1807,7 @@ compete: competeInfo(player),
     maps: mapInfo(player),
     press: pressInfo(player),
     bank: bankInfo(player),
+    ins: insurerInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1806,7 +1829,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1850,7 +1873,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (night?.isNight) s += 20;
       return s;
     }
-    case ACT_BANKERWORK: {
+    case ACT_BANK: {
       // The inventory clock: a full pack forces the hinge trip.
       let s = 6;
       if (freeSlots <= 2) s = 70;
@@ -2470,6 +2493,22 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_INSURERWORK: {
+      // Insurance: insurers sell real policies and settle real claims at
+      // the office — underwriting is work, and work pays. A human insurer
+      // works when the office is open. Non-insurers have no business
+      // behind the counter.
+      const iw = ins ?? { isInsurer: false, hasOffice: false };
+      if (!iw.isInsurer) return 4; // not an insurer
+      if (!iw.hasOffice) return 4; // honest — no office, no work
+      let s = 24;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 40; // drunk insurers are a liability
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_SCIENCE: {
       // Science: scientists run real experiments in the kingdom lab. A human
       // researcher works when they have a running experiment — and starts a
@@ -2979,7 +3018,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

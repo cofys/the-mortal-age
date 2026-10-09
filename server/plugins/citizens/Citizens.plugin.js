@@ -21,6 +21,7 @@
 
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { onWarDeclared, onWarEnded, onOfficeAssigned, onOfficeVacated } = require("./CitizenEvents");
+const { onInsuranceCommand, onPlayerDeathInsured, USAGE: INSURANCE_USAGE } = require("./CitizenInsuranceEvents");
 const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { initCitizenSocial, onSocialChatResponse } = require("./chat/CitizenSocial");
@@ -622,6 +623,7 @@ module.exports = {
     api.onPlayerAttack(onCitizenAttackedByPlayer);
     api.onPlayerLevelUp(onLevelUpHeard);
     api.onPlayerDeath(onDeathSeen);
+    api.onPlayerDeath(onPlayerDeathInsured);
     api.onNpcDeath(onKillWitnessed);
     api.onPlayerLogin(onFriendLoggedIn);
     api.onPlayerLogout(onFriendLoggedOut);
@@ -639,6 +641,12 @@ module.exports = {
       onCitizenCommand,
       PlayerRights.ADMINISTRATOR,
       "Manage AI citizens: ::citizen [status|spawn]"
+    );
+    api.registerCommand(
+      "insurance",
+      onInsuranceCommand,
+      PlayerRights.NONE,
+      INSURANCE_USAGE
     );
   },
 };

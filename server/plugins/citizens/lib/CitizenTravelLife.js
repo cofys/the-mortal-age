@@ -131,6 +131,12 @@ function processArrival(director, journey, nowMs) {
     );
   }
 
+  // Citizen insurance: reimburse insured travelers for bandit losses.
+  // Guarded + lazy — insurance is optional, travel never depends on it.
+  try {
+    require("./CitizenInsurance").settleTravelDanger(uname, journey, { coinsLost, damage }, player);
+  } catch { /* insurance optional */ }
+
   // Cargo: peddler goods sell at margin on arrival.
   let cargoProfit = 0;
   if (journey.cargo) {
