@@ -319,7 +319,7 @@ function attach(api) {
         const result = claimFullCharacter(player, originId, backgroundId, firstname, lastname, appearanceRaw);
         if (!result.ok) {
           claimError = result.error;
-          console.warn(`[origins-api] full character claim failed for ${username}: ${result.error}`);
+          console.warn(`[origins-api] full character claim failed for ${player.getUsername?.() ?? "?"}: ${result.error}`);
         }
       } else {
         // Legacy single-origin claim.
