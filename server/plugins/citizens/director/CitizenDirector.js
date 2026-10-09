@@ -199,6 +199,7 @@ const CitizenSchools = require("../lib/CitizenSchools");
 // celebration chatter, and participation journaling all fire for them.
 registerFeastSource();
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
+const { tickSeasonLife } = require("../lib/CitizenSeasonLife");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -2201,6 +2202,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("weather reactions failed", { error: String(error?.message ?? error) });
     }
+    // Citizen seasons: season transitions (announced + journaled once),
+    // rain-boosted crop growth on citizen farms, seasonal reactions near
+    // real players, storm shelter. Data tier, zero LLM.
+    try {
+      tickSeasonLife(this, nowMs);
+    } catch (error) {
+      this.log("season life failed", { error: String(error?.message ?? error) });
+    }
     // Citizen festivals: realm-wide seasonal festivals (5 annual, 3-day
     // windows). Citizens journal their participation (shared history) and,
     // when a real player is near, celebrate with personality-gated lines,
@@ -2987,6 +2996,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen entertainment save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (require("../lib/CitizenSeasons").save()) {
+        this.log("citizen seasons saved");
+      }
+    } catch (error) {
+      this.log("citizen seasons save failed", {
         error: String(error?.message ?? error),
       });
     }

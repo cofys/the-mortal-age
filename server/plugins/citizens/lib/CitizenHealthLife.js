@@ -183,8 +183,14 @@ function healerCareerOf(record) {
 // --- tick phases -------------------------------------------------------------
 
 function phaseOnset(director, records, nowMs, rng) {
-  const month = new Date(nowMs).getMonth();
-  const winter = month === 11 || month === 0 || month === 1;
+  // Winter comes from the season system (single source of truth).
+  let winter = false;
+  try {
+    winter = require("./CitizenSeasons").isWinter(nowMs);
+  } catch {
+    const month = new Date(nowMs).getMonth();
+    winter = month === 11 || month === 0 || month === 1;
+  }
   for (const record of records) {
     const username = usernameOf(record);
     if (!username || Health.isSick(username)) continue;

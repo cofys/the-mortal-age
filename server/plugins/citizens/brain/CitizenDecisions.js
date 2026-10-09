@@ -496,6 +496,33 @@ function sickPenalty(player) {
 }
 
 /**
+ * Climate right now: season + sky weather. Returns
+ * { season, weather, isStorm, outdoorPenalty }. Defensive: a missing Sky
+ * or season module scores as clear spring weather (no penalty).
+ */
+function climateInfo() {
+  try {
+    const Seasons = require("../lib/CitizenSeasons");
+    const nowMs = Date.now();
+    const season = Seasons.seasonOf(nowMs);
+    let weather = "clear";
+    try {
+      weather = String(require("../../skills/fishing/Conditions.Fishing").getWeather?.() ?? "clear").toLowerCase();
+    } catch {
+      weather = "clear";
+    }
+    return {
+      season,
+      weather,
+      isStorm: weather === "storm",
+      outdoorPenalty: Seasons.outdoorWorkPenalty(weather),
+    };
+  } catch {
+    return { season: "spring", weather: "clear", isStorm: false, outdoorPenalty: 0 };
+  }
+}
+
+/**
  * Travel readiness: can this citizen afford the cheapest open route?
  * Returns { canTravel, cheapestFare, openCount }. Defensive: a
  * missing/broken travel module scores as unable to travel.
@@ -937,6 +964,7 @@ function snapshot(player) {
     travel: travelInfo(player),
     entertain: entertainInfo(player),
     drunk: isDrunk(player),
+    climate: climateInfo(),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -954,7 +982,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, travel, entertain, drunk, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, travel, entertain, drunk, climate, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1105,6 +1133,9 @@ function scoreActivity(activityId, snap) {
       else if (goalType === GOAL_SAVE_GOLD) s += 12;
       if (coins < 60) s += 8; // herb runs pay — a broke farmer grinds
       if (seeds >= 6) s += 8; // a real seed stockpile to work through
+      // Weather: rain waters the crops (no penalty — a farmer works in rain),
+      // but storms are dangerous even in the fields.
+      if (climate?.isStorm) s -= 30;
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1128,6 +1159,8 @@ function scoreActivity(activityId, snap) {
       if (goalType === GOAL_SAVE_GOLD) s += 8;
       if ((thiefLevel ?? 1) >= 20) s += 6; // silk stalls and up
       if ((thiefLevel ?? 1) >= 35) s += 6; // fur stalls and up
+      // Storms are a thief's friend: fewer witnesses, guards huddled inside.
+      if (climate?.isStorm) s += 8;
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1149,6 +1182,8 @@ function scoreActivity(activityId, snap) {
       if (builds >= 8) s += 8; // a real timber stockpile to work through
       if (homeFurnishable) s += 8; // building to furnish my own home
       if ((buildLevel ?? 1) >= 29) s += 6; // oak bookcases and up
+      // Storms shut down the workshop — nobody frames furniture in a gale.
+      s += climate?.outdoorPenalty ?? 0;
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1663,6 +1698,7 @@ module.exports = {
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,
+  ACT_BUILD,
   ACT_TRAVEL,
   ACT_ENTERTAIN,
   ACT_MEAL,

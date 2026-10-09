@@ -866,6 +866,31 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "what season is it" — player asks about the season / weather.
+  if (/\b(what season is it|is it winter|is it summer|is it spring|is it autumn|is it fall|what's the weather|how's the weather|is it cold|is it raining|is it storming)\b/.test(said)) {
+    try {
+      const Seasons = require("../lib/CitizenSeasons");
+      const nowMs = Date.now();
+      const season = Seasons.seasonOf(nowMs);
+      let weather = "clear";
+      try {
+        weather = String(require("../../skills/fishing/Conditions.Fishing").getWeather?.() ?? "clear").toLowerCase();
+      } catch {
+        weather = "clear";
+      }
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "season_status", {
+        season,
+        description: Seasons.describe(nowMs),
+        weather,
+        warmClothes: Seasons.warmClothesNeeded(nowMs),
+        festival: Seasons.seasonalFestival(season),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "are you a criminal" — player asks about the citizen's record.
   if (/\b(are you a criminal|have you committed crimes|are you wanted|do you have a record|are you a thief)\b/.test(said)) {
     try {
