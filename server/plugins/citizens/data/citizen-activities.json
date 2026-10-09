@@ -634,6 +634,27 @@
           "type": "citizenTravel"
         }
       ]
+    },
+    {
+      "id": "citizen_entertain",
+      "mode": "citizen_entertain",
+      "repeat": false,
+      "capacity": 16,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenEntertain"
+        }
+      ]
     }
   ]
 }

@@ -189,9 +189,11 @@ const { tickSchools } = require("../lib/CitizenSchoolLife");
 const { tickHealth } = require("../lib/CitizenHealthLife");
 const { tickJustice } = require("../lib/CitizenJusticeLife");
 const { tickTravel } = require("../lib/CitizenTravelLife");
+const { tickEntertain } = require("../lib/CitizenEntertainLife");
 const CitizenHealth = require("../lib/CitizenHealth");
 const CitizenCrime = require("../lib/CitizenCrime");
 const CitizenTravel = require("../lib/CitizenTravel");
+const CitizenEntertainment = require("../lib/CitizenEntertainment");
 const CitizenSchools = require("../lib/CitizenSchools");
 // Religious feasts join the seasonal calendar so the festival games,
 // celebration chatter, and participation journaling all fire for them.
@@ -2857,6 +2859,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("travel failed", { error: String(error?.message ?? error) });
     }
+    // Citizen entertainment: taverns, bards, theater, arena, sobriety.
+    // Data tier, zero LLM.
+    try {
+      tickEntertain(this, nowMs);
+    } catch (error) {
+      this.log("entertainment failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -2969,6 +2978,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen travel save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenEntertainment.save()) {
+        this.log("citizen entertainment saved");
+      }
+    } catch (error) {
+      this.log("citizen entertainment save failed", {
         error: String(error?.message ?? error),
       });
     }

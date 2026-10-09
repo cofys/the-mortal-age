@@ -101,6 +101,7 @@ const ACT_FARM = "citizen_farm";
 const ACT_THIEVE = "citizen_thieve";
 const ACT_BUILD = "citizen_build";
 const ACT_TRAVEL = "citizen_travel";
+const ACT_ENTERTAIN = "citizen_entertain";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -521,6 +522,39 @@ function travelInfo(player) {
 }
 
 /**
+ * Entertainment readiness: can this citizen afford a night out?
+ * Returns { canDrink, canDice, canTheater }. Defensive: a
+ * missing/broken entertainment module scores as unable to have fun.
+ */
+function entertainInfo(player) {
+  try {
+    const Entertain = require("../lib/CitizenEntertainment");
+    const coins = coinCount(player);
+    return {
+      canDrink: coins >= Entertain.DRINK_PRICE,
+      canDice: coins >= Entertain.DICE_MIN_BET,
+      canTheater: coins >= Entertain.THEATER_PRICE,
+    };
+  } catch {
+    return { canDrink: false, canDice: false, canTheater: false };
+  }
+}
+
+/**
+ * Drunkenness check: is this citizen currently drunk?
+ * Defensive: a missing/broken entertainment module scores as sober.
+ */
+function isDrunk(player) {
+  try {
+    const Entertain = require("../lib/CitizenEntertainment");
+    const username = player?.getUsername?.() ?? player?.getName?.() ?? "";
+    return Entertain.isDrunk(username);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -901,6 +935,8 @@ function snapshot(player) {
     jailed: jailPenalty(player),
     notoriety: notorietyOf(player),
     travel: travelInfo(player),
+    entertain: entertainInfo(player),
+    drunk: isDrunk(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -918,7 +954,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, travel, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, travel, entertain, drunk, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1140,6 +1176,28 @@ function scoreActivity(activityId, snap) {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_ENTERTAIN: {
+      // Entertainment: tavern drinks, dice, bard music, theater. Costs
+      // real coins — broke citizens can't have fun. Low-mood citizens
+      // seek it out; the sociable love the tavern; the curious love the
+      // theater. Drunk citizens shouldn't drink more.
+      const e = entertain ?? { canDrink: false, canDice: false, canTheater: false };
+      if (!e.canDrink && !e.canDice && !e.canTheater) return 4;
+      let s = 20;
+      if (mood < 30) s += 16; // miserable citizens need a night out
+      else if (mood < 50) s += 8;
+      const sociable = personality?.sociable ?? personality?.extroverted ?? 0;
+      if (sociable > 0.7) s += 10; // tavern is the social hub
+      const curious = personality?.curious ?? personality?.adventurous ?? 0;
+      if (curious > 0.6 && e.canTheater) s += 8; // theater for the curious
+      if (goalType === GOAL_MASTER_TRADE) s -= 6; // traders save, not spend
+      else if (goalType === GOAL_SAVE_GOLD) s -= 10; // fun spends, not saves
+      if (drunk) s -= 20; // already drunk — one more ale is a bad idea
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      return s;
+    }
     case ACT_RC: {
       // Runecrafting: craft essence into runes for XP and coin. No essence
       // anywhere, no altar trip. Runecrafting is station work — the citizen
@@ -1355,6 +1413,7 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
   const snap = snapshot(player);
   const sick = snap.sick ?? 0;
   const jailed = snap.jailed ?? 0;
+  const drunkPenalty = snap.drunk ? 30 : 0;
   const scored = candidates
     .filter((a) => a && typeof a.id === "string")
     .map((a) => ({
@@ -1364,11 +1423,13 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
       // Sickness keeps citizens away from work: the sicker they are, the
       // less work appeals (a plague is -60: effectively no work at all).
       // Jail is the same: a jailed citizen serves time, not shifts.
+      // Drunkenness is similar: a drunk citizen shouldn't operate machinery.
       score:
         scoreActivity(a.id, snap) +
         intentBonusFor(a.id, player) -
         (sick > 0 && WORK_ACTIVITIES.has(a.id) ? sick : 0) -
-        (jailed > 0 && WORK_ACTIVITIES.has(a.id) ? jailed : 0),
+        (jailed > 0 && WORK_ACTIVITIES.has(a.id) ? jailed : 0) -
+        (drunkPenalty > 0 && WORK_ACTIVITIES.has(a.id) ? drunkPenalty : 0),
     }))
     .sort((x, y) => y.score - x.score);
   if (scored.length === 0) {
@@ -1602,8 +1663,8 @@ module.exports = {
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,
-  ACT_BUILD,
   ACT_TRAVEL,
+  ACT_ENTERTAIN,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

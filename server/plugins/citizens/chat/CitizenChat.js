@@ -908,6 +908,59 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a tavern" — player asks about drinking and fun.
+  if (/\b(is there a tavern|where is the tavern|where can i drink|is there a bar|where is the bar)\b/.test(said)) {
+    try {
+      const Entertain = require("../lib/CitizenEntertainment");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? null;
+      const tavern = kingdomId ? Entertain.tavernOfKingdom(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "entertain_tavern", {
+        hasTavern: !!tavern,
+        tavernName: tavern?.name ?? null,
+        drinkPrice: Entertain.DRINK_PRICE,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "play dice" — player wants to gamble.
+  if (/\b(play dice|roll dice|gamble|bet on dice|dice game)\b/.test(said)) {
+    try {
+      const Entertain = require("../lib/CitizenEntertainment");
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "entertain_dice", {
+        minBet: Entertain.DICE_MIN_BET,
+        maxBet: Entertain.DICE_MAX_BET,
+        winChance: Entertain.DICE_WIN_CHANCE,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "is there a theater" — player asks about plays.
+  if (/\b(is there a theater|where is the theater|any plays|what is playing|theatre)\b/.test(said)) {
+    try {
+      const Entertain = require("../lib/CitizenEntertainment");
+      const theater = Entertain.theater();
+      const shows = Entertain.recentShows(1);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "entertain_theater", {
+        theaterName: theater?.name ?? null,
+        ticketPrice: Entertain.THEATER_PRICE,
+        nowPlaying: shows[0]?.title ?? null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where can I travel" / "take me to X" — player asks about ships/caravans.
   if (/\b(where can i travel|how do i travel|is there a ship|is there a caravan|take me to|i want to travel|can you take me)\b/.test(said)) {
     try {
