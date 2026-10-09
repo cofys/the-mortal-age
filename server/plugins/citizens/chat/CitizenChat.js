@@ -709,6 +709,36 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "minstrels' guild" / "performance certification" / "golden lyre" /
+  // "songthief" / "harmony inspection" — player asks about the musicians'
+  // association. (CitizenMusicDance owns ensembles/concerts/lessons;
+  // CitizenMusicFestivals owns promoters/grounds/productions; this owns the
+  // guild layer only.) Placed before the music blocks so the more specific
+  // guild phrasing wins.
+  if (/\b(minstrels'? guild|musicians'? guild|performance certification|certify (a|my) performance|certified performance|golden lyre|harmony inspection|maestro|songthief)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenMusicGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "musicguild_status", {
+        username: citizenUsername,
+        exists: desc.exists ?? false,
+        memberCount: desc.memberCount ?? 0,
+        certified: desc.certified ?? 0,
+        harmony: desc.harmony ?? 100,
+        treasury: desc.treasury ?? 0,
+        prestige: desc.prestige ?? 0,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "weavers' guild" / "collection certification" / "golden needle" /
   // "knockoff" / "atelier inspection" — player asks about the designers'
   // association. (CitizenRunways owns shows/designers/collections/ateliers;
