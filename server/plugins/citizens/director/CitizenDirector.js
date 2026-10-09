@@ -169,6 +169,8 @@ const { tickExplorers2 } = require("../lib/CitizenExplorers2");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
 const { tickClans } = require("../lib/CitizenClanLife");
 const CitizenClans = require("../lib/CitizenClans");
+const { tickHomes } = require("../lib/CitizenHomeLife");
+const CitizenHomes = require("../lib/CitizenHomes");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
@@ -2731,6 +2733,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("clans failed", { error: String(error?.message ?? error) });
     }
+    // Citizen homes: assignment, rent collection, furnishing, gatherings.
+    // Data tier, zero LLM.
+    try {
+      tickHomes(this, nowMs);
+    } catch (error) {
+      this.log("homes failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -2753,6 +2762,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen clans save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenHomes.save()) {
+        this.log("citizen homes saved");
+      }
+    } catch (error) {
+      this.log("citizen homes save failed", {
         error: String(error?.message ?? error),
       });
     }

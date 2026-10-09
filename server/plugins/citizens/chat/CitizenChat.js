@@ -689,6 +689,45 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     }
   }
 
+  // "where do you live" — the citizen describes their real home.
+  if (/\b(where do you live|where's your house|where is your home|show me your home)\b/.test(said)) {
+    try {
+      const Homes = require("../lib/CitizenHomes");
+      const home = Homes.homeOf(citizenUsername);
+      if (!home) return false; // Homeless — LLM can riff.
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "home_describe");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // "can I visit your home" — player asks for a guest invitation.
+  if (/\b(can i visit|invite me (to|over to) your (house|home|place)|come (to|over to) your (house|home|place))\b/.test(said)) {
+    try {
+      const Homes = require("../lib/CitizenHomes");
+      const home = Homes.homeOf(citizenUsername);
+      if (!home) return false;
+      // Friends, clanmates and the already-welcome get in; strangers are
+      // told to befriend first — the LLM handles the nuance.
+      const { isFriend } = require("../lib/CitizenBonds");
+      const { clanOf, clanOfPlayer } = require("../lib/CitizenClans");
+      const welcome =
+        isFriend(citizenUsername, speakerUsername) ||
+        Homes.isGuestAllowed(home, speakerUsername) ||
+        (clanOf(citizenUsername) && clanOfPlayer(speakerUsername)?.id === clanOf(citizenUsername).id);
+      if (welcome) {
+        Homes.inviteGuest(home.id, speakerUsername);
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "home_visit_yes");
+      } else {
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "home_visit_no");
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // "follow me" / "come with me" — player asks citizen to follow.
   if (/\b(follow me|come with me|walk with me|stay with me)\b/.test(said)) {
     if (SocialMechanics.requestFollow(citizenUsername, speakerUsername)) {
@@ -741,6 +780,9 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
       companion_accept: `${display}: Wonderful! Let's go — right now, while the mood's right.`,
       companion_decline: `${display}: Ah, that's a shame. Maybe another time.`,
       companion_invite: `${display}: Wonderful! Let's go — right now, while the mood's right.`,
+      home_describe: `${display}: I've got a place of my own — come see it sometime.`,
+      home_visit_yes: `${display}: Of course — you're welcome at my place any time.`,
+      home_visit_no: `${display}: I'd like to, but I don't really know you yet. Let's talk a while first.`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM
