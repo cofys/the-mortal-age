@@ -87,6 +87,17 @@ const ACT_ROUTINE = "citizen_routine";
 const ACT_MEAL = "citizen_meal";
 const ACT_REST = "citizen_rest";
 const ACT_BANK = "citizen_bank";
+<<<<<<< HEAD
+=======
+const ACT_LIGHT_FIRE = "citizen_light_fire";
+const ACT_SMELT = "citizen_smelt";
+const ACT_CRAFT = "citizen_craft";
+const ACT_COOK = "citizen_cook";
+const ACT_HERB = "citizen_herb";
+const ACT_FLETCH = "citizen_fletch";
+const ACT_RC = "citizen_rc";
+const ACT_AGILITY = "citizen_agility";
+>>>>>>> 96a2ad87
 const ACT_SOCIAL = "tavern_social";
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
 // re-decision. Short activities (meal/rest/bank) complete on their own.
@@ -310,6 +321,146 @@ function scoreActivity(activityId, snap) {
       if (criticalHp || exhausted) s -= 40;
       return s;
     }
+<<<<<<< HEAD
+=======
+    case ACT_LIGHT_FIRE: {
+      // Firemaking: burn logs for XP. No logs, no fire. Industrious citizens
+      // burn in the evening by the bank; nobody lights fires while hurt or
+      // exhausted. Fires are social — a small bonus when others are near.
+      if ((logs ?? 0) <= 0) return 4;
+      let s = 34 + industrious * 12;
+      if (hour >= 17 || hour <= 2) s += 8; // evening fire time
+      if (goalType === GOAL_MASTER_TRADE) s += 10; // skilling goal
+      if (goalType === GOAL_SAVE_GOLD) s += 4;
+      if (nearby >= 2) s += 6;
+      if (logs >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_AGILITY: {
+      // Agility: run obstacle courses for XP and faster run-energy restore.
+      // No materials — the course itself is the tool — so there's no stock
+      // gate; the action returns "success" quickly when no course is nearby.
+      // Industrious citizens with a skilling goal train laps; the hurt,
+      // exhausted, and weary stay off the ropes.
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 10; // skilling goal
+      if (goalType === GOAL_RANK_UP) s += 8;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_FLETCH: {
+      // Fletching: cut logs into shafts and bows for XP and coin. No logs
+      // (or no knife) anywhere, no cutting. Fletching is inventory work —
+      // no station needed — so citizens pick it up whenever they've got
+      // logs from woodcutting. Shafts and bows sell steadily, so broke
+      // traders grind them; the weary and hurt stay away.
+      if ((fletchLogs ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // shafts sell steadily — a broke cutter grinds
+      if (fletchLogs >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_RC: {
+      // Runecrafting: craft essence into runes for XP and coin. No essence
+      // anywhere, no altar trip. Runecrafting is station work — the citizen
+      // must travel to the altar — so it's picked up when there's a real
+      // stockpile to justify the journey. Runes sell well to mages and
+      // crafters, so broke traders grind them; the weary and hurt stay away.
+      if ((essence ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // runes sell well — a broke crafter grinds
+      if (essence >= 14) s += 8; // a real stockpile to justify the altar trip
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_SMELT: {
+      // Smelting: turn ore into bars for XP and coin. No ore anywhere, no
+      // furnace trip. Industrious citizens with a trade goal work the
+      // furnace; like mining, the weary and hurt stay away.
+      if ((ore ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // bars sell well — a broke smith grinds
+      if (ore >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_CRAFT: {
+      // Crafting: cut uncut gems for XP and coin. No gems anywhere, no
+      // cutting. Gem cutting is inventory work — no station needed — so
+      // citizens pick it up whenever they've got gems. Cut gems sell well,
+      // so broke traders grind them; the weary and hurt stay away.
+      if ((gems ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // cut gems sell well — a broke cutter grinds
+      if (gems >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_COOK: {
+      // Cooking: turn raw food into cooked food for XP, coin, and healing.
+      // No raw food anywhere, no cooking. Cooked food is what citizens eat
+      // to heal, so low-food citizens cook to survive; broke traders cook to
+      // sell. The weary and hurt stay away (the meal hinge handles eating).
+      if ((rawFood ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // cooked food sells well — a broke cook grinds
+      if (rawFood >= 10) s += 8; // a real stockpile to work through
+      if (food < 3) s += 12; // low on food — cook to eat, not just to sell
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_HERB: {
+      // Herblore: clean herbs and mix potions for XP and coin. No herbs
+      // anywhere, no mixing. Herblore is inventory work — no station
+      // needed — so citizens pick it up whenever they've got herbs.
+      // Potions heal and sell well, so broke traders grind them; the
+      // weary and hurt stay away.
+      if ((herbs ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // potions sell well — a broke mixer grinds
+      if (herbs >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+>>>>>>> 96a2ad87
     case ACT_SOCIAL: {
       let s = 18 + sociable * 22;
       if (mood < 40) s += 14;
@@ -624,6 +775,19 @@ function resetForTests() {
 
 module.exports = {
   ACT_ROUTINE,
+<<<<<<< HEAD
+=======
+  ACT_MINE,
+  ACT_CHOP,
+  ACT_LIGHT_FIRE,
+  ACT_SMELT,
+  ACT_CRAFT,
+  ACT_COOK,
+  ACT_HERB,
+  ACT_FLETCH,
+  ACT_RC,
+  ACT_AGILITY,
+>>>>>>> 96a2ad87
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

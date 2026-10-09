@@ -416,9 +416,74 @@ function finishObstacleOnLogout({ player }) {
 
 buildIndex();
 
+/**
+ * Bot helpers for citizen agility training (mirrors the Crafting/Herblore/
+ * Fletching/Runecrafting `startBot*` pattern). Citizens run courses via the
+ * real object-click path — attemptObstacle -> ObstacleRunner -> finishObstacle
+ * — so no session wrapper is needed; the helpers below are the course
+ * selection and busy-state reads the brain action needs.
+ */
+
+/** Uniform required level of a course (all courses ship uniform levels). */
+function courseLevel(course) {
+  try {
+    const levels = (course?.obstacles ?? [])
+      .filter((o) => o && typeof o.level === "number")
+      .map((o) => o.level);
+    return levels.length ? Math.max(...levels) : Number.MAX_SAFE_INTEGER;
+  } catch {
+    return Number.MAX_SAFE_INTEGER;
+  }
+}
+
+/** Courses bots must never train on (lawless zones, per the PvP design). */
+const BOT_EXCLUDED_COURSES = new Set(["wilderness"]);
+
+/**
+ * Best course for an agility level: highest-level course the player qualifies
+ * for, excluding lawless zones. Returns null when nothing qualifies (level 1
+ * always matches Gnome Stronghold / Shayzien Basic).
+ */
+function findBestCourseForLevel(level) {
+  let best = null;
+  let bestLevel = -1;
+  for (const course of COURSES) {
+    if (!course || BOT_EXCLUDED_COURSES.has(course.key)) continue;
+    const lvl = courseLevel(course);
+    if (lvl <= level && lvl > bestLevel) {
+      best = course;
+      bestLevel = lvl;
+    }
+  }
+  return best;
+}
+
+/** True while the player is mid-obstacle (ObstacleRunner busy attribute). */
+function isObstacleRunning(player) {
+  try {
+    return ObstacleRunner.isBusy(player);
+  } catch {
+    return false;
+  }
+}
+
+/** The player's current lap progress ({ course, index }) or null. */
+function getLapProgress(player) {
+  try {
+    return player?.getAttribute?.(PROGRESS_ATTRIBUTE) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   name: "Agility",
   members: true,
+  findBestCourseForLevel,
+  isObstacleRunning,
+  getLapProgress,
+  courseLevel,
+  AGILITY_COURSES: COURSES,
   register(api) {
     pluginApi = api;
     core = api.core;
