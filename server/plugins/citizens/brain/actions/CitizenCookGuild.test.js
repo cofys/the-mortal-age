@@ -143,6 +143,21 @@ test("factory creates the action", () => {
   assert.strictEqual(typeof a.update, "function");
 });
 
+test("members TALK during session rounds (no silent guild hall)", () => {
+  addMember("Gwen", "souschef");
+  const said = [];
+  const spec = { sayPublic: (player, line) => said.push(line) };
+  const a = createCitizenCookGuildAction(spec, {});
+  const p = stubPlayer("Gwen", { ...HALL_TILE });
+  a.update({ player: p, nowMs: 1000000 }); // at hall -> enters session
+  runTicks(a, p, 5, 9000, 1001000); // session rounds at human pace
+  assert.ok(said.length >= 1, `expected hall chatter, got ${said.length} lines`);
+  for (const line of said) {
+    assert.ok(line && line.length <= 80, `bad line: ${JSON.stringify(line)}`);
+    assert.ok(line.trim().split(/\s+/).length <= 15, `line too long: "${line}"`);
+  }
+});
+
 test("non-member walks home honestly", () => {
   const a = createCitizenCookGuildAction({}, {});
   const p = stubPlayer("Stranger", { x: 0, y: 0, z: 0 });

@@ -95,7 +95,10 @@ function voiceLine(voice, pool, rng = Math.random) {
     }
     return "";
   }
-  return styleLine(voice, lines[Math.floor(rng() * lines.length)]);
+  // Clamp the rng output: a misbehaving rng (>= 1 or negative) must pick
+  // a valid line, never silence the speaker via an out-of-bounds index.
+  const idx = Math.max(0, Math.min(lines.length - 1, Math.floor(rng() * lines.length)));
+  return styleLine(voice, lines[idx]);
 }
 
 /**

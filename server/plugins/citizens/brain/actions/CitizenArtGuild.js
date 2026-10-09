@@ -34,6 +34,7 @@ const {
   agentRng,
   humanizerProfile,
 } = require("../../lib/humanizer");
+const { speakInSession } = require("../../lib/CitizenGuildChatter");
 
 const GIVE_UP_MS = 10 * 60 * 1000;
 const SESSION_ROUNDS = 3;
@@ -45,6 +46,18 @@ function guildsApi() {
     return require("../../lib/CitizenArtGuilds");
   } catch {
     return null;
+  }
+}
+
+// Speech: spec.sayPublic in tests, else the real chat-box path.
+// sayPublic is tick-safe (every engine read guarded), so a fake player
+// in tests just no-ops through the optional chains.
+function sayPublicApi(spec) {
+  try {
+    if (typeof spec?.sayPublic === "function") return spec.sayPublic;
+    return require("../../chat/CitizenSayPublic").sayPublic;
+  } catch {
+    return () => false;
   }
 }
 
@@ -154,7 +167,19 @@ function createCitizenArtGuildAction(spec, world) {
           state.roundsDone++;
           // Session content is the visible social layer: master artists
           // run studio-review rounds and teach; mentored apprentices study.
+          // Members TALK — critique, questions, show-offs, gossip, dues
+          // gripes — voiced through their personality (gruff master vs
+          // chatty apprentice). A silent guild hall is the bot tell.
           // Real economics (dues, fees, bounties) run on the life tick.
+          speakInSession({
+            player,
+            personality: state.personality,
+            rng: state.rng,
+            rank: state.rank,
+            roundIndex: state.roundsDone - 1,
+            guild: "art",
+            sayPublic: sayPublicApi(spec),
+          });
           return "running";
         }
         case "returning": {

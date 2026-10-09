@@ -128,6 +128,29 @@ test("null player returns success", () => {
   assert.strictEqual(result, "success");
 });
 
+test("members TALK during session rounds (no silent guild hall)", () => {
+  guildState.members["lute larry"] = { rank: "minstrel", suspended: false };
+  const said = [];
+  const spec = { sayPublic: (player, line) => said.push(line) };
+  const action = createCitizenMusicGuildAction(spec, {});
+  const player = makePlayer("Lute Larry", { x: 3200, y: 3200, z: 0 });
+  let nowMs = 1000;
+  action.update({ player, nowMs }); // outbound
+  player.position = { x: 3300, y: 3300, z: 0 };
+  player.getPosition = () => player.position;
+  nowMs += 1000;
+  action.update({ player, nowMs }); // arrives, enters session
+  for (let i = 0; i < 3; i++) {
+    nowMs += 8000;
+    action.update({ player, nowMs }); // session rounds
+  }
+  assert.ok(said.length >= 1, `expected hall chatter, got ${said.length} lines`);
+  for (const line of said) {
+    assert.ok(line && line.length <= 80, `bad line: ${JSON.stringify(line)}`);
+    assert.ok(line.trim().split(/\s+/).length <= 15, `line too long: "${line}"`);
+  }
+});
+
 test("give-up timeout redirects to returning", () => {
   guildState.members["lute larry"] = { rank: "minstrel", suspended: false };
   const action = createCitizenMusicGuildAction({}, {});

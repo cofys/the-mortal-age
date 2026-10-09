@@ -34,6 +34,7 @@ const {
   agentRng,
   humanizerProfile,
 } = require("../../lib/humanizer");
+const { speakInSession } = require("../../lib/CitizenGuildChatter");
 
 const GIVE_UP_MS = 10 * 60 * 1000;
 const SESSION_ROUNDS = 3;
@@ -45,6 +46,16 @@ function guildsApi() {
     return require("../../lib/CitizenMusicGuilds");
   } catch {
     return null;
+  }
+}
+
+// Speech: spec.sayPublic in tests, else the real chat-box path.
+function sayPublicApi(spec) {
+  try {
+    if (typeof spec?.sayPublic === "function") return spec.sayPublic;
+    return require("../../chat/CitizenSayPublic").sayPublic;
+  } catch {
+    return () => false;
   }
 }
 
@@ -154,7 +165,18 @@ function createCitizenMusicGuildAction(spec, world) {
           state.roundsDone++;
           // Session content is the visible social layer: maestro masters
           // run harmony-review rounds and teach; mentored novices study.
-          // Real economics (dues, fees, bounties) run on the life tick.
+          // Members TALK — critique, questions, show-offs, gossip, dues
+          // gripes — voiced through their personality. A silent hall is
+          // the bot tell. Real economics run on the life tick.
+          speakInSession({
+            player,
+            personality: state.personality,
+            rng: state.rng,
+            rank: state.rank,
+            roundIndex: state.roundsDone - 1,
+            guild: "music",
+            sayPublic: sayPublicApi(spec),
+          });
           return "running";
         }
         case "returning": {

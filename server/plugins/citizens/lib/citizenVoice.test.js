@@ -179,4 +179,15 @@ function personality(traits, speechStyle, vocabulary) {
   assert.ok(d.includes("15 words"), "plain directive caps length");
 }
 
+{
+  // Out-of-range rng must pick a valid line, never silence the speaker.
+  const pool = { plain: ["alpha", "beta", "gamma"], terse: ["a", "b"] };
+  const v = voiceFor(personality(["gruff"], "short clipped sentences"));
+  assert.strictEqual(voiceLine(v, pool, () => 1.5), "b");
+  assert.strictEqual(voiceLine(v, pool, () => 99), "b");
+  assert.strictEqual(voiceLine(v, pool, () => -0.5), "a");
+  const v2 = voiceFor(personality(["dutiful"], "plain blunt words"));
+  assert.ok(["a", "b"].includes(voiceLine(v2, pool, () => 2.7)));
+}
+
 console.log("ALL CITIZENVOICE TESTS PASSED");

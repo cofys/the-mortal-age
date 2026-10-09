@@ -166,4 +166,35 @@ test("action id is citizenArtGuild", () => {
   assert.strictEqual(action.id, "citizenArtGuild");
 });
 
+test("members TALK during session rounds (no silent guild hall)", () => {
+  members.add("painty pete");
+  const said = [];
+  const spec = { sayPublic: (player, line) => said.push(line) };
+  const player = stubPlayer("painty pete", { x: HALL_TILE.x, y: HALL_TILE.y, z: 0 });
+  const action = createCitizenArtGuildAction(spec, {});
+  let now = 1000;
+  assert.strictEqual(action.update({ player, nowMs: now }), "running"); // enters session
+  for (let i = 0; i < 3; i++) {
+    now += 8000;
+    assert.strictEqual(action.update({ player, nowMs: now }), "running");
+  }
+  assert.ok(said.length >= 2, `expected chatter across 3 rounds, got ${said.length}`);
+  for (const line of said) {
+    assert.ok(line && line.length > 0 && line.length <= 80, `bad line: ${JSON.stringify(line)}`);
+    const words = line.trim().split(/\s+/).length;
+    assert.ok(words <= 15, `line too long (${words} words): "${line}"`);
+  }
+});
+
+test("session speech never breaks the tick when sayPublic throws", () => {
+  members.add("painty pete");
+  const spec = { sayPublic: () => { throw new Error("chat exploded"); } };
+  const player = stubPlayer("painty pete", { x: HALL_TILE.x, y: HALL_TILE.y, z: 0 });
+  const action = createCitizenArtGuildAction(spec, {});
+  let now = 1000;
+  assert.strictEqual(action.update({ player, nowMs: now }), "running");
+  now += 8000;
+  assert.strictEqual(action.update({ player, nowMs: now }), "running"); // no throw
+});
+
 console.log(`\n${passed} tests passed`);
