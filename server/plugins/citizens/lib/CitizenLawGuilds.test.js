@@ -63,13 +63,25 @@ function stubCivilLaw(ledger) {
 
 function stubBanking() {
   const key = require.resolve("./CitizenBanking");
-  const credited = [];
+  const accounts = {};
   const fake = {
-    creditAccount: (u, amt) => { credited.push({ u, amt }); return true; },
-    _credited: credited,
+    // Real contract: accountFor(username) -> live account record;
+    // markDirty() -> persist. creditAccount does NOT exist on the engine —
+    // the old mock masked a silent no-op.
+    accountFor: (u) => {
+      const k = String(u || "").trim().toLowerCase();
+      accounts[k] = accounts[k] || { balance: 0 };
+      return accounts[k];
+    },
+    markDirty: () => { fake._dirty = true; },
+    _accounts: accounts,
   };
   require.cache[key] = { id: key, filename: key, loaded: true, exports: fake };
-  return { unstick: () => { delete require.cache[key]; }, credited };
+  return {
+    unstick: () => { delete require.cache[key]; },
+    accounts,
+    balanceOf: (u) => (accounts[String(u || "").trim().toLowerCase()] || {}).balance || 0,
+  };
 }
 
 function stubReputation(deedsMap) {
@@ -248,9 +260,9 @@ function testProBono() {
   assert.strictEqual(a.ok, true);
   assert.strictEqual(a.paid, Guilds.PROBONO_FEE);
   assert.strictEqual(a.owed, 0);
-  assert.strictEqual(unBank.credited.length, 1);
-  assert.strictEqual(unBank.credited[0].u, "Bob");
-  assert.strictEqual(unBank.credited[0].amt, Guilds.PROBONO_FEE);
+  // The fee must land in the advocate's REAL bank account via accountFor —
+  // the old creditAccount mock masked a silent no-op.
+  assert.strictEqual(unBank.balanceOf("Bob"), Guilds.PROBONO_FEE);
   assert.strictEqual(Guilds.memberOf("Bob").casesHandled, 1);
   unCareers(); unCivil(); unBank.unstick();
   console.log("ok - pro bono assignment and payment");

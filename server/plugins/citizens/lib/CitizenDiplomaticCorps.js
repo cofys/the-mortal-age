@@ -496,8 +496,17 @@ function assignMediation(kingdomId, claimId, mediatorName) {
   if (paid > 0) {
     try {
       const Banking = require("./CitizenBanking");
-      if (Banking.creditAccount) Banking.creditAccount(mediatorName, paid);
-    } catch { paid = 0; owed = MEDIATION_FEE; }
+      // CitizenBanking exposes accountFor, not creditAccount — credit the
+      // live account record directly. Must throw on unreachable so the
+      // catch keeps the fee honestly owed (the old guard never threw, so
+      // coins silently vanished while the claim read "paid").
+      const acct = Banking && typeof Banking.accountFor === "function"
+        ? Banking.accountFor(mediatorName)
+        : null;
+      if (!acct) throw new Error("banking-unreachable");
+      acct.balance = (Number(acct.balance) || 0) + paid;
+      if (typeof Banking.markDirty === "function") Banking.markDirty();
+    } catch { g.mediationFund += paid; paid = 0; owed = MEDIATION_FEE; }
   }
   claim.paidAtMs = paid > 0 ? Date.now() : 0;
   claim.owed = owed;
@@ -521,7 +530,14 @@ function retryOwedMediation(kingdomId) {
     claim.owed -= amt;
     try {
       const Banking = require("./CitizenBanking");
-      if (Banking.creditAccount) Banking.creditAccount(claim.mediator, amt);
+      // Real API: accountFor -> live record. Must throw on unreachable so
+      // the catch restores fund + owed.
+      const acct = Banking && typeof Banking.accountFor === "function"
+        ? Banking.accountFor(claim.mediator)
+        : null;
+      if (!acct) throw new Error("banking-unreachable");
+      acct.balance = (Number(acct.balance) || 0) + amt;
+      if (typeof Banking.markDirty === "function") Banking.markDirty();
     } catch { g.mediationFund += amt; claim.owed += amt; break; }
     if (claim.owed <= 0) { claim.status = "paid"; claim.paidAtMs = Date.now(); }
     paid += amt;

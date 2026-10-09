@@ -748,16 +748,28 @@ function payBounty(bountyId) {
   const owed = b.amount - pay;
   g.treasury -= pay;
   if (pay > 0) {
+    // CitizenBanking exposes accountFor, not creditAccount — credit the
+    // live account record directly (same pattern as CitizenLibrarianGuilds
+    // payBounty). If banking is unreachable, restore the treasury and keep
+    // the bounty owed: never mark paid what was never delivered.
+    let credited = false;
     try {
       const B = bankingApi();
-      // CitizenBanking exposes accountFor, not creditAccount — credit the
-      // live account record directly (same pattern as CitizenCivilLaw).
       const acct = B && typeof B.accountFor === "function" ? B.accountFor(b.claimedBy) : null;
       if (acct) {
         acct.balance = (Number(acct.balance) || 0) + pay;
         if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
       }
     } catch { /* banking is best-effort */ }
+    if (!credited) {
+      g.treasury += pay;
+      b.paid = false;
+      b.paidAmount = 0;
+      b.owedAmount = b.amount;
+      touch();
+      return { ok: false, reason: "banking-unreachable", amount: 0, owed: b.amount, to: b.claimedBy };
+    }
   }
   b.paid = true;
   b.paidAmount = pay;

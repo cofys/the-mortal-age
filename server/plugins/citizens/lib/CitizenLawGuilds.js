@@ -454,8 +454,16 @@ function assignProBonoAdvocate(kingdomId, claimId, advocateName) {
   if (paid > 0) {
     try {
       const Banking = require("./CitizenBanking");
-      if (Banking.creditAccount) Banking.creditAccount(advocateName, paid);
-    } catch { /* banking unavailable — coins stay owed */ paid = 0; owed = PROBONO_FEE; }
+      // CitizenBanking exposes accountFor, not creditAccount — credit the
+      // live account record directly. A missing/unreachable banking layer
+      // must throw so the catch below keeps the fee honestly owed.
+      const acct = Banking && typeof Banking.accountFor === "function"
+        ? Banking.accountFor(advocateName)
+        : null;
+      if (!acct) throw new Error("banking-unreachable");
+      acct.balance = (Number(acct.balance) || 0) + paid;
+      if (typeof Banking.markDirty === "function") Banking.markDirty();
+    } catch { /* banking unavailable — coins stay owed */ g.probonoFund += paid; paid = 0; owed = PROBONO_FEE; }
   }
   claim.paidAtMs = paid > 0 ? Date.now() : 0;
   claim.owed = owed;
@@ -479,7 +487,15 @@ function retryOwedProBono(kingdomId) {
     claim.owed -= amt;
     try {
       const Banking = require("./CitizenBanking");
-      if (Banking.creditAccount) Banking.creditAccount(claim.advocate, amt);
+      // Real API: accountFor -> live record. Must throw on unreachable so
+      // the catch restores fund + owed (the old creditAccount guard never
+      // threw, so coins silently vanished).
+      const acct = Banking && typeof Banking.accountFor === "function"
+        ? Banking.accountFor(claim.advocate)
+        : null;
+      if (!acct) throw new Error("banking-unreachable");
+      acct.balance = (Number(acct.balance) || 0) + amt;
+      if (typeof Banking.markDirty === "function") Banking.markDirty();
     } catch { g.probonoFund += amt; claim.owed += amt; break; }
     if (claim.owed <= 0) { claim.status = "paid"; claim.paidAtMs = Date.now(); }
     paid += amt;

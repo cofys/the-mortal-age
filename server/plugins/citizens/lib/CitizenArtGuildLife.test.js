@@ -48,7 +48,11 @@ function installStubs() {
       careerOf: (u) => careers[String(u || "").toLowerCase()] || null,
     },
     "./CitizenReputation": { awardDeed: () => {} },
-    "./CitizenBanking": { creditAccount: () => true },
+    "./CitizenBanking": {
+      // Real contract: accountFor -> live record; markDirty -> persist.
+      accountFor: (u) => ({ balance: 0 }),
+      markDirty: () => {},
+    },
     "./CitizenBonds": { normalizeName: (s) => String(s || "").toLowerCase().trim() },
   };
   Module.prototype.require = function (id) {

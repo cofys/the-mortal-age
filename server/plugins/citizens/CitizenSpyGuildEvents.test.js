@@ -58,7 +58,8 @@ function stubEspionage() {
 
 function stubBanking() {
   const key = require.resolve("./lib/CitizenBanking");
-  const fake = { creditAccount: () => ({ ok: true }) };
+  // Real contract: accountFor -> live record; markDirty -> persist.
+  const fake = { accountFor: () => ({ balance: 0 }), markDirty: () => {} };
   require.cache[key] = { id: key, filename: key, loaded: true, exports: fake };
   return () => { delete require.cache[key]; };
 }

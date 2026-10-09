@@ -37,11 +37,9 @@ function installStubs(opts = {}) {
     "./CitizenReputation": {
       awardDeed: (u, deed) => { (opts.deeds = opts.deeds || []).push([u, deed]); },
     },
-    "./CitizenBanking": {
-      creditAccount: (u, amt) => { (opts.credits = opts.credits || []).push([u, amt]); return true; },
-      // Real contract (0645 audit): accountFor(username) -> live account
-      // record; markDirty() -> persist. The owed-bounty retry credits
-      // through this, never through the dead creditAccount above.
+    "./CitizenBanking": opts.banking || {
+      // Real contract: accountFor(username) -> live account record;
+      // markDirty() -> persist. creditAccount does NOT exist on the engine.
       accountFor: (u) => {
         const key = String(u || "").toLowerCase().trim();
         (opts.bankAccounts = opts.bankAccounts || {})[key] =
@@ -432,25 +430,6 @@ test("patronage: post, claim with a real cert, pay from treasury", () => {
     },
     artistWorks: { "painty pete": ["a1"] },
   });
-  Module.prototype.require = (function (prev) {
-    return function (id) {
-      if (id === "./CitizenBanking") {
-        // Real contract: accountFor(username) -> live account record,
-        // markDirty() -> persist. creditAccount does not exist on
-        // CitizenBanking (it was a dead API the old test codified).
-        return {
-          accountFor: (u) => {
-            const key = String(u || "").toLowerCase().trim();
-            (opts.bankAccounts = opts.bankAccounts || {})[key] =
-              (opts.bankAccounts || {})[key] || { balance: 0 };
-            return opts.bankAccounts[key];
-          },
-          markDirty: () => { opts.bankDirty = true; },
-        };
-      }
-      return prev.apply(this, arguments);
-    };
-  })(Module.prototype.require);
   try {
     Guilds.joinGuild("Painty Pete", "varrock");
     Guilds.joinGuild("Rich Rita", "varrock");
@@ -465,7 +444,10 @@ test("patronage: post, claim with a real cert, pay from treasury", () => {
     const pay = Guilds.payBounty(post.bountyId);
     assert.strictEqual(pay.ok, true);
     assert.strictEqual(pay.amount, 200);
-    assert.strictEqual(((opts.bankAccounts || {})["painty pete"] || {}).balance, 200);
+    // The patronage bounty must land in the claimant's REAL bank account
+    // via accountFor — the old creditAccount mock masked a silent no-op.
+    assert.strictEqual((opts.bankAccounts["painty pete"] || {}).balance, 200);
+    assert.strictEqual(opts.bankDirty, true);
   } finally { restore(); }
 });
 
@@ -571,6 +553,38 @@ test("persistence round-trips through the save file", () => {
     Guilds._setSavePathForTests(p);
     Guilds.resetForTests();
     assert.ok(Guilds.isGuildMember("painty pete"));
+  } finally { restore(); }
+});
+
+test("payBounty: banking unreachable keeps coins honest (no vanishing)", () => {
+  const opts = {};
+  const restore = installStubs({
+    careers: { "painty pete": "artist", "rich rita": "artist" },
+    artworks: {
+      a1: { id: "a1", title: "Sunset", artist: "painty pete", quality: 90, medium: "painting" },
+    },
+    artistWorks: { "painty pete": ["a1"] },
+    banking: {}, // CitizenBanking present but accountFor missing: unreachable
+  });
+  try {
+    Guilds.joinGuild("Painty Pete", "varrock");
+    Guilds.joinGuild("Rich Rita", "varrock");
+    const post = Guilds.postBounty("varrock", "rich rita", "painting", 200);
+    assert.strictEqual(post.ok, true);
+    Guilds.creditTreasury("varrock", 1200);
+    const cert = Guilds.certifyArtwork("varrock", "painty pete", "a1");
+    assert.strictEqual(cert.ok, true);
+    const claim = Guilds.claimBounty(post.bountyId, "painty pete", cert.certId);
+    assert.strictEqual(claim.ok, true);
+    const treasuryBefore = Guilds.describe("varrock").treasury;
+    const pay = Guilds.payBounty(post.bountyId);
+    // Must NOT report success: the coins never reached the claimant.
+    assert.strictEqual(pay.ok, false);
+    assert.strictEqual(pay.reason, "banking-unreachable");
+    // Treasury must be restored — no coins invented, none destroyed.
+    assert.strictEqual(Guilds.describe("varrock").treasury, treasuryBefore);
+    // Bounty stays unpaid and fully owed, never silently marked paid.
+    assert.strictEqual(pay.owed, 200);
   } finally { restore(); }
 });
 

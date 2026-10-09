@@ -74,11 +74,22 @@ function stubEspionage(cfg) {
 
 function stubBanking() {
   const key = require.resolve("./CitizenBanking");
-  const credited = [];
-  const fake = { creditAccount: (u, amt) => { credited.push({ u, amt }); return { ok: true }; } };
+  const accounts = {};
+  // Real contract: accountFor(username) -> live account record;
+  // markDirty() -> persist. creditAccount does NOT exist on the engine —
+  // the old mock masked a silent no-op.
+  const fake = {
+    accountFor: (u) => {
+      const k = String(u || "").trim().toLowerCase();
+      accounts[k] = accounts[k] || { balance: 0 };
+      return accounts[k];
+    },
+    markDirty: () => { fake._dirty = true; },
+    _accounts: accounts,
+  };
   require.cache[key] = { id: key, filename: key, loaded: true, exports: fake };
   const un = () => { delete require.cache[key]; };
-  return { un, credited };
+  return { un, balanceOf: (u) => (accounts[String(u || "").trim().toLowerCase()] || {}).balance || 0 };
 }
 
 function stubReputation() {
@@ -298,7 +309,7 @@ function testInterrogationBounty() {
   assert.deepStrictEqual(r.revealed, ["op-1", "op-2"], "real op ids revealed");
   assert.strictEqual(r.paid, Guilds.INTERROGATION_BOUNTY, "full bounty paid");
   assert.strictEqual(r.owed, 0, "nothing owed");
-  assert.ok(bank.credited.some((c) => c.u === "Alice" && c.amt === Guilds.INTERROGATION_BOUNTY), "bank credited");
+  assert.ok(bank.balanceOf("Alice") === Guilds.INTERROGATION_BOUNTY, "bank credited via real accountFor");
   assert.strictEqual(g.tradecraftFund, 500 - Guilds.INTERROGATION_BOUNTY, "fund debited");
   assert.strictEqual(g.intel.length, 1, "intel logged");
   // Non-spymaster cannot run bounty interrogations.

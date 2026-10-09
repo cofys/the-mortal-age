@@ -87,8 +87,18 @@ function stubTreaties(ledger) {
 
 function stubBanking() {
   const key = require.resolve("./CitizenBanking");
+  const accounts = {};
   const fake = {
-    creditAccount: (u, amt) => { fake.credits = fake.credits || []; fake.credits.push({ u, amt }); },
+    // Real contract: accountFor(username) -> live account record;
+    // markDirty() -> persist. creditAccount does NOT exist on the engine —
+    // the old mock masked a silent no-op.
+    accountFor: (u) => {
+      const k = String(u || "").trim().toLowerCase();
+      accounts[k] = accounts[k] || { balance: 0 };
+      return accounts[k];
+    },
+    markDirty: () => { fake._dirty = true; },
+    _accounts: accounts,
   };
   require.cache[key] = { id: key, filename: key, loaded: true, exports: fake };
   return () => { delete require.cache[key]; };
@@ -219,8 +229,8 @@ function testMediationFlow() {
   assert.strictEqual(res.paid, Corps.MEDIATION_FEE, "fee paid");
   assert.strictEqual(tensions["asgarnia:misthalin"], 80 - Corps.MEDIATION_TENSION_DROP, "tension actually written");
   const bKey = require.resolve("./CitizenBanking");
-  assert.ok(require.cache[bKey].exports.credits.some((c) => c.u === "Diana" && c.amt === Corps.MEDIATION_FEE),
-    "fee credited to mediator's bank account");
+  assert.strictEqual(require.cache[bKey].exports._accounts["diana"].balance, Corps.MEDIATION_FEE,
+    "fee credited to mediator's real bank account via accountFor");
   assert.strictEqual(g.members["diana"].mediationsLed, 1, "mediation counted");
   cleanup(...un);
 }

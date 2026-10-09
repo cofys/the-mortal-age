@@ -26,7 +26,12 @@ const artStubs = {
 };
 const careersStub = { careerOf: (u) => careers[String(u || "").toLowerCase()] || null };
 const reputationStub = { awardDeed: () => {} };
-const bankingStub = { creditAccount: () => true };
+const bankingStub = {
+  // Real contract: accountFor -> live record; markDirty -> persist.
+  // creditAccount does NOT exist on the engine.
+  accountFor: (u) => ({ balance: 0 }),
+  markDirty: () => {},
+};
 const bondsStub = { normalizeName: (s) => String(s || "").toLowerCase().trim() };
 
 const stubs = {

@@ -515,9 +515,16 @@ function bountyInterrogation(kingdomId, interrogator, spy, nowMs = Date.now()) {
   if (paid > 0) {
     try {
       const Banking = require("./CitizenBanking");
-      if (typeof Banking.creditAccount === "function") Banking.creditAccount(interrogator, paid);
-      else { paid = 0; owed = INTERROGATION_BOUNTY; }
-    } catch { paid = 0; owed = INTERROGATION_BOUNTY; }
+      // CitizenBanking exposes accountFor, not creditAccount — credit the
+      // live account record directly. Must throw on unreachable so the
+      // catch keeps the bounty honestly owed.
+      const acct = Banking && typeof Banking.accountFor === "function"
+        ? Banking.accountFor(interrogator)
+        : null;
+      if (!acct) throw new Error("banking-unreachable");
+      acct.balance = (Number(acct.balance) || 0) + paid;
+      if (typeof Banking.markDirty === "function") Banking.markDirty();
+    } catch { g.tradecraftFund += paid; paid = 0; owed = INTERROGATION_BOUNTY; }
   }
   const entry = { interrogator, spy, paid, owed, atMs: nowMs, revealed: revealed.length };
   g.intel[g.intel.length - 1].bounty = entry;
@@ -539,8 +546,14 @@ function retryOwedBounties(kingdomId) {
     b.owed -= amt;
     try {
       const Banking = require("./CitizenBanking");
-      if (typeof Banking.creditAccount === "function") Banking.creditAccount(b.interrogator, amt);
-      else { g.tradecraftFund += amt; b.owed += amt; break; }
+      // Real API: accountFor -> live record. Must throw on unreachable so
+      // the catch restores fund + owed.
+      const acct = Banking && typeof Banking.accountFor === "function"
+        ? Banking.accountFor(b.interrogator)
+        : null;
+      if (!acct) throw new Error("banking-unreachable");
+      acct.balance = (Number(acct.balance) || 0) + amt;
+      if (typeof Banking.markDirty === "function") Banking.markDirty();
     } catch { g.tradecraftFund += amt; b.owed += amt; break; }
     paid += amt;
   }
