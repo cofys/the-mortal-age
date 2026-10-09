@@ -2003,6 +2003,34 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "artists' guild" / "masterpiece certification" / "golden palette" /
+  // "forger" / "studio inspection" — player asks about the artists'
+  // association. (CitizenArt owns artwork creation/display/market/exhibitions;
+  // CitizenGalleries owns auctions/acquisitions/commissions/appraisals; this
+  // owns the guild layer only.) Placed before the art blocks so the more
+  // specific guild phrasing wins.
+  if (/\b(artists'? guild|masterpiece certification|certify (an|my) artwork|certified artwork|golden palette|studio inspection|master artist|forger|patronage bounty)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenArtGuilds");
+      let kingdomId = null;
+      try {
+        kingdomId = Guilds.memberOf(citizenUsername)?.kingdomId || null;
+      } catch { /* no guild */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "artguild_status", {
+        username: citizenUsername,
+        exists: desc.exists ?? false,
+        memberCount: desc.memberCount ?? 0,
+        certified: desc.certified ?? 0,
+        treasury: desc.treasury ?? 0,
+        prestige: desc.prestige ?? 0,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a gallery" / "where is the gallery" — player asks about art.
   if (/\b(is there a gallery|where is the gallery|art gallery|museum)\b/.test(said)) {
     try {

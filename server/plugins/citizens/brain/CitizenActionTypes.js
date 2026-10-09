@@ -82,6 +82,7 @@ const { createCitizenSportsGuildAction } = require("./actions/CitizenSportsGuild
 const { createCitizenCookGuildAction } = require("./actions/CitizenCookGuild");
 const { createCitizenWeaverGuildAction } = require("./actions/CitizenWeaverGuild");
 const { createCitizenMusicGuildAction } = require("./actions/CitizenMusicGuild");
+const { createCitizenArtGuildAction } = require("./actions/CitizenArtGuild");
 const { createCitizenTeamPlayAction } = require("./actions/CitizenTeamPlay");
 const { createCitizenResearchAction } = require("./actions/CitizenResearch");
 const { createIdleSocialAction } = require("./actions/IdleSocial");
@@ -208,6 +209,7 @@ registerBotActionType("citizenCompete", createCitizenCompeteAction);
   registerBotActionType("citizenCookGuild", createCitizenCookGuildAction);
   registerBotActionType("citizenWeaverGuild", createCitizenWeaverGuildAction);
   registerBotActionType("citizenMusicGuild", createCitizenMusicGuildAction);
+  registerBotActionType("citizenArtGuild", createCitizenArtGuildAction);
   registerBotActionType("citizenTeamPlay", createCitizenTeamPlayAction);
   registerBotActionType("citizenResearch", createCitizenResearchAction);
   registerBotActionType("idleSocial", createIdleSocialAction);
