@@ -657,6 +657,33 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "chefs' guild" / "culinary code" / "recipe certification" — player asks
+  // about the culinary profession's association. (CitizenCookOffs owns the
+  // live cooking circuit; this owns the guild layer only.)
+  if (/\b(chefs'? guild|culinary code|recipe certification|certify (a|my) recipe|certified recipe|golden ladle|kitchen inspection|chef de cuisine|sous chef)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenCookGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "cookguild_status", {
+        username: citizenUsername,
+        exists: desc.exists ?? false,
+        memberCount: desc.memberCount ?? 0,
+        sealed: desc.sealed ?? 0,
+        hygiene: desc.hygiene ?? 100,
+        treasury: desc.treasury ?? 0,
+        prestige: desc.prestige ?? 0,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "cook-off" / "cooking competition" / "recipe" — player asks about the
   // cooking circuit. (CitizenCuisine owns the monthly best-dish showcases;
   // this owns live cook-offs, judging panels, and recipes.)

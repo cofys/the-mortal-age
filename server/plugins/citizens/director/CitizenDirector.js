@@ -295,6 +295,8 @@ const { tickStageGuildLife } = require("../lib/CitizenStageGuildLife");
 const CitizenStageGuilds = require("../lib/CitizenStageGuilds");
 const { tickSportsGuildLife } = require("../lib/CitizenSportsGuildLife");
 const CitizenSportsGuilds = require("../lib/CitizenSportsGuilds");
+const { tickCookGuildLife } = require("../lib/CitizenCookGuildLife");
+const CitizenCookGuilds = require("../lib/CitizenCookGuilds");
 const { tickCivilLife } = require("../lib/CitizenCivilLife");
 const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -3354,6 +3356,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("sports guild failed", { error: String(error?.message ?? error) });
     }
+    // (CitizenCookOffs owns cook-offs/recipes; CitizenCuisine owns dishes/
+    // menus; this owns the profession's guild layer only.)
+    try {
+      tickCookGuildLife(this, nowMs);
+    } catch (error) {
+      this.log("cook guild failed", { error: String(error?.message ?? error) });
+    }
     // Bar association: dues, case reviews, pro bono, disciplinary board,
     // legal school. Data tier, zero LLM. (CitizenCivilLaw owns contracts/
     // disputes/judgments; this owns the profession's guild layer only.)
@@ -3823,7 +3832,14 @@ if (CitizenTournaments.save()) {
         this.log("citizen sports guild saved");
       }
     } catch (error) {
-      this.log("citizen sports guild save failed", {
+      this.log("citizen sports guild save failed", { error: String(error?.message ?? error) });
+    }
+    try {
+      if (CitizenCookGuilds.save()) {
+        this.log("citizen cook guild saved");
+      }
+    } catch (error) {
+      this.log("citizen cook guild save failed", {
         error: String(error?.message ?? error),
       });
     }
