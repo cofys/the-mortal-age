@@ -87,8 +87,6 @@ const ACT_ROUTINE = "citizen_routine";
 const ACT_MEAL = "citizen_meal";
 const ACT_REST = "citizen_rest";
 const ACT_BANK = "citizen_bank";
-<<<<<<< HEAD
-=======
 const ACT_LIGHT_FIRE = "citizen_light_fire";
 const ACT_SMELT = "citizen_smelt";
 const ACT_CRAFT = "citizen_craft";
@@ -97,8 +95,10 @@ const ACT_HERB = "citizen_herb";
 const ACT_FLETCH = "citizen_fletch";
 const ACT_RC = "citizen_rc";
 const ACT_AGILITY = "citizen_agility";
->>>>>>> 96a2ad87
+const ACT_SLAYER = "citizen_slayer";
 const ACT_SOCIAL = "tavern_social";
+const ACT_MINE = "citizen_mine";
+const ACT_CHOP = "citizen_chop";
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
 // re-decision. Short activities (meal/rest/bank) complete on their own.
 const ANCHOR_ACTIVITIES = new Set([
@@ -110,6 +110,8 @@ const ANCHOR_ACTIVITIES = new Set([
   "courtier_attend",
   "leisure_stroll",
   "refugee_flight",
+  ACT_MINE,
+  ACT_CHOP,
 ]);
 
 const MEAL_ROLES = new Set(["commoner", "merchant", "guard", "courtier"]);
@@ -228,6 +230,320 @@ function nearbyCount(player) {
   }
 }
 
+/** Count of burnable logs in the inventory (firemaking fuel). */
+function logCount(player) {
+  try {
+    const Firemaking = require("../../skills/Firemaking.plugin");
+    if (typeof Firemaking?.isWoodcuttingLog !== "function") return 0;
+    let n = 0;
+    for (const item of player?.getInventory?.()?.getItems?.() ?? []) {
+      let id = 0;
+      try {
+        id = item?.getId?.() ?? 0;
+      } catch {
+        continue;
+      }
+      if (id > 0 && Firemaking.isWoodcuttingLog(id)) n++;
+    }
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
+/** Bars the citizen could smelt right now (inventory ore, else bank ore). */
+function smeltableBars(player) {
+  try {
+    const Smithing = require("../../skills/Smithing.plugin");
+    const recipes = Smithing?.SMELTING_RECIPES;
+    if (!Array.isArray(recipes) || !recipes.length) return 0;
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    const barsFrom = (recipe, useBank) => {
+      let bars = Number.MAX_SAFE_INTEGER;
+      for (const [itemId, perBar] of recipe.ingredients ?? []) {
+        if (!Number.isInteger(itemId) || !Number.isInteger(perBar) || perBar <= 0)
+          return 0;
+        const have = invAmount(itemId) + (useBank ? bankAmount(itemId) : 0);
+        bars = Math.min(bars, Math.floor(have / perBar));
+      }
+      return bars === Number.MAX_SAFE_INTEGER ? 0 : bars;
+    };
+    // Inventory first (no trip needed), then bank.
+    let best = 0;
+    for (const recipe of recipes) best = Math.max(best, barsFrom(recipe, false));
+    if (best > 0) return best;
+    for (const recipe of recipes) best = Math.max(best, barsFrom(recipe, true));
+    return best;
+  } catch {
+    return 0;
+  }
+}
+
+/** Uncut gems the citizen could cut right now (inventory, else bank). */
+function gemCount(player) {
+  try {
+    const Crafting = require("../../skills/Crafting.plugin");
+    const recipes = Crafting?.CRAFTING_RECIPES;
+    if (!Array.isArray(recipes) || !recipes.length) return 0;
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    // Inventory first (no trip needed), then bank.
+    let invTotal = 0;
+    for (const recipe of recipes) invTotal += invAmount(recipe.uncutId);
+    if (invTotal > 0) return invTotal;
+    let bankTotal = 0;
+    for (const recipe of recipes) bankTotal += bankAmount(recipe.uncutId);
+    return bankTotal;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Herb materials the citizen could work right now (inventory, else bank).
+ * Counts inputs of recipes whose partner item (vial/secondary) is also
+ * available in the same place — cleaning needs nothing, mixing needs
+ * its 1:1 partner.
+ */
+function herbCount(player) {
+  try {
+    const Herblore = require("../../skills/Herblore.plugin");
+    const recipes = Herblore?.HERBLORE_RECIPES;
+    if (!Array.isArray(recipes) || !recipes.length) return 0;
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    const workable = (amount, recipe) =>
+      amount(recipe.inputId) > 0 &&
+      (!recipe.needsId || amount(recipe.needsId) > 0);
+    // Inventory first (no trip needed), then bank.
+    let invTotal = 0;
+    for (const recipe of recipes) {
+      if (workable(invAmount, recipe)) invTotal += invAmount(recipe.inputId);
+    }
+    if (invTotal > 0) return invTotal;
+    let bankTotal = 0;
+    for (const recipe of recipes) {
+      if (workable(bankAmount, recipe)) bankTotal += bankAmount(recipe.inputId);
+    }
+    return bankTotal;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Logs the citizen could fletch right now (inventory, else bank). Counts
+ * logs of level-gated recipes — the knife is the non-consumed partner, so
+ * it must be in the same place as the logs (pack or bank).
+ */
+function fletchCount(player) {
+  try {
+    const Fletching = require("../../skills/Fletching.plugin");
+    const recipes = Fletching?.FLETCHING_RECIPES;
+    if (!Array.isArray(recipes) || !recipes.length) return 0;
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    const workable = (amount, recipe) =>
+      Number.isInteger(recipe.inputId) &&
+      amount(recipe.inputId) > 0 &&
+      (!recipe.needsId || amount(recipe.needsId) > 0);
+    // Inventory first (no trip needed), then bank.
+    let invTotal = 0;
+    for (const recipe of recipes) {
+      if (workable(invAmount, recipe)) invTotal += invAmount(recipe.inputId);
+    }
+    if (invTotal > 0) return invTotal;
+    let bankTotal = 0;
+    for (const recipe of recipes) {
+      if (workable(bankAmount, recipe)) bankTotal += bankAmount(recipe.inputId);
+    }
+    return bankTotal;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Essence the citizen could craft right now (inventory, else bank).
+ * Counts rune essence + pure essence — the runecrafting inputs.
+ */
+function essenceCount(player) {
+  try {
+    const Runecrafting = require("../../skills/Runecrafting.plugin");
+    const ids = Runecrafting?.ESSENCE_IDS;
+    if (!Array.isArray(ids) || !ids.length) return 0;
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    // Inventory first (no trip needed), then bank.
+    let invTotal = 0;
+    for (const id of ids) invTotal += invAmount(id);
+    if (invTotal > 0) return invTotal;
+    let bankTotal = 0;
+    for (const id of ids) bankTotal += bankAmount(id);
+    return bankTotal;
+  } catch {
+    return 0;
+  }
+}
+
+/** Raw food the citizen could cook right now (inventory, else bank). */
+function rawFoodCount(player) {  try {
+    const Cooking = require("../../skills/Cooking.plugin");
+    const recipes = Cooking?.COOKING_RECIPES;
+    if (!Array.isArray(recipes) || !recipes.length) return 0;
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    // Inventory first (no trip needed), then bank.
+    let invTotal = 0;
+    for (const recipe of recipes) invTotal += invAmount(recipe.rawId);
+    if (invTotal > 0) return invTotal;
+    let bankTotal = 0;
+    for (const recipe of recipes) bankTotal += bankAmount(recipe.rawId);
+    return bankTotal;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Cheap read-only snapshot of everything the scorer needs. needsFor is a Map
  * lookup against the director-ticked CitizenNeeds registry — never created
@@ -253,6 +569,13 @@ function snapshot(player) {
     food: foodCount(player),
     freeSlots: freeSlots(player),
     nearby: nearbyCount(player),
+    logs: logCount(player),
+    ore: smeltableBars(player),
+    gems: gemCount(player),
+    rawFood: rawFoodCount(player),
+    herbs: herbCount(player),
+    fletchLogs: fletchCount(player),
+    essence: essenceCount(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -270,7 +593,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -321,8 +644,6 @@ function scoreActivity(activityId, snap) {
       if (criticalHp || exhausted) s -= 40;
       return s;
     }
-<<<<<<< HEAD
-=======
     case ACT_LIGHT_FIRE: {
       // Firemaking: burn logs for XP. No logs, no fire. Industrious citizens
       // burn in the evening by the bank; nobody lights fires while hurt or
@@ -334,6 +655,24 @@ function scoreActivity(activityId, snap) {
       if (goalType === GOAL_SAVE_GOLD) s += 4;
       if (nearby >= 2) s += 6;
       if (logs >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_FLETCH: {
+      // Fletching: cut logs into shafts and bows for XP and coin. No logs
+      // (or no knife) anywhere, no cutting. Fletching is inventory work —
+      // no station needed — so citizens pick it up whenever they've got
+      // logs from woodcutting. Shafts and bows sell steadily, so broke
+      // traders grind them; the weary and hurt stay away.
+      if ((fletchLogs ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // shafts sell steadily — a broke cutter grinds
+      if (fletchLogs >= 10) s += 8; // a real stockpile to work through
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -355,18 +694,17 @@ function scoreActivity(activityId, snap) {
       if (mood < 20) s -= 8;
       return s;
     }
-    case ACT_FLETCH: {
-      // Fletching: cut logs into shafts and bows for XP and coin. No logs
-      // (or no knife) anywhere, no cutting. Fletching is inventory work —
-      // no station needed — so citizens pick it up whenever they've got
-      // logs from woodcutting. Shafts and bows sell steadily, so broke
-      // traders grind them; the weary and hurt stay away.
-      if ((fletchLogs ?? 0) <= 0) return 4;
+    case ACT_SLAYER: {
+      // Slayer: hunt assigned monsters for Slayer + combat XP. No task and
+      // no master nearby means the action returns "success" quickly, so
+      // there's no stock gate — the action itself handles the empty states.
+      // Brave, industrious citizens with combat goals take tasks; the hurt,
+      // exhausted, and weary stay home. Wilderness tasks are never hunted
+      // (the action refuses them), so scoring doesn't need a wilderness gate.
       let s = 36 + industrious * 12;
-      if (goalType === GOAL_MASTER_TRADE) s += 14;
-      else if (goalType === GOAL_SAVE_GOLD) s += 10;
-      if (coins < 60) s += 10; // shafts sell steadily — a broke cutter grinds
-      if (fletchLogs >= 10) s += 8; // a real stockpile to work through
+      if (goalType === GOAL_BOSS_SLAYER) s += 16; // slayer goal
+      else if (goalType === GOAL_MASTER_TRADE) s += 8;
+      if (goalType === GOAL_RANK_UP) s += 8;
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -460,7 +798,6 @@ function scoreActivity(activityId, snap) {
       if (mood < 20) s -= 8;
       return s;
     }
->>>>>>> 96a2ad87
     case ACT_SOCIAL: {
       let s = 18 + sociable * 22;
       if (mood < 40) s += 14;
@@ -494,6 +831,41 @@ function scoreActivity(activityId, snap) {
     case "refugee_flight": {
       let s = 55;
       if (exhausted) s -= 40;
+      return s;
+    }
+    case ACT_MINE: {
+      // Mining: ore for the smiths, coins for the miner. Industrious
+      // citizens with a trade goal pick up the pickaxe. Like the routine,
+      // it's work — the weary and hurt stay away.
+      let s = 38;
+      if (goalType === GOAL_MASTER_TRADE) s += 16;
+      else if (goalType === GOAL_SAVE_GOLD) s += 12;
+      s += urgent * 6;
+      s += industrious * 12;
+      if (coins < 60) s += 18;
+      else if (coins < 250) s += 6;
+      if (weary) s -= 50;
+      if (hurt) s -= 25;
+      if (freeSlots <= 2) s += 8; // full: bank hinge handles it
+      return s;
+    }
+    case ACT_CHOP: {
+      // Woodcutting: logs for the fires, coins for the cutter. Industrious
+      // citizens with a trade goal grab the axe. Citizens low on logs (for
+      // firemaking) chop more. Like mining, it's work — the weary stay away.
+      let s = 36;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      s += urgent * 6;
+      s += industrious * 12;
+      if (coins < 60) s += 16;
+      else if (coins < 250) s += 5;
+      // Low on logs? The fire needs feeding.
+      if (logs < 5) s += 12;
+      else if (logs < 15) s += 6;
+      if (weary) s -= 50;
+      if (hurt) s -= 25;
+      if (freeSlots <= 2) s += 8; // full: bank hinge handles it
       return s;
     }
     default:
@@ -775,8 +1147,6 @@ function resetForTests() {
 
 module.exports = {
   ACT_ROUTINE,
-<<<<<<< HEAD
-=======
   ACT_MINE,
   ACT_CHOP,
   ACT_LIGHT_FIRE,
@@ -787,7 +1157,7 @@ module.exports = {
   ACT_FLETCH,
   ACT_RC,
   ACT_AGILITY,
->>>>>>> 96a2ad87
+  ACT_SLAYER,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

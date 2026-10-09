@@ -21,8 +21,6 @@ const { createCitizenRoutineAction } = require("./actions/CitizenRoutine");
 const { createCitizenMealAction } = require("./actions/CitizenMeal");
 const { createCitizenRestAction } = require("./actions/CitizenRest");
 const { createCitizenBankAction } = require("./actions/CitizenBank");
-<<<<<<< HEAD
-=======
 const { createCitizenLightFireAction } = require("./actions/CitizenLightFire");
 const { createCitizenSmeltAction } = require("./actions/CitizenSmelt");
 const { createCitizenCraftAction } = require("./actions/CitizenCraft");
@@ -31,7 +29,7 @@ const { createCitizenHerbAction } = require("./actions/CitizenHerb");
 const { createCitizenFletchAction } = require("./actions/CitizenFletch");
 const { createCitizenRcAction } = require("./actions/CitizenRc");
 const { createCitizenAgilityAction } = require("./actions/CitizenAgility");
->>>>>>> 96a2ad87
+const { createCitizenSlayerAction } = require("./actions/CitizenSlayer");
 const { createIdleSocialAction } = require("./actions/IdleSocial");
 const { createRefugeeFlightAction } = require("./actions/RefugeeFlight");
 const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE } = require("../constants");
@@ -95,8 +93,6 @@ function registerCitizenActionTypes() {
   registerBotActionType("citizenMeal", createCitizenMealAction);
   registerBotActionType("citizenRest", createCitizenRestAction);
   registerBotActionType("citizenBank", createCitizenBankAction);
-<<<<<<< HEAD
-=======
   registerBotActionType("citizenLightFire", createCitizenLightFireAction);
   registerBotActionType("citizenSmelt", createCitizenSmeltAction);
   registerBotActionType("citizenCraft", createCitizenCraftAction);
@@ -105,7 +101,7 @@ function registerCitizenActionTypes() {
   registerBotActionType("citizenFletch", createCitizenFletchAction);
   registerBotActionType("citizenRc", createCitizenRcAction);
   registerBotActionType("citizenAgility", createCitizenAgilityAction);
->>>>>>> 96a2ad87
+  registerBotActionType("citizenSlayer", createCitizenSlayerAction);
   registerBotActionType("idleSocial", createIdleSocialAction);
   registerBotActionType("refugeeFlight", createRefugeeFlightAction);
   registerBotConditionKind("citizen", createCitizenCondition);

@@ -507,6 +507,28 @@
           "type": "citizenAgility"
         }
       ]
+    },
+    {
+      "id": "citizen_slayer",
+      "mode": "citizen_slayer",
+      "repeat": false,
+      "capacity": 16,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "guard",
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenSlayer"
+        }
+      ]
     }
   ]
 }

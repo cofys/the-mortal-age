@@ -164,4 +164,19 @@ check("save writes and reloads homes", () => {
   assert.equal(reloaded.furnishings[0].key, "table");
 });
 
+check("transferHome: ownership passes, debt cleared, furnishings kept", () => {
+  const home = Homes.createHome("Ivy Jones", "Ivy Jones", "asgarnia", Homes.SIZE_HOUSE);
+  Homes.addFurnishing(home.id, "table");
+  Homes.addRentDebt(Homes.getHome(home.id));
+  assert.equal(Homes.transferHome(home.id, "Bob Stone", "Bob Stone"), true);
+  const after = Homes.getHome(home.id);
+  assert.equal(after.owner, "bob stone");
+  assert.equal(after.ownerDisplay, "Bob Stone");
+  assert.equal(after.rentDebt, 0);
+  assert.equal(after.furnishings.length, 1);
+  assert.equal(Homes.homeOf("Bob Stone")?.id, home.id);
+  assert.equal(Homes.homeOf("Ivy Jones"), null);
+  assert.equal(Homes.transferHome("home_999", "Nobody", "Nobody"), false);
+});
+
 console.log(`\n${passed} checks passed.`);
