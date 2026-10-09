@@ -74,14 +74,25 @@ test("tickMapLife registers cartographer-career citizens", () => {
 });
 
 test("ambient drafting consumes real papyrus and lists the map", () => {
-  const { kingdomIdOf } = require("../brain/CitizenSites");
   const record = { username: "Drafty", kingdomId: "misthalin", personality: { curiosity: 0.9 }, papyrus: true };
-  const realKingdom = kingdomIdOf(record); // the module uses the real derivation
   const director = fakeDirector([record]);
   tickMapLife(director, 1000); // first tick registers + drafts
-  const desc = Maps.describe(realKingdom);
+  // The draft routes to the citizen's OWN kingdom (record.kingdomId), not the
+  // brain's KINGDOM_IDS[0] fallback — regression for the kingdomIdOf trap.
+  const desc = Maps.describe(record.kingdomId);
   assert.ok(desc.mapCount >= 1, `expected a drafted map, got ${desc.mapCount}`);
   assert.ok(desc.listingCount >= 1, "drafted map should be listed");
+});
+
+test("cartographer registration routes to the citizen's own kingdom", () => {
+  // morytania is NOT the first kingdom (brain fallback is asgarnia) — a
+  // plain roster record must register under its own kingdomId.
+  const director = fakeDirector([
+    { username: "MoryCarto", kingdomId: "morytania", career: "cartographer", personality: {} },
+  ]);
+  tickMapLife(director, Date.now());
+  assert.strictEqual(Maps.cartographerCount("morytania"), 1, "cartographer should register under morytania");
+  assert.strictEqual(Maps.cartographerCount("asgarnia"), 0, "nothing should fall back to the first kingdom");
 });
 
 test("ambient drafting is throttled per kingdom", () => {

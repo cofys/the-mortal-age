@@ -778,7 +778,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   if (/\b(cook-off|cookoff|cooking competition|mystery ingredient|iron chef)\b/.test(said)) {
     try {
       const CookOffs = require("../lib/CitizenCookOffs");
-      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const kingdomId = citizenKingdomId(citizenUsername) ?? "unknown";
       const open = CookOffs.openCookOff(kingdomId);
       const season = CookOffs.seasonOf(Date.now());
       notifyCitizenSpoke(citizenUsername, speakerUsername, "cookoff", {
@@ -824,7 +824,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   if (/\b(athlete|athletes|stadium|stadiums|training|fitness|sports record)\b/.test(said)) {
     try {
       const Athletics = require("../lib/CitizenAthletics");
-      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const kingdomId = citizenKingdomId(citizenUsername) ?? "unknown";
       const stadium = Athletics.stadiumFor(kingdomId);
       const athletes = Athletics.athletesIn(kingdomId, 3);
       notifyCitizenSpoke(citizenUsername, speakerUsername, "athletics", {
@@ -870,7 +870,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   if (/\b(playwright|playwrights|troupe|troupes|touring company|who wrote that play|standing ovation)\b/.test(said)) {
     try {
       const Theater = require("../lib/CitizenTheater");
-      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const kingdomId = citizenKingdomId(citizenUsername) ?? "unknown";
       const troupes = Theater.troupesIn(kingdomId);
       const plays = Theater.playsIn(kingdomId);
       const upcoming = Theater.upcomingPerformances(kingdomId);
@@ -1988,7 +1988,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   if (/\b(dig site|dig sites|excavation|excavations|artifact|artifacts|archaeologist|archaeologists|archaeology)\b/.test(said)) {
     try {
       const Arch = require("../lib/CitizenArchaeology");
-      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const kingdomId = citizenKingdomId(citizenUsername) ?? "unknown";
       const sites = Arch.activeSites(kingdomId);
       const museum = Arch.museumStatus(kingdomId);
       notifyCitizenSpoke(citizenUsername, speakerUsername, "archaeology_status", {
@@ -2035,7 +2035,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   if (/\b(is there a gallery|where is the gallery|art gallery|museum)\b/.test(said)) {
     try {
       const Art = require("../lib/CitizenArt");
-      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const kingdomId = citizenKingdomId(citizenUsername) ?? "unknown";
       const gallery = Art.galleryFor(kingdomId);
       const displayed = (gallery.displayed ?? []).length;
       notifyCitizenSpoke(citizenUsername, speakerUsername, "art_gallery", {
@@ -2260,7 +2260,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const { getDirector } = require("../director/CitizenDirector");
       const director = getDirector();
       const record = director?.roster?.get?.(normalizeName(citizenUsername));
-      const kingdomId = record?.kingdomId ?? ctx?.kingdomId ?? "unknown";
+      const kingdomId = record?.kingdomId ?? citizenKingdomId(citizenUsername) ?? "unknown";
       notifyCitizenSpoke(citizenUsername, speakerUsername, "gallery_ops", {
         username: citizenUsername,
         prestige: G.prestigeFor(kingdomId),
@@ -2292,7 +2292,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
       const { getDirector } = require("../director/CitizenDirector");
       const director = getDirector();
       const record = director?.roster?.get?.(normalizeName(citizenUsername));
-      const kingdomId = record?.kingdomId ?? ctx?.kingdomId ?? "unknown";
+      const kingdomId = record?.kingdomId ?? citizenKingdomId(citizenUsername) ?? "unknown";
       notifyCitizenSpoke(citizenUsername, speakerUsername, "library_ops", {
         username: citizenUsername,
         knowledge: Lib.knowledgeFor(kingdomId),

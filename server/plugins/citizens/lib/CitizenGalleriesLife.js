@@ -78,8 +78,12 @@ function usernameOf(record) {
 
 function kingdomIdOf(record) {
   try {
-    const { kingdomIdOf } = require("../brain/CitizenSites");
-    return kingdomIdOf(record) || record.kingdomId || null;
+    const { kingdomIdOf: brainKingdomIdOf } = require("../brain/CitizenSites");
+    // Roster record's own kingdomId FIRST — the brain's kingdomIdOf() always
+    // returns a truthy string (KINGDOM_IDS[0] fallback for anything without
+    // getAttribute), so calling it first silently pins everything to the
+    // first kingdom. The brain read stays as the live-entity fallback.
+    return record?.kingdomId || brainKingdomIdOf(record) || null;
   } catch {
     return record?.kingdomId || null;
   }
