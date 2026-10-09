@@ -1549,6 +1549,11 @@ class CitizenDirector {
       record.merchantKind === "prime"
         ? this.registry.byId.get(ACTIVITY_PRIME_MERCHANT)
         : this.registry.byId.get(ROLE_ACTIVITY[record.role]);
+    // DIAG: log attachBrain status
+    if (!global._attachDiagLogged) {
+      global._attachDiagLogged = true;
+      console.log(`[DIAG-ATTACH] registry=${!!this.registry}, byId=${!!this.registry?.byId}, activity=${!!activity}, role=${record.role}, activityId=${ROLE_ACTIVITY[record.role]}`);
+    }
     if (activity) {
       attachBrain({
         runtime,
