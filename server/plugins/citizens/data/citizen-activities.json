@@ -304,6 +304,40 @@
       ]
     },
     {
+      "id": "citizen_chop",
+      "mode": "citizen_chop",
+      "repeat": true,
+      "capacity": 32,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "equipTool",
+          "tool": "axe"
+        },
+        {
+          "type": "interactObject",
+          "catalog": "tree",
+          "option": "Chop down",
+          "until": {
+            "inventoryFull": true
+          },
+          "stallSeconds": 120
+        },
+        {
+          "type": "citizenBank"
+        }
+      ]
+    },
+    {
       "id": "citizen_light_fire",
       "mode": "citizen_routine",
       "repeat": false,

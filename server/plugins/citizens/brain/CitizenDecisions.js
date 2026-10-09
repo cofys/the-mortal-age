@@ -91,6 +91,7 @@ const ACT_LIGHT_FIRE = "citizen_light_fire";
 const ACT_SMELT = "citizen_smelt";
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
+const ACT_CHOP = "citizen_chop";
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
 // re-decision. Short activities (meal/rest/bank) complete on their own.
 const ANCHOR_ACTIVITIES = new Set([
@@ -103,6 +104,7 @@ const ANCHOR_ACTIVITIES = new Set([
   "leisure_stroll",
   "refugee_flight",
   ACT_MINE,
+  ACT_CHOP,
 ]);
 
 const MEAL_ROLES = new Set(["commoner", "merchant", "guard", "courtier"]);
@@ -473,6 +475,25 @@ function scoreActivity(activityId, snap) {
       if (freeSlots <= 2) s += 8; // full: bank hinge handles it
       return s;
     }
+    case ACT_CHOP: {
+      // Woodcutting: logs for the fires, coins for the cutter. Industrious
+      // citizens with a trade goal grab the axe. Citizens low on logs (for
+      // firemaking) chop more. Like mining, it's work — the weary stay away.
+      let s = 36;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      s += urgent * 6;
+      s += industrious * 12;
+      if (coins < 60) s += 16;
+      else if (coins < 250) s += 5;
+      // Low on logs? The fire needs feeding.
+      if (logs < 5) s += 12;
+      else if (logs < 15) s += 6;
+      if (weary) s -= 50;
+      if (hurt) s -= 25;
+      if (freeSlots <= 2) s += 8; // full: bank hinge handles it
+      return s;
+    }
     default:
       return 30; // unknown future activity: neutral, never breaks
   }
@@ -753,6 +774,7 @@ function resetForTests() {
 module.exports = {
   ACT_ROUTINE,
   ACT_MINE,
+  ACT_CHOP,
   ACT_LIGHT_FIRE,
   ACT_SMELT,
   ACT_MEAL,
