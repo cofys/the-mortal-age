@@ -105,6 +105,26 @@ const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
 const ACT_CHOP = "citizen_chop";
+// Work activities — the ones sickness keeps citizens away from. Meal,
+// rest, bank, and social are NOT work: a sick citizen still eats, rests,
+// banks, and complains to friends about feeling awful.
+const WORK_ACTIVITIES = new Set([
+  ACT_ROUTINE,
+  ACT_LIGHT_FIRE,
+  ACT_SMELT,
+  ACT_CRAFT,
+  ACT_COOK,
+  ACT_HERB,
+  ACT_FLETCH,
+  ACT_RC,
+  ACT_AGILITY,
+  ACT_SLAYER,
+  ACT_HUNT,
+  ACT_FARM,
+  ACT_THIEVE,
+  ACT_MINE,
+  ACT_CHOP,
+]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
 // re-decision. Short activities (meal/rest/bank) complete on their own.
 const ANCHOR_ACTIVITIES = new Set([
@@ -458,6 +478,21 @@ function homeWantsFurniture(player) {
 }
 
 /**
+ * Sickness work penalty 0..60, read from the health data tier.
+ * Defensive: a missing/broken health module scores as healthy.
+ */
+function sickPenalty(player) {
+  try {
+    const Health = require("../lib/CitizenHealth");
+    const username = player?.username ?? player?.getUsername?.() ?? null;
+    if (!username || typeof Health.workPenaltyFor !== "function") return 0;
+    return Health.workPenaltyFor(username);
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Herb materials the citizen could work right now (inventory, else bank).
  * Counts inputs of recipes whose partner item (vial/secondary) is also
  * available in the same place — cleaning needs nothing, mixing needs
@@ -802,6 +837,7 @@ function snapshot(player) {
     builds: buildCount(player),
     buildLevel: constructLevel(player),
     homeFurnishable: homeWantsFurniture(player),
+    sick: sickPenalty(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -1230,13 +1266,19 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
   }
 
   const snap = snapshot(player);
+  const sick = snap.sick ?? 0;
   const scored = candidates
     .filter((a) => a && typeof a.id === "string")
     .map((a) => ({
       activity: a,
       // Session intents steer the pick: a citizen with "earn 2000 coins"
       // scores work higher. Capped so intents never override critical needs.
-      score: scoreActivity(a.id, snap) + intentBonusFor(a.id, player),
+      // Sickness keeps citizens away from work: the sicker they are, the
+      // less work appeals (a plague is -60: effectively no work at all).
+      score:
+        scoreActivity(a.id, snap) +
+        intentBonusFor(a.id, player) -
+        (sick > 0 && WORK_ACTIVITIES.has(a.id) ? sick : 0),
     }))
     .sort((x, y) => y.score - x.score);
   if (scored.length === 0) {

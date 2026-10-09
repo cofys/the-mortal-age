@@ -186,6 +186,8 @@ const {
   registerFeastSource,
 } = require("../lib/CitizenFestivalLife");
 const { tickSchools } = require("../lib/CitizenSchoolLife");
+const { tickHealth } = require("../lib/CitizenHealthLife");
+const CitizenHealth = require("../lib/CitizenHealth");
 const CitizenSchools = require("../lib/CitizenSchools");
 // Religious feasts join the seasonal calendar so the festival games,
 // celebration chatter, and participation journaling all fire for them.
@@ -2825,6 +2827,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("schools failed", { error: String(error?.message ?? error) });
     }
+    // Citizen health: illness onset, contagion, recovery, healers,
+    // hospitals, epidemics. Data tier, zero LLM.
+    try {
+      tickHealth(this, nowMs);
+    } catch (error) {
+      this.log("health failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -2910,6 +2919,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen schools save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenHealth.save()) {
+        this.log("citizen health saved");
+      }
+    } catch (error) {
+      this.log("citizen health save failed", {
         error: String(error?.message ?? error),
       });
     }

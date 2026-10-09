@@ -826,6 +826,46 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "are you sick" — player asks about the citizen's health.
+  if (/\b(are you sick|are you ill|are you feeling well|are you healthy|how is your health)\b/.test(said)) {
+    try {
+      const Health = require("../lib/CitizenHealth");
+      const s = Health.sicknessSummary(citizenUsername);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "health_status", {
+        sick: !!s,
+        illness: s?.label ?? null,
+        symptom: s?.symptom ?? null,
+        inHospital: s?.inHospital ?? false,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "where is the healer" — player asks about healers / the infirmary.
+  if (/\b(where is the healer|is there a healer|where is the infirmary|is there a hospital|i need healing|i am sick)\b/.test(said)) {
+    try {
+      const Health = require("../lib/CitizenHealth");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? null;
+      const hospital = kingdomId ? Health.hospitalOfKingdom(kingdomId) : null;
+      const sickCount = kingdomId ? Health.sickOfKingdom(kingdomId).length : 0;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "health_healer", {
+        hasInfirmary: !!hospital,
+        infirmaryName: hospital?.name ?? null,
+        bedsFree: hospital ? hospital.beds - hospital.patients.length : 0,
+        sickCount,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   return false;
 }
 

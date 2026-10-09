@@ -200,6 +200,17 @@ function mortalityChanceFor(record) {
   if (role === "guard") {
     p += BATTLE_PER_TICK;
   }
+  // The pale plague kills. Other illnesses just lay citizens low — the
+  // health data tier owns that distinction. Defensive: a missing health
+  // module must never change mortality.
+  try {
+    const Health = require("./CitizenHealth");
+    if (typeof Health.mortalityBonusFor === "function" && record?.username) {
+      p += Health.mortalityBonusFor(record.username);
+    }
+  } catch {
+    // fall through
+  }
   return p;
 }
 
