@@ -550,6 +550,27 @@
           "type": "citizenHunt"
         }
       ]
+    },
+    {
+      "id": "citizen_farm",
+      "mode": "citizen_farm",
+      "repeat": true,
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenFarm"
+        }
+      ]
     }
   ]
 }

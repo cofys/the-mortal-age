@@ -97,6 +97,9 @@ const ACT_RC = "citizen_rc";
 const ACT_AGILITY = "citizen_agility";
 const ACT_SLAYER = "citizen_slayer";
 const ACT_HUNT = "citizen_hunt";
+const ACT_FARM = "citizen_farm";
+// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
+const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
 const ACT_CHOP = "citizen_chop";
@@ -113,6 +116,7 @@ const ANCHOR_ACTIVITIES = new Set([
   "refugee_flight",
   ACT_MINE,
   ACT_CHOP,
+  ACT_FARM,
 ]);
 
 const MEAL_ROLES = new Set(["commoner", "merchant", "guard", "courtier"]);
@@ -591,6 +595,69 @@ function huntCount(player) {
   }
 }
 
+/** Seeds the citizen could plant right now (inventory, else bank). */
+function seedCount(player) {
+  try {
+    const Farming = require("../../skills/farming/Patches.Farming");
+    const seeds = Farming?.botFarm?.seeds;
+    if (!seeds) return 0;
+    let level = 1;
+    try {
+      const Skill = require("../../src/main/typescript/elvarg/game/model/Skill")
+        .Skill;
+      const mgr = player?.getSkillManager?.();
+      if (mgr && Skill && typeof mgr.getCurrentLevel === "function") {
+        const lvl = mgr.getCurrentLevel(Skill.FARMING);
+        if (Number.isInteger(lvl) && lvl > 0) level = lvl;
+      }
+    } catch {
+      // level 1 fallback — low-level seeds only
+    }
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    // Inventory first (no trip needed), then bank.
+    let invTotal = 0;
+    for (const [seedId, crop] of seeds) {
+      if (!crop || !FARM_PATCH_TYPES.includes(crop.type)) continue;
+      if ((crop.level ?? 99) > level) continue;
+      invTotal += invAmount(seedId);
+    }
+    if (invTotal > 0) return invTotal;
+    let bankTotal = 0;
+    for (const [seedId, crop] of seeds) {
+      if (!crop || !FARM_PATCH_TYPES.includes(crop.type)) continue;
+      if ((crop.level ?? 99) > level) continue;
+      bankTotal += bankAmount(seedId);
+    }
+    return bankTotal;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Cheap read-only snapshot of everything the scorer needs. needsFor is a Map
  * lookup against the director-ticked CitizenNeeds registry — never created
@@ -624,6 +691,7 @@ function snapshot(player) {
     fletchLogs: fletchCount(player),
     essence: essenceCount(player),
     hunts: huntCount(player),
+    seeds: seedCount(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -641,7 +709,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -772,6 +840,26 @@ function scoreActivity(activityId, snap) {
       else if (goalType === GOAL_SAVE_GOLD) s += 10;
       if (coins < 60) s += 10; // feathers sell well — a broke hunter grinds
       if (hunts >= 3) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_FARM: {
+      // Farming: run the patch circuit for XP and produce. No seeds
+      // anywhere, no farming — a human can't farm without seeds either.
+      // Herb runs are the classic money-maker, so save-gold citizens lean
+      // in; like the other skilling activities, the weary and hurt stay
+      // away. Farming is periodic by nature: after a run the patches are
+      // planted and growing, so the action itself ends the run and the
+      // picker only re-selects it when there's fresh work.
+      if ((seeds ?? 0) <= 0) return 4;
+      let s = 34 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 12;
+      if (coins < 60) s += 8; // herb runs pay — a broke farmer grinds
+      if (seeds >= 6) s += 8; // a real seed stockpile to work through
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1226,6 +1314,7 @@ module.exports = {
   ACT_AGILITY,
   ACT_SLAYER,
   ACT_HUNT,
+  ACT_FARM,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

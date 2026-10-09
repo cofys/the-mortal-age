@@ -682,4 +682,27 @@ function attach(api) {
     api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI, Hespori.HesporiCombat, { singleton: false });
 }
 
-Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick });
+/**
+ * botFarm — the citizen brain's entry points into the REAL farming engine.
+ *
+ * These are the same functions the player click path calls (plant / rake /
+ * waterPatch / healthCheck / harvest / dig / fertilize), so citizens consume
+ * real seeds, grow crops on the real growth clock, and earn real Farming XP
+ * through SkillManager. The brain advances growth itself with
+ * Model.advanceFarm — the same call the farming tick makes — because citizen
+ * bots are not on the farming tick's tracked set. Table references (patches /
+ * seeds / crops) are the live engine tables, not copies. Additive only: no
+ * player-facing behavior changes.
+ */
+const botFarm = {
+  plant, rake, waterPatch, healthCheck, harvest, dig, fertilize,
+  stateFor, farmFor, hasTool, requireTool, nearPatch,
+  advanceFarm: Model.advanceFarm,
+  patches: Data.CACHE.patches,
+  seeds: Data.SEEDS,
+  crops: Data.CROPS,
+  waterable: Data.WATERABLE,
+  itemId: (name) => Data.itemId(name),
+};
+
+Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick, botFarm });
