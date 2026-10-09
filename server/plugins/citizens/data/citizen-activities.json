@@ -1366,6 +1366,27 @@
       ]
     },
     {
+      "id": "citizen_spyguild",
+      "mode": "citizen_spyguild",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenShadowGuild"
+        }
+      ]
+    },
+    {
       "id": "citizen_teamplay",
       "mode": "citizen_teamplay",
       "repeat": false,

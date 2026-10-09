@@ -769,6 +769,33 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // Shadow guild (espionage guild layer). Placed before the espionage block;
+  // keywords are distinct from it ("spymaster" alone stays with espionage).
+  if (/\b(shadow guild|spymasters'? guild|dead drop|tradecraft|safe house|mole hunt|double agent|guild of shadows)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenSpyGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "spyguild_status", {
+        username: citizenUsername,
+        members: desc?.members ?? 0,
+        spymasters: desc?.spymasters ?? 0,
+        treasury: desc?.treasury ?? 0,
+        tradecraftFund: desc?.tradecraftFund ?? 0,
+        unreadDrops: desc?.unreadDrops ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "any spies" / "covert" / "infiltrate" — citizen espionage.
   // (Passive "what news from <kingdom>" stays with CitizenDiplomacy.)
   if (/\b(any sp(y|ies)|covert ops?|infiltrat\w*|spymaster|caught.*spy|spy network)\b/.test(said)) {

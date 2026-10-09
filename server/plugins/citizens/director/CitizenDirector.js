@@ -285,6 +285,8 @@ const { tickLawGuildLife } = require("../lib/CitizenLawGuildLife");
 const CitizenLawGuilds = require("../lib/CitizenLawGuilds");
 const { tickDiplomaticCorpsLife } = require("../lib/CitizenDiplomaticCorpsLife");
 const CitizenDiplomaticCorps = require("../lib/CitizenDiplomaticCorps");
+const { tickSpyGuildLife } = require("../lib/CitizenSpyGuildLife");
+const CitizenSpyGuilds = require("../lib/CitizenSpyGuilds");
 const { tickCivilLife } = require("../lib/CitizenCivilLife");
 const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -3299,6 +3301,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("diplomatic corps failed", { error: String(error?.message ?? error) });
     }
+    // Shadow guild: dues, dead drops, sanctuary, mole board, interrogation
+    // bounties, tradecraft school. Data tier, zero LLM. (CitizenEspionage
+    // owns networks/ops/cells; this owns the profession's guild layer only.)
+    try {
+      tickSpyGuildLife(this, nowMs);
+    } catch (error) {
+      this.log("spy guild failed", { error: String(error?.message ?? error) });
+    }
     // Bar association: dues, case reviews, pro bono, disciplinary board,
     // legal school. Data tier, zero LLM. (CitizenCivilLaw owns contracts/
     // disputes/judgments; this owns the profession's guild layer only.)
@@ -3724,6 +3734,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen diplomatic corps save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenSpyGuilds.save()) {
+        this.log("citizen spy guild saved");
+      }
+    } catch (error) {
+      this.log("citizen spy guild save failed", {
         error: String(error?.message ?? error),
       });
     }
