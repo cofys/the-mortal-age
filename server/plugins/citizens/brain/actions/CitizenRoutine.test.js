@@ -44,6 +44,9 @@ const {
   _bendLeg: bendLeg,
   _extendWorkShift: extendWorkShift,
   _phaseFor: phaseFor,
+  _haulPriceFor: haulPriceFor,
+  _sellItems: sellItems,
+  _verifiedAdds: verifiedAdds,
   _KIND_WORK: KIND_WORK,
   _KIND_MARKET: KIND_MARKET,
   _KIND_MEAL: KIND_MEAL,
@@ -281,6 +284,98 @@ function testBrokenIntentReadsDontBreakRoutine() {
   assert.equal(kind, KIND_MARKET, "broken reads fall back to the plan");
 }
 
+// ---------------------------------------------------------------------------
+// Real haul pricing (alignment review finding #5)
+// ---------------------------------------------------------------------------
+
+const { getReferencePrice } = require("../../../economy/Prices.Economy");
+
+// Canonical engine ItemContainer shape: getAmount(id), deleteNumber(id, n),
+// adds(id, n) — the shapes the vanishing-coins sweep standardized on.
+function mockInv(contents) {
+  const m = new Map(Object.entries(contents));
+  return {
+    getAmount: (id) => m.get(String(id)) ?? 0,
+    adds: (id, qty) => {
+      m.set(String(id), (m.get(String(id)) ?? 0) + qty);
+    },
+    deleteNumber: (id, qty) => {
+      m.set(String(id), (m.get(String(id)) ?? 0) - qty);
+    },
+    _map: m,
+  };
+}
+
+function testHaulPriceIsRealReferencePrice() {
+  // Haul prices come from the living-economy reference price — the same
+  // real table merchant stalls and player shops use — never a fixed coin.
+  assert.equal(haulPriceFor(317), getReferencePrice(317), "raw shrimps = reference price");
+  assert.equal(haulPriceFor(1511), getReferencePrice(1511), "logs = reference price");
+  assert.equal(haulPriceFor(440), getReferencePrice(440), "iron ore = reference price");
+  assert.ok(haulPriceFor(317) > 1, "a real GE-listed haul is worth more than the 1-coin floor");
+  assert.equal(haulPriceFor(999999), 1, "unknown item ids floor at 1, never throw");
+}
+
+function testSellItemsHappyPath() {
+  const seller = mockInv({ 1511: 10, 995: 0 });
+  const buyer = mockInv({ 1511: 0, 995: 500 });
+  const paid = sellItems(seller, buyer, 1511, 4, 23);
+  assert.equal(paid, 92, "4 logs @ 23 = 92 coins");
+  assert.equal(seller._map.get("1511"), 6, "seller loses the logs");
+  assert.equal(seller._map.get("995"), 92, "seller gains the coins");
+  assert.equal(buyer._map.get("1511"), 4, "buyer gains the logs");
+  assert.equal(buyer._map.get("995"), 408, "buyer pays from its own coin");
+}
+
+function testSellItemsBuyerCannotCover() {
+  const seller = mockInv({ 1511: 10, 995: 0 });
+  const buyer = mockInv({ 1511: 0, 995: 50 }); // can't cover 4 @ 23
+  const paid = sellItems(seller, buyer, 1511, 4, 23);
+  assert.equal(paid, 0, "no trade when the buyer can't cover");
+  assert.equal(seller._map.get("1511"), 10, "seller keeps the logs");
+  assert.equal(buyer._map.get("995"), 50, "buyer keeps its coins");
+}
+
+function testSellItemsItemCreditFailureRestoresSeller() {
+  const seller = mockInv({ 1511: 10, 995: 0 });
+  const buyer = mockInv({ 1511: 0, 995: 500 });
+  buyer.adds = () => {
+    throw new Error("engine add throws");
+  };
+  const paid = sellItems(seller, buyer, 1511, 4, 23);
+  assert.equal(paid, 0, "failed item credit pays nothing");
+  assert.equal(seller._map.get("1511"), 10, "seller's debited drops are restored");
+  assert.equal(buyer._map.get("995"), 500, "buyer's coins untouched");
+}
+
+function testSellItemsCoinCreditFailureRollsBack() {
+  const seller = mockInv({ 1511: 10, 995: 0 });
+  const buyer = mockInv({ 1511: 0, 995: 500 });
+  // Coin adds throw but item adds succeed: the trade must unwind fully.
+  seller.adds = (id, qty) => {
+    if (String(id) === "995") throw new Error("engine coin credit throws");
+    seller._map.set(String(id), (seller._map.get(String(id)) ?? 0) + qty);
+  };
+  const paid = sellItems(seller, buyer, 1511, 4, 23);
+  assert.equal(paid, 0, "failed coin credit pays nothing");
+  assert.equal(seller._map.get("1511"), 10, "seller's items come back");
+  assert.equal(seller._map.get("995"), 0, "seller gains no coins");
+  assert.equal(buyer._map.get("1511"), 0, "buyer keeps no items");
+  assert.equal(buyer._map.get("995"), 500, "buyer's coins come back");
+}
+
+function testVerifiedAddsDetectsThrowingCredit() {
+  const inv = mockInv({ 995: 100 });
+  assert.equal(verifiedAdds(inv, 995, 50), true, "real credit verifies");
+  assert.equal(inv._map.get("995"), 150);
+  const broken = mockInv({ 995: 100 });
+  broken.adds = () => {
+    throw new Error("engine add throws");
+  };
+  assert.equal(verifiedAdds(broken, 995, 50), false, "throwing credit fails verification");
+  assert.equal(broken._map.get("995"), 100, "nothing landed");
+}
+
 const tests = [
   testNoIntentsNoBend,
   testWorkIntentSkipsMarket,
@@ -294,6 +389,12 @@ const tests = [
   testBendIdempotent,
   testExtendClampedToNextLeg,
   testBrokenIntentReadsDontBreakRoutine,
+  testHaulPriceIsRealReferencePrice,
+  testSellItemsHappyPath,
+  testSellItemsBuyerCannotCover,
+  testSellItemsItemCreditFailureRestoresSeller,
+  testSellItemsCoinCreditFailureRollsBack,
+  testVerifiedAddsDetectsThrowingCredit,
 ];
 
 let pass = 0;
