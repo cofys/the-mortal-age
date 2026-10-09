@@ -351,7 +351,7 @@ function onCitizenDeath(director, player, event, nowMs = Date.now()) {
     const record = director.roster.get(normalizeName(username));
     if (!record) return null;
     const killerName = describeKiller(event?.killer);
-    return recordCitizenDeath(
+    const outcome = recordCitizenDeath(
       director,
       record,
       {
@@ -360,6 +360,15 @@ function onCitizenDeath(director, player, event, nowMs = Date.now()) {
       },
       nowMs
     );
+    // A killer with a name is personal: players and fellow citizens who
+    // murder you earn a grudge (and a warning to your friends). NPC kills
+    // are not personal — noteKill filters those out.
+    try {
+      require("./CitizenSocialBonds").noteKill(username, event?.killer, director, nowMs);
+    } catch {
+      // Grudges must never break the death path.
+    }
+    return outcome;
   } catch {
     return null;
   }

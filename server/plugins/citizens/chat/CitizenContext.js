@@ -201,6 +201,17 @@ function buildContext(citizenUsername, speakerUsername) {
     // Memory must never break the chat path.
   }
 
+  // Social bonds: the persistent relationship score toward THIS speaker —
+  // friendship, rivalry, remembered favors and grudges. One line, only
+  // when there's something worth saying.
+  try {
+    const { bondSummary } = require("../lib/CitizenSocialBonds");
+    const bond = bondSummary(citizenUsername, speakerUsername);
+    if (bond) parts.push(bond);
+  } catch {
+    // Bond memory must never break the chat path.
+  }
+
   // Kinship: spouses, sweethearts, close friends, feuds. Real people talk
   // about their own lives — the citizen's words stay consistent with the
   // relationships the background tier simulated.

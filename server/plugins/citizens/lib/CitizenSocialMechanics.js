@@ -162,6 +162,16 @@ function tickCitizen(record, getBot, nearbyPlayers) {
       addEnemy(name, playerKey);
       removeFriend(name, playerKey);
       journalEvent(name, `Declared ${playerKey} an enemy. They went too far.`, "enemy");
+      try {
+        require("./CitizenSocialBonds").recordGrudge(
+          name,
+          playerKey,
+          "betrayal",
+          "Pushed too far — declared an enemy."
+        );
+      } catch {
+        // Grudges must never break the tick.
+      }
       // Warn the player if they're online.
       const p = findPlayer(playerKey);
       if (p) notifyPlayer(p, `${record.displayName ?? name}: Stay away from me. We're done.`);
@@ -533,11 +543,19 @@ function requestFriend(playerName, citizenName) {
 
 /** Citizen accepts a player's friend request (called when citizen is "asked"). */
 function citizenAcceptFriend(citizenName, playerName) {
+  const bond = (kind, opts) => {
+    try {
+      require("./CitizenSocialBonds").recordInteraction(citizenName, playerName, kind, opts);
+    } catch {
+      // Bonding must never break the friend path.
+    }
+  };
   const result = resolveInvite(citizenName, getInvites(citizenName).find(
     (i) => normalizeName(i.from) === normalizeName(playerName) && i.kind === INVITE_FRIEND
   )?.id, true);
   if (result) {
     journalEvent(citizenName, `Accepted ${playerName}'s friend request.`, "social");
+    bond("befriended", { mutual: true });
     return true;
   }
   // No pending request — citizen decides based on relationship.
@@ -545,6 +563,7 @@ function citizenAcceptFriend(citizenName, playerName) {
     addFriend(citizenName, playerName);
     addFriend(playerName, citizenName);
     journalEvent(citizenName, `Became friends with ${playerName}.`, "social");
+    bond("befriended", { mutual: true });
     return true;
   }
   return false;

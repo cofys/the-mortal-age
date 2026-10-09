@@ -6,7 +6,8 @@
  * When a citizen hears public chat (via citizens:chat-heard), common patterns
  * get instant scripted reactions instead of waiting for the LLM mouth:
  *   - "gz!" on level-up announcements (the "gz" culture)
- *   - greeting back when greeted
+ *   - greeting back when greeted — BY NAME for friends
+ *   - the cold shoulder for rivals (shun lines, or pointed silence)
  *   - "thanks!" when someone says "gz" to them
  *   - farewells, laughter, "gl!" — the fast social glue
  *
@@ -56,6 +57,8 @@ const POOLS = Object.freeze({
   gzReceived: Object.freeze(["thanks!", "ty!", "tyty!", "appreciated!"]),
   gl: Object.freeze(["gl!", "good luck!", "you got this!"]),
   agree: Object.freeze(["yeah", "exactly", "true", "ikr", "facts"]),
+  // Cold shoulder for rivals: short, dismissive, very human.
+  shun: Object.freeze(["...", "what.", "not now.", "whatever."]),
 });
 
 // Terse variants for gruff/taciturn citizens (they don't exclaim).
@@ -69,6 +72,7 @@ const TERSE = Object.freeze({
   gzReceived: Object.freeze(["ty.", "thanks."]),
   gl: Object.freeze(["gl."]),
   agree: Object.freeze(["yeah.", "true."]),
+  shun: Object.freeze(["...", "what.", "hm."]),
 });
 
 /** Combine plain + terse into a voice-aware pool for voiceLine(). */
@@ -154,6 +158,23 @@ function reactionChance(personality) {
 // --- Main entry ------------------------------------------------------------
 
 /**
+ * The cold shoulder: a rival's greeting gets a dismissive line, not a
+ * greeting back. Deliberate (no chance gate) and throttled like any
+ * reaction. Returns the line spoken, or null if it couldn't speak.
+ */
+function speakShun(citizenUsername, personality, bot, nowMs) {
+  const voice = voiceFor(personality);
+  const line = voiceLine(voice, voicePool("shun"));
+  try {
+    sayPublic(bot, line);
+  } catch {
+    return null;
+  }
+  lastReactionAt.set(citizenUsername, nowMs);
+  return line;
+}
+
+/**
  * Attempt a scripted reaction. Returns the line spoken, or null if no
  * reaction fired (caller should fall through to the LLM path).
  *
@@ -176,13 +197,40 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
   const poolKey = matchPattern(text);
   if (!poolKey) return null;
 
-  // Personality gate.
+  // Personality for the voice styling below.
   let personality = {};
   try {
     personality = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
   } catch {
     personality = {};
   }
+
+  // Relationship layer: friends get greeted BY NAME, rivals get shunned.
+  // A real player lights up for a friend and goes cold (or silent) for an
+  // enemy — the scripted reflexes should too. Hostile reactions are
+  // deliberate, not chance-gated: you don't roll dice on shunning your
+  // nemesis.
+  let hostile = false;
+  let warm = false;
+  try {
+    const Bonds = require("../lib/CitizenSocialBonds");
+    const standing = Bonds.standingFor(citizenUsername, speakerUsername);
+    hostile = standing === "rival" || standing === "nemesis";
+    warm = standing === "friend" || standing === "close";
+  } catch {
+    // No bond data — proceed as strangers.
+  }
+  if (hostile) {
+    if (poolKey !== "greeting") {
+      // Pointed silence: you don't congratulate your nemesis. Fall through
+      // to the LLM path (which gets the curt context) without consuming
+      // the throttle.
+      return null;
+    }
+    return speakShun(citizenUsername, personality, bot, nowMs);
+  }
+
+  // Personality gate (warm/neutral reactions only).
   const chance = reactionChance(personality);
   if (Math.random() >= chance) return null;
 
@@ -202,10 +250,24 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
     }
   }
 
+  // Warm override: greet friends BY NAME.
+  if (warm && poolKey === "greeting") {
+    key = "greetFriend"; // filled with the speaker's name below
+  }
+
   // Pick line through the shared voice module (terse variants for
   // gruff/taciturn, lowercase/punctuation styling per voice profile).
   const voice = voiceFor(personality);
-  const line = voiceLine(voice, voicePool(key));
+  let line;
+  if (key === "greetFriend") {
+    const first = String(speakerUsername ?? "").trim().split(" ")[0] || "you";
+    line = voiceLine(voice, {
+      plain: [`hey ${first}!`, `${first}!! good to see you`, `hey ${first}, how's it going`],
+      terse: [`hey ${first}.`, `${first}.`, `oh. ${first}.`],
+    });
+  } else {
+    line = voiceLine(voice, voicePool(key));
+  }
 
   // Speak like a player: overhead + chat box (not NPC-style overhead-only).
   try {
@@ -215,6 +277,20 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
   }
 
   lastReactionAt.set(citizenUsername, nowMs);
+
+  // Real conversations build real friendships: a warm exchange nudges the
+  // bond score. Shuns don't (the cold shoulder is the message).
+  if (key !== "shun") {
+    try {
+      require("../lib/CitizenSocialBonds").recordInteraction(
+        citizenUsername,
+        speakerUsername,
+        "chatted"
+      );
+    } catch {
+      // Bonding must never break the reaction.
+    }
+  }
   return line;
 }
 
@@ -226,6 +302,7 @@ function resetForTests() {
 
 module.exports = {
   tryScriptedReaction,
+  speakShun,
   matchPattern,
   reactionChance,
   resetForTests,

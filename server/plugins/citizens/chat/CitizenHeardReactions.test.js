@@ -227,6 +227,77 @@ check("tryScriptedReaction: broken bot degrades gracefully", () => {
   }
 });
 
+// --- Relationship-aware reactions -------------------------------------------
+
+const SocialBonds = require("../lib/CitizenSocialBonds");
+
+check("greeting from a friend greets BY NAME", () => {
+  SocialBonds.resetForTests();
+  for (let i = 0; i < 4; i++) {
+    SocialBonds.recordInteraction("Petra Stone", "Cofys Friend", "befriended");
+  }
+  assert.equal(SocialBonds.standingFor("Petra Stone", "Cofys Friend"), "friend");
+  const spoken = [];
+  const bot = mockBot({ traits: ["chatty"] }, spoken);
+  let line = null;
+  for (let i = 0; i < 20 && !line; i++) {
+    resetForTests();
+    spoken.length = 0;
+    line = tryScriptedReaction("Petra Stone", "Cofys Friend", "hi", bot, Date.now());
+  }
+  assert.ok(line, "friend greeting should eventually fire for chatty citizen");
+  assert.ok(
+    line.toLowerCase().includes("cofys"),
+    `friend should be greeted by name, got: "${line}"`
+  );
+});
+
+check("greeting from a rival gets the cold shoulder", () => {
+  SocialBonds.resetForTests();
+  SocialBonds.recordGrudge("Petra Stone", "Rival Rita", "kill", "Killed me at the mole.");
+  assert.equal(SocialBonds.standingFor("Petra Stone", "Rival Rita"), "rival");
+  const spoken = [];
+  const bot = mockBot({ traits: ["chatty"] }, spoken);
+  // Deterministic: shunning a rival is deliberate, not chance-gated.
+  const line = tryScriptedReaction("Petra Stone", "Rival Rita", "hi", bot, Date.now());
+  assert.ok(line, "rival greeting should get a shun line");
+  assert.ok(
+    POOLS.shun.includes(line) || TERSE.shun.includes(line),
+    `should be a shun line, got: "${line}"`
+  );
+});
+
+check("rival's celebration gets pointed silence, not gz", () => {
+  SocialBonds.resetForTests();
+  SocialBonds.recordGrudge("Petra Stone", "Rival Rita", "kill", "Killed me at the mole.");
+  const spoken = [];
+  const bot = mockBot({ traits: ["chatty"] }, spoken);
+  // Deterministic: hostile + non-greeting returns null before the chance gate.
+  const line = tryScriptedReaction("Petra Stone", "Rival Rita", "just hit 70 fishing!", bot, Date.now());
+  assert.equal(line, null, "no gz for a rival");
+  assert.equal(spoken.length, 0, "silence means silence");
+});
+
+check("warm conversation nudges the bond score", () => {
+  SocialBonds.resetForTests();
+  const before = SocialBonds.scoreOf("Petra Stone", "Cofy");
+  const spoken = [];
+  const bot = mockBot({ traits: ["chatty"] }, spoken);
+  let line = null;
+  for (let i = 0; i < 20 && !line; i++) {
+    resetForTests();
+    spoken.length = 0;
+    line = tryScriptedReaction("Petra Stone", "Cofy", "hi", bot, Date.now());
+  }
+  assert.ok(line, "greeting should fire");
+  assert.equal(
+    SocialBonds.scoreOf("Petra Stone", "Cofy"),
+    before + 2,
+    "a heard conversation warms the bond"
+  );
+  SocialBonds.resetForTests();
+});
+
 // --- Pool sanity ------------------------------------------------------------
 
 check("pools: all non-empty, all short", () => {
