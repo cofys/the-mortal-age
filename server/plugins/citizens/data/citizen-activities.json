@@ -402,6 +402,27 @@
           "type": "citizenCraft"
         }
       ]
+    },
+    {
+      "id": "citizen_cook",
+      "mode": "citizen_cook",
+      "repeat": false,
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenCook"
+        }
+      ]
     }
   ]
 }

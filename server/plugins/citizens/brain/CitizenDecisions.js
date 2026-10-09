@@ -90,6 +90,7 @@ const ACT_BANK = "citizen_bank";
 const ACT_LIGHT_FIRE = "citizen_light_fire";
 const ACT_SMELT = "citizen_smelt";
 const ACT_CRAFT = "citizen_craft";
+const ACT_COOK = "citizen_cook";
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
 const ACT_CHOP = "citizen_chop";
@@ -340,6 +341,49 @@ function gemCount(player) {
   }
 }
 
+/** Raw food the citizen could cook right now (inventory, else bank). */
+function rawFoodCount(player) {
+  try {
+    const Cooking = require("../../skills/Cooking.plugin");
+    const recipes = Cooking?.COOKING_RECIPES;
+    if (!Array.isArray(recipes) || !recipes.length) return 0;
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    // Inventory first (no trip needed), then bank.
+    let invTotal = 0;
+    for (const recipe of recipes) invTotal += invAmount(recipe.rawId);
+    if (invTotal > 0) return invTotal;
+    let bankTotal = 0;
+    for (const recipe of recipes) bankTotal += bankAmount(recipe.rawId);
+    return bankTotal;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Cheap read-only snapshot of everything the scorer needs. needsFor is a Map
  * lookup against the director-ticked CitizenNeeds registry — never created
@@ -368,6 +412,7 @@ function snapshot(player) {
     logs: logCount(player),
     ore: smeltableBars(player),
     gems: gemCount(player),
+    rawFood: rawFoodCount(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -385,7 +430,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -480,6 +525,24 @@ function scoreActivity(activityId, snap) {
       else if (goalType === GOAL_SAVE_GOLD) s += 10;
       if (coins < 60) s += 10; // cut gems sell well — a broke cutter grinds
       if (gems >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_COOK: {
+      // Cooking: turn raw food into cooked food for XP, coin, and healing.
+      // No raw food anywhere, no cooking. Cooked food is what citizens eat
+      // to heal, so low-food citizens cook to survive; broke traders cook to
+      // sell. The weary and hurt stay away (the meal hinge handles eating).
+      if ((rawFood ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // cooked food sells well — a broke cook grinds
+      if (rawFood >= 10) s += 8; // a real stockpile to work through
+      if (food < 3) s += 12; // low on food — cook to eat, not just to sell
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -840,6 +903,7 @@ module.exports = {
   ACT_LIGHT_FIRE,
   ACT_SMELT,
   ACT_CRAFT,
+  ACT_COOK,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,
