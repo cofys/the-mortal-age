@@ -206,16 +206,23 @@ check("tickLibrarians proximity gating", () => {
   const said = [];
   citizen.forceChat = (line) => said.push(line);
 
+  // Real-API director shape (CitizenDirector.js:1374/1379): roster/isOnline/
+  // getBot. Nearby players come from the citizen bot's getLocalPlayers
+  // (Player.ts:796) — director.onlinePlayers does not exist on the real
+  // director, so stub the bot instead.
+  const mkDirector = () => ({
+    roster: new Map([[libUser, record]]),
+    isOnline: () => true,
+    getBot: () => citizen,
+  });
+
   // Case A: real player near -> may fire (chance-gated, run many ticks).
+  citizen.getLocalPlayers = () => [human];
   let fired = 0;
   for (let i = 0; i < 40; i++) {
     said.length = 0;
     lib.tickLibrarians(
-      {
-        roster: new Map([[libUser, record]]),
-        playerFor: () => citizen,
-        onlinePlayers: () => [human],
-      },
+      mkDirector(),
       Date.now() + i * 4 * 3600 * 1000 // step past cooldowns
     );
     if (said.length) fired++;
@@ -224,14 +231,11 @@ check("tickLibrarians proximity gating", () => {
 
   // Case B: only bots near -> never fires.
   const botOnly = mkPlayer("botx", 105, 105, true);
+  citizen.getLocalPlayers = () => [botOnly];
   for (let i = 0; i < 10; i++) {
     said.length = 0;
     lib.tickLibrarians(
-      {
-        roster: new Map([[libUser, record]]),
-        playerFor: () => citizen,
-        onlinePlayers: () => [botOnly],
-      },
+      mkDirector(),
       Date.now() + 10 * 86400000 + i * 4 * 3600 * 1000
     );
     assert.equal(said.length, 0, "should stay silent with only bots near");

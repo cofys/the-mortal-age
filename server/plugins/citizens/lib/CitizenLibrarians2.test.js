@@ -282,15 +282,20 @@ assert.ok(bookName, "found a bookfolk citizen for the tick test");
 const fakeCitizen = {
   forceChat: (line) => said.push(line),
   getLocation: () => ({ getX: () => 3200, getY: () => 3200, getZ: () => 0 }),
+  // Real engine API (Player.ts:796): nearby players come from the citizen
+  // bot, not from a director.onlinePlayers that doesn't exist.
+  getLocalPlayers: () => [fakePlayer],
 };
 const fakePlayer = {
   getUsername: () => "RealPlayer",
+  isPlayerBot: () => false,
+  getHostAddress: () => "9.9.9.9",
   getLocation: () => ({ getX: () => 3205, getY: () => 3205, getZ: () => 0 }),
 };
 const director = {
   roster: { values: () => [{ username: bookName, role: "commoner", kingdomId: "misthalin" }] },
-  playerFor: () => fakeCitizen,
-  onlinePlayers: () => [fakePlayer],
+  isOnline: () => true,
+  getBot: () => fakeCitizen,
 };
 // force the chance gate: Math.random patch scoped to the call
 const origRandom = Math.random;

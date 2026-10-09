@@ -514,8 +514,13 @@ function tickLibrarians(director, nowMs) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    // Real engine API: Player.getLocalPlayers() (Player.ts:796). The citizen
+    // bot's local players are the only players that can possibly be near.
+    // (Previously this scanned director.roster — citizen records, all bots —
+    // so the gate could never fire: isRealPlayer is never true for a bot.)
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
