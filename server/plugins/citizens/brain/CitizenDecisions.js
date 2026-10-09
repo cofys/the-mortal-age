@@ -98,6 +98,7 @@ const ACT_AGILITY = "citizen_agility";
 const ACT_SLAYER = "citizen_slayer";
 const ACT_HUNT = "citizen_hunt";
 const ACT_FARM = "citizen_farm";
+const ACT_THIEVE = "citizen_thieve";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -349,6 +350,17 @@ function gemCount(player) {
   } catch {
     return 0;
   }
+}
+
+/** The citizen's Thieving level (1 when unreadable — bakery stalls only). */
+function thiefLevel(player) {
+  try {
+    const Thieving = require("../../skills/Thieving.plugin");
+    if (Thieving?.thievingLevel) return Thieving.thievingLevel(player);
+  } catch {
+    // fall through
+  }
+  return 1;
 }
 
 /**
@@ -692,6 +704,7 @@ function snapshot(player) {
     essence: essenceCount(player),
     hunts: huntCount(player),
     seeds: seedCount(player),
+    thiefLevel: thiefLevel(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -709,7 +722,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -860,6 +873,29 @@ function scoreActivity(activityId, snap) {
       else if (goalType === GOAL_SAVE_GOLD) s += 12;
       if (coins < 60) s += 8; // herb runs pay — a broke farmer grinds
       if (seeds >= 6) s += 8; // a real seed stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_THIEVE: {
+      // Thieving: steal from market stalls for Thieving XP and loot.
+      // No materials — the market itself is the tool — so there's no stock
+      // gate; the action returns "success" quickly when no stall is nearby.
+      // Need drives thieves: the broke steal to eat. The sneaky and the
+      // greedy steal from inclination. Higher Thieving unlocks richer
+      // stalls, so veterans lean in. The hurt, exhausted, and weary keep
+      // their hands in their pockets.
+      let s = 30 + industrious * 12;
+      if (coins < 60) s += 14; // need drives thieves
+      const traits = traitSet(personality);
+      if (traits.has("sneaky") || traits.has("mischievous")) s += 10;
+      if (traits.has("greedy")) s += 6;
+      if (traits.has("honest") || traits.has("dutiful")) s -= 12;
+      if (goalType === GOAL_SAVE_GOLD) s += 8;
+      if ((thiefLevel ?? 1) >= 20) s += 6; // silk stalls and up
+      if ((thiefLevel ?? 1) >= 35) s += 6; // fur stalls and up
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1315,6 +1351,7 @@ module.exports = {
   ACT_SLAYER,
   ACT_HUNT,
   ACT_FARM,
+  ACT_THIEVE,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

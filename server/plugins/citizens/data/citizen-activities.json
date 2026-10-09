@@ -571,6 +571,27 @@
           "type": "citizenFarm"
         }
       ]
+    },
+    {
+      "id": "citizen_thieve",
+      "mode": "citizen_thieve",
+      "repeat": false,
+      "capacity": 16,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenThieve"
+        }
+      ]
     }
   ]
 }

@@ -406,10 +406,56 @@ function register(api) {
   }
 }
 
+/**
+ * Bot entry point: attempt a pickpocket without clicking. Builds a synthetic
+ * event for the real pickpocket flow — the PickpocketTask resolves success
+ * or the stun exactly as it does for players. Returns true when the attempt
+ * was accepted (outcome lands a tick later).
+ */
+function startBotPickpocket(player, npc) {
+  if (!pluginApi || !TaskManager) return false; // plugin not registered
+  let name = null;
+  let npcId = -1;
+  try {
+    const def = npc.getDefinition?.();
+    name = typeof def?.getName === "function" ? def.getName() : null;
+    npcId = npc.getId?.() ?? -1;
+  } catch {
+    return false;
+  }
+  if (!name) return false;
+  if (!targetFor(name, npcId)) return false;
+  const event = {
+    player,
+    npc,
+    npcId,
+    definition: { getName: () => name },
+    handled: false,
+  };
+  try {
+    pickpocket(event);
+  } catch {
+    return false;
+  }
+  return event.handled === true;
+}
+
+/** Pickpocket targets the given Thieving level allows, for the brain layer. */
+function pickpocketTargetsForLevel(level) {
+  return TARGETS.filter((t) => (t.level ?? 1) <= level).map((t) => ({
+    name: t.npcs?.[0] ?? "unknown",
+    npcs: [...(t.npcs ?? [])],
+    level: t.level ?? 1,
+    xp: t.xp ?? 0,
+  }));
+}
+
 module.exports = {
   register,
   pouchCoins,
   POUCH_COINS,
   TARGETS,
+  startBotPickpocket,
+  pickpocketTargetsForLevel,
   _test: { pickpocket, successChance, rollLoot, giveLoot, targetFor, messageName, dodgyNecklaceProtects, wearOutGloves, rateOf },
 };
