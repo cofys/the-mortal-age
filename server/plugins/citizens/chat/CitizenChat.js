@@ -1016,6 +1016,47 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a gallery" / "where is the gallery" — player asks about art.
+  if (/\b(is there a gallery|where is the gallery|art gallery|museum)\b/.test(said)) {
+    try {
+      const Art = require("../lib/CitizenArt");
+      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const gallery = Art.galleryFor(kingdomId);
+      const displayed = (gallery.displayed ?? []).length;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "art_gallery", {
+        username: citizenUsername,
+        galleryName: gallery.name,
+        displayed,
+        kingdomId,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "do you make art" / "are you an artist" — player asks about the citizen's art.
+  if (/\b(do you make art|are you an artist|what art do you make|show me your art)\b/.test(said)) {
+    try {
+      const Art = require("../lib/CitizenArt");
+      const works = Art.artworksOf(citizenUsername);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "art_status", {
+        username: citizenUsername,
+        count: works.length,
+        works: works.slice(0, 5).map((a) => ({
+          title: a.title,
+          medium: a.mediumLabel,
+          quality: a.quality,
+          forSale: a.forSale,
+          price: a.price,
+        })),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "do you have a pet" / "what pets do you have" — player asks about pets.
   if (/\b(do you have a pet|what pets do you have|do you own a pet|tell me about your pet|what is your pet|do you have any pets)\b/.test(said)) {
     try {

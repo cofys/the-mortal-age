@@ -207,6 +207,8 @@ const { tickGuilds } = require("../lib/CitizenGuildLife");
 const CitizenGuilds = require("../lib/CitizenGuilds");
 const { tickPets } = require("../lib/CitizenPetLife");
 const CitizenPets = require("../lib/CitizenPets");
+const { tickArt } = require("../lib/CitizenArtLife");
+const CitizenArt = require("../lib/CitizenArt");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -2910,6 +2912,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("pets failed", { error: String(error?.message ?? error) });
     }
+    // Citizen art: exhibitions, market expiry, inspiration.
+    // Data tier, zero LLM.
+    try {
+      tickArt(this, nowMs);
+    } catch (error) {
+      this.log("art failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3074,6 +3083,15 @@ class CitizenDirector {
       CitizenPets.save();
     } catch (error) {
       this.log("citizen pets save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenArt.save()) {
+        this.log("citizen art saved");
+      }
+    } catch (error) {
+      this.log("citizen art save failed", {
         error: String(error?.message ?? error),
       });
     }

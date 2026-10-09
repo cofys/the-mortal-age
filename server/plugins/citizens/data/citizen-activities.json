@@ -697,6 +697,27 @@
           "type": "citizenPetCare"
         }
       ]
+    },
+    {
+      "id": "citizen_createart",
+      "mode": "citizen_createart",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenCreateArt"
+        }
+      ]
     }
   ]
 }

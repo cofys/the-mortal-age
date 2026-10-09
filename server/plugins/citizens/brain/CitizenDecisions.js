@@ -104,6 +104,7 @@ const ACT_TRAVEL = "citizen_travel";
 const ACT_ENTERTAIN = "citizen_entertain";
 const ACT_GUILD = "citizen_guild";
 const ACT_PETCARE = "citizen_petcare";
+const ACT_CREATEART = "citizen_createart";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -129,6 +130,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_TRAVEL,
   ACT_GUILD,
   ACT_PETCARE,
+  ACT_CREATEART,
   ACT_MINE,
   ACT_CHOP,
 ]);
@@ -649,6 +651,48 @@ function petInfo(player) {
 }
 
 /**
+ * Art info: can this citizen make art right now, and are they the arty type?
+ * Defensive: a missing/broken art module scores as unable.
+ */
+function artInfo(player) {
+  try {
+    const Art = require("../lib/CitizenArt");
+    const inv = player?.getInventory?.();
+    if (!inv) return { canCreate: false, medium: null };
+    // Check each medium for affordable materials (same order as the action).
+    for (const mediumId of ["sculpture", "painting", "writing"]) {
+      const medium = Art.ART_MEDIUMS[mediumId];
+      if (!medium) continue;
+      let ok = true;
+      for (const mat of medium.materials) {
+        const ids = mat.anyOf ?? [mat.item];
+        let have = 0;
+        for (const id of ids) {
+          try {
+            if (typeof inv.getAmount === "function") have += inv.getAmount(id) ?? 0;
+            else if (typeof inv.count === "function") have += inv.count(id) ?? 0;
+            else if (typeof inv.contains === "function") have += inv.contains(id) ? 1 : 0;
+          } catch { /* ignore */ }
+        }
+        if (have < mat.amount) { ok = false; break; }
+      }
+      for (const tool of medium.tools ?? []) {
+        let have = 0;
+        try {
+          if (typeof inv.getAmount === "function") have = inv.getAmount(tool) ?? 0;
+          else if (typeof inv.contains === "function") have = inv.contains(tool) ? 1 : 0;
+        } catch { /* ignore */ }
+        if (have < 1) { ok = false; break; }
+      }
+      if (ok) return { canCreate: true, medium: mediumId };
+    }
+    return { canCreate: false, medium: null };
+  } catch {
+    return { canCreate: false, medium: null };
+  }
+}
+
+/**
  * Drunkenness check: is this citizen currently drunk?
  * Defensive: a missing/broken entertainment module scores as sober.
  */
@@ -1066,6 +1110,7 @@ function snapshot(player) {
     entertain: entertainInfo(player),
     guild: guildInfo(player),
     pets: petInfo(player),
+    art: artInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
@@ -1086,7 +1131,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, drunk, climate, night, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, drunk, climate, night, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1373,6 +1418,22 @@ function scoreActivity(activityId, snap) {
       if (pi.needsCare) s += 20; // hungry/sad pets are urgent
       const nurturing = personality?.nurturing ?? personality?.kind ?? 0;
       if (nurturing > 0.6) s += 8; // animal lovers seek it out
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      return s;
+    }
+    case ACT_CREATEART: {
+      // Art: creative citizens with materials make art. A human artist
+      // doesn't grind — they create when inspired and supplied.
+      const ai = art ?? { canCreate: false };
+      if (!ai.canCreate) return 4; // no materials, no art
+      let s = 14;
+      const creativity = personality?.creativity ?? personality?.creative ?? 0;
+      if (creativity > 0.7) s += 14; // true artists seek it out
+      else if (creativity > 0.5) s += 6;
+      if (goalType === GOAL_MASTER_TRADE) s += 6; // art sells
+      if (mood != null && mood < 30) s += 4; // art as solace
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1861,6 +1922,7 @@ module.exports = {
   ACT_ENTERTAIN,
   ACT_GUILD,
   ACT_PETCARE,
+  ACT_CREATEART,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

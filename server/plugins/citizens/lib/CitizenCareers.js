@@ -101,6 +101,7 @@ const CAREERS = Object.freeze({
   scribe: Object.freeze({ label: "scribe", skill: null, wage: 180, service: true }),
   healer: Object.freeze({ label: "healer", skill: "herblore", wage: 160, service: true }),
   bard: Object.freeze({ label: "bard", skill: null, wage: 140, service: true }),
+  artist: Object.freeze({ label: "artist", skill: "crafting", wage: 150, service: true }),
 });
 
 const CAREER_KEYS = Object.freeze(Object.keys(CAREERS));
