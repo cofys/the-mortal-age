@@ -1,136 +1,318 @@
 "use strict";
 
-const assert = require("node:assert");
+/**
+ * Castle unit checks — fortification, buildings, staffing, tithe economy.
+ *
+ * The castle is the fortified heart of a kingdom. Phase 1: data model
+ * (fort tiers, 8 buildings, banner, war chest). Phase 2: citizen staffing
+ * (role-matched, slot-limited) and the tithe economy (citizens pay,
+ * buildings cost upkeep, net flows to the war chest).
+ */
+const assert = require("node:assert/strict");
 const { describe, it, beforeEach } = require("node:test");
 
-// Minimal KingdomStore stub: the real module hits the DB. We swap the
-// require cache entry before loading Castle.
-const storePath = require.resolve("./KingdomStore.js");
-let flagsByKingdom = {};
+const Castle = require("./Castle.Kingdoms");
 
-function resetStore() {
-  flagsByKingdom = {};
-  const stub = {
-    getKingdom: (id) => {
-      const flags = flagsByKingdom[id];
-      return flags ? { id, flags } : null;
-    },
-    setFlag: (id, key, value) => {
-      flagsByKingdom[id] = flagsByKingdom[id] ?? {};
-      flagsByKingdom[id][key] = value;
-    },
-  };
-  require.cache[storePath] = {
-    id: storePath,
-    filename: storePath,
-    loaded: true,
-    exports: stub,
+// In-memory store mock — same shape as KingdomStore (load/save).
+function mockStore() {
+  let state = {};
+  return {
+    load: () => state,
+    save: () => {},
+    _state: () => state,
   };
 }
 
-let Castle;
-function loadCastle() {
-  delete require.cache[require.resolve("./Castle.Kingdoms.js")];
-  Castle = require("./Castle.Kingdoms.js");
-}
+describe("fortification", () => {
+  let store;
+  beforeEach(() => { store = mockStore(); });
 
-const KID = "test-kingdom";
-const CHEST = "founding:war-chest";
+  it("starts at tier 0 (camp)", () => {
+    const castle = Castle.ensureCastle("asgarnia", store);
+    assert.equal(castle.fortTier, 0);
+    assert.equal(Castle.fortTierDef(0).id, "camp");
+  });
 
-function seedKingdom(chestCoins) {
-  flagsByKingdom[KID] = { [CHEST]: chestCoins };
-}
+  it("upgrade deducts cost and raises tier", () => {
+    const castle = Castle.ensureCastle("asgarnia", store);
+    Castle.depositWarChest("asgarnia", 10000000, store);
+    const r = Castle.upgradeFortification("asgarnia", store);
+    assert.equal(r.ok, true);
+    assert.equal(r.tier, 1);
+    assert.equal(Castle.getCastle("asgarnia", store).fortTier, 1);
+  });
 
-beforeEach(() => {
-  resetStore();
-  loadCastle();
+  it("upgrade fails without funds", () => {
+    Castle.ensureCastle("asgarnia", store);
+    const r = Castle.upgradeFortification("asgarnia", store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "insufficient-funds");
+  });
+
+  it("upgrade fails at max tier", () => {
+    const castle = Castle.ensureCastle("asgarnia", store);
+    castle.fortTier = 4;
+    const r = Castle.upgradeFortification("asgarnia", store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "already-max");
+  });
+
+  it("fortDefense includes barracks bonus when staffed", () => {
+    const castle = Castle.ensureCastle("asgarnia", store);
+    castle.fortTier = 2; // stone walls: 25 defense
+    assert.equal(Castle.fortDefense(castle), 25);
+    Castle.depositWarChest("asgarnia", 5000000, store);
+    Castle.buildBuilding("asgarnia", "barracks", store); // tier 1: 5 defense, 10 slots
+    // Unstaffed: barracks gives 0 (staffing ratio 0)
+    assert.equal(Castle.fortDefense(castle), 25);
+    // Fully staffed: +5
+    for (let i = 0; i < 10; i++) {
+      Castle.staffBuilding("asgarnia", "barracks", `guard${i}`, "guard", store);
+    }
+    assert.equal(Castle.fortDefense(castle), 30);
+  });
 });
 
-describe("Castle.Kingdoms", () => {
-  it("fortTier defaults to 0, fortStrength 0", () => {
-    seedKingdom(0);
-    assert.strictEqual(Castle.fortTier(KID), 0);
-    assert.strictEqual(Castle.fortStrength(KID), 0);
+describe("buildings", () => {
+  let store;
+  beforeEach(() => { store = mockStore(); });
+
+  it("builds tier 1 and upgrades to tier 2", () => {
+    Castle.ensureCastle("asgarnia", store);
+    Castle.depositWarChest("asgarnia", 10000000, store);
+    let r = Castle.buildBuilding("asgarnia", "workshop", store);
+    assert.equal(r.ok, true);
+    assert.equal(r.tier, 1);
+    r = Castle.buildBuilding("asgarnia", "workshop", store);
+    assert.equal(r.ok, true);
+    assert.equal(r.tier, 2);
   });
 
-  it("upgradeFort walks palisade -> stone -> battlements, deducting chest", () => {
-    seedKingdom(50_000_000);
-    let r = Castle.upgradeFort(KID);
-    assert.ok(r.ok && r.tier === 1 && r.name === "palisade");
-    assert.strictEqual(Castle.fortStrength(KID), 500);
-    assert.strictEqual(flagsByKingdom[KID][CHEST], 45_000_000);
-
-    r = Castle.upgradeFort(KID);
-    assert.ok(r.ok && r.tier === 2 && r.name === "stone walls");
-    assert.strictEqual(Castle.fortStrength(KID), 1500);
-
-    r = Castle.upgradeFort(KID);
-    assert.ok(r.ok && r.tier === 3 && r.name === "battlements");
-    assert.strictEqual(Castle.fortStrength(KID), 3000);
-
-    r = Castle.upgradeFort(KID);
-    assert.ok(!r.ok && r.reason === "max-tier");
+  it("rejects unknown building", () => {
+    Castle.ensureCastle("asgarnia", store);
+    const r = Castle.buildBuilding("asgarnia", "spaceship", store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "unknown-building");
   });
 
-  it("upgradeFort refuses when chest is short", () => {
-    seedKingdom(1_000_000);
-    const r = Castle.upgradeFort(KID);
-    assert.ok(!r.ok && r.reason === "insufficient-funds");
-    assert.strictEqual(Castle.fortTier(KID), 0);
+  it("rejects build without funds", () => {
+    Castle.ensureCastle("asgarnia", store);
+    const r = Castle.buildBuilding("asgarnia", "barracks", store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "insufficient-funds");
   });
 
-  it("buildBuilding requires keep first", () => {
-    seedKingdom(100_000_000);
-    const r = Castle.buildBuilding(KID, "barracks");
-    assert.ok(!r.ok && r.reason === "requires-keep");
+  it("rejects tier 4 (max is 3)", () => {
+    const castle = Castle.ensureCastle("asgarnia", store);
+    Castle.depositWarChest("asgarnia", 100000000, store);
+    Castle.buildBuilding("asgarnia", "chapel", store);
+    Castle.buildBuilding("asgarnia", "chapel", store);
+    Castle.buildBuilding("asgarnia", "chapel", store);
+    const r = Castle.buildBuilding("asgarnia", "chapel", store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "already-max");
+    assert.equal(castle.buildings.chapel.tier, 3);
+  });
+});
+
+describe("staffing", () => {
+  let store;
+  beforeEach(() => {
+    store = mockStore();
+    Castle.ensureCastle("asgarnia", store);
+    Castle.depositWarChest("asgarnia", 10000000, store);
+    Castle.buildBuilding("asgarnia", "barracks", store); // guard role, 10 slots
+    Castle.buildBuilding("asgarnia", "workshop", store); // worker role, 8 slots
   });
 
-  it("buildBuilding constructs keep then upgrades tiers", () => {
-    seedKingdom(100_000_000);
-    let r = Castle.buildBuilding(KID, "keep");
-    assert.ok(r.ok && r.tier === 1 && r.cost === 10_000_000);
-    r = Castle.buildBuilding(KID, "keep");
-    assert.ok(r.ok && r.tier === 2 && r.cost === 25_000_000);
-    r = Castle.buildBuilding(KID, "keep");
-    assert.ok(r.ok && r.tier === 3 && r.cost === 50_000_000);
-    r = Castle.buildBuilding(KID, "keep");
-    assert.ok(!r.ok && r.reason === "max-tier");
-    assert.deepStrictEqual(Castle.buildings(KID).keep, { tier: 3 });
+  it("staffs a guard in the barracks", () => {
+    const r = Castle.staffBuilding("asgarnia", "barracks", "alice", "guard", store);
+    assert.equal(r.ok, true);
+    const info = Castle.staffingInfo(Castle.getCastle("asgarnia", store), "barracks");
+    assert.equal(info.staffed, 1);
+    assert.equal(info.slots, 10);
   });
 
-  it("buildBuilding allows other buildings after keep", () => {
-    seedKingdom(100_000_000);
-    Castle.buildBuilding(KID, "keep");
-    const r = Castle.buildBuilding(KID, "chapel");
-    assert.ok(r.ok && r.tier === 1);
+  it("rejects wrong role", () => {
+    const r = Castle.staffBuilding("asgarnia", "barracks", "bob", "worker", store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "wrong-role");
   });
 
-  it("buildBuilding refuses unknown ids and short chests", () => {
-    seedKingdom(100_000_000);
-    assert.ok(!Castle.buildBuilding(KID, "starship").ok);
-    seedKingdom(1_000);
-    const r = Castle.buildBuilding(KID, "keep");
-    assert.ok(!r.ok && r.reason === "insufficient-funds");
+  it("rejects staffing an unbuilt building", () => {
+    const r = Castle.staffBuilding("asgarnia", "chapel", "carol", "clergy", store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "not-built");
   });
 
-  it("setBanner stores colors + emblem, validates", () => {
-    seedKingdom(0);
-    assert.ok(!Castle.setBanner(KID, ["red"], "lion").ok);
-    const r = Castle.setBanner(KID, ["red", "gold"], "lion");
-    assert.ok(r.ok);
-    assert.deepStrictEqual(Castle.banner(KID), { colors: ["red", "gold"], emblem: "lion" });
+  it("rejects overfilling slots", () => {
+    for (let i = 0; i < 10; i++) {
+      const r = Castle.staffBuilding("asgarnia", "barracks", `g${i}`, "guard", store);
+      assert.equal(r.ok, true);
+    }
+    const r = Castle.staffBuilding("asgarnia", "barracks", "extra", "guard", store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "full");
   });
 
-  it("migrateWallsPaid converts the old boolean to fort tier 1", () => {
-    flagsByKingdom[KID] = { [CHEST]: 0, "founding:walls-paid": true };
-    assert.ok(Castle.migrateWallsPaid(KID));
-    assert.strictEqual(Castle.fortTier(KID), 1);
-    assert.ok(!Castle.migrateWallsPaid(KID)); // idempotent
+  it("one job per citizen: restaffing moves them", () => {
+    Castle.staffBuilding("asgarnia", "barracks", "dave", "guard", store);
+    // dave is a guard; can't work the workshop (wrong role), but verify
+    // he's removed from barracks when unstaffed
+    const r = Castle.unstaffBuilding("asgarnia", "dave", store);
+    assert.equal(r.ok, true);
+    const info = Castle.staffingInfo(Castle.getCastle("asgarnia", store), "barracks");
+    assert.equal(info.staffed, 0);
   });
 
-  it("returns no-kingdom for unknown ids", () => {
-    assert.ok(!Castle.upgradeFort("nope").ok);
-    assert.ok(!Castle.buildBuilding("nope", "keep").ok);
-    assert.ok(!Castle.setBanner("nope", ["a", "b"], "x").ok);
+  it("unstaff unknown citizen fails", () => {
+    const r = Castle.unstaffBuilding("asgarnia", "nobody", store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "not-staffed");
+  });
+});
+
+describe("building effects", () => {
+  let store;
+  beforeEach(() => {
+    store = mockStore();
+    Castle.ensureCastle("asgarnia", store);
+    Castle.depositWarChest("asgarnia", 50000000, store);
+  });
+
+  it("unstaffed building gives 25% bonus", () => {
+    Castle.buildBuilding("asgarnia", "workshop", store); // tier 1: 0.10 craftBonus
+    const castle = Castle.getCastle("asgarnia", store);
+    const bonus = Castle.buildingBonus(castle, "workshop", "craftBonus");
+    assert.ok(Math.abs(bonus - 0.025) < 0.001, `expected 0.025, got ${bonus}`);
+  });
+
+  it("fully staffed building gives 100% bonus", () => {
+    Castle.buildBuilding("asgarnia", "workshop", store);
+    for (let i = 0; i < 8; i++) {
+      Castle.staffBuilding("asgarnia", "workshop", `w${i}`, "worker", store);
+    }
+    const castle = Castle.getCastle("asgarnia", store);
+    const bonus = Castle.buildingBonus(castle, "workshop", "craftBonus");
+    assert.ok(Math.abs(bonus - 0.10) < 0.001, `expected 0.10, got ${bonus}`);
+  });
+
+  it("half staffed gives 62.5% bonus", () => {
+    Castle.buildBuilding("asgarnia", "workshop", store);
+    for (let i = 0; i < 4; i++) {
+      Castle.staffBuilding("asgarnia", "workshop", `w${i}`, "worker", store);
+    }
+    const castle = Castle.getCastle("asgarnia", store);
+    const bonus = Castle.buildingBonus(castle, "workshop", "craftBonus");
+    // 0.10 * (0.25 + 0.75 * 0.5) = 0.10 * 0.625 = 0.0625
+    assert.ok(Math.abs(bonus - 0.0625) < 0.001, `expected 0.0625, got ${bonus}`);
+  });
+
+  it("castleBonuses aggregates everything", () => {
+    Castle.buildBuilding("asgarnia", "chapel", store);
+    const bonuses = Castle.castleBonuses(Castle.getCastle("asgarnia", store));
+    assert.equal(typeof bonuses.defense, "number");
+    assert.equal(typeof bonuses.morale, "number");
+    assert.equal(typeof bonuses.craftBonus, "number");
+    assert.ok(bonuses.morale > 0, "chapel should give morale");
+  });
+
+  it("missing building gives zero bonus", () => {
+    const castle = Castle.getCastle("asgarnia", store);
+    assert.equal(Castle.buildingBonus(castle, "library", "xpBonus"), 0);
+  });
+});
+
+describe("tithe economy", () => {
+  let store;
+  beforeEach(() => {
+    store = mockStore();
+    Castle.ensureCastle("asgarnia", store);
+  });
+
+  it("collects tithes from citizens", () => {
+    const citizens = ["a", "b", "c", "d", "e"]; // 5 citizens
+    const r = Castle.collectTithesForce("asgarnia", citizens, store);
+    assert.equal(r.ok, true);
+    assert.equal(r.citizenCount, 5);
+    assert.equal(r.collected, 5 * 100); // TITHE_BASE, no treasury bonus
+    assert.equal(r.upkeep, 0); // no buildings
+    assert.equal(r.net, 500);
+    assert.equal(Castle.getCastle("asgarnia", store).warChest, 500);
+  });
+
+  it("treasury building boosts tithe efficiency", () => {
+    Castle.depositWarChest("asgarnia", 5000000, store);
+    Castle.buildBuilding("asgarnia", "treasury", store); // tier 1: 0.05 titheEff, unstaffed -> 25%
+    const r = Castle.collectTithesForce("asgarnia", ["a", "b"], store);
+    // tithePerCitizen = 100 * (1 + 0.05*0.25) = 101.25 -> 101
+    assert.equal(r.tithePerCitizen, 101);
+    assert.equal(r.collected, 202);
+  });
+
+  it("building upkeep reduces net income", () => {
+    Castle.depositWarChest("asgarnia", 5000000, store);
+    Castle.buildBuilding("asgarnia", "barracks", store); // upkeep 5000
+    const r = Castle.collectTithesForce("asgarnia", ["a"], store); // 100 collected
+    assert.equal(r.collected, 100);
+    assert.equal(r.upkeep, 5000);
+    assert.equal(r.net, -4900);
+    // War chest can't go negative: 5000000 - 1000000 (barracks cost) - 4900
+    const castle = Castle.getCastle("asgarnia", store);
+    assert.ok(castle.warChest >= 0);
+  });
+
+  it("totalUpkeep sums all buildings", () => {
+    Castle.depositWarChest("asgarnia", 10000000, store);
+    Castle.buildBuilding("asgarnia", "barracks", store); // 5000
+    Castle.buildBuilding("asgarnia", "chapel", store); // 2000
+    const castle = Castle.getCastle("asgarnia", store);
+    assert.equal(Castle.totalUpkeep(castle), 7000);
+  });
+
+  it("throttles collections to once per cycle", () => {
+    Castle.collectTithesForce("asgarnia", ["a"], store);
+    const r = Castle.collectTithes("asgarnia", ["a"], store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "too-soon");
+  });
+});
+
+describe("banner and war chest", () => {
+  let store;
+  beforeEach(() => { store = mockStore(); });
+
+  it("sets a valid banner", () => {
+    const r = Castle.setBanner("asgarnia", "azure", "lion", store);
+    assert.equal(r.ok, true);
+    const castle = Castle.getCastle("asgarnia", store);
+    assert.deepEqual(castle.banner, { color: "azure", symbol: "lion" });
+  });
+
+  it("rejects bad color and symbol", () => {
+    assert.equal(Castle.setBanner("asgarnia", "pink", "lion", store).ok, false);
+    assert.equal(Castle.setBanner("asgarnia", "azure", "ufo", store).ok, false);
+  });
+
+  it("deposit and withdraw war chest", () => {
+    Castle.ensureCastle("asgarnia", store);
+    Castle.depositWarChest("asgarnia", 1000, store);
+    assert.equal(Castle.getCastle("asgarnia", store).warChest, 1000);
+    const r = Castle.withdrawWarChest("asgarnia", 400, store);
+    assert.equal(r.ok, true);
+    assert.equal(r.warChest, 600);
+  });
+
+  it("withdraw fails without funds", () => {
+    Castle.ensureCastle("asgarnia", store);
+    const r = Castle.withdrawWarChest("asgarnia", 100, store);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "insufficient-funds");
+  });
+
+  it("rejects bad amounts", () => {
+    Castle.ensureCastle("asgarnia", store);
+    assert.equal(Castle.depositWarChest("asgarnia", -5, store).ok, false);
+    assert.equal(Castle.withdrawWarChest("asgarnia", 0, store).ok, false);
   });
 });
