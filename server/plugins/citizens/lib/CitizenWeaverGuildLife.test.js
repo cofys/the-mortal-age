@@ -16,9 +16,13 @@ const sitesPath = path.resolve(__dirname, "../brain/CitizenSites.js");
 require.cache[sitesPath] = {
   id: sitesPath, filename: sitesPath, loaded: true,
   exports: {
-    KINGDOM_IDS: ["varrock"],
+    KINGDOM_IDS: ["varrock", "falador"],
+    // The real CitizenSites.kingdomIdOf reads player.getAttribute and silently
+    // returns KINGDOM_IDS[0] for plain roster records — the local helper in
+    // the life module must prefer record.kingdomId instead.
     kingdomIdOf: () => "varrock",
     siteTile: () => ({ x: 3200, y: 3200, z: 0 }),
+    siteTileByKingdom: (kid) => ({ x: 3200, y: 3200, z: 0 }),
   },
 };
 
@@ -73,21 +77,24 @@ function botFor(name) {
   const key = String(name).toLowerCase();
   return {
     username: name,
+    // Mirrors the real ItemContainer contract: getAmount(id),
+    // deleteNumber(id, amount). There is no inv.count(id) and no
+    // inv.remove(id, amount).
     inventory: {
       getAmount: (id) => (id === Guilds.COINS_ID ? (fakeInv.get(key) ?? 0) : 0),
-      count: (id) => (id === Guilds.COINS_ID ? (fakeInv.get(key) ?? 0) : 0),
-      remove: (id, n) => {
-        if (id !== Guilds.COINS_ID) return false;
+      deleteNumber: (id, n) => {
+        if (id !== Guilds.COINS_ID) return;
         const have = fakeInv.get(key) ?? 0;
         fakeInv.set(key, Math.max(0, have - n));
-        return true;
       },
     },
   };
 }
-function fakeDirector(players) {
+// Roster records are plain objects with a real kingdomId field (the
+// director's roster), NOT player entities.
+function fakeDirector(entries) {
   return {
-    roster: { values: () => players.map((p) => ({ username: p })) },
+    roster: { values: () => entries.map((e) => (typeof e === "string" ? { username: e, kingdomId: "varrock" } : e)) },
     isOnline: () => true,
     getBot: (r) => botFor(r?.username ?? ""),
     sayPublic: () => {},
@@ -186,6 +193,26 @@ check("tick grants the golden needle quarterly", () => {
   Guilds.settleCertification("varrock", "c1", Date.now());
   Life.tickWeaverGuildLife(fakeDirector(["Anya"]), Date.now());
   assert.ok(fakeRep.awarded.some(([u, d]) => u === "Anya" && d === "needlegrand"));
+});
+
+check("tick collects dues into the member's OWN kingdom (was: all to first kingdom)", () => {
+  makeDesigner("Anya"); makeDesigner("Borin");
+  Guilds.joinGuild("Anya", "varrock");
+  Guilds.joinGuild("Borin", "falador");
+  Guilds.memberOf("Anya").duesPaidUntilMs = Date.now() - 1000;
+  Guilds.memberOf("Borin").duesPaidUntilMs = Date.now() - 1000;
+  fakeInv.set("anya", 100);
+  fakeInv.set("borin", 100);
+  Life.tickWeaverGuildLife(fakeDirector([
+    { username: "Anya", kingdomId: "varrock" },
+    { username: "Borin", kingdomId: "falador" },
+  ]), Date.now());
+  assert.strictEqual(fakeInv.get("anya"), 75, "varrock member pays");
+  assert.strictEqual(fakeInv.get("borin"), 75, "falador member pays");
+  assert.strictEqual(Guilds.guildTreasuryFor("varrock"), 20, "varrock treasury gets varrock dues");
+  assert.strictEqual(Guilds.guildTreasuryFor("falador"), 20, "falador treasury gets falador dues");
+  assert.strictEqual(Guilds.memberOf("Anya").missedDues, 0);
+  assert.strictEqual(Guilds.memberOf("Borin").missedDues, 0);
 });
 
 console.log(`\n${passed} tests passed`);

@@ -156,7 +156,10 @@ function hallTileFor(kingdomId) {
   if (!tile) {
     try {
       const S = require("../brain/CitizenSites");
-      tile = S && typeof S.siteTile === "function" ? S.siteTile({ kingdomId: kid }, "market") : null;
+      // siteTile needs a player entity; for a bare kingdom id the real
+      // contract is siteTileByKingdom (a plain { kingdomId } object would
+      // silently resolve to the first kingdom).
+      tile = S && typeof S.siteTileByKingdom === "function" ? S.siteTileByKingdom(kid, "market") : null;
     } catch { tile = null; }
   }
   if (!tile) return { x: 3200, y: 3200, z: 0 };
@@ -275,13 +278,16 @@ function leaveGuild(username) {
 function recordDuesPayment(username, nowMs) {
   const s = ensure();
   const m = s.members[norm(username)];
-  if (!m || m.suspended) return { ok: false };
+  if (!m) return { ok: false };
+  // Suspended members may catch up: paying clears the suspension ("suspended
+  // until caught up"). The old guard rejected suspended payers AFTER their
+  // coins were already taken by the caller — coins lost, dues unrecorded.
   const g = ensureGuild(m.kingdomId);
   g.treasury += (DUES_WEEKLY - DUES_ATELIER_SHARE);
   g.atelierFund += DUES_ATELIER_SHARE;
   m.duesPaidUntilMs = Math.max(m.duesPaidUntilMs || 0, nowMs) + DUES_PERIOD_MS;
   m.missedDues = 0;
-  if (m.suspended && m.missedDues === 0) m.suspended = false;
+  m.suspended = false;
   markDirty();
   return { ok: true };
 }
@@ -396,11 +402,29 @@ function settleCertification(kingdomId, collectionId, nowMs) {
   return { ok: true, grade, bounty, paid: bounty - owed, owed };
 }
 
+/**
+ * Pull a queued submission back out (e.g. the submitter could not pay the
+ * certification fee). Without this a failed payment leaves the collection
+ * queued and the life tick settles it for free.
+ */
+function withdrawSubmission(kingdomId, collectionId) {
+  const s = ensure();
+  const qi = s.queue.findIndex((q) => q.kingdomId === kingdomId && String(q.collectionId) === String(collectionId));
+  if (qi < 0) return { ok: false, reason: "not-queued" };
+  s.queue.splice(qi, 1);
+  markDirty();
+  return { ok: true };
+}
+
 function retryOwedBounties(kingdomId) {
   const s = ensure();
   const g = ensureGuild(kingdomId);
   let paid = 0;
   for (const okey of Object.keys(s.bountiesOwed)) {
+    // Key shape is `${owner}:${kingdomId}:${collectionId}` — never pay one
+    // kingdom's owed bounties out of another kingdom's treasury.
+    const parts = String(okey).split(":");
+    if (parts.length < 3 || parts[1] !== String(kingdomId)) continue;
     const amt = s.bountiesOwed[okey];
     if (!amt) continue;
     const fromTreasury = Math.min(g.treasury, amt);
@@ -789,6 +813,7 @@ module.exports = {
   sealsForKingdom,
   submitCollection,
   settleCertification,
+  withdrawSubmission,
   retryOwedBounties,
   bountiesOwedFor,
   // tribunal

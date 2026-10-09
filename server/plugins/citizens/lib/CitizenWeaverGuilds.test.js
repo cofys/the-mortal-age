@@ -20,6 +20,8 @@ require.cache[sitesPath] = {
     KINGDOM_IDS: ["varrock", "falador"],
     kingdomIdOf: () => "varrock",
     siteTile: () => ({ x: 3200, y: 3200, z: 0 }),
+    // Real contract: siteTileByKingdom(kingdomId, kind) for non-entity lookups.
+    siteTileByKingdom: (kid) => ({ x: 3200, y: 3200, z: 0 }),
   },
 };
 
@@ -326,6 +328,49 @@ test("describe reports the guild state", () => {
   const d = G.describe("varrock");
   assert.ok(d.exists);
   assert.strictEqual(d.memberCount, 1);
+});
+
+test("suspended member can pay dues to catch up (was: coins taken, dues rejected)", () => {
+  asDesigner("alice");
+  G.joinGuild("alice", "varrock");
+  const m = G.memberOf("alice");
+  m.suspended = true;
+  m.missedDues = 2;
+  const res = G.recordDuesPayment("alice", Date.now());
+  assert.ok(res.ok, "suspended members must be able to catch up");
+  assert.strictEqual(G.memberOf("alice").suspended, false);
+  assert.strictEqual(G.memberOf("alice").missedDues, 0);
+});
+
+test("retryOwedBounties never pays one kingdom from another's treasury", () => {
+  asDesigner("alice"); asDesigner("bob");
+  G.joinGuild("alice", "varrock");
+  G.joinGuild("bob", "falador");
+  addCollection("c1", { designer: "alice", quality: 6, kingdomId: "varrock" });
+  G.submitCollection("alice", "varrock", "c1", Date.now());
+  G.settleCertification("varrock", "c1", Date.now()); // broke -> owed
+  assert.ok(G.bountiesOwedFor("alice") > 0);
+  const fv = G.guildOf("falador");
+  fv.treasury = 1000;
+  const res = G.retryOwedBounties("falador");
+  assert.strictEqual(res.paid, 0, "falador must not pay varrock's bounties");
+  assert.strictEqual(fv.treasury, 1000);
+  assert.ok(G.bountiesOwedFor("alice") > 0, "varrock's debt survives");
+  G.guildOf("varrock").treasury = 1000;
+  const res2 = G.retryOwedBounties("varrock");
+  assert.ok(res2.paid > 0);
+  assert.strictEqual(G.bountiesOwedFor("alice"), 0);
+});
+
+test("withdrawSubmission pulls a queued certification back out", () => {
+  asDesigner("alice");
+  G.joinGuild("alice", "varrock");
+  addCollection("c1", { designer: "alice", quality: 6 });
+  G.submitCollection("alice", "varrock", "c1", Date.now());
+  assert.ok(G.withdrawSubmission("varrock", "c1").ok);
+  assert.strictEqual(G.withdrawSubmission("varrock", "c1").ok, false);
+  // Nothing left for the life tick to settle for free.
+  assert.deepStrictEqual(G.serialize().queue, []);
 });
 
 test("save round-trips", () => {

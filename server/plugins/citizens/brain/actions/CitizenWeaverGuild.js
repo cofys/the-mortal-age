@@ -160,12 +160,23 @@ function createCitizenWeaverGuildAction(spec, world) {
           // study. Real economics (dues, fees, bounties) run on the life tick.
           try {
             if (state.roundsDone === SESSION_ROUNDS && state.rank === Guilds.RANK_GRANDCOUTURIER) {
-              const mem = Guilds.memberOf(username);
-              if (mem && mem.mentor) {
+              // This citizen IS the master; find the apprentice under their wing.
+              // (member.mentor points at the master, so reading the master's own
+              // mentor field here would be backwards — and nearly always null.)
+              let apprentice = null;
+              try {
+                for (const n of Guilds.memberNames(state.kingdomId)) {
+                  const am = Guilds.memberOf(n);
+                  if (am && am.mentor === username) { apprentice = am.username; break; }
+                }
+              } catch { /* roster read is best-effort */ }
+              if (apprentice) {
                 const { getJournal } = require("../../lib/CitizenJournal");
-                getJournal().log?.("weaverguild-mentoring", {
-                  master: username, apprentice: mem.mentor, kingdomId: state.kingdomId,
-                });
+                // Canonical 4-arg shape: log(name, kind, text, {data}). A 2-arg
+                // log(name, {...}) is dead — the real journal returns null.
+                getJournal().log?.(username, "weaverguild",
+                  `${username} mentored ${apprentice} in the Weavers' Guild hall.`,
+                  { apprentice, kingdomId: state.kingdomId });
               }
             }
           } catch { /* journaling is optional */ }

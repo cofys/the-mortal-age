@@ -58,15 +58,19 @@ require.cache[humanizerPath] = {
 };
 
 const journalPath = path.resolve(__dirname, "../../lib/CitizenJournal.js");
+const logged = [];
 require.cache[journalPath] = {
   id: journalPath, filename: journalPath, loaded: true,
-  exports: { getJournal: () => ({ log: () => true }) },
+  // Captures the real 4-arg call shape: log(name, kind, text, {data}).
+  exports: { getJournal: () => ({ log: (...args) => { logged.push(args); return true; } }) },
 };
 
 // Controllable guild membership.
 const members = new Set();
+const memberNamesCase = new Map(); // norm -> original-case username
 const suspended = new Set();
 const ranks = new Map();
+const mentors = new Map(); // apprenticeNorm -> masterUsername
 const guildsPath = path.resolve(__dirname, "../../lib/CitizenWeaverGuilds.js");
 require.cache[guildsPath] = {
   id: guildsPath, filename: guildsPath, loaded: true,
@@ -78,8 +82,9 @@ require.cache[guildsPath] = {
     guildRankOf: (u) => ranks.get(String(u || "").toLowerCase()) || null,
     memberOf: (u) => {
       const n = String(u || "").toLowerCase();
-      return members.has(n) ? { suspended: suspended.has(n), mentor: null } : null;
+      return members.has(n) ? { username: memberNamesCase.get(n) || u, suspended: suspended.has(n), mentor: mentors.get(n) || null } : null;
     },
+    memberNames: () => [...members],
     ensureGuild: () => ({ hallTile: { x: 3215, y: 3206, z: 0 } }),
   },
 };
@@ -115,8 +120,11 @@ function runTicks(action, player, ticks, stepMs, startMs = 1000000) {
 let passed = 0;
 function test(name, fn) {
   members.clear();
+  memberNamesCase.clear();
   suspended.clear();
   ranks.clear();
+  mentors.clear();
+  logged.length = 0;
   try {
     fn();
     passed++;
@@ -128,8 +136,10 @@ function test(name, fn) {
 }
 
 function addMember(name, rank = "apprentice") {
-  members.add(String(name).toLowerCase());
-  ranks.set(String(name).toLowerCase(), rank);
+  const n = String(name).toLowerCase();
+  members.add(n);
+  memberNamesCase.set(n, name);
+  ranks.set(n, rank);
 }
 
 test("factory creates the action", () => {
@@ -187,6 +197,38 @@ test("gives up after ten minutes and heads home", () => {
   assert.strictEqual(p.__weaverState.phase, "returning");
   assert.deepStrictEqual(p.__movedTo, HOME_TILE);
   assert.strictEqual(status, "running");
+});
+
+test("grandcouturier session journals mentoring in canonical 4-arg shape", () => {
+  addMember("Gwen", "grandcouturier");
+  addMember("Apprentice1", "apprentice");
+  mentors.set("apprentice1", "Gwen"); // Apprentice1 is under Gwen's wing
+  const a = createCitizenWeaverGuildAction({}, {});
+  const p = stubPlayer("Gwen", { x: 0, y: 0, z: 0 });
+  a.update({ player: p, nowMs: 1000000 });
+  // arrive at the hall and run all three session rounds
+  p.getPosition = () => ({ ...HALL_TILE });
+  const { status } = runTicks(a, p, 100, 9000, 1001000);
+  assert.strictEqual(p.__weaverState.roundsDone, 3);
+  assert.strictEqual(status, "running");
+  const mentoring = logged.filter((args) => args[1] === "weaverguild");
+  assert.strictEqual(mentoring.length, 1, "exactly one canonical mentoring entry");
+  const [name, kind, text, data] = mentoring[0];
+  assert.strictEqual(name, "Gwen");
+  assert.strictEqual(kind, "weaverguild");
+  assert.ok(typeof text === "string" && text.length > 0, "text is required by the real journal");
+  assert.strictEqual(data.apprentice, "Apprentice1", "the APPRENTICE is journaled, not the master's own mentor");
+});
+
+test("no mentoring journal when the master has no apprentices", () => {
+  addMember("Gwen", "grandcouturier");
+  const a = createCitizenWeaverGuildAction({}, {});
+  const p = stubPlayer("Gwen", { x: 0, y: 0, z: 0 });
+  a.update({ player: p, nowMs: 1000000 });
+  p.getPosition = () => ({ ...HALL_TILE });
+  runTicks(a, p, 100, 9000, 1001000);
+  assert.strictEqual(p.__weaverState.roundsDone, 3);
+  assert.strictEqual(logged.filter((args) => args[1] === "weaverguild").length, 0);
 });
 
 console.log(`\n${passed} tests passed`);

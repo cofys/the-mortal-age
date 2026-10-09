@@ -15,7 +15,7 @@ const Guilds = require("./lib/CitizenWeaverGuilds");
 const COINS_ID = 995;
 
 const WEAVERGUILD_USAGE =
-  "::weaverguild [status|join|leave|dues|code|certify <collectionId>|seals|report|inspect|cases|vote <caseId> <guilty|innocent>|needle|contribute <coins>|school|apprentice <name>]";
+  "::weaverguild [status|join|leave|dues|code|certify <collectionId>|seals|report <designer>|inspect|cases|vote <caseId> <guilty|innocent>|needle|contribute <coins>|school|apprentice <name>]";
 
 function usernameOf(player) {
   try {
@@ -54,9 +54,11 @@ function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
+    // Canonical: ItemContainer.getAmount(id), deleteNumber/delete(id, amount).
+    // There is no inv.count(id) and no inv.remove(id, amount).
+    const has = typeof inv.getAmount === "function" ? inv.getAmount(COINS_ID) : 0;
     if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
+    if (typeof inv.deleteNumber === "function") inv.deleteNumber(COINS_ID, amount);
     else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
     else return false;
     return true;
@@ -126,6 +128,9 @@ function onWeaverGuildCommand(player, args) {
       const sub2 = Guilds.submitCollection(username, kingdomId, collectionId, Date.now());
       if (!sub2.ok) { say(player, `Could not submit: ${sub2.reason}.`); return; }
       if (sub2.fee > 0 && !takeCoins(player, sub2.fee)) {
+        // The submission is already queued — withdraw it, or the life tick
+        // would settle it for free and the fee would be a no-op.
+        Guilds.withdrawSubmission(kingdomId, collectionId);
         say(player, `Certification costs ${sub2.fee} coins.`);
         return;
       }
@@ -142,8 +147,11 @@ function onWeaverGuildCommand(player, args) {
     }
     case "report": {
       // Report a suspected knockoff: the guild scans the real ledger.
-      const res = Guilds.reportKnockoff(kingdomId, username, username);
-      say(player, res.ok ? `Knockoff case opened (case ${res.id}). The tribunal will review the ledgers.`
+      // The accused is the named designer — never default to the reporter.
+      const accused = rest.join(" ");
+      if (!accused) { say(player, "Usage: ::weaverguild report <designer>"); return; }
+      const res = Guilds.reportKnockoff(kingdomId, accused, username);
+      say(player, res.ok ? `Knockoff case opened against ${accused} (case ${res.id}). The tribunal will review the ledgers.`
         : `Could not report: ${res.reason}.`);
       return;
     }
