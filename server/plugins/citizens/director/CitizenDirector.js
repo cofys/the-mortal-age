@@ -181,6 +181,13 @@ const { tickGovernments } = require("../lib/CitizenGovernmentLife");
 const CitizenGovernment = require("../lib/CitizenGovernment");
 const { tickFaith } = require("../lib/CitizenFaithLife");
 const CitizenFaith = require("../lib/CitizenFaith");
+const {
+  tickFestivalLife,
+  registerFeastSource,
+} = require("../lib/CitizenFestivalLife");
+// Religious feasts join the seasonal calendar so the festival games,
+// celebration chatter, and participation journaling all fire for them.
+registerFeastSource();
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
@@ -2800,6 +2807,14 @@ class CitizenDirector {
       tickFaith(this, nowMs);
     } catch (error) {
       this.log("faith failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen festival life: merged festival calendar (seasonal +
+    // religious feasts), council festival weeks, anticipation, unrest
+    // relief. Data tier, zero LLM.
+    try {
+      tickFestivalLife(this, nowMs);
+    } catch (error) {
+      this.log("festival life failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {

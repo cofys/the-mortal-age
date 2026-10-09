@@ -125,6 +125,23 @@ const FESTIVAL_INVITES = Object.freeze({
 const lastChatByCitizen = new Map(); // username -> timestamp
 const journaledFestivals = new Map(); // `${username}:${festivalId}:${year}` -> timestamp
 
+// === Extension hook: other systems (e.g. CitizenFestivalLife's religious
+// feasts) can register an extra festival source. The source is a pure
+// function (nowMs) -> festival def or null. Null by default: existing
+// behavior is unchanged.
+let extraFestivalSource = null;
+function registerFestivalSource(fn) {
+  extraFestivalSource = typeof fn === "function" ? fn : null;
+}
+function extraFestival(nowMs) {
+  if (!extraFestivalSource) return null;
+  try {
+    return extraFestivalSource(nowMs) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Memory-leak plug: prune entries older than a day, at most hourly.
 let lastPruneAt = 0;
 function pruneCooldowns(nowMs) {
@@ -159,11 +176,13 @@ function activeFestival(nowMs) {
   const day = d.getDate();
   for (const f of FESTIVALS) {
     if (f.month !== month) continue;
-    if (day >= f.startDay && day < f.startDay + FESTIVAL_DURATION_DAYS) {
+    const duration = f.durationDays ?? FESTIVAL_DURATION_DAYS;
+    if (day >= f.startDay && day < f.startDay + duration) {
       return f;
     }
   }
-  return null;
+  // Extension hook: religious feasts and other registered sources.
+  return extraFestival(nowMs);
 }
 
 /**
@@ -334,11 +353,14 @@ function festivalStatus() {
 function resetForTests() {
   lastChatByCitizen.clear();
   journaledFestivals.clear();
+  extraFestivalSource = null;
   lastPruneAt = 0;
 }
 
 module.exports = {
   tickFestivals,
+  // Extension hook for other festival systems (religious feasts, ...):
+  registerFestivalSource,
   // Exported for tests:
   activeFestival,
   voiceOf,

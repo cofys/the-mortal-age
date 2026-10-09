@@ -676,6 +676,26 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "when is the next festival" — player asks about upcoming festivals.
+  if (/\b(when is the next festival|next festival|what festivals are coming|any festivals soon|upcoming festivals)\b/.test(said)) {
+    try {
+      const Fest = require("../lib/CitizenFestivalLife");
+      const upcoming = Fest.festivalsComing(3, Date.now());
+      if (!upcoming.length) return false;
+      const first = upcoming[0];
+      const days = Fest.daysUntil(first, Date.now());
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "festival_next", {
+        name: first.name,
+        days,
+        blurb: first.blurb,
+        more: upcoming.length - 1,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "i want to run for mayor" — player nominates themselves.
   if (/\b(i want to run|nominate me|put me on the ballot|i'll run for)\b/.test(said)) {
     try {
@@ -816,6 +836,9 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, extra) {
       faith_temple: extra?.templeTier > 0
         ? `${display}: We have a fine chapel here — tier ${extra.templeTier}. Come pray with us sometime.`
         : `${display}: No grand temple here, but any quiet corner will do for prayer.`,
+      festival_next: extra
+        ? `${display}: ${extra.days === 0 ? `${extra.name} is happening right now` : `${extra.name} starts in ${extra.days} day${extra.days === 1 ? "" : "s"}`} — ${extra.blurb}${extra.more > 0 ? `, and ${extra.more} more after that` : ""}.`
+        : `${display} shrugs.`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM
