@@ -172,6 +172,7 @@ function tickSportsGuildLife(director, nowMs = Date.now()) {
           announce(director, kid,
             `${res.winner} takes the golden laurel with ${res.records} certified records!`, nowMs);
         }
+        Guilds.retryLaurelOwed(kid);
       } catch { /* never breaks the tick */ }
 
       // --- athletic school (gamesmaster teaches rookies)

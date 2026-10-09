@@ -41,6 +41,26 @@ require.cache[athleticsPath] = {
   },
 };
 
+// Controllable fake of the real CitizenBanking data tier. Real contract:
+// accountFor(username) -> live account record; markDirty() persists.
+// bankingDown simulates unreachable banking. Without this stub the guild
+// module would load the REAL banking tier and pollute its save file.
+let bankingDown = false;
+const bankAccounts = {}; // lowername -> { balance }
+const bankingPath = path.resolve(__dirname, "./CitizenBanking.js");
+require.cache[bankingPath] = {
+  id: bankingPath, filename: bankingPath, loaded: true,
+  exports: {
+    accountFor: (u) => {
+      if (bankingDown) throw new Error("banking unreachable");
+      const key = String(u || "").toLowerCase().trim();
+      if (!bankAccounts[key]) bankAccounts[key] = { balance: 0 };
+      return bankAccounts[key];
+    },
+    markDirty: () => {},
+  },
+};
+
 // --- real module under test ---
 
 const Guilds = require("./CitizenSportsGuilds.js");
@@ -49,6 +69,8 @@ function fresh() {
   Guilds.resetForTests();
   fakeAthletics.athletes = new Set();
   fakeAthletics.records = Object.create(null);
+  for (const k of Object.keys(bankAccounts)) delete bankAccounts[k];
+  bankingDown = false;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sportsguild-"));
   Guilds.setSaveFile(path.join(tmp, "save.json"));
 }
@@ -326,6 +348,75 @@ test("describe reports guild stats", () => {
   const d = Guilds.describe("varrock");
   assert.strictEqual(d.exists, true);
   assert.strictEqual(d.memberCount, 1);
+});
+
+// --- golden laurel: vanishing-coins regressions ---
+
+function sealRecordForLaurel(name) {
+  addAthlete(name);
+  Guilds.joinGuild(name, "varrock");
+  setRecord("varrock", "running", name, 250);
+  Guilds.guildOf("varrock").treasury = 1000;
+  assert.strictEqual(Guilds.submitRecord(name, "varrock", "running", Date.now()).ok, true);
+  assert.strictEqual(Guilds.settleCertification("varrock", "running", Date.now()).ok, true);
+  // The certification bounty (B grade, doubled for the home kingdom = 120)
+  // already landed in the winner's bank account via the fixed cert path.
+  return 120;
+}
+
+test("grantLaurel credits the winner's real bank account", () => {
+  const certBounty = sealRecordForLaurel("Flash");
+  Guilds.guildOf("varrock").treasury = 1000;
+  const before = Guilds.guildOf("varrock").treasury;
+  const r = Guilds.grantLaurel("varrock", Date.now());
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.winner, "Flash");
+  assert.strictEqual(r.paid, Guilds.LAUREL_PRIZE);
+  assert.strictEqual(r.owed, 0);
+  // The prize lands in the winner's REAL bank account — never vanishes.
+  assert.strictEqual(Guilds.guildOf("varrock").treasury, before - Guilds.LAUREL_PRIZE);
+  assert.strictEqual(bankAccounts["flash"].balance, certBounty + Guilds.LAUREL_PRIZE);
+});
+
+test("grantLaurel with unreachable banking: treasury intact, prize honestly owed", () => {
+  const certBounty = sealRecordForLaurel("Flash");
+  Guilds.guildOf("varrock").treasury = 1000;
+  bankingDown = true;
+  const r = Guilds.grantLaurel("varrock", Date.now());
+  bankingDown = false;
+  assert.strictEqual(r.ok, true);
+  // The laurel was awarded but the prize was NOT marked paid: no coins
+  // vanished while the record claimed payment.
+  assert.strictEqual(r.paid, 0);
+  assert.strictEqual(r.owed, Guilds.LAUREL_PRIZE);
+  assert.strictEqual(Guilds.guildOf("varrock").treasury, 1000);
+  assert.strictEqual(bankAccounts["flash"].balance, certBounty);
+  // Recovery: retry delivers the owed prize to the winner's bank account.
+  const retry = Guilds.retryLaurelOwed("varrock");
+  assert.strictEqual(retry.paid, Guilds.LAUREL_PRIZE);
+  assert.strictEqual(bankAccounts["flash"].balance, certBounty + Guilds.LAUREL_PRIZE);
+  assert.strictEqual(Guilds.guildOf("varrock").treasury, 1000 - Guilds.LAUREL_PRIZE);
+});
+
+test("retryLaurelOwed is partial-honest and survives banking outages", () => {
+  const certBounty = sealRecordForLaurel("Flash");
+  // Short treasury: partial prize paid, rest owed honestly.
+  Guilds.guildOf("varrock").treasury = 80;
+  const r = Guilds.grantLaurel("varrock", Date.now());
+  assert.strictEqual(r.paid, 80);
+  assert.strictEqual(r.owed, Guilds.LAUREL_PRIZE - 80);
+  assert.strictEqual(bankAccounts["flash"].balance, certBounty + 80);
+  // Banking down during retry: nothing delivered, treasury untouched.
+  Guilds.guildOf("varrock").treasury = 500;
+  bankingDown = true;
+  const retry1 = Guilds.retryLaurelOwed("varrock");
+  bankingDown = false;
+  assert.strictEqual(retry1.paid, 0);
+  assert.strictEqual(Guilds.guildOf("varrock").treasury, 500);
+  // Banking back: remainder delivered to the winner's bank account.
+  const retry2 = Guilds.retryLaurelOwed("varrock");
+  assert.strictEqual(retry2.paid, Guilds.LAUREL_PRIZE - 80);
+  assert.strictEqual(bankAccounts["flash"].balance, certBounty + Guilds.LAUREL_PRIZE);
 });
 
 console.log(`\n${passed} tests passed.`);

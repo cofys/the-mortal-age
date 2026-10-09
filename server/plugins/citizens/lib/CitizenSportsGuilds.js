@@ -561,16 +561,66 @@ function grantLaurel(kingdomId, nowMs) {
   }
   if (!best) return { ok: false, reason: "no-candidates" };
   g.lastLaurelAt = nowMs || Date.now();
-  let owed = 0;
-  const fromTreasury = Math.min(g.treasury, LAUREL_PRIZE);
-  g.treasury -= fromTreasury;
-  const remaining = LAUREL_PRIZE - fromTreasury;
-  if (remaining > 0) {
-    s.laurelOwed[kingdomId] = (s.laurelOwed[kingdomId] || 0) + remaining;
-    owed = remaining;
+  // The prize is credited to the winner's REAL bank account before the
+  // treasury is touched — deducting without delivering is the
+  // vanishing-coins bug. Banking unreachable: the full prize stays
+  // honestly owed for retryLaurelOwed.
+  let paid = 0;
+  const prize = Math.min(g.treasury, LAUREL_PRIZE);
+  if (prize > 0) {
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(best) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + prize;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (credited) {
+      g.treasury -= prize;
+      paid = prize;
+    }
   }
+  const owed = LAUREL_PRIZE - paid;
+  if (owed > 0) s.laurelOwed[kingdomId] = (s.laurelOwed[kingdomId] || 0) + owed;
+  g.lastLaurelWinner = best;
   markDirty();
-  return { ok: true, winner: best, records: bestCount, paid: LAUREL_PRIZE - owed, owed };
+  return { ok: true, winner: best, records: bestCount, paid, owed };
+}
+
+/**
+ * Retry honestly-owed golden-laurel prizes once the treasury refills. The
+ * winner is recorded on each grant, so owed prizes reach the right bank
+ * account. Banking-down keeps everything owed for a later tick.
+ */
+function retryLaurelOwed(kingdomId) {
+  const s = ensure();
+  const g = ensureGuild(kingdomId);
+  const owed = s.laurelOwed[kingdomId] || 0;
+  if (!owed) return { ok: true, paid: 0 };
+  const paid = Math.min(g.treasury, owed);
+  if (paid <= 0) return { ok: true, paid: 0 };
+  // Credit the recorded winner's bank account before deducting — never
+  // mark paid what was never delivered.
+  const winner = g.lastLaurelWinner;
+  let credited = false;
+  try {
+    const B = bankingApi();
+    const acct = B && winner && typeof B.accountFor === "function" ? B.accountFor(winner) : null;
+    if (acct) {
+      acct.balance = (Number(acct.balance) || 0) + paid;
+      if (typeof B.markDirty === "function") B.markDirty();
+      credited = true;
+    }
+  } catch { /* banking is best-effort */ }
+  if (!credited) return { ok: true, paid: 0 };
+  g.treasury -= paid;
+  if (paid >= owed) delete s.laurelOwed[kingdomId];
+  else s.laurelOwed[kingdomId] = owed - paid;
+  markDirty();
+  return { ok: true, paid };
 }
 
 // --- athletic school & mentorship ---------------------------------------------
@@ -728,6 +778,7 @@ module.exports = {
   recordTraining,
   claimCamp,
   grantLaurel,
+  retryLaurelOwed,
   holdClass,
   tryPromote,
   takeApprentice,
