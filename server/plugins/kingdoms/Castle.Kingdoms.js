@@ -1,6 +1,7 @@
 "use strict";
 
 const Relations = require("./Relations.Kingdoms");
+const Wars = require("./Wars.Kingdoms");
 
 /**
  * Castle — the fortified heart of a kingdom.
@@ -400,6 +401,19 @@ function collectTithes(kingdomId, citizenUsernames, store) {
   const net = collected - upkeep;
   castle.warChest = Math.max(0, castle.warChest + net);
   castle.lastTitheAt = nowMs;
+
+  // Phase 5: vassals pay 10% of net tithe income to their overlord.
+  let vassalTribute = 0;
+  let vassalOverlord = null;
+  const tributeDue = Wars.vassalTributeOf(kingdomId, net, store.load());
+  if (tributeDue.tribute > 0) {
+    vassalTribute = tributeDue.tribute;
+    vassalOverlord = tributeDue.overlordId;
+    castle.warChest = Math.max(0, castle.warChest - vassalTribute);
+    const overlordCastle = ensureCastle(vassalOverlord, store);
+    overlordCastle.warChest += vassalTribute;
+  }
+
   store.save();
   return {
     ok: true,
@@ -409,6 +423,8 @@ function collectTithes(kingdomId, citizenUsernames, store) {
     citizenCount: citizenUsernames.length,
     tithePerCitizen,
     tradeBonus,
+    vassalTribute,
+    vassalOverlord,
     warChest: castle.warChest,
   };
 }

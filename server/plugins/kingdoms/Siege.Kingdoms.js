@@ -34,10 +34,8 @@
  */
 
 const Castle = require("./Castle.Kingdoms");
-<<<<<<< HEAD
-=======
 const Relations = require("./Relations.Kingdoms");
->>>>>>> 8c0dc6dc
+const Wars = require("./Wars.Kingdoms");
 
 // ---------------------------------------------------------------------------
 // Tuning constants
@@ -157,15 +155,12 @@ function canDeclareSiege(attackerKingdomId, defenderKingdomId, store) {
     }
   }
 
-<<<<<<< HEAD
-=======
   // Diplomacy gate (Phase 4): sieges need hostile borders or open war.
   // Allies cannot be besieged; neutral powers must be escalated first
   // (ultimatums) or fought in a declared war.
   const rel = Relations.canSiegeRelation(attackerKingdomId, defenderKingdomId, store);
   if (!rel.ok) return rel;
 
->>>>>>> 8c0dc6dc
   return { ok: true };
 }
 
@@ -289,8 +284,6 @@ function tickSiege(defenderKingdomId, store) {
 }
 
 /**
-<<<<<<< HEAD
-=======
  * Advance every active siege by one tick. Wired to the hourly siege task.
  * Sieges past their per-tick time gate are skipped by tickSiege itself
  * ("too-soon"), so this is safe to call on a fixed cadence.
@@ -325,7 +318,6 @@ function tickAllSieges(store) {
 }
 
 /**
->>>>>>> 8c0dc6dc
  * Victory: attacker breaches the walls.
  * - Loot 25% of defender war chest → attacker's war chest
  * - Damage 2 random buildings (lose a tier, or destroyed if tier 1)
@@ -335,20 +327,41 @@ function resolveVictory(siege, state) {
   const attackerCastle = state.castles[siege.attackerKingdomId];
   const defenderCastle = state.castles[siege.defenderKingdomId];
 
+  // Phase 5: a declared war goal shapes what victory takes. A bare raid
+  // (no active war between the pair) loots the default spoils.
+  const warGoal = Wars.warGoalBetween(
+    siege.attackerKingdomId,
+    siege.defenderKingdomId,
+    state
+  );
+  let lootPct = VICTORY_LOOT_PCT;
+  let buildingsDamaged = VICTORY_BUILDINGS_DAMAGED;
+  let fortDamage = 1;
+  if (warGoal === "loot") {
+    lootPct = 0.35; // plunder: strip the coffers
+  } else if (warGoal === "territory") {
+    lootPct = 0.15; // demolition, not robbery
+    buildingsDamaged = 3;
+    fortDamage = 2;
+  } else if (warGoal === "vassalize") {
+    lootPct = 0.1; // subjugation: the prize is the oath
+    Wars.setVassalState(siege.defenderKingdomId, siege.attackerKingdomId, state);
+  }
+
   // Loot
-  const loot = Math.floor(defenderCastle.warChest * VICTORY_LOOT_PCT);
+  const loot = Math.floor(defenderCastle.warChest * lootPct);
   defenderCastle.warChest -= loot;
   if (attackerCastle) attackerCastle.warChest += loot;
 
   // Damage buildings
   const buildingIds = Object.keys(defenderCastle.buildings);
-  // Shuffle and take up to VICTORY_BUILDINGS_DAMAGED
+  // Shuffle and take up to buildingsDamaged
   for (let i = buildingIds.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [buildingIds[i], buildingIds[j]] = [buildingIds[j], buildingIds[i]];
   }
   const damaged = [];
-  for (const bid of buildingIds.slice(0, VICTORY_BUILDINGS_DAMAGED)) {
+  for (const bid of buildingIds.slice(0, buildingsDamaged)) {
     const b = defenderCastle.buildings[bid];
     if (!b) continue;
     if (b.tier > 1) {
@@ -362,11 +375,12 @@ function resolveVictory(siege, state) {
 
   // Damage fortification
   if (defenderCastle.fortTier > 0) {
-    defenderCastle.fortTier -= 1;
+    defenderCastle.fortTier = Math.max(0, defenderCastle.fortTier - fortDamage);
   }
 
   siege.loot = loot;
   siege.damaged = damaged;
+  siege.warGoal = warGoal;
   return "victory";
 }
 
@@ -467,39 +481,6 @@ function liftSiege(attackerKingdomId, defenderKingdomId, store) {
   return { ok: true };
 }
 
-<<<<<<< HEAD
-module.exports = {
-  // Tuning
-  SIEGE_DECLARE_COST,
-  SIEGE_COOLDOWN_MS,
-  SIEGE_TICK_MS,
-  SIEGE_MAX_TICKS,
-  SIEGE_MIN_TICKS_BEFORE_DEFEAT,
-  SALLY_COST,
-  SALLY_COOLDOWN_MS,
-  SALLY_PROGRESS_HIT,
-  REPAIR_COST,
-  REPAIR_PROGRESS_HIT,
-  VICTORY_LOOT_PCT,
-  VICTORY_BUILDINGS_DAMAGED,
-  // Power
-  siegePower,
-  defenderPower,
-  // Declaration
-  canDeclareSiege,
-  declareSiege,
-  // Tick
-  tickSiege,
-  // Queries
-  getSiege,
-  getSiegesByAttacker,
-  // Defense
-  sallyForth,
-  repairWalls,
-  // Attacker
-  liftSiege,
-};
-=======
 // ---------------------------------------------------------------------------
 // Hourly siege task wiring
 // ---------------------------------------------------------------------------
@@ -550,4 +531,5 @@ module.exports.getSiegesByAttacker = getSiegesByAttacker;
 module.exports.sallyForth = sallyForth;
 module.exports.repairWalls = repairWalls;
 module.exports.liftSiege = liftSiege;
->>>>>>> 8c0dc6dc
+// Test seam: lets war-goal integration tests drive a victory directly.
+module.exports.resolveVictory = resolveVictory;

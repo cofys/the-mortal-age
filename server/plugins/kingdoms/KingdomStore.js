@@ -40,6 +40,12 @@ function load() {
       if (!Array.isArray(state.wars)) state.wars = [];
       // Worlds saved before the diplomacy layer have no alliance registry.
       if (!Array.isArray(state.alliances)) state.alliances = [];
+      // Worlds saved before the siege engine have no siege registry.
+      if (!state.sieges || typeof state.sieges !== "object") state.sieges = {};
+      // Worlds saved before the war-goals layer have no peace offers.
+      if (!Array.isArray(state.peaceOffers)) state.peaceOffers = [];
+      // Worlds saved before the vassalage layer have no vassal registry.
+      if (!state.vassals || typeof state.vassals !== "object") state.vassals = {};
     }
   } catch {
     // No save yet, or unreadable: the seed data will fill it at startup.
