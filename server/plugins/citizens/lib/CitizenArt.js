@@ -255,6 +255,28 @@ function artworksOf(username) {
   return st.artworks.filter((a) => a.artist === name || a.owner === name);
 }
 
+/** Look up a single artwork by id (for gallery operations). */
+function artworkById(artworkId) {
+  const st = load();
+  return st.artworks.find((a) => a.id === artworkId) ?? null;
+}
+
+/**
+ * Transfer artwork ownership (for auctions, acquisitions, commissions).
+ * Marks the record dirty so it persists. Returns true on success.
+ */
+function transferOwnership(artworkId, newOwner) {
+  const st = load();
+  const art = st.artworks.find((a) => a.id === artworkId);
+  if (!art) return false;
+  art.owner = normalizeName(newOwner);
+  art.forSale = false;
+  art.price = 0;
+  art.listedAt = 0;
+  markDirty();
+  return true;
+}
+
 /** Artworks currently listed for sale in a kingdom. */
 function marketListings(kingdomId) {
   const st = load();
@@ -425,6 +447,8 @@ module.exports = {
   createArtwork,
   valueFor,
   artworksOf,
+  artworkById,
+  transferOwnership,
   marketListings,
   listForSale,
   buyArtwork,

@@ -993,6 +993,27 @@
       ]
     },
     {
+      "id": "citizen_curate",
+      "mode": "citizen_curate",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenCurate"
+        }
+      ]
+    },
+    {
       "id": "citizen_explore",
       "mode": "citizen_explore",
       "repeat": false,

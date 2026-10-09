@@ -1787,6 +1787,38 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "auction" / "curator" / "art commission" / "traveling exhibition" — player
+  // asks about gallery operations. (CitizenArt owns artwork creation, display
+  // galleries, the fixed-price market, and exhibitions; this owns auctions,
+  // curators, commissions, appraisals, and traveling exhibitions.)
+  if (/\b(art auction|auction house|curator|art commission|commission art|appraise my art|traveling exhibition|gallery prestige)\b/.test(said)) {
+    try {
+      const G = require("../lib/CitizenGalleries");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? ctx?.kingdomId ?? "unknown";
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "gallery_ops", {
+        username: citizenUsername,
+        prestige: G.prestigeFor(kingdomId),
+        openAuctions: G.openAuctions(kingdomId).slice(0, 3).map((a) => ({
+          title: a.title,
+          highBid: a.bids.length ? a.bids[a.bids.length - 1].amount : a.reserve,
+        })),
+        openCommissions: G.openCommissions(kingdomId).slice(0, 3).map((c) => ({
+          medium: c.medium,
+          theme: c.theme,
+          escrow: c.escrow,
+        })),
+        stats: G.stats(kingdomId),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "what's in fashion" — player asks about trends, shops, competitions.
   if (/\b(what.s in fashion|fashion trend|what.s trendy|is there a tailor|clothing shop|buy clothes|style competition|best dressed|what.s the style)\b/.test(said)) {
     try {
