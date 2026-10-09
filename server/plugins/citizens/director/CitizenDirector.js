@@ -188,10 +188,12 @@ const {
 const { tickSchools } = require("../lib/CitizenSchoolLife");
 const { tickHealth } = require("../lib/CitizenHealthLife");
 const { tickJustice } = require("../lib/CitizenJusticeLife");
+const { tickLegalLife } = require("../lib/CitizenLegalLife");
 const { tickTravel } = require("../lib/CitizenTravelLife");
 const { tickEntertain } = require("../lib/CitizenEntertainLife");
 const CitizenHealth = require("../lib/CitizenHealth");
 const CitizenCrime = require("../lib/CitizenCrime");
+const CitizenLegalCode = require("../lib/CitizenLegalCode");
 const CitizenTravel = require("../lib/CitizenTravel");
 const CitizenEntertainment = require("../lib/CitizenEntertainment");
 const CitizenSchools = require("../lib/CitizenSchools");
@@ -2881,6 +2883,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("justice failed", { error: String(error?.message ?? error) });
     }
+    // Citizen legal: judges, appeals, pardons, player trials.
+    // Data tier, zero LLM.
+    try {
+      tickLegalLife(this, nowMs);
+    } catch (error) {
+      this.log("legal failed", { error: String(error?.message ?? error) });
+    }
     // Citizen travel: ship/caravan journeys, arrivals, danger, cargo.
     // Data tier, zero LLM.
     try {
@@ -3068,6 +3077,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen crime save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenLegalCode.save()) {
+        this.log("citizen legal code saved");
+      }
+    } catch (error) {
+      this.log("citizen legal code save failed", {
         error: String(error?.message ?? error),
       });
     }

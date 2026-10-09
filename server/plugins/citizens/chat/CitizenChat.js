@@ -1068,6 +1068,42 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "what are the laws" / "i need a lawyer" — player asks about law and order.
+  if (/\b(what are the laws|the law|is there a lawyer|i need a lawyer|any lawyers|who is the judge|is there a judge|the court|courthouse)\b/.test(said)) {
+    try {
+      const LegalCode = require("../lib/CitizenLegalCode");
+      const Gov = require("../lib/CitizenGovernment");
+      const now = Date.now();
+      // Find the citizen's kingdom for the judge lookup.
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf({ getUsername: () => citizenUsername, username: citizenUsername });
+      } catch {
+        // best-effort
+      }
+      const judge = kingdomId ? LegalCode.judgeFor(kingdomId, now) : null;
+      const justiceLaws = ["harsh-justice", "restorative-justice", "trial-by-jury"].filter(
+        (id) => {
+          try {
+            return Gov.hasLaw(kingdomId, id, now);
+          } catch {
+            return false;
+          }
+        }
+      );
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "legal_status", {
+        username: citizenUsername,
+        judge: judge ? judge.username : null,
+        justiceLaws,
+        lawyerFee: LegalCode.LAWYER_FEE,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a guild" / "what guild am i in" — player asks about trade guilds.
   if (/\b(is there a guild|what guilds are there|are there guilds|tell me about guilds|what guild am i in|am i in a guild|what is my guild)\b/.test(said)) {
     try {
