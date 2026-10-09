@@ -118,7 +118,7 @@ The default implementation is `PlayerPersistence`, backed by `game.sqlite` in ea
 ### Save triggers
 
 - **Login/logout** — saved immediately via `saveSnapshot()`
-- **Autosave** — bulk save every 120 seconds via `savePlayers()`
+- **Autosave** — staggered every 15 minutes (1500 ticks) via `plugins/persistence/Autosave.plugin.js`: name-hash spread over the first interval, budget of 10 saves per tick, bots marked `bot-skip-persistence` skipped
 - **Orphan expiration** — saved when a disconnected-in-combat player is removed
 
 ### What gets persisted
