@@ -817,6 +817,36 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "bankers guild" / "bank guild" / "deposit insurance" / "bank audit" —
+  // the bankers' association (guild layer). Placed before the banking
+  // block; keywords are distinct from it ("my balance", "borrow coins", ...).
+  if (/\b(bankers'? guild|bank guild|deposit insurance|bank audit|banking standards|insured deposit)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenBankGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "bankguild_status", {
+        username: citizenUsername,
+        members: desc?.members ?? 0,
+        auditors: desc?.auditors ?? 0,
+        treasury: desc?.treasury ?? 0,
+        insuranceFund: desc?.insuranceFund ?? 0,
+        branchStatus: desc?.branchStatus ?? "unknown",
+        openClaims: desc?.openClaims ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+        isCovered: citizenUsername ? Guilds.isCovered(citizenUsername) : false,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a bank" / "my balance" / "open account" — banking.
   if (/\b(is there a bank|any bankers?|my balance|open an? account|bank balance|any loans?|borrow coins|deposit coins|withdraw coins)\b/.test(said)) {
     try {

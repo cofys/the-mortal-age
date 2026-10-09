@@ -273,6 +273,8 @@ const { tickPress } = require("../lib/CitizenPressLife");
 const CitizenPress = require("../lib/CitizenPress");
 const { tickPressGuildLife } = require("../lib/CitizenPressGuildLife");
 const CitizenPressGuilds = require("../lib/CitizenPressGuilds");
+const { tickBankGuildLife } = require("../lib/CitizenBankGuildLife");
+const CitizenBankGuilds = require("../lib/CitizenBankGuilds");
 const { tickBankingLife } = require("../lib/CitizenBankingLife");
 const CitizenBanking = require("../lib/CitizenBanking");
 const { tickInsuranceLife } = require("../lib/CitizenInsuranceLife");
@@ -3249,6 +3251,15 @@ class CitizenDirector {
     } catch (error) {
       this.log("press guild failed", { error: String(error?.message ?? error) });
     }
+    // Bankers' association: membership, dues, branch audits, deposit
+    // insurance, banker school, ethics tribunal. Data tier, zero LLM.
+    // (CitizenBanking owns accounts/loans/branches; this owns the
+    // profession's guild layer only.)
+    try {
+      tickBankGuildLife(this, nowMs);
+    } catch (error) {
+      this.log("bank guild failed", { error: String(error?.message ?? error) });
+    }
     // Citizen banking: real accounts, deposits, withdrawals, interest, loans.
     // Data tier, zero LLM. (CitizenBankers owns hash-derived banker flavor;
     // CitizenBankers2 owns hash-derived moneyfolk flavor.)
@@ -3636,6 +3647,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen press save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenBankGuilds.save()) {
+        this.log("citizen bank guild saved");
+      }
+    } catch (error) {
+      this.log("citizen bank guild save failed", {
         error: String(error?.message ?? error),
       });
     }

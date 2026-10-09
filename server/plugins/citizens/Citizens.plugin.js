@@ -35,6 +35,7 @@ const { onCookOffCommand, COOKOFF_USAGE } = require("./CitizenCookOffEvents");
 const { onFestivalCommand, FESTIVAL_USAGE } = require("./CitizenMusicFestivalEvents");
 const { onMapGuildCommand, MAPGUILD_USAGE } = require("./CitizenMapGuildEvents");
 const { onPressGuildCommand, PRESSGUILD_USAGE } = require("./CitizenPressGuildEvents");
+const { onBankGuildCommand, BANKGUILD_USAGE } = require("./CitizenBankGuildEvents");
 const { onGalleryCommand, GALLERY_USAGE } = require("./CitizenGalleryEvents");
 const { onLibraryCommand, LIBRARY_USAGE } = require("./CitizenLibraryEvents");
 const { onObservatoryCommand, OBSERVATORY_USAGE } = require("./CitizenObservatoryEvents");
@@ -777,6 +778,12 @@ module.exports = {
       onPressGuildCommand,
       PlayerRights.NONE,
       PRESSGUILD_USAGE
+    );
+    api.registerCommand(
+      "bankguild",
+      onBankGuildCommand,
+      PlayerRights.NONE,
+      BANKGUILD_USAGE
     );
   },
 };
