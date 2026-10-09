@@ -523,6 +523,25 @@ function climateInfo() {
 }
 
 /**
+ * Night right now: time-of-day and nocturnal effects. Returns
+ * { timeOfDay, isNight, nightPenalty }. Defensive: a missing day/night
+ * module scores as day (no penalty).
+ */
+function nightInfo() {
+  try {
+    const DayNight = require("../lib/CitizenDayNight");
+    const nowMs = Date.now();
+    return {
+      timeOfDay: DayNight.timeOfDay(nowMs),
+      isNight: DayNight.isNight(nowMs),
+      nightPenalty: DayNight.nightWorkPenalty(nowMs),
+    };
+  } catch {
+    return { timeOfDay: "day", isNight: false, nightPenalty: 0 };
+  }
+}
+
+/**
  * Travel readiness: can this citizen afford the cheapest open route?
  * Returns { canTravel, cheapestFare, openCount }. Defensive: a
  * missing/broken travel module scores as unable to travel.
@@ -965,6 +984,7 @@ function snapshot(player) {
     entertain: entertainInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
+    night: nightInfo(),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -982,7 +1002,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, travel, entertain, drunk, climate, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, travel, entertain, drunk, climate, night, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1022,7 +1042,10 @@ function scoreActivity(activityId, snap) {
     }
     case ACT_REST: {
       if (!weary) return 4;
-      return 58 + (WEARY_AT - energy) * 1.3;
+      let s = 58 + (WEARY_AT - energy) * 1.3;
+      // Night is for sleeping: the weary rest deeper after dark.
+      if (night?.isNight) s += 20;
+      return s;
     }
     case ACT_BANK: {
       // The inventory clock: a full pack forces the hinge trip.
@@ -1161,6 +1184,8 @@ function scoreActivity(activityId, snap) {
       if ((thiefLevel ?? 1) >= 35) s += 6; // fur stalls and up
       // Storms are a thief's friend: fewer witnesses, guards huddled inside.
       if (climate?.isStorm) s += 8;
+      // Night is a thief's friend: dark streets, fewer witnesses.
+      if (night?.isNight) s += 8;
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1459,12 +1484,15 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
       // less work appeals (a plague is -60: effectively no work at all).
       // Jail is the same: a jailed citizen serves time, not shifts.
       // Drunkenness is similar: a drunk citizen shouldn't operate machinery.
+      // Night darkens outdoor labor: nobody sane chops trees in the dark
+      // (nightPenalty is already negative, so it adds the penalty).
       score:
         scoreActivity(a.id, snap) +
         intentBonusFor(a.id, player) -
         (sick > 0 && WORK_ACTIVITIES.has(a.id) ? sick : 0) -
         (jailed > 0 && WORK_ACTIVITIES.has(a.id) ? jailed : 0) -
-        (drunkPenalty > 0 && WORK_ACTIVITIES.has(a.id) ? drunkPenalty : 0),
+        (drunkPenalty > 0 && WORK_ACTIVITIES.has(a.id) ? drunkPenalty : 0) +
+        (night?.nightPenalty < 0 && WORK_ACTIVITIES.has(a.id) ? night.nightPenalty : 0),
     }))
     .sort((x, y) => y.score - x.score);
   if (scored.length === 0) {

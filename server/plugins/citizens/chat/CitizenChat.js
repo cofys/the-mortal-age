@@ -891,6 +891,23 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "what time is it" — player asks about the time of day / night.
+  if (/\b(what time is it|is it night|is it day|is it dark|is it dawn|is it dusk|what's the time|are the lamps lit)\b/.test(said)) {
+    try {
+      const DayNight = require("../lib/CitizenDayNight");
+      const nowMs = Date.now();
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "time_status", {
+        timeOfDay: DayNight.timeOfDay(nowMs),
+        description: DayNight.describe(nowMs),
+        isNight: DayNight.isNight(nowMs),
+        lampsLit: DayNight.lampsLit(nowMs),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "are you a criminal" — player asks about the citizen's record.
   if (/\b(are you a criminal|have you committed crimes|are you wanted|do you have a record|are you a thief)\b/.test(said)) {
     try {

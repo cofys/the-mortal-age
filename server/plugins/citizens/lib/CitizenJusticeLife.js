@@ -192,6 +192,12 @@ function phaseOnset(director, records, nowMs, rng) {
     if (honest > 0 && leaning === 0) continue; // the honest don't steal
     let p = CRIME_PER_TICK * (1 + leaning * 2);
     if (leaning === 0) p *= 0.2; // no leaning, almost never
+    // Night doubles opportunistic crime (defensive: missing module = day rate).
+    try {
+      p *= require("./CitizenDayNight").nightCrimeMultiplier(nowMs);
+    } catch {
+      // Day rate.
+    }
     if (!chance(rng, p)) continue;
     const kind = pickWeighted(rng, ONSET_TABLE);
     const witnessed = chance(rng, WITNESS_CHANCE);

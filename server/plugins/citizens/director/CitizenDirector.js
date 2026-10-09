@@ -200,6 +200,7 @@ const CitizenSchools = require("../lib/CitizenSchools");
 registerFeastSource();
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickSeasonLife } = require("../lib/CitizenSeasonLife");
+const { tickDayNight } = require("../lib/CitizenDayNightLife");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -2875,6 +2876,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("entertainment failed", { error: String(error?.message ?? error) });
     }
+    // Citizen day/night: transitions, sleep, night watch, stargazing.
+    // Data tier, zero LLM.
+    try {
+      tickDayNight(this, nowMs);
+    } catch (error) {
+      this.log("daynight failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3005,6 +3013,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen seasons save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (require("../lib/CitizenDayNight").save()) {
+        this.log("citizen daynight saved");
+      }
+    } catch (error) {
+      this.log("citizen daynight save failed", {
         error: String(error?.message ?? error),
       });
     }
