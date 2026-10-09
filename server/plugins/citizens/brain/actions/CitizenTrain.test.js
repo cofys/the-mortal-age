@@ -41,7 +41,10 @@ require.cache[sitesPath] = {
   exports: {
     siteTile: () => ({ x: 3200, y: 3200, z: 0 }),
     kingdomIdOf: () => "asgarnia",
-    marketTile: () => ({ x: 3200, y: 3200, level: 0 }),
+    // Real seam: siteTileByKingdom(kingdomId, kind). (The old mock carried
+    // a `marketTile` export that does not exist on the real CitizenSites —
+    // stadiumTile() silently nulled every stadium because of it.)
+    siteTileByKingdom: () => ({ x: 3200, y: 3200, z: 0 }),
   },
 };
 

@@ -142,16 +142,28 @@ function onRecordBroken(director, kingdomId, sport, record) {
     Rep?.awardDeed?.(record.holder, "recordbreaker");
     const label = Athletics.SPORT_LABELS[sport] || sport;
     announce(director, kingdomId,
-      `${record.holder} has set a new ${kingdomId} record in ${label}!`);
+      `${record.holder} has set a new ${kingdomId} record in ${label}!`, record.holder);
   } catch { /* announcements are best-effort */ }
 }
 
-function announce(director, kingdomId, text) {
+function announce(director, kingdomId, text, speakerUsername) {
   try {
-    const { sayPublic } = safeRequire("../chat/CitizenSayPublic") || {};
+    const { sayPublic, isRealPlayer } = safeRequire("../chat/CitizenSayPublic") || {};
     const { stadiumTile } = Athletics;
     const tile = stadiumTile(kingdomId);
-    if (sayPublic && tile) sayPublic(director, tile, text);
+    if (!sayPublic || !tile) return;
+    // LOD-gated: a materialized citizen speaks, and only where a real
+    // player can hear. (The old code passed (director, tile, text) —
+    // wrong arg order, so announcements never reached chat.)
+    const bot = speakerUsername && director?.getBot ? director.getBot({ username: speakerUsername }) : null;
+    if (!bot) return;
+    const near = bot.getLocalPlayers?.() ?? [];
+    const heard = near.some((p) => {
+      try { return isRealPlayer ? isRealPlayer(p) : (p?.isRealPlayer?.() ?? !p?.isBot); }
+      catch { return false; }
+    });
+    if (!heard) return;
+    sayPublic(bot, text);
   } catch { /* never throw */ }
 }
 

@@ -77,9 +77,19 @@ function careerOf(record) {
   }
 }
 
-function hasPapyrus(record) {
+function botFor(director, record) {
   try {
-    const inv = record?.getInventory?.();
+    return director?.getBot ? director.getBot(record) : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasPapyrus(bot, record) {
+  try {
+    // Roster records are plain data (no getInventory) — read the
+    // materialized bot's inventory. No bot, no papyrus, no draft.
+    const inv = bot?.getInventory?.() ?? record?.getInventory?.();
     if (!inv) return false;
     return (inv.getAmount?.(Theater.PAPYRUS_ID) ?? inv.count?.(Theater.PAPYRUS_ID) ?? 0) >= 1;
   } catch {
@@ -95,9 +105,14 @@ function isOnline(record) {
   }
 }
 
-function nearRealPlayers(record) {
+function nearRealPlayers(director, record) {
   try {
-    const players = record?.getLocalPlayers?.() ?? [];
+    // Roster records are plain data — resolve the materialized bot and
+    // read ITS nearby players. (The old code called record.getLocalPlayers,
+    // which doesn't exist on records, so this always returned false and
+    // every theater announcement silently died.)
+    const bot = botFor(director, record);
+    const players = bot?.getLocalPlayers?.() ?? [];
     return players.some((p) => {
       try {
         return p?.isRealPlayer?.() ?? !p?.isBot;
@@ -107,6 +122,17 @@ function nearRealPlayers(record) {
     });
   } catch {
     return false;
+  }
+}
+
+/** Speak through the materialized bot; silent when nobody's there to hear. */
+function speakFor(director, record, text) {
+  try {
+    const bot = botFor(director, record);
+    if (!bot) return;
+    sayPublic(bot, text);
+  } catch {
+    // speech is best-effort
   }
 }
 
@@ -139,7 +165,7 @@ function tickTheaterLife(director, nowMs) {
         const kingdomId = kingdomIdOf(record);
         if (!kingdomId) continue;
         if (!byKingdom.has(kingdomId)) byKingdom.set(kingdomId, []);
-        byKingdom.get(kingdomId).push({ record, username, kingdomId });
+        byKingdom.get(kingdomId).push({ record, username, kingdomId, bot: botFor(director, record) });
 
         // register playwrights: career playwrights, or creative citizens
         const career = careerOf(record);
@@ -158,16 +184,16 @@ function tickTheaterLife(director, nowMs) {
         // ambient playwriting — throttled, needs real papyrus
         if (!cooled(lastWrite, kingdomId, WRITE_COOLDOWN_MS, now)) {
           const writers = citizens.filter(
-            (c) => Theater.isPlaywright(c.username) && hasPapyrus(c.record)
+            (c) => Theater.isPlaywright(c.username) && hasPapyrus(c.bot, c.record)
           );
           if (writers.length) {
             const rng = agentRng(`theater-write:${kingdomId}:${Math.floor(now / WRITE_COOLDOWN_MS)}`);
             const writer = writers[Math.floor(rng() * writers.length)];
             const genres = Theater.GENRE_KEYS;
             const genre = genres[Math.floor(rng() * genres.length)];
-            const res = Theater.writePlay(writer.record, genre);
-            if (res.ok && nearRealPlayers(writer.record)) {
-              sayPublic(writer.record, `Just finished a new ${genre} — "${res.play.title}"!`);
+            const res = Theater.writePlay(writer.bot ?? writer.record, genre);
+            if (res.ok && nearRealPlayers(director, writer.record)) {
+              speakFor(director, writer.record, `Just finished a new ${genre} — "${res.play.title}"!`);
             }
           }
         }
@@ -194,8 +220,8 @@ function tickTheaterLife(director, nowMs) {
               // seed the repertoire with a local play if one exists
               const plays = Theater.playsIn(kingdomId);
               if (plays.length) Theater.addToRepertoire(res.troupe.name, plays[0].id);
-              if (nearRealPlayers(founder.record)) {
-                sayPublic(founder.record, `Hear ye! ${res.troupe.name} takes the stage!`);
+              if (nearRealPlayers(director, founder.record)) {
+                speakFor(director, founder.record, `Hear ye! ${res.troupe.name} takes the stage!`);
               }
             }
           }
@@ -223,9 +249,10 @@ function tickTheaterLife(director, nowMs) {
           try {
             const res = Theater.settlePerformance(perf.id);
             if (res.ok && res.review.stars >= 4 && !cooled(lastAnnounce, kingdomId, ANNOUNCE_COOLDOWN_MS, now)) {
-              const witness = citizens.find((c) => nearRealPlayers(c.record));
+              const witness = citizens.find((c) => nearRealPlayers(director, c.record));
               if (witness) {
-                sayPublic(
+                speakFor(
+                  director,
                   witness.record,
                   `${res.review.troupe}'s "${res.review.playTitle}" ${res.review.verdict}!`
                 );
