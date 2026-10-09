@@ -99,6 +99,7 @@ const ACT_SLAYER = "citizen_slayer";
 const ACT_HUNT = "citizen_hunt";
 const ACT_FARM = "citizen_farm";
 const ACT_THIEVE = "citizen_thieve";
+const ACT_BUILD = "citizen_build";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -361,6 +362,99 @@ function thiefLevel(player) {
     // fall through
   }
   return 1;
+}
+
+/** The citizen's Construction level (1 when unreadable — crude chairs only). */
+function constructLevel(player) {
+  try {
+    const Construction = require("../../skills/Construction.plugin");
+    if (Construction?.constructionLevel)
+      return Construction.constructionLevel(player);
+  } catch {
+    // fall through
+  }
+  return 1;
+}
+
+/**
+ * Furniture builds the citizen could make right now: best level-gated
+ * recipe's achievable count from pack materials (no trip needed), else
+ * from pack + bank combined.
+ */
+function buildCount(player) {
+  try {
+    const Construction = require("../../skills/Construction.plugin");
+    const recipes = Construction?.CONSTRUCTION_RECIPES;
+    if (!Array.isArray(recipes) || !recipes.length) return 0;
+    const level = constructLevel(player);
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    const buildsFrom = (recipe, useBank) => {
+      let builds = Number.MAX_SAFE_INTEGER;
+      for (const [itemId, perBuild] of recipe.materials ?? []) {
+        if (!Number.isInteger(itemId) || !Number.isInteger(perBuild) || perBuild <= 0)
+          return 0;
+        const have = invAmount(itemId) + (useBank ? bankAmount(itemId) : 0);
+        builds = Math.min(builds, Math.floor(have / perBuild));
+      }
+      return builds === Number.MAX_SAFE_INTEGER ? 0 : builds;
+    };
+    // Inventory first (no trip needed), then bank.
+    let best = 0;
+    for (const recipe of recipes) {
+      if ((recipe.level ?? 99) > level) continue;
+      best = Math.max(best, buildsFrom(recipe, false));
+    }
+    if (best > 0) return best;
+    for (const recipe of recipes) {
+      if ((recipe.level ?? 99) > level) continue;
+      best = Math.max(best, buildsFrom(recipe, true));
+    }
+    return best;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Housing tie-in: true when the citizen owns a home with empty furniture
+ * slots — they're building to furnish their own place, not just to sell.
+ */
+function homeWantsFurniture(player) {
+  try {
+    const Homes = require("../lib/CitizenHomes");
+    const username = player?.getUsername?.();
+    if (!username || typeof Homes?.homeOf !== "function") return false;
+    const home = Homes.homeOf(username);
+    if (!home) return false;
+    const furn = home.furnishings ?? [];
+    return furn.length < 8; // MAX_FURNISHINGS
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -705,6 +799,9 @@ function snapshot(player) {
     hunts: huntCount(player),
     seeds: seedCount(player),
     thiefLevel: thiefLevel(player),
+    builds: buildCount(player),
+    buildLevel: constructLevel(player),
+    homeFurnishable: homeWantsFurniture(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -722,7 +819,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -896,6 +993,27 @@ function scoreActivity(activityId, snap) {
       if (goalType === GOAL_SAVE_GOLD) s += 8;
       if ((thiefLevel ?? 1) >= 20) s += 6; // silk stalls and up
       if ((thiefLevel ?? 1) >= 35) s += 6; // fur stalls and up
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_BUILD: {
+      // Construction: build furniture from planks for XP and coin. No
+      // planks anywhere, no carpentry — a human can't build without timber.
+      // Carpenters whose own home still has empty furniture slots build to
+      // furnish first; finished furniture sells well, so broke traders grind
+      // it too. Higher Construction unlocks oak furniture, so veterans lean
+      // in. The hurt, exhausted, and weary stay away from the workbench.
+      if ((builds ?? 0) <= 0) return 4;
+      let s = 34 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // furniture sells well — a broke carpenter grinds
+      if (builds >= 8) s += 8; // a real timber stockpile to work through
+      if (homeFurnishable) s += 8; // building to furnish my own home
+      if ((buildLevel ?? 1) >= 29) s += 6; // oak bookcases and up
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1352,6 +1470,7 @@ module.exports = {
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,
+  ACT_BUILD,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

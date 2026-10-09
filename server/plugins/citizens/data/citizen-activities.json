@@ -592,6 +592,27 @@
           "type": "citizenThieve"
         }
       ]
+    },
+    {
+      "id": "citizen_build",
+      "mode": "citizen_build",
+      "repeat": false,
+      "capacity": 16,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenBuild"
+        }
+      ]
     }
   ]
 }
