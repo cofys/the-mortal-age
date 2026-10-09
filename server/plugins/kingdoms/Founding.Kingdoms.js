@@ -103,7 +103,6 @@
  */
 
 const Store = require("./KingdomStore");
-const Castle = require("./Castle.Kingdoms");
 const Membership = require("./Membership.Kingdoms");
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 
@@ -400,7 +399,7 @@ function founderStrength(kingdom) {
     followers.length * FOLLOWER_STRENGTH +
     Math.floor(chest / 10_000) * CHEST_STRENGTH_PER_10K +
     combat * COMBAT_STRENGTH_PER_LEVEL +
-    Castle.fortStrength(kingdom.id)
+    (flags[FLAG_WALLS_PAID] === true ? FORTIFICATION_STRENGTH : 0)
   );
 }
 
@@ -708,13 +707,11 @@ function tickContested(kingdom, flags, now) {
 
   // 1. The fortification levy: 5M of timber and iron from the war chest.
   //    Retried every tick until paid; half-raised walls grant no strength.
-  Castle.migrateWallsPaid(kingdom.id);
-  if (flags[FLAG_WALLS_PAID] !== true && Castle.fortTier(kingdom.id) === 0) {
+  if (flags[FLAG_WALLS_PAID] !== true) {
     const chest = flags[FLAG_WAR_CHEST] ?? 0;
     if (chest >= WALLS_COST) {
       Store.setFlag(kingdom.id, FLAG_WAR_CHEST, chest - WALLS_COST);
       Store.setFlag(kingdom.id, FLAG_WALLS_PAID, true);
-      Castle.migrateWallsPaid(kingdom.id); // boolean -> fort tier 1
       ledger(kingdom, "walls", "the palisade: timber and iron", WALLS_COST);
       dirty = true;
       const founder = pluginApi.core.World.getPlayerByName?.(kingdom.ruler);

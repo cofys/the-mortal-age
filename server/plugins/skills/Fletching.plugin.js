@@ -21,10 +21,6 @@ const CREATION_ALL_SENTINEL = 28;
 
 let fletchingTick = 0;
 
-// Bot sessions live at module level so the bot entry point shares the map
-// with register()'s task — same shape as Crafting/Herblore.
-const ACTIVE_FLETCHING_SESSIONS = new Map();
-
 function itemId(name) {
   const id = ItemIds[name];
   return Number.isInteger(id) ? id : null;
@@ -518,69 +514,7 @@ const BOLT_RECIPES_BY_UNFINISHED = new Map(
 );
 
 function getFletchingLevel(player) {
-  try {
-    return player.getSkillManager().getCurrentLevel(Skill.FLETCHING);
-  } catch {
-    return 1;
-  }
-}
-
-/**
- * Bot entry point — fletch logs for real Fletching XP, no interface clicking.
- * Finds the best knife-on-logs recipe the player's level allows that they
- * actually hold (plus a knife), and works `amount` logs, one per interval
- * tick. Same shape as upstream Smelt.js and our Crafting/Herblore
- * startBotX: the brain calls this once, the task drives the session.
- *
- * Citizens chain from woodcutting: chop logs -> fletch arrow shafts/bows.
- * Highest level recipe wins — a human fletches the best thing they've got
- * the level and logs for.
- */
-function findBestFletchingRecipe(player) {
-  const inventory = player.getInventory?.();
-  if (!inventory) return null;
-  const level = getFletchingLevel(player);
-  const knifeId = itemId("KNIFE");
-  if (!Number.isInteger(knifeId)) return null;
-  let hasKnife = false;
-  try {
-    hasKnife = inventory.getAmount(knifeId) > 0;
-  } catch {
-    hasKnife = false;
-  }
-  if (!hasKnife) return null;
-  let best = null;
-  for (const recipe of LOG_RECIPE_DEFINITIONS) {
-    if (!recipe || recipe.level > level) continue;
-    const logId = recipe.requirements?.[1]?.id;
-    if (!Number.isInteger(logId)) continue;
-    let logCount = 0;
-    try {
-      logCount = inventory.getAmount(logId);
-    } catch {
-      logCount = 0;
-    }
-    if (logCount <= 0) continue;
-    if (!best || recipe.level > best.level) {
-      best = recipe;
-    }
-  }
-  return best;
-}
-
-function startBotFletching(player, amount) {
-  const recipe = findBestFletchingRecipe(player);
-  if (!recipe) return false;
-  return startFletchingSession(
-    ACTIVE_FLETCHING_SESSIONS,
-    player,
-    recipe,
-    amount
-  );
-}
-
-function isFletchingActive(player) {
-  return player != null && ACTIVE_FLETCHING_SESSIONS.has(player);
+  return player.getSkillManager().getCurrentLevel(Skill.FLETCHING);
 }
 
 function stopFletchingSession(activeSessions, player, resetAnimation = true) {
@@ -846,7 +780,7 @@ module.exports = {
   members: true,
   register(api) {
     TaskManager = api.getTaskManager();
-    const activeSessions = ACTIVE_FLETCHING_SESSIONS;
+    const activeSessions = new Map();
     TaskManager.submit(new FletchingTask(activeSessions));
 
     api.onPlayerDisconnect(({ player }) => {
@@ -957,18 +891,4 @@ module.exports = {
       bolts: BOLT_RECIPES_BY_UNFINISHED.size,
     });
   },
-  // Bot entry points + recipe table for citizen brains (same shape as
-  // Herblore.plugin's HERBLORE_RECIPES export).
-  FLETCHING_RECIPES: LOG_RECIPE_DEFINITIONS.filter(Boolean).map((recipe) => ({
-    name: recipe.key,
-    inputId: recipe.requirements?.[1]?.id ?? null,
-    needsId: recipe.requirements?.[0]?.id ?? null,
-    outputId: recipe.outputId,
-    outputAmount: recipe.outputAmount,
-    level: recipe.level,
-    xp: recipe.xp,
-  })),
-  startBotFletching,
-  isFletchingActive,
-  findBestFletchingRecipe,
 };

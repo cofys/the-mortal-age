@@ -115,7 +115,6 @@ const CitizenBuilders = require("../lib/CitizenBuilders");
 const CitizenRetirement = require("../lib/CitizenRetirement");
 const { tickElections } = require("../lib/CitizenElection");
 const CitizenRelationships = require("../lib/CitizenRelationships");
-const BrainRelationships = require("../brain/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
 const { tickTavernGames } = require("../lib/CitizenTavernGames");
@@ -167,14 +166,6 @@ const { tickSpies, tickSpyShouts } = require("../lib/CitizenSpies");
 const { tickExplorers } = require("../lib/CitizenExplorers");
 const { tickExplorers2 } = require("../lib/CitizenExplorers2");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
-const { tickClans } = require("../lib/CitizenClanLife");
-const CitizenClans = require("../lib/CitizenClans");
-const { tickHomes } = require("../lib/CitizenHomeLife");
-const CitizenHomes = require("../lib/CitizenHomes");
-const { tickCareers } = require("../lib/CitizenCareerLife");
-const { tickFamilies } = require("../lib/CitizenFamilyLife");
-const CitizenCareers = require("../lib/CitizenCareers");
-const CitizenFamilies = require("../lib/CitizenFamilies");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
@@ -717,49 +708,6 @@ class CitizenDirector {
     // LOD bands must update on the fast tick, not just the slow 60s tick.
     // Otherwise citizens stay "asleep" for up to a minute after a player
     // arrives, appearing frozen. This is cheap distance math.
-    // Movement safety net (fast tick): if citizen brains aren't ticking
-    // (attachBrain failure), the director handles movement directly so
-    // citizens visibly move. Dispatches queued requests and wanders idle
-    // citizens (15% per tick, 3-5 tiles).
-    try {
-      const nav = require("../../bots/behaviours/navigation/BotNavigation");
-      const { peekMovementRequest, dispatchMovementRequest, requestMovement, clearMovementRequest } = nav;
-      for (const record of this.roster.values()) {
-        if (!this.isOnline(record)) continue;
-        const bot = this.getBot(record);
-        if (!bot) continue;
-        if (bot.getMovementQueue?.()?.size?.() > 0) continue;
-        const req = peekMovementRequest(bot);
-        if (req) {
-          try {
-            const result = dispatchMovementRequest(bot, req);
-            if (result?.hasRoute === true) clearMovementRequest(bot);
-          } catch {}
-          continue;
-        }
-        if (Math.random() < 0.15) {
-          try {
-            const loc = bot.getLocation?.();
-            if (!loc) continue;
-            const dx = Math.floor(Math.random() * 11) - 5;
-            const dy = Math.floor(Math.random() * 11) - 5;
-            if (dx === 0 && dy === 0) continue;
-            requestMovement(bot, loc.getX() + dx, loc.getY() + dy, {
-              reason: "director_wander",
-              basicPather: true,
-              z: loc.getZ?.() ?? 0,
-            });
-            const req2 = peekMovementRequest(bot);
-            if (req2) {
-              const r2 = dispatchMovementRequest(bot, req2);
-              if (r2?.hasRoute === true) clearMovementRequest(bot);
-            }
-          } catch {}
-        }
-      }
-    } catch (error) {
-      this.log("director movement failed", { error: String(error?.message ?? error) });
-    }
     try {
       tickLodBands(this, Date.now());
     } catch (error) {
@@ -1597,23 +1545,12 @@ class CitizenDirector {
       // Non-fatal: bot remains in the add-player queue.
     }
 
-    const activityId =
+    const activity =
       record.merchantKind === "prime"
-        ? ACTIVITY_PRIME_MERCHANT
-        : ROLE_ACTIVITY[record.role];
-    const activity = activityId ? this.registry.byId.get(activityId) : null;
-    if (!activity) {
-      // ROOT CAUSE FIX: Log when activity lookup fails instead of silently
-      // skipping attachBrain. This was causing citizens to spawn without
-      // brains, leaving them frozen (entry.brain null → BotBehaviorTask skips).
-      this.log("spawn failed: no activity for role", {
-        citizen: record.username,
-        role: record.role,
-        activityId: activityId ?? "(undefined - ROLE_ACTIVITY missing role)",
-        merchantKind: record.merchantKind ?? null,
-      });
-    } else {
-      const attached = attachBrain({
+        ? this.registry.byId.get(ACTIVITY_PRIME_MERCHANT)
+        : this.registry.byId.get(ROLE_ACTIVITY[record.role]);
+    if (activity) {
+      attachBrain({
         runtime,
         registry: this.registry,
         world: this.world,
@@ -1623,17 +1560,7 @@ class CitizenDirector {
         resetMovementState,
         nowMs: Date.now(),
       });
-      if (!attached) {
-        // ROOT CAUSE FIX: Log when attachBrain fails instead of silently
-        // continuing. The brain is required for movement.
-        this.log("spawn failed: attachBrain returned false", {
-          citizen: record.username,
-          role: record.role,
-          activityId: activity.id,
-        });
-      } else {
-        record.currentActivityId = activity.id;
-      }
+      record.currentActivityId = activity.id;
     }
 
     // The LLM mouth learns who this person is (llm-gateway contract).
@@ -1855,6 +1782,58 @@ class CitizenDirector {
       tickLodBands(this, nowMs);
     } catch (error) {
       this.log("tick-lod failed", { error: String(error?.message ?? error) });
+    }
+    // Movement: citizen brains may not be ticking (attachBrain silent
+    // failure), but the director tick runs. Handle movement here directly
+    // so citizens visibly move even without a brain tick.
+    try {
+      const nav = require("../../bots/behaviours/navigation/BotNavigation");
+      const { peekMovementRequest, dispatchMovementRequest, requestMovement, clearMovementRequest } = nav;
+      let _onlineCount = 0;
+      let _wanderCount = 0;
+      for (const record of this.roster.values()) {
+        if (!this.isOnline(record)) continue;
+        _onlineCount++;
+        const bot = this.getBot(record);
+        if (!bot) continue;
+        // Skip if already moving
+        if (bot.getMovementQueue?.()?.size?.() > 0) continue;
+        // Dispatch any queued request first
+        const req = peekMovementRequest(bot);
+        if (req) {
+          try {
+            const result = dispatchMovementRequest(bot, req);
+            if (result?.hasRoute === true) clearMovementRequest(bot);
+          } catch {}
+          continue;
+        }
+        // No queued movement: wander occasionally (10% per tick) to a nearby tile
+        // This gives visible life even when the brain isn't running.
+        if (Math.random() < 0.10) {
+          try {
+            const loc = bot.getLocation?.();
+            if (!loc) continue;
+            const dx = Math.floor(Math.random() * 11) - 5; // -5 to +5
+            const dy = Math.floor(Math.random() * 11) - 5;
+            if (dx === 0 && dy === 0) continue;
+            const tx = loc.getX() + dx;
+            const ty = loc.getY() + dy;
+            _wanderCount++; requestMovement(bot, tx, ty, { reason: "director_wander", basicPather: true, z: loc.getZ?.() ?? 0 });
+            // Dispatch immediately
+            const req2 = peekMovementRequest(bot);
+            if (req2) {
+              const result2 = dispatchMovementRequest(bot, req2);
+              if (result2?.hasRoute === true) clearMovementRequest(bot);
+            }
+          } catch {}
+        }
+      }
+      if (!global._moveDiagLogged) {
+        global._moveDiagLogged = true;
+        console.log(`[DIAG-MOVE] online=${_onlineCount}, wandered=${_wanderCount}`);
+      }
+    } catch (error) {
+      this.log("director movement failed", { error: String(error?.message ?? error) });
     }
     for (const record of this.roster.values()) {
       const online = this.isOnline(record);
@@ -2715,13 +2694,6 @@ class CitizenDirector {
     } catch (error) {
       this.log("relationships failed", { error: String(error?.message ?? error) });
     }
-    // Citizen↔citizen bond formation: rapport from real interactions and
-    // personality compatibility promotes into friends/rivals. Data tier.
-    try {
-      BrainRelationships.tickRelationships(this, nowMs);
-    } catch (error) {
-      this.log("bond formation failed", { error: String(error?.message ?? error) });
-    }
     // Citizen secret societies: hidden orders (Gilded Ledger, Shadow Circle,
     // Old Guard) hold night meetings, advance agendas, and quietly recruit
     // trusted players. Data tier, zero LLM.
@@ -2729,34 +2701,6 @@ class CitizenDirector {
       tickSocieties(this, nowMs);
     } catch (error) {
       this.log("societies failed", { error: String(error?.message ?? error) });
-    }
-    // Citizen clans: formation, growth, player invites, outings,
-    // celebrations and skill moots. Data tier, zero LLM.
-    try {
-      tickClans(this, nowMs);
-    } catch (error) {
-      this.log("clans failed", { error: String(error?.message ?? error) });
-    }
-    // Citizen homes: assignment, rent collection, furnishing, gatherings.
-    // Data tier, zero LLM.
-    try {
-      tickHomes(this, nowMs);
-    } catch (error) {
-      this.log("homes failed", { error: String(error?.message ?? error) });
-    }
-    // Citizen careers: assignment, promotions, wages, changes, teaching.
-    // Data tier, zero LLM.
-    try {
-      tickCareers(this, nowMs);
-    } catch (error) {
-      this.log("careers failed", { error: String(error?.message ?? error) });
-    }
-    // Citizen families: formation, births, growing up, coming of age,
-    // teaching, inheritance, protection. Data tier, zero LLM.
-    try {
-      tickFamilies(this, nowMs);
-    } catch (error) {
-      this.log("families failed", { error: String(error?.message ?? error) });
     }
     try {
       if (getJournal().saveIfDirty()) {
@@ -2771,42 +2715,6 @@ class CitizenDirector {
       CitizenBonds.save();
     } catch (error) {
       this.log("citizen bonds save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenClans.save()) {
-        this.log("citizen clans saved");
-      }
-    } catch (error) {
-      this.log("citizen clans save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenHomes.save()) {
-        this.log("citizen homes saved");
-      }
-    } catch (error) {
-      this.log("citizen homes save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenCareers.save()) {
-        this.log("citizen careers saved");
-      }
-    } catch (error) {
-      this.log("citizen careers save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenFamilies.save()) {
-        this.log("citizen families saved");
-      }
-    } catch (error) {
-      this.log("citizen families save failed", {
         error: String(error?.message ?? error),
       });
     }

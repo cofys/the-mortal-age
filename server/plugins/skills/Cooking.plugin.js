@@ -6,29 +6,12 @@ const { ItemDefinition } = require("../../src/main/typescript/elvarg/game/defini
 const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
-const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
 
 const FIRE_COOK_ANIMATION = new Animation(896);
 const RANGE_COOK_ANIMATION = new Animation(897);
 const COOK_INTERVAL_TICKS = 4;
-
-// Object ids citizens can cook on: lit fires (from Firemaking) and permanent
-// ranges. Exposed for the citizen cooking brain action's object search.
-const COOK_OBJECT_IDS = Object.freeze([
-  ObjectIds.FIRE_5, // 5249 — lit fire
-  ObjectIds.FORESTERS_CAMPFIRE, // 49927
-  ObjectIds.FORESTERS_CAMPFIRE_2, // 49928
-  ObjectIds.FORESTERS_CAMPFIRE_3, // 49929
-  ObjectIds.COOKING_RANGE, // 114
-  ObjectIds.COOKING_RANGE_2, // 4172
-  ObjectIds.RANGE, // 2859
-]);
-
-// Bot sessions live at module level so the bot entry point (startBotCooking)
-// and the register()-submitted CookingTask share the same map — same shape
-// as Crafting's ACTIVE_CRAFTING_SESSIONS.
-const ACTIVE_COOKING_SESSIONS = new Map();
 
 const COOKABLES = Object.freeze([
   { raw: ItemIds.RAW_BEEF, cooked: ItemIds.COOKED_MEAT, burnt: ItemIds.BURNT_MEAT, level: 1, xp: 30, stopBurn: 34, name: "meat" },
@@ -161,25 +144,6 @@ function startCooking(player, object, cookable, activeSessions) {
   });
 
   return true;
-}
-
-/**
- * Bot entry point — cook raw food for real Cooking XP, no interface
- * clicking. The citizen must already be standing at a real fire or range
- * object (found via object search); the session drives one cook per
- * interval tick until the food runs out, the fire burns out, or the
- * citizen moves. Same shape as upstream Smelt.js: the brain calls this
- * once, the task drives the session.
- */
-function startBotCooking(player, object, cookable) {
-  if (!player || !object || !cookable) {
-    return false;
-  }
-  return startCooking(player, object, cookable, ACTIVE_COOKING_SESSIONS);
-}
-
-function isCookingActive(player) {
-  return player != null && ACTIVE_COOKING_SESSIONS.has(player);
 }
 
 class CookingTask extends Task {
@@ -326,35 +290,21 @@ function answerRawXp(request) {
 
 module.exports = {
   name: "Cooking",
-  // Data-driven recipes for bots: derived from the COOKABLES table so the
-  // hand-cook and bot paths never disagree on level/xp.
-  COOKING_RECIPES: COOKABLES.map((c) => ({
-    name: `Cook ${c.name}`,
-    rawId: c.raw,
-    cookedId: c.cooked,
-    burntId: c.burnt,
-    level: c.level,
-    xp: c.xp,
-    stopBurn: c.stopBurn,
-    rangeOnly: !!c.rangeOnly,
-  })),
-  COOK_OBJECT_IDS,
-  startBotCooking,
-  isCookingActive,
   register(api) {
     pluginApi = api;
     TaskManager = api.getTaskManager();
-    TaskManager.submit(new CookingTask(ACTIVE_COOKING_SESSIONS));
+    const activeSessions = new Map();
+    TaskManager.submit(new CookingTask(activeSessions));
 
     api.onPlayerDisconnect(({ player }) => {
-      stopCooking(ACTIVE_COOKING_SESSIONS, player, false);
+      stopCooking(activeSessions, player, false);
     });
     api.onPlayerLevelUp(({ player }) => {
-      stopCooking(ACTIVE_COOKING_SESSIONS, player, false);
+      stopCooking(activeSessions, player, false);
     });
 
-    api.onItemOnObject(handleCook.bind(null, ACTIVE_COOKING_SESSIONS), { noted: false });
-    api.onObjectInteraction("Range", { Cook: handleRangeCook.bind(null, ACTIVE_COOKING_SESSIONS) });
+    api.onItemOnObject(handleCook.bind(null, activeSessions), { noted: false });
+    api.onObjectInteraction("Range", { Cook: handleRangeCook.bind(null, activeSessions) });
     api.onCustomEvent("cooking:raw-xp", answerRawXp);
 
     api.log("registered", {

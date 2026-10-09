@@ -103,29 +103,6 @@ function addInfluence(player, kingdomId, amount) {
   return rec.points;
 }
 
-/**
- * Spend influence (e.g. on diplomacy actions). Settles idle decay first so
- * idleness is honestly priced, then deducts from raw points — the tenure
- * bonus is remembered service, not a spendable purse.
- * @returns {{ok: boolean, remaining?: number, reason?: string}}
- */
-function spendInfluence(player, kingdomId, amount) {
-  if (!player?.setAttribute || !kingdomId || !(amount > 0)) {
-    return { ok: false, reason: "bad-args" };
-  }
-  const now = Date.now();
-  const records = { ...recordsOf(player) };
-  const rec = records[kingdomId];
-  if (!rec || typeof rec !== "object") return { ok: false, reason: "no-record" };
-  const settled = decayedPoints(rec, now);
-  if (settled < amount) return { ok: false, reason: "insufficient", remaining: Math.floor(settled) };
-  rec.points = settled - amount;
-  rec.lastEarned = now;
-  records[kingdomId] = rec;
-  player.setAttribute(INFLUENCE_ATTRIBUTE, records);
-  return { ok: true, remaining: Math.floor(rec.points) };
-}
-
 /** kingdom:rank-granted handler: fealty for the base rank, promotion otherwise. */
 function onRankGranted(event) {
   const player = event?.player;
@@ -211,7 +188,6 @@ module.exports.CHALLENGE_THRESHOLD = CHALLENGE_THRESHOLD;
 module.exports.CHALLENGE_COOLDOWN_MS = CHALLENGE_COOLDOWN_MS;
 module.exports.effectiveInfluence = effectiveInfluence;
 module.exports.addInfluence = addInfluence;
-module.exports.spendInfluence = spendInfluence;
 module.exports.onRankGranted = onRankGranted;
 module.exports.onTaskCompleted = onTaskCompleted;
 module.exports.getTrial = getTrial;

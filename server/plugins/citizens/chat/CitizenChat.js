@@ -623,140 +623,6 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
-  // "can I join your clan" — player asks to join the citizen's clan.
-  if (/\b(join your clan|invite me to (your )?clan|can i join (your|the) clan|let me join (your|the) clan)\b/.test(said)) {
-    try {
-      const Clans = require("../lib/CitizenClans");
-      const clan = Clans.clanOf(citizenUsername);
-      if (!clan) return false; // No clan — LLM can riff.
-      if (Clans.clanOfPlayer(speakerUsername)) return false; // Already in one.
-      const id = Clans.requestJoinClan(speakerUsername, clan.id);
-      if (id) {
-        notifyCitizenSpoke(citizenUsername, speakerUsername, "clan_join_request");
-      } else {
-        notifyCitizenSpoke(citizenUsername, speakerUsername, "clan_join_denied");
-      }
-    } catch {
-      return false;
-    }
-    return true;
-  }
-
-  // "start a clan with me" — player asks the citizen to found a clan.
-  if (/\b(start a clan|found a clan|make a clan)( with me)?\b/.test(said)) {
-    try {
-      const Clans = require("../lib/CitizenClans");
-      const { normalizeName } = require("../lib/CitizenBonds");
-      const { getDirector } = require("../director/CitizenDirector");
-      const director = getDirector();
-      const record = director?.roster?.get?.(normalizeName(citizenUsername));
-      const isRosterCitizen = (n) => director?.roster?.has?.(String(n ?? "").toLowerCase()) ?? false;
-      if (!record) return false;
-      if (Clans.clanOf(citizenUsername) || Clans.clanOfPlayer(speakerUsername)) return false;
-      const isFriend = Bonds.isFriend(citizenUsername, speakerUsername);
-      if (isFriend && Clans.founderEligible(record, isRosterCitizen)) {
-        const clan = Clans.createClan(
-          citizenUsername,
-          record.displayName ?? citizenUsername,
-          record.kingdomId,
-          Clans.kindForRecord(record)
-        );
-        if (clan) {
-          Clans.addPlayerMember(clan.id, speakerUsername, speakerUsername);
-          notifyCitizenSpoke(citizenUsername, speakerUsername, "clan_founded");
-          return true;
-        }
-      }
-      return false; // Not leader material or not friends — LLM handles it.
-    } catch {
-      return false;
-    }
-  }
-
-  // "leave clan" — player leaves the citizen's clan.
-  if (/\b(leave (your |the )?clan|quit (your |the )?clan)\b/.test(said)) {
-    try {
-      const Clans = require("../lib/CitizenClans");
-      const clan = Clans.clanOf(citizenUsername);
-      if (clan && Clans.clanOfPlayer(speakerUsername)?.id === clan.id) {
-        Clans.removeMember(clan.id, speakerUsername);
-        notifyCitizenSpoke(citizenUsername, speakerUsername, "clan_left");
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }
-
-  // "what do you do" — the citizen describes their real career.
-  if (/\b(what do you do|what's your (job|trade|profession|work)|what do you do for (a living|work))\b/.test(said)) {
-    try {
-      const Careers = require("../lib/CitizenCareers");
-      const desc = Careers.describeCareer(citizenUsername);
-      notifyCitizenSpoke(citizenUsername, speakerUsername, "career_describe", { careerDesc: desc });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // "do you have children" / "tell me about your family" — real family records.
-  if (/\b(do you have (kids|children|a family)|tell me about your family|are you married|do you have a (wife|husband|spouse))\b/.test(said)) {
-    try {
-      const Families = require("../lib/CitizenFamilies");
-      const summary = Families.familySummary(citizenUsername);
-      const family = Families.familyOf(citizenUsername);
-      if (!summary && !family) return false; // No family — LLM can riff.
-      notifyCitizenSpoke(citizenUsername, speakerUsername, "family_describe", {
-        familySummary: summary,
-        hasFamily: !!family,
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // "where do you live" — the citizen describes their real home.
-  if (/\b(where do you live|where's your house|where is your home|show me your home)\b/.test(said)) {
-    try {
-      const Homes = require("../lib/CitizenHomes");
-      const home = Homes.homeOf(citizenUsername);
-      if (!home) return false; // Homeless — LLM can riff.
-      notifyCitizenSpoke(citizenUsername, speakerUsername, "home_describe");
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // "can I visit your home" — player asks for a guest invitation.
-  if (/\b(can i visit|invite me (to|over to) your (house|home|place)|come (to|over to) your (house|home|place))\b/.test(said)) {
-    try {
-      const Homes = require("../lib/CitizenHomes");
-      const home = Homes.homeOf(citizenUsername);
-      if (!home) return false;
-      // Friends, clanmates and the already-welcome get in; strangers are
-      // told to befriend first — the LLM handles the nuance.
-      const { isFriend } = require("../lib/CitizenBonds");
-      const { clanOf, clanOfPlayer } = require("../lib/CitizenClans");
-      const welcome =
-        isFriend(citizenUsername, speakerUsername) ||
-        Homes.isGuestAllowed(home, speakerUsername) ||
-        (clanOf(citizenUsername) && clanOfPlayer(speakerUsername)?.id === clanOf(citizenUsername).id);
-      if (welcome) {
-        Homes.inviteGuest(home.id, speakerUsername);
-        notifyCitizenSpoke(citizenUsername, speakerUsername, "home_visit_yes");
-      } else {
-        notifyCitizenSpoke(citizenUsername, speakerUsername, "home_visit_no");
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   // "follow me" / "come with me" — player asks citizen to follow.
   if (/\b(follow me|come with me|walk with me|stay with me)\b/.test(said)) {
     if (SocialMechanics.requestFollow(citizenUsername, speakerUsername)) {
@@ -781,7 +647,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
  * from the citizen). The LLM will pick up the new relationship in context
  * on the next exchange.
  */
-function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, data) {
+function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
   if (!pluginApi) return;
   try {
     const { getDirector } = require("../director/CitizenDirector");
@@ -795,10 +661,6 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, data) {
       party_join: `${display}: I'm with you. Lead on.`,
       party_create: `${display}: A party! I'm in. Where to?`,
       clan_invite: `${display}: Join my clan chat — we'd be glad to have you.`,
-      clan_join_request: `${display}: I'll put your name to the clan. If the others know you, you're in.`,
-      clan_join_denied: `${display}: Hmm, that didn't go through. Maybe ask me again later.`,
-      clan_founded: `${display}: A clan! Right — we're doing this. Welcome aboard.`,
-      clan_left: `${display}: Sorry to see you go. The door's open if you change your mind.`,
       boss_trip: `${display}: A boss trip? I'm in. Let's go.`,
       activity_invite: `${display}: We've got company — ${speakerUsername}'s coming with us!`,
       follow_start: `${display}: Right behind you.`,
@@ -809,11 +671,6 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, data) {
       companion_accept: `${display}: Wonderful! Let's go — right now, while the mood's right.`,
       companion_decline: `${display}: Ah, that's a shame. Maybe another time.`,
       companion_invite: `${display}: Wonderful! Let's go — right now, while the mood's right.`,
-      home_describe: `${display}: I've got a place of my own — come see it sometime.`,
-      career_describe: `${display}: I'm ${data?.careerDesc ?? "between jobs at the moment"}.`,
-      home_visit_yes: `${display}: Of course — you're welcome at my place any time.`,
-      home_visit_no: `${display}: I'd like to, but I don't really know you yet. Let's talk a while first.`,
-      family_describe: `${display}: ${data?.familySummary ?? "Family's everything to me."}`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM
