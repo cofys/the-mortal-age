@@ -484,25 +484,55 @@ function smithingFor(playerName, nowMs = Date.now()) {
 // Journal + rumor helpers.
 // ============================================================================
 
-function journalize(citizen, text) {
-  try {
-    const journal = require("./CitizenJournal");
-    if (typeof journal.appendEntry === "function") {
-      journal.appendEntry(citizen, text);
-    } else if (typeof journal.addEntry === "function") {
-      journal.addEntry(citizen, text);
+// === Journal access (lazy require — CitizenJournal may not load in tests) ===
+// Canonical: getJournal().log(name, kind, text). The appendEntry/addEntry
+// probe pattern is dead — CitizenJournal only exports getJournal() with a
+// log() method (blacksmiths rung audit 2026-10-08).
+let _journal = null;
+function journal() {
+  if (_journal === null) {
+    try {
+      _journal = require("./CitizenJournal").getJournal();
+    } catch {
+      _journal = false;
     }
+  }
+  return _journal || null;
+}
+
+function journalize(citizenName, text) {
+  try {
+    journal()?.log(citizenName, "work", text);
   } catch {
-    /* journal absent */
+    /* journal is best-effort; never break the tick */
   }
 }
 
-function seedRumor(text) {
+// Canonical rumor seed: seedRumor(rng, event). The bare-string call is dead —
+// CitizenRumors.seedRumor (lib/CitizenRumors.js:101) requires event.kind +
+// event.what and returns null otherwise (blacksmiths rung audit 2026-10-08).
+function seedRumor(event) {
   try {
     const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") rumors.seedRumor(text);
+    if (typeof rumors.seedRumor === "function") rumors.seedRumor(Math.random, event);
   } catch {
     /* rumors absent */
+  }
+}
+
+/**
+ * The materialized player-bot for a roster record, or null when the citizen
+ * isn't online. Canonical director API: isOnline(record) + getBot(record)
+ * (CitizenDirector.js:1374/1379). director.playerFor / director.onlinePlayers
+ * do NOT exist — the blacksmiths rung audit (2026-10-08) found them dead and
+ * the smithfolk interaction tier dead-on-arrival because of it. Never call them.
+ */
+function materializedBot(director, record) {
+  try {
+    if (director.isOnline?.(record)) return director.getBot?.(record) ?? null;
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -527,7 +557,7 @@ function tickSmithfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Forge hours only (dawn to dusk, server-local)
@@ -555,8 +585,11 @@ function tickSmithfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    // Real engine API: Player.getLocalPlayers() (Player.ts:796). The citizen
+    // bot's local players are the only players that can possibly be near.
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -583,8 +616,13 @@ function doSmithfolkWork(director, record, citizen, type, nowMs) {
         smithy: smithy.name,
       });
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `unveiled ${mw.piece} at ${smithy.name}`);
-      seedRumor(`${mw.piece} unveiled at ${smithy.name}!`);
+      journalize(record.username, `unveiled ${mw.piece} at ${smithy.name}`);
+      seedRumor({
+        kind: "masterwork",
+        who: record.username,
+        what: `${mw.piece} unveiled at ${smithy.name}`,
+        where: smithy.name,
+      });
       return;
     }
   }
@@ -594,26 +632,26 @@ function doSmithfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.4) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `worked at ${smithy.name}`);
+    journalize(record.username, `worked at ${smithy.name}`);
   } else if (roll < 0.6) {
     const jobs = jobsFor(name, type, nowMs);
     const job = jobs.length ? jobs[0] : "a day's work";
     const line = fill(pickOne(Math.random, DONE_LINES), { job });
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `finished ${job} at ${smithy.name}`);
+    journalize(record.username, `finished ${job} at ${smithy.name}`);
   } else if (roll < 0.75) {
     const good = goodForToday(smithy, nowMs);
     const line = fill(pickOne(Math.random, GOODS_LINES), { good });
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `hawked ${good} at ${smithy.name}`);
+    journalize(record.username, `hawked ${good} at ${smithy.name}`);
   } else if (roll < 0.88) {
     const line = pickOne(Math.random, REPAIR_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `offered repairs at ${smithy.name}`);
+    journalize(record.username, `offered repairs at ${smithy.name}`);
   } else {
     const line = pickOne(Math.random, LESSON_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `offered smithing lessons at ${smithy.name}`);
+    journalize(record.username, `offered smithing lessons at ${smithy.name}`);
   }
 }
 

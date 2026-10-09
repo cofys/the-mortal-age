@@ -192,11 +192,30 @@ function withinTiles(a, b, radius) {
 }
 
 /**
+ * The materialized player-bot for a roster record, or null when the citizen
+ * isn't online. Canonical director API: isOnline(record) + getBot(record)
+ * (CitizenDirector.js:1374/1379). director.playerFor / director.onlinePlayers
+ * do NOT exist — the blacksmiths rung audit (2026-10-08) found them dead and
+ * the interaction tier dead-on-arrival because of it. Never call them.
+ */
+function materializedBot(director, record) {
+  try {
+    if (director.isOnline?.(record)) return director.getBot?.(record) ?? null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * True if any real (non-bot) player is within radius tiles of the citizen.
  */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    // Real engine API: Player.getLocalPlayers() (Player.ts:796). The citizen
+    // bot's local players are the only players that can possibly be near.
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -300,9 +319,9 @@ function wareFor(username, type, dateMs) {
 }
 
 /** Today's forging job description for the visible work. */
-function jobFor(username, type, dateMs) {
+function jobFor(username, type, dateMs, kingdom) {
   const { label } = wareFor(username, type, dateMs);
-  const forge = forgeFor(username, null);
+  const forge = forgeFor(username, kingdom ?? null);
   return { label, forge: forge.name };
 }
 
@@ -454,7 +473,7 @@ function tickSmiths(director, nowMs, desync) {
         const last = lastWorkByCitizen.get(record.username) || 0;
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, WORK_RADIUS)) continue;
         if (Math.random() >= WORK_CHANCE) continue;
@@ -475,7 +494,7 @@ function tickSmiths(director, nowMs, desync) {
         if (!type) continue;
         const last = lastHawkByCitizen.get(record.username) || 0;
         if (nowMs - last < HAWK_COOLDOWN_MS) continue;
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -495,7 +514,7 @@ function tickSmiths(director, nowMs, desync) {
         if (type !== SMITH_WEAPONSMITH && type !== SMITH_BLADESMITH) continue;
         const last = lastCommissionByCitizen.get(record.username) || 0;
         if (nowMs - last < COMMISSION_COOLDOWN_MS) continue;
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= COMMISSION_CHANCE) continue;
@@ -514,7 +533,7 @@ function tickSmiths(director, nowMs, desync) {
 /** The visible work: hammering/smelt animation + emote line + journal line. */
 function doForgeWork(director, record, citizen, type, nowMs) {
   const rng = Math.random;
-  const { label, forge } = jobFor(record.username, type, nowMs);
+  const { label, forge } = jobFor(record.username, type, nowMs, record.kingdomId ?? record.kingdom);
   const { metal } = wareFor(record.username, type, nowMs);
 
   // Farriers and half the armorsmiths smelt; the rest hammer at the anvil.
@@ -534,7 +553,7 @@ function doForgeWork(director, record, citizen, type, nowMs) {
 /** Hawking: announce today's wares; masterworks become the crowd moment. */
 function doWaresHawk(director, citizen, record, type, nowMs) {
   const rng = Math.random;
-  const { label, forge } = jobFor(record.username, type, nowMs);
+  const { label, forge } = jobFor(record.username, type, nowMs, record.kingdomId ?? record.kingdom);
   void director;
 
   const piece = masterworkFor(record.username, nowMs);
