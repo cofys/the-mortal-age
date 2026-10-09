@@ -27,6 +27,8 @@
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+const Membership = require("./Membership.Kingdoms");
+
 const INFLUENCE_ATTRIBUTE = "kingdom:influence";
 const TRIAL_ATTRIBUTE = "kingdom:trial";
 const CHALLENGE_COOLDOWN_ATTRIBUTE = "kingdom:challenge-cooldown";
@@ -45,6 +47,23 @@ const PETITION_THRESHOLD = 100;
 const CHALLENGE_THRESHOLD = 250;
 /** Cooldown after losing (or declining) a challenge, per office. */
 const CHALLENGE_COOLDOWN_MS = 7 * DAY_MS;
+
+/**
+ * Earned rank ladder. A player's home-kingdom choice becomes a progression
+ * path: service (donations, tasks, fealty) earns influence, and crossing a
+ * threshold promotes through the kingdom's hierarchy — no owner command
+ * needed. Thresholds are effective influence (decayed points + tenure bonus).
+ * Man-at-arms at 100 matches the petition threshold: the court notices you
+ * exactly when you become eligible to petition for an office. Monarch is
+ * NEVER earned — the great rulers' fates are questline content.
+ */
+const RANK_EARN_THRESHOLDS = Object.freeze([
+  { rank: "Man-at-arms", at: 100 },
+  { rank: "Knight", at: 300 },
+  { rank: "Lord", at: 800 },
+  { rank: "Regent", at: 2000 },
+]);
+const BASE_RANK = "Subject";
 
 function blankRecord(now) {
   return { points: 0, firstEarned: now, lastEarned: now };
@@ -143,6 +162,50 @@ function onTaskCompleted(event) {
   addInfluence(player, kingdomId, INFLUENCE_PER_TASK);
 }
 
+/** Rank the court owes a player at this effective influence. Never Monarch. */
+function rankForInfluence(effective) {
+  let rank = BASE_RANK;
+  for (const t of RANK_EARN_THRESHOLDS) {
+    if (effective >= t.at) rank = t.rank;
+  }
+  return rank;
+}
+
+/**
+ * The rank a player has earned but does not yet hold, or null.
+ * Guards: bots are excluded (the citizens director owns their promotions),
+ * only the kingdom the player serves promotes them, ranks are never taken
+ * away (influence decays; honors don't), and the target must sit in the
+ * kingdom's own hierarchy below Monarch.
+ */
+function promotionTarget(player, kingdomId, hierarchy) {
+  if (!player?.setAttribute || !kingdomId) return null;
+  if (player.isPlayerBot?.() === true) return null;
+  if ((player.getAttribute?.(Membership.KINGDOM_ID_ATTRIBUTE) ?? null) !== kingdomId) return null;
+  const ladder = Array.isArray(hierarchy) ? hierarchy : [];
+  const target = rankForInfluence(effectiveInfluence(player, kingdomId));
+  const targetIdx = ladder.indexOf(target);
+  if (targetIdx < 0) return null;
+  const current = player.getAttribute?.(Membership.KINGDOM_RANK_ATTRIBUTE) ?? BASE_RANK;
+  const currentIdx = ladder.indexOf(current);
+  if (currentIdx < 0 || targetIdx <= currentIdx) return null;
+  return target;
+}
+
+/**
+ * Promote a player who has earned it. Emits kingdom:rank-granted through
+ * the injected emitEvent (the Events module wires the real bus), so this
+ * stays pure and testable. Returns the granted rank, or null when nothing
+ * was earned. One hop: a player whose service skips ranks is named the
+ * highest earned rank directly.
+ */
+function settlePromotion(player, kingdomId, hierarchy, emitEvent) {
+  const target = promotionTarget(player, kingdomId, hierarchy);
+  if (!target || typeof emitEvent !== "function") return null;
+  emitEvent({ player, kingdomId, rank: target, via: "service" });
+  return target;
+}
+
 /** Active trial of service, or null. */
 function getTrial(player) {
   try {
@@ -209,6 +272,11 @@ module.exports.INFLUENCE_DECAY_PER_DAY = INFLUENCE_DECAY_PER_DAY;
 module.exports.PETITION_THRESHOLD = PETITION_THRESHOLD;
 module.exports.CHALLENGE_THRESHOLD = CHALLENGE_THRESHOLD;
 module.exports.CHALLENGE_COOLDOWN_MS = CHALLENGE_COOLDOWN_MS;
+module.exports.RANK_EARN_THRESHOLDS = RANK_EARN_THRESHOLDS;
+module.exports.BASE_RANK = BASE_RANK;
+module.exports.rankForInfluence = rankForInfluence;
+module.exports.promotionTarget = promotionTarget;
+module.exports.settlePromotion = settlePromotion;
 module.exports.effectiveInfluence = effectiveInfluence;
 module.exports.addInfluence = addInfluence;
 module.exports.spendInfluence = spendInfluence;

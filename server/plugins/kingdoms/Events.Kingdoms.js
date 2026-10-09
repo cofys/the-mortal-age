@@ -96,6 +96,36 @@ function onRankGranted(event) {
     player.setAttribute(Membership.KINGDOM_TITLES_ATTRIBUTE, titles);
   }
   Influence.onRankGranted(event);
+  settleEarnedPromotion(player, event.kingdomId);
+}
+
+/**
+ * The earned-promotion settle: after any influence lands (fealty, donation,
+ * task), the court checks whether the player's service has crossed a rank
+ * threshold and promotes them. One hop to the highest earned rank; the
+ * resulting kingdom:rank-granted re-enters onRankGranted, which settles
+ * again and stops when the rank is held (bounded by the ladder, so it
+ * always terminates).
+ */
+function settleEarnedPromotion(player, kingdomId) {
+  if (!pluginApi || !player?.setAttribute || !kingdomId) return null;
+  const kingdom = Store.getKingdom(kingdomId);
+  const rank = Influence.settlePromotion(
+    player,
+    kingdomId,
+    kingdom?.hierarchy ?? [],
+    (payload) => pluginApi.emitCustomEvent("kingdom:rank-granted", payload)
+  );
+  if (rank) {
+    try {
+      player.sendMessage(
+        `[Court] Your service is weighed and found worthy — you are named ${rank} of ${kingdom?.name ?? kingdomId}.`
+      );
+    } catch {
+      // Cosmetic; the promotion already landed.
+    }
+  }
+  return rank;
 }
 
 /** Revenue arrived: notification only. Emitters grant the tax themselves
@@ -182,11 +212,17 @@ function announceToRealm(message) {
 /** A war-effort donation: influence for the gift, progress for an active trial. */
 function onDonationMade(event) {
   Politics.onDonationMade(event);
+  if (event?.player?.setAttribute && event?.kingdomId) {
+    settleEarnedPromotion(event.player, event.kingdomId);
+  }
 }
 
 /** A kingdom task completed: influence for the service. */
 function onTaskCompleted(event) {
   Influence.onTaskCompleted(event);
+  if (event?.player?.setAttribute && event?.kingdomId) {
+    settleEarnedPromotion(event.player, event.kingdomId);
+  }
 }
 
 /** An office went vacant — broadcast so the director or a claimant can answer. */
