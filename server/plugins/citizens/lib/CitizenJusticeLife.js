@@ -29,6 +29,56 @@ const Crime = require("./CitizenCrime");
 const { agentRng, chance } = require("./humanizer");
 const { normalizeName } = require("./CitizenBonds");
 
+/**
+ * Legal-profession hook for trials. Reads the sitting judge and any hired
+ * lawyer defensively — if the legal-code module is missing or has no data,
+ * the trial proceeds exactly as before (zero behavior change).
+ * Returns { guiltDelta, judgeName } where guiltDelta is subtracted from the
+ * court's guilt score (lawyer defense + jury skepticism), and judgeName is
+ * who presided (for journaling).
+ */
+function legalHookFor(username, kingdomId, nowMs) {
+  let guiltDelta = 0;
+  let judgeName = null;
+  try {
+    const LegalCode = require("./CitizenLegalCode");
+    // Lawyer: hired counsel reduces the guilt score.
+    guiltDelta += LegalCode.defenseBonusFor(username) || 0;
+    // Jury: trial-by-jury law makes the court more skeptical.
+    guiltDelta += LegalCode.jurySkepticismBonus(kingdomId, nowMs) || 0;
+    // Judge: a fair judge (high fairness) further protects the innocent.
+    // The judge's fairness only ever REDUCES guilt — a biased bench is a
+    // different (darker) feature, not this one.
+    if (kingdomId) {
+      const judge = LegalCode.judgeFor(kingdomId, nowMs);
+      if (judge) {
+        judgeName = judge.username;
+        guiltDelta += (judge.fairness || 0.5) * 0.1;
+      }
+    }
+  } catch {
+    // legal code unavailable — trial proceeds on bare evidence
+  }
+  return { guiltDelta, judgeName };
+}
+
+/** Award the advocate deed when a defended citizen is acquitted. */
+function awardAdvocateDeed(username) {
+  try {
+    const LegalCode = require("./CitizenLegalCode");
+    const rep = LegalCode.lawyerFor(username);
+    if (rep && rep.lawyer) {
+      const Reputation = require("./CitizenReputation");
+      if (typeof Reputation.awardDeed === "function") {
+        Reputation.awardDeed(rep.lawyer, "advocate", Date.now());
+      }
+      LegalCode.clearLawyer(username);
+    }
+  } catch {
+    // best-effort
+  }
+}
+
 // Per slow-tick (~60s) base crime chance. Tuned so a ~170-citizen realm
 // sees a crime every few days, not a crime wave.
 const CRIME_PER_TICK = 0.0004;
@@ -277,17 +327,31 @@ function phaseTrials(director, records, nowMs, rng) {
     let guilt = 0.35; // the court starts skeptical
     if (latest.witnessed) guilt += 0.45;
     guilt += Math.min(0.3, priors * 0.15);
+    // Legal profession: the sitting judge presides, hired counsel defends,
+    // and trial-by-jury law raises the court's skepticism. All defensive —
+    // if the legal code has nothing to say, the trial runs on bare evidence.
+    const { guiltDelta, judgeName } = legalHookFor(username, kingdomOf(record), nowMs);
+    guilt = Math.max(0, guilt - guiltDelta);
     const guilty = (rng() ?? Math.random()) < guilt;
     const def = Crime.crimeDef(latest.kind);
+    const presided = judgeName ? ` before Judge ${judgeName}` : "";
     if (guilty) {
       const sentence = Crime.convict(username, latest.kind, nowMs);
       verdicts.push({ username, kind: latest.kind, sentence, record });
       journalEvent(
         username,
-        `stood trial for ${def.label} and was found guilty.`
+        `stood trial for ${def.label}${presided} and was found guilty.`
       );
+      // The lawyer's job is done — win or lose, the representation ends.
+      try {
+        require("./CitizenLegalCode").clearLawyer(username);
+      } catch {
+        // best-effort
+      }
     } else {
-      journalEvent(username, `stood trial for ${def.label} and was acquitted.`);
+      journalEvent(username, `stood trial for ${def.label}${presided} and was acquitted.`);
+      // An acquitted client makes their lawyer's name.
+      awardAdvocateDeed(username);
       if (heardByPlayer(director, username, TRIAL_ANNOUNCE_RADIUS)) {
         sayPublicTo(director, username, "The court found me innocent — the watch owes me an apology.");
       }

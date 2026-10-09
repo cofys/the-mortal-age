@@ -823,6 +823,27 @@
           "type": "citizenPhilosophize"
         }
       ]
+    },
+    {
+      "id": "citizen_lawyer",
+      "mode": "citizen_lawyer",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenLawyer"
+        }
+      ]
     }
   ]
 }

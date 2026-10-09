@@ -109,6 +109,7 @@ const ACT_CREATEART = "citizen_createart";
 const ACT_COMPETE = "citizen_compete";
 const ACT_DIPLOMAT = "citizen_diplomat";
 const ACT_EXPLORE = "citizen_explore";
+const ACT_LAWYER = "citizen_lawyer";
 const ACT_INVENT = "citizen_invent";
 const ACT_PHILOSOPHIZE = "citizen_philosophize";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
@@ -138,7 +139,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_INVENT, ACT_PHILOSOPHIZE,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -803,6 +804,40 @@ function exploreInfo(player) {
 }
 
 /**
+ * Legal readiness: is this citizen a lawyer, and are there accused citizens
+ * needing counsel? Returns { isLawyer, clientsAvailable, activeCases }.
+ * Defensive: a missing/broken module scores as unable to practice law.
+ */
+function legalInfo(player) {
+  try {
+    let isLawyer = false;
+    try {
+      const Careers = require("../lib/CitizenCareers");
+      const username = player?.getUsername?.() ?? player?.username ?? "";
+      isLawyer = Careers.careerOf?.(username) === "lawyer";
+    } catch { /* careers unreadable */ }
+
+    let clientsAvailable = 0;
+    let activeCases = 0;
+    try {
+      const LegalCode = require("../lib/CitizenLegalCode");
+      const Guards = require("../lib/CitizenGuards");
+      const now = Date.now();
+      activeCases = LegalCode.representationCount?.() ?? 0;
+      // Clients available: wanted citizens are the pool.
+      const wantedCount = typeof Guards.wantedCount === "function"
+        ? Guards.wantedCount(now)
+        : 0;
+      clientsAvailable = Math.max(0, wantedCount - activeCases);
+    } catch { /* legal/guards unreadable */ }
+
+    return { isLawyer, clientsAvailable, activeCases };
+  } catch {
+    return { isLawyer: false, clientsAvailable: 0, activeCases: 0 };
+  }
+}
+
+/**
  * Invention readiness: Crafting level, creativity, active projects,
  * affordable blueprints. Returns { craftingLevel, isCreative,
  * activeProjects, affordableCount }.
@@ -1294,6 +1329,7 @@ compete: competeInfo(player),
     explore: exploreInfo(player),
     invent: inventInfo(player),
     philosophy: philosophyInfo(player),
+    legal: legalInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
@@ -1314,7 +1350,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, philosophy, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, philosophy, legal, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1729,6 +1765,23 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody philosophizes drunk well
       if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_LAWYER: {
+      // Law: lawyers take cases for accused citizens. A human lawyer seeks
+      // clients when the courts are busy — justice is work, and work pays.
+      // Non-lawyers have no business at the courthouse.
+      const li = legal ?? { isLawyer: false, clientsAvailable: 0, activeCases: 0 };
+      if (!li.isLawyer) return 4; // not a lawyer
+      if ((li.clientsAvailable ?? 0) <= 0) return 4; // no clients, no cases
+      let s = 22;
+      if ((li.activeCases ?? 0) > 0) s += 8; // a practice with clients grows
+      const just = personality?.just ?? personality?.lawful ?? personality?.honest ?? 0;
+      if (just > 0.6) s += 10; // the just are drawn to the bar
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // nobody argues drunk well
       return s;
     }
     case ACT_RC: {
@@ -2217,7 +2270,7 @@ module.exports = {
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_INVENT, ACT_PHILOSOPHIZE,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

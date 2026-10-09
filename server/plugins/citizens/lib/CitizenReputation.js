@@ -71,6 +71,7 @@ const DEEDS = Object.freeze({
   inventor: Object.freeze({ points: 8, label: "invention breakthrough" }),
   sage: Object.freeze({ points: 8, label: "attained sage wisdom" }),
   debater: Object.freeze({ points: 4, label: "won a public debate" }),
+  advocate: Object.freeze({ points: 6, label: "won an acquittal as defense counsel" }),
   betrayal: Object.freeze({ points: -6, label: "betrayal" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),
 });

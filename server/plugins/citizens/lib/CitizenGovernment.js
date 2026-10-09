@@ -101,6 +101,27 @@ const LAWS = {
     dislikes: ["merchant"],
     unrestDelta: -6,
   },
+  "harsh-justice": {
+    name: "Harsh Justice",
+    description: "Doubled fines and longer jail terms for criminals.",
+    likes: ["guard"],
+    dislikes: ["commoner"],
+    unrestDelta: 8,
+  },
+  "restorative-justice": {
+    name: "Restorative Justice",
+    description: "Fines go to victims, not the town; shorter jail terms.",
+    likes: ["commoner"],
+    dislikes: ["guard"],
+    unrestDelta: -6,
+  },
+  "trial-by-jury": {
+    name: "Trial by Jury",
+    description: "Twelve citizens weigh the evidence; fewer innocents hang.",
+    likes: ["commoner"],
+    dislikes: [],
+    unrestDelta: -4,
+  },
 };
 
 const LAW_IDS = Object.keys(LAWS);
