@@ -28,7 +28,10 @@ const navPath = path.resolve(__dirname, "../../../bots/behaviours/navigation/Bot
 require.cache[navPath] = {
   id: navPath, filename: navPath, loaded: true,
   exports: {
-    requestMovement: (player, tile) => { player.__movedTo = tile; },
+    // Real engine shape: requestMovement(player, targetX, targetY, options).
+    requestMovement: (player, targetX, targetY, options) => {
+      player.__movedTo = { x: targetX, y: targetY, z: options?.z };
+    },
     clearMovementRequest: () => {},
   },
 };
@@ -128,6 +131,8 @@ test("curious citizen far from press walks to the press", () => {
   const res = action.update({ player, nowMs: 1000 });
   assert.strictEqual(res, "running");
   assert.ok(player.__movedTo, "expected a walk-to-press movement request");
+  assert.strictEqual(player.__movedTo.x, 3224, "press x passed as numeric targetX");
+  assert.strictEqual(player.__movedTo.y, 3176, "press y passed as numeric targetY");
   assert.strictEqual(Press.isJournalist("Curious Cat"), true); // registered on first visit
 });
 

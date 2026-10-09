@@ -7,6 +7,7 @@
  */
 
 const assert = require("assert");
+const path = require("path");
 
 const Press = require("./CitizenPress");
 const { tickPress, resetForTests } = require("./CitizenPressLife");
@@ -114,6 +115,70 @@ test("edition distributes to subscribers", () => {
   const ed = Press.latestEdition("misthalin");
   assert.ok(ed, "edition should compile after 3 stories accumulate");
   assert.strictEqual(Press.subscribersIn("misthalin")[0].editionsReceived, 1);
+});
+
+test("LOD: tick with no citizens online records nothing", () => {
+  tickPress(fakeDirector([]), Date.now());
+  tickPress(null, Date.now());
+  assert.strictEqual(Press.unclaimedEvents("war", "misthalin").length, 0);
+  assert.strictEqual(Press.unclaimedEvents("culture", "misthalin").length, 0);
+});
+
+test("gatherers use the real module APIs (wars, champions, elections)", () => {
+  // Stub the upstream modules in the require cache (same pattern as
+  // CitizenReport.test.js) so the gatherers hit real-shaped APIs.
+  const tourPath = path.resolve(__dirname, "./CitizenTournaments.js");
+  const ksPath = path.resolve(__dirname, "../../kingdoms/KingdomStore.js");
+  const govPath = path.resolve(__dirname, "./CitizenGovernment.js");
+  require.cache[tourPath] = {
+    id: tourPath, filename: tourPath, loaded: true,
+    exports: {
+      // Canonical: topChampions(limit) -> [{ kingdomId, sportId, username,
+      // season, at, tournamentId }]. There is no allChampions export.
+      topChampions: () => [
+        { kingdomId: "misthalin", sportId: "dueling", username: "Champ Cid", tournamentId: "t-9", at: Date.now() },
+      ],
+    },
+  };
+  require.cache[ksPath] = {
+    id: ksPath, filename: ksPath, loaded: true,
+    exports: {
+      getActiveWars: () => [{ attackerId: "asgarnia", defenderId: "misthalin", active: true }],
+    },
+  };
+  require.cache[govPath] = {
+    id: govPath, filename: govPath, loaded: true,
+    exports: {
+      // Canonical: allCouncils() -> councils with a .log of { at, text }.
+      // There is no recentElections/latestElections export.
+      allCouncils: () => [
+        { kingdomId: "misthalin", log: [{ at: Date.now(), text: "Mira elected mayor with 12 votes." }] },
+      ],
+    },
+  };
+  try {
+    const d = fakeDirector([citizen("Alice", "misthalin", "journalist")]);
+    tickPress(d, Date.now());
+    const wars = Press.unclaimedEvents("war", "misthalin");
+    assert.ok(
+      wars.some((e) => e.subjectId === "war:asgarnia:misthalin" && e.kind === Press.KIND_MAJOR),
+      "war event gathered via KingdomStore.getActiveWars"
+    );
+    const champs = Press.unclaimedEvents("culture", "misthalin");
+    assert.ok(
+      champs.some((e) => /Champ Cid/.test(e.summary) && e.subjectId === "champion:t-9"),
+      "champion gathered via CitizenTournaments.topChampions with the real username"
+    );
+    const filed = Press.storiesFor("misthalin", "politics");
+    assert.ok(
+      filed.some((s) => /elected mayor/i.test(s.headline)),
+      "election gathered from the council log and filed as a politics story"
+    );
+  } finally {
+    delete require.cache[tourPath];
+    delete require.cache[ksPath];
+    delete require.cache[govPath];
+  }
 });
 
 test("tick survives missing modules gracefully", () => {

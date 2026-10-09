@@ -30,6 +30,7 @@ const { sayPublic } = require("../chat/CitizenSayPublic");
 
 const ANNOUNCE_COOLDOWN_MS = 6 * 3600 * 1000; // one news cry per kingdom per 6h
 const INVESTIGATE_COOLDOWN_MS = 30 * 60 * 1000; // one story per reporter per 30m
+const ELECTION_WINDOW_MS = 24 * 3600 * 1000; // only recent council-log elections count as news
 
 const lastAnnounceByKingdom = new Map(); // kingdomId -> ms
 const lastStoryByReporter = new Map(); // norm -> ms
@@ -98,14 +99,23 @@ function looksLikeReporter(record) {
   }
 }
 
-/** Real players near a tile — for announcements. Defensive. */
-function anyRealPlayerNear(director, tile, radius) {
+/** Real players near a tile — canonical engine scan via a citizen bot's
+ *  local-player list. Defensive: never throws, false when unknown. */
+function anyRealPlayerNear(bot, tile, radius) {
   try {
-    if (!director || !tile) return false;
-    const players = director.getRealPlayersNear?.(tile, radius)
-      ?? director.realPlayersNear?.(tile, radius)
-      ?? [];
-    return Array.isArray(players) ? players.length > 0 : !!players;
+    if (!bot || !tile) return false;
+    for (const p of bot.getLocalPlayers?.() ?? []) {
+      try {
+        if (p === bot) continue;
+        if (p?.isPlayerBot?.() === true || p?.getHostAddress?.() === "bot") continue;
+        const pp = p?.getPosition?.() ?? p?.position;
+        if (!pp) continue;
+        const dx = (pp.x ?? 0) - tile.x;
+        const dy = (pp.y ?? 0) - tile.y;
+        if (Math.hypot(dx, dy) <= radius) return true;
+      } catch { /* one bad player never breaks the scan */ }
+    }
+    return false;
   } catch {
     return false;
   }
@@ -123,8 +133,8 @@ function botFor(director, record) {
 
 function gatherWarEvents(Press) {
   try {
-    const path = require("path");
-    const KingdomStore = require(path.join("..", "kingdoms", "KingdomStore"));
+    // Module-relative require: KingdomStore lives at plugins/kingdoms/.
+    const KingdomStore = require("../../kingdoms/KingdomStore");
     const wars = KingdomStore.getActiveWars?.() ?? [];
     for (const w of wars) {
       const a = w?.attackerId, d = w?.defenderId;
@@ -145,8 +155,10 @@ function gatherDiscoveryEvents(Press) {
     const all = Discovery.allDiscoveries?.() ?? Discovery.recentDiscoveries?.(50) ?? [];
     for (const disc of all) {
       if (!disc?.id) continue;
+      // Discovery records carry no home kingdom; claimedBy holds the
+      // claiming kingdomId once a kingdom claims the discovery.
       Press.recordEvent(
-        Press.BEAT_DISCOVERY, disc.kingdomId ?? "wanderer",
+        Press.BEAT_DISCOVERY, disc.claimedBy ?? "wanderer",
         `discovery:${disc.id}`,
         `${disc.type ?? "discovery"} found${disc.discoverer ? ` by ${disc.discoverer}` : ""}`,
         Press.KIND_ROUTINE
@@ -158,14 +170,16 @@ function gatherDiscoveryEvents(Press) {
 function gatherChampionEvents(Press) {
   try {
     const T = require("./CitizenTournaments");
-    const champs = T.allChampions?.() ?? [];
+    // Canonical: topChampions(limit) -> [{ kingdomId, sportId, username,
+    // season, at, tournamentId }]. There is no allChampions export.
+    const champs = T.topChampions?.(50) ?? [];
     for (const c of champs) {
       if (!c?.tournamentId) continue;
       Press.recordEvent(
         Press.BEAT_CULTURE, c.kingdomId ?? "wanderer",
         `champion:${c.tournamentId}`,
-        `${c.winner ?? "a champion"} wins the ${c.sportId ?? "tournament"}`,
-        c.isChampionship ? Press.KIND_MAJOR : Press.KIND_ROUTINE
+        `${c.username ?? "a champion"} wins the ${c.sportId ?? "tournament"}`,
+        Press.KIND_ROUTINE
       );
     }
   } catch { /* tournaments unavailable — skip */ }
@@ -174,16 +188,23 @@ function gatherChampionEvents(Press) {
 function gatherElectionEvents(Press) {
   try {
     const Gov = require("./CitizenGovernment");
-    const recent = Gov.recentElections?.(10) ?? Gov.latestElections?.() ?? [];
-    const list = Array.isArray(recent) ? recent : [recent].filter(Boolean);
-    for (const e of list) {
-      if (!e?.id && !e?.kingdomId) continue;
-      Press.recordEvent(
-        Press.BEAT_POLITICS, e.kingdomId ?? "wanderer",
-        `election:${e.id ?? e.kingdomId}:${e.heldAt ?? ""}`,
-        e.summary ?? `election held in ${e.kingdomId}`,
-        Press.KIND_MAJOR
-      );
+    // Canonical: allCouncils() -> council records; each council.log holds
+    // { at, text } entries, including "<name> elected mayor with N votes."
+    // There is no recentElections/latestElections export.
+    const councils = Gov.allCouncils?.() ?? [];
+    const now = Date.now();
+    for (const council of councils) {
+      const kid = council?.kingdomId ?? "wanderer";
+      for (const entry of council?.log ?? []) {
+        if (!entry || !/elected mayor/i.test(entry.text ?? "")) continue;
+        if (now - (entry.at ?? 0) > ELECTION_WINDOW_MS) continue;
+        Press.recordEvent(
+          Press.BEAT_POLITICS, kid,
+          `election:${kid}:${entry.at}`,
+          entry.text,
+          Press.KIND_MAJOR
+        );
+      }
     }
   } catch { /* government unavailable — skip */ }
 }
@@ -195,9 +216,18 @@ function tickPress(director, nowMs) {
   if (!Press) return;
   const now = nowMs ?? Date.now();
 
+  // LOD: one roster scan, reused by every pass below. With no citizens
+  // online there is nobody to register, nobody to investigate, and no
+  // kingdom audience — skip the whole tick (including event gathering).
+  let online = [];
+  try {
+    online = onlineCitizens(director);
+  } catch { /* roster unreadable — skip */ }
+  if (!online.length) return;
+
   // 1. Register reporters from online citizens.
   try {
-    for (const record of onlineCitizens(director)) {
+    for (const record of online) {
       try {
         if (!looksLikeReporter(record)) continue;
         const kid = kingdomIdOf(record);
@@ -217,7 +247,7 @@ function tickPress(director, nowMs) {
 
   // 3. Journalists investigate: claim unclaimed events, file stories.
   try {
-    for (const record of onlineCitizens(director)) {
+    for (const record of online) {
       try {
         const name = record.username ?? record.name;
         if (!name || !Press.isJournalist(name)) continue;
@@ -247,7 +277,7 @@ function tickPress(director, nowMs) {
   // 4. Special editions: major events or 3+ stories on one beat.
   try {
     const seenKingdoms = new Set();
-    for (const record of onlineCitizens(director)) {
+    for (const record of online) {
       const kid = kingdomIdOf(record);
       if (kid) seenKingdoms.add(String(kid).toLowerCase());
     }
@@ -273,25 +303,23 @@ function tickPress(director, nowMs) {
         for (const sub of Press.subscribersIn(kid)) {
           try { Press.recordRead(sub.username, res.id); } catch { /* skip */ }
         }
-        // Announce near real players.
+        // Announce near real players: find a newsboy bot first, then check
+        // for real players near the press via the canonical engine scan.
         const last = lastAnnounceByKingdom.get(kid) ?? 0;
         if (last > 0 && now - last < ANNOUNCE_COOLDOWN_MS) continue;
-        const press = Press.pressFor(kid);
-        if (!anyRealPlayerNear(director, press?.tile, 30)) continue;
-        const bot = (() => {
-          for (const record of onlineCitizens(director)) {
-            const b = botFor(director, record);
-            if (b) return b;
-          }
-          return null;
-        })();
-        if (bot) {
-          try {
-            const ed = res.edition;
-            sayPublic(bot, `Extra! Extra! Special edition — ${ed.storyIds.length} stories on ${ed.beat}. ${Press.SUBSCRIPTION_PRICE} coins a subscription!`);
-            lastAnnounceByKingdom.set(kid, now);
-          } catch { /* speech failed — skip */ }
+        let bot = null;
+        for (const record of online) {
+          bot = botFor(director, record);
+          if (bot) break;
         }
+        if (!bot) continue;
+        const press = Press.pressFor(kid);
+        if (!anyRealPlayerNear(bot, press?.tile, 30)) continue;
+        try {
+          const ed = res.edition;
+          sayPublic(bot, `Extra! Extra! Special edition — ${ed.storyIds.length} stories on ${ed.beat}. ${Press.SUBSCRIPTION_PRICE} coins a subscription!`);
+          lastAnnounceByKingdom.set(kid, now);
+        } catch { /* speech failed — skip */ }
       } catch { /* one bad kingdom never breaks the tick */ }
     }
   } catch { /* edition pass failed — skip */ }
