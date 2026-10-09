@@ -9,6 +9,24 @@ const SHOP_API_PATH = path.resolve(__dirname, "ShopApi.js");
 const STORE_PATH = path.resolve(__dirname, "../citizens/shop/PlayerShopStore.js");
 const SHOPS_PATH = path.resolve(__dirname, "../citizens/shop/PlayerShops.js");
 const KINGDOMS_PATH = path.resolve(__dirname, "../kingdoms/KingdomStore.js");
+const AUTH_PATH = path.resolve(__dirname, "ContentApiAuth.js");
+
+// --- stub ContentApiAuth (P0 security fix) ----------------------------------
+// The test provides tokens via query params; stub validates against a test map.
+const testTokens = new Map(); // token -> player
+function stubModule(resolvedPath, exportsObj) {
+  const m = new (require("node:module").Module)(resolvedPath, module);
+  m.exports = exportsObj;
+  m.loaded = true;
+  require.cache[resolvedPath] = m;
+}
+stubModule(AUTH_PATH, {
+  setPluginApi: () => {},
+  requireAuth: (query) => {
+    const token = query.get("token");
+    return testTokens.get(token) || null;
+  },
+});
 
 // --- real store, in-memory only -------------------------------------------
 const Store = require(STORE_PATH);
@@ -24,12 +42,6 @@ Store.upsertStall({
 });
 
 // --- stub PlayerShops -------------------------------------------------------
-function stubModule(resolvedPath, exportsObj) {
-  const m = new (require("node:module").Module)(resolvedPath, module);
-  m.exports = exportsObj;
-  m.loaded = true;
-  require.cache[resolvedPath] = m;
-}
 
 const overlayOpened = [];
 const overlayClosed = [];
@@ -119,17 +131,19 @@ function query(params) {
 }
 
 // --- no player / unknown -----------------------------------------------------
-assert.deepEqual(query({}), { open: false });
-assert.deepEqual(query({ player: "Nobody" }), { open: false });
+assert.deepEqual(query({}), { open: false, error: "unauthorized" });
+assert.deepEqual(query({ token: "invalid" }), { open: false, error: "unauthorized" });
 
 // --- close action ------------------------------------------------------------
 const jon = makePlayer("Jon");
-assert.deepEqual(query({ player: "Jon", action: "close" }), { open: false });
+const jonToken = "test-token-jon";
+testTokens.set(jonToken, jon);
+assert.deepEqual(query({ token: jonToken, action: "close" }), { open: false });
 assert.deepEqual(overlayClosed, ["Jon"]);
 
 // --- board view ----------------------------------------------------------------
 overlayOpened.length = 0;
-let res = query({ player: "Jon", view: "board" });
+let res = query({ token: jonToken, view: "board" });
 assert.equal(res.open, true);
 assert.equal(res.view, "board");
 assert.equal(res.hasStall, true);
@@ -140,7 +154,7 @@ assert.equal(res.kingdoms.length, 1);
 assert.deepEqual(overlayOpened[0], { player: "Jon", view: "board", owner: null });
 
 // --- manage view ---------------------------------------------------------------
-res = query({ player: "Jon", view: "manage" });
+res = query({ token: jonToken, view: "manage" });
 assert.equal(res.open, true);
 assert.equal(res.view, "manage");
 assert.equal(res.wares.length, 1);
@@ -151,18 +165,20 @@ assert.equal(res.inventory[0].id, 526);
 assert.deepEqual(res.hireCandidates, ["Sue", "Bob"]);
 
 // --- buy mutation ---------------------------------------------------------------
-res = query({ player: "Jon", view: "browse", owner: "Jon", do: "buy", item: "526", qty: "2" });
+res = query({ token: jonToken, view: "browse", owner: "Jon", do: "buy", item: "526", qty: "2" });
 assert.equal(res.view, "browse");
 assert.equal(res.notice, "You buy 2 x Test Sword for 24 coins.");
 
 // --- browse invalid owner falls back to board ------------------------------------
-res = query({ player: "Jon", view: "browse", owner: "Nobody" });
+res = query({ token: jonToken, view: "browse", owner: "Nobody" });
 assert.equal(res.view, "board");
 assert.equal(res.notice, "That stall is gone.");
 
 // --- manage with no stall falls back to board --------------------------------------
 const amy = makePlayer("Amy");
-res = query({ player: "Amy", view: "manage" });
+const amyToken = "test-token-amy";
+testTokens.set(amyToken, amy);
+res = query({ token: amyToken, view: "manage" });
 assert.equal(res.view, "board");
 assert.equal(res.hasStall, false);
 

@@ -38,6 +38,7 @@
 const Store = require("../citizens/shop/PlayerShopStore");
 const PlayerShops = require("../citizens/shop/PlayerShops");
 const KingdomStore = require("../kingdoms/KingdomStore");
+const ContentApiAuth = require("./ContentApiAuth");
 
 const OVERLAY_OPEN_ATTRIBUTE = "shop:overlay-open";
 const COINS = 995;
@@ -302,10 +303,12 @@ function applyMutation(player, query) {
 
 function attach(api) {
   pluginApi = api;
+  ContentApiAuth.setPluginApi(api);
   console.info("[shop-api] registering shop-status endpoint");
   api.registerContentEndpoint("shop-status", (query) => {
-    const player = findPlayer(query.get("player"));
-    if (!player) return { open: false };
+    // P0 security fix: require per-session token auth instead of trusting ?player=
+    const player = ContentApiAuth.requireAuth(query);
+    if (!player) return { open: false, error: "unauthorized" };
 
     const action = String(query.get("action") ?? "").trim().toLowerCase();
     if (action === "close") {

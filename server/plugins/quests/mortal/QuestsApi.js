@@ -42,6 +42,7 @@ const QuestState = require("./QuestState");
 const FollowUps = require("./FollowUpQuests");
 const { substitute } = require("./QuestUtil");
 const { siteTileByKingdom } = require("../../citizens/brain/CitizenSites");
+const ContentApiAuth = require("../../interface/ContentApiAuth");
 
 let apiRef = null;
 let Items = null;
@@ -362,18 +363,12 @@ function attach(api) {
   apiRef = api;
   Items = api.core.ItemIdentifiers;
   Skill = api.core.Skill;
+  ContentApiAuth.setPluginApi(api);
   console.info("[quests-api] registering quests-status endpoint");
   api.registerContentEndpoint("quests-status", (query) => {
-    const username = (query.get("player") || "").trim();
-    let player = null;
-    if (username) {
-      try {
-        player = api.core.World.getPlayerByName(username) || null;
-      } catch {
-        player = null;
-      }
-    }
-    if (!player) return { quest: null };
+    // P0 security fix: require per-session token auth. Quest advancement is privileged.
+    const player = ContentApiAuth.requireAuth(query);
+    if (!player) return { quest: null, error: "unauthorized" };
 
     const quest = QuestState.activeQuest(player);
     const action = (query.get("action") || "").trim().toLowerCase();

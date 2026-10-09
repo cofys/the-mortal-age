@@ -1,5 +1,7 @@
 "use strict";
 
+const ContentApiAuth = require("./ContentApiAuth");
+
 /**
  * ExamineApi — HTTP data layer for the web client's examine overlay.
  *
@@ -188,9 +190,17 @@ function findPlayer(api, username) {
 
 function attach(api) {
   console.info("[examine-api] registering examine-status endpoint");
+  ContentApiAuth.setPluginApi(api);
   api.registerContentEndpoint("examine-status", (query) => {
-    const player = findPlayer(api, query.get("player"));
+    // P0 security fix: the close action requires auth; reads use token if present
+    // but examine sheets are public info (visible in-game via right-click).
     const action = (query.get("action") || "").trim().toLowerCase();
+    const player = action === "close"
+      ? ContentApiAuth.requireAuth(query)
+      : (ContentApiAuth.requireAuth(query) || findPlayer(api, query.get("player")));
+    if (action === "close" && !player) {
+      return { open: false, error: "unauthorized" };
+    }
 
     if (player && action === "close") {
       try {

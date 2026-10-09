@@ -36,6 +36,7 @@ const Data = require("./Data.Origins");
 const BgData = require("./Data.Backgrounds");
 const Selection = require("./Selection.Origins");
 const Backgrounds = require("./Backgrounds.Origins");
+const ContentApiAuth = require("../interface/ContentApiAuth");
 
 let apiRef = null;
 
@@ -280,16 +281,13 @@ function claimFullCharacter(player, originId, backgroundId, firstName, lastName,
 
 function attach(api) {
   apiRef = api;
+  ContentApiAuth.setPluginApi(api);
   console.info("[origins-api] registering origins-status endpoint");
   api.registerContentEndpoint("origins-status", (query) => {
-    const username = (query.get("player") || "").trim();
-    let player = null;
-    if (username) {
-      try {
-        player = api.core.World.getPlayerByName(username) || null;
-      } catch {
-        player = null;
-      }
+    // P0 security fix: require per-session token auth. Character reset is privileged.
+    const player = ContentApiAuth.requireAuth(query);
+    if (!player) {
+      return { error: "unauthorized", open: false };
     }
 
     // Failed-claim error for this request, surfaced in the payload so the

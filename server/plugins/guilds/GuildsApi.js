@@ -27,6 +27,7 @@
  */
 
 const Registry = require("./GuildRegistry");
+const ContentApiAuth = require("../interface/ContentApiAuth");
 
 let apiRef = null;
 
@@ -52,7 +53,6 @@ function err(message) {
 
 function handle(query) {
   const action = (query.get("action") || "").trim().toLowerCase();
-  const playerName = (query.get("player") || "").trim();
 
   if (action === "list") {
     return { guilds: Registry.listGuilds() };
@@ -65,6 +65,15 @@ function handle(query) {
     return { guild: Registry.guildSummary(g.id) };
   }
 
+  // P0 security fix: player-scoped reads and management actions require auth token.
+  // Public actions (list, info) above remain unauthenticated.
+  const player = ContentApiAuth.requireAuth(query);
+  if (!player) return err("Unauthorized: valid session token required.");
+
+  const playerName = (() => {
+    try { return player.getUsername?.() ?? ""; } catch { return ""; }
+  })();
+
   // Player-scoped reads.
   if (!action && playerName) {
     const g = Registry.memberGuild(playerName);
@@ -74,9 +83,7 @@ function handle(query) {
     };
   }
 
-  // Management actions need a player.
-  const player = playerName ? findPlayer(playerName) : null;
-  if (!player) return err("Player not found or not online.");
+  // Management actions need a player (already authenticated above).
 
   const displayOf = (p) => {
     try { return p.getUsername?.() ?? playerName; } catch { return playerName; }
@@ -167,6 +174,7 @@ function handle(query) {
 
 function attach(api) {
   apiRef = api;
+  ContentApiAuth.setPluginApi(api);
   console.info("[guilds-api] registering guilds endpoint");
   api.registerContentEndpoint("guilds", (query) => {
     try {

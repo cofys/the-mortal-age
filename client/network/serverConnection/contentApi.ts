@@ -33,10 +33,17 @@ export async function fetchContent(path: string): Promise<any> {
     }
     const base = getContentApiBase();
     if (!base) throw new Error("World content connection is unavailable");
+    // Include the session token for authenticated endpoints (P0 security fix).
+    // The token is issued by the server on login over the authenticated WebSocket.
+    let url = `${base}${path}`;
+    if (state.sessionToken) {
+        const sep = url.includes("?") ? "&" : "?";
+        url = `${url}${sep}token=${encodeURIComponent(state.sessionToken)}`;
+    }
     // A hung request must never stick a caller (e.g. the character-claim
     // "Begin Your Life" button) on a spinner forever — 15s then fail loud
     // so the UI can show the error and let the player retry.
-    const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!response.ok) throw new Error(`Content request failed: ${response.status}`);
     return response.json();
 }

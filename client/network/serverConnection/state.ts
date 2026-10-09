@@ -79,6 +79,7 @@ export const state = {
     sessionUsername: null as string | null,
     sessionPassword: null as string | null,
     sessionRevision: 0,
+    sessionToken: null as string | null,
     currentTick: 0,
     serverTickMs: 600,
     serverClockOffsetMs: 0,

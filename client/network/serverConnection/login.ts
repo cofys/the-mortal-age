@@ -145,6 +145,7 @@ export function suppressReconnection(): void {
     // Clear session credentials - user logged out intentionally
     state.sessionUsername = null;
     state.sessionPassword = null;
+    state.sessionToken = null;
     clearLoginConnectRetryTimer();
     try {
         const g: any = (typeof window !== "undefined" ? window : globalThis) as any;

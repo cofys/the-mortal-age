@@ -103,6 +103,7 @@ import {
 } from "../network/ServerConnection";
 import type { WorldEntityInfoPayload } from "../network/ServerConnection";
 import { sendSetHeading } from "../network/serverConnection/outgoing/movement";
+import { state as connectionState } from "../network/serverConnection/state";
 import type {
     CollectionLogServerPayload,
     HitsplatServerPayload,
@@ -3038,6 +3039,19 @@ export class OsrsClient {
         // Subscribe to chat messages to add to history and mark chatCycle for transmit
         try {
             this.unsubscribeChatMessages = subscribeChatMessages((msg) => {
+                // P0 security fix: intercept auth token sent over authenticated WebSocket.
+                // The server sends [AUTH-TOKEN]<token> on login; we capture it for API auth
+                // and suppress it from chat history so it's never visible.
+                try {
+                    const text = String(msg?.text ?? "");
+                    if (text.startsWith("[AUTH-TOKEN]")) {
+                        const token = text.slice("[AUTH-TOKEN]".length).trim();
+                        if (token) {
+                            connectionState.sessionToken = token;
+                        }
+                        return; // Do not add to chat history
+                    }
+                } catch {}
                 if (this.varManager?.getVarp(SPLIT_PRIVATE_CHAT_VARP) === 1) {
                     this.splitPrivateChatPlugin.addMessage(msg);
                 }

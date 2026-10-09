@@ -1,5 +1,7 @@
 "use strict";
 
+const ContentApiAuth = require("./ContentApiAuth");
+
 /**
  * NewspaperApi — HTTP data layer for the web client's newspaper overlay.
  *
@@ -42,10 +44,17 @@ function paperFor(edition) {
 
 function attach(api) {
   console.info("[newspaper-api] registering newspaper-status endpoint");
+  ContentApiAuth.setPluginApi(api);
   api.registerContentEndpoint("newspaper-status", (query) => {
     try {
-      const player = findPlayer(api, query.get("player"));
+      // P0 security fix: the close action requires auth; newspaper content is public.
       const action = (query.get("action") || "").trim().toLowerCase();
+      const player = action === "close"
+        ? ContentApiAuth.requireAuth(query)
+        : (ContentApiAuth.requireAuth(query) || findPlayer(api, query.get("player")));
+      if (action === "close" && !player) {
+        return { open: false, error: "unauthorized" };
+      }
 
       if (player && action === "close") {
         try { player.setAttribute(NEWSPAPER_OPEN_ATTRIBUTE, ""); }
