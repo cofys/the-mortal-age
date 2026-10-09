@@ -465,6 +465,27 @@
           "type": "citizenFletch"
         }
       ]
+    },
+    {
+      "id": "citizen_rc",
+      "mode": "citizen_rc",
+      "repeat": false,
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenRc"
+        }
+      ]
     }
   ]
 }

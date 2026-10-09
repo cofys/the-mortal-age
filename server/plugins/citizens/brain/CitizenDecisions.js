@@ -93,6 +93,7 @@ const ACT_CRAFT = "citizen_craft";
 const ACT_COOK = "citizen_cook";
 const ACT_HERB = "citizen_herb";
 const ACT_FLETCH = "citizen_fletch";
+const ACT_RC = "citizen_rc";
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
 const ACT_CHOP = "citizen_chop";
@@ -453,6 +454,52 @@ function fletchCount(player) {
   }
 }
 
+/**
+ * Essence the citizen could craft right now (inventory, else bank).
+ * Counts rune essence + pure essence — the runecrafting inputs.
+ */
+function essenceCount(player) {
+  try {
+    const Runecrafting = require("../../skills/Runecrafting.plugin");
+    const ids = Runecrafting?.ESSENCE_IDS;
+    if (!Array.isArray(ids) || !ids.length) return 0;
+    const inv = player?.getInventory?.();
+    const invAmount = (id) => {
+      try {
+        return inv?.getAmount?.(id) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    const bankAmount = (id) => {
+      let total = 0;
+      try {
+        for (let tab = 0; tab < 8; tab++) {
+          const bank = player?.getBank?.(tab);
+          if (!bank) continue;
+          const slot = bank.getSlotForItemId?.(id) ?? -1;
+          if (slot < 0) continue;
+          const stack = bank.getItems?.()[slot];
+          if (!stack || stack.getId?.() !== id) continue;
+          total += stack.getAmount?.() ?? 0;
+        }
+      } catch {
+        // treat as empty
+      }
+      return total;
+    };
+    // Inventory first (no trip needed), then bank.
+    let invTotal = 0;
+    for (const id of ids) invTotal += invAmount(id);
+    if (invTotal > 0) return invTotal;
+    let bankTotal = 0;
+    for (const id of ids) bankTotal += bankAmount(id);
+    return bankTotal;
+  } catch {
+    return 0;
+  }
+}
+
 /** Raw food the citizen could cook right now (inventory, else bank). */
 function rawFoodCount(player) {  try {
     const Cooking = require("../../skills/Cooking.plugin");
@@ -526,6 +573,7 @@ function snapshot(player) {
     rawFood: rawFoodCount(player),
     herbs: herbCount(player),
     fletchLogs: fletchCount(player),
+    essence: essenceCount(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -543,7 +591,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -623,6 +671,24 @@ function scoreActivity(activityId, snap) {
       else if (goalType === GOAL_SAVE_GOLD) s += 10;
       if (coins < 60) s += 10; // shafts sell steadily — a broke cutter grinds
       if (fletchLogs >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_RC: {
+      // Runecrafting: craft essence into runes for XP and coin. No essence
+      // anywhere, no altar trip. Runecrafting is station work — the citizen
+      // must travel to the altar — so it's picked up when there's a real
+      // stockpile to justify the journey. Runes sell well to mages and
+      // crafters, so broke traders grind them; the weary and hurt stay away.
+      if ((essence ?? 0) <= 0) return 4;
+      let s = 36 + industrious * 12;
+      if (goalType === GOAL_MASTER_TRADE) s += 14;
+      else if (goalType === GOAL_SAVE_GOLD) s += 10;
+      if (coins < 60) s += 10; // runes sell well — a broke crafter grinds
+      if (essence >= 14) s += 8; // a real stockpile to justify the altar trip
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1055,6 +1121,7 @@ module.exports = {
   ACT_COOK,
   ACT_HERB,
   ACT_FLETCH,
+  ACT_RC,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

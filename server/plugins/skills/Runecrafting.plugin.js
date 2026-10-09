@@ -346,13 +346,23 @@ function handleCraftRunes(event) {
   }
 
   const player = event.player;
+  craftRunesAtAltar(player, runeData);
+
+  event.handled = true;
+  return true;
+}
+
+/**
+ * Core runecrafting logic: craft all essence in inventory at the altar.
+ * Returns the number of essence crafted (0 if none).
+ */
+function craftRunesAtAltar(player, runeData) {
   const level = player.getSkillManager().getCurrentLevel(Skill.RUNECRAFTING);
   if (level < runeData.level) {
     player.sendMessage(
       `You need a Runecrafting level of at least ${runeData.level} to craft this.`
     );
-    event.handled = true;
-    return true;
+    return 0;
   }
 
   const essenceId = runeData.pureOnly
@@ -369,8 +379,7 @@ function handleCraftRunes(event) {
         ? "You need Pure essence to craft runes using this altar."
         : "You don't have any essence in your inventory."
     );
-    event.handled = true;
-    return true;
+    return 0;
   }
 
   const amountPerEssence = runeMultiplier(level, runeData);
@@ -398,8 +407,60 @@ function handleCraftRunes(event) {
     });
   }
 
-  event.handled = true;
-  return true;
+  return craftedEssence;
+}
+
+/**
+ * Bot entry point — craft runes for real Runecrafting XP, no interface clicking.
+ * Takes the altar object ID (from RUNES_BY_ALTAR_ID keys) and crafts all
+ * essence in the player's inventory. Same shape as upstream Smelt.js and our
+ * Crafting startBotCrafting: the brain calls this once, the work happens
+ * synchronously (runecrafting crafts the full inventory per altar visit).
+ * Returns the number of essence crafted (0 if none).
+ */
+function startBotRunecrafting(player, altarObjectId) {
+  if (!player) return 0;
+  const runeData = RUNES_BY_ALTAR_ID?.get(altarObjectId);
+  if (!runeData) return 0;
+  try {
+    return craftRunesAtAltar(player, runeData);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Runecrafting crafts the full inventory synchronously per altar visit —
+ * there's no ongoing session to track. Always returns false; the brain
+ * action re-decides after each craft.
+ */
+function isRunecraftingActive(player) {
+  return false;
+}
+
+/**
+ * Best altar for the player's level: highest-level altar at or under their
+ * Runecrafting level. Returns { objectId, runeData } or null.
+ */
+function findBestAltar(player) {
+  let level = 1;
+  try {
+    level = player.getSkillManager?.().getCurrentLevel(Skill.RUNECRAFTING) ?? 1;
+  } catch {
+    level = 1;
+  }
+  let best = null;
+  try {
+    for (const [objectId, runeData] of RUNES_BY_ALTAR_ID ?? []) {
+      if ((runeData?.level ?? 99) > level) continue;
+      if (!best || (runeData.level ?? 0) > (best.runeData.level ?? 0)) {
+        best = { objectId, runeData };
+      }
+    }
+  } catch {
+    return null;
+  }
+  return best;
 }
 
 function locateDirection(player, ruinX, ruinY) {
@@ -526,6 +587,23 @@ function handleEnterRift(event) {
 
 module.exports = {
   name: "Runecrafting",
+  startBotRunecrafting,
+  isRunecraftingActive,
+  findBestAltar,
+  // Exposed for the citizen decision layer (essence counting).
+  get RUNES_BY_ALTAR_ID() {
+    return RUNES_BY_ALTAR_ID;
+  },
+  get ALTAR_DESTINATIONS() {
+    return ALTAR_DESTINATIONS;
+  },
+  get ESSENCE_IDS() {
+    try {
+      return [ItemIdentifiers.RUNE_ESSENCE, ItemIdentifiers.PURE_ESSENCE];
+    } catch {
+      return [];
+    }
+  },
   register(api) {
     initialize(api);
 
