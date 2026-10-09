@@ -35,11 +35,13 @@ function mockDirector() {
 }
 
 function mockPlayer(coins) {
+  // Canonical engine inventory shapes (getAmount/deleteNumber/adds) — the
+  // stale add(id, n)/remove(id, n) shapes don't exist on the real engine.
   const inv = {
     coins,
     getAmount(id) { return id === 995 ? this.coins : 0; },
-    add(id, n) { if (id === 995) this.coins += n; },
-    remove(id, n) { if (id === 995 && this.coins >= n) { this.coins -= n; return true; } return false; },
+    adds(id, n) { if (id === 995 && n > 0) this.coins += n; },
+    deleteNumber(id, n) { if (id === 995 && n > 0) this.coins = Math.max(0, this.coins - n); },
   };
   return { username: "TestCitizen", getInventory: () => inv, _inv: inv };
 }

@@ -621,9 +621,31 @@ function distributeBequest(director, heirs, pool, deceasedName) {
         const rec = recordOf(director, heir);
         const bot = rec ? botOf(director, rec) : null;
         if (bot) {
-          const inv = bot.getInventory?.();
-          inv?.add?.(COINS, perHeir);
-          journalEvent(heir, `Inherited ${perHeir} coins from ${deceasedName}.`, "family");
+          // Verified credit: add(id, n) throws on the real engine (add takes
+          // an Item instance), and the estate pool was already debited — an
+          // unchecked credit vanishes the inheritance. On failure, accrue
+          // like the offline path so the heir is paid on materialize.
+          let paid = false;
+          try {
+            const inv = bot.getInventory?.();
+            if (inv && typeof inv.adds === "function") {
+              const before = inv.getAmount?.(COINS) ?? 0;
+              inv.adds(COINS, perHeir);
+              paid = (inv.getAmount?.(COINS) ?? 0) === before + perHeir;
+            }
+          } catch { paid = false; }
+          if (paid) {
+            journalEvent(heir, `Inherited ${perHeir} coins from ${deceasedName}.`, "family");
+          } else {
+            try {
+              const Careers = require("./CitizenCareers");
+              const rec2 = Careers.careerFor?.(heir);
+              if (rec2) rec2.savings = (rec2.savings ?? 0) + perHeir;
+            } catch {
+              // Fall through to the journal note.
+            }
+            journalEvent(heir, `Inherited ${perHeir} coins from ${deceasedName} (held until they return).`, "family");
+          }
         } else {
           // Offline — accrue like career savings.
           try {

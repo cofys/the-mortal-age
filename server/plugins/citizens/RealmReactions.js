@@ -202,10 +202,27 @@ function onWageDay(event) {
     }
   });
   for (const guard of guards) {
+    // Verified credit: add(id, n) throws on the real engine (add takes an Item
+    // instance), so the old unchecked call let wages vanish after the treasury
+    // was already debited. A failed credit is refunded to the treasury so the
+    // coins never disappear mid-payday.
+    let paid = false;
     try {
-      guard.getInventory?.()?.add?.(COINS_ID, perGuard);
+      const inv = guard.getInventory?.();
+      if (inv && typeof inv.adds === "function") {
+        const before = inv.getAmount?.(COINS_ID) ?? 0;
+        inv.adds(COINS_ID, perGuard);
+        paid = (inv.getAmount?.(COINS_ID) ?? 0) === before + perGuard;
+      }
     } catch {
       // One missed payday doesn't stop the rest.
+    }
+    if (!paid) {
+      try {
+        if (typeof KingdomStore.grantTax === "function") KingdomStore.grantTax(kingdomId, perGuard);
+      } catch { /* treasury refund is best-effort */ }
+      addMood(guard, -10); // stiffed on payday
+      continue;
     }
     addMood(guard, 6); // payday feels good
     // Spend some of it on food: two loaves from a bread merchant, one
