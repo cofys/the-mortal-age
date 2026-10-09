@@ -549,7 +549,49 @@ function onLevelUpHeard(event) {
 
 function onDeathSeen(event) {
   onPlayerDeathNotice(event);
+  if (onMilitiaDeathSeen(event)) return; // war dead get funerals, not respawns
   recordCitizenDeathSeen(event);
+}
+
+/**
+ * A militia citizen fell in battle: permanent death with full funeral rites.
+ * War has real casualties — the fallen don't respawn at the hearth. The
+ * funeral system (CitizenFunerals.recordDeath) handles mourning, burial,
+ * obituaries, and roster removal. Returns true if handled.
+ */
+function onMilitiaDeathSeen(event) {
+  try {
+    const player = event?.player;
+    if (!isCitizenBot(player)) return false;
+    const username = player?.getUsername?.();
+    if (!username) return false;
+    const Militia = require("../kingdoms/Militia.Kingdoms");
+    if (!Militia.isMilitia(username)) return false;
+    const director = getDirector();
+    if (!director?.roster) return false;
+    const record = director.roster.get(username.toLowerCase().trim());
+    if (!record) return false;
+    const rec = Militia.militiaOf(username);
+    const kingdomId = rec?.kingdomId ?? record.kingdomId;
+    let kingdomName = String(kingdomId);
+    try {
+      const k = require("../kingdoms/KingdomStore").getKingdom(kingdomId);
+      if (k?.name) kingdomName = k.name;
+    } catch {
+      // Name is cosmetic.
+    }
+    const cause =
+      rec?.side === "attacker"
+        ? `fell in battle attacking for ${kingdomName}`
+        : `fell in battle defending ${kingdomName}`;
+    const { recordDeath } = require("./lib/CitizenFunerals");
+    recordDeath(director, record, cause, Date.now());
+    Militia.discharge(username, kingdomId);
+    Militia.recordDeath(kingdomId);
+    return true;
+  } catch {
+    return false; // fall through to normal death handling
+  }
 }
 
 /**
@@ -572,6 +614,32 @@ function recordCitizenDeathSeen(event) {
 /** A monster died in view of the street: citizens react to the fight. */
 function onKillWitnessed(event) {
   onNpcKillWitnessed(event);
+  onMilitiaKillSeen(event);
+}
+
+/**
+ * A militia citizen killed an enemy: record it for the war tally.
+ * Militia kills feed siege power (every 10 kills = +1 power).
+ */
+function onMilitiaKillSeen(event) {
+  try {
+    const killer = event?.killer;
+    const npc = event?.npc;
+    if (!killer || !npc) return;
+    if (!isCitizenBot(killer)) return;
+    const username = killer.getUsername?.();
+    if (!username) return;
+    const Militia = require("../kingdoms/Militia.Kingdoms");
+    const rec = Militia.militiaOf(username);
+    if (!rec) return;
+    // Only count war raiders and enemy-tagged NPCs.
+    const raider = npc.warRaider;
+    const npcKingdom = npc.getAttribute?.("kingdom:id");
+    if (!raider && !npcKingdom) return;
+    Militia.recordKill(rec.kingdomId);
+  } catch {
+    // Non-fatal.
+  }
 }
 
 /** A player logged out within earshot: the street bids them farewell. */

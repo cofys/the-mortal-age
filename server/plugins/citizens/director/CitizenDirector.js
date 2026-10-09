@@ -54,6 +54,7 @@ const CitizenFavors = require("../lib/CitizenFavors");
 const ActivityParties = require("../lib/CitizenActivityParties");
 const BossRuns = require("../lib/CitizenBossRuns");
 const CitizenWarfare = require("../lib/CitizenWarfare");
+const Militia = require("../../kingdoms/Militia.Kingdoms");
 const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
@@ -2172,6 +2173,13 @@ class CitizenDirector {
       CitizenWarfare.tickWarfare(this, hour);
     } catch (error) {
       this.log("warfare failed", { error: String(error?.message ?? error) });
+    }
+    // Combat militia: volunteers take up real arms and fight real battles.
+    // Recruitment, muster, and discharge. Zero LLM, real combat engine.
+    try {
+      Militia.tickMilitia(this, this.api);
+    } catch (error) {
+      this.log("militia failed", { error: String(error?.message ?? error) });
     }
     // Expeditionary warfare: citizen armies rally, march to the border,
     // fight journaled battles with real casualties, and march home.

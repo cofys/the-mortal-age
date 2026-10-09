@@ -173,9 +173,12 @@ function quartermasterPayload(kingdomId) {
 
 function marshalPayload(kingdomId) {
   const order = OfficeTools.getPatrolOrder(kingdomId);
+  const Militia = require("./Militia.Kingdoms");
   return {
     garrison: Tension.garrisonOf(kingdomId),
     treasury: Store.getKingdom(kingdomId)?.treasury ?? 0,
+    militiaOrders: Militia.getOrders(kingdomId),
+    militiaCount: Militia.militiaCount(kingdomId),
     patrolOrder: order
       ? {
           target: order.target,
@@ -397,6 +400,25 @@ function runOfficeAction(api, player, action, query) {
       if (kindGate) return kindGate;
       OfficeTools.clearPatrolOrder(office.kingdomId);
       return describeAction(action, true, "The patrols stand down.");
+    }
+    case "set-militia-orders": {
+      const { ok, office } = checkHolder(player, officeId);
+      if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "marshal");
+      if (kindGate) return kindGate;
+      const order = (query.get("order") || "").trim().toLowerCase();
+      const Militia = require("./Militia.Kingdoms");
+      const result = Militia.setOrders(office.kingdomId, order, username);
+      if (!result.ok) {
+        return describeAction(action, false, "Orders are attack, defend, or fallback.");
+      }
+      const label =
+        order === "attack"
+          ? "The militia marches to meet the enemy."
+          : order === "defend"
+            ? "The militia holds the walls."
+            : "The militia falls back to the muster point.";
+      return describeAction(action, true, label);
     }
     case "set-war-levy": {
       const { ok, office } = checkHolder(player, officeId);

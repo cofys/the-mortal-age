@@ -280,8 +280,26 @@ function tickSiege(defenderKingdomId, store) {
   const defMorale = WarSupply.moraleOf(siege.defenderKingdomId, warKey);
   siege.attackerMorale = Math.round(atkMorale * 100) / 100;
   siege.defenderMorale = Math.round(defMorale * 100) / 100;
-  const atk = Math.max(1, Math.round(atkBase * atkMorale));
+  let atk = Math.max(1, Math.round(atkBase * atkMorale));
   let def = Math.max(1, Math.round(defenderPower(defenderCastle) * defMorale));
+  // Militia: citizens fighting in the siege shift the balance. Attacker
+  // militia kills boost the assault; defender militia kills stiffen the
+  // walls. Real combat, real consequences.
+  try {
+    const Militia = require("./Militia.Kingdoms");
+    const atkBonus = Militia.militiaSiegeBonus(siege.attackerKingdomId);
+    const defBonus = Militia.militiaSiegeBonus(defenderKingdomId);
+    if (atkBonus > 0) {
+      atk = Math.max(1, atk + atkBonus);
+      siege.militiaAtkBonus = atkBonus;
+    }
+    if (defBonus > 0) {
+      def = Math.max(1, def + defBonus);
+      siege.militiaDefBonus = defBonus;
+    }
+  } catch {
+    // Militia module unavailable: no bonus.
+  }
   // Phase 10: a defender mid-succession-crisis answers to rival claimants,
   // not one crown — the walls hold less well.
   try {

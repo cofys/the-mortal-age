@@ -54,6 +54,8 @@ const ACTIVITY_TAVERN_SOCIAL = "tavern_social";
 const ACTIVITY_LEISURE_STROLL = "leisure_stroll";
 const ACTIVITY_PRIME_MERCHANT = "prime_merchant";
 const ACTIVITY_REFUGEE_FLIGHT = "refugee_flight";
+const ACTIVITY_MILITIA_DUTY = "militia_duty";
+const ATTR_CITIZEN_MILITIA = "citizens:militia";
 // The flight route: waypoint tiles from the border town to the safe city,
 // set on the bot by WarRefugees at spawn. The war key owns cleanup.
 const ATTR_REFUGEE_ROUTE = "citizens:refugee-route";
@@ -117,6 +119,8 @@ module.exports = {
   ACTIVITY_LEISURE_STROLL,
   ACTIVITY_PRIME_MERCHANT,
   ACTIVITY_REFUGEE_FLIGHT,
+  ACTIVITY_MILITIA_DUTY,
+  ATTR_CITIZEN_MILITIA,
   ATTR_REFUGEE_ROUTE,
   ATTR_REFUGEE_WAR,
   ROLE_ACTIVITY,

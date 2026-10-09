@@ -96,6 +96,7 @@ module.exports = {
     loadContentModule("./WarTable.Kingdoms")(api);
     loadContentModule("./WarTableApi")(api);
     loadContentModule("./WarSupply.Kingdoms")(api);
+    loadContentModule("./Militia.Kingdoms")(api);
     loadContentModule("./MyKingdom.Kingdoms")(api);
     loadContentModule("./MyKingdomApi")(api);
     loadContentModule("./OfficeDashboardApi")(api);

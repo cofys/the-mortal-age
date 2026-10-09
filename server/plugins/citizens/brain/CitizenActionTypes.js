@@ -30,6 +30,7 @@ const { createCitizenFletchAction } = require("./actions/CitizenFletch");
 const { createCitizenRcAction } = require("./actions/CitizenRc");
 const { createCitizenAgilityAction } = require("./actions/CitizenAgility");
 const { createCitizenSlayerAction } = require("./actions/CitizenSlayer");
+const { createCitizenMilitiaAction } = require("./actions/CitizenMilitia");
 const { createCitizenHuntAction } = require("./actions/CitizenHunt");
 const { createCitizenFarmAction } = require("./actions/CitizenFarm");
 const { createCitizenThieveAction } = require("./actions/CitizenThieve");
@@ -159,6 +160,7 @@ function registerCitizenActionTypes() {
   registerBotActionType("citizenRc", createCitizenRcAction);
   registerBotActionType("citizenAgility", createCitizenAgilityAction);
   registerBotActionType("citizenSlayer", createCitizenSlayerAction);
+  registerBotActionType("militiaDuty", createCitizenMilitiaAction);
   registerBotActionType("citizenHunt", createCitizenHuntAction);
   registerBotActionType("citizenFarm", createCitizenFarmAction);
   registerBotActionType("citizenThieve", createCitizenThieveAction);
