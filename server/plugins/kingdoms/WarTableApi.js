@@ -39,6 +39,8 @@ const Castle = require("./Castle.Kingdoms");
 const Siege = require("./Siege.Kingdoms");
 const Relations = require("./Relations.Kingdoms");
 const Wars = require("./Wars.Kingdoms");
+const Coalitions = require("./Coalitions.Kingdoms");
+const AiDiplomacy = require("./AiDiplomacy.Kingdoms");
 
 const WARTABLE_OPEN_ATTRIBUTE = "wartable:open";
 
@@ -107,6 +109,9 @@ function kingdomPayload(k, homeId) {
   payload.atWar = Store.getActiveWars().some(
     (w) => w.attackerId === k.id || w.defenderId === k.id
   );
+  // Coalition membership, so the war table can draw the realm's blocs.
+  const coalition = Coalitions.coalitionOf(k.id, Store);
+  payload.coalition = coalition ? { key: coalition.key, name: coalition.name } : null;
   return payload;
 }
 
@@ -206,6 +211,21 @@ function statusPayload(player) {
       since: r.since ?? null,
     }));
 
+  // Coalitions of the realm: every league of three or more crowns, with
+  // named members — drawn from the live alliance graph.
+  const coalitions = Coalitions.coalitionsOf(Store).map((c) => ({
+    key: c.key,
+    name: c.name,
+    members: c.members.map((id) => ({ id, name: kingdomName(id) })),
+    pactCount: c.pactCount,
+    totalStrength: c.totalStrength,
+    formedAt: c.formedAt ?? null,
+  }));
+
+  // Calls to arms: allies of each war's defender and where their
+  // deliberation stands (deliberating / joined / absent / refused).
+  const defenseCalls = AiDiplomacy.getDefenseCalls(Store);
+
   // Home-kingdom war room: castle, vassalage, pending peace offers, wars.
   let homeDetail = null;
   if (homeId) {
@@ -248,6 +268,8 @@ function statusPayload(player) {
     relations,
     sieges,
     vassalage,
+    coalitions,
+    defenseCalls,
     homeDetail,
   };
 }

@@ -379,3 +379,172 @@ describe("considerBetrayals", () => {
     assert.equal(store.load().alliances[0].betrayalRisk, 0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 8: coalitions
+// ---------------------------------------------------------------------------
+
+describe("considerCoalitionPacts", () => {
+  let A, B, C, store;
+  beforeEach(() => {
+    A = idFor("steadfast");
+    B = idFor("cautious", [A]);
+    C = idFor("steadfast", [A, B]);
+    store = mockStore([A, B, C]);
+    for (const id of [A, B, C]) giveCastle(store, id, 20_000_000);
+    addAlliance(store, A, B);
+    addAlliance(store, B, C);
+    setTension(store, A, C, 30); // inside the relaxed friend-of-friend bar
+  });
+
+  it("seals the triangle between friends of friends", () => {
+    const events = AiDiplomacy.councilDiplomacyTick(store, { rng: always });
+    const pacts = events.filter((e) => e.type === "pact-formed");
+    const triangle = pacts.find(
+      (e) =>
+        [e.a, e.b].sort().join(":") === [A, C].sort().join(":") && e.viaAlly === B
+    );
+    assert.ok(triangle, "expected the A-C triangle pact to form");
+  });
+
+  it("announces the coalition when the triangle closes", () => {
+    const events = AiDiplomacy.councilDiplomacyTick(store, { rng: always });
+    const formed = events.filter((e) => e.type === "coalition-formed");
+    assert.equal(formed.length, 1);
+    assert.deepEqual(formed[0].coalition.members.sort(), [A, B, C].sort());
+    assert.ok(formed[0].coalition.name);
+  });
+
+  it("does not seal when tension exceeds the relaxed bar", () => {
+    setTension(store, A, C, 60); // above 40 + 15
+    const events = AiDiplomacy.councilDiplomacyTick(store, { rng: always });
+    const triangle = events
+      .filter((e) => e.type === "pact-formed")
+      .find((e) => [e.a, e.b].sort().join(":") === [A, C].sort().join(":"));
+    assert.equal(triangle, undefined);
+  });
+
+  it("two aggressive courts sign nothing, even through a friend", () => {
+    const G1 = idFor("aggressive");
+    const G2 = idFor("aggressive", [G1]);
+    const F = idFor("steadfast", [G1, G2]);
+    const s2 = mockStore([G1, G2, F]);
+    for (const id of [G1, G2, F]) giveCastle(s2, id, 20_000_000);
+    addAlliance(s2, G1, F);
+    addAlliance(s2, F, G2);
+    setTension(s2, G1, G2, 10);
+    const events = AiDiplomacy.councilDiplomacyTick(s2, { rng: always });
+    const triangle = events
+      .filter((e) => e.type === "pact-formed")
+      .find((e) => [e.a, e.b].sort().join(":") === [G1, G2].sort().join(":"));
+    assert.equal(triangle, undefined);
+  });
+});
+
+describe("coalition loyalty", () => {
+  it("allies in the same coalition are more loyal", () => {
+    const A = idFor("steadfast");
+    const B = idFor("steadfast", [A]);
+    const C = idFor("steadfast", [A, B]);
+    const X = idFor("aggressive", [A, B, C]);
+    const store = mockStore([A, B, C, X]);
+    for (const id of [A, B, C, X]) giveCastle(store, id, 20_000_000);
+    addAlliance(store, A, B);
+    addAlliance(store, B, C);
+    addAlliance(store, A, C); // the triangle: one coalition
+    addWar(store, X, A);
+    const loyal = AiDiplomacy.loyaltyOf(B, A, X, store);
+
+    const store2 = mockStore([A, B, C, X]);
+    for (const id of [A, B, C, X]) giveCastle(store2, id, 20_000_000);
+    addAlliance(store2, A, B); // B allies A but no coalition
+    addWar(store2, X, A);
+    const plain = AiDiplomacy.loyaltyOf(B, A, X, store2);
+
+    assert.ok(loyal > plain, `coalition loyalty ${loyal} should exceed ${plain}`);
+    assert.ok(Math.abs(loyal - plain - 0.1) < 1e-9);
+  });
+});
+
+describe("considerCoalitionPeace", () => {
+  it("coalition partners follow a bloc peace offer", () => {
+    const A = idFor("steadfast");
+    const M = idFor("steadfast", [A]);
+    const B = idFor("cautious", [A, M]);
+    const X = idFor("aggressive", [A, M, B]);
+    const store = mockStore([A, M, B, X]);
+    for (const id of [A, M, B, X]) giveCastle(store, id, 20_000_000);
+    addAlliance(store, A, B);
+    addAlliance(store, B, M);
+    addAlliance(store, A, M); // one coalition: A, B, M
+    addWar(store, A, X);
+    addWar(store, M, X);
+    // A puts white-peace terms on the table with X.
+    const offered = Wars.offerPeaceAi(A, X, { type: "white-peace" }, store);
+    assert.ok(offered.ok);
+
+    const events = AiDiplomacy.councilDiplomacyTick(store, { rng: always });
+    const bloc = events.filter((e) => e.type === "bloc-peace-offer");
+    assert.equal(bloc.length, 1);
+    assert.equal(bloc[0].by, M);
+    assert.equal(bloc[0].enemy, X);
+    assert.equal(bloc[0].via, A);
+    // And M's offer is really on the table now.
+    const offers = Wars.getPeaceOffers(M, store);
+    assert.ok(offers.some((o) => o.terms?.type === "white-peace"));
+  });
+
+  it("no bloc offer without a member's terms on the table", () => {
+    const A = idFor("steadfast");
+    const M = idFor("steadfast", [A]);
+    const B = idFor("cautious", [A, M]);
+    const X = idFor("aggressive", [A, M, B]);
+    const store = mockStore([A, M, B, X]);
+    for (const id of [A, M, B, X]) giveCastle(store, id, 20_000_000);
+    addAlliance(store, A, B);
+    addAlliance(store, B, M);
+    addAlliance(store, A, M);
+    addWar(store, M, X);
+    const events = AiDiplomacy.councilDiplomacyTick(store, { rng: always });
+    assert.deepEqual(
+      events.filter((e) => e.type === "bloc-peace-offer"),
+      []
+    );
+  });
+});
+
+describe("getDefenseCalls", () => {
+  it("reports allies still deliberating", () => {
+    const A = idFor("steadfast");
+    const B = idFor("cautious", [A]);
+    const X = idFor("aggressive", [A, B]);
+    const store = mockStore([A, B, X]);
+    for (const id of [A, B, X]) giveCastle(store, id, 20_000_000);
+    addAlliance(store, A, B);
+    addWar(store, X, A);
+    // No tick yet: the call is unanswered — B deliberates.
+    const summary = AiDiplomacy.getDefenseCalls(store);
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].attackerId, X);
+    assert.equal(summary[0].defenderId, A);
+    assert.deepEqual(
+      summary[0].calls.map((c) => [c.allyId, c.status]),
+      [[B, "deliberating"]]
+    );
+  });
+
+  it("reports a joined ally after the call is answered", () => {
+    const A = idFor("steadfast");
+    const B = idFor("steadfast", [A]);
+    const X = idFor("cautious", [A, B]);
+    const store = mockStore([A, B, X]);
+    for (const id of [A, B, X]) giveCastle(store, id, 20_000_000);
+    addAlliance(store, A, B);
+    addWar(store, X, A);
+    AiDiplomacy.councilDiplomacyTick(store, { rng: always });
+    const summary = AiDiplomacy.getDefenseCalls(store);
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].calls[0].allyId, B);
+    assert.equal(summary[0].calls[0].status, "joined");
+  });
+});

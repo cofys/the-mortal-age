@@ -21,6 +21,40 @@ interface KingdomInfo {
     underSiege: boolean;
     besiegingCount: number;
     atWar: boolean;
+    coalition: CoalitionRef | null;
+}
+
+interface CoalitionRef {
+    key: string;
+    name: string;
+}
+
+interface CoalitionMember {
+    id: string;
+    name: string;
+}
+
+interface CoalitionInfo {
+    key: string;
+    name: string;
+    members: CoalitionMember[];
+    pactCount: number;
+    totalStrength: number;
+    formedAt: number | null;
+}
+
+interface DefenseCallEntry {
+    allyId: string;
+    allyName: string;
+    status: "deliberating" | "joined" | "absent" | "refused";
+}
+
+interface DefenseCallInfo {
+    attackerId: string;
+    defenderId: string;
+    attackerName: string;
+    defenderName: string;
+    calls: DefenseCallEntry[];
 }
 
 interface WarInfo {
@@ -142,6 +176,8 @@ interface WarTableStatus {
     relations: RelationInfo[];
     sieges: SiegeInfo[];
     vassalage: VassalageInfo[];
+    coalitions: CoalitionInfo[];
+    defenseCalls: DefenseCallInfo[];
     homeDetail: HomeDetail | null;
     actionResult?: ActionResult;
 }
@@ -516,6 +552,36 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                                         ))}
                                 </div>
                             )}
+                            <h2 className="tma-wartable-section-title">Coalitions of the Realm</h2>
+                            {(status.coalitions ?? []).length === 0 ? (
+                                <p className="tma-wartable-empty">
+                                    No leagues formed — pacts stand alone, for now.
+                                </p>
+                            ) : (
+                                <div className="tma-wartable-cards">
+                                    {(status.coalitions ?? []).map((c) => (
+                                        <div key={c.key} className="tma-wartable-card">
+                                            <div className="tma-wartable-card-title">
+                                                🤝 {c.name}
+                                            </div>
+                                            <div className="tma-wartable-card-sub">
+                                                {c.members.map((m) => m.name).join(" · ")}
+                                            </div>
+                                            <div className="tma-wartable-card-row">
+                                                <span className="tma-wartable-muted">
+                                                    {c.pactCount} pact{c.pactCount === 1 ? "" : "s"}
+                                                </span>
+                                                <StrengthPips strength={Math.min(5, Math.max(1, Math.round(c.totalStrength / Math.max(1, c.pactCount))))} />
+                                            </div>
+                                            {c.formedAt && (
+                                                <div className="tma-wartable-card-sub">
+                                                    Rose {fmtDate(c.formedAt)}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             <h2 className="tma-wartable-section-title">Battle Lines</h2>
                             <div className="tma-wartable-cards">
                                 {status.kingdoms.map((k) => {
@@ -535,6 +601,11 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                                                     <span className="tma-wartable-home-tag"> · HOME</span>
                                                 )}
                                             </div>
+                                            {k.coalition && (
+                                                <div className="tma-wartable-card-sub">
+                                                    🤝 {k.coalition.name}
+                                                </div>
+                                            )}
                                             {k.vassalOfName && (
                                                 <div className="tma-wartable-card-sub">
                                                     Sworn to {k.vassalOfName}
@@ -749,6 +820,52 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                                             <div className="tma-wartable-card-sub">
                                                 Declared {fmtDate(w.declaredAt)}
                                             </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <h2 className="tma-wartable-section-title">Calls to Arms</h2>
+                            {(status.defenseCalls ?? []).length === 0 ? (
+                                <p className="tma-wartable-empty">
+                                    No allies to call upon — or none being called.
+                                </p>
+                            ) : (
+                                <div className="tma-wartable-cards">
+                                    {(status.defenseCalls ?? []).map((d, i) => (
+                                        <div key={`${d.attackerId}-${d.defenderId}-${i}`} className="tma-wartable-card">
+                                            <div className="tma-wartable-card-title">
+                                                {d.attackerName} ⚔ {d.defenderName}
+                                            </div>
+                                            {d.calls.map((c) => {
+                                                const label =
+                                                    c.status === "deliberating"
+                                                        ? "deliberates…"
+                                                        : c.status === "joined"
+                                                          ? "marches to the defense!"
+                                                          : c.status === "absent"
+                                                            ? "could not answer — its own war consumes every blade"
+                                                            : "REFUSED — betrayal!";
+                                                const color =
+                                                    c.status === "deliberating"
+                                                        ? "#c9a227"
+                                                        : c.status === "joined"
+                                                          ? "#4d9e4d"
+                                                          : c.status === "absent"
+                                                            ? "#8a8a8a"
+                                                            : "#d43a2a";
+                                                return (
+                                                    <div key={c.allyId} className="tma-wartable-card-row">
+                                                        <span>{c.allyName}</span>
+                                                        <span
+                                                            className="tma-wartable-badge"
+                                                            style={{ borderColor: color, color }}
+                                                        >
+                                                            {label}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     ))}
                                 </div>

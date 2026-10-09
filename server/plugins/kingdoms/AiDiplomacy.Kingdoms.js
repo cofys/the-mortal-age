@@ -35,6 +35,7 @@ const Siege = require("./Siege.Kingdoms");
 const Wars = require("./Wars.Kingdoms");
 const Relations = require("./Relations.Kingdoms");
 const AiWarfare = require("./AiWarfare.Kingdoms");
+const Coalitions = require("./Coalitions.Kingdoms");
 
 // ---------------------------------------------------------------------------
 // Tuning
@@ -98,6 +99,16 @@ const BETRAYAL_SIEGE_PROGRESS = 60;
 const PACT_UPKEEP_CHANCE = 0.1;
 const PACT_UPKEEP_MIN_CHEST = 10_000_000;
 const PACT_UPKEEP_MAX_TENSION = 20;
+
+/** Friends of friends trust each other: relaxed tension bar for triad pacts. */
+const COALITION_PACT_TENSION_BONUS = 15;
+/** Per-tick chance a friend-of-friend pair seals the triangle. */
+const COALITION_PACT_CHANCE = 0.25;
+/** Blocs fight as blocs: loyalty bonus when the ally shares the coalition. */
+const COALITION_LOYALTY_BONUS = 0.1;
+/** Per-tick chance a coalition member follows a bloc peace offer. */
+const BLOC_PEACE_CHANCE = 0.35;
+const BLOC_PEACE_STEADY_CHANCE = 0.5;
 
 /** Founding flags — fledgling claims sign no pacts. */
 const FLAG_FLEDGLING = "founding:fledgling";
@@ -386,6 +397,54 @@ function considerPactUpkeep(store, rng, events) {
   }
 }
 
+/** Kingdoms allied to the same third court: the classic triangle seed. */
+function commonAlly(a, c, store) {
+  const alliesA = new Set(alliesOf(a, store));
+  for (const b of alliesOf(c, store)) {
+    if (alliesA.has(b)) return b;
+  }
+  return null;
+}
+
+/**
+ * Coalitions grow one triangle at a time: when A and C share an ally B,
+ * they already trust each other by proxy — friends of friends sign with
+ * a relaxed border and a warm chance. This is how pairs become leagues.
+ */
+function considerCoalitionPacts(store, rng, events) {
+  const kingdoms = councilKingdoms(store);
+  for (const [a, c] of pairsOf(kingdoms)) {
+    if (isAllied(a, c, store) || atWarBetween(a, c, store)) continue;
+    if (vassalBound(a, c, store)) continue;
+    if (pactOnCooldown(a, c, store)) continue;
+    const via = commonAlly(a, c, store);
+    if (!via) continue;
+    if (tensionOf(a, c, store) > PACT_MAX_TENSION + COALITION_PACT_TENSION_BONUS) continue;
+
+    const tempA = temperamentOf(a);
+    const tempC = temperamentOf(c);
+    if (
+      tempA === AiWarfare.TEMPERAMENT_AGGRESSIVE &&
+      tempC === AiWarfare.TEMPERAMENT_AGGRESSIVE
+    ) {
+      continue; // two hungry courts sign nothing, even through a friend
+    }
+    let chance = COALITION_PACT_CHANCE;
+    if (tempA === AiWarfare.TEMPERAMENT_AGGRESSIVE || tempC === AiWarfare.TEMPERAMENT_AGGRESSIVE) {
+      chance *= AGGRESSIVE_PACT_MULT;
+    }
+    if (rng() >= chance) continue;
+
+    if (warChestOf(a, store) - PACT_EMBASSY_COST < WARCHEST_RESERVE) continue;
+    if (warChestOf(c, store) - PACT_EMBASSY_COST < WARCHEST_RESERVE) continue;
+    spendWarChest(a, PACT_EMBASSY_COST, store);
+    spendWarChest(c, PACT_EMBASSY_COST, store);
+
+    const pactName = pactNameFor(a, c, store, rng);
+    events.push({ type: "pact-formed", a, b: c, pactName, viaAlly: via });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Mutual defense — allies answer calls to arms
 // ---------------------------------------------------------------------------
@@ -395,6 +454,12 @@ function loyaltyOf(allyId, defenderId, attackerId, store) {
   let loyalty = LOYALTY_BASE[t] ?? 0.5;
   const rec = pactRecord(defenderId, allyId, store);
   loyalty += LOYALTY_PER_STRENGTH * ((rec?.strength ?? 1) - 1);
+  // Blocs fight as blocs: sharing a coalition steadies the marching feet.
+  const allyCoalition = Coalitions.coalitionOf(allyId, store);
+  const defenderCoalition = Coalitions.coalitionOf(defenderId, store);
+  if (allyCoalition && defenderCoalition && allyCoalition.key === defenderCoalition.key) {
+    loyalty += COALITION_LOYALTY_BONUS;
+  }
   if (tensionOf(allyId, attackerId, store) > HOT_ATTACKER_TENSION) {
     loyalty -= LOYALTY_HOT_ATTACKER_PENALTY;
   }
@@ -571,15 +636,63 @@ function considerBetrayalDrift(store) {
   }
 }
 
+/** A pending white-peace offer between two kingdoms, either direction. */
+function whitePeaceOfferBetween(a, b, store) {
+  return Wars.getPeaceOffers(a, store).find(
+    (o) =>
+      o &&
+      ((o.a === a && o.b === b) || (o.a === b && o.b === a)) &&
+      o.terms?.type === "white-peace"
+  );
+}
+
+/**
+ * Coalitions negotiate as a bloc: when one member has white-peace terms
+ * on the table with an enemy, its coalition partners fighting the same
+ * enemy lay the same terms. One table, one peace — the league ends its
+ * wars together.
+ */
+function considerCoalitionPeace(store, rng, events) {
+  for (const war of activeWars(store)) {
+    const { attackerId: m, defenderId: x } = war;
+    if (!m || !x) continue;
+    const coalition = Coalitions.coalitionOf(m, store);
+    if (!coalition) continue;
+    // Some other member already has terms on the table with this enemy.
+    let via = null;
+    for (const member of coalition.members) {
+      if (member === m) continue;
+      if (whitePeaceOfferBetween(member, x, store)) {
+        via = member;
+        break;
+      }
+    }
+    if (!via) continue;
+    if (whitePeaceOfferBetween(m, x, store)) continue; // already at the table
+
+    const t = temperamentOf(m);
+    const chance =
+      t === AiWarfare.TEMPERAMENT_STEADFAST || t === AiWarfare.TEMPERAMENT_CAUTIOUS
+        ? BLOC_PEACE_STEADY_CHANCE
+        : BLOC_PEACE_CHANCE;
+    if (rng() >= chance) continue;
+
+    const res = Wars.offerPeaceAi(m, x, { type: "white-peace" }, store);
+    if (res.ok) {
+      events.push({ type: "bloc-peace-offer", by: m, enemy: x, via });
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The tick
 // ---------------------------------------------------------------------------
 
 /**
- * One diplomacy session: courts seal pacts, deepen them, answer calls to
- * arms, and knife their friends. Returns the notable events for the
- * attach wrapper to emit and announce. Pure — pass a fixed rng for
- * deterministic tests.
+ * One diplomacy session: courts seal pacts, deepen them, close triangles
+ * into coalitions, answer calls to arms, negotiate as a bloc, and knife
+ * their friends. Returns the notable events for the attach wrapper to
+ * emit and announce. Pure — pass a fixed rng for deterministic tests.
  */
 function councilDiplomacyTick(store, opts = {}) {
   const rng = opts.rng ?? Math.random;
@@ -587,11 +700,50 @@ function councilDiplomacyTick(store, opts = {}) {
 
   considerPacts(store, rng, events);
   considerPactUpkeep(store, rng, events);
+  considerCoalitionPacts(store, rng, events);
   considerDefenseCalls(store, rng, events);
   considerBetrayalDrift(store);
   considerBetrayals(store, rng, events);
+  for (const e of Coalitions.reconcileCoalitions(store, { rng })) events.push(e);
+  considerCoalitionPeace(store, rng, events);
 
   return events;
+}
+
+/**
+ * Every open war the council answers, with each ally of the defender
+ * and where its deliberation stands: "deliberating" (unanswered),
+ * "joined", "absent", or "refused". For the war table — so players can
+ * watch their allies make up their minds.
+ */
+function getDefenseCalls(store) {
+  const calls = defenseCalls(store);
+  const out = [];
+  for (const war of activeWars(store)) {
+    if (war.declaredBy === "tension" || war.declaredBy === "alliance") continue;
+    const { attackerId, defenderId } = war;
+    if (!attackerId || !defenderId) continue;
+    const answered = calls[warKey(war)] ?? {};
+    const entries = [];
+    for (const ally of alliesOf(defenderId, store)) {
+      if (ally === attackerId) continue;
+      entries.push({
+        allyId: ally,
+        allyName: nameOf(ally, store),
+        status: answered[ally] ?? "deliberating",
+      });
+    }
+    if (entries.length > 0) {
+      out.push({
+        attackerId,
+        defenderId,
+        attackerName: nameOf(attackerId, store),
+        defenderName: nameOf(defenderId, store),
+        calls: entries,
+      });
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -732,6 +884,34 @@ function attachAiDiplomacy(api) {
             resolveAt: null,
           });
         }
+      } else if (e.type === "coalition-formed") {
+        api.emitCustomEvent("kingdom:coalition-formed", {
+          coalition: e.coalition,
+          broker: "ai-council",
+        });
+        const members = e.coalition.members.map(kingdomName).join(", ");
+        announceToRealm(
+          `[Realm] A LEAGUE is born! ${e.coalition.name} — ${members} — ` +
+            `stand as one. The realm's map of friends is now a map of blocs.`
+        );
+        console.info("[ai-diplomacy] coalition formed", e.coalition);
+      } else if (e.type === "coalition-dissolved") {
+        api.emitCustomEvent("kingdom:coalition-dissolved", {
+          name: e.name,
+          members: e.members,
+        });
+        announceToRealm(
+          `[Realm] ${e.name} is no more — its pacts lie in tatters, ` +
+            `and its crowns walk alone again.`
+        );
+        console.info("[ai-diplomacy] coalition dissolved", e);
+      } else if (e.type === "bloc-peace-offer") {
+        announceToRealm(
+          `[Realm] ${kingdomName(e.by)} joins the peace table — ` +
+            `${kingdomName(e.via)}'s terms with ${kingdomName(e.enemy)} ` +
+            `are now the league's terms.`
+        );
+        console.info("[ai-diplomacy] bloc peace offer", e);
       } else {
         console.info("[ai-diplomacy] event", e);
       }
@@ -762,6 +942,7 @@ module.exports = attachAiDiplomacy;
 module.exports.attachAiDiplomacy = attachAiDiplomacy;
 module.exports.councilDiplomacyTick = councilDiplomacyTick;
 module.exports.loyaltyOf = loyaltyOf;
+module.exports.getDefenseCalls = getDefenseCalls;
 module.exports.temperamentOf = temperamentOf;
 module.exports.DIPLOMACY_TASK_TICKS = DIPLOMACY_TASK_TICKS;
 module.exports.PACT_MAX_TENSION = PACT_MAX_TENSION;
