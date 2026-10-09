@@ -1759,6 +1759,33 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     }
     return true;
   }
+  // "music festival" / "promoter" / "festival ground" — player asks about
+  // music-festival production. (CitizenMusicDance owns ensembles/concerts/
+  // lessons; CitizenBards owns minstrels; CitizenFestivals owns the seasonal
+  // calendar; this owns promoter-run music festival productions.)
+  if (/\b(music festival|festival promoter|festival ground|who is playing|lineup|headliner|festival tickets)\b/.test(said)) {
+    try {
+      const MF = require("../lib/CitizenMusicFestivals");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? "unknown";
+      const upcoming = MF.upcomingFestivals(kingdomId).slice(0, 3).map((f) => ({
+        name: f.name,
+        days: f.days,
+        acts: Object.values(f.lineup || {}).flat().length,
+      }));
+      const ground = MF.groundFor(kingdomId);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "festival_status", {
+        upcoming,
+        ground: ground ? { capacity: ground.capacity, condition: ground.condition } : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
 
   // "what's in fashion" — player asks about trends, shops, competitions.
   if (/\b(what.s in fashion|fashion trend|what.s trendy|is there a tailor|clothing shop|buy clothes|style competition|best dressed|what.s the style)\b/.test(said)) {

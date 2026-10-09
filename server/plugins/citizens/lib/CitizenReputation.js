@@ -106,6 +106,8 @@ const DEEDS = Object.freeze({
   collectionlaureate: Object.freeze({ points: 6, label: "created five collections" }),
   champion: Object.freeze({ points: 8, label: "won an athletic championship" }),
   recordbreaker: Object.freeze({ points: 6, label: "broke a kingdom sports record" }),
+  festivallegend: Object.freeze({ points: 8, label: "promoted five music festivals" }),
+  festivalheadliner: Object.freeze({ points: 6, label: "headlined three festivals" }),
   ironchef: Object.freeze({ points: 8, label: "won a cook-off" }),
   recipehunter: Object.freeze({ points: 6, label: "invented three recipes" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),
