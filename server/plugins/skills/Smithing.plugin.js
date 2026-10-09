@@ -516,7 +516,14 @@ function performSmithAction(player, smithable) {
   }
 
   inventory.deleteNumber(smithable.barId, smithable.barsRequired);
-  inventory.addItem(new Item(smithable.itemId, smithable.amount));
+  const smithed = new Item(smithable.itemId, smithable.amount);
+  pluginApi?.emitCustomEvent("crafting:produced", {
+    player,
+    item: smithed,
+    skill: Skill.SMITHING,
+    requiredLevel: smithable.requiredLevel,
+  });
+  inventory.addItem(smithed);
   player.performAnimation(SMITH_ANIMATION);
   player.getSkillManager().addExperiences(Skill.SMITHING, 10);
 

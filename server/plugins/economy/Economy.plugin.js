@@ -14,6 +14,7 @@ module.exports = {
     require("./Events.Economy")(api);
     require("./Sinks.Economy")(api);
     require("./Fees.Economy")(api);
+    require("./Repair.Economy")(api);
     require("./Commands.Economy")(api);
   },
 };

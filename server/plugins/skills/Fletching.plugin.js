@@ -638,7 +638,14 @@ function performFletchingAction(player, recipe) {
   }
 
   consumeRequirements(inventory, recipe);
-  inventory.addItem(new Item(recipe.outputId, recipe.outputAmount));
+  const fletched = new Item(recipe.outputId, recipe.outputAmount);
+  pluginApi?.emitCustomEvent("crafting:produced", {
+    player,
+    item: fletched,
+    skill: Skill.FLETCHING,
+    requiredLevel: recipe.level,
+  });
+  inventory.addItem(fletched);
   player.performAnimation(recipe.animation);
   player.getSkillManager().addExperiences(Skill.FLETCHING, recipe.xp);
 
@@ -840,12 +847,14 @@ function resolveBoltRecipe(itemA, itemB) {
 }
 
 let TaskManager;
+let pluginApi;
 
 module.exports = {
   name: "Fletching",
   members: true,
   register(api) {
     TaskManager = api.getTaskManager();
+    pluginApi = api;
     const activeSessions = ACTIVE_FLETCHING_SESSIONS;
     TaskManager.submit(new FletchingTask(activeSessions));
 
