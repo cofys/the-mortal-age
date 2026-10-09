@@ -1468,6 +1468,28 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "trade charter" / "monopoly" / "who holds the charter" — player asks
+  // about guild trade monopolies.
+  if (/\b(trade charter|charters|monopoly|monopolies|who holds the charter|chartered goods)\b/.test(said)) {
+    try {
+      const C = require("../lib/CitizenTradeCharters");
+      const active = C.activeCharters();
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "charter_status", {
+        count: active.length,
+        charters: active.slice(0, 5).map((c) => ({
+          kingdomId: c.kingdomId,
+          category: c.category,
+          categoryLabel: C.categoryFor(c.category)?.label ?? c.category,
+          guildId: c.guildId,
+          daysLeft: Math.max(0, Math.ceil((c.expiresAt - Date.now()) / 86400000)),
+        })),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a gallery" / "where is the gallery" — player asks about art.
   if (/\b(is there a gallery|where is the gallery|art gallery|museum)\b/.test(said)) {
     try {

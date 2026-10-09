@@ -26,6 +26,8 @@ const { onContractCommand, onWillCommand, onDisputeCommand, onRepresentCommand, 
 const { onTreatyCommand, USAGE: TREATY_USAGE } = require("./CitizenTreatyEvents");
 const { setEmitter: setTreatyEmitter } = require("./lib/CitizenTreatyLife");
 const { onSpyCommand, USAGE: SPY_USAGE } = require("./CitizenSpyEvents");
+const { onCharterCommand, CHARTER_USAGE } = require("./CitizenTradeCharterEvents");
+const { onOfferConfirmed: onCharterOfferConfirmed } = require("./lib/CitizenCharterToll");
 const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { initCitizenSocial, onSocialChatResponse } = require("./chat/CitizenSocial");
@@ -621,6 +623,8 @@ module.exports = {
     api.onCustomEvent(EVENT_OFFICE_VACATED, onKingdomOfficeVacated);
     api.onCustomEvent("kingdom:office-seeks-holder", onKingdomOfficeSeeksHolder);
     api.onCustomEvent("election:endorse", onElectionEndorse);
+    // Guild charter tolls on GE sell offers (chartered goods, non-members).
+    api.onCustomEvent("ge:offer-confirmed", onCharterOfferConfirmed);
     api.onCustomEvent(EVENT_CITIZEN_CHAT_HEARD, onCitizenChatHeard);
     api.onCustomEvent("llm:chat-response", onSocialThreadResponse);
     api.onCustomEvent("kingdom:rumor", onKingdomRumorHeard);
@@ -690,6 +694,12 @@ module.exports = {
       onSpyCommand,
       PlayerRights.NONE,
       SPY_USAGE
+    );
+    api.registerCommand(
+      "charter",
+      onCharterCommand,
+      PlayerRights.NONE,
+      CHARTER_USAGE
     );
   },
 };
