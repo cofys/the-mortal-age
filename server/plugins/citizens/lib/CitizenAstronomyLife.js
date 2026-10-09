@@ -25,6 +25,13 @@ const Astro = require("./CitizenAstronomy");
 // Observation cadence: check every slow tick, but observations are slow.
 const OBSERVE_EVERY_MS = 30 * 60 * 1000; // 30 min between observation rounds
 
+// Last observation-round timestamp (module-local, NOT persisted to the save).
+let lastObserveAtMs = 0;
+
+function resetForTests() {
+  lastObserveAtMs = 0;
+}
+
 function isNightTime(nowMs) {
   try {
     const DayNight = require("./CitizenDayNight");
@@ -34,23 +41,62 @@ function isNightTime(nowMs) {
   return h >= 21 || h < 5;
 }
 
-function say(director, bot, line) {
+/**
+ * Canonical speech: sayPublic(citizen, text) from chat/CitizenSayPublic.
+ * (bot.sayPublic and director.sayAs do NOT exist — they silently no-op'd.)
+ */
+function say(bot, line) {
   try {
-    if (bot && typeof bot.sayPublic === "function") bot.sayPublic(line);
-    else if (typeof director?.sayAs === "function") director.sayAs(bot, line);
+    const { sayPublic } = require("../chat/CitizenSayPublic");
+    if (bot && typeof sayPublic === "function") sayPublic(bot, line);
   } catch { /* speech never breaks the tick */ }
 }
 
-function journal(director, text, tags) {
+/**
+ * Canonical journal: getJournal().log(name, kind, text).
+ * (director.getJournal does NOT exist on the real CitizenDirector.)
+ */
+function journal(name, kind, text) {
   try {
-    const j = director?.getJournal?.();
-    if (j && typeof j.log === "function") j.log(text, tags || ["astronomy"]);
+    const { getJournal } = require("./CitizenJournal");
+    const j = typeof getJournal === "function" ? getJournal() : null;
+    if (j && typeof j.log === "function") j.log(name, kind, text);
   } catch { /* journal never breaks the tick */ }
+}
+
+/** True when a real player is within overhead-chat range of the bot. */
+function realPlayerNear(bot) {
+  try {
+    const { isRealPlayer } = require("../chat/CitizenSayPublic");
+    const locals = bot?.getLocalPlayers?.() ?? [];
+    for (const p of locals) {
+      try {
+        if (typeof isRealPlayer === "function" ? isRealPlayer(p) : (p?.isRealPlayer?.() ?? !p?.isBot)) {
+          return true;
+        }
+      } catch { /* keep scanning */ }
+    }
+  } catch { /* engine seam failed */ }
+  return false;
+}
+
+/** Cheap LOD gate: nothing to do when zero citizens are online. */
+function anyCitizenOnline(director) {
+  try {
+    for (const record of director?.roster?.values?.() ?? []) {
+      try {
+        if (director?.isOnline && director.isOnline(record)) return true;
+      } catch { /* keep scanning */ }
+    }
+  } catch { /* roster unreadable */ }
+  return false;
 }
 
 function tickAstronomy(director, nowMs) {
   const now = nowMs || Date.now();
   try {
+    // LOD gate: no ticking when no citizens are online at all.
+    if (!anyCitizenOnline(director)) return;
     const st = Astro.load();
 
     // 1. Register curious online citizens as astronomers.
@@ -80,14 +126,14 @@ function tickAstronomy(director, nowMs) {
     const night = isNightTime(now);
     if (night) {
       try {
-        const lastKey = "__astro_last_observe";
-        const last = st[lastKey] || 0;
-        if (now - last >= OBSERVE_EVERY_MS) {
-          st[lastKey] = now;
+        // Cooldown checked BEFORE the (expensive) astronomer materialization.
+        if (now - lastObserveAtMs >= OBSERVE_EVERY_MS) {
+          lastObserveAtMs = now;
           for (const astro of Object.values(st.astronomers)) {
             try {
-              const bot = director?.playerFor?.(astro.username)
-                ?? director?.getBot?.({ username: astro.username });
+              // Canonical: director.getBot takes the record ({ username }).
+              // (director.playerFor does NOT exist.)
+              const bot = director?.getBot ? director.getBot({ username: astro.username }) : null;
               if (!bot) continue; // offline astronomers don't observe
               const obs = Astro.observatoryFor(astro.kingdomId);
               if (!obs || !obs.tile) continue;
@@ -97,9 +143,8 @@ function tickAstronomy(director, nowMs) {
               const r = Astro.createChart(astro.username, astro.kingdomId, quality);
               if (r.ok) {
                 Astro.gainWisdom(astro.username, 1);
-                journal(director,
-                  `${astro.username} charted the stars (quality ${r.quality}).`,
-                  ["astronomy", "chart"]);
+                journal(astro.username, "astronomy",
+                  `${astro.username} charted the stars (quality ${r.quality}).`);
               }
             } catch { /* one bad astronomer never breaks the tick */ }
           }
@@ -122,15 +167,21 @@ function tickAstronomy(director, nowMs) {
           : ev.kind === "lunar_eclipse"
           ? "The moon is swallowed by shadow. An omen — fortune favors the bold tonight."
           : "The sun is dying at midday. Stay close to the lamps, friends.";
-        // Announce near a real player if one is around.
+        // Announce through an online kingdom bot — but only when a real
+        // player is near enough to hear it (LOD: no shouts into the void).
+        // (director.getBotsForKingdom does NOT exist; canonical is
+        // director.onlineBotsForKingdom(kingdomId).)
+        let speaker = null;
         try {
-          const bots = director?.getBotsForKingdom?.(kingdomId) ?? [];
-          const bot = bots[0] || null;
-          say(director, bot, line);
-        } catch { /* no bot to speak through */ }
-        journal(director,
-          `Celestial event over ${kingdomId}: ${ev.label}${omen ? ` (omen: ${omen})` : ""}.`,
-          ["astronomy", "event"]);
+          const bots = typeof director?.onlineBotsForKingdom === "function"
+            ? director.onlineBotsForKingdom(kingdomId)
+            : [];
+          speaker = Array.isArray(bots) && bots.length ? bots[0] : null;
+        } catch { speaker = null; }
+        if (speaker && realPlayerNear(speaker)) say(speaker, line);
+        const reporter = (Astro.astronomersFor(kingdomId)[0] || {}).username || "stargazers";
+        journal(reporter, "astronomy",
+          `Celestial event over ${kingdomId}: ${ev.label}${omen ? ` (omen: ${omen})` : ""}.`);
         // Fame for the kingdom's astronomers when they call it right.
         try {
           const Rep = require("./CitizenReputation");
@@ -148,4 +199,4 @@ function tickAstronomy(director, nowMs) {
   }
 }
 
-module.exports = { tickAstronomy, isNightTime };
+module.exports = { tickAstronomy, isNightTime, resetForTests };

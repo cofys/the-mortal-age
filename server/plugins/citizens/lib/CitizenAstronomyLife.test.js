@@ -10,7 +10,7 @@
 const assert = require("assert");
 
 const Astro = require("./CitizenAstronomy");
-const { tickAstronomy, isNightTime } = require("./CitizenAstronomyLife");
+const { tickAstronomy, isNightTime, resetForTests } = require("./CitizenAstronomyLife");
 
 let passed = 0;
 let failed = 0;
@@ -18,6 +18,7 @@ let failed = 0;
 function test(name, fn) {
   try {
     Astro.resetForTests();
+    resetForTests();
     fn();
     passed++;
     console.log(`  ok - ${name}`);
@@ -27,17 +28,17 @@ function test(name, fn) {
   }
 }
 
-/** Minimal stub director: empty roster, no bots. */
+/** Minimal stub director: empty roster, no bots. Uses the REAL director API
+ *  shape (isOnline(record), getBot(record), onlineBotsForKingdom(kingdomId)).
+ *  The dead shims playerFor/getBotsForKingdom/getJournal/sayAs do NOT exist
+ *  on the real CitizenDirector, so they are not stubbed here. */
 function stubDirector(overrides) {
   return Object.assign({
     roster: new Map(),
     isOnline: () => false,
     getBot: () => null,
-    playerFor: () => null,
-    getBotsForKingdom: () => [],
-    getJournal: () => ({ log: () => {} }),
+    onlineBotsForKingdom: () => [],
     log: () => {},
-    sayAs: () => {},
   }, overrides || {});
 }
 
@@ -82,12 +83,14 @@ test("night observations create charts for online astronomers", () => {
   Astro.registerAstronomer("Night Owl", "varrock");
   const bot = {
     getUsername: () => "Night Owl",
-    sayPublic: () => {},
+    getLocalPlayers: () => [],
   };
   const night = new Date(2026, 5, 1, 23, 0).getTime();
+  const record = { username: "Night Owl", role: "commoner" };
   const director = stubDirector({
-    playerFor: () => bot,
-    getBotsForKingdom: () => [bot],
+    roster: new Map([["night owl", record]]),
+    isOnline: () => true,
+    getBot: () => bot,
   });
   tickAstronomy(director, night);
   const charts = Astro.chartsFor("varrock");
@@ -99,7 +102,12 @@ test("daytime observations do not create charts", () => {
   Astro.registerAstronomer("Day Dreamer", "varrock");
   const bot = { getUsername: () => "Day Dreamer" };
   const day = new Date(2026, 5, 1, 12, 0).getTime();
-  const director = stubDirector({ playerFor: () => bot });
+  const record = { username: "Day Dreamer", role: "commoner" };
+  const director = stubDirector({
+    roster: new Map([["day dreamer", record]]),
+    isOnline: () => true,
+    getBot: () => bot,
+  });
   tickAstronomy(director, day);
   assert.strictEqual(Astro.chartsFor("varrock").length, 0);
 });
@@ -107,14 +115,26 @@ test("daytime observations do not create charts", () => {
 test("celestial events get announced once per cooldown", () => {
   Astro.registerAstronomer("Event Watcher", "varrock");
   const said = [];
+  // Fake real player near the speaker: canonical isRealPlayer() treats a
+  // player with getUsername (not a bot) as real; the line reaches their
+  // packet sender via the real sayPublic() path.
+  const fakeReal = {
+    getUsername: () => "Jon",
+    getIndex: () => 7,
+    getPacketSender: () => ({ sendPublicChat: (text) => said.push(text) }),
+    getRelations: () => ({ canReceivePublicChatFrom: () => true }),
+  };
   const bot = {
     getUsername: () => "Event Watcher",
-    sayPublic: (line) => said.push(line),
+    getLocalPlayers: () => [fakeReal],
   };
   const jan2026 = new Date(2026, 0, 15, 23, 0).getTime(); // meteor shower month
+  const record = { username: "Event Watcher", role: "commoner" };
   const director = stubDirector({
-    playerFor: () => bot,
-    getBotsForKingdom: () => [bot],
+    roster: new Map([["event watcher", record]]),
+    isOnline: () => true,
+    getBot: () => bot,
+    onlineBotsForKingdom: () => [bot],
   });
   tickAstronomy(director, jan2026);
   assert.ok(said.length >= 1, "expected an announcement");
@@ -124,10 +144,36 @@ test("celestial events get announced once per cooldown", () => {
   assert.strictEqual(said.length, firstCount);
 });
 
+test("events stay silent when no real player is near", () => {
+  Astro.registerAstronomer("Lonely Watcher", "varrock");
+  const said = [];
+  const bot = {
+    getUsername: () => "Lonely Watcher",
+    getLocalPlayers: () => [], // nobody around
+  };
+  const jan2026 = new Date(2026, 0, 15, 23, 0).getTime();
+  const record = { username: "Lonely Watcher", role: "commoner" };
+  const director = stubDirector({
+    roster: new Map([["lonely watcher", record]]),
+    isOnline: () => true,
+    getBot: () => bot,
+    onlineBotsForKingdom: () => [bot],
+  });
+  tickAstronomy(director, jan2026);
+  assert.strictEqual(said.length, 0, "expected silence with no real player near");
+  // The event was still announced (throttle marked), just not spoken.
+  assert.strictEqual(Astro.announceEvent("varrock", "meteor_shower", jan2026 + 2000), false);
+});
+
 test("offline astronomers do not observe", () => {
   Astro.registerAstronomer("Sleeper", "varrock");
   const night = new Date(2026, 5, 1, 23, 0).getTime();
-  const director = stubDirector({ playerFor: () => null });
+  const record = { username: "Sleeper", role: "commoner" };
+  const director = stubDirector({
+    roster: new Map([["sleeper", record]]),
+    isOnline: () => false, // citizen exists but is offline
+    getBot: () => null,
+  });
   tickAstronomy(director, night);
   assert.strictEqual(Astro.chartsFor("varrock").length, 0);
 });

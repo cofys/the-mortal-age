@@ -71,7 +71,11 @@ function atTile(player, tile, radius = ARRIVE_RADIUS) {
 
 function walkTo(player, tile) {
   try {
-    requestMovement(player, { x: tile.x, y: tile.y, z: tile.z ?? 0 });
+    // Canonical BotNavigation shape: (player, x, y, options).
+    // (The object-tile shape silently no-ops — isFinite check fails.)
+    if (tile && Number.isFinite(tile.x) && Number.isFinite(tile.y)) {
+      requestMovement(player, tile.x, tile.y, { z: tile.z ?? 0 });
+    }
   } catch {}
 }
 

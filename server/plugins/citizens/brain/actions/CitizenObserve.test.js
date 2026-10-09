@@ -32,14 +32,19 @@ require.cache[actionStatePath] = {
   },
 };
 
-// Stub BotNavigation: track movement requests.
+// Stub BotNavigation: track movement requests. Real shape is
+// requestMovement(player, targetX, targetY, options) — an object-tile
+// second argument silently no-ops (isFinite check fails).
 const navPath = path.resolve(
   __dirname, "../../../bots/behaviours/navigation/BotNavigation.js"
 );
 require.cache[navPath] = {
   id: navPath, filename: navPath, loaded: true,
   exports: {
-    requestMovement: (player, tile) => { player.__movedTo = tile; },
+    requestMovement: (player, x, y, opts) => {
+      player.__movedTo = { x, y, z: opts?.z ?? 0 };
+      return true;
+    },
     clearMovementRequest: () => {},
   },
 };
