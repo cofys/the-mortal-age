@@ -107,10 +107,15 @@ function affordableBlueprint(player, Inventions) {
   const inv = player?.getInventory?.();
   if (!inv) return null;
   const craftingLevel = realCraftingLevel(player);
+  const kingdomId = kingdomIdOf(player);
   for (const bpId of BLUEPRINT_PREFERENCE) {
     const bp = Inventions.blueprint(bpId);
     if (!bp) continue;
     if (craftingLevel < bp.craftingLevel) continue;
+    // Science gate: some blueprints need a kingdom science discovery first.
+    try {
+      if (typeof Inventions.isBlueprintUnlocked === "function" && !Inventions.isBlueprintUnlocked(bpId, kingdomId)) continue;
+    } catch { /* gate unreadable — allow */ }
     let ok = true;
     for (const [itemId, amount] of Object.entries(bp.materials)) {
       if (countItem(inv, Number(itemId)) < amount) {

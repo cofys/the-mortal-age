@@ -991,6 +991,27 @@
           "type": "citizenTeamPlay"
         }
       ]
+    },
+    {
+      "id": "citizen_research",
+      "mode": "citizen_research",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenResearch"
+        }
+      ]
     }
   ]
 }

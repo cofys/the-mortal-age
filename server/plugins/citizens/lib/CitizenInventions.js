@@ -55,6 +55,7 @@ const MATERIALS = Object.freeze({
 const BLUEPRINTS = Object.freeze({
   improved_pickaxe: Object.freeze({
     label: "improved pickaxe",
+    discoveryReq: "fine_alloys", // unlocked by the fine-alloys science discovery
     type: "tool",
     description: "a pickaxe with a better-balanced head",
     materials: Object.freeze({ [MATERIALS.iron_bar]: 2, [MATERIALS.oak_planks]: 1 }),
@@ -65,6 +66,7 @@ const BLUEPRINTS = Object.freeze({
   }),
   reinforced_axe: Object.freeze({
     label: "reinforced axe",
+    discoveryReq: "tempered_steel", // unlocked by the tempered-steel science discovery
     type: "tool",
     description: "an axe with a steel-reinforced haft",
     materials: Object.freeze({ [MATERIALS.steel_bar]: 1, [MATERIALS.oak_planks]: 2 }),
@@ -95,6 +97,7 @@ const BLUEPRINTS = Object.freeze({
   }),
   ore_washer: Object.freeze({
     label: "ore washer",
+    discoveryReq: "reagent_distillation", // unlocked by the reagent-distillation science discovery
     type: "device",
     description: "a water-driven ore cleaning device",
     materials: Object.freeze({ [MATERIALS.iron_bar]: 3, [MATERIALS.oak_planks]: 2, [MATERIALS.rope]: 2 }),
@@ -213,6 +216,24 @@ function blueprints() {
  */
 function blueprint(id) {
   return BLUEPRINTS[id] ?? null;
+}
+
+/**
+ * Science gate: is this blueprint researchable in the given kingdom?
+ * Blueprints with a discoveryReq need the matching CitizenScience discovery
+ * in that kingdom first. Blueprints without one are always unlocked.
+ * Defensive: a missing/broken science module means "unlocked" (no gate).
+ */
+function isBlueprintUnlocked(blueprintId, kingdomId) {
+  const bp = blueprint(blueprintId);
+  if (!bp) return false;
+  if (!bp.discoveryReq) return true;
+  try {
+    const Science = require("./CitizenScience");
+    return Science.hasDiscovery(kingdomId, bp.discoveryReq);
+  } catch {
+    return true; // science module missing — don't block inventors
+  }
 }
 
 // --- research projects -----------------------------------------------------
@@ -454,6 +475,7 @@ module.exports = {
   ROYALTY_COINS,
   blueprints,
   blueprint,
+  isBlueprintUnlocked,
   startResearch,
   progressResearch,
   activeProjects,

@@ -426,7 +426,13 @@ function researchProgress(kingdomId, researchKey, nowMs) {
   const def = researchDef(researchKey);
   if (!rec || !def || rec.status !== "in_progress") return 0;
   const elapsed = nowMs - rec.startedAt;
-  const total = def.durationHours * 3600 * 1000;
+  // Science boost: medicine discoveries accelerate medical research.
+  let boost = 1;
+  try {
+    const Science = require("./CitizenScience");
+    boost = 1 + (Science.surgeryResearchBonusFor(kingdomId) ?? 0);
+  } catch { /* science module missing — no boost */ }
+  const total = (def.durationHours * 3600 * 1000) / boost;
   return Math.min(1, elapsed / total);
 }
 

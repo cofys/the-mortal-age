@@ -235,6 +235,8 @@ const { tickConstruction } = require("../lib/CitizenConstructionLife");
 const CitizenConstruction = require("../lib/CitizenConstruction");
 const { tickPhilosophy } = require("../lib/CitizenPhilosophyLife");
 const CitizenPhilosophy = require("../lib/CitizenPhilosophy");
+const { tickScience } = require("../lib/CitizenScienceLife");
+const CitizenScience = require("../lib/CitizenScience");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -3045,6 +3047,13 @@ class CitizenDirector {
       tickConstruction(this, nowMs);
     } catch (error) {
       this.log("construction failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen science: experiments progress in real time, findings resolve.
+    // Data tier, zero LLM.
+    try {
+      tickScience(this, nowMs);
+    } catch (error) {
+      this.log("science failed", { error: String(error?.message ?? error) });
     }    try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3346,6 +3355,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen philosophy save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenScience.save()) {
+        this.log("citizen science saved");
+      }
+    } catch (error) {
+      this.log("citizen science save failed", {
         error: String(error?.message ?? error),
       });
     }

@@ -119,6 +119,7 @@ const ACT_PHILOSOPHIZE = "citizen_philosophize";
 const ACT_SURGEON = "citizen_surgeon";
 const ACT_CONSTRUCT = "citizen_construct";
 const ACT_TEAMPLAY = "citizen_teamplay";
+const ACT_SCIENCE = "citizen_research";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -152,7 +153,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1156,6 +1157,29 @@ function leagueInfo(player) {
   }
 }
 
+
+/**
+ * Science readiness: is this citizen a registered scientist, and do they
+ * have a running experiment? Defensive: a missing/broken science module
+ * scores as unable to research.
+ */
+function scienceInfo(player) {
+  try {
+    const S = require("../lib/CitizenScience");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const rec = S.scientistFor(username);
+    if (!rec) return { isScientist: false, hasExperiment: false, field: null };
+    return {
+      isScientist: true,
+      hasExperiment: !!S.experimentFor(username),
+      field: rec.field,
+      skillLevel: rec.skillLevel ?? 1,
+    };
+  } catch {
+    return { isScientist: false, hasExperiment: false, field: null };
+  }
+}
+
 /**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
@@ -1574,6 +1598,7 @@ compete: competeInfo(player),
     philosophy: philosophyInfo(player),
     legal: legalInfo(player),
     league: leagueInfo(player),
+    science: scienceInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1595,7 +1620,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2169,6 +2194,25 @@ case ACT_COMPETE: {
       if (drunk) s -= 20;
       return s;
     }
+    case ACT_SCIENCE: {
+      // Science: scientists run real experiments in the kingdom lab. A human
+      // researcher works when they have a running experiment — and starts a
+      // new one when the lab is free and materials are on hand. Non-scientists
+      // have no business in the lab. The hurt and weary stay home.
+      const sc = science ?? { isScientist: false, hasExperiment: false, field: null };
+      if (!sc.isScientist) return 4; // not a scientist
+      let s = 20;
+      if (sc.hasExperiment) s += 14; // running experiment needs tending
+      const curious = personality?.curious ?? personality?.inquisitive ?? 0;
+      if (curious > 0.7) s += 10; // the curious are drawn to discovery
+      else if (curious > 0.5) s += 5;
+      if (goalType === GOAL_MASTER_TRADE) s += 6; // discoveries unlock blueprints
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      return s;
+    }
     case ACT_RC: {
       // Runecrafting: craft essence into runes for XP and coin. No essence
       // anywhere, no altar trip. Runecrafting is station work — the citizen
@@ -2659,7 +2703,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

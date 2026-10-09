@@ -1483,6 +1483,34 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "what was discovered" / "is there a scientist" — player asks about science.
+  if (/\b(what was discovered|any discoveries|is there a scientist|any scientists|what are you researching|the laboratory|is there a lab)\b/.test(said)) {
+    try {
+      const S = require("../lib/CitizenScience");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? null;
+      const st = S.load();
+      const discoveries = Object.values(st.discoveries ?? {})
+        .filter((d) => !kingdomId || String(d.kingdomId) === String(kingdomId))
+        .slice(-5)
+        .map((d) => ({ name: d.name, field: d.field, verified: d.verified }));
+      const pubs = S.recentPublications(3).map((p) => ({ title: p.title, scientist: p.scientist }));
+      const rec = citizenUsername ? S.scientistFor(citizenUsername) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "science_status", {
+        discoveries,
+        publications: pubs,
+        myField: rec?.field ?? null,
+        labLevel: kingdomId ? S.labFor(kingdomId).level : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where can I travel" / "take me to X" — player asks about ships/caravans.
   if (/\b(where can i travel|how do i travel|is there a ship|is there a caravan|take me to|i want to travel|can you take me)\b/.test(said)) {
     try {
