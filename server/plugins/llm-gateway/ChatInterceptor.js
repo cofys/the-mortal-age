@@ -16,6 +16,8 @@
 
 const BOT_HOST_ADDRESS = "bot"; // set by bots/behaviours/spawn/BotPlayerFactory.js
 
+const { PlayerThrottles } = require("./PlayerThrottles");
+
 const DEFAULT_CARD =
   "You are an ordinary citizen of Gielinor going about your day. Friendly but " +
   "busy; you don't know everything and you say so.";
@@ -31,6 +33,10 @@ class ChatInterceptor {
     this.citizens = new Map(); // lowercased username -> { username, personalityCard, replyCooldownMs }
     this.lastReplyAt = new Map(); // lowercased username -> timestamp
     this.lastPublicReplyAt = new Map(); // lowercased username -> timestamp (public-path cap)
+    // Per-PLAYER throttles: one player can never farm the daily call budget
+    // (see PlayerThrottles.js). Independent of the per-citizen cooldowns
+    // above, which rotate across the citizen pool and don't bound the input.
+    this.throttles = new PlayerThrottles();
   }
 
   get World() {
@@ -101,6 +107,11 @@ class ChatInterceptor {
     const clean = String(text ?? "").trim().slice(0, 320);
     if (!clean || !citizenUsername || !requesterUsername) return;
     if (!this.checkCooldown(citizenUsername)) return; // silence is free
+    // Per-player PM budget (default 200 LLM replies/day/player): the
+    // per-citizen 8s cooldown above rotates across citizens, so without this
+    // one player cycling PMs could sustain ~7 calls/min with no bound.
+    // Only GRANTED replies consume budget — the 8s denials don't punish.
+    if (!this.throttles.checkPmReply(requesterUsername)) return; // silence is free
     // Live context for the reply (private messages don't pass through the
     // citizens plugin's chat module, so the gateway asks the registered
     // builder). Failures fall back to no context, never break the path.
@@ -118,6 +129,18 @@ class ChatInterceptor {
       channel,
       context,
     });
+  }
+
+  // Public-path per-PLAYER throttle (the gateway calls this for channel
+  // === "public" AFTER checkPublicCooldown passes). A player spamming
+  // public chat near a crowd could otherwise trigger 2 LLM calls per
+  // utterance with no bound — the per-citizen 30s cooldown rotates across
+  // the pool. Default: 4 LLM replies per 5 minutes per player (~48/hr,
+  // under the research's ~50/hr bar). The window slides: five quiet minutes
+  // restore the full allowance, so a throttled player is never silenced
+  // forever. Only granted replies consume budget. Silence is free.
+  checkPublicRateLimit(requesterUsername) {
+    return this.throttles.checkPublicReply(requesterUsername);
   }
 
   // Module-level hook handler (wired by name from the plugin's register).

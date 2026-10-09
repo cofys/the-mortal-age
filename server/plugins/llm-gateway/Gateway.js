@@ -16,6 +16,7 @@
 
 const { ProviderChain } = require("./ProviderChain");
 const { InMemoryMemoryStore, SqliteMemoryStore } = require("./MemoryStore");
+const { JsonMemoryStore } = require("./JsonMemoryStore");
 const { buildPrompt, buildSpeakPrompt } = require("./PromptBuilder");
 const { TypingScheduler } = require("./TypingScheduler");
 const { ChatInterceptor } = require("./ChatInterceptor");
@@ -44,7 +45,27 @@ function withTimeout(promise, ms, reason) {
 
 function createMemoryStore() {
   if (SQLITE_DB_PATH) return new SqliteMemoryStore(SQLITE_DB_PATH);
-  return new InMemoryMemoryStore();
+  // JSON-file memory: survives restarts, so first contact after a deploy no
+  // longer burns the flagship tier again (the quietest quota leak in the
+  // research). Dirty-flag + debounced writes — never on the hot path.
+  return new JsonMemoryStore();
+}
+
+// Plain-node testable tier selection. First contact gets the flagship tier:
+// first impressions shape whether a player keeps talking to citizens.
+// Follow-ups ride cheaper slots. Public-chat replies go to LITE even on
+// first contact: they're 60-char ambient chatter, and public spam is the
+// biggest quota risk — the lite buckets (allam-2-7b alone: 5,600 calls/day)
+// absorb it. Flagship stays for PM first contact, the real 1:1 conversation
+// where quality matters. A caller-specified tier always wins — foreground
+// player chat never subsidizes background chatter.
+function resolveReplyTier({ channel, tier, historyLength }) {
+  if (tier) return tier;
+  if (channel === "public") {
+    const publicFlagshipFirst = process.env.LLM_GATEWAY_PUBLIC_FLAGSHIP_FIRST_CONTACT === "1";
+    return publicFlagshipFirst && historyLength === 0 ? "flagship" : "lite";
+  }
+  return historyLength === 0 ? "flagship" : "lite";
 }
 
 class Gateway {
@@ -65,7 +86,17 @@ class Gateway {
     // the private-message path via requestChat). Without this cap, one
     // player spamming public chat in a crowd triggers up to 2 LLM calls
     // per utterance, unbounded — free-tier quota is precious.
-    if (channel === "public" && !this.interceptor.checkPublicCooldown(citizenUsername)) return;
+    //
+    // Two guards, in this order: per-citizen minimum gap first (a denial
+    // here must NOT consume the player's budget), then the per-player
+    // throttle (default 4 LLM replies per 5 min per player — one spammer
+    // can never sustain >~50 calls/hr). The player's window slides, so a
+    // throttled player is never silenced forever; five quiet minutes and
+    // citizens talk to them again, like real players would.
+    if (channel === "public") {
+      if (!this.interceptor.checkPublicCooldown(citizenUsername)) return;
+      if (!this.interceptor.checkPublicRateLimit(requesterUsername)) return;
+    }
 
     const startedAt = Date.now();
     const citizen = this.interceptor.getCitizen(citizenUsername);
@@ -92,10 +123,19 @@ class Gateway {
     });
     // First contact gets the flagship tier: first impressions shape whether a
     // player keeps talking to citizens. Follow-ups ride cheaper slots.
+    // Public-chat replies go to LITE even on first contact: they're 60-char
+    // ambient chatter, and public spam is the biggest quota risk — the lite
+    // buckets (allam-2-7b alone: 5,600 calls/day) absorb it. Flagship stays
+    // for PM first contact, the real 1:1 conversation where quality matters.
+    // Override with LLM_GATEWAY_PUBLIC_FLAGSHIP_FIRST_CONTACT=1 if Jon wants
+    // flagship first impressions in public too.
     // A caller-specified tier (e.g. "lite" for citizen-to-citizen threads)
     // always wins — foreground player chat never subsidizes background chatter.
-    if (payload?.tier) prompt.tier = payload.tier;
-    else if (history.length === 0) prompt.tier = "flagship";
+    prompt.tier = resolveReplyTier({
+      channel,
+      tier: payload?.tier,
+      historyLength: history.length,
+    });
 
     // Foreground budget: never make a waiting player eat the full 25s abort
     // + 30s queue worst case. Past the budget, stay silent (handled below
@@ -213,6 +253,13 @@ class Gateway {
 
   shutdown() {
     this.scheduler.cancelAll();
+    // Flush pending telemetry + persisted memory so a restart loses nothing.
+    try {
+      this.chain?.usage?.shutdown();
+    } catch { /* telemetry must never break shutdown */ }
+    try {
+      if (typeof this.memory?.shutdown === "function") this.memory.shutdown();
+    } catch { /* memory must never break shutdown */ }
   }
 
   status() {
@@ -224,4 +271,4 @@ class Gateway {
   }
 }
 
-module.exports = { Gateway, createMemoryStore };
+module.exports = { Gateway, createMemoryStore, resolveReplyTier };
