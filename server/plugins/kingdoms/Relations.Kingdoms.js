@@ -151,13 +151,28 @@ const TRADE_BONUS_PER_ALLY = 0.05;
 const TRADE_BONUS_CAP = 0.15;
 
 /**
+ * Pact strength for the trade bonus: stronger bonds carry more goods.
+ * Defaults to 1 for pacts that predate the strength field.
+ */
+function pactStrengthOf(a, b, store) {
+  const [x, y] = [String(a), String(b)].sort();
+  const alliances = store.load().alliances ?? [];
+  const rec = alliances.find((r) => r && r.a === x && r.b === y);
+  return rec?.strength ?? 1;
+}
+
+/**
  * Trade bonus for the castle tithe economy: +5% tithe efficiency per
- * allied kingdom, capped at +15%. Zero when friendless.
+ * allied kingdom, scaled by pact strength (a strength-3 pact moves
+ * three times the goods), capped at +15%. Zero when friendless.
  */
 function alliedTradeBonus(kingdomId, store) {
   if (!kingdomId || !store) return 0;
-  const allies = alliesOfIn(kingdomId, store);
-  return Math.min(TRADE_BONUS_CAP, allies.length * TRADE_BONUS_PER_ALLY);
+  const total = alliesOfIn(kingdomId, store).reduce(
+    (sum, ally) => sum + TRADE_BONUS_PER_ALLY * pactStrengthOf(kingdomId, ally, store),
+    0
+  );
+  return Math.min(TRADE_BONUS_CAP, total);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +281,7 @@ module.exports = {
   canSiegeRelation,
   tensionOf,
   alliedTradeBonus,
+  pactStrengthOf,
   // Actions
   sendEnvoy,
   issueUltimatum,

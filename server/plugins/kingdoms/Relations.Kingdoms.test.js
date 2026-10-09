@@ -179,6 +179,20 @@ describe("alliedTradeBonus", () => {
     assert.equal(Relations.alliedTradeBonus("asgarnia", store), 0);
     assert.equal(Relations.alliedTradeBonus("misthalin", store), 0.05);
   });
+
+  it("scales with pact strength", () => {
+    addAlliance(store, "asgarnia", "misthalin");
+    const state = store.load();
+    state.alliances[0].strength = 3;
+    assert.equal(Relations.alliedTradeBonus("asgarnia", store), 0.15);
+  });
+
+  it("defaults strength 1 for legacy pacts", () => {
+    const state = store.load();
+    state.alliances = [{ a: "asgarnia", b: "misthalin", pactName: "old" }];
+    assert.equal(Relations.alliedTradeBonus("asgarnia", store), 0.05);
+    assert.equal(Relations.pactStrengthOf("asgarnia", "misthalin", store), 1);
+  });
 });
 
 describe("sendEnvoy", () => {

@@ -273,6 +273,10 @@ const WAR_REASONS_AI = [
 
 /** A willing court declares a formal war through the shared machinery. */
 function considerWar(a, b, store, rng, events) {
+  // Allies never draw on each other — the gates would refuse anyway, but
+  // the council doesn't even consider it. Betrayal goes through the pact
+  // system, never a surprise declaration.
+  if (Relations.relationOf(a, b, store) === Relations.RELATION_ALLIED) return;
   const [first, second] = attackerFirst(a, b);
   for (const [attacker, defender] of [
     [first, second],
