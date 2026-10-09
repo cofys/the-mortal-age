@@ -24,6 +24,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Hoisted exclusion-chain requires (was: lazy require per citizen per tick).
 // The chain is linear with no back-references, so top-level is safe.
@@ -140,28 +144,16 @@ const GREAT_WORKS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [CLOCKMAKER_HOROLOGIST]: [
-    "*files a gear tooth to a whisper*",
-    "*tests the escapement tick*",
     "A second lost is a second never found again.",
-    "*loupes a balance wheel*",
   ],
   [CLOCKMAKER_ASSEMBLER]: [
-    "*seats the mainspring barrel*",
-    "*fits the dial to the plate*",
     "Steady hands, now — the train goes in together or not at all.",
-    "*oils the pinions*",
   ],
   [CLOCKMAKER_REPAIRER]: [
-    "*opens a watch case*",
-    "*cleans a fouled pivot*",
     "Brought in dead, she'll leave keeping Greenwich time.",
-    "*replaces a broken mainspring*",
   ],
   [CLOCKMAKER_SELLER]: [
-    "*polishes a watch glass*",
-    "*winds the display pieces*",
     "Every piece guaranteed to outlive its owner — ask about the warranty.",
-    "*arranges the chronometers in a row*",
   ],
 };
 
@@ -577,7 +569,7 @@ function tipClockmaker(event, deps = {}, nowMs = Date.now()) {
 
   event.handled = true;
   try {
-    target.forceChat?.(pickOne(Math.random, TIP_THANKS));
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: TIP_THANKS })); }
   } catch { /* cosmetic */ }
   journalize(target, `received a ${amount}-coin tip from ${player.getUsername?.() ?? "a patron"}`);
   return amount;
@@ -659,7 +651,7 @@ function doClockmakerWork(director, record, citizen, type, nowMs) {
         work: gw.work,
         days: gw.lengthDays,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled ${gw.work} at ${workshop.name}`);
       seedRumor(`${gw.work} stands complete at ${workshop.name}!`);
       return;
@@ -673,7 +665,7 @@ function doClockmakerWork(director, record, citizen, type, nowMs) {
     if (!lastFiredByCitizen.has(key)) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(pickOne(Math.random, MASTERWORK_LINES), { piece: mw });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled a masterwork at ${workshop.name}: ${mw}`);
       seedRumor(`A masterwork ${mw} unveiled at ${workshop.name}!`);
       return;
@@ -684,7 +676,7 @@ function doClockmakerWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.45) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${workshop.name}`);
   } else if (roll < 0.75) {
     const pieces = piecesFor(name, record.kingdomId, nowMs);
@@ -692,15 +684,15 @@ function doClockmakerWork(director, record, citizen, type, nowMs) {
     const jewel = jewelForToday(nowMs);
     const metal = metalForToday(nowMs);
     const line = fill(pickOne(Math.random, HAWK_LINES), { piece });
-    citizen.forceChat?.(line + ` Set with ${jewel}, cased in ${metal}.`);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line + ` Set with ${jewel}, cased in ${metal}.`] })); }
     journalize(citizen, `hawked ${piece} at ${workshop.name}`);
   } else if (type === CLOCKMAKER_REPAIRER) {
     const line = pickOne(Math.random, REPAIR_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered repairs at ${workshop.name}`);
   } else {
     const line = pickOne(Math.random, COMMISSION_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered commissions at ${workshop.name}`);
   }
 }

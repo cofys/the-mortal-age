@@ -22,6 +22,9 @@
 
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
+const { voiceFor, voiceLine } = require("../lib/citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 const {
   createBotPlayer,
 } = require("../../bots/behaviours/spawn/BotPlayerFactory");
@@ -1680,7 +1683,7 @@ class CitizenDirector {
       rank: next,
     });
     try {
-      bot.forceChat?.(`Promoted to ${next}! The ${record.kingdomId} guard thanks you.`);
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [`Promoted to ${next}! The ${record.kingdomId} guard thanks you.`] })); }
     } catch (error) {
       // Cosmetic.
     }

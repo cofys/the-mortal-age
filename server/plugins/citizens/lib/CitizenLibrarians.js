@@ -29,6 +29,10 @@
  */
 
 const { getJournal } = require("./CitizenJournal");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const LIBRARY_RADIUS = 14; // tiles — close enough to hear a page turn
@@ -331,27 +335,24 @@ function logWork(username, kind, text) {
 // === Scripted lines ===
 const WORK_LINES = {
   [LIBRARIAN_ARCHIVIST]: [
-    "*slides a volume back onto its shelf*",
-    "*dusts a row of chronicles*",
-    "*relabels a misfiled scroll*",
-    "*straightens the genealogy folios*",
+    "Archiving today.",
+    "Records in order.",
+    "Archivist working.",
   ],
   [LIBRARIAN_RESEARCHER]: [
-    "*scribbles notes in the margins*",
-    "*cross-references two heavy tomes*",
-    "*murmurs over a star chart*",
-    "*traces a finger down a bestiary page*",
+    "Researching.",
+    "Deep in the stacks.",
+    "Studying here.",
   ],
   [LIBRARIAN_SCRIBE]: [
-    "*copies a manuscript in a fair hand*",
-    "*sharpens a quill*",
-    "*rules fresh vellum*",
-    "*illuminates a capital letter in gold leaf*",
+    "Copying texts.",
+    "Scribe at work.",
+    "Writing away.",
   ],
   [LIBRARIAN_STORYTELLER]: [
-    "*polishes a storyteller's staff*",
-    "*rehearses a verse under their breath*",
-    "*arranges the tale-benches in a circle*",
+    "Stories here!",
+    "Tales told.",
+    "Gather round!",
   ],
 };
 
@@ -459,7 +460,7 @@ function tickLibrarians(director, nowMs) {
         // 5a. Work emote (scripted, zero LLM)
         if (workDue && rng() < 0.6) {
           try {
-            citizen.forceChat(workLineFor(type, rng));
+            { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [workLineFor(type, rng)] })); }
           } catch {
             /* forceChat is best-effort */
           }
@@ -494,7 +495,7 @@ function tickLibrarians(director, nowMs) {
           }
 
           try {
-            citizen.forceChat(line);
+            { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
           } catch {
             /* forceChat is best-effort */
           }

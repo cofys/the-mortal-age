@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenCouriers — the private delivery underworld: pigeon keepers, parcel
@@ -511,15 +515,15 @@ function doCourierLoop(director, record, citizen, type, nowMs) {
       doPigeonKeeper(director, record, citizen, run, nowMs);
     } else if (type === "parcel_runner") {
       const line = rng() < 0.5 ? pickOne(rng, RUNBY_LINES) : pickOne(rng, HIRE_LINES);
-      citizen.forceChat?.(fillLine(line, run));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [fillLine(line, run)] })); }
       journalize(citizen, "ran parcels through the city");
     } else if (type === "letter_carrier") {
       const line = rng() < 0.5 ? pickOne(rng, DELIVERY_LINES) : pickOne(rng, HIRE_LINES);
-      citizen.forceChat?.(fillLine(line, run));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [fillLine(line, run)] })); }
       journalize(citizen, "delivered private letters by hand");
     } else {
       // message_runner — urgent dispatches
-      citizen.forceChat?.(fillLine(pickOne(rng, RUNBY_LINES), run));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [fillLine(pickOne(rng, RUNBY_LINES), run)] })); }
       journalize(citizen, "sprinted an urgent dispatch across town");
     }
 
@@ -538,19 +542,19 @@ function doPigeonKeeper(director, record, citizen, run, nowMs) {
   const flight = pigeonFlightFor(record.username, nowMs);
   const rng = Math.random;
   if (flight.grounded) {
-    citizen.forceChat?.(fillLine(pickOne(rng, PIGEON_GROUNDED_LINES), flight));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [fillLine(pickOne(rng, PIGEON_GROUNDED_LINES), flight)] })); }
     journalize(citizen, "kept the pigeons grounded in the rain");
     return;
   }
   const last = lastPigeonFanfareByCitizen.get(record.username) || 0;
   if (nowMs - last >= PIGEON_FANFARE_COOLDOWN_MS && rng() < 0.5) {
     // Crowd moment: the release fanfare.
-    citizen.forceChat?.(fillLine(pickOne(rng, PIGEON_RELEASE_LINES), flight));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [fillLine(pickOne(rng, PIGEON_RELEASE_LINES), flight)] })); }
     journalize(citizen, `released ${flight.bird} with a message for ${flight.destination}`);
     seedRumor(`${flight.bird}, a carrier pigeon from ${run.loft}, was seen winging toward ${flight.destination}.`);
     lastPigeonFanfareByCitizen.set(record.username, nowMs);
   } else {
-    citizen.forceChat?.("Pigeons fed, wings checked. Who needs a message flown?");
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: ["Pigeons fed, wings checked. Who needs a message flown?"] })); }
     journalize(citizen, "tended the carrier pigeons");
   }
 }

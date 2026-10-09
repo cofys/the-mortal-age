@@ -31,6 +31,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const VOLUNTEER_RADIUS = 14; // tiles — close enough to see/hear
@@ -84,28 +88,16 @@ const DRIVE_KINDS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [VOLUNTEER_CLEANER]: [
-    "*sweeps the gutter with long strokes*",
-    "*picks up litter and drops it in a sack*",
     "Mind the wet cobbles — just washed them.",
-    "*scrubs a market stall clean*",
   ],
   [VOLUNTEER_HELPER]: [
-    "*helps an elder up the steps*",
-    "*carries a parcel for a neighbor*",
     "Need a hand with that? It's no trouble.",
-    "*mends a loose shutter for a shopkeeper*",
   ],
   [VOLUNTEER_CHARITY]: [
-    "*ladles stew into a bowl for a hungry child*",
-    "*folds donated cloaks into neat piles*",
     "Everyone eats tonight — that's the rule.",
-    "*hands out bread at the charity kitchen*",
   ],
   [VOLUNTEER_EVENT]: [
-    "*hangs bunting across the square*",
-    "*stacks benches for the festival crowd*",
     "Festival won't set itself up, friend!",
-    "*tests the lantern strings one by one*",
   ],
 };
 
@@ -532,7 +524,7 @@ function doVolunteerWork(director, record, citizen, type, nowMs) {
           area: area.name,
           need: drive.need,
         });
-        citizen.forceChat?.(line);
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
         journalize(citizen, `announced ${drive.label} at ${area.name}`);
         seedRumor(`${drive.label} this week at ${area.name} — ${drive.need}!`);
         return;
@@ -544,21 +536,21 @@ function doVolunteerWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `volunteered at ${area.name}`);
   } else if (roll < 0.75) {
     const deed = deedFor(name, nowMs);
     if (deed) {
-      citizen.forceChat?.(deed);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [deed] })); }
       journalize(citizen, deed);
     } else {
       const line = pickOne(Math.random, WORK_LINES[type]);
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `volunteered at ${area.name}`);
     }
   } else {
     const line = pickOne(Math.random, INVITE_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `invited a player to volunteer at ${area.name}`);
   }
 }
@@ -572,7 +564,7 @@ function thankDonor(citizen, donorName) {
     const line = fill(pickOne(Math.random, THANKS_LINES), {
       name: String(donorName ?? "friend"),
     });
-    citizen?.forceChat?.(line);
+    { const _cvp = citizen?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `thanked ${donorName} for a donation`);
     return line;
   } catch {

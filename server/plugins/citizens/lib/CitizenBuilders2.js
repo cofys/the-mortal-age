@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenBuilders2 — the hoddies: hod carriers ferrying bricks up the
@@ -121,7 +125,6 @@ const MATERIALS = [
 
 // === Scripted lines ===
 const HOD_LINES = [
-  "*hefts a loaded hod, brick dust in the air*",
   "Up the ladder with {material} — mind your head below!",
   "*balances the hod, step by steady step* Another load for the course!",
   "{material} for the bricklayers! Coming up!",
@@ -533,7 +536,7 @@ function seedRumor(text) {
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
   try {
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch { /* cosmetic */ }
 }
 

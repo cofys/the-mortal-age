@@ -41,6 +41,10 @@ const { agentRng, chance, humanizerProfile } = require("./humanizer");
 const { getJournal } = require("./CitizenJournal");
 const { isFriend, isEnemy, normalizeName } = require("./CitizenBonds");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-tavern-games.json");
 
@@ -88,38 +92,24 @@ const CHALLENGE_LINES = Object.freeze([
 ]);
 
 const CROWD_LINES = Object.freeze([
-  "*the crowd leans in*",
   "Oooooh!",
-  "*laughter erupts from the table*",
-  "*someone slams a mug on the table*",
   "Come on, come on!",
-  "*the tavern goes quiet*",
-  "*cheers from the corner table*",
 ]);
 
 const ROUND_LINES = Object.freeze({
   dice: [
-    "*{a} shakes the cup and rolls...*",
     "{a}: \"Double sixes! Read them and weep!\"",
-    "*the dice clatter across the table*",
     "{b}: \"No way. No WAY. Roll again!\"",
   ],
   cards: [
-    "*{a} fans their cards, face unreadable*",
     "{b}: \"He's bluffing. I can always tell.\"",
-    "*a long pause as {a} studies the table*",
     "{a}: \"All in. Call it or fold.\"",
   ],
   armwrestle: [
-    "*{a} and {b} lock hands, elbows on the table*",
-    "*veins bulge as neither arm moves*",
     "{a}: \"Grr... you're stronger than you look!\"",
-    "*the table creaks under the strain*",
   ],
   drinking: [
-    "*{a} downs another mug, foam on their beard*",
     "{b}: \"*hic*... one more. I can do one more.\"",
-    "*the crowd counts along: three... four... FIVE!*",
     "{a}: \"Is the room spinning, or is it just me?\"",
   ],
 });
@@ -133,7 +123,6 @@ const WIN_LINES = Object.freeze([
 
 const LOSE_LINES = Object.freeze([
   "{l}: \"Best two out of three. I demand a rematch!\"",
-  "*{l} counts out the wager, grumbling*",
   "{l}: \"The dice hate me. They have always hated me.\"",
   "{l}: \"You got lucky. That's all. Lucky.\"",
 ]);
@@ -788,7 +777,7 @@ function sayThrough(director, username, text) {
     const citizen = director.getBot?.(record);
     if (!citizen) return false;
     if (!anyRealPlayerNear(director, citizen, TAVERN_RADIUS)) return false;
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
     return true;
   } catch { return false; }
 }
@@ -814,7 +803,7 @@ function visibleAnnounce(director, night, announcement, rng) {
       }
     } catch { /* best-effort */ }
     if (!speaker) return;
-    speaker.forceChat?.(String(announcement.text).slice(0, 140));
+    { const _cvp = speaker.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(speaker, voiceLine(voiceFor(_cvp), { plain: [String(announcement.text).slice(0, 140)] })); }
     // Crowd noise on big moments: spectators react.
     if (["win", "rivalry", "draw"].includes(announcement.kind) && chance(rng, 0.6)) {
       const crowdLine = pickOne(rng, CROWD_LINES);

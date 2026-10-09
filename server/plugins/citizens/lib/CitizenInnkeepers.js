@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenInnkeepers — innkeeper citizens who run the inns: lodging, stables,
@@ -351,7 +355,7 @@ function logWork(username, kind, text) {
 
 function forceSay(bot, line) {
   try {
-    bot.forceChat?.(String(line).slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(line).slice(0, 120)] })); }
   } catch {
     // Cosmetic only.
   }

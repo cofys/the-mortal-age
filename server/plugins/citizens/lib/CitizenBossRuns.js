@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenBossRuns — autonomous citizen boss-run parties.
@@ -277,7 +281,7 @@ function shoutIfWatched(director, record, line) {
   try {
     const bot = director.getBot(record);
     if (bot && realPlayersNear(bot).length > 0) {
-      try { bot.forceChat?.(line); } catch { /* non-fatal */ }
+      try { { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); } } catch { /* non-fatal */ }
     }
   } catch { /* non-fatal */ }
 }

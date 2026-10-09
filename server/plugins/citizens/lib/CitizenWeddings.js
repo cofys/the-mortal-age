@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenWeddings — anniversaries, romantic drama, and player-facing romance.
@@ -203,7 +207,7 @@ function toneToward(citizenName, playerName) {
 
 function say(bot, line) {
   try {
-    bot?.forceChat?.(String(line).slice(0, 160));
+    { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(line).slice(0, 160)] })); }
   } catch {
     // Non-fatal.
   }

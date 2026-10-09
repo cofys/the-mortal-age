@@ -29,6 +29,10 @@ const fs = require("fs");
 const { skillStore, SKILLS, levelForXp } = require("./CitizenSkilling");
 const { setFollow, clearFollow, normalizeName } = require("./CitizenBonds");
 const { getJournal } = require("./CitizenJournal");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const MASTER_LEVEL = 60; // a master has truly learned the trade
@@ -360,11 +364,11 @@ function tickApprenticeLife(director, nowMs, rng = Math.random) {
       const masterRec = rosterArr.find((r) => normalizeName(r.username) === p.master);
       const masterBot = director.playerFor?.(masterRec);
       try {
-        apprenticeBot.forceChat?.(apprenticeQuestion(rng, p.skill));
+        { const _cvp = apprenticeBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(apprenticeBot, voiceLine(voiceFor(_cvp), { plain: [apprenticeQuestion(rng, p.skill)] })); }
         if (masterBot) {
           // Master answers a beat later would need scheduling; same-tick
           // reply is fine — the pair reads as a conversation.
-          masterBot.forceChat?.(masterTeaching(rng, p.skill));
+          { const _cvp = masterBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(masterBot, voiceLine(voiceFor(_cvp), { plain: [masterTeaching(rng, p.skill)] })); }
         }
       } catch { /* non-fatal */ }
       lastChatterByApprentice.set(apprentice, nowMs);

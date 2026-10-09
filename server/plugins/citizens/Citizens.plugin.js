@@ -26,6 +26,10 @@ const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/
 const { initCitizenSocial, onSocialChatResponse } = require("./chat/CitizenSocial");
 const { registerCitizenActionTypes } = require("./brain/CitizenActionTypes");
 const { initCitizenDecisions } = require("./brain/CitizenDecisions");
+const { ATTR_CITIZEN_PERSONALITY } = require("./constants");
+const { voiceFor, voiceLine } = require("./lib/citizenVoice");
+const { sayPublic } = require("./chat/CitizenSayPublic");
+
 const {
   registerCitizenActivities,
   getBaseRegistry,
@@ -204,9 +208,7 @@ function onCitizenAttackedByPlayer({ player, target }) {
   const victimName = target.getUsername?.() ?? "?";
   memory.addGrudge(victimName, attackerName, GRUDGE_ATTACK, "attack");
   try {
-    target.forceChat?.(
-      ATTACK_OUTCRY[Math.floor(Math.random() * ATTACK_OUTCRY.length)]
-    );
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: [ATTACK_OUTCRY[Math.floor(Math.random() * ATTACK_OUTCRY.length)]] })); }
   } catch (error) {
     // Cosmetic.
   }
@@ -289,7 +291,7 @@ function guardIntervention(attacker, victim, kingdomId) {
     } catch { /* non-fatal */ }
     // Shout a warning.
     try {
-      guardBot.forceChat?.(GUARD_INTERVENE_WARNINGS[Math.floor(Math.random() * GUARD_INTERVENE_WARNINGS.length)]);
+      { const _cvp = guardBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(guardBot, voiceLine(voiceFor(_cvp), { plain: [GUARD_INTERVENE_WARNINGS[Math.floor(Math.random() * GUARD_INTERVENE_WARNINGS.length)]] })); }
     } catch { /* non-fatal */ }
     // Engage in combat — the guard defends the city.
     try {

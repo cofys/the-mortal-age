@@ -43,6 +43,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level requires (perf lesson from the artisan fix): the tie-in modules
 // are linear deps with no back-references to this module, so hoisting is
@@ -102,29 +106,21 @@ const BEATS = [
 // === Scripted lines ===
 const PATROL_LINES = {
   [WATCH_NIGHT]: [
-    "*raises the lantern, peering into the dark*",
     "All's well on the {beat}.",
     "Night watch! Show your face or keep moving.",
-    "*taps the lamppost — still lit*",
     "Quiet tonight. The {shift} watch holds the walls.",
   ],
   [WATCH_DAY]: [
-    "*scans the market crowd*",
     "Easy there — the warden's watching.",
     "Keep your hands to yourself on the {beat}.",
-    "*nods to the stallholders*",
     "Peaceful morning on the {beat}. Good.",
   ],
   [WATCH_GATE]: [
-    "*leans on the doorframe, watching the comings and goings*",
     "Mind the door — I'll keep an eye on it.",
     "None pass without a nod on my beat.",
-    "*checks the latch*",
   ],
   [WATCH_FIRE]: [
-    "*scans the rooftops*",
     "No smoke on the horizon. Good.",
-    "*sniffs the wind*",
     "Dry night — mind your candles, all of you.",
   ],
 };
@@ -528,7 +524,7 @@ function doWatchWork(director, record, citizen, type, nowMs) {
       if (!lastFiredByCitizen.has(key)) {
         lastFiredByCitizen.set(key, nowMs);
         const line = fill(pickOne(Math.random, FIRE_ALARM_LINES), { beat: scare });
-        citizen.forceChat?.(line);
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
         journalize(citizen, `raised the fire alarm over ${scare}`);
         seedRumor(`Smoke spotted over ${scare} — the watch raises the alarm!`);
         return;
@@ -543,7 +539,7 @@ function doWatchWork(director, record, citizen, type, nowMs) {
     beat: onBeat,
     shift,
   });
-  citizen.forceChat?.(line);
+  { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   journalize(citizen, `walked the watch on ${onBeat}`);
 }
 

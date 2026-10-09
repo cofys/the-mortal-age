@@ -50,6 +50,10 @@ const { normalizeName } = require("./CitizenBonds");
 const { getJournal } = require("./CitizenJournal");
 const { getMemory } = require("./CitizenMemory");
 const { GOSSIP_OFFICE } = require("../constants");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-offices.json");
 
@@ -203,7 +207,7 @@ function shoutIfSeen(director, citizenName, line) {
     const bot = record ? director.getBot?.(record) : null;
     if (!bot) return false;
     if (realPlayersNear(bot).length === 0) return false;
-    bot.forceChat?.(line);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     return true;
   } catch {
     return false;

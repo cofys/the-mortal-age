@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenFishers — fisher citizens who work the waters: deep-sea fishers haul
@@ -218,28 +222,24 @@ function canFish(type, weather, season) {
 // === Visible work lines (forceChat emotes, zero LLM) ===
 const WORK_LINES = {
   [FISHER_DEEPSEA]: [
-    "*hauls the net aboard*",
-    "*heaves the big net*",
-    "*throws the harpoon*",
-    "*sorts the catch on deck*",
+    "Deep-sea fishing.",
+    "Out on the water.",
+    "Big catches here.",
   ],
   [FISHER_RIVER]: [
-    "*casts the line*",
-    "*mends the fishing rod*",
-    "*baits the hook*",
-    "*reels in slowly*",
+    "River fishing.",
+    "Trout biting today.",
+    "Lines in the water.",
   ],
   [FISHER_ICE]: [
-    "*drills the ice hole*",
-    "*dangles the line through the ice*",
-    "*clears slush from the hole*",
-    "*wraps the hands against the cold*",
+    "Ice fishing.",
+    "Cold but biting.",
+    "Fishing the ice.",
   ],
   [FISHER_DIVER]: [
-    "*dives beneath the waves*",
-    "*surfaces with a gasp*",
-    "*checks the oyster beds*",
-    "*pries open an oyster*",
+    "Diving today.",
+    "Pearl diving.",
+    "Underwater work.",
   ],
 };
 
@@ -452,7 +452,7 @@ function doFishWork(director, record, citizen, type, nowMs) {
   const fish = catchFor(record.username, spot, nowMs);
   if (Math.random() < BIG_CATCH_CHANCE) {
     try {
-      citizen.forceChat?.(bigCatchLineFor(Math.random, fish, spot));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [bigCatchLineFor(Math.random, fish, spot)] })); }
     } catch {
       // forceChat is best-effort.
     }
@@ -461,7 +461,7 @@ function doFishWork(director, record, citizen, type, nowMs) {
     return;
   }
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -482,7 +482,7 @@ function doCatchHawk(director, citizen, record, nowMs) {
   const fish = catchFor(record.username, spot, nowMs);
   const line = hawkLineFor(Math.random, fish, spot);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -493,7 +493,7 @@ function doCatchHawk(director, citizen, record, nowMs) {
 function doStormWarning(citizen, username) {
   const line = stormLineFor(Math.random);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }

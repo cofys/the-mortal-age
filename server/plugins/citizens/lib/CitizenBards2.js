@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenBards2 — the amateur songfolk: street buskers, tale-spinners,
@@ -129,22 +133,17 @@ const FALLBACK_BALLADS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [SONFOLK_BUSKER]: [
-    "*strikes a simple chord, hat on the ground for coppers*",
-    "*plays a lively jig for the passersby*",
     "Tunes for coppers, friends — toss one in the hat!",
   ],
   [SONFOLK_TALESPINNER]: [
     "*clears throat* ...a quick verse, then, if you'll have it!",
     "Here's a two-minute tale — hold the fire while I spin it.",
-    "*counts a rhyme off on their fingers*",
   ],
   [SONFOLK_MINSTREL]: [
     "*tunes the old lute* ...right, this one's for the circle.",
-    "*plays a sweet simple melody for the campfire crowd*",
     "Know this one? Sing along if you do!",
   ],
   [SONFOLK_SWAPPER]: [
-    "*trades a verse with a traveler, scribbling on a scrap*",
     "Heard this one up north — listen, then tell me if I got it right.",
     "A verse for a verse, friend — that's the swapper's rule.",
   ],
@@ -535,7 +534,7 @@ function seedRumor(text) {
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
   try {
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch { /* cosmetic */ }
 }
 

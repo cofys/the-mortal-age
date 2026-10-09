@@ -29,6 +29,10 @@
 
 const fs = require("fs");
 const path = require("path");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-memory.json");
 
@@ -744,7 +748,7 @@ class CitizenMemoryStore {
         const bot = botFor?.(next);
         const line = gossipSpeakLine(rumor.kind, rumor.subjectDisplay, rumor.text);
         try {
-          bot?.forceChat?.(line.slice(0, 160));
+          { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 160)] })); }
           rumor.lastSpokeAt = now; // per-event ~30min cooldown, persisted
           this.lastGossipSpeakAt.set(rumor.holder, now);
           this.dirty = true;

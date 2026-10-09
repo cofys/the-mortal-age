@@ -39,6 +39,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level requires (perf lesson from the artisan fix): the exclusion
 // modules are linear deps with no back-references to this module, so
@@ -118,28 +122,16 @@ const SEA_YARNS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [DOCKFOLK_DOCKHAND]: [
-    "*heaves a crate onto the cart*",
-    "*rolls a barrel down the gangplank*",
     "Mind your toes — this one's full of nails!",
-    "*wipes sweat, takes a pull from the waterskin*",
   ],
   [DOCKFOLK_MENDER]: [
-    "*stitches canvas with a sailmaker's palm*",
-    "*splices rope with practiced fingers*",
     "A sail's like a promise — keep it whole or don't make it.",
-    "*brushes hot tar along the seam*",
   ],
   [DOCKFOLK_FISHER]: [
-    "*flicks a hand-line off the pier*",
-    "*baits the hook with a lugworm*",
     "Patience, patience — the sea pays those who wait.",
-    "*hauls in the line, hand over hand*",
   ],
   [DOCKFOLK_SALT]: [
-    "*leans on a bollard, watching the water*",
-    "*spits thoughtfully into the harbor*",
     "Sea's restless today. She'll blow by evening, mark me.",
-    "*mends a net one-handed, out of habit*",
   ],
 };
 
@@ -555,7 +547,7 @@ function doDockfolkWork(director, record, citizen, type, nowMs) {
     if (!lastFiredByCitizen.has(key)) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(pickOne(Math.random, ARRIVAL_LINES), { ship, dock: dock.name });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `${ship} arrived at ${dock.name}`);
       seedRumor(`${ship} makes harbor at ${dock.name}!`);
       return;
@@ -566,42 +558,42 @@ function doDockfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.4) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${dock.name}`);
   } else if (roll < 0.6) {
     if (type === DOCKFOLK_FISHER) {
       const line = `*hauls in the line* — ${catchFor(name, nowMs)}. The pot's fed tonight.`;
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `caught ${catchFor(name, nowMs)} at ${dock.name}`);
     } else if (type === DOCKFOLK_SALT) {
       const line = yarnFor(name, nowMs);
-      citizen.forceChat?.(`"${line}"`);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [`"${line}"`] })); }
       journalize(citizen, `spun a yarn at ${dock.name}`);
     } else {
       const jobs = jobsFor(name, type, nowMs);
       const job = jobs.length ? jobs[0] : "a dock job";
       const line = fill(pickOne(Math.random, FINISH_LINES), { job });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `finished ${job} at ${dock.name}`);
     }
   } else if (roll < 0.8) {
     if (type === DOCKFOLK_DOCKHAND) {
       const line = pickOne(Math.random, HIRE_LINES);
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } else if (type === DOCKFOLK_MENDER) {
       const line = pickOne(Math.random, SUPPLY_LINES);
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } else if (type === DOCKFOLK_SALT) {
       const line = pickOne(Math.random, YARN_LINES);
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } else {
       const line = `*baits the hook* — the sea's in a ${weatherFor(nowMs)} mood today.`;
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     }
     journalize(citizen, `offered services at ${dock.name}`);
   } else {
     const line = `*looks out past the breakwater* — ${weatherFor(nowMs)} seas and a fair tide.`;
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `read the weather at ${dock.name}`);
   }
 }

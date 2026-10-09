@@ -39,6 +39,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level requires (perf lesson from the artisan fix): the exclusion
 // modules are linear deps with no back-references to this module, so
@@ -128,28 +132,16 @@ const GARDEN_HERBS = [
 // === Scripted lines ===
 const BREW_LINES = {
   [BREWFOLK_HEDGEWITCH]: [
-    "*stirs the cottage pot, muttering old rhymes*",
-    "*ties a bundle of dried herbs with twine*",
     "Come back at moonrise — the batch needs the night air.",
-    "*pours the brew through muslin into a crock*",
   ],
   [BREWFOLK_BREWER]: [
-    "*stirs the community cauldron, watching the colour turn*",
-    "*skims the foam off the top — nearly ready*",
     "One more stir and she'll be bottled by noon.",
-    "*labels the bottles with a charcoal stub*",
   ],
   [BREWFOLK_MIXER]: [
-    "*blends two vials and watches them swirl*",
-    "*measures drops from a tiny pipette*",
     "Half mint, half honey — the festival crowd loves this one.",
-    "*seals the cork with a dab of wax*",
   ],
   [BREWFOLK_EXPERIMENTER]: [
-    "*scribbles in a battered notebook*",
-    "*adds a pinch of something purple — probably fine*",
     "If this works, it'll glow. If not, it'll smoke.",
-    "*adjusts the flame under the retort*",
   ],
 };
 
@@ -160,10 +152,10 @@ const HAWK_LINES = [
 ];
 
 const MISHAP_LINES = [
-  "*POOF* — purple smoke everywhere! Stand back!*",
-  "*the retort just spat green flames!*",
-  "*cough* — open a window, that batch went wrong!*",
-  "*a foul smell rolls out of the stillroom — hold your nose!*",
+  "Whoa! Purple smoke everywhere! Stand back!",
+  "The retort just spat green flames!",
+  "Open a window, that batch went wrong!",
+  "Hold your nose, something's off in there!",
 ];
 
 const LESSON_LINES = [
@@ -548,7 +540,7 @@ function doBrewfolkWork(director, record, citizen, type, nowMs) {
     const key = "mishap:" + stillroom.name + ":" + day;
     if (!lastFiredByCitizen.has(key)) {
       lastFiredByCitizen.set(key, nowMs);
-      citizen.forceChat?.(mishap);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [mishap] })); }
       journalize(citizen, `had a stillroom mishap at ${stillroom.name} (nobody hurt)`);
       seedRumor(`A stillroom mishap at ${stillroom.name} — green smoke everywhere!`);
       return;
@@ -559,7 +551,7 @@ function doBrewfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.45) {
     const line = pickOne(Math.random, BREW_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `brewed at ${stillroom.name}`);
   } else if (roll < 0.75) {
     const brews = brewsFor(name, nowMs);
@@ -568,11 +560,11 @@ function doBrewfolkWork(director, record, citizen, type, nowMs) {
       brew,
       price: priceFor(brew),
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hawked ${brew} at ${stillroom.name}`);
   } else {
     const line = pickOne(Math.random, LESSON_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered brewing lessons at ${stillroom.name}`);
   }
 }

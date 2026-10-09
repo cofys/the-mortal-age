@@ -36,6 +36,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const ACTOR_RADIUS = 14; // tiles — close enough to see the stage
@@ -149,17 +153,9 @@ const MONOLOGUES = Object.freeze({
 });
 
 const STAGEHAND_LINES = Object.freeze([
-  "*hauls a painted backdrop into place*",
-  "*lowers the moon prop on its rope*",
-  "*sweeps the stage between acts*",
-  "*whispers a forgotten line from the wings*",
-  "*rings the act-change bell*",
 ]);
 
 const BOW_LINES = Object.freeze([
-  "*takes a deep bow to thunderous applause*",
-  "*bows low, hand on heart*",
-  "*takes a bow as roses sail onto the stage*",
 ]);
 
 const PREMIERE_LINES = Object.freeze([
@@ -429,7 +425,7 @@ function troupeMemberFor(playerName, nowMs = Date.now()) {
 function heckleSeen(actorCitizen, hecklerName) {
   try {
     const line = pickOne(Math.random, HECKLE_COMEBACKS);
-    actorCitizen?.forceChat?.(line);
+    { const _cvp = actorCitizen?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(actorCitizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(actorCitizen, `heckled by ${hecklerName} and answered: "${line}"`);
     return line;
   } catch {
@@ -490,7 +486,7 @@ function tipActor(event, deps = {}, nowMs = Date.now()) {
 
   event.handled = true;
   try {
-    target.forceChat?.(pickOne(Math.random, TIP_THANKS));
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: TIP_THANKS })); }
   } catch { /* cosmetic */ }
   journalize(target, `received a ${amount}-coin tip from ${player.getUsername?.() ?? "a patron"}`);
   return amount;
@@ -579,26 +575,26 @@ function performScene(director, record, citizen, type, nowMs) {
   if (play.premiere && (lastTroupeAnnounce.get(theater.name) ?? -1) < day) {
     lastTroupeAnnounce.set(theater.name, day);
     const line = fill(pickOne(Math.random, PREMIERE_LINES), slots);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `premiered "${play.title}" at ${theater.name}`);
     seedRumor(`Premiere tonight: "${play.title}" by ${troupe.name} at ${theater.name}!`);
     return;
   }
 
   if (type === ACTOR_STAGEHAND) {
-    citizen.forceChat?.(pickOne(Math.random, STAGEHAND_LINES));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: STAGEHAND_LINES })); }
     return;
   }
 
   // Opening for leads; monologues for tragedians/comedians.
   if (type === ACTOR_LEAD) {
-    citizen.forceChat?.(fill(pickOne(Math.random, OPENING_LINES), slots));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, fill(voiceLine(voiceFor(_cvp), { plain: OPENING_LINES }), slots)); }
     journalize(citizen, `opened "${play.title}" at ${theater.name}`);
     return;
   }
 
   const line = pickOne(Math.random, MONOLOGUES[play.genre]);
-  citizen.forceChat?.(line);
+  { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   journalize(citizen, `performed in "${play.title}" (${play.genre}) at ${theater.name}`);
 }
 
@@ -614,7 +610,7 @@ function maybeInvitePlayer(record, citizen, type) {
       ? fill(pickOne(Math.random, JOIN_LINES), { troupe: troupe.name })
       : fill(pickOne(Math.random, INVITE_LINES), { play: play.title });
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch { /* cosmetic */ }
   return line;
 }

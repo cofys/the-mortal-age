@@ -33,6 +33,10 @@ const fs = require("fs");
 const path = require("path");
 const { agentRng, chance } = require("./humanizer");
 const { ROLE_MERCHANT } = require("../constants");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-kin.json");
 const MAX_BONDS_PER_CITIZEN = 12;
@@ -482,7 +486,7 @@ function seedRumor({ kingdomId, kind, subject, subjectDisplay, text, holder }) {
 
 function say(bot, line) {
   try {
-    bot?.forceChat?.(String(line).slice(0, 160));
+    { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(line).slice(0, 160)] })); }
   } catch {
     // Non-fatal.
   }

@@ -52,6 +52,10 @@ const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // --- tuning --------------------------------------------------------------------
 
@@ -318,7 +322,7 @@ function startTask(director, record, bot, taskKey, nowMs) {
   // Walk to the spot, then face it and work. The emote is the visible bit.
   walkTo(director, bot, tile);
   try {
-    bot.forceChat?.(def.emote);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [def.emote] })); }
   } catch {
     // Cosmetic.
   }
@@ -375,7 +379,7 @@ function tickGreeting(director, record, bot, nowMs) {
     // Non-fatal.
   }
   try {
-    bot.forceChat?.(SHOPKEEPER_GREETINGS[Math.floor(rng() * SHOPKEEPER_GREETINGS.length)]);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [SHOPKEEPER_GREETINGS[Math.floor(rng() * SHOPKEEPER_GREETINGS.length)]] })); }
   } catch {
     // Cosmetic.
   }

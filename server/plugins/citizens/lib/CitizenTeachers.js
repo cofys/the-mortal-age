@@ -36,6 +36,10 @@ const fs = require("fs");
 const { getJournal } = require("./CitizenJournal");
 const { normalizeName } = require("./CitizenBonds");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const CLASS_RADIUS = 14; // tiles — close enough to see/hear the lesson
@@ -121,12 +125,9 @@ const LESSON_LINES = Object.freeze({
 });
 
 const STUDENT_LINES = Object.freeze([
-  "*scribbles furiously on a wax tablet*",
   "But why does it work that way?",
   "I got it right this time! Did you see?",
-  "*recites under their breath, counting on fingers*",
   "Will this be on the recitation?",
-  "*nudges a classmate and whispers*",
 ]);
 
 const WELCOME_LINES = Object.freeze([
@@ -543,8 +544,8 @@ function holdClass(director, record, teacher, teacherBot, nowMs, rng) {
   const subject = pickOne(rng, subjects);
   const line = fillLessonLine(pickOne(rng, LESSON_LINES[subject]), teacherType, subject);
   try {
-    teacherBot.forceChat?.(`*${TEACHER_TITLES[teacherType]} holds class — ${subject}*`);
-    teacherBot.forceChat?.(line);
+    { const _cvp = teacherBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(teacherBot, voiceLine(voiceFor(_cvp), { plain: [`*${TEACHER_TITLES[teacherType]} holds class — ${subject}*`] })); }
+    { const _cvp = teacherBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(teacherBot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // Non-fatal.
   }
@@ -553,7 +554,7 @@ function holdClass(director, record, teacher, teacherBot, nowMs, rng) {
   const class_ = studentsNear(director, teacherBot, CLASS_SEARCH_RADIUS).slice(0, 2);
   for (const studentBot of class_) {
     try {
-      studentBot.forceChat?.(pickOne(rng, STUDENT_LINES));
+      { const _cvp = studentBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(studentBot, voiceLine(voiceFor(_cvp), { plain: STUDENT_LINES }, rng)); }
     } catch {
       // Non-fatal.
     }
@@ -566,7 +567,7 @@ function holdClass(director, record, teacher, teacherBot, nowMs, rng) {
     if (nowMs - last < WELCOME_COOLDOWN_MS) continue;
     lastWelcomeByTeacherPlayer.set(key, nowMs);
     try {
-      teacherBot.forceChat?.(pickOne(rng, WELCOME_LINES));
+      { const _cvp = teacherBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(teacherBot, voiceLine(voiceFor(_cvp), { plain: WELCOME_LINES }, rng)); }
     } catch {
       // Non-fatal.
     }

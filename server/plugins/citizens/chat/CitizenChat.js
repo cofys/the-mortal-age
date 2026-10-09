@@ -1,4 +1,7 @@
 "use strict";
+const { voiceFor, voiceLine } = require("../lib/citizenVoice");
+const { sayPublic } = require("./CitizenSayPublic");
+
 
 /**
  * CitizenChat — the citizens plugin's side of the chat contract.
@@ -678,7 +681,7 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
     if (speaker) speaker.sendMessage(msg);
     // Also force-chat on the bot so nearby players see it.
     try {
-      bot?.forceChat?.(msg.split(": ").slice(1).join(": ") || msg);
+      { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [msg.split(": ").slice(1).join(": ") || msg] })); }
     } catch {
       // Non-fatal.
     }

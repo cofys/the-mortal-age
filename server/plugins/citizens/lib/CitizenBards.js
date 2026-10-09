@@ -42,6 +42,10 @@ const { getJournal } = require("./CitizenJournal");
 const { getMemory } = require("./CitizenMemory");
 const { normalizeName } = require("./CitizenBonds");
 const { chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const BARD_FRACTION_PCT = 20; // ~20% of commoners are bards (after exclusions)
@@ -133,18 +137,15 @@ const REPERTOIRE = Object.freeze({
 const PERFORMANCE_LINES = Object.freeze({
   [BARD_MINSTREL]: Object.freeze([
     "*draws a deep breath* ...and now, '{song}'!",
-    "*sings a verse of '{song}', voice ringing off the rafters*",
     "They wept in Ardougne when I sang '{song}'. Wept, I tell you!",
     "'{song}' — as requested by the fine folk of the hall!",
     "*holds the final note of '{song}'* ...thank you, thank you!",
     "A love song next? Or shall we have '{song}' again?",
   ]),
   [BARD_INSTRUMENTALIST]: Object.freeze([
-    "*tunes the lute, then launches into '{song}'*",
     "No words tonight — just the music. '{song}'.",
     "*fingers fly across the strings* ...'{song}', for the dancers!",
     "This one needs no singer. Listen — '{song}'.",
-    "*the drum joins in, and the whole hall is tapping along to '{song}'*",
     "An old tune, '{song}', older than the stones of this hall.",
   ]),
   [BARD_STORYTELLER]: Object.freeze([
@@ -158,7 +159,6 @@ const PERFORMANCE_LINES = Object.freeze({
   [BARD_JESTER]: Object.freeze([
     "*tumbles across the floor* ...and THAT is '{song}'!",
     "A jest for the court! '{song}'!",
-    "*juggles three apples while reciting '{song}' backwards*",
     "The king laughed at '{song}'. The king! Laughing!",
     "Don't try '{song}' at home. Especially the custard part.",
     "*bows so low the bells on his cap touch the floor* '{song}'!",
@@ -596,7 +596,7 @@ function tipBard(event, deps = {}, nowMs = Date.now()) {
 
   event.handled = true;
   try {
-    target.forceChat?.(pickOne(Math.random, TIP_THANKS));
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: TIP_THANKS })); }
   } catch { /* cosmetic */ }
   try {
     const mem = getMemory();
@@ -718,7 +718,7 @@ function dailyRhythms(director, nowMs, rng) {
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
   try {
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch { /* cosmetic */ }
 }
 

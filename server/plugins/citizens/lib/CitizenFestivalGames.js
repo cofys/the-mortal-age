@@ -25,6 +25,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const GAMES_RADIUS = 14; // tiles — close enough to see/hear
@@ -451,7 +455,7 @@ function doGameWork(director, record, citizen, festival, nowMs) {
     if (!announcedToday.has(key)) {
       announcedToday.set(key, nowMs);
       const line = fill(pickOne(Math.random, ANNOUNCE_LINES), slots);
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(record.username, "social", `announced ${GAME_NAMES[game]} at the festival`);
       return;
     }
@@ -460,7 +464,7 @@ function doGameWork(director, record, citizen, festival, nowMs) {
   if (roll < 0.7) {
     // Cheer on the competitors.
     const line = pickOne(Math.random, CHEER_LINES[game]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     return;
   }
 
@@ -479,7 +483,7 @@ function doGameWork(director, record, citizen, festival, nowMs) {
         ...slots,
         winner,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(record.username, "social", `cheered ${winner}'s victory at ${GAME_NAMES[game]}`);
       // Seed the win into rumors once per game per day.
       const rkey = "win:" + kingdomId + ":" + day + ":" + game;
@@ -494,7 +498,7 @@ function doGameWork(director, record, citizen, festival, nowMs) {
   // Invite the player to join, or talk bets.
   if (Math.random() < 0.5) {
     const line = fill(pickOne(Math.random, PLAYER_INVITE_LINES), slots);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } else {
     const rosterNames = [];
     try {
@@ -509,7 +513,7 @@ function doGameWork(director, record, citizen, festival, nowMs) {
         ...slots,
         name: comps[0],
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     }
   }
 }

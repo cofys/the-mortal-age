@@ -56,6 +56,10 @@ const { getJournal } = require("./CitizenJournal");
 const { normalizeName, sendInvite, getInvites, resolveInvite } = require("./CitizenBonds");
 const { KINGDOM_IDS, siteTileByKingdom } = require("../brain/CitizenSites");
 const { ROLE_COURTIER } = require("../constants");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Kingdoms plugin is optional at require time (plain-node tests run without
 // it); all live calls are guarded.
@@ -787,7 +791,7 @@ function diplomatBot(director, mission) {
 /** Scripted line from a materialized citizen. Cosmetic, never throws. */
 function forceSay(bot, line) {
   try {
-    bot?.forceChat?.(String(line).slice(0, LINE_MAX));
+    { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(line).slice(0, LINE_MAX)] })); }
   } catch {
     // Non-fatal.
   }

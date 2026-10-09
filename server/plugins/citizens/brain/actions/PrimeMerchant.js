@@ -19,6 +19,9 @@
  */
 
 const { playerState } = require("../../../bots/brain/ActionState");
+const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
+
 const {
   requestMovement,
   clearMovementRequest,
@@ -160,7 +163,7 @@ function createPrimeMerchantAction(spec, world) {
 
   function say(player, line) {
     try {
-      player.forceChat?.(line);
+      { const _cvp = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(player, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } catch (error) {
       // Cosmetic only.
     }

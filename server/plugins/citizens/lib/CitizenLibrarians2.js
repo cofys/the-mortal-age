@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenLibrarians2 — the bookfolk: amateur reading-life folk under the
@@ -169,43 +173,33 @@ const SWAP_BOOKS = [
 
 // Morning setup flavor: before 10:00 the bookfolk are still setting up.
 const SETUP_LINES = [
-  "*stacks the swap pile, biggest books at the bottom*",
-  "*chalk-marks the day's pamphlet prices on a slate*",
-  "*sweeps the reading bench with {their} sleeve*",
-  "*pins the broadsides up crooked and hopes for no wind*",
-  "*counts the tale-circle cushions, twice*",
-  "*wipes pamphlet ink off {their} hands*",
+  "Books out for swapping.",
+  "Setting up the reading corner.",
+  "Pamphlets priced on the slate.",
+  "Just stacking the swap pile.",
 ];
 
 // Work lines per type.
 const WORK_LINES = {
   [READING_HELPER]: [
-    "*re-shelves the returns pile in the reading corner*",
-    "*fetches a volume for a waiting reader*",
-    "*straightens the bench's book row*",
-    "*shushes a giggling corner, kindly*",
-    "*wipes a smudge off a well-thumbed page*",
+    "Helping readers.",
+    "Find a book?",
+    "Reading help here.",
   ],
   [PAMPHLET_SELLER]: [
-    "*waves a broadside at the passing crowd*",
-    "*folds the pamphlet stack and stacks the coins*",
-    "*reads a verse aloud to prove it's worth a copper*",
-    "*pins a fresh broadside over the rained-on one*",
-    "*counts the remaining pamphlets, hoping*",
+    "Pamphlets here!",
+    "News sheets!",
+    "Fresh pamphlets!",
   ],
   [STORY_MINDER]: [
-    "*gathers the tale-circle into a wider ring*",
-    "*hushes a rowdy corner of the circle*",
-    "*hands the littlest one the good cushion*",
-    "*tunes a battered tale-drum*",
-    "*shoos a stray dog out of the circle*",
+    "Minding the tales.",
+    "Stories kept.",
+    "Tale-keeper here.",
   ],
   [BOOK_SWAPPER]: [
-    "*appraises a offered book, turning it over*",
-    "*buries a dud under the good pile*",
-    "*marks a swapped book with the pile's stamp*",
-    "*bargains a one-for-one swap down to a smile*",
-    "*fishes a damp book out and sets it in the sun*",
+    "Swapping books.",
+    "Trade a tome?",
+    "Book swap open.",
   ],
 };
 
@@ -560,7 +554,7 @@ function seedRumor(rng, text) {
 /** Say a line in chat (never throws). */
 function forceSay(citizen, text) {
   try {
-    if (citizen?.forceChat) citizen.forceChat(String(text).slice(0, 120));
+    if (citizen?.forceChat) { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
     else if (citizen?.say) citizen.say(String(text).slice(0, 120));
   } catch { /* cosmetic */ }
 }

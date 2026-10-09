@@ -36,6 +36,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const TUTOR_RADIUS = 14; // tiles — close enough to see/hear
@@ -124,11 +128,8 @@ const LESSON_LINES = {
 
 const PUPIL_LINES = [
   "Yes, {teacher}!",
-  "*scribbles furiously*",
   "But why, {teacher}?",
-  "*reads aloud, stumbling, then steady*",
   "I did it! Look, {teacher} — I did it!",
-  "*nods along, eyes wide*",
 ];
 
 const OFFER_LINES = {
@@ -599,7 +600,7 @@ function doEducatorWork(director, record, citizen, type, nowMs) {
       const line = fill(pickOne(Math.random, GRADUATION_LINES), {
         pupil: graduate,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `${graduate} graduated from ${venue.name}`);
       seedRumor(`${graduate} graduated at ${venue.name}!`);
       return;
@@ -614,7 +615,7 @@ function doEducatorWork(director, record, citizen, type, nowMs) {
     const line = fill(pickOne(Math.random, LESSON_LINES[type]), {
       subject: lesson.subject,
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `taught ${lesson.subject} at ${venue.name}`);
   } else if (roll < 0.75) {
     const pupils = pupilsFor(name, nowMs);
@@ -622,13 +623,13 @@ function doEducatorWork(director, record, citizen, type, nowMs) {
     const line = fill(pickOne(Math.random, PUPIL_LINES), {
       teacher: record.username,
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `${pupil} answered a question at ${venue.name}`);
   } else {
     const line = fill(pickOne(Math.random, OFFER_LINES[type]), {
       venue: venue.name,
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered ${type} lessons at ${venue.name}`);
   }
 }

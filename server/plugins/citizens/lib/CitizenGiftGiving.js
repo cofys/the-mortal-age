@@ -35,6 +35,10 @@ const { getJournal } = require("./CitizenJournal");
 const { normalizeName } = require("./CitizenBonds");
 const { warmthOf } = require("../StreetNotices");
 const { agentRng, chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const GIFT_RADIUS = 12; // tiles — close enough to hand something over
@@ -434,7 +438,7 @@ function giveGift(citizen, player, record, occasion, gift, vars, nowMs = Date.no
     gift: giftDesc,
   });
   try {
-    citizen.forceChat?.(line.slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
   } catch {
     // A shy citizen.
   }

@@ -41,6 +41,10 @@
 
 const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // --- phases ------------------------------------------------------------------
 
@@ -279,7 +283,7 @@ function workTick(director, record, bot, nowMs) {
   journalEvent(record.username, text, "routine");
   if (realPlayersNear(bot).length > 0) {
     try {
-      bot.forceChat?.(line);
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } catch {
       // Cosmetic.
     }
@@ -294,7 +298,7 @@ function followAckTick(director, record, bot, phase, nowMs, rng) {
   record.followAckAt = nowMs;
   const line = ackForPhase(record, phase, rng);
   try {
-    bot.forceChat?.(line);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // Cosmetic.
   }
@@ -316,7 +320,7 @@ function tickCitizenRoutine(director, record, bot, hour, nowMs) {
     const sayLine = sayForPhase(record, phase, rng);
     if (sayLine && realPlayersNear(bot).length > 0) {
       try {
-        bot.forceChat?.(sayLine);
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [sayLine] })); }
       } catch {
         // Cosmetic.
       }

@@ -23,6 +23,10 @@
 
 const Store = require("./PlayerShopStore");
 const KingdomStore = require("../../kingdoms/KingdomStore");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("../lib/citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const QUIT_LINES = [
   "No pay, no work — I quit!",
@@ -62,7 +66,7 @@ function releaseEmployee(stall, reason, hooks = {}) {
     }
     if (reason === "unpaid") {
       try {
-        bot.forceChat?.(pick(QUIT_LINES));
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: QUIT_LINES })); }
       } catch {
         // Silent resentment.
       }

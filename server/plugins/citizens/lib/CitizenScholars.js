@@ -34,6 +34,10 @@
  */
 
 const { getJournal } = require("./CitizenJournal");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const LECTURE_RADIUS = 14; // tiles — close enough to hear a talk
@@ -113,10 +117,9 @@ const LECTURE_LINES = [
 ];
 
 const STUDY_LINES = [
-  "*scribbles notes about {topic}*",
-  "*mutters while studying {topic}*",
-  "*cross-references scrolls on {topic}*",
-  "*sketches diagrams of {topic}*",
+  "Studying {topic} here.",
+  "Deep in the books on {topic}.",
+  "Notes on {topic}, anyone interested?",
 ];
 
 // === State ===
@@ -386,7 +389,7 @@ function tickLectures(director, nowMs = Date.now(), desync = null) {
       const lastLecture = lastLectureAt.get(name) || 0;
       if (nowMs - lastLecture >= LECTURE_COOLDOWN_MS) {
         try {
-          citizen.forceChat?.(lectureLine(name, r.topic));
+          { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [lectureLine(name, r.topic)] })); }
         } catch {
           /* display-only */
         }
@@ -399,7 +402,7 @@ function tickLectures(director, nowMs = Date.now(), desync = null) {
       const lastStudy = lastStudyAt.get(name) || 0;
       if (nowMs - lastStudy >= STUDY_COOLDOWN_MS) {
         try {
-          citizen.forceChat?.(studyLine(r.topic));
+          { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [studyLine(r.topic)] })); }
         } catch {
           /* display-only */
         }

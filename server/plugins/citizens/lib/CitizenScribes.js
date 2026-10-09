@@ -33,6 +33,10 @@
  */
 
 const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const SCRIBE_RADIUS = 14; // tiles — close enough to see/hear
@@ -98,28 +102,17 @@ const SERVICES = {
 // === Scripted lines ===
 const WORK_LINES = {
   [SCRIBE_COPYIST]: [
-    "*dips the quill, copies line by line*",
-    "*rules the margins with a steady hand*",
     "Mind the ink — it smudges if you breathe on it.",
-    "*compares the copy against the original*",
   ],
   [SCRIBE_LETTER]: [
-    "*takes down a customer's words, word by word*",
     "Shall I make it sound fond, or firm?",
-    "*sands the letter dry*",
     "Dictate slowly — my hand is quick but not that quick.",
   ],
   [SCRIBE_RECORD]: [
-    "*totals a column of figures*",
-    "*enters the day's takings in the ledger*",
     "Every coin accounted for — that's the whole art of it.",
-    "*cross-checks yesterday's entries*",
   ],
   [SCRIBE_CALLIGRAPHER]: [
-    "*paints a gold-leaf initial*",
-    "*flourishes a capital letter*",
     "A letter should look as fine as it reads.",
-    "*mixes a fresh pot of red ink*",
   ],
 };
 
@@ -519,7 +512,7 @@ function doScribeWork(director, record, citizen, type, nowMs) {
         lastFiredByCitizen.set(key, nowMs);
         const piece = pickOne(rng, SERVICES[SCRIBE_CALLIGRAPHER]).name;
         const line = fill(pickOne(rng, UNVEIL_LINES), { piece });
-        citizen.forceChat?.(line);
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
         journalize(citizen, `unveiled ${piece} at ${scriptorium.name}`);
         seedRumor(`${piece} unveiled at ${scriptorium.name}!`);
         return;
@@ -533,7 +526,7 @@ function doScribeWork(director, record, citizen, type, nowMs) {
     if (roll < 0.3) {
       const title = manuscriptForToday(nowMs);
       const line = fill(pickOne(Math.random, COPY_LINES), { title });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `finished copying ${title} at ${scriptorium.name}`);
       return;
     }
@@ -543,11 +536,11 @@ function doScribeWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.55) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${scriptorium.name}`);
   } else {
     const line = pickOne(Math.random, OFFER_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered writing services at ${scriptorium.name}`);
   }
 }

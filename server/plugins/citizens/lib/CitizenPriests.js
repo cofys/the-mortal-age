@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenPriests — priest citizens who guide worship: services, blessings,
@@ -317,7 +321,7 @@ function logWork(username, kind, text) {
 
 function forceSay(bot, line) {
   try {
-    bot.forceChat?.(String(line).slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(line).slice(0, 120)] })); }
   } catch {
     // Cosmetic only.
   }
@@ -408,10 +412,7 @@ const ABSOLUTION_LINES = [
   "The weight is lifted. Walk in the light now.",
 ];
 const MONK_LINES = [
-  "*sweeps the shrine steps in slow, even strokes*",
-  "*lights a stick of incense and bows*",
   "Silence is the oldest prayer. Join me a while.",
-  "*tends the offering bowls, humming low*",
   "The temple asks little: sweep, breathe, be kind.",
 ];
 const ORACLE_LINES = [

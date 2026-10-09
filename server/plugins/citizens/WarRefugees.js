@@ -21,6 +21,10 @@ const { getDirector } = require("./director/CitizenDirector");
 const { siteTileByKingdom } = require("./brain/CitizenSites");
 const { needsFor, addMood } = require("./brain/CitizenNeeds");
 const { noisyTile, agentRng } = require("./lib/humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("./constants");
+const { voiceFor, voiceLine } = require("./lib/citizenVoice");
+const { sayPublic } = require("./chat/CitizenSayPublic");
+
 const {
   ROLE_REFUGEE,
   ATTR_REFUGEE_ROUTE,
@@ -118,7 +122,7 @@ function spawnColumn(attackerId, defenderId) {
         // Non-fatal.
       }
       try {
-        bot.forceChat?.(pick(FLIGHT_CRIES).slice(0, 120));
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [pick(FLIGHT_CRIES).slice(0, 120)] })); }
       } catch {
         // The flight speaks for itself.
       }

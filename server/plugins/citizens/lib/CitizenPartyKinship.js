@@ -31,6 +31,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { warmthOf } = require("../StreetNotices");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const REFUSAL_LINE_COOLDOWN_MS = 6 * 3600 * 1000; // a leader explains themselves at most this often
 const MAX_STORMED_PAIRS = 16; // per-party bound on remembered storm-offs
@@ -325,7 +329,7 @@ function maybeRefusalLine(director, record, excluded, nowMs = Date.now()) {
   if (!bot || realPlayersNear(bot).length === 0) return;
   lastRefusalLineAt.set(key, nowMs);
   try {
-    bot.forceChat?.(refusalLine(record, feudDisplay).slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [refusalLine(record, feudDisplay).slice(0, 120)] })); }
   } catch {
     // A silent leader.
   }
@@ -407,7 +411,7 @@ function maybeStormOff(director, party, leader, nowMs = Date.now()) {
   }
   if (bot && realPlayersNear(bot).length > 0) {
     try {
-      bot.forceChat?.(stormOffLine(stormerRec, otherDisplay).slice(0, 120));
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [stormOffLine(stormerRec, otherDisplay).slice(0, 120)] })); }
     } catch {
       // A silent exit.
     }

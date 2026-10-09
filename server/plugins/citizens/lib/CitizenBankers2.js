@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenBankers2 — the moneyfolk: street money-changers, coin-sorters for
@@ -165,10 +169,10 @@ const ASSAY_LINES = [
 ];
 
 const COUNT_LINES = [
-  "*counts the coins, stack by neat stack*",
-  "*weighs a handful against the brass weight*",
-  "*tallies the day's takings, twice over*",
-  "*tips the purse across the table, counting under breath*",
+  "Counting the day's takings.",
+  "Just tallying up.",
+  "Coins stacked neat.",
+  "Balancing the books.",
 ];
 
 const LOAN_LINES = [
@@ -637,7 +641,7 @@ function seedRumor(text) {
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
   try {
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch { /* cosmetic */ }
 }
 

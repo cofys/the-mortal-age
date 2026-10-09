@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenCartographers2 — the mapfolk: amateur map-scratchers under the
@@ -160,36 +164,34 @@ const MAPFOLK_REGIONS = [
 
 // Morning setup flavor: before 10:00 the mapfolk are still setting up.
 const SETUP_LINES = [
-  "*sets the kiosk board at an angle that almost works*",
-  "*uncaps the inkwell and weights down the sketch pile*",
-  "*chalk-marks the day's sketch prices on the corner*",
-  "*unrolls the rough copies and pins them to the kiosk*",
-  "*wipes charcoal dust off their hands*",
-  "*dips a wax pencil and tests it on the board's edge*",
+  "Kiosk's open, maps for sale.",
+  "Setting up the map stand.",
+  "Prices chalked on the corner.",
+  "Just pinning up today's copies.",
 ];
 
 // Work lines per type.
 const WORK_LINES = {
   [MAP_SKETCHER]: [
-    "*sketches a rough coastline, tongue between {their} teeth*",
-    "*shades a hill range in with a blunt pencil*",
-    "*holds a sketch at arm's length, squinting*",
-    "*sharpens a charcoal stick with a penknife*",
-    "*copies a bend in the river freehand, off by a mile*",
+    "Sketching maps.",
+    "Rough sketches here.",
+    "Map sketcher working.",
+    "Detailed sketches.",
+    "Maps drawn to order.",
   ],
   [CHART_HAWKER]: [
-    "*flicks a corner of the copy pile to stop the pages sticking*",
-    "*calls out the day's rough copies to passersby*",
-    "*holds up a smudged hand-copy for a better look*",
-    "*haggles cheerfully over a folded chart*",
-    "*wipes a fresh smudge off a copy with {their} sleeve*",
+    "Charts! Get your charts!",
+    "Hawking maps here.",
+    "Fresh charts!",
+    "Best charts in town!",
+    "Hawking daily.",
   ],
   [ROUGH_DRAFTER]: [
-    "*inks a coarse route-chart, fingers black to the knuckle*",
-    "*rules a rough distance scale along the page's edge*",
-    "*blots a wet chart and hopes for the best*",
-    "*drafts a traveler's way-chart in big clumsy lines*",
-    "*asks a passerby which way the road bends, writes it down*",
+    "Rough drafts here.",
+    "Drafting plans.",
+    "Sketches cheap.",
+    "Drafts cheap!",
+    "Wobbly but works.",
   ],
 };
 
@@ -199,16 +201,22 @@ const HAWK_LINES = {
     "Sketches! Rough maps of {region}, drawn by my own hand!",
     "A rough sketch of {region} — cheap, and cheaper than getting lost!",
     "Traveller! Take a rough copy of {region}, mind the smudges!",
+    "Detailed sketches.",
+    "Maps drawn to order.",
   ],
   [CHART_HAWKER]: [
     "Hand-copies! {region} road charts, copied fair by my own hand!",
     "Copies of the {region} chart — a copper, take your pick!",
     "Cheap charts! {region}, smudged a little, priced a lot little!",
+    "Best charts in town!",
+    "Hawking daily.",
   ],
   [ROUGH_DRAFTER]: [
     "Route-charts! A rough draft of {region} for a copper or two!",
     "Heading out? A coarse chart of {region}, inked this morning!",
     "Rough charts for travellers — {region}, take one for the road!",
+    "Drafts cheap!",
+    "Wobbly but works.",
   ],
 };
 
@@ -540,7 +548,7 @@ function seedRumor(rng, event) {
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
   try {
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch { /* cosmetic */ }
 }
 

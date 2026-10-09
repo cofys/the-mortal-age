@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenHerbalists — citizens who gather herbs, study plants, and supply
@@ -257,20 +261,17 @@ function herbOfTheDay(username, kingdom, dateMs) {
 // === Scripted lines (all data, zero LLM) ===
 
 const GATHER_EMOTES = [
-  "*crouches to inspect a patch of green*",
-  "*plucks leaves with practiced fingers*",
-  "*brushes soil from a fresh root*",
-  "*sniffs a crushed leaf, nodding*",
-  "*fills a woven basket with cuttings*",
-  "*trims stems with a small sickle*",
+  "Gathering herbs here.",
+  "Good patch of greens.",
+  "Just plucking leaves.",
+  "Fresh roots today.",
 ];
 
 const PREP_EMOTES = [
-  "*spreads leaves on a drying rack*",
-  "*grinds dried herbs with a mortar*",
-  "*ties bundles of herbs with twine*",
-  "*labels jars of powdered leaf*",
-  "*weighs out dried portions*",
+  "Drying herbs out.",
+  "Grinding these down.",
+  "Tying up bundles.",
+  "Just labeling jars.",
 ];
 
 function hawkLine(type, herb) {
@@ -313,7 +314,7 @@ function playAnim(director, citizen, animId) {
 /** Force a chat line above the citizen's head, best-effort. */
 function forceChat(citizen, line) {
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch { /* cosmetic only */ }
 }
 

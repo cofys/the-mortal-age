@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenBlacksmiths — blacksmith citizens who forge the cities' weapons,
@@ -364,7 +368,7 @@ function playAnim(director, bot, animId) {
 function sayLine(citizen, line) {
   try {
     if (!line || !citizen?.forceChat) return false;
-    citizen.forceChat(String(line));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(line)] })); }
     return true;
   } catch {
     return false;
@@ -374,12 +378,6 @@ function sayLine(citizen, line) {
 // === Line pools (scripted, zero LLM) ===
 
 const WORK_EMOTES = Object.freeze([
-  "*hammers the glowing metal*",
-  "*shapes the bar on the anvil*",
-  "*quenches the hot steel*",
-  "*folds the metal over itself*",
-  "*grinds an edge on the wheel*",
-  "*stokes the furnace coals*",
 ]);
 
 const WORK_LINES = Object.freeze([

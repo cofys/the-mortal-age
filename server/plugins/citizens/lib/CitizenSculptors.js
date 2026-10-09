@@ -41,6 +41,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const SCULPTOR_RADIUS = 14; // tiles — close enough to hear the chisel
@@ -146,12 +150,6 @@ const MONUMENT_DEDICATIONS = Object.freeze([
 
 // === Scripted lines (data tier; the LLM riffs via the journal) ===
 const WORK_EMOTES = Object.freeze([
-  "*taps the chisel, stone chips fly*",
-  "*steps back to judge the proportions*",
-  "*files a rough edge smooth*",
-  "*blows dust from the carving*",
-  "*hefts the mallet and strikes true*",
-  "*traces the grain with a fingertip*",
 ]);
 
 const HAWK_LINES = Object.freeze([
@@ -174,16 +172,11 @@ const COMMISSION_LINES = Object.freeze([
 ]);
 
 const RESTORE_LINES = Object.freeze([
-  "*patches a crack with fresh plaster*",
-  "*scrubs moss from the old stone*",
   "Another winter, another crack — she'll stand a century more.",
-  "*polishes the bronze back to a shine*",
 ]);
 
 const MONUMENT_WORK_LINES = Object.freeze([
-  "*raises another block onto the monument*",
   "The monument to {dedication} grows, stone by stone.",
-  "*checks the plumb line on the monument*",
   "Come the dedication day, the whole city will gather.",
 ]);
 
@@ -600,7 +593,7 @@ function tipSculptor(event, deps = {}, nowMs = Date.now()) {
 
   event.handled = true;
   try {
-    target.forceChat?.(pickOne(Math.random, TIP_THANKS));
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: TIP_THANKS })); }
   } catch { /* cosmetic */ }
   journalize(target, `received a ${amount}-coin tip from ${player.getUsername?.() ?? "a patron"}`);
   return amount;
@@ -685,7 +678,7 @@ function sculptScene(director, record, citizen, type, nowMs) {
     const line = fill(pickOne(Math.random, MASTERPIECE_LINES), {
       subject: work ? `${work.subject} (${work.quality})` : "a new work",
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `unveiled a masterpiece at ${workshop.name}`);
     seedRumor(`A masterpiece unveiled at ${workshop.name} — come see it!`);
     return;
@@ -700,7 +693,7 @@ function sculptScene(director, record, citizen, type, nowMs) {
         const line = fill(pickOne(Math.random, MONUMENT_COMPLETE_LINES), {
           dedication: monument.dedication,
         });
-        citizen.forceChat?.(line);
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
         journalize(citizen, `completed ${monument.name} at ${workshop.name}`);
         seedRumor(`${monument.name} stands complete at ${workshop.name}!`);
         return;
@@ -708,7 +701,7 @@ function sculptScene(director, record, citizen, type, nowMs) {
       const line = fill(pickOne(Math.random, MONUMENT_WORK_LINES), {
         dedication: monument.dedication,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `worked on ${monument.name} at ${workshop.name}`);
       return;
     }
@@ -719,7 +712,7 @@ function sculptScene(director, record, citizen, type, nowMs) {
     const work = catalog.works[0];
     const emote = pickOne(Math.random, RESTORE_LINES);
     const line = !emote.startsWith("*") && work ? `Restoring ${work.subject} — ${emote}` : emote;
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `restored statuary at ${workshop.name}`);
     return;
   }
@@ -731,13 +724,13 @@ function sculptScene(director, record, citizen, type, nowMs) {
       subject: work.subject,
       quality: work.quality,
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hawked "${work.subject}" (${work.quality}) at ${workshop.name}`);
     return;
   }
 
   // Fallback: work emotes.
-  citizen.forceChat?.(pickOne(Math.random, WORK_EMOTES));
+  { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: WORK_EMOTES })); }
 }
 
 /**
@@ -747,7 +740,7 @@ function sculptScene(director, record, citizen, type, nowMs) {
 function maybeOfferCommission(record, citizen, type) {
   const line = pickOne(Math.random, COMMISSION_LINES);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch { /* cosmetic */ }
   return line;
 }

@@ -28,6 +28,10 @@
 
 const { agentRng, chance, humanizerProfile } = require("./humanizer");
 const { getJournal } = require("./CitizenJournal");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 const {
   isFriend,
   isEnemy,
@@ -349,7 +353,7 @@ function speakMember(director, hangout, rng) {
     if (!bot) return;
     // Look at who you're talking to: the anchor/center reads as the group.
     faceToward(bot, hangout.anchorTile);
-    bot.forceChat?.(line);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalEvent(speaker.record.username, `chatted at the ${hangout.anchorKind}: "${line}"`, "social");
   } catch {
     // Non-fatal.

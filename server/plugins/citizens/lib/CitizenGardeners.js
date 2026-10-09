@@ -30,6 +30,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const GARDEN_RADIUS = 14; // tiles — close enough to see/hear
@@ -161,28 +165,16 @@ const TASKS = {
 
 const WORK_LINES = {
   [GARDENER_FLOWER]: [
-    "*sniffs a prize rose*",
-    "*ties up a leaning delphinium*",
     "These beds have bloomed since my grandmother's day.",
-    "*deadheads a spent bloom*",
   ],
   [GARDENER_VEGETABLE]: [
-    "*lifts a basket of fresh beans*",
-    "*earths up the potato rows*",
     "The poor get the first picking — the crown's own rule.",
-    "*waters the tomato rows*",
   ],
   [GARDENER_TREE]: [
-    "*runs a hand along the bark*",
-    "*saws a dead branch cleanly*",
     "This oak was a sapling when the palace was built.",
-    "*tamps the soil around a new sapling*",
   ],
   [GARDENER_PARK]: [
-    "*sweeps the path in long strokes*",
-    "*oils a creaking bench hinge*",
     "A tidy park keeps a tidy town, I always say.",
-    "*rakes the gravel into neat lines*",
   ],
 };
 
@@ -583,7 +575,7 @@ function doGardenerWork(director, record, citizen, type, nowMs) {
     if (!lastFiredByCitizen.has(key)) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(pickOne(Math.random, RARE_LINES), { bloom: rare });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled a rare bloom at ${garden.name}: ${rare}`);
       seedRumor(`${rare} — right here at ${garden.name}!`);
       return;
@@ -593,7 +585,7 @@ function doGardenerWork(director, record, citizen, type, nowMs) {
   // Vegetable growers announce donations from the public plots.
   if (type === GARDENER_VEGETABLE && Math.random() < 0.25) {
     const line = pickOne(Math.random, DONATION_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered public-plot produce at ${garden.name}`);
     return;
   }
@@ -601,7 +593,7 @@ function doGardenerWork(director, record, citizen, type, nowMs) {
   // Volunteer invitations for lingering players.
   if (Math.random() < 0.2) {
     const line = pickOne(Math.random, VOLUNTEER_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `invited volunteers at ${garden.name}`);
     return;
   }
@@ -609,7 +601,7 @@ function doGardenerWork(director, record, citizen, type, nowMs) {
   // Garden tour offers (tree keepers and flower tenders).
   if ((type === GARDENER_TREE || type === GARDENER_FLOWER) && Math.random() < 0.15) {
     const line = pickOne(Math.random, TOUR_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered a garden tour at ${garden.name}`);
     return;
   }
@@ -618,11 +610,11 @@ function doGardenerWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `tended ${garden.name}: ${taskFor(name, type, nowMs)}`);
   } else {
     const line = fill(pickOne(Math.random, SHOW_LINES[type]), { bloom });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `showed off the ${bloom} at ${garden.name}`);
   }
 }
@@ -637,7 +629,7 @@ function maybeInvitePlayer(record, citizen, type) {
     garden: garden.name,
   });
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch { /* cosmetic */ }
   return line;
 }

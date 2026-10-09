@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenArchitects2 — the draftfolk: amateur plan-scratchers under the
@@ -168,36 +172,34 @@ const DRAFTFOLK_SUBJECTS = [
 
 // Morning setup flavor: before 10:00 the draftfolk are still setting up.
 const SETUP_LINES = [
-  "*props the draft board against the corner post, again*",
-  "*weights the sketch pile with a half-brick*",
-  "*chalk-marks the day's sketch prices on the board's edge*",
-  "*unrolls the rough plans and pins them crooked*",
-  "*wipes charcoal dust off {their} hands*",
-  "*tests a wax pencil on the board's corner*",
+  "Boards up, sketches out.",
+  "Setting up for the day.",
+  "Prices are chalked on the board.",
+  "Just getting the stall ready.",
 ];
 
 // Work lines per type.
 const WORK_LINES = {
   [ROUGH_DRAFTER]: [
-    "*sketches a wobbly wall line, tongue between {their} teeth*",
-    "*holds a plan at arm's length, squinting at the lean*",
-    "*sharpens a charcoal stick with a penknife*",
-    "*draws the fence straight, the wall less so*",
-    "*redraws a crooked line bolder, calling it character*",
+    "Rough drafts, cheap!",
+    "Sketching wobbly plans here.",
+    "Need a plan drawn up?",
+    "Drafts while you wait.",
+    "Fresh sketches, fresh ideas.",
   ],
   [PLAN_COPYIST]: [
-    "*copies yesterday's sketch onto fresh paper*",
-    "*holds the copy up to the light, checking the lines*",
-    "*labels a copy-plan in big careful letters*",
-    "*stacks the hand-copies and weights the pile*",
-    "*blots a wet copy and hopes the ink holds*",
+    "Cheap copies, good as the original.",
+    "Hand-copied plans here.",
+    "Need a copy of that sketch?",
+    "Copies while you wait.",
+    "Plans copied neat and cheap.",
   ],
   [CORNER_ADVISER]: [
-    "*chalk-marks a fix-it diagram on the board's back*",
-    "*measures nothing twice, advises once*",
-    "*taps a sketch with the pencil, making the point*",
-    "*leans on the board, explaining a roof pitch*",
-    "*waves a passerby over to look at the diagram*",
+    "Free advice on your build.",
+    "Ask me about your plans.",
+    "Corner advice, no charge.",
+    "I can look over your draft.",
+    "Building tips here.",
   ],
 };
 
@@ -538,7 +540,7 @@ function seedRumor(rng, text) {
 /** Say a line in chat (never throws). */
 function forceSay(citizen, text) {
   try {
-    if (citizen?.forceChat) citizen.forceChat(String(text).slice(0, 120));
+    if (citizen?.forceChat) { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
     else if (citizen?.say) citizen.say(String(text).slice(0, 120));
   } catch { /* cosmetic */ }
 }

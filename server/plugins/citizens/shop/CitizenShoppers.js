@@ -30,6 +30,9 @@ const KingdomStore = require("../../kingdoms/KingdomStore");
 const { getJournal } = require("../lib/CitizenJournal");
 const { getMemory } = require("../lib/CitizenMemory");
 const { humanizerProfile, agentRng } = require("../lib/humanizer");
+const { voiceFor, voiceLine } = require("../lib/citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 const {
   ensureNeeds,
   needsFor,
@@ -401,7 +404,7 @@ function considerStall(director, bot, record, stall, rng) {
       (p) => p !== bot && p?.isPlayerBot?.() !== true
     );
     if (realNearby && best.isDeal && rng() < 0.5) {
-      bot?.forceChat?.("What a bargain!");
+      { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: ["What a bargain!"] })); }
     }
   } catch {
     // Cosmetic.

@@ -47,6 +47,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const ARCHITECT_RADIUS = 14; // tiles — close enough to see the drafting table
@@ -142,20 +146,9 @@ const FALLBACK_WORKS = Object.freeze([
 
 // === Scripted lines (data tier; the LLM riffs via the journal) ===
 const WORK_EMOTES = Object.freeze([
-  "*unrolls a fresh sheet of vellum*",
-  "*sharpens a charcoal stick and sketches*",
-  "*sights along the straightedge*",
-  "*erases a line and redraws it bolder*",
-  "*leans close, checking the scale*",
-  "*weights the plan corners with brass rules*",
 ]);
 
 const SURVEY_EMOTES = Object.freeze([
-  "*drives a chalked stake into the ground*",
-  "*paces off the plot, counting under breath*",
-  "*levels the sighting rod*",
-  "*notes the bearing in a field book*",
-  "*stretches a knotted cord across the site*",
 ]);
 
 const HAWK_LINES = Object.freeze([
@@ -173,9 +166,7 @@ const UNVEIL_LINES = Object.freeze([
 
 const DESIGN_WORK_LINES = Object.freeze([
   "The plans for {name} grow, line by line.",
-  "*inks another sheet of the grand design*",
   "When {name} rises, the whole city will marvel.",
-  "*cross-checks the span tables for {name}*",
 ]);
 
 const SURVEY_LINES = Object.freeze([
@@ -578,7 +569,7 @@ function tipArchitect(event, deps = {}, nowMs = Date.now()) {
 
   event.handled = true;
   try {
-    target.forceChat?.(pickOne(Math.random, TIP_THANKS));
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: TIP_THANKS })); }
   } catch { /* cosmetic */ }
   journalize(target, `received a ${amount}-coin tip from ${player.getUsername?.() ?? "a patron"}`);
   return amount;
@@ -663,13 +654,13 @@ function architectScene(director, record, citizen, type, nowMs) {
       if (design.complete && (lastUnveilAnnounce.get(studio.name) ?? -1) < day) {
         lastUnveilAnnounce.set(studio.name, day);
         const line = fill(pickOne(Math.random, UNVEIL_LINES), { name: design.name });
-        citizen.forceChat?.(line);
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
         journalize(citizen, `unveiled the plans for ${design.name} at ${studio.name}`);
         seedRumor(`Plans unveiled at ${studio.name}: ${design.name}!`);
         return;
       }
       const line = fill(pickOne(Math.random, DESIGN_WORK_LINES), { name: design.name });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `drafted ${design.name} at ${studio.name}`);
       return;
     }
@@ -678,10 +669,10 @@ function architectScene(director, record, citizen, type, nowMs) {
   // Surveyors: stake out plots.
   if (type === ARCHITECT_SURVEYOR) {
     const work = catalog.works[0];
-    citizen.forceChat?.(pickOne(Math.random, SURVEY_EMOTES));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: SURVEY_EMOTES })); }
     if (work) {
       const announce = fill(pickOne(Math.random, SURVEY_LINES), { design: work.subject });
-      citizen.forceChat?.(announce);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [announce] })); }
     }
     journalize(citizen, `surveyed plots at ${studio.name}`);
     return;
@@ -693,7 +684,7 @@ function architectScene(director, record, citizen, type, nowMs) {
     const line = fill(pickOne(Math.random, INSPECT_LINES), {
       work: work ? work.subject : "the new works",
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `inspected construction for ${studio.name}`);
     return;
   }
@@ -705,13 +696,13 @@ function architectScene(director, record, citizen, type, nowMs) {
       design: work.subject,
       quality: work.quality,
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hawked plans for "${work.subject}" (${work.quality}) at ${studio.name}`);
     return;
   }
 
   // Fallback: work emotes.
-  citizen.forceChat?.(pickOne(Math.random, WORK_EMOTES));
+  { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: WORK_EMOTES })); }
 }
 
 /**
@@ -721,7 +712,7 @@ function architectScene(director, record, citizen, type, nowMs) {
 function maybeOfferCommission(record, citizen, type) {
   const line = pickOne(Math.random, COMMISSION_LINES);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch { /* cosmetic */ }
   return line;
 }

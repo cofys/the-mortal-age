@@ -46,6 +46,10 @@ const KingdomStore = require("../../kingdoms/KingdomStore");
 const { getDirector } = require("../director/CitizenDirector");
 const { isKingdomAtWar } = require("../CitizenEvents");
 const { ATTR_CITIZEN_ROLE, ROLE_COMMONER } = require("../constants");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("../lib/citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 const {
   FLAG_OP1,
   FLAG_OP2,
@@ -860,9 +864,7 @@ function hireEmployee(api, player, nameArg) {
     }
     Store.save();
     try {
-      chosen.forceChat?.(
-        `I'll mind ${player.getUsername()}'s stall — ${Store.DAILY_WAGE} coins a day, mind.`
-      );
+      { const _cvp = chosen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(chosen, voiceLine(voiceFor(_cvp), { plain: [`I'll mind ${player.getUsername()}'s stall — ${Store.DAILY_WAGE} coins a day, mind.`] })); }
     } catch {
       // A quiet hire.
     }

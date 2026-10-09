@@ -29,6 +29,10 @@ const { getMemory, MOMENT_GIFT } = require("./lib/CitizenMemory");
 const { getJournal } = require("./lib/CitizenJournal");
 const { normalizeName } = require("./lib/CitizenBonds");
 const { warmthOf } = require("./StreetNotices");
+const { ATTR_CITIZEN_PERSONALITY } = require("./constants");
+const { voiceFor, voiceLine } = require("./lib/citizenVoice");
+const { sayPublic } = require("./chat/CitizenSayPublic");
+
 
 const BOT_HOST_ADDRESS = "bot"; // set by bots/behaviours/spawn/BotPlayerFactory.js
 
@@ -198,7 +202,7 @@ function onGiftGiven(event, deps = {}, nowMs = Date.now()) {
   if (verdict === "decline") {
     // Bound gear stays with its owner; the refusal is the whole moment.
     try {
-      target.forceChat?.(fillLine(pick(DECLINE_LINES), { name: playerName, item: itemName }).slice(0, 120));
+      { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: [fillLine(pick(DECLINE_LINES), { name: playerName, item: itemName }).slice(0, 120)] })); }
     } catch {
       // A silent citizen.
     }
@@ -258,7 +262,7 @@ function onGiftGiven(event, deps = {}, nowMs = Date.now()) {
       item: itemName,
     });
     try {
-      target.forceChat?.(line.slice(0, 120));
+      { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
     } catch {
       // A shy citizen.
     }
