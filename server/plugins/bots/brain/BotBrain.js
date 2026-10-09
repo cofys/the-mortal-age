@@ -285,6 +285,11 @@ class BotBrain {
 
   /** @returns {"running"|"idle"} */
   tick(nowMs = Date.now()) {
+    if (this.state?.isCitizen && !this._diagLogged) {
+      this._diagLogged = true;
+      const username = this.player?.getUsername?.() ?? 'unknown';
+      console.log(`[DIAG-CITIZEN] brain ticking for ${username}`);
+    }
     this.dispatchMovement();
     // Support runs before the activity action: boosts, defensive/retreat,
     // then eating.
