@@ -1104,6 +1104,31 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a surgeon" / "i need surgery" — player asks about advanced medicine.
+  if (/\b(is there a surgeon|any surgeons|i need surgery|need an operation|the hospital|is there a hospital|surgery wing)\b/.test(said)) {
+    try {
+      const Surgery = require("../lib/CitizenSurgery");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf({ getUsername: () => citizenUsername, username: citizenUsername });
+      } catch {
+        // best-effort
+      }
+      const wing = kingdomId ? Surgery.wingOf(kingdomId) : null;
+      const need = Surgery.needsSurgery(speakerUsername);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "surgery_status", {
+        username: citizenUsername,
+        hasWing: !!wing,
+        needsSurgery: !!need,
+        procedure: need?.procedure ?? null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a guild" / "what guild am i in" — player asks about trade guilds.
   if (/\b(is there a guild|what guilds are there|are there guilds|tell me about guilds|what guild am i in|am i in a guild|what is my guild)\b/.test(said)) {
     try {

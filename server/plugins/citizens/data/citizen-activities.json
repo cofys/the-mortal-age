@@ -844,6 +844,27 @@
           "type": "citizenLawyer"
         }
       ]
+    },
+    {
+      "id": "citizen_surgeon",
+      "mode": "citizen_surgeon",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenSurgeon"
+        }
+      ]
     }
   ]
 }

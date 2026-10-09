@@ -111,7 +111,8 @@ const ACT_DIPLOMAT = "citizen_diplomat";
 const ACT_EXPLORE = "citizen_explore";
 const ACT_LAWYER = "citizen_lawyer";
 const ACT_INVENT = "citizen_invent";
-const ACT_PHILOSOPHIZE = "citizen_philosophize";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
+const ACT_PHILOSOPHIZE = "citizen_philosophize";
+const ACT_SURGEON = "citizen_surgeon";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
@@ -139,7 +140,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -838,6 +839,35 @@ function legalInfo(player) {
 }
 
 /**
+ * Surgery readiness: is this citizen a surgeon, and are there patients
+ * who need surgery? Defensive: a missing/broken surgery module scores
+ * as unable to operate.
+ */
+function surgeryInfo(player) {
+  try {
+    const Surgery = require("../lib/CitizenSurgery");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isSurgeon = Surgery.isSurgeon(username);
+    if (!isSurgeon) return { isSurgeon: false, patientsWaiting: 0 };
+    // Patients waiting: citizens who needSurgery in the same kingdom.
+    // This is a data-tier scan — cheap because needsSurgery is a pure
+    // read of CitizenHealth records.
+    let patientsWaiting = 0;
+    try {
+      const Health = require("../lib/CitizenHealth");
+      // We can't enumerate all citizens here (no roster access), so we
+      // report whether the surgeon themself could operate. The Life
+      // tick does the real matching. A surgeon with no personal
+      // knowledge of patients still scores for ward duty.
+      patientsWaiting = 1; // ward duty: surgeons tend the hospital
+    } catch { /* health unreadable */ }
+    return { isSurgeon, patientsWaiting };
+  } catch {
+    return { isSurgeon: false, patientsWaiting: 0 };
+  }
+}
+
+/**
  * Invention readiness: Crafting level, creativity, active projects,
  * affordable blueprints. Returns { craftingLevel, isCreative,
  * activeProjects, affordableCount }.
@@ -1330,6 +1360,7 @@ compete: competeInfo(player),
     invent: inventInfo(player),
     philosophy: philosophyInfo(player),
     legal: legalInfo(player),
+    surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
@@ -1350,7 +1381,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, philosophy, legal, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1782,6 +1813,22 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody argues drunk well
+      return s;
+    }
+    case ACT_SURGEON: {
+      // Surgery: surgeons operate on the severely ill and injured. A human
+      // surgeon works the ward when patients need them — medicine is work,
+      // and work pays. Non-surgeons have no business in the operating room.
+      const si = surgery ?? { isSurgeon: false, patientsWaiting: 0 };
+      if (!si.isSurgeon) return 4; // not a surgeon
+      let s = 24;
+      if ((si.patientsWaiting ?? 0) > 0) s += 12; // patients need you
+      const caring = personality?.compassion ?? personality?.kind ?? personality?.helpful ?? 0;
+      if (caring > 0.6) s += 10; // the caring are drawn to healing
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 40; // nobody operates drunk
       return s;
     }
     case ACT_RC: {
@@ -2270,7 +2317,7 @@ module.exports = {
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

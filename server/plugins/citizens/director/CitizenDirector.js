@@ -189,6 +189,7 @@ const { tickSchools } = require("../lib/CitizenSchoolLife");
 const { tickHealth } = require("../lib/CitizenHealthLife");
 const { tickJustice } = require("../lib/CitizenJusticeLife");
 const { tickLegalLife } = require("../lib/CitizenLegalLife");
+const { tickSurgery } = require("../lib/CitizenSurgeryLife");
 const { tickTravel } = require("../lib/CitizenTravelLife");
 const { tickEntertain } = require("../lib/CitizenEntertainLife");
 const CitizenHealth = require("../lib/CitizenHealth");
@@ -2890,6 +2891,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("legal failed", { error: String(error?.message ?? error) });
     }
+    // Citizen surgery: surgeons, procedures, research, quarantine.
+    // Data tier, zero LLM. Complements CitizenHealth (never duplicates).
+    try {
+      tickSurgery(this, nowMs);
+    } catch (error) {
+      this.log("surgery failed", { error: String(error?.message ?? error) });
+    }
     // Citizen travel: ship/caravan journeys, arrivals, danger, cargo.
     // Data tier, zero LLM.
     try {
@@ -3086,6 +3094,16 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen legal code save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      const CitizenSurgery = require("../lib/CitizenSurgery");
+      if (CitizenSurgery.save()) {
+        this.log("citizen surgery saved");
+      }
+    } catch (error) {
+      this.log("citizen surgery save failed", {
         error: String(error?.message ?? error),
       });
     }
