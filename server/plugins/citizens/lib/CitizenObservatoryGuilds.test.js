@@ -16,6 +16,8 @@ let charts = []; // chart records
 let activeEvent = null; // active celestial event kind
 const awardDeeds = [];
 const pubs = []; // science publications
+let bankingDown = false;
+const bankAccounts = {}; // lowername -> { balance }
 
 const EVENT_SCHEDULES = {
   meteor_shower: { label: "meteor shower", scheduleMonths: 1 },
@@ -38,6 +40,17 @@ function installStubs() {
     "./CitizenCareers": { careerOf: (u) => careers[String(u || "").toLowerCase()] || null },
     "./CitizenReputation": { awardDeed: (u, deed) => { awardDeeds.push([u, deed]); } },
     "./CitizenScience": { recentPublications: () => pubs.slice() },
+    "./CitizenBanking": {
+      // Real contract: accountFor creates-and-returns the live record;
+      // markDirty persists. bankingDown simulates unreachable banking.
+      accountFor: (u) => {
+        if (bankingDown) throw new Error("banking unreachable");
+        const key = String(u || "").toLowerCase().trim();
+        if (!bankAccounts[key]) bankAccounts[key] = { balance: 0 };
+        return bankAccounts[key];
+      },
+      markDirty: () => {},
+    },
     "../brain/CitizenSites": {
       KINGDOM_IDS: ["varrock"],
       kingdomIdOf: () => "varrock",
@@ -62,6 +75,8 @@ function freshSave() {
 
 function resetEngine() {
   for (const k of Object.keys(careers)) delete careers[k];
+  for (const k of Object.keys(bankAccounts)) delete bankAccounts[k];
+  bankingDown = false;
   astronomers = {};
   charts = [];
   activeEvent = null;
@@ -416,6 +431,118 @@ test("describe summarizes the guild", () => {
   assert.strictEqual(d.memberCount, 1);
   assert.strictEqual(d.treasury, 0);
   assert.ok(d.hallTile, "hall tile resolved near the observatory");
+});
+
+// --- vanishing-coins fixes: bounties and prizes reach real bank accounts ---
+
+test("certifyChart bounty lands in the astronomer's bank account", () => {
+  addAstronomer("Sky");
+  charts.push({ id: "c1", astronomer: "Sky", kingdomId: "varrock", quality: 9, createdAt: 1 });
+  Guilds.creditTreasury("varrock", 1000);
+  const before = Guilds.guildOf("varrock").treasury;
+  const res = Guilds.certifyChart("varrock", "Sky", "c1");
+  assert.strictEqual(res.ok, true);
+  assert.strictEqual(res.bountyPaid, 120);
+  assert.strictEqual(res.bountyOwed, 0);
+  // The coins actually moved: treasury down, bank balance up. No vanishing.
+  assert.strictEqual(Guilds.guildOf("varrock").treasury, before - 120);
+  assert.strictEqual(bankAccounts["sky"].balance, 120);
+});
+
+test("certifyChart with unreachable banking: treasury rolls back, bounty owed", () => {
+  addAstronomer("Sky");
+  charts.push({ id: "c1", astronomer: "Sky", kingdomId: "varrock", quality: 9, createdAt: 1 });
+  Guilds.creditTreasury("varrock", 1000);
+  const before = Guilds.guildOf("varrock").treasury;
+  bankingDown = true;
+  const res = Guilds.certifyChart("varrock", "Sky", "c1");
+  bankingDown = false;
+  // Certification itself succeeded, but the bounty was NOT marked paid.
+  assert.strictEqual(res.ok, true);
+  assert.strictEqual(res.bountyPaid, 0);
+  assert.strictEqual(res.bountyOwed, 120);
+  // Treasury intact: no coins vanished while the record claimed payment.
+  assert.strictEqual(Guilds.guildOf("varrock").treasury, before);
+  assert.strictEqual(bankAccounts["sky"], undefined);
+  // Recovery: retry delivers once banking is back.
+  const retry = Guilds.retryOwedBounties("varrock");
+  assert.strictEqual(retry.paid, 120);
+  assert.strictEqual(bankAccounts["sky"].balance, 120);
+  assert.strictEqual(Guilds.chartCertFor(res.certId).bountyOwed, 0);
+});
+
+test("retryOwedBounties delivers to bank; unreachable banking keeps owed", () => {
+  addAstronomer("Sky");
+  charts.push({ id: "cB", astronomer: "Sky", kingdomId: "varrock", quality: 6, createdAt: 1 });
+  // Broke treasury: owed honestly.
+  const r = Guilds.certifyChart("varrock", "Sky", "cB");
+  assert.strictEqual(r.bountyOwed, 60);
+  // Banking down during retry: nothing delivered, treasury untouched.
+  Guilds.creditTreasury("varrock", 100);
+  const before = Guilds.guildOf("varrock").treasury;
+  bankingDown = true;
+  const retry1 = Guilds.retryOwedBounties("varrock");
+  bankingDown = false;
+  assert.strictEqual(retry1.paid, 0);
+  assert.strictEqual(Guilds.guildOf("varrock").treasury, before);
+  assert.strictEqual(Guilds.chartCertFor(r.certId).bountyOwed, 60);
+  // Banking back: delivered to the real account.
+  const retry2 = Guilds.retryOwedBounties("varrock");
+  assert.strictEqual(retry2.paid, 60);
+  assert.strictEqual(bankAccounts["sky"].balance, 60);
+});
+
+test("confirmPredictions herald prize lands in the predictor's bank account", () => {
+  addAstronomer("Seer");
+  const sm = Guilds.memberOf("Seer");
+  sm.rank = Guilds.RANK_STARMASTER;
+  Guilds.touch();
+  Guilds.creditTreasury("varrock", 500);
+  const p = Guilds.predictEvent("varrock", "Seer", "lunar_eclipse");
+  assert.strictEqual(p.ok, true);
+  activeEvent = "lunar_eclipse";
+  const res = Guilds.confirmPredictions("varrock", p.predictedForMs + 1000);
+  assert.deepStrictEqual(res.confirmed, [p.predictionId]);
+  const pred = Guilds.predictionsFor("varrock")[0];
+  assert.strictEqual(pred.prizePaid, Guilds.HERALD_PRIZE);
+  assert.strictEqual(pred.prizeOwed, 0);
+  assert.strictEqual(bankAccounts["seer"].balance, Guilds.HERALD_PRIZE);
+});
+
+test("confirmPredictions with unreachable banking: prize owed, treasury intact", () => {
+  addAstronomer("Seer");
+  const sm = Guilds.memberOf("Seer");
+  sm.rank = Guilds.RANK_STARMASTER;
+  Guilds.touch();
+  Guilds.creditTreasury("varrock", 500);
+  const before = Guilds.guildOf("varrock").treasury;
+  const p = Guilds.predictEvent("varrock", "Seer", "lunar_eclipse");
+  activeEvent = "lunar_eclipse";
+  bankingDown = true;
+  const res = Guilds.confirmPredictions("varrock", p.predictedForMs + 1000);
+  bankingDown = false;
+  assert.deepStrictEqual(res.confirmed, [p.predictionId]);
+  const pred = Guilds.predictionsFor("varrock")[0];
+  assert.strictEqual(pred.status, "confirmed"); // the sky confirmed it
+  assert.strictEqual(pred.prizePaid, 0);
+  assert.strictEqual(pred.prizeOwed, Guilds.HERALD_PRIZE);
+  assert.strictEqual(Guilds.guildOf("varrock").treasury, before);
+});
+
+test("silver orrery prize lands in the winner's bank account", () => {
+  addAstronomer("Sky");
+  charts.push({ id: "c1", astronomer: "Sky", kingdomId: "varrock", quality: 9, createdAt: 1 });
+  Guilds.creditTreasury("varrock", 1000);
+  const cert = Guilds.certifyChart("varrock", "Sky", "c1");
+  assert.strictEqual(cert.ok, true);
+  // Isolate the orrery prize from the certification bounty.
+  bankAccounts["sky"].balance = 0;
+  Guilds.creditTreasury("varrock", 500);
+  const res = Guilds.grantSilverOrrery("varrock", Date.now());
+  assert.strictEqual(res.ok, true);
+  assert.strictEqual(res.winner, "Sky");
+  assert.strictEqual(res.prizePaid, 200);
+  assert.strictEqual(bankAccounts["sky"].balance, 200);
 });
 
 console.log(`\n${passed} tests passed`);

@@ -204,6 +204,28 @@ function scienceApi() {
   try { return require("./CitizenScience"); } catch { return null; }
 }
 
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
+// Credit real coins to a username's REAL bank account. Returns true only
+// when the balance actually moved. CitizenBanking exposes accountFor, not
+// creditAccount — credit the live account record directly (same pattern as
+// the art/law/diplo/spy guild payout fixes).
+function creditBankAccount(username, amount) {
+  if (!username || !(amount > 0)) return false;
+  try {
+    const B = bankingApi();
+    const acct = B && typeof B.accountFor === "function" ? B.accountFor(username) : null;
+    if (!acct) return false;
+    acct.balance = (Number(acct.balance) || 0) + amount;
+    if (typeof B.markDirty === "function") B.markDirty();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // === Guild management ===
 
 function ensureGuild(kingdomId) {
@@ -412,8 +434,10 @@ function certifyChart(kingdomId, username, chartId) {
     certifiedMs: now,
   };
 
-  // Pay the bounty from the treasury; when broke the bounty is owed
-  // honestly, never invented.
+  // Pay the bounty from the treasury into the astronomer's REAL bank
+  // account. When the treasury is broke the bounty is owed honestly, never
+  // invented. When banking is unreachable the treasury deduction rolls back
+  // and the full bounty stays owed: never mark paid what was never delivered.
   const bounty = CERT_BOUNTY[grade];
   let paid = 0;
   let owed = 0;
@@ -424,6 +448,14 @@ function certifyChart(kingdomId, username, chartId) {
     paid = g.treasury;
     owed = bounty - paid;
     g.treasury = 0;
+  }
+  if (paid > 0 && !creditBankAccount(username, paid)) {
+    // Banking unreachable: restore the treasury, keep the whole bounty owed
+    // for a later tick. The coins must not vanish while the record claims
+    // they were paid.
+    g.treasury += paid;
+    owed = bounty;
+    paid = 0;
   }
   st.certifications[certId].bountyPaid = paid;
   st.certifications[certId].bountyOwed = owed;
@@ -467,6 +499,13 @@ function retryOwedBounties(kingdomId) {
     if (g.treasury <= 0) break;
     const pay = Math.min(cert.bountyOwed, g.treasury);
     g.treasury -= pay;
+    // Deliver to the astronomer's REAL bank account. If banking is
+    // unreachable, restore the treasury and keep the bounty owed: never
+    // mark paid what was never delivered.
+    if (!creditBankAccount(cert.astronomer, pay)) {
+      g.treasury += pay;
+      continue;
+    }
     cert.bountyOwed -= pay;
     cert.bountyPaid += pay;
     paid += pay;
@@ -715,7 +754,10 @@ function confirmPredictions(kingdomId, nowMs) {
       const g = ensureGuild(kingdomId);
       g.confirmedPredictions = (g.confirmedPredictions || 0) + 1;
       g.prestige = Math.min(100, g.prestige + 5);
-      // The herald's prize: 100 real coins, owed honestly when broke.
+      // The herald's prize: 100 real coins into the predictor's REAL bank
+      // account, owed honestly when the treasury is broke. When banking is
+      // unreachable the deduction rolls back and the full prize stays owed:
+      // never mark paid what was never delivered.
       let paid = 0;
       let owed = 0;
       if (g.treasury >= HERALD_PRIZE) {
@@ -725,6 +767,11 @@ function confirmPredictions(kingdomId, nowMs) {
         paid = g.treasury;
         owed = HERALD_PRIZE - paid;
         g.treasury = 0;
+      }
+      if (paid > 0 && !creditBankAccount(p.predictedBy, paid)) {
+        g.treasury += paid;
+        owed = HERALD_PRIZE;
+        paid = 0;
       }
       p.prizePaid = paid;
       p.prizeOwed = owed;
@@ -775,7 +822,9 @@ function grantSilverOrrery(kingdomId, nowMs) {
   const [winnerKey, count] = entries[0];
   const winner = st.members[winnerKey].username;
 
-  // 200-coin real prize; owed honestly when the treasury is broke.
+  // 200-coin real prize into the winner's REAL bank account; owed honestly
+  // when the treasury is broke. When banking is unreachable the deduction
+  // rolls back: never mark paid what was never delivered.
   let paid = 0;
   let owed = 0;
   if (g.treasury >= ORRERY_PRIZE) {
@@ -785,6 +834,11 @@ function grantSilverOrrery(kingdomId, nowMs) {
     paid = g.treasury;
     owed = ORRERY_PRIZE - paid;
     g.treasury = 0;
+  }
+  if (paid > 0 && !creditBankAccount(winner, paid)) {
+    g.treasury += paid;
+    owed = ORRERY_PRIZE;
+    paid = 0;
   }
   g.lastOrreryMs = nowMs;
   try {
