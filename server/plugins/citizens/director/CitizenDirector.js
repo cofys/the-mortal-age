@@ -213,7 +213,9 @@ const CitizenArt = require("../lib/CitizenArt");
 const { tickTournaments } = require("../lib/CitizenTournamentLife");
 const CitizenTournaments = require("../lib/CitizenTournaments");
 const { tickCovertDiplomacy } = require("../lib/CitizenDiplomacyLife");
-const CitizenDiplomacy = require("../lib/CitizenDiplomacy");const { tickShoppers } = require("../shop/CitizenShoppers");
+const CitizenDiplomacy = require("../lib/CitizenDiplomacy");
+const { tickDiscoveryLife } = require("../lib/CitizenDiscoveryLife");
+const CitizenDiscovery = require("../lib/CitizenDiscovery");const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
 const CitizenBonds = require("../lib/CitizenBonds");
@@ -2937,6 +2939,13 @@ class CitizenDirector {
       tickCovertDiplomacy(this, nowMs);
     } catch (error) {
       this.log("diplomacy failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen discoveries: trade-route adoption, fame deeds, announcements.
+    // Data tier, zero LLM. (CitizenExplorers owns the expedition sim.)
+    try {
+      tickDiscoveryLife(this, nowMs);
+    } catch (error) {
+      this.log("discovery failed", { error: String(error?.message ?? error) });
     }    try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3129,6 +3138,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen diplomacy save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenDiscovery.save()) {
+        this.log("citizen discoveries saved");
+      }
+    } catch (error) {
+      this.log("citizen discoveries save failed", {
         error: String(error?.message ?? error),
       });
     }

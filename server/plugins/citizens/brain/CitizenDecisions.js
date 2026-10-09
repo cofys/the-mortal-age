@@ -107,7 +107,8 @@ const ACT_PETCARE = "citizen_petcare";
 const ACT_CREATEART = "citizen_createart";
 
 const ACT_COMPETE = "citizen_compete";
-const ACT_DIPLOMAT = "citizen_diplomat";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
+const ACT_DIPLOMAT = "citizen_diplomat";
+const ACT_EXPLORE = "citizen_explore";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
@@ -135,7 +136,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -763,6 +764,43 @@ function diplomatInfo(player) {
 }
 
 /**
+ * Exploration readiness: Hunter level, curiosity, recent discoveries.
+ * Returns { hunterLevel, isCurious, recentFinds }.
+ * Defensive: a missing/broken module scores as unable to explore.
+ */
+function exploreInfo(player) {
+  try {
+    let hunterLevel = 1;
+    try {
+      const Hunter = require("../../skills/Hunter.plugin");
+      hunterLevel = Hunter.hunterLevel?.(player) ?? 1;
+    } catch { /* hunter unreadable */ }
+
+    let isCurious = false;
+    try {
+      const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+      const p = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+      const traits = p.traits ?? [];
+      isCurious = traits.includes("curious") || traits.includes("adventurous");
+    } catch { /* personality unreadable */ }
+
+    let recentFinds = 0;
+    try {
+      const Discovery = require("../lib/CitizenDiscovery");
+      const username = player?.getUsername?.() ?? player?.username ?? "";
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      recentFinds = Discovery.allDiscoveries().filter(
+        (d) => d.discoverer === username && d.foundAt > weekAgo
+      ).length;
+    } catch { /* discovery unreadable */ }
+
+    return { hunterLevel, isCurious, recentFinds };
+  } catch {
+    return { hunterLevel: 1, isCurious: false, recentFinds: 0 };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1169,7 +1207,8 @@ function snapshot(player) {
     art: artInfo(player),
 
 compete: competeInfo(player),
-    diplomat: diplomatInfo(player),    drunk: isDrunk(player),
+    diplomat: diplomatInfo(player),
+    explore: exploreInfo(player),    drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
     hour: new Date().getHours(), // server-local, per the timezone rule
@@ -1189,7 +1228,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1539,7 +1578,24 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody spies drunk well
       return s;
-    }    case ACT_RC: {
+    }
+    case ACT_EXPLORE: {
+      // Exploration: venture into the wilds, search, discover. Hunters
+      // thrive (survival + finds), the curious can't stay home, recent
+      // discoverers ride the high. The hurt and weary stay by the fire.
+      const e = explore ?? { hunterLevel: 1, isCurious: false, recentFinds: 0 };
+      let s = 20 + Math.min((e.hunterLevel ?? 1) * 0.5, 15);
+      if (e.isCurious) s += 12; // curiosity is the engine
+      if ((e.recentFinds ?? 0) > 0) s += 8; // success breeds ambition
+      if (goalType === GOAL_MASTER_TRADE) s += 8; // new routes, new markets
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // nobody explores drunk well
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_RC: {
       // Runecrafting: craft essence into runes for XP and coin. No essence
       // anywhere, no altar trip. Runecrafting is station work — the citizen
       // must travel to the altar — so it's picked up when there's a real
@@ -2025,7 +2081,7 @@ module.exports = {
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

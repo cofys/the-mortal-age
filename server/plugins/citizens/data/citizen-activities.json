@@ -760,6 +760,27 @@
           "type": "citizenDiplomat"
         }
       ]
+    },
+    {
+      "id": "citizen_explore",
+      "mode": "citizen_explore",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenExplore"
+        }
+      ]
     }
   ]
 }
