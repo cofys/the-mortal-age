@@ -175,6 +175,8 @@ check("tick fires near real player", () => {
   };
   const director = {
     roster: new Map([[uname, { username: uname, role: "commoner", kingdom: "asgarnia" }]]),
+    isOnline: () => true,
+    getBot: () => citizen,
     playerFor: () => citizen,
     world: { getPlayers: () => [citizen, human] },
     journal: { addEntry: (u, t) => journals.push([u, t]) },

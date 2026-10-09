@@ -2,6 +2,7 @@
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { voiceFor, voiceLine } = require("./citizenVoice");
 const { sayPublic } = require("../chat/CitizenSayPublic");
+const { brainTickDue } = require("./CitizenTickLod");
 
 
 /**
@@ -393,7 +394,7 @@ function maybeLessonOffer(director, record, citizen, nowMs) {
  * Data tier is free; the visible part fires only when a real player is near.
  * @param {object} director - the CitizenDirector instance
  * @param {number} nowMs - Date.now()
- * @param {function} desync - timing-desync gate (may be undefined in tests)
+ * @param {object} desync - timing-desync gate ({tick, spread}, may be undefined in tests)
  */
 function tickHerbalists(director, nowMs, desync) {
   pruneCooldowns(nowMs);
@@ -408,7 +409,7 @@ function tickHerbalists(director, nowMs, desync) {
         // 2. Materialized citizen required, then proximity to a real player.
         const citizen = (director.isOnline(record) ? director.getBot(record) : null);
         if (!citizen) continue;
-        if (desync && !desync(record.username, nowMs)) continue;
+        if (!brainTickDue(director, record, desync?.tick)) continue;
         if (!anyRealPlayerNear(director, citizen, HERBALIST_RADIUS)) continue;
 
         // 3. Chance gate after all cheap gates.
