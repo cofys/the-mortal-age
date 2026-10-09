@@ -292,6 +292,16 @@ function startJourney(username, from, to, nowMs, player) {
   } catch {
     // A missing/broken pets module never slows travel.
   }
+  // Built bridges and roads shorten the journey (real infrastructure effect).
+  try {
+    const Infra = require("./CitizenInfrastructure");
+    const bonus = Infra.travelBonusFor(route.from, route.to) || 0;
+    if (bonus > 0) {
+      durationMs = Math.round(durationMs * Math.max(0.5, 1 - bonus / 100));
+    }
+  } catch {
+    // A missing/broken infrastructure module never slows travel.
+  }
   const journey = {
     username: uname,
     from: route.from,
@@ -397,8 +407,18 @@ const MONSTER_HP_LOSS = [8, 25]; // monsters deal 8-25 damage
 function rollDanger(journey, rng) {
   const route = routeBetween(journey.from, journey.to);
   const r = rng ?? Math.random;
-  const banditRisk = route?.banditRisk ?? 0.15;
+  let banditRisk = route?.banditRisk ?? 0.15;
   const monsterRisk = route?.monsterRisk ?? 0.1;
+
+  // Built roads are patrolled — bandits think twice (real infrastructure effect).
+  try {
+    const Infra = require("./CitizenInfrastructure");
+    if (Infra.routeSafer(journey.from, journey.to)) {
+      banditRisk = Math.max(0.02, banditRisk * 0.5);
+    }
+  } catch {
+    // A missing/broken infrastructure module never changes danger.
+  }
 
   const bandit = r() < banditRisk;
   const monster = r() < monsterRisk;

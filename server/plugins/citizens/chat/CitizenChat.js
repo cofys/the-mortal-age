@@ -1048,8 +1048,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   }
 
   // "what's being built" / "is there a landmark" — player asks about construction.
-  if (/\b(what'?s being built|any construction|under construction|is there a landmark|any landmarks|what districts|the building site|new buildings)\b/.test(said)) {
-    try {
+  if (/\b(what'?s being built|any construction|under construction|is there a landmark|any landmarks|what districts|the building site|new buildings)\b/.test(said)) {    try {
       const Con = require("../lib/CitizenConstruction");
       // Aggregate across kingdoms — the citizen reports what they know.
       const allActive = [];
@@ -1068,6 +1067,30 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
         username: citizenUsername,
         active: allActive.slice(0, 5),
         landmarks: allLandmarks.slice(0, 5),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "any bridges" / "is there an engineer" — player asks about infrastructure.
+  if (/\b(any bridges|new bridge|is there an engineer|any engineers|public works|new road|any roads|watchtower|border fort|the reservoir|infrastructure)\b/.test(said)) {
+    try {
+      const Infra = require("../lib/CitizenInfrastructure");
+      const st = Infra.load();
+      const active = Object.values(st.projects ?? {}).map((p) => ({
+        type: p.type, kingdomId: p.kingdomId, from: p.from, to: p.to,
+      }));
+      const built = Object.values(st.built ?? {}).slice(-5).map((b) => ({
+        type: b.type, kingdomId: b.kingdomId, from: b.from, to: b.to,
+      }));
+      const rec = citizenUsername ? Infra.engineerFor(citizenUsername) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "infrastructure_status", {
+        username: citizenUsername,
+        isEngineer: !!rec,
+        active: active.slice(0, 5),
+        built: built,
       });
     } catch {
       return false;

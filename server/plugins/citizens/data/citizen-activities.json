@@ -972,6 +972,27 @@
       ]
     },
     {
+      "id": "citizen_engineerwork",
+      "mode": "citizen_engineerwork",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenEngineerWork"
+        }
+      ]
+    },
+    {
       "id": "citizen_teamplay",
       "mode": "citizen_teamplay",
       "repeat": false,

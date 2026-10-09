@@ -120,6 +120,7 @@ const ACT_SURGEON = "citizen_surgeon";
 const ACT_CONSTRUCT = "citizen_construct";
 const ACT_TEAMPLAY = "citizen_teamplay";
 const ACT_SCIENCE = "citizen_research";
+const ACT_ENGINEER = "citizen_engineerwork";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -153,7 +154,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1092,6 +1093,56 @@ function constructInfo(player) {
 }
 
 /**
+ * Infrastructure readiness: is there an active public-works project in the
+ * citizen's kingdom, are they carrying materials it needs? Defensive:
+ * a missing/broken infrastructure module scores as unable.
+ */
+function infraInfo(player) {
+  try {
+    let constructionLevel = 1;
+    try {
+      constructionLevel = player?.getSkills?.()?.getLevel?.("construction")
+        ?? player?.skills?.construction ?? 1;
+    } catch { /* construction unreadable */ }
+
+    let hasProject = false;
+    let donatableCount = 0;
+    let isEngineer = false;
+    try {
+      const Infra = require("../lib/CitizenInfrastructure");
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kingdomId = kingdomIdOf(player);
+      const proj = kingdomId ? Infra.activeProjectFor(kingdomId) : null;
+      hasProject = !!proj;
+      if (proj) {
+        const spec = Infra.specFor(proj.type);
+        const inv = player?.getInventory?.();
+        if (spec && inv) {
+          for (const [itemId, need] of Object.entries(spec.materials)) {
+            const donated = proj.stockpile?.[itemId] ?? 0;
+            if (donated >= need) continue;
+            let have = 0;
+            try {
+              if (typeof inv.getAmount === "function") have = inv.getAmount(Number(itemId)) ?? 0;
+              else if (typeof inv.count === "function") have = inv.count(Number(itemId)) ?? 0;
+            } catch { /* best-effort */ }
+            if (have > 0) donatableCount++;
+          }
+        }
+      }
+      try {
+        const username = player?.getUsername?.() ?? player?.username;
+        isEngineer = !!(username && Infra.engineerFor(username));
+      } catch { /* not registered */ }
+    } catch { /* infrastructure unreadable */ }
+
+    return { constructionLevel, hasProject, donatableCount, isEngineer };
+  } catch {
+    return { constructionLevel: 1, hasProject: false, donatableCount: 0, isEngineer: false };
+  }
+}
+
+/**
  * Philosophy readiness: is this citizen a philosopher, can they contemplate,
  * are they thoughtful? Defensive: missing module scores as unable.
  */
@@ -1598,6 +1649,7 @@ compete: competeInfo(player),
     philosophy: philosophyInfo(player),
     legal: legalInfo(player),
     league: leagueInfo(player),
+    infra: infraInfo(player),
     science: scienceInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
@@ -1620,7 +1672,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2194,6 +2246,26 @@ case ACT_COMPETE: {
       if (drunk) s -= 20;
       return s;
     }
+    case ACT_ENGINEER: {
+      // Infrastructure: engineers build the kingdom's real bridges, roads,
+      // watchtowers, forts, and reservoirs. A human engineer shows up when
+      // there's an active public-works project — registered engineers most
+      // of all, and anyone carrying materials the project needs. No project,
+      // no work. The hurt and weary stay home.
+      const inf = infra ?? { constructionLevel: 1, hasProject: false, donatableCount: 0, isEngineer: false };
+      if (!inf.hasProject) return 4; // nothing being built
+      let s = 20;
+      if (inf.isEngineer) s += 16; // registered engineers answer the call
+      if ((inf.donatableCount ?? 0) > 0) s += 14; // carrying needed materials
+      s += Math.min((inf.constructionLevel ?? 1) * 0.3, 10); // skill matters
+      if (goalType === GOAL_MASTER_TRADE) s += 6; // public works pay
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_SCIENCE: {
       // Science: scientists run real experiments in the kingdom lab. A human
       // researcher works when they have a running experiment — and starts a
@@ -2703,7 +2775,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

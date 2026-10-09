@@ -237,6 +237,8 @@ const { tickPhilosophy } = require("../lib/CitizenPhilosophyLife");
 const CitizenPhilosophy = require("../lib/CitizenPhilosophy");
 const { tickScience } = require("../lib/CitizenScienceLife");
 const CitizenScience = require("../lib/CitizenScience");
+const { tickInfrastructure } = require("../lib/CitizenInfrastructureLife");
+const CitizenInfrastructure = require("../lib/CitizenInfrastructure");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -3054,6 +3056,14 @@ class CitizenDirector {
       tickScience(this, nowMs);
     } catch (error) {
       this.log("science failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen infrastructure: real public-works projects, material
+    // stockpiles, built network effects. Data tier, zero LLM.
+    // (CitizenEngineers owns flavor, CitizenConstruction owns buildings.)
+    try {
+      tickInfrastructure(this, nowMs);
+    } catch (error) {
+      this.log("infrastructure failed", { error: String(error?.message ?? error) });
     }    try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3364,6 +3374,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen science save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenInfrastructure.save()) {
+        this.log("citizen infrastructure saved");
+      }
+    } catch (error) {
+      this.log("citizen infrastructure save failed", {
         error: String(error?.message ?? error),
       });
     }
