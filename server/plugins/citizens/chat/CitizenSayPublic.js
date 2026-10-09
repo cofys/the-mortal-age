@@ -161,6 +161,13 @@ function sayPublic(citizen, text, opts = {}) {
   if (sent > 0 && username) {
     lastChatBoxAt.set(username, nowMs);
   }
+  // DIAG: log why chat-box delivery fails
+  if (sent === 0 && !global._sayPublicDiagLogged) {
+    global._sayPublicDiagLogged = true;
+    const localCount = (locals || []).length;
+    const realCount = (locals || []).filter(isRealPlayer).length;
+    console.log(`[DIAG-SAYPUBLIC] sent=0, locals=${localCount}, realPlayers=${realCount}, from=${from}`);
+  }
   return sent > 0;
 }
 
