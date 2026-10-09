@@ -419,7 +419,15 @@ function pickSkill(record, director, rng) {
 
 function grantXpWithCelebration(director, record, skillId, amount) {
   const def = SKILLS[skillId];
-  const { leveled, level } = skillStore.addXp(record.username, skillId, amount);
+  // Elders are slower but wiser: middle-aged +5% XP, elders +10%.
+  let bonus = 0;
+  try {
+    bonus = require("./CitizenAging").xpBonusForRecord(record);
+  } catch {
+    bonus = 0;
+  }
+  const boosted = bonus > 0 ? Math.max(1, Math.round(amount * (1 + bonus))) : amount;
+  const { leveled, level } = skillStore.addXp(record.username, skillId, boosted);
   if (leveled) {
     const line = `Reached level ${level} ${def.label}!`;
     journalEvent(record.username, line, "work");
