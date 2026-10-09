@@ -172,7 +172,9 @@ const CitizenClans = require("../lib/CitizenClans");
 const { tickHomes } = require("../lib/CitizenHomeLife");
 const CitizenHomes = require("../lib/CitizenHomes");
 const { tickCareers } = require("../lib/CitizenCareerLife");
+const { tickFamilies } = require("../lib/CitizenFamilyLife");
 const CitizenCareers = require("../lib/CitizenCareers");
+const CitizenFamilies = require("../lib/CitizenFamilies");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
@@ -2749,6 +2751,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("careers failed", { error: String(error?.message ?? error) });
     }
+    // Citizen families: formation, births, growing up, coming of age,
+    // teaching, inheritance, protection. Data tier, zero LLM.
+    try {
+      tickFamilies(this, nowMs);
+    } catch (error) {
+      this.log("families failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -2789,6 +2798,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen careers save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenFamilies.save()) {
+        this.log("citizen families saved");
+      }
+    } catch (error) {
+      this.log("citizen families save failed", {
         error: String(error?.message ?? error),
       });
     }

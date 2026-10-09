@@ -357,6 +357,28 @@ function removeHome(homeId, reason) {
   return true;
 }
 
+// --- ownership transfer -------------------------------------------------------
+
+/**
+ * Transfer a home to a new owner (inheritance, family moves). Keeps the
+ * furnishings, guests and activity log; resets rent debt — the debt died
+ * with the previous owner.
+ */
+function transferHome(homeId, newOwnerName, newOwnerDisplay) {
+  const d = data();
+  const home = d.homes[String(homeId)];
+  if (!home || !newOwnerName) return false;
+  const prevDisplay = home.ownerDisplay;
+  home.owner = normalizeName(newOwnerName);
+  home.ownerDisplay = newOwnerDisplay ?? newOwnerName;
+  home.rentDebt = 0;
+  home.rentDueAt = Date.now() + 24 * 3600 * 1000;
+  recordActivity(home, `Ownership transferred from ${prevDisplay} to ${home.ownerDisplay}.`);
+  journalEvent(home.owner, `Took ownership of the family home.`, "social");
+  markDirty();
+  return true;
+}
+
 // --- test seams ---------------------------------------------------------------
 
 function resetForTests() {
@@ -400,6 +422,7 @@ module.exports = {
   recordRentPaid,
   addRentDebt,
   removeHome,
+  transferHome,
   save,
   resetForTests,
   _setSavePathForTests,

@@ -701,6 +701,23 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     }
   }
 
+  // "do you have children" / "tell me about your family" — real family records.
+  if (/\b(do you have (kids|children|a family)|tell me about your family|are you married|do you have a (wife|husband|spouse))\b/.test(said)) {
+    try {
+      const Families = require("../lib/CitizenFamilies");
+      const summary = Families.familySummary(citizenUsername);
+      const family = Families.familyOf(citizenUsername);
+      if (!summary && !family) return false; // No family — LLM can riff.
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "family_describe", {
+        familySummary: summary,
+        hasFamily: !!family,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // "where do you live" — the citizen describes their real home.
   if (/\b(where do you live|where's your house|where is your home|show me your home)\b/.test(said)) {
     try {
@@ -796,6 +813,7 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, data) {
       career_describe: `${display}: I'm ${data?.careerDesc ?? "between jobs at the moment"}.`,
       home_visit_yes: `${display}: Of course — you're welcome at my place any time.`,
       home_visit_no: `${display}: I'd like to, but I don't really know you yet. Let's talk a while first.`,
+      family_describe: `${display}: ${data?.familySummary ?? "Family's everything to me."}`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM
