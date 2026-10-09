@@ -993,6 +993,27 @@
       ]
     },
     {
+      "id": "citizen_observe",
+      "mode": "citizen_observe",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenObserve"
+        }
+      ]
+    },
+    {
       "id": "citizen_teamplay",
       "mode": "citizen_teamplay",
       "repeat": false,

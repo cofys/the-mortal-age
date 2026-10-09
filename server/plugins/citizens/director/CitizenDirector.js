@@ -239,6 +239,8 @@ const { tickScience } = require("../lib/CitizenScienceLife");
 const CitizenScience = require("../lib/CitizenScience");
 const { tickInfrastructure } = require("../lib/CitizenInfrastructureLife");
 const CitizenInfrastructure = require("../lib/CitizenInfrastructure");
+const { tickAstronomy } = require("../lib/CitizenAstronomyLife");
+const CitizenAstronomy = require("../lib/CitizenAstronomy");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -3064,7 +3066,16 @@ class CitizenDirector {
       tickInfrastructure(this, nowMs);
     } catch (error) {
       this.log("infrastructure failed", { error: String(error?.message ?? error) });
-    }    try {
+    }
+    // Citizen astronomy: astronomers, observatories, star charts, celestial
+    // events, astrology. Data tier, zero LLM. (CitizenScience owns the
+    // astronomy science field; CitizenDayNightLife owns stargazing flavor.)
+    try {
+      tickAstronomy(this, nowMs);
+    } catch (error) {
+      this.log("astronomy failed", { error: String(error?.message ?? error) });
+    }
+    try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
       }
@@ -3383,6 +3394,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen infrastructure save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenAstronomy.save()) {
+        this.log("citizen astronomy saved");
+      }
+    } catch (error) {
+      this.log("citizen astronomy save failed", {
         error: String(error?.message ?? error),
       });
     }

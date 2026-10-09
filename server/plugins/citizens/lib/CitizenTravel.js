@@ -302,6 +302,27 @@ function startJourney(username, from, to, nowMs, player) {
   } catch {
     // A missing/broken infrastructure module never slows travel.
   }
+  // Star charts guide the way (real astronomy effect). Charts are made by
+  // astronomers observing at night; the bonus reads from the chart records.
+  try {
+    const Astro = require("./CitizenAstronomy");
+    const bonus = Astro.chartBonusFor(route.from) || 0;
+    if (bonus > 0) {
+      durationMs = Math.round(durationMs * Math.max(0.5, 1 - bonus / 100));
+    }
+  } catch {
+    // A missing/broken astronomy module never slows travel.
+  }
+  // Meteor showers light the night road (real celestial-event effect).
+  try {
+    const Astro = require("./CitizenAstronomy");
+    const bonus = Astro.eventEffectFor(route.from, "travel_speed", now) || 0;
+    if (bonus > 0) {
+      durationMs = Math.round(durationMs * Math.max(0.5, 1 - bonus / 100));
+    }
+  } catch {
+    // A missing/broken astronomy module never slows travel.
+  }
   const journey = {
     username: uname,
     from: route.from,

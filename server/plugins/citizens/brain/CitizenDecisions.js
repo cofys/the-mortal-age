@@ -121,6 +121,7 @@ const ACT_CONSTRUCT = "citizen_construct";
 const ACT_TEAMPLAY = "citizen_teamplay";
 const ACT_SCIENCE = "citizen_research";
 const ACT_ENGINEER = "citizen_engineerwork";
+const ACT_OBSERVE = "citizen_observe";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -154,7 +155,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1232,6 +1233,46 @@ function scienceInfo(player) {
 }
 
 /**
+ * Astronomy readiness: is this citizen an astronomer (or curious enough to
+ * become one), and is it night? Defensive: a missing/broken astronomy
+ * module scores as unable to observe.
+ */
+function astroInfo(player) {
+  try {
+    const Astro = require("../lib/CitizenAstronomy");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const rec = Astro.astronomerFor(username);
+    let isAstronomer = !!rec;
+    let curious = 0;
+    try {
+      const personality = player?.getAttribute?.("citizens:personality") ?? {};
+      curious = personality.curious ?? 0;
+    } catch { /* personality unreadable */ }
+    if (!isAstronomer && curious >= Astro.ASTRONOMER_MIN_CURIOSITY) {
+      isAstronomer = true; // will register on first visit
+    }
+    let night = false;
+    try {
+      const DayNight = require("../lib/CitizenDayNight");
+      night = typeof DayNight.isNight === "function"
+        ? !!DayNight.isNight(Date.now()) : false;
+    } catch {
+      const h = new Date().getHours();
+      night = h >= 21 || h < 5;
+    }
+    let hasEvent = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kingdomId = kingdomIdOf(player);
+      hasEvent = !!(kingdomId && Astro.activeEventFor(kingdomId, Date.now()));
+    } catch { /* no event info */ }
+    return { isAstronomer, night, hasEvent, wisdom: rec?.wisdom ?? 0 };
+  } catch {
+    return { isAstronomer: false, night: false, hasEvent: false, wisdom: 0 };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1651,6 +1692,7 @@ compete: competeInfo(player),
     league: leagueInfo(player),
     infra: infraInfo(player),
     science: scienceInfo(player),
+    astro: astroInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1672,7 +1714,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2266,6 +2308,24 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_OBSERVE: {
+      // Astronomy: astronomers watch the night sky from the observatory and
+      // chart the stars. A human stargazer goes out when it's dark — daytime
+      // holds no sky. Celestial events draw every curious eye upward. The
+      // hurt and weary stay home.
+      const a = astro ?? { isAstronomer: false, night: false, hasEvent: false, wisdom: 0 };
+      if (!a.isAstronomer) return 4; // not a watcher of skies
+      if (!a.night) return 4; // the sky isn't out by day
+      let s = 20;
+      if (a.hasEvent) s += 16; // eclipses and comets wait for no one
+      s += Math.min((a.wisdom ?? 0) * 0.2, 10); // seasoned eyes see more
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_SCIENCE: {
       // Science: scientists run real experiments in the kingdom lab. A human
       // researcher works when they have a running experiment — and starts a
@@ -2775,7 +2835,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

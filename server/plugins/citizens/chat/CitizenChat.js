@@ -1074,6 +1074,33 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there an observatory" / "what's in the sky" / "read my stars" — astronomy.
+  if (/\b(observatory|any astronomers?|is there an astronomer|what'?s in the sky|tonight'?s sky|read my stars|my horoscope|celestial event|any eclipse|any comet|meteor shower|star chart)\b/.test(said)) {
+    try {
+      const Astro = require("../lib/CitizenAstronomy");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Astro.describe(kingdomId, Date.now()) : null;
+      const reading = citizenUsername
+        ? Astro.readOmen(citizenUsername, kingdomId, Date.now()) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "astronomy_status", {
+        username: citizenUsername,
+        observatory: desc ? { chartCount: desc.chartCount, chartBonus: desc.chartBonus } : null,
+        activeEvent: desc?.activeEvent ?? null,
+        eventLabel: desc?.eventLabel ?? null,
+        omen: desc?.omen ?? null,
+        yourOmen: reading?.omen ?? null,
+        astronomerCount: desc?.astronomerCount ?? 0,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "any bridges" / "is there an engineer" — player asks about infrastructure.
   if (/\b(any bridges|new bridge|is there an engineer|any engineers|public works|new road|any roads|watchtower|border fort|the reservoir|infrastructure)\b/.test(said)) {
     try {
