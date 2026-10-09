@@ -11,22 +11,48 @@ const os = require("os");
 const path = require("path");
 
 const Esp = require("./CitizenEspionage");
+
+// --- real-API-shape stubs (installed before the Life module's lazy requires)
+// The real journal seam is getJournal().log(citizenName, kind, text, opts)
+// (CitizenJournal.js:79) — NOT director.journal (doesn't exist on the real
+// director). The real speech seam is CitizenSayPublic.sayPublic(bot, text).
+const journaled = [];
+const said = [];
+const journalPath = path.resolve(__dirname, "./CitizenJournal.js");
+require.cache[journalPath] = {
+  id: journalPath, filename: journalPath, loaded: true,
+  exports: {
+    getJournal: () => ({
+      log: (name, kind, text, data) => { journaled.push({ name, kind, text, data }); },
+    }),
+  },
+};
+const sayPublicPath = path.resolve(__dirname, "../chat/CitizenSayPublic.js");
+require.cache[sayPublicPath] = {
+  id: sayPublicPath, filename: sayPublicPath, loaded: true,
+  exports: {
+    sayPublic: (bot, text) => { said.push({ bot, text }); return true; },
+    isRealPlayer: (p) => { try { return p?.isRealPlayer?.() ?? !p?.isBot; } catch { return false; } },
+  },
+};
+
 const Life = require("./CitizenEspionageLife");
 
 const SAVE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "esplife-test-")), "espionage.json");
 Esp._setSavePathForTests(SAVE);
 
 function fakeDirector() {
-  const journaled = [];
-  const said = [];
+  // Real director shape: getBot takes the RECORD ({username}), roster is a
+  // Map of plain data records, log() is the server log. Speech and
+  // journaling go through the stubbed canonical seams above.
   return {
-    journaled,
-    said,
     roster: new Map(),
-    journal(kind, text, data) { journaled.push({ kind, text, data }); },
-    log(text, data) { journaled.push({ kind: "log", text, data }); },
-    getBot() { return null; },
-    sayPublic(username, text) { said.push({ username, text }); },
+    log(text, data) { /* server log, unused here */ },
+    getBot(query) {
+      const username = typeof query === "string" ? query : query?.username;
+      if (!username) return null;
+      return { username, forceChat() {}, getLocalPlayers: () => [] };
+    },
   };
 }
 
@@ -34,6 +60,8 @@ let passed = 0;
 function test(name, fn) {
   Esp.resetForTests();
   Life.resetForTests();
+  journaled.length = 0;
+  said.length = 0;
   try {
     fn();
     passed++;
@@ -60,7 +88,8 @@ test("planning ops activate after the planning window", () => {
   Life.tickEspionage(d, 1000 + Esp.PLANNING_MS + 5000);
   const after = Esp.operationById(op.id);
   assert.strictEqual(after.state, "active", "planning -> active");
-  assert.ok(d.journaled.some((j) => j.data?.op === op.id), "activation journaled");
+  assert.ok(journaled.some((j) => j.data?.op === op.id && j.kind === "espionage"), "activation journaled via getJournal().log");
+  assert.strictEqual(journaled.find((j) => j.data?.op === op.id)?.name, "tick-spy", "journaled under the operative");
 });
 
 test("active ops resolve on the tick", () => {
@@ -89,7 +118,8 @@ test("counter-intel sweep can catch an enemy cell", () => {
     caught = Esp.cellFor("enemy-spy") === null;
   }
   assert.ok(caught, "sweep eventually caught the cell");
-  assert.ok(d.journaled.some((j) => /unmasked/i.test(j.text)), "catch journaled");
+  assert.ok(journaled.some((j) => /unmasked/i.test(j.text)), "catch journaled via getJournal().log");
+  assert.ok(said.some((s) => /Found one/i.test(s.text) && s.bot?.username === "eagle-eye"), "catch announced via canonical sayPublic(bot, text)");
   void cell;
 });
 

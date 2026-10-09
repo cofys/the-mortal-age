@@ -39,20 +39,38 @@ function kingdomAtWar(kingdomId) {
   return false;
 }
 
-function journalFact(kind, data) {
+function journalFact(kind, data, petitioner) {
   try {
-    const J = require("./CitizenJournal");
-    if (typeof J.journal === "function") J.journal(kind, data);
-    else if (typeof J.record === "function") J.record(kind, data);
+    // Canonical journal API: getJournal().log(citizenName, kind, text, opts).
+    // (The old code probed J.journal/J.record — neither exists on the real
+    // CitizenJournal module, so charter history silently died.)
+    const { getJournal } = require("./CitizenJournal");
+    const who = petitioner || "unknown";
+    const label = kind.replace(/^charter_/, "").replace(/_/g, " ");
+    getJournal().log(who, kind, `Trade charter ${label}: ${data.category} in ${data.kingdomId} (${data.guildId}).`, data);
   } catch {
     // journaling is best-effort
   }
 }
 
-function announce(text) {
+function announce(director, kingdomId, text) {
   try {
-    const { sayPublic } = require("../chat/CitizenSayPublic");
-    if (typeof sayPublic === "function") sayPublic(null, text);
+    // LOD-gated: a materialized citizen of the kingdom speaks, only where
+    // a real player can hear. (The old code called sayPublic(null, text),
+    // which returns false immediately — announcements never fired.)
+    const { sayPublic, isRealPlayer } = require("../chat/CitizenSayPublic");
+    if (typeof sayPublic !== "function") return;
+    const bots = typeof director?.onlineBotsForKingdom === "function"
+      ? director.onlineBotsForKingdom(kingdomId)
+      : [];
+    for (const bot of bots) {
+      try {
+        const near = bot?.getLocalPlayers?.() ?? [];
+        if (!near.some((p) => (isRealPlayer ? isRealPlayer(p) : (p?.isRealPlayer?.() ?? !p?.isBot)))) continue;
+        sayPublic(bot, text);
+        return;
+      } catch { /* try the next bot */ }
+    }
   } catch {
     // announcements are best-effort
   }
@@ -79,8 +97,8 @@ function tickTradeCharters(director, nowMs = Date.now()) {
       if (!expired && kingdomAtWar(c.kingdomId)) {
         Charters.revokeCharter(c.kingdomId, c.category);
         const cat = Charters.categoryFor(c.category);
-        journalFact("charter_revoked_war", { kingdomId: c.kingdomId, category: c.category, guildId: c.guildId });
-        announce(`The ${cat?.label ?? c.category} trade charter in ${c.kingdomId} has been suspended — war disrupts all monopolies.`);
+        journalFact("charter_revoked_war", { kingdomId: c.kingdomId, category: c.category, guildId: c.guildId }, c.petitioner);
+        announce(director, c.kingdomId, `The ${cat?.label ?? c.category} trade charter in ${c.kingdomId} has been suspended — war disrupts all monopolies.`);
         continue;
       }
 
@@ -88,8 +106,8 @@ function tickTradeCharters(director, nowMs = Date.now()) {
       if (expired) {
         Charters.revokeCharter(c.kingdomId, c.category);
         const cat = Charters.categoryFor(c.category);
-        journalFact("charter_lapsed", { kingdomId: c.kingdomId, category: c.category, guildId: c.guildId });
-        announce(`The ${cat?.label ?? c.category} trade charter in ${c.kingdomId} has lapsed — the market is open to all traders.`);
+        journalFact("charter_lapsed", { kingdomId: c.kingdomId, category: c.category, guildId: c.guildId }, c.petitioner);
+        announce(director, c.kingdomId, `The ${cat?.label ?? c.category} trade charter in ${c.kingdomId} has lapsed — the market is open to all traders.`);
         continue;
       }
 
@@ -99,8 +117,8 @@ function tickTradeCharters(director, nowMs = Date.now()) {
         const res = Charters.renewCharter(c.kingdomId, c.category, nowMs);
         if (res.ok) {
           const cat = Charters.categoryFor(c.category);
-          journalFact("charter_renewed", { kingdomId: c.kingdomId, category: c.category, guildId: c.guildId });
-          announce(`The ${guildName(c.guildId)} Guild has renewed its ${cat?.label ?? c.category} trade charter in ${c.kingdomId}.`);
+          journalFact("charter_renewed", { kingdomId: c.kingdomId, category: c.category, guildId: c.guildId }, c.petitioner);
+          announce(director, c.kingdomId, `The ${guildName(c.guildId)} Guild has renewed its ${cat?.label ?? c.category} trade charter in ${c.kingdomId}.`);
         }
         // Renewal failure (treasury broke) is silent — the charter lapses
         // at expiry and the lapse announcement covers it.

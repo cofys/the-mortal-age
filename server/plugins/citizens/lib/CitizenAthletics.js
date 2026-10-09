@@ -153,10 +153,13 @@ function foundStadium(kingdomId, capacity = 200) {
 
 function stadiumTile(kingdomId) {
   // Stadiums sit near the market square; resolved defensively.
+  // (CitizenSites has no `marketTile` export — the canonical seam is
+  // siteTileByKingdom(kingdomId, kind); the old name silently nulled
+  // every stadium, so athletes could never train.)
   try {
-    const { marketTile } = require("../brain/CitizenSites");
-    const t = marketTile(kingdomId);
-    if (t) return { x: t.x + 8, y: t.y, level: t.level || 0 };
+    const { siteTileByKingdom } = require("../brain/CitizenSites");
+    const t = siteTileByKingdom(kingdomId, "market");
+    if (t) return { x: t.x + 8, y: t.y, z: t.z ?? 0 };
   } catch { /* sites unreadable */ }
   return null;
 }

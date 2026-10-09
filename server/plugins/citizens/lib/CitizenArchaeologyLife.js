@@ -64,15 +64,28 @@ function usernameOf(record) {
 
 function realPlayersNear(director, tile, radius) {
   try {
-    const players = director.getRealPlayers ? director.getRealPlayers() : [];
-    if (!tile || !Array.isArray(players)) return [];
-    return players.filter((p) => {
-      try {
-        const pos = p.getPosition?.() ?? p.position;
-        if (!pos) return false;
-        return Math.hypot((pos.x ?? 0) - tile.x, (pos.y ?? 0) - tile.y) <= (radius ?? 14);
-      } catch { return false; }
-    });
+    // director.getRealPlayers doesn't exist on the real CitizenDirector —
+    // scan materialized citizens' getLocalPlayers (the canonical engine
+    // seam) for real players within radius of the tile.
+    if (!tile) return [];
+    const { isRealPlayer } = require("../chat/CitizenSayPublic");
+    const roster = director?.roster?.values?.() ?? [];
+    for (const record of roster) {
+      let bot = null;
+      try { bot = director?.getBot ? director.getBot(record) : null; }
+      catch { continue; }
+      const locals = bot?.getLocalPlayers?.() ?? [];
+      for (const p of locals) {
+        try {
+          const real = isRealPlayer ? isRealPlayer(p) : (p?.isRealPlayer?.() ?? !p?.isBot);
+          if (!real) continue;
+          const pos = p.getPosition?.() ?? p.position;
+          if (!pos) continue;
+          if (Math.hypot((pos.x ?? 0) - tile.x, (pos.y ?? 0) - tile.y) <= (radius ?? 14)) return [p];
+        } catch { /* one bad player never breaks the scan */ }
+      }
+    }
+    return [];
   } catch { return []; }
 }
 

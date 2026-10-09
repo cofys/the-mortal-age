@@ -35,17 +35,28 @@ const SWEEP_CATCH_BASE = 0.12;
 
 function sayPublicTo(director, username, text) {
   try {
-    const bot = director?.getBot?.(username) ?? director?.bots?.get?.(username);
-    if (bot?.sayPublic) bot.sayPublic(text);
-    else if (typeof director?.sayPublic === "function") director.sayPublic(username, text);
+    // director.getBot takes the RECORD ({username}), not a bare string;
+    // and speech goes through the canonical CitizenSayPublic seam, which
+    // only reaches chat boxes of nearby real players. (The old code called
+    // getBot(username) — always null — then bot.sayPublic/director.sayPublic,
+    // neither of which exists, so espionage speech never fired.)
+    const bot = director?.getBot ? director.getBot({ username }) : null;
+    if (!bot) return;
+    const { sayPublic } = require("../chat/CitizenSayPublic");
+    if (typeof sayPublic === "function") sayPublic(bot, text);
   } catch {
     // speech is best-effort
   }
 }
 
-function journal(director, text, data = {}) {
+function journal(director, username, text, data = {}) {
   try {
-    director?.journal?.("espionage", text, data);
+    // Canonical journal API: getJournal().log(citizenName, kind, text, opts).
+    // (The old code called director.journal(...), which doesn't exist on
+    // the real CitizenDirector, so every espionage journal entry silently
+    // died. director.log only writes the server log, not the journal.)
+    const { getJournal } = require("./CitizenJournal");
+    getJournal().log(username, "espionage", text, data);
   } catch {
     try {
       director?.log?.(`[espionage] ${text}`, data);
@@ -84,7 +95,7 @@ function advanceOperations(director, nowMs) {
       if (op.state === "planning") {
         const activated = Esp.activateOperation(op.id, nowMs);
         if (activated) {
-          journal(director, `Shadows move against ${prettyKingdom(op.targetKingdom)}.`, {
+          journal(director, op.operative, `Shadows move against ${prettyKingdom(op.targetKingdom)}.`, {
             op: op.id,
             kind: op.type,
           });
@@ -137,25 +148,25 @@ function announceOutcome(director, op) {
     awardDeed(op.operative, "ghost");
     if (op.type === "assassination") {
       const text = `${op.target} was assassinated in ${target}. The shadows claim another.`;
-      journal(director, text, { op: op.id, victim: op.target });
+      journal(director, op.operative, text, { op: op.id, victim: op.target });
       sayPublicTo(director, op.operative, "The deed is done. No one saw me.");
     } else if (op.subtype === "supply") {
       const text = `A ${target} caravan was sabotaged on the road — cargo destroyed.`;
-      journal(director, text, { op: op.id });
+      journal(director, op.operative, text, { op: op.id });
     } else if (op.subtype === "treasury") {
       const text = `The ${target} treasury was robbed in the night. Coins missing.`;
-      journal(director, text, { op: op.id, stolen: op.coinsStolen ?? 0 });
+      journal(director, op.operative, text, { op: op.id, stolen: op.coinsStolen ?? 0 });
     }
   } else if (op.outcome === "caught") {
     awardDeed(op.operative, "burned");
     const text = `A ${prettyKingdom(op.network)} spy was caught ${op.type === "assassination" ? "with a blade" : "with sabotage tools"} in ${target}!`;
-    journal(director, text, { op: op.id, spy: op.operative });
+    journal(director, op.operative, text, { op: op.id, spy: op.operative });
     sayPublicTo(director, op.operative, "They caught me. Run.");
     // The crown interrogates — names come out.
     try {
       const revealed = Esp.interrogate({ spy: op.operative, by: `${target} watch`, nowMs: Date.now() });
       if (revealed.length > 0) {
-        journal(director, `Under questioning, the captured spy named ${revealed.length} operation(s).`, {
+        journal(director, op.operative, `Under questioning, the captured spy named ${revealed.length} operation(s).`, {
           op: op.id,
           revealed,
         });
@@ -218,14 +229,14 @@ function sweepForAgent(director, kingdom, agent, nowMs) {
         // recall is best-effort
       }
       const text = `The ${prettyKingdom(kingdom)} watch unmasked a ${prettyKingdom(cell.homeKingdom)} spy!`;
-      journal(director, text, { cell: cell.id, spy: cell.spy });
+      journal(director, agent, text, { cell: cell.id, spy: cell.spy });
       awardDeed(agent, "spycatcher");
       awardDeed(cell.spy, "burned");
       sayPublicTo(director, agent, "Found one. Take them quietly.");
       try {
         const revealed = Esp.interrogate({ spy: cell.spy, by: agent, nowMs });
         if (revealed.length > 0) {
-          journal(director, `The unmasked spy talked: ${revealed.length} operation(s) exposed.`, {
+          journal(director, cell.spy, `The unmasked spy talked: ${revealed.length} operation(s) exposed.`, {
             cell: cell.id,
             revealed,
           });
