@@ -52,8 +52,7 @@ function stubPlayer(username, opts) {
   return {
     username,
     getUsername: () => username,
-    isRealPlayer: () => !(o.bot ?? false),
-    isBot: o.bot ?? false,
+    isPlayerBot: () => !!(o.bot ?? false),
     getInventory: () => inv,
     sendMessage: (t) => messages.push(t),
     _messages: messages,

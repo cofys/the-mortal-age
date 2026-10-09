@@ -24,7 +24,7 @@ function fakePlayer(username, kingdomId, coins = 5000, isBot = false) {
   return {
     username,
     messages,
-    isBot,
+    isPlayerBot: () => !!isBot,
     getUsername: () => username,
     getAttribute: (k) => (k === "kingdom:id" || k === "kingdomId" ? kingdomId : null),
     getInventory: () => ({

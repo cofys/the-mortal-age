@@ -62,9 +62,8 @@ function mockPlayer(username, isBot) {
   const said = [];
   return {
     username,
-    isBot: !!isBot,
+    isPlayerBot: () => !!isBot,
     getUsername() { return username; },
-    isRealPlayer() { return !isBot; },
     sendMessage(t) { said.push(t); },
     said,
     getInventory() { return { getAmount: () => 1000, count: () => 1000, remove: () => true, add: () => {} }; },

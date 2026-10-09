@@ -47,7 +47,7 @@ function makePlayer(username, coins, isBot = false) {
   return {
     username,
     messages,
-    isBot,
+    isPlayerBot: () => !!isBot,
     getUsername: () => username,
     sendMessage: (t) => messages.push(t),
     getInventory: () => ({

@@ -36,10 +36,7 @@ function fakePlayer(username, coins, isBot = false) {
   const messages = [];
   return {
     username,
-    isBot,
-    isRealPlayer() {
-      return !isBot;
-    },
+    isPlayerBot: () => !!isBot,
     getUsername() {
       return username;
     },

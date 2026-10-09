@@ -15,8 +15,7 @@ function stubPlayer(username, opts) {
     messages,
     getUsername: () => username,
     username,
-    isRealPlayer: () => o.isBot ? false : true,
-    isBot: !!o.isBot,
+    isPlayerBot: () => !!o.isBot,
     sendMessage: (t) => messages.push(t),
   };
 }

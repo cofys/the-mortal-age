@@ -29,8 +29,7 @@ function stubPlayer(username, { coins = 500, cooking = 60, kingdomId = "misthali
   const messages = [];
   return {
     username,
-    isBot,
-    isRealPlayer: () => !isBot,
+    isPlayerBot: () => !!isBot,
     getUsername: () => username,
     sendMessage: (t) => messages.push(t),
     getSkillManager: () => ({ getCurrentLevel: () => cooking }),

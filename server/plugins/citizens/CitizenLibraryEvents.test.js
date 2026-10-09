@@ -61,7 +61,7 @@ function fakePlayer(username, kingdomId, { papyrus = 0, coins = 0, isBot = false
   return {
     getUsername: () => username,
     username,
-    isBot,
+    isPlayerBot: () => !!isBot,
     getAttribute: (key) => (key === "kingdom:id" ? kingdomId : null),
     getInventory: () => inv,
     sendMessage: (text) => messages.push(text),

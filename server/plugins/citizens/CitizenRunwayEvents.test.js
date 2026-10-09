@@ -56,8 +56,7 @@ function mockPlayer(username, opts) {
   return {
     username,
     getUsername: () => username,
-    isRealPlayer: () => true,
-    isBot: false,
+    isPlayerBot: () => false,
     getAttribute: (k) => (k === "kingdom:id" ? "misthalin" : undefined),
     getInventory: () => inv,
     messages: [],
@@ -73,7 +72,7 @@ function run(player, args) {
 }
 
 test("bots are rejected", () => {
-  const bot = { isRealPlayer: () => false, isBot: true, messages: [], sendMessage(t) { this.messages.push(t); } };
+  const bot = { isPlayerBot: () => true, messages: [], sendMessage(t) { this.messages.push(t); } };
   onRunwayCommand(bot, "venues");
   assert(bot.messages.join(" ").toLowerCase().includes("citizens"), "bot rejection message");
 });

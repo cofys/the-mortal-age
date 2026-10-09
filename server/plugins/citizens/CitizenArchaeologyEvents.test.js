@@ -30,8 +30,7 @@ function makePlayer(username, opts) {
     player: {
       getUsername: () => username,
       username,
-      isBot: o.isBot ?? false,
-      isRealPlayer: () => !(o.isBot ?? false),
+      isPlayerBot: () => !!(o.isBot ?? false),
       sendMessage: (t) => said.push(String(t)),
       getInventory: () => ({
         // Real ItemContainer API: getAmount(id), adds(id, amount), deleteNumber(id, amount).
