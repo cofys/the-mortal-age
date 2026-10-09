@@ -633,6 +633,25 @@ function notorietyOf(player) {
 }
 
 /**
+ * Reputation summary { score, tier } for the fame system, read from the
+ * reputation data tier. The famous are welcomed, the infamous shunned.
+ * Defensive: a missing/broken reputation module scores as unknown.
+ */
+function reputationOf(player) {
+  try {
+    const Rep = require("../lib/CitizenReputation");
+    const username = player?.username ?? player?.getUsername?.() ?? null;
+    if (!username || typeof Rep.reputationSummary !== "function") {
+      return { score: 0, tier: "unknown" };
+    }
+    const s = Rep.reputationSummary(username);
+    return { score: s?.score ?? 0, tier: s?.tier ?? "unknown" };
+  } catch {
+    return { score: 0, tier: "unknown" };
+  }
+}
+
+/**
  * Herb materials the citizen could work right now (inventory, else bank).
  * Counts inputs of recipes whose partner item (vial/secondary) is also
  * available in the same place — cleaning needs nothing, mixing needs
@@ -980,6 +999,7 @@ function snapshot(player) {
     sick: sickPenalty(player),
     jailed: jailPenalty(player),
     notoriety: notorietyOf(player),
+    reputation: reputationOf(player),
     travel: travelInfo(player),
     entertain: entertainInfo(player),
     drunk: isDrunk(player),
@@ -1002,7 +1022,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, travel, entertain, drunk, climate, night, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, drunk, climate, night, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1356,6 +1376,16 @@ function scoreActivity(activityId, snap) {
       // A criminal reputation empties the tavern around you: notorious
       // citizens are shunned (notoriety 100 = -30 social).
       if ((notoriety ?? 0) > 0) s -= Math.min(30, Math.round((notoriety ?? 0) * 0.3));
+      // Fame cuts the other way: the famous are welcomed, the infamous
+      // shunned. Snapshot carries { score, tier }; the modifier is a pure
+      // function of the tier ladder (unknown = 0).
+      const repTier = reputation?.tier ?? "unknown";
+      if (repTier === "legendary") s += 12;
+      else if (repTier === "famous") s += 8;
+      else if (repTier === "known") s += 4;
+      else if (repTier === "disliked") s -= 4;
+      else if (repTier === "notorious") s -= 8;
+      else if (repTier === "infamous") s -= 12;
       return s;
     }
     case "guard_patrol":

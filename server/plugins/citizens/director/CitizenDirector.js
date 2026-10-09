@@ -201,6 +201,8 @@ registerFeastSource();
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickSeasonLife } = require("../lib/CitizenSeasonLife");
 const { tickDayNight } = require("../lib/CitizenDayNightLife");
+const { tickReputation } = require("../lib/CitizenReputationLife");
+const CitizenReputation = require("../lib/CitizenReputation");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -2883,6 +2885,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("daynight failed", { error: String(error?.message ?? error) });
     }
+    // Citizen reputation: fame decay, crime sync, skill-mastery renown,
+    // fame announcements, bard songs. Data tier, zero LLM.
+    try {
+      tickReputation(this, nowMs);
+    } catch (error) {
+      this.log("reputation failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3022,6 +3031,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen daynight save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenReputation.save()) {
+        this.log("citizen reputation saved");
+      }
+    } catch (error) {
+      this.log("citizen reputation save failed", {
         error: String(error?.message ?? error),
       });
     }

@@ -184,8 +184,21 @@ function createPrimeMerchantAction(spec, world) {
     }
     // Sword buyers take one at a time.
     inventory.deleteNumber(wareId, 1);
+    // Fame commands a premium: famous merchants charge more, infamous ones
+    // must discount to move goods. Defensive — unknown reputation = 1.0.
+    let fameMultiplier = 1.0;
     try {
-      inventory.add(new Item(COINS, pricePerWare), true);
+      const Rep = require("../../lib/CitizenReputation");
+      const merchantName = player.getUsername?.() ?? null;
+      if (merchantName && typeof Rep.salePriceModifierFor === "function") {
+        fameMultiplier = Rep.salePriceModifierFor(merchantName) ?? 1.0;
+      }
+    } catch {
+      // reputation unreadable — sell at the listed price
+    }
+    const salePrice = Math.max(1, Math.floor(pricePerWare * fameMultiplier));
+    try {
+      inventory.add(new Item(COINS, salePrice), true);
     } catch (error) {
       world?.log?.("citizen_prime_sale_failed", {
         merchant: player.getUsername?.(),

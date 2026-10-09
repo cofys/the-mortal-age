@@ -927,6 +927,49 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "am i famous" / "who is famous" — player asks about reputation and fame.
+  if (/\b(am i famous|what is my reputation|whats my reputation|who is famous|who is the most famous|is anyone famous|am i well known|what is my fame)\b/.test(said)) {
+    try {
+      const Rep = require("../lib/CitizenReputation");
+      const aboutSelf = /\b(am i|my)\b/.test(said);
+      if (aboutSelf) {
+        const s = Rep.reputationSummary(speakerUsername);
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "fame_status", {
+          username: speakerUsername,
+          score: s?.score ?? 0,
+          tier: s?.tier ?? "unknown",
+          tierLabel: s?.tierLabel ?? "unknown",
+        });
+      } else {
+        const top = Rep.topFamous(3);
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "fame_leaders", {
+          leaders: top.map((r) => ({ username: r.username, tier: r.tier, score: r.score })),
+        });
+      }
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "are you famous" — player asks about THIS citizen's renown.
+  if (/\b(are you famous|are you well known|what is your reputation|have you heard of yourself)\b/.test(said)) {
+    try {
+      const Rep = require("../lib/CitizenReputation");
+      const s = Rep.reputationSummary(citizenUsername);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "fame_status", {
+        username: citizenUsername,
+        score: s?.score ?? 0,
+        tier: s?.tier ?? "unknown",
+        tierLabel: s?.tierLabel ?? "unknown",
+        recentDeeds: (s?.recentDeeds ?? []).slice(0, 3),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where is the prison" — player asks about the gaol.
   if (/\b(where is the prison|is there a jail|where is the gaol|who is in jail|is there a prison)\b/.test(said)) {
     try {
