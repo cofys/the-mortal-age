@@ -1014,6 +1014,27 @@
       ]
     },
     {
+      "id": "citizen_chart",
+      "mode": "citizen_chart",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenChart"
+        }
+      ]
+    },
+    {
       "id": "citizen_teamplay",
       "mode": "citizen_teamplay",
       "repeat": false,

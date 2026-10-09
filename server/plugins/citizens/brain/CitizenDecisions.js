@@ -122,6 +122,7 @@ const ACT_TEAMPLAY = "citizen_teamplay";
 const ACT_SCIENCE = "citizen_research";
 const ACT_ENGINEER = "citizen_engineerwork";
 const ACT_OBSERVE = "citizen_observe";
+const ACT_CHART = "citizen_chart";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -155,7 +156,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1273,6 +1274,34 @@ function astroInfo(player) {
 }
 
 /**
+ * Cartography readiness: is this citizen a cartographer (or curious enough
+ * to become one), and do they have papyrus? Defensive: a missing/broken
+ * maps module scores as unable to chart.
+ */
+function mapInfo(player) {
+  try {
+    const Maps = require("../lib/CitizenMaps");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isCartographer = Maps.isCartographer(username);
+    let curious = 0;
+    try {
+      const personality = player?.getAttribute?.("citizens:personality") ?? {};
+      curious = personality.curiosity ?? personality.curious ?? 0;
+    } catch { /* personality unreadable */ }
+    let hasPapyrus = false;
+    try {
+      const inv = player?.inventory ?? player?.getInventory?.();
+      if (inv && typeof inv.count === "function") {
+        hasPapyrus = inv.count(Maps.MAT_PAPYRUS) >= 1;
+      }
+    } catch { /* inventory unreadable */ }
+    return { isCartographer, curious, hasPapyrus };
+  } catch {
+    return { isCartographer: false, curious: 0, hasPapyrus: false };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1693,6 +1722,7 @@ compete: competeInfo(player),
     infra: infraInfo(player),
     science: scienceInfo(player),
     astro: astroInfo(player),
+    maps: mapInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1714,7 +1744,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2326,6 +2356,23 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_CHART: {
+      // Cartography: cartographers draft real maps at the map shop from
+      // real papyrus. A human mapmaker works when they have materials —
+      // no papyrus, no maps. Curious citizens may wander in and register.
+      // The hurt and weary stay home.
+      const m = maps ?? { isCartographer: false, curious: 0, hasPapyrus: false };
+      if (!m.isCartographer && (m.curious ?? 0) < 0.5) return 4; // not a mapmaker
+      if (!m.hasPapyrus) return 4; // honest — no materials, no maps
+      let s = 20;
+      if (m.isCartographer) s += 10; // the trade calls
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_SCIENCE: {
       // Science: scientists run real experiments in the kingdom lab. A human
       // researcher works when they have a running experiment — and starts a
@@ -2835,7 +2882,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

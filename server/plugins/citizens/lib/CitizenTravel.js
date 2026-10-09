@@ -313,6 +313,17 @@ function startJourney(username, from, to, nowMs, player) {
   } catch {
     // A missing/broken astronomy module never slows travel.
   }
+  // Good maps shorten the road (real cartography effect). Maps are drafted
+  // by cartographers at the map shop; the bonus reads from the map records.
+  try {
+    const Maps = require("./CitizenMaps");
+    const bonus = Maps.mapNavigationBonusFor(route.from) || 0;
+    if (bonus > 0) {
+      durationMs = Math.round(durationMs * Math.max(0.5, 1 - bonus / 100));
+    }
+  } catch {
+    // A missing/broken maps module never slows travel.
+  }
   // Meteor showers light the night road (real celestial-event effect).
   try {
     const Astro = require("./CitizenAstronomy");

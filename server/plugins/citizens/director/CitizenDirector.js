@@ -241,6 +241,8 @@ const { tickInfrastructure } = require("../lib/CitizenInfrastructureLife");
 const CitizenInfrastructure = require("../lib/CitizenInfrastructure");
 const { tickAstronomy } = require("../lib/CitizenAstronomyLife");
 const CitizenAstronomy = require("../lib/CitizenAstronomy");
+const { tickMapLife } = require("../lib/CitizenMapLife");
+const CitizenMaps = require("../lib/CitizenMaps");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -3075,6 +3077,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("astronomy failed", { error: String(error?.message ?? error) });
     }
+    // Citizen cartography: real maps, map shops, exploration logs, treasure
+    // caches. Data tier, zero LLM. (CitizenCartographers owns hash-derived
+    // cartographer flavor; CitizenDiscovery owns discovery records.)
+    try {
+      tickMapLife(this, nowMs);
+    } catch (error) {
+      this.log("maps failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3403,6 +3413,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen astronomy save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenMaps.save()) {
+        this.log("citizen maps saved");
+      }
+    } catch (error) {
+      this.log("citizen maps save failed", {
         error: String(error?.message ?? error),
       });
     }

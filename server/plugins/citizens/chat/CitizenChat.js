@@ -1101,6 +1101,35 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a map shop" / "do you have a map" / "treasure map" — cartography.
+  if (/\b(map shop|any maps?|buy a map|world map|city map|dungeon map|treasure map|any treasure|cartographer|mapmaker)\b/.test(said)) {
+    try {
+      const Maps = require("../lib/CitizenMaps");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Maps.describe(kingdomId) : null;
+      const listings = kingdomId ? Maps.listingsFor(kingdomId).slice(0, 5).map((l) => ({
+        type: l.map?.type, price: l.price, quality: l.map?.quality, creator: l.map?.creator,
+      })) : [];
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "maps_status", {
+        username: citizenUsername,
+        mapCount: desc?.mapCount ?? 0,
+        listingCount: desc?.listingCount ?? 0,
+        cheapest: desc?.cheapest ?? null,
+        treasureRumors: desc?.treasureRumors ?? 0,
+        cartographerCount: desc?.cartographerCount ?? 0,
+        listings,
+        isCartographer: citizenUsername ? Maps.isCartographer(citizenUsername) : false,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "any bridges" / "is there an engineer" — player asks about infrastructure.
   if (/\b(any bridges|new bridge|is there an engineer|any engineers|public works|new road|any roads|watchtower|border fort|the reservoir|infrastructure)\b/.test(said)) {
     try {
