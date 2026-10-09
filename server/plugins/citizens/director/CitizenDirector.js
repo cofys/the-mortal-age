@@ -167,6 +167,8 @@ const { tickSpies, tickSpyShouts } = require("../lib/CitizenSpies");
 const { tickExplorers } = require("../lib/CitizenExplorers");
 const { tickExplorers2 } = require("../lib/CitizenExplorers2");
 const { tickSocieties } = require("../lib/CitizenSecretSocieties");
+const { tickClans } = require("../lib/CitizenClanLife");
+const CitizenClans = require("../lib/CitizenClans");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
@@ -2722,6 +2724,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("societies failed", { error: String(error?.message ?? error) });
     }
+    // Citizen clans: formation, growth, player invites, outings,
+    // celebrations and skill moots. Data tier, zero LLM.
+    try {
+      tickClans(this, nowMs);
+    } catch (error) {
+      this.log("clans failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -2735,6 +2744,15 @@ class CitizenDirector {
       CitizenBonds.save();
     } catch (error) {
       this.log("citizen bonds save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenClans.save()) {
+        this.log("citizen clans saved");
+      }
+    } catch (error) {
+      this.log("citizen clans save failed", {
         error: String(error?.message ?? error),
       });
     }

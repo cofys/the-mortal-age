@@ -488,6 +488,16 @@ function acceptInvite(playerName, citizenName, kind) {
     journalEvent(citizenName, `Joined a party with ${playerName}.`, "social");
   } else if (invite.kind === INVITE_CLAN) {
     journalEvent(citizenName, `${playerName} joined my clan chat.`, "social");
+    // Citizen-clan invite (data.clanId): the player joins the clan itself,
+    // not just the chat channel.
+    if (invite.data?.clanId) {
+      try {
+        const Clans = require("./CitizenClans");
+        Clans.playerAcceptsClan(playerName, invite.data.clanId, playerName);
+      } catch {
+        // Non-fatal — the invite is still resolved.
+      }
+    }
   } else if (invite.kind === INVITE_ACTIVITY) {
     // Activity invite accepted: the player joins the citizen's activity
     // party (fishing trip, skilling session, boss run). Lazy require —

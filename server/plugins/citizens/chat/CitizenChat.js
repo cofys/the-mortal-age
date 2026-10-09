@@ -623,6 +623,72 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "can I join your clan" — player asks to join the citizen's clan.
+  if (/\b(join your clan|invite me to (your )?clan|can i join (your|the) clan|let me join (your|the) clan)\b/.test(said)) {
+    try {
+      const Clans = require("../lib/CitizenClans");
+      const clan = Clans.clanOf(citizenUsername);
+      if (!clan) return false; // No clan — LLM can riff.
+      if (Clans.clanOfPlayer(speakerUsername)) return false; // Already in one.
+      const id = Clans.requestJoinClan(speakerUsername, clan.id);
+      if (id) {
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "clan_join_request");
+      } else {
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "clan_join_denied");
+      }
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "start a clan with me" — player asks the citizen to found a clan.
+  if (/\b(start a clan|found a clan|make a clan)( with me)?\b/.test(said)) {
+    try {
+      const Clans = require("../lib/CitizenClans");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const isRosterCitizen = (n) => director?.roster?.has?.(String(n ?? "").toLowerCase()) ?? false;
+      if (!record) return false;
+      if (Clans.clanOf(citizenUsername) || Clans.clanOfPlayer(speakerUsername)) return false;
+      const isFriend = Bonds.isFriend(citizenUsername, speakerUsername);
+      if (isFriend && Clans.founderEligible(record, isRosterCitizen)) {
+        const clan = Clans.createClan(
+          citizenUsername,
+          record.displayName ?? citizenUsername,
+          record.kingdomId,
+          Clans.kindForRecord(record)
+        );
+        if (clan) {
+          Clans.addPlayerMember(clan.id, speakerUsername, speakerUsername);
+          notifyCitizenSpoke(citizenUsername, speakerUsername, "clan_founded");
+          return true;
+        }
+      }
+      return false; // Not leader material or not friends — LLM handles it.
+    } catch {
+      return false;
+    }
+  }
+
+  // "leave clan" — player leaves the citizen's clan.
+  if (/\b(leave (your |the )?clan|quit (your |the )?clan)\b/.test(said)) {
+    try {
+      const Clans = require("../lib/CitizenClans");
+      const clan = Clans.clanOf(citizenUsername);
+      if (clan && Clans.clanOfPlayer(speakerUsername)?.id === clan.id) {
+        Clans.removeMember(clan.id, speakerUsername);
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "clan_left");
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   // "follow me" / "come with me" — player asks citizen to follow.
   if (/\b(follow me|come with me|walk with me|stay with me)\b/.test(said)) {
     if (SocialMechanics.requestFollow(citizenUsername, speakerUsername)) {
@@ -661,6 +727,10 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
       party_join: `${display}: I'm with you. Lead on.`,
       party_create: `${display}: A party! I'm in. Where to?`,
       clan_invite: `${display}: Join my clan chat — we'd be glad to have you.`,
+      clan_join_request: `${display}: I'll put your name to the clan. If the others know you, you're in.`,
+      clan_join_denied: `${display}: Hmm, that didn't go through. Maybe ask me again later.`,
+      clan_founded: `${display}: A clan! Right — we're doing this. Welcome aboard.`,
+      clan_left: `${display}: Sorry to see you go. The door's open if you change your mind.`,
       boss_trip: `${display}: A boss trip? I'm in. Let's go.`,
       activity_invite: `${display}: We've got company — ${speakerUsername}'s coming with us!`,
       follow_start: `${display}: Right behind you.`,
