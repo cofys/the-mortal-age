@@ -16,10 +16,100 @@ const DriftNets = require("./hunter/DriftNets.Hunter");
 const Dungeon = require("./hunter/Dungeon.Hunter");
 const Rumours = require("./hunter/Rumours.Hunter");
 const Broavs = require("./hunter/Broavs.Hunter");
+const HunterContext = require("./hunter/Context.Hunter");
+
+/**
+ * Bot entry point for citizen/bot hunter work. Lays the best trap the
+ * player's Hunter level allows via the real Traps.activate path — the
+ * same way a player clicking "Lay" on a bird snare does it. No interface
+ * clicking, no shortcuts.
+ *
+ * @param {Player} player - the citizen/bot
+ * @param {string} [trapKind] - specific trap kind (e.g. "bird"), or best for level
+ * @returns {boolean} true if the lay was initiated
+ */
+function startBotHunting(player, trapKind) {
+  try {
+    const H = HunterContext.H;
+    const data = H?.data;
+    if (!data?.traps) return false;
+    const kind = trapKind || bestTrapKindForLevel(hunterLevel(player));
+    const def = data.traps[kind];
+    if (!def || !def.item) return false; // needs tree/boulder/base — not bot-layable
+    return Traps.activate({ player, itemId: def.item }) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** True if the player has any hunter traps laid right now. */
+function isHuntingActive(player) {
+  try {
+    const H = HunterContext.H;
+    for (const trap of H?.traps ?? []) {
+      if (trap.player === player) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Hunter level, 1 when unreadable (bird-snare-only — safe fallback). */
+function hunterLevel(player) {
+  try {
+    const Skill = require("../src/main/typescript/elvarg/game/model/Skill").Skill;
+    const mgr = player.getSkillManager?.();
+    if (!mgr || !Skill || typeof mgr.getCurrentLevel !== "function") return 1;
+    const lvl = mgr.getCurrentLevel(Skill.HUNTER);
+    return Number.isInteger(lvl) && lvl > 0 ? lvl : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
+ * Best trap kind the citizen can lay from inventory at their level.
+ * Only item-based traps (bird snare, box trap, rabbit snare, magic box)
+ * — tree/boulder/pit traps need world objects and aren't bot-layable.
+ */
+function bestTrapKindForLevel(level) {
+  try {
+    const data = HunterContext.H?.data;
+    if (!data?.traps) return "bird";
+    let best = null;
+    for (const [kind, def] of Object.entries(data.traps)) {
+      if (!def.item) continue;
+      if ((def.level ?? 99) > level) continue;
+      if (!best || (def.level ?? 0) > (data.traps[best].level ?? 0)) best = kind;
+    }
+    return best ?? "bird";
+  } catch {
+    return "bird";
+  }
+}
+
+/** Trap kinds with their item ids and levels, for the brain/decision layer. */
+function huntingTrapInfo() {
+  try {
+    const data = HunterContext.H?.data;
+    if (!data?.traps) return [];
+    return Object.entries(data.traps)
+      .filter(([, def]) => def.item)
+      .map(([kind, def]) => ({ kind, itemId: def.item, level: def.level ?? 99 }));
+  } catch {
+    return [];
+  }
+}
 
 module.exports = {
   name: "Hunter",
   members: true,
+  startBotHunting,
+  isHuntingActive,
+  hunterLevel,
+  bestTrapKindForLevel,
+  huntingTrapInfo,
   register(api) {
     api.onServerStartup(Runtime.start.bind(null, api));
     api.onServerShutdown(Runtime.shutdown);

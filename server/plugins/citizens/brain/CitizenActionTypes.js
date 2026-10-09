@@ -30,6 +30,7 @@ const { createCitizenFletchAction } = require("./actions/CitizenFletch");
 const { createCitizenRcAction } = require("./actions/CitizenRc");
 const { createCitizenAgilityAction } = require("./actions/CitizenAgility");
 const { createCitizenSlayerAction } = require("./actions/CitizenSlayer");
+const { createCitizenHuntAction } = require("./actions/CitizenHunt");
 const { createIdleSocialAction } = require("./actions/IdleSocial");
 const { createRefugeeFlightAction } = require("./actions/RefugeeFlight");
 const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE } = require("../constants");
@@ -102,6 +103,7 @@ function registerCitizenActionTypes() {
   registerBotActionType("citizenRc", createCitizenRcAction);
   registerBotActionType("citizenAgility", createCitizenAgilityAction);
   registerBotActionType("citizenSlayer", createCitizenSlayerAction);
+  registerBotActionType("citizenHunt", createCitizenHuntAction);
   registerBotActionType("idleSocial", createIdleSocialAction);
   registerBotActionType("refugeeFlight", createRefugeeFlightAction);
   registerBotConditionKind("citizen", createCitizenCondition);
