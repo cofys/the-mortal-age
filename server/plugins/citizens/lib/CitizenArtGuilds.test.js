@@ -423,13 +423,16 @@ test("grantGoldenPalette awards quarterly to the most-certified member", () => {
 
 test("patronage: post, claim with a real cert, pay from treasury", () => {
   const opts = {};
-  const restore = installStubs({
+  // NOTE: pass the test's own opts object (not a fresh literal): installStubs'
+  // parameter shadows the outer binding, so a literal would leave this opts
+  // empty and the bankAccounts/bankDirty assertions below would read undefined.
+  const restore = installStubs(Object.assign(opts, {
     careers: { "painty pete": "artist", "rich rita": "artist" },
     artworks: {
       a1: { id: "a1", title: "Sunset", artist: "painty pete", quality: 90, medium: "painting" },
     },
     artistWorks: { "painty pete": ["a1"] },
-  });
+  }));
   try {
     Guilds.joinGuild("Painty Pete", "varrock");
     Guilds.joinGuild("Rich Rita", "varrock");
