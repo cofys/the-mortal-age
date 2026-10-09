@@ -1789,8 +1789,11 @@ class CitizenDirector {
     try {
       const nav = require("../../bots/behaviours/navigation/BotNavigation");
       const { peekMovementRequest, dispatchMovementRequest, requestMovement, clearMovementRequest } = nav;
+      let _onlineCount = 0;
+      let _wanderCount = 0;
       for (const record of this.roster.values()) {
         if (!this.isOnline(record)) continue;
+        _onlineCount++;
         const bot = this.getBot(record);
         if (!bot) continue;
         // Skip if already moving
@@ -1815,7 +1818,7 @@ class CitizenDirector {
             if (dx === 0 && dy === 0) continue;
             const tx = loc.getX() + dx;
             const ty = loc.getY() + dy;
-            requestMovement(bot, tx, ty, { reason: "director_wander", basicPather: true, z: loc.getZ?.() ?? 0 });
+            _wanderCount++; requestMovement(bot, tx, ty, { reason: "director_wander", basicPather: true, z: loc.getZ?.() ?? 0 });
             // Dispatch immediately
             const req2 = peekMovementRequest(bot);
             if (req2) {
@@ -1824,6 +1827,10 @@ class CitizenDirector {
             }
           } catch {}
         }
+      }
+      if (!global._moveDiagLogged) {
+        global._moveDiagLogged = true;
+        console.log(`[DIAG-MOVE] online=${_onlineCount}, wandered=${_wanderCount}`);
       }
     } catch (error) {
       this.log("director movement failed", { error: String(error?.message ?? error) });
