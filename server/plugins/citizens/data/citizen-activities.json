@@ -381,6 +381,27 @@
           "type": "citizenSmelt"
         }
       ]
+    },
+    {
+      "id": "citizen_craft",
+      "mode": "citizen_craft",
+      "repeat": false,
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenCraft"
+        }
+      ]
     }
   ]
 }
