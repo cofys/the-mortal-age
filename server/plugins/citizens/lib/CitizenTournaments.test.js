@@ -271,9 +271,9 @@ test("coinCount/removeCoins/addCoins with mock inventory", () => {
   let coins = 100;
   const player = {
     getInventory: () => ({
-      count: (id) => (id === 995 ? coins : 0),
-      remove: (id, n) => { if (id === 995) coins -= n; },
-      add: (id, n) => { if (id === 995) coins += n; },
+      getAmount: (id) => (id === 995 ? coins : 0),
+      deleteNumber: (id, n) => { if (id === 995) coins -= n; },
+      adds: (id, n) => { if (id === 995) coins += n; },
     }),
   };
   assert.equal(T.coinCount(player), 100);

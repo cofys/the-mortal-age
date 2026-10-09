@@ -26,10 +26,10 @@ function stubPlayer(username, coins, kingdomId) {
     getAttribute: (k) => (k === "kingdom:id" || k === "kingdomId" ? kingdomId : null),
     isPlayerBot: () => false,
     getInventory: () => ({
+      // Real ItemContainer API: getAmount(id), adds(id, amount), deleteNumber(id, amount).
       getAmount: (id) => (id === 995 ? balance : 0),
-      count: (id) => (id === 995 ? balance : 0),
-      remove: (id, n) => { if (id === 995) balance = Math.max(0, balance - n); },
-      add: (id, n) => { if (id === 995) balance += n; },
+      adds: (id, n) => { if (id === 995 && n > 0) balance += n; },
+      deleteNumber: (id, n) => { if (id === 995) balance = Math.max(0, balance - n); },
     }),
     sendMessage: (m) => messages.push(m),
     _balance: () => balance,

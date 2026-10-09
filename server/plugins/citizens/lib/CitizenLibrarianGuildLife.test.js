@@ -114,7 +114,8 @@ function botWithCoins(coins) {
   return {
     inventory: {
       getAmount: (id) => inv.get(id) || 0,
-      remove: (id, n) => inv.set(id, Math.max(0, (inv.get(id) || 0) - n)),
+      // Canonical ItemContainer API: deleteNumber(id, amount).
+      deleteNumber: (id, n) => inv.set(id, Math.max(0, (inv.get(id) || 0) - n)),
     },
   };
 }

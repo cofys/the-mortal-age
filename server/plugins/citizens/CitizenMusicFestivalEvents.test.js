@@ -30,8 +30,9 @@ function stubPlayer(username, opts) {
     sendMessage: (t) => messages.push(t),
     messages,
     getInventory: () => ({
-      getAmount: () => o.coins || 0,
-      remove: () => { o.coins = (o.coins || 0); },
+      // Real ItemContainer API: getAmount(id), deleteNumber(id, amount).
+      getAmount: (id) => (id === 995 ? o.coins || 0 : 0),
+      deleteNumber: (id, n) => { if (id === 995) o.coins = Math.max(0, (o.coins || 0) - n); },
     }),
   };
 }

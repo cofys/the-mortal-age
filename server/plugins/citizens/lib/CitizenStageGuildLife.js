@@ -87,10 +87,12 @@ function takeCoins(bot, amount) {
   try {
     const inv = bot.inventory ?? bot.getInventory?.();
     if (!inv) return false;
-    if (typeof inv.remove === "function") inv.remove(Guilds.COINS_ID, amount);
-    else if (typeof inv.delete === "function") inv.delete(Guilds.COINS_ID, amount);
-    else return false;
-    return true;
+    // Canonical: deleteNumber(id, amount) with balance verification. ItemContainer
+    // has no inv.remove(id, amount).
+    const before = inv.getAmount?.(Guilds.COINS_ID) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(Guilds.COINS_ID, amount);
+    return (inv.getAmount?.(Guilds.COINS_ID) ?? 0) === before - amount;
   } catch { return false; }
 }
 

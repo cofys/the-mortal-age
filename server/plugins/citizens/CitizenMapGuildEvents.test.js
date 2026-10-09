@@ -49,10 +49,10 @@ function makePlayer(username, coins, isBot) {
     isBot: !!isBot,
     isRealPlayer: () => !isBot,
     getInventory: () => ({
+      // Real ItemContainer API: getAmount(id), adds(id, amount), deleteNumber(id, amount).
       getAmount: (id) => (id === 995 ? c : 0),
-      count: (id) => (id === 995 ? c : 0),
-      remove: (id, n) => { if (id === 995 && c >= n) { c -= n; return true; } return false; },
-      add: (id, n) => { if (id === 995) c += n; },
+      adds: (id, n) => { if (id === 995 && n > 0) c += n; },
+      deleteNumber: (id, n) => { if (id === 995 && c >= n) c -= n; },
     }),
     sendMessage: (t) => messages.push(t),
     __coins: () => c,

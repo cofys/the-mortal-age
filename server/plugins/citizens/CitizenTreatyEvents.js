@@ -34,7 +34,8 @@ function kingdomOf(player) {
 
 function coinsOf(player) {
   try {
-    return player?.getInventory?.()?.getAmount?.(COINS_ID) ?? player?.getInventory?.().count?.(COINS_ID) ?? 0;
+    // Canonical: ItemContainer.getAmount(id). There is no inv.count(id).
+    return player?.getInventory?.()?.getAmount?.(COINS_ID) ?? 0;
   } catch {
     return 0;
   }
@@ -44,12 +45,13 @@ function takeCoinsFrom(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
-    if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
-    else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    if (before < amount) return false;
+    // Canonical engine API: ItemContainer.deleteNumber(id, amount).
+    // There is no inv.remove(id, amount) and no inv.count(id).
+    inv.deleteNumber?.(COINS_ID, amount);
+    // Honest: the balance must actually have moved, or the fee wasn't taken.
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before - amount;
   } catch {
     return false;
   }
@@ -185,4 +187,4 @@ function describeReason(r) {
   }
 }
 
-module.exports = { onTreatyCommand, USAGE };
+module.exports = { onTreatyCommand, USAGE , takeCoinsFrom };

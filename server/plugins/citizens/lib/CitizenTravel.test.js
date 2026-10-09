@@ -87,12 +87,11 @@ describe("journey lifecycle", () => {
     let balance = coins;
     return {
       getInventory: () => ({
-        count: () => balance,
         getAmount: () => balance,
-        remove: (id, n) => {
+        deleteNumber: (id, n) => {
           balance = Math.max(0, balance - n);
         },
-        add: (id, n) => {
+        adds: (id, n) => {
           balance += n;
         },
       }),

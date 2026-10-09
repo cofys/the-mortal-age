@@ -29,10 +29,16 @@ function makeDirector(records, opts = {}) {
   const players = new Map();
   for (const r of records) {
     if (opts.online?.includes(r.username)) {
+      const items = new Map();
+      for (const id of opts.herbs?.[r.username] ?? []) items.set(id, 1);
       players.set(r.username, {
+        // Canonical ItemContainer API: getAmount(id), deleteNumber(id, amount).
+        // Herbs are really consumed so the mock balance verifies.
         getInventory: () => ({
-          count: (id) => (opts.herbs?.[r.username]?.includes(id) ? 1 : 0),
-          remove: () => {},
+          getAmount: (id) => items.get(id) ?? 0,
+          deleteNumber: (id, n) => {
+            items.set(id, Math.max(0, (items.get(id) ?? 0) - n));
+          },
         }),
       });
     }

@@ -298,7 +298,7 @@ check("tickBequestFlush: owed coins land in the heir's real inventory", () => {
   let coins = 0;
   const bot = {
     getInventory: () => ({
-      add: (id, amt) => { if (id === 995) coins += amt; },
+      adds: (id, amt) => { if (id === 995) coins += amt; },
       getAmount: () => coins,
     }),
   };

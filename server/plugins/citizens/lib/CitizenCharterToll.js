@@ -100,17 +100,15 @@ function coinsOf(player) {
 }
 
 function takeCoins(player, amount) {
+  // Canonical: deleteNumber(id, amount) with balance verification. ItemContainer
+  // has no inv.remove(id, amount).
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    if (typeof inv.delete === "function") {
-      inv.delete(COINS_ID, amount);
-      return true;
-    }
-    if (typeof inv.remove === "function") {
-      inv.remove(COINS_ID, amount);
-      return true;
-    }
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(COINS_ID, amount);
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before - amount;
   } catch {
     // fall through
   }

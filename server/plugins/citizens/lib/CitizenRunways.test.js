@@ -41,16 +41,17 @@ function mockPlayer(username, coins, papyrus, cloth) {
       if (id === 1759) return this.cloth;
       return 0;
     },
-    add(id, n) {
+    // Canonical ItemContainer API: getAmount(id), adds(id, amount),
+    // deleteNumber(id, amount). There is no inv.add / inv.remove.
+    adds(id, n) {
       if (id === 995) this.coins += n;
       if (id === 970) this.papyrus += n;
       if (id === 1759) this.cloth += n;
     },
-    remove(id, n) {
-      if (id === 995 && this.coins >= n) { this.coins -= n; return true; }
-      if (id === 970 && this.papyrus >= n) { this.papyrus -= n; return true; }
-      if (id === 1759 && this.cloth >= n) { this.cloth -= n; return true; }
-      return false;
+    deleteNumber(id, n) {
+      if (id === 995) this.coins = Math.max(0, this.coins - n);
+      if (id === 970) this.papyrus = Math.max(0, this.papyrus - n);
+      if (id === 1759) this.cloth = Math.max(0, this.cloth - n);
     },
   };
   return { username, getUsername: () => username, getInventory: () => inv, _inv: inv };
@@ -281,6 +282,22 @@ test("save round-trips state", () => {
   Runways.resetForTests();
   assert(Runways.isDesigner("Save"), "designer survives reload");
   assert(Runways.describe().designers === 1, "describe counts");
+});
+
+// --- canonical ItemContainer API regressions (inv-audit) ---
+test("takeCoins reduces the balance via deleteNumber, broke refuses honestly", () => {
+  const rich = mockPlayer("RichTaker", 1000, 0, 0);
+  assert.strictEqual(Runways.takeCoins(rich, 400), true, "take succeeds");
+  assert.strictEqual(rich._inv.coins, 600, "balance reduced by the take");
+  assert.strictEqual(Runways.takeCoins(rich, 9999), false, "broke refuses");
+  assert.strictEqual(rich._inv.coins, 600, "failed take touches nothing");
+  assert.strictEqual(Runways.takeCoins(null, 10), false, "null player refuses");
+});
+
+test("giveCoins credits via adds", () => {
+  const p = mockPlayer("PrizeTaker", 100, 0, 0);
+  assert.strictEqual(Runways.giveCoins(p, 250), true, "give succeeds");
+  assert.strictEqual(p._inv.coins, 350, "balance credited");
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

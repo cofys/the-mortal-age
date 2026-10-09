@@ -399,23 +399,25 @@ function seasonalComfortBonus(wornTypes, nowMs) {
 // --- inventory helpers (defensive, real engine) -----------------------------------
 
 function countItem(player, itemId) {
+  // Canonical: ItemContainer.getAmount(id). There is no inv.count(id) or
+  // inv.getCount(id) on the engine container.
   try {
-    return player?.inventory?.count?.(itemId) ?? player?.inventory?.getCount?.(itemId) ?? 0;
+    return player?.inventory?.getAmount?.(itemId) ?? 0;
   } catch {
     return 0;
   }
 }
 
 function removeItem(player, itemId, count) {
+  // Canonical: deleteNumber(id, amount) with balance verification. There is
+  // no inv.remove(id, amount) on ItemContainer.
   try {
-    if (player?.inventory?.remove?.(itemId, count) !== undefined) {
-      player.inventory.remove(itemId, count);
-      return true;
-    }
-    if (player?.inventory?.delete) {
-      player.inventory.delete(itemId, count);
-      return true;
-    }
+    const inv = player?.inventory;
+    if (!inv) return false;
+    const before = inv.getAmount?.(itemId) ?? 0;
+    if (before < count) return false;
+    inv.deleteNumber?.(itemId, count);
+    return (inv.getAmount?.(itemId) ?? 0) === before - count;
   } catch {
     // Honest failure.
   }
@@ -424,18 +426,22 @@ function removeItem(player, itemId, count) {
 
 function coinCount(player) {
   try {
-    return player?.inventory?.count?.(995) ?? player?.coins ?? 0;
+    return player?.inventory?.getAmount?.(995) ?? player?.coins ?? 0;
   } catch {
     return 0;
   }
 }
 
 function removeCoins(player, amount) {
+  // Canonical: deleteNumber(id, amount) with balance verification. There is
+  // no inv.remove(id, amount) on ItemContainer.
   try {
-    if (player?.inventory?.remove?.(995, amount) !== undefined) {
-      player.inventory.remove(995, amount);
-      return true;
-    }
+    const inv = player?.inventory;
+    if (!inv) return false;
+    const before = inv.getAmount?.(995) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(995, amount);
+    return (inv.getAmount?.(995) ?? 0) === before - amount;
   } catch {
     // Honest failure.
   }

@@ -524,10 +524,52 @@ function skillIndexFor(skill) {
   return SKILL_ORDER.indexOf(s);
 }
 
+// --- canonical coin helpers (real engine API: getAmount / deleteNumber / adds) ---
+// The old guards probed `inv.count` / `inv.remove` (neither exists on the
+// engine inventory). These three are the only coin paths; every balance move
+// is verified before reporting success.
+
+/** Read a real item amount. Never throws, never invents. */
+function coinCountInv(inv, id) {
+  try { return inv?.getAmount?.(id) ?? 0; } catch { return 0; }
+}
+
+/**
+ * Remove exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the debit.
+ */
+function takeCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before - amount;
+  } catch { return false; }
+}
+
+/**
+ * Credit exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the credit.
+ */
+function giveCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    inv.adds?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before + amount;
+  } catch { return false; }
+}
+
+/** Test seam: canonical real-API coin helpers (inventory audit). */
+function _coinHelpersForTests() {
+  return { coinCount: coinCountInv, takeCoins, giveCoins };
+}
+
 function coinCount(player) {
   try {
     const inv = player?.getInventory?.() ?? player?.inventory;
-    if (inv?.count) return Number(inv.count(995) ?? 0);
+    if (typeof inv?.getAmount === "function") return coinCountInv(inv, 995);
     if (Array.isArray(inv)) {
       return inv.filter((i) => Number(i?.id) === 995).reduce((n, i) => n + Number(i?.amount ?? 1), 0);
     }
@@ -540,10 +582,7 @@ function coinCount(player) {
 function removeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.() ?? player?.inventory;
-    if (inv?.remove) {
-      inv.remove(995, amount);
-      return true;
-    }
+    return takeCoins(inv, 995, amount);
   } catch {
     // fall through
   }
@@ -582,6 +621,7 @@ function resetForTests() {
 module.exports = {
   _setSavePathForTests,
   resetForTests,
+  _coinHelpersForTests,
   guilds,
   guildFor,
   rankForFavor,

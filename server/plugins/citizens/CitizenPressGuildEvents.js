@@ -62,7 +62,8 @@ function takeCoins(player, amount) {
     if (typeof inv.deleteNumber === "function") inv.deleteNumber(COINS_ID, amount);
     else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
     else return false;
-    return true;
+    // Honest: the balance must actually have moved, or the fee wasn't taken.
+    return (inv.getAmount?.(COINS_ID) ?? 0) === has - amount;
   } catch {
     return false;
   }
@@ -232,4 +233,4 @@ function onPressGuildCommand(player, args) {
   say(player, PRESSGUILD_USAGE);
 }
 
-module.exports = { onPressGuildCommand, PRESSGUILD_USAGE };
+module.exports = { onPressGuildCommand, PRESSGUILD_USAGE , takeCoins };

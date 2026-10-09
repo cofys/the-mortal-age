@@ -94,9 +94,11 @@ function removeItem(bot, itemId, amount) {
     if (!inv) return false;
     // Canonical: deleteNumber(id, amount) / delete(id, amount). ItemContainer
     // has no inv.remove(id, amount).
-    if (typeof inv.deleteNumber === "function") { inv.deleteNumber(itemId, amount); return true; }
-    if (typeof inv.delete === "function") { inv.delete(itemId, amount); return true; }
-    return false;
+    // Canonical: deleteNumber(id, amount) with balance verification.
+    const before = inv.getAmount?.(itemId) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(itemId, amount);
+    return (inv.getAmount?.(itemId) ?? 0) === before - amount;
   } catch { return false; }
 }
 

@@ -25,8 +25,9 @@ function playerWith({ coins = 1000, levels = {} } = {}) {
     username: "TestCitizen",
     getInventory() {
       return {
-        count: (id) => (id === 995 ? coins : 0),
-        remove: (id, amt) => { /* pretend */ },
+        getAmount: (id) => (id === 995 ? coins : 0),
+        deleteNumber: (id, amt) => { if (id === 995) coins -= amt; },
+        adds: (id, amt) => { if (id === 995) coins += amt; },
       };
     },
     items,

@@ -81,9 +81,10 @@ function stubPlayer(name, coins, isBot = false) {
   const messages = [];
   const inv = {
     coins,
-    getAmount: () => inv.coins,
-    remove: (id, n) => { inv.coins -= n; },
-    add: (id, n) => { inv.coins += n; },
+    // Real ItemContainer API: getAmount(id), adds(id, amount), deleteNumber(id, amount).
+    getAmount: (id) => (id === 995 ? inv.coins : 0),
+    deleteNumber: (id, n) => { if (id === 995) inv.coins -= n; },
+    adds: (id, n) => { if (id === 995 && n > 0) inv.coins += n; },
   };
   return {
     messages,

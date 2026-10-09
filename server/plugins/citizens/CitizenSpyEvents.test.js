@@ -28,9 +28,9 @@ function fakePlayer(username, kingdomId, coins = 5000, isBot = false) {
     getUsername: () => username,
     getAttribute: (k) => (k === "kingdom:id" || k === "kingdomId" ? kingdomId : null),
     getInventory: () => ({
+      // Real ItemContainer API: getAmount(id), deleteNumber(id, amount).
       getAmount: (id) => inv.get(id) ?? 0,
-      count: (id) => inv.get(id) ?? 0,
-      remove: (id, n) => inv.set(id, Math.max(0, (inv.get(id) ?? 0) - n)),
+      deleteNumber: (id, n) => inv.set(id, Math.max(0, (inv.get(id) ?? 0) - n)),
     }),
     sendMessage: (t) => messages.push(t),
     _coins: () => inv.get(COINS) ?? 0,

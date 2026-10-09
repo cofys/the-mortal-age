@@ -23,9 +23,9 @@ function makeBot(coins) {
   return {
     inventory: {
       getAmount: (id) => (id === 995 ? coins : 0),
-      count: (id) => (id === 995 ? coins : 0),
-      remove: (id, n) => { if (id === 995 && coins >= n) { coins -= n; return true; } return false; },
-      add: (id, n) => { if (id === 995) coins += n; },
+      // Canonical ItemContainer API: adds(id, amount), deleteNumber(id, amount).
+      adds: (id, n) => { if (id === 995) coins += n; },
+      deleteNumber: (id, n) => { if (id === 995) coins = Math.max(0, coins - n); },
       _coins: () => coins,
     },
     sendMessage: () => {},

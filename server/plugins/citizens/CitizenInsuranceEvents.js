@@ -107,11 +107,20 @@ function onInsuranceCommand({ player, parts }) {
           return true;
         }
         // Players prepay: the tick cannot honestly collect from an offline player.
+        // Canonical engine API: ItemContainer.deleteNumber(id, amount).
+        // inv.remove(...) never existed, so prepayment silently never collected.
         if (def.term === "weekly") {
           const extra = r.policy.premium * (PLAYER_PREPAY_WEEKS - 1);
           const inv = player.getInventory?.();
-          const have = inv?.getAmount?.(COINS_ID) ?? 0;
-          if (have >= extra && inv?.remove?.(COINS_ID, extra)) {
+          const before = inv?.getAmount?.(COINS_ID) ?? 0;
+          let prepaid = false;
+          try {
+            if (inv && before >= extra) {
+              inv.deleteNumber?.(COINS_ID, extra);
+              prepaid = (inv.getAmount?.(COINS_ID) ?? 0) === before - extra;
+            }
+          } catch { prepaid = false; }
+          if (prepaid) {
             const st = Insurance._data();
             st.pool += extra;
             st.totalPremiums += extra;

@@ -52,8 +52,14 @@ function kingdomOf(player) {
 
 function giveCoins(player, amount) {
   try {
-    player?.getInventory?.()?.add?.(COINS_ID, amount);
-    return true;
+    const inv = player?.getInventory?.();
+    if (!inv || amount <= 0) return false;
+    // Canonical: adds(id, amount). add(item, refresh) takes an Item object —
+    // add(id, amount) throws, so prize money silently never arrived.
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    inv.adds?.(COINS_ID, amount);
+    // Honest: the balance must actually have moved, or the prize wasn't paid.
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before + amount;
   } catch {
     return false;
   }
@@ -63,12 +69,13 @@ function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
-    if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
-    else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    if (before < amount) return false;
+    // Canonical engine API: ItemContainer.deleteNumber(id, amount).
+    // There is no inv.remove(id, amount) and no inv.count(id).
+    inv.deleteNumber?.(COINS_ID, amount);
+    // Honest: the balance must actually have moved, or the fee wasn't taken.
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before - amount;
   } catch {
     return false;
   }
@@ -166,4 +173,4 @@ function onDigCommand(player, args) {
   say(player, DIG_USAGE);
 }
 
-module.exports = { onDigCommand, DIG_USAGE };
+module.exports = { onDigCommand, DIG_USAGE , giveCoins, takeCoins };

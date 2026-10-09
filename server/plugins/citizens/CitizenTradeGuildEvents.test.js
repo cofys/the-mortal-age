@@ -38,9 +38,9 @@ function makePlayer(username, opts = {}) {
     isRealPlayer: () => !opts.bot,
     getUsername: () => username,
     getInventory: () => ({
+      // Real ItemContainer API: getAmount(id), deleteNumber(id, amount).
       getAmount: (id) => (id === 995 ? coins : 0),
-      count: (id) => (id === 995 ? coins : 0),
-      remove: (id, n) => { if (id === 995 && coins >= n) { coins -= n; return true; } return false; },
+      deleteNumber: (id, n) => { if (id === 995 && coins >= n) coins -= n; },
     }),
     getAttribute: (k) => (k === "citizens:market-wares" && opts.wares ? JSON.stringify(opts.wares) : null),
     sendMessage: (t) => said.push(t),

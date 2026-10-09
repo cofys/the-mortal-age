@@ -38,7 +38,8 @@ function fakeBot(username, coins) {
   const inv = {
     coins,
     getAmount: (id) => (id === 995 ? inv.coins : 0),
-    remove: (id, n) => { if (id === 995 && inv.coins >= n) { inv.coins -= n; return true; } return false; },
+    // Canonical ItemContainer API: deleteNumber(id, amount).
+    deleteNumber: (id, n) => { if (id === 995) inv.coins = Math.max(0, inv.coins - n); },
   };
   return {
     getUsername: () => username,

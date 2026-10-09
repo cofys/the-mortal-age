@@ -68,7 +68,8 @@ function makePlayer(username, coins, isBot) {
   const inv = {
     _coins: coins,
     getAmount: (id) => (id === 995 ? inv._coins : 0),
-    remove: (id, amt) => { if (id === 995) inv._coins = Math.max(0, inv._coins - amt); },
+    // Real ItemContainer API: getAmount(id), deleteNumber(id, amount).
+    deleteNumber: (id, amt) => { if (id === 995) inv._coins = Math.max(0, inv._coins - amt); },
   };
   return {
     getUsername: () => username,

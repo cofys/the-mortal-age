@@ -30,8 +30,8 @@ function makeBot(coins, wares) {
   return {
     inventory: {
       getAmount: (id) => (id === 995 ? c : 0),
-      count: (id) => (id === 995 ? c : 0),
-      remove: (id, n) => { if (id === 995 && c >= n) { c -= n; return true; } return false; },
+      // Canonical ItemContainer API: deleteNumber(id, amount).
+      deleteNumber: (id, n) => { if (id === 995) c = Math.max(0, c - n); },
     },
     getAttribute: (k) => (k === "citizens:market-wares" && wares ? JSON.stringify(wares) : null),
     sendMessage: () => {},

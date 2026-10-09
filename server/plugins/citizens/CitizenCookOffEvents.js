@@ -259,4 +259,4 @@ function onCookOffCommand(player, args) {
   }
 }
 
-module.exports = { onCookOffCommand, COOKOFF_USAGE };
+module.exports = { onCookOffCommand, COOKOFF_USAGE , takeCoins };

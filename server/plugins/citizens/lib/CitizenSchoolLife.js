@@ -117,11 +117,14 @@ function takeCoins(bot, amount) {
 
 /** Give coins for real; returns true when the inventory accepted them. */
 function giveCoins(bot, amount) {
+  // Canonical: adds(id, amount) with balance verification. inv.add takes an
+  // Item instance, not (id, amount) — the old call threw inside ItemContainer.
   try {
     const inv = bot?.getInventory?.();
-    if (!inv || typeof inv.add !== "function") return false;
-    inv.add(COINS, amount);
-    return true;
+    if (!inv) return false;
+    const before = inv.getAmount?.(COINS) ?? 0;
+    inv.adds?.(COINS, amount);
+    return (inv.getAmount?.(COINS) ?? 0) === before + amount;
   } catch {
     return false;
   }

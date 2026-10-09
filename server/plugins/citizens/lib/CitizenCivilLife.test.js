@@ -25,10 +25,9 @@ function fakeBot(username, coins, kingdomId) {
     getUsername: () => username,
     getInventory() {
       return {
-        count: () => balance,
         getAmount: () => balance,
-        remove: (id, n) => { balance = Math.max(0, balance - n); },
-        add: (id, n) => { balance += n; },
+        deleteNumber: (id, n) => { balance = Math.max(0, balance - n); },
+        adds: (id, n) => { balance += n; },
       };
     },
     __balance: () => balance,
@@ -184,7 +183,7 @@ test("tick: citizens speak via the canonical bot path when a real player is near
     forceChat: (t) => spoken.push(t),
     getLocalPlayers: () => [realPlayer],
     getInventory() {
-      return { count: () => 1000, remove: () => {}, add: () => {} };
+      return { getAmount: () => 1000, deleteNumber: () => {}, adds: () => {} };
     },
   };
   const record = { username: "Alice", __bot: bot };
@@ -216,7 +215,7 @@ test("tick: silent when no real player is near", () => {
     forceChat: (t) => spoken.push(t),
     getLocalPlayers: () => [], // nobody around
     getInventory() {
-      return { count: () => 1000, remove: () => {}, add: () => {} };
+      return { getAmount: () => 1000, deleteNumber: () => {}, adds: () => {} };
     },
   };
   const director = {

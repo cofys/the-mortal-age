@@ -32,7 +32,7 @@ function fakeBot(coins) {
       deleted: (id, amount) => {
         if (id === COINS) c = Math.max(0, c - amount);
       },
-      add: (id, amount) => {
+      adds: (id, amount) => {
         if (id === COINS) c += amount;
       },
     }),

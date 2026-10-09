@@ -34,10 +34,10 @@ function makePlayer(username, opts) {
       isRealPlayer: () => !(o.isBot ?? false),
       sendMessage: (t) => said.push(String(t)),
       getInventory: () => ({
-        getAmount: () => coins,
-        count: () => coins,
-        add: (id, n) => { coins += n; return true; },
-        remove: (id, n) => { if (coins >= n) { coins -= n; return true; } return false; },
+        // Real ItemContainer API: getAmount(id), adds(id, amount), deleteNumber(id, amount).
+        getAmount: (id) => (id === 995 ? coins : 0),
+        adds: (id, n) => { if (id === 995 && n > 0) coins += n; },
+        deleteNumber: (id, n) => { if (id === 995 && coins >= n) coins -= n; },
       }),
     },
     said,

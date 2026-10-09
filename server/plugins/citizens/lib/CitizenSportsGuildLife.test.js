@@ -69,8 +69,8 @@ function makeDirector(members) {
       inventory: {
         _coins: 1000,
         getAmount: function () { return this._coins; },
-        count: function () { return this._coins; },
-        remove: function (id, n) { this._coins -= n; },
+        // Canonical ItemContainer API: deleteNumber(id, amount).
+        deleteNumber: function (id, n) { this._coins = Math.max(0, this._coins - n); },
       },
     }),
   };

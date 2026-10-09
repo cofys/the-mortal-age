@@ -78,10 +78,15 @@ function payPrize(director, username, amount) {
     const bot = director?.getBot?.({ username });
     if (!bot) return false; // offline — honestly skip, never invent
     const player = bot.player ?? bot;
-    if (player?.inventory?.add) {
-      player.inventory.add(995, amount);
-      return true;
-    }
+    // Canonical: adds(id, amount) via getInventory(). Direct player.inventory
+    // kept as a fallback for test doubles. inv.add takes an Item instance, not
+    // (id, amount) — the old call threw inside ItemContainer. Verify the
+    // credit landed.
+    const inv = player?.getInventory?.() ?? player?.inventory;
+    if (!inv) return false;
+    const before = inv.getAmount?.(995) ?? 0;
+    inv.adds?.(995, amount);
+    return (inv.getAmount?.(995) ?? 0) === before + amount;
   } catch {
     // Honest failure.
   }

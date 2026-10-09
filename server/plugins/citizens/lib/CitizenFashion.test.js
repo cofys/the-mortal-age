@@ -126,8 +126,9 @@ test("buyGarment moves real coins", () => {
     username: "Buyer",
     inventory: {
       _coins: price + 100,
-      count(id) { return id === 995 ? this._coins : 0; },
-      remove(id, n) { if (id === 995) this._coins -= n; },
+      // Canonical ItemContainer API: getAmount(id), deleteNumber(id, amount).
+      getAmount(id) { return id === 995 ? this._coins : 0; },
+      deleteNumber(id, n) { if (id === 995) this._coins = Math.max(0, this._coins - n); },
     },
   };
   const before = buyer.inventory._coins;
@@ -144,8 +145,9 @@ test("buyGarment refuses when broke", () => {
   const buyer = {
     username: "Broke",
     inventory: {
-      count() { return 0; },
-      remove() {},
+      // Canonical ItemContainer API: getAmount(id).
+      getAmount() { return 0; },
+      deleteNumber() {},
     },
   };
   const result = Fashion.buyGarment("falador", g.id, buyer);
@@ -203,7 +205,8 @@ test("seasonalComfortBonus rewards warm clothes in winter", () => {
 
 test("canAffordMaterials is honest about missing engine", () => {
   // Without engine items, materials are unresolvable — honest failure.
-  const mockPlayer = { inventory: { count: () => 0 } };
+  // Canonical ItemContainer API: getAmount(id).
+  const mockPlayer = { inventory: { getAmount: () => 0 } };
   const check = Fashion.canAffordMaterials(mockPlayer, "shirt");
   // Either ok (engine available) or honest about what's missing.
   assert.ok(typeof check.ok === "boolean");

@@ -64,6 +64,8 @@ function hasMaterials(player, materials) {
   // materials: { itemKey: count }. Resolves keys to real item ids via
   // Surgery.materialIds(). Returns true only if the player's real
   // inventory holds every required item in the required count.
+  // Canonical: ItemContainer.getAmount(id). There is no inv.count(id), and
+  // inv[id] on a container object is undefined — not an item count.
   try {
     const ids = Surgery.materialIds();
     const inv = player?.inventory ?? player?.getInventory?.();
@@ -71,7 +73,7 @@ function hasMaterials(player, materials) {
     for (const [key, count] of Object.entries(materials ?? {})) {
       const id = ids[key];
       if (id == null) return false; // unresolvable material = cannot proceed
-      const have = typeof inv.count === "function" ? inv.count(id) : (inv[id] ?? 0);
+      const have = inv.getAmount?.(id) ?? 0;
       if (have < count) return false;
     }
     return true;
@@ -81,15 +83,21 @@ function hasMaterials(player, materials) {
 }
 
 function consumeMaterials(player, materials) {
-  // Removes the real items. Returns true on success.
+  // Removes the real items. Returns true on success. Canonical:
+  // deleteNumber(id, amount) with per-item balance verification — the old
+  // inv.remove(id, amount) does not exist on ItemContainer, so materials
+  // were never consumed while the function still reported success.
   try {
     const ids = Surgery.materialIds();
     const inv = player?.inventory ?? player?.getInventory?.();
-    if (!inv || typeof inv.remove !== "function") return false;
+    if (!inv) return false;
     for (const [key, count] of Object.entries(materials ?? {})) {
       const id = ids[key];
       if (id == null) return false;
-      inv.remove(id, count);
+      const before = inv.getAmount?.(id) ?? 0;
+      if (before < count) return false;
+      inv.deleteNumber?.(id, count);
+      if ((inv.getAmount?.(id) ?? 0) !== before - count) return false;
     }
     return true;
   } catch {
@@ -370,4 +378,9 @@ function tickSurgery(director, nowMs) {
   }
 }
 
-module.exports = { tickSurgery };
+module.exports = {
+  tickSurgery,
+  // test seams — inventory-API regression surface (canonical ItemContainer API)
+  _hasMaterialsForTests: hasMaterials,
+  _consumeMaterialsForTests: consumeMaterials,
+};

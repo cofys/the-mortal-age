@@ -784,7 +784,12 @@ function tickBequestFlush(director) {
       if (!inv) continue;
       const amount = child.bequest;
       try {
-        inv.add(COINS, amount);
+        // Canonical: adds(id, amount). inv.add takes an Item instance, not
+        // (id, amount) — the old call threw inside ItemContainer. Verify the
+        // credit landed; otherwise keep the bequest and retry next tick.
+        const before = inv.getAmount?.(COINS) ?? 0;
+        inv.adds?.(COINS, amount);
+        if ((inv.getAmount?.(COINS) ?? 0) !== before + amount) continue;
         child.bequest = 0;
         journalEvent(child.display, `Received ${amount} coins of inheritance.`, "family");
       } catch {

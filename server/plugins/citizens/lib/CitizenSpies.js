@@ -651,16 +651,15 @@ function declineSpyInvite(playerName, citizenName) {
  * checked at call time, never assumed.
  */
 function chargeCoins(player, amount) {
+  // Canonical: deleteNumber(id, amount) with balance verification. ItemContainer
+  // has no inv.removes / inv.remove.
   try {
     const inv = player.getInventory?.();
     if (!inv) return false;
-    const have = inv.getAmount?.(COINS) ?? 0;
-    if (have < amount) return false;
-    if (typeof inv.removes === "function") inv.removes(COINS, amount);
-    else if (typeof inv.remove === "function") inv.remove(COINS, amount);
-    else if (typeof inv.delete === "function") inv.delete(COINS, amount);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(COINS) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(COINS, amount);
+    return (inv.getAmount?.(COINS) ?? 0) === before - amount;
   } catch {
     return false;
   }

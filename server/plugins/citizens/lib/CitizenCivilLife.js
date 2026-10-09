@@ -25,6 +25,49 @@ const MEDIATION_CHANCE = 0.6;
 const HEARING_CHANCE = 0.5;
 const ENFORCE_CHANCE = 0.7;
 
+// --- canonical coin helpers (real engine API: getAmount / deleteNumber / adds) ---
+// The old inline code probed `inv.count` / `inv.remove` / `inv.add` — `count`
+// and `remove` do not exist on the engine inventory, and `add(id, amount)`
+// takes an Item object, not an id. These three are the only coin paths; every
+// balance move is verified before reporting success.
+
+/** Read a real item amount. Never throws, never invents. */
+function coinCount(inv, id) {
+  try { return inv?.getAmount?.(id) ?? 0; } catch { return 0; }
+}
+
+/**
+ * Remove exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the debit.
+ */
+function takeCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before - amount;
+  } catch { return false; }
+}
+
+/**
+ * Credit exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the credit.
+ */
+function giveCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    inv.adds?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before + amount;
+  } catch { return false; }
+}
+
+/** Test seam: canonical real-API coin helpers (inventory audit). */
+function _coinHelpersForTests() {
+  return { coinCount, takeCoins, giveCoins };
+}
+
 function safeTick(director, fn, label) {
   try {
     fn(director);
@@ -195,14 +238,14 @@ function passMediation(director, pf, nowMs, rng) {
         const half = Math.floor(d.claim / 2);
         try {
           const inv = defendant.getInventory?.();
-          const have = typeof inv?.count === "function" ? inv.count(995) || 0 : 0;
-          const take = Math.min(have, half);
-          if (take > 0 && typeof inv.remove === "function") {
-            inv.remove(995, take);
+          const take = Math.min(coinCount(inv, 995), half);
+          if (take > 0 && takeCoins(inv, 995, take)) {
             paid = take;
-            if (plaintiff && typeof plaintiff.getInventory?.()?.add === "function") {
-              plaintiff.getInventory().add(995, take);
-            }
+            // Credit the plaintiff through the real API. The old code called
+            // inv.add(995, take) here — the wrong overload (add takes an Item),
+            // which throws on a live inventory and would have destroyed coins.
+            const pinv = plaintiff?.getInventory?.();
+            if (pinv) giveCoins(pinv, 995, take);
           }
         } catch { /* honest: no coins moved */ }
       }
@@ -285,8 +328,7 @@ function passEnforcement(director, pf, nowMs, rng) {
 function estateOf(player, username) {
   let coins = 0;
   try {
-    const inv = player?.getInventory?.();
-    if (inv && typeof inv.count === "function") coins += inv.count(995) || 0;
+    coins += coinCount(player?.getInventory?.(), 995);
   } catch { /* ignore */ }
   try {
     // CitizenBanking exposes accountFor/balanceOf/deposit/withdraw —
@@ -345,8 +387,8 @@ function passWills(director, nowMs) {
     if (player && estate > 0) {
       try {
         const inv = player.getInventory?.();
-        const have = typeof inv?.count === "function" ? inv.count(995) || 0 : 0;
-        if (have > 0 && typeof inv.remove === "function") inv.remove(995, have);
+        const have = coinCount(inv, 995);
+        if (have > 0) takeCoins(inv, 995, have);
       } catch { /* honest: leave what we can't move */ }
     }
     const res = CivilLaw.executeWill(username, estate, pf, closeBondsOf(username));
@@ -400,4 +442,4 @@ function resetForTests() {
   // No module-local state; CivilLaw.resetForTests covers the data tier.
 }
 
-module.exports = { tickCivilLife, resetForTests };
+module.exports = { tickCivilLife, resetForTests, _coinHelpersForTests };

@@ -69,11 +69,53 @@ function kingdomIdOf(record) {
   } catch { return record?.kingdomId || null; }
 }
 
+// --- canonical coin helpers (real engine API: getAmount / deleteNumber / adds) ---
+// The old multi-API guards probed `inv.count` / `inv.remove` / `inv.delete` —
+// `count` and `remove` do not exist on the engine inventory. These three are
+// the only item paths; every balance move is verified before reporting success.
+
+/** Read a real item amount. Never throws, never invents. */
+function coinCount(inv, id) {
+  try { return inv?.getAmount?.(id) ?? 0; } catch { return 0; }
+}
+
+/**
+ * Remove exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the debit.
+ */
+function takeCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before - amount;
+  } catch { return false; }
+}
+
+/**
+ * Credit exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the credit.
+ */
+function giveCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    inv.adds?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before + amount;
+  } catch { return false; }
+}
+
+/** Test seam: canonical real-API coin helpers (inventory audit). */
+function _coinHelpersForTests() {
+  return { coinCount, takeCoins, giveCoins };
+}
+
 function hasItem(bot, itemId, amount) {
   try {
     const inv = bot.inventory ?? bot.getInventory?.();
     if (!inv) return false;
-    if (typeof inv.count === "function") return inv.count(itemId) >= amount;
+    if (typeof inv.getAmount === "function") return coinCount(inv, itemId) >= amount;
     if (Array.isArray(inv.items)) {
       return inv.items.filter((i) => (i?.id ?? i) === itemId).length >= amount;
     }
@@ -85,18 +127,15 @@ function removeItem(bot, itemId, amount) {
   try {
     const inv = bot.inventory ?? bot.getInventory?.();
     if (!inv) return false;
-    if (typeof inv.remove === "function") { inv.remove(itemId, amount); return true; }
-    if (typeof inv.delete === "function") { inv.delete(itemId, amount); return true; }
-    return false;
+    return takeCoins(inv, itemId, amount);
   } catch { return false; }
 }
 
 function addCoins(bot, amount) {
   try {
     const inv = bot.inventory ?? bot.getInventory?.();
-    if (!inv || typeof inv.add !== "function") return false;
-    inv.add(Guilds.COINS_ID, amount);
-    return true;
+    if (!inv) return false;
+    return giveCoins(inv, Guilds.COINS_ID, amount);
   } catch { return false; }
 }
 
@@ -361,4 +400,4 @@ function resetForTests() {
   seenTamper.clear();
 }
 
-module.exports = { tickBankGuildLife, resetForTests };
+module.exports = { tickBankGuildLife, resetForTests, _coinHelpersForTests };

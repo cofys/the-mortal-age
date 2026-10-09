@@ -56,11 +56,13 @@ function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return { ok: false };
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
-    if (has < amount) return { ok: false };
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
-    else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
-    return { ok: true };
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    if (before < amount) return { ok: false };
+    // Canonical engine API: ItemContainer.deleteNumber(id, amount).
+    // There is no inv.remove(id, amount) and no inv.count(id).
+    inv.deleteNumber?.(COINS_ID, amount);
+    // Honest: the balance must actually have moved, or the fee wasn't taken.
+    return { ok: (inv.getAmount?.(COINS_ID) ?? 0) === before - amount };
   } catch {
     return { ok: false };
   }
@@ -215,4 +217,4 @@ function onFestivalCommand(player, args) {
   }
 }
 
-module.exports = { onFestivalCommand, FESTIVAL_USAGE };
+module.exports = { onFestivalCommand, FESTIVAL_USAGE , takeCoins };

@@ -22,9 +22,9 @@ function makeBot(coins) {
   const items = coins > 0 ? [{ id: 995, amount: coins }] : [];
   return {
     inventory: {
-      count: (id) => (id === 995 ? coins : 0),
-      remove: (id, n) => { if (id === 995 && coins >= n) { coins -= n; return true; } return false; },
-      add: (id, n) => { if (id === 995) coins += n; },
+      getAmount: (id) => (id === 995 ? coins : 0),
+      deleteNumber: (id, n) => { if (id === 995 && coins >= n) { coins -= n; return true; } return false; },
+      adds: (id, n) => { if (id === 995) coins += n; },
       _coins: () => coins,
     },
     sendMessage: () => {},

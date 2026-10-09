@@ -756,54 +756,58 @@ function renovate(kingdomId, payer, points) {
 // --- coin & material helpers --------------------------------------------------------
 
 function takeCoins(player, amount) {
+  // Canonical: deleteNumber(id, amount) with balance verification. ItemContainer
+  // has no inv.remove(id, amount).
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
-    if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
-    else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(COINS_ID, amount);
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before - amount;
   } catch {
     return false;
   }
 }
 
 function giveCoins(player, amount) {
+  // Canonical: adds(id, amount) with balance verification. inv.add takes an
+  // Item instance, not (id, amount) — the old call threw inside ItemContainer.
   try {
     const inv = player?.getInventory?.();
     if (!inv || amount <= 0) return false;
-    if (typeof inv.add === "function") inv.add(COINS_ID, amount);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    inv.adds?.(COINS_ID, amount);
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before + amount;
   } catch {
     return false;
   }
 }
 
 function takeMaterial(player, itemId, amount) {
+  // Canonical: deleteNumber(id, amount) with balance verification. ItemContainer
+  // has no inv.remove(id, amount).
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(itemId) ?? inv.count?.(itemId) ?? 0;
-    if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(itemId, amount);
-    else if (typeof inv.delete === "function") inv.delete(itemId, amount);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(itemId) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(itemId, amount);
+    return (inv.getAmount?.(itemId) ?? 0) === before - amount;
   } catch {
     return false;
   }
 }
 
 function giveMaterial(player, itemId, amount) {
+  // Canonical: adds(id, amount) with balance verification. inv.add takes an
+  // Item instance, not (id, amount) — the old call threw inside ItemContainer.
   try {
     const inv = player?.getInventory?.();
     if (!inv || amount <= 0) return false;
-    if (typeof inv.add === "function") inv.add(itemId, amount);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(itemId) ?? 0;
+    inv.adds?.(itemId, amount);
+    return (inv.getAmount?.(itemId) ?? 0) === before + amount;
   } catch {
     return false;
   }

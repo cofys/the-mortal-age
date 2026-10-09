@@ -72,7 +72,8 @@ function makeBot(name, coins, kingdom = "varrock") {
   const inv = {
     coins,
     getAmount: () => inv.coins,
-    remove: (id, n) => { inv.coins -= n; },
+    // Canonical ItemContainer API: deleteNumber(id, amount).
+    deleteNumber: (id, n) => { inv.coins = Math.max(0, inv.coins - n); },
   };
   return {
     _kingdom: kingdom,

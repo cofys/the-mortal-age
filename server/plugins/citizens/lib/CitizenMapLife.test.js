@@ -35,13 +35,18 @@ function fakeDirector(records) {
       username: record.username,
       inventory: {
         _items: record.papyrus ? [{ id: 970 }, { id: 970 }] : [],
-        count(id) { return this._items.filter((i) => i.id === id).length; },
-        remove(id, n) {
+        getAmount(id) { return this._items.filter((i) => i.id === id).length; },
+        deleteNumber(id, n) {
           let left = n;
           this._items = this._items.filter((i) => {
             if (i.id === id && left > 0) { left--; return false; }
             return true;
           });
+          return this;
+        },
+        adds(id, n) {
+          for (let k = 0; k < n; k++) this._items.push({ id });
+          return this;
         },
       },
     }),

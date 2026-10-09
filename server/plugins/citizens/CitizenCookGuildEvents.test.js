@@ -83,8 +83,9 @@ function stubPlayer(username, { bot = false, coins = 0 } = {}) {
     isBot: bot,
     isRealPlayer: () => !bot,
     getInventory: () => ({
-      getAmount: () => coins,
-      remove: () => true,
+      // Real ItemContainer API: getAmount(id), deleteNumber(id, amount).
+      getAmount: (id) => (id === 995 ? coins : 0),
+      deleteNumber: (id, n) => { if (id === 995 && coins >= n) coins -= n; },
     }),
     sendMessage: (t) => messages.push(String(t)),
   };

@@ -48,12 +48,11 @@ function mockPlayer(username, coins) {
   const inv = {
     coins: coins || 0,
     getAmount(id) { return id === 995 ? this.coins : 0; },
-    count(id) { return id === 995 ? this.coins : 0; },
-    add(id, n) { if (id === 995) this.coins += n; },
-    remove(id, n) {
+    deleteNumber(id, n) {
       if (id === 995 && this.coins >= n) { this.coins -= n; return true; }
       return false;
     },
+    adds(id, n) { if (id === 995) this.coins += n; },
   };
   return {
     username,

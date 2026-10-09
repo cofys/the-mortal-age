@@ -139,9 +139,14 @@ function payUsername(director, username, amount) {
     const bot = record && director?.isOnline?.(record) ? director.getBot?.(record) : null;
     if (bot) {
       const inv = bot.getInventory?.();
-      if (inv && typeof inv.add === "function") {
-        inv.add(995, amount);
-        return true;
+      // Canonical: adds(id, amount) with balance verification. inv.add takes
+      // an Item instance, not (id, amount) — the old call threw inside
+      // ItemContainer. The bank-credit fallback is handled by the caller on
+      // a false return.
+      if (inv) {
+        const before = inv.getAmount?.(995) ?? 0;
+        inv.adds?.(995, amount);
+        return (inv.getAmount?.(995) ?? 0) === before + amount;
       }
     }
   } catch {

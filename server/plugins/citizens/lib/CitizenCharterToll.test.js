@@ -49,14 +49,10 @@ function fakePlayer(username, coins, kingdomId) {
     _messages: messages,
     getInventory() {
       return {
+        // Canonical ItemContainer API: getAmount(id), deleteNumber(id, amount).
         getAmount: (id) => (id === 995 ? bal : 0),
-        count: (id) => (id === 995 ? bal : 0),
-        delete: (id, n) => {
-          if (id === 995 && bal >= n) {
-            bal -= n;
-            return true;
-          }
-          return false;
+        deleteNumber: (id, n) => {
+          if (id === 995) bal = Math.max(0, bal - n);
         },
       };
     },
@@ -75,13 +71,17 @@ function seedCharter(guildId, kingdomId, category) {
   const seeder = {
     getInventory() {
       return {
+        // Canonical ItemContainer API: getAmount(id), deleteNumber(id, amount).
+        getAmount: (id) => (id === 995 ? bal : 0),
+        deleteNumber: (id, n) => {
+          if (id === 995) bal = Math.max(0, bal - n);
+        },
+        // Legacy path: petitionCharter (CitizenTradeCharters.js — a different
+        // file's dead-API scope) still reads inv.count / inv.delete. Kept so
+        // the charter seed keeps working until that file is canonicalized.
         count: (id) => (id === 995 ? bal : 0),
         delete: (id, n) => {
-          if (id === 995 && bal >= n) {
-            bal -= n;
-            return true;
-          }
-          return false;
+          if (id === 995) bal = Math.max(0, bal - n);
         },
       };
     },

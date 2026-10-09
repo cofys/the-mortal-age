@@ -136,14 +136,52 @@ function nextId(prefix, nowMs) {
 }
 
 // --- coin helpers (real inventories only) ------------------------------------
+// Canonical engine API only (getAmount / deleteNumber / adds). The old guards
+// probed `inv.count` / `inv.remove` (neither exists on the engine inventory)
+// and `inv.add(COIN_ID, amount)` used the wrong overload — add takes an Item
+// object, so it threw on a live inventory. Every balance move is verified
+// before reporting success.
+
+/** Read a real item amount. Never throws, never invents. */
+function coinCount(inv, id) {
+  try { return inv?.getAmount?.(id) ?? 0; } catch { return 0; }
+}
+
+/**
+ * Remove exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the debit.
+ */
+function takeCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before - amount;
+  } catch { return false; }
+}
+
+/**
+ * Credit exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the credit.
+ */
+function giveCoinsInv(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    inv.adds?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before + amount;
+  } catch { return false; }
+}
+
+/** Test seam: canonical real-API coin helpers (inventory audit). */
+function _coinHelpersForTests() {
+  return { coinCount, takeCoins, giveCoins: giveCoinsInv };
+}
 
 function countCoins(player) {
   try {
-    const inv = player?.getInventory?.();
-    if (!inv) return 0;
-    if (typeof inv.count === "function") return inv.count(COIN_ID);
-    if (typeof inv.getAmount === "function") return inv.getAmount(COIN_ID);
-    return 0;
+    return coinCount(player?.getInventory?.(), COIN_ID);
   } catch {
     return 0;
   }
@@ -153,13 +191,9 @@ function removeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return 0;
-    const have = countCoins(player);
-    const take = Math.min(have, amount);
+    const take = Math.min(coinCount(inv, COIN_ID), amount);
     if (take <= 0) return 0;
-    if (typeof inv.remove === "function") inv.remove(COIN_ID, take);
-    else if (typeof inv.delete === "function") inv.delete(COIN_ID, take);
-    else return 0;
-    return take;
+    return takeCoins(inv, COIN_ID, take) ? take : 0;
   } catch {
     return 0;
   }
@@ -169,9 +203,7 @@ function giveCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv || amount <= 0) return 0;
-    if (typeof inv.add === "function") inv.add(COIN_ID, amount);
-    else return 0;
-    return amount;
+    return giveCoinsInv(inv, COIN_ID, amount) ? amount : 0;
   } catch {
     return 0;
   }
@@ -819,6 +851,7 @@ function deedsForCurator(username) {
 module.exports = {
   _setSavePathForTests,
   resetForTests,
+  _coinHelpersForTests,
   save,
   markDirty,
   // curators

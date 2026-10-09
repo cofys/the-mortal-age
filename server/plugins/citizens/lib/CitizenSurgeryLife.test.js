@@ -92,8 +92,11 @@ function freshDirector(records) {
           _items: items,
           getLevel: (skill) => (skill === "herblore" ? 75 : 1),
           inventory: {
-            count: (id) => items.get(id) ?? 0,
-            remove: (id, n) => items.set(id, Math.max(0, (items.get(id) ?? 0) - n)),
+            // Canonical ItemContainer API: getAmount(id),
+            // deleteNumber(id, amount). The old fake inv.count/inv.remove
+            // API never touched a real balance.
+            getAmount: (id) => items.get(id) ?? 0,
+            deleteNumber: (id, n) => items.set(id, Math.max(0, (items.get(id) ?? 0) - n)),
           },
           getInventory() { return this.inventory; },
         });
@@ -244,6 +247,25 @@ test("player surgery request gets a surgeon assigned", () => {
   assert.ok(p, "player procedure should exist");
   // After assignment it becomes in_progress (scheduleProcedure overwrites).
   assert.ok(["queued", "in_progress"].includes(p.status));
+});
+
+test("consumeMaterials really consumes via deleteNumber, hasMaterials is honest", () => {
+  // Regression: the old code used the fake inv.count/inv.remove API, so
+  // materials were never consumed while the function reported success.
+  const { _hasMaterialsForTests: hasM, _consumeMaterialsForTests: consumeM } = require("./CitizenSurgeryLife");
+  const d = freshDirector([
+    { username: "Mira", kingdomId: "varrock", career: { key: "healer" } },
+  ]);
+  stockBot(d, "Mira", { 1001: 5, 1002: 3 }); // thread x5, bandage x3
+  const bot = d.getBot({ username: "Mira" });
+  const mats = { thread: 2, bandage: 1 };
+  assert.strictEqual(hasM(bot, mats), true, "has materials");
+  assert.strictEqual(consumeM(bot, mats), true, "consumes materials");
+  assert.strictEqual(bot.inventory.getAmount(1001), 3, "thread really reduced");
+  assert.strictEqual(bot.inventory.getAmount(1002), 2, "bandage really reduced");
+  assert.strictEqual(hasM(bot, { thread: 4 }), false, "honest when short");
+  assert.strictEqual(consumeM(bot, { thread: 4 }), false, "refuses when short");
+  assert.strictEqual(bot.inventory.getAmount(1001), 3, "failed consume touches nothing");
 });
 
 console.log(`\n${passed} tests passed.`);

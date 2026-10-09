@@ -68,9 +68,10 @@ function makeBot(coins) {
     inventory: {
       _coins: coins,
       getAmount: function () { return this._coins; },
-      count: function () { return this._coins; },
-      remove: function (id, n) { if (this._coins < n) return false; this._coins -= n; return true; },
-      add: function (id, n) { this._coins += n; return true; },
+      // Canonical ItemContainer API: adds(id, amount), deleteNumber(id, amount).
+      // There is no inv.add / inv.remove / inv.count.
+      adds: function (id, n) { this._coins += n; return true; },
+      deleteNumber: function (id, n) { this._coins = Math.max(0, this._coins - n); },
     },
   };
 }

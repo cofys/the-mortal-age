@@ -39,14 +39,15 @@ function mockPlayer(username, coins, papyrus) {
       if (id === 970) return this.papyrus;
       return 0;
     },
-    add(id, n) {
+    // Canonical ItemContainer API: getAmount(id), adds(id, amount),
+    // deleteNumber(id, amount). There is no inv.add / inv.remove.
+    adds(id, n) {
       if (id === 995) this.coins += n;
       if (id === 970) this.papyrus += n;
     },
-    remove(id, n) {
-      if (id === 995 && this.coins >= n) { this.coins -= n; return true; }
-      if (id === 970 && this.papyrus >= n) { this.papyrus -= n; return true; }
-      return false;
+    deleteNumber(id, n) {
+      if (id === 995) this.coins = Math.max(0, this.coins - n);
+      if (id === 970) this.papyrus = Math.max(0, this.papyrus - n);
     },
   };
   return { username, getUsername: () => username, getInventory: () => inv, _inv: inv };

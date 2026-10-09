@@ -62,7 +62,8 @@ function takeCoins(player, amount) {
     if (typeof inv.deleteNumber === "function") inv.deleteNumber(COINS_ID, amount);
     else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
     else return false;
-    return true;
+    // Honest: the balance must actually have moved, or the fee wasn't taken.
+    return (inv.getAmount?.(COINS_ID) ?? 0) === has - amount;
   } catch {
     return false;
   }
@@ -75,8 +76,11 @@ function giveCoins(player, amount) {
     // Canonical id/amount form is adds(id, amount): add(item, refresh) takes
     // an Item object, not (id, amount). The wrong signature would throw (or
     // corrupt) and silently break honest refunds.
-    if (typeof inv.adds === "function") { inv.adds(COINS_ID, amount); return true; }
-    return false;
+    if (typeof inv.adds !== "function") return false;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    inv.adds(COINS_ID, amount);
+    // Honest: the balance must actually have moved, or the prize wasn't paid.
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before + amount;
   } catch {
     return false;
   }
@@ -273,4 +277,4 @@ function onArtGuildCommand(player, args) {
   }
 }
 
-module.exports = { onArtGuildCommand, ARTGUILD_USAGE };
+module.exports = { onArtGuildCommand, ARTGUILD_USAGE , giveCoins, takeCoins };

@@ -120,12 +120,17 @@ function mockPlayer(username, coins) {
   const inv = {
     coins: coins || 0,
     getAmount(id) { return id === 995 ? this.coins : 0; },
-    count(id) { return id === 995 ? this.coins : 0; },
-    add(id, n) { if (id === 995) this.coins += n; },
-    remove(id, n) {
-      if (id === 995 && this.coins >= n) { this.coins -= n; return true; }
-      return false;
+    // Canonical ItemContainer API: adds(id, amount), deleteNumber(id, amount).
+    // There is no inv.add / inv.remove.
+    adds(id, n) { if (id === 995) this.coins += n; },
+    deleteNumber(id, n) {
+      if (id === 995) this.coins = Math.max(0, this.coins - n);
     },
+    // Legacy path: CitizenGalleries.js (a different module, separate worker's
+    // dead-API scope) still reads inv.count / inv.delete. Kept so auction
+    // consignment tests keep working until that module is canonicalized.
+    count(id) { return id === 995 ? this.coins : 0; },
+    delete(id, n) { if (id === 995) this.coins = Math.max(0, this.coins - n); },
   };
   return {
     username,

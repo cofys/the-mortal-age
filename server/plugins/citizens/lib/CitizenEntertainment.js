@@ -188,11 +188,53 @@ function soberUp(username, hoursElapsed) {
 }
 
 // --- drinks (honest coins) -------------------------------------------------------
+// Canonical engine API only (getAmount / deleteNumber / adds). The old guards
+// probed `inv.count` / `inv.remove` (neither exists on the engine inventory)
+// and `inv.add(995, amount)` used the wrong overload — add takes an Item
+// object, so it threw on a live inventory. Every balance move is verified
+// before reporting success.
+
+/** Read a real item amount. Never throws, never invents. */
+function coinCount(inv, id) {
+  try { return inv?.getAmount?.(id) ?? 0; } catch { return 0; }
+}
+
+/**
+ * Remove exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the debit.
+ */
+function takeCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before - amount;
+  } catch { return false; }
+}
+
+/**
+ * Credit exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the credit.
+ */
+function giveCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    inv.adds?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before + amount;
+  } catch { return false; }
+}
+
+/** Test seam: canonical real-API coin helpers (inventory audit). */
+function _coinHelpersForTests() {
+  return { coinCount, takeCoins, giveCoins };
+}
+
 function countCoins(player) {
   try {
     if (typeof player?.countCoins === "function") return player.countCoins();
-    const inv = player?.getInventory?.();
-    if (inv && typeof inv.count === "function") return inv.count(995);
+    return coinCount(player?.getInventory?.(), 995);
   } catch {
     // fall through
   }
@@ -202,11 +244,7 @@ function countCoins(player) {
 function removeCoins(player, amount) {
   try {
     if (typeof player?.removeCoins === "function") return player.removeCoins(amount);
-    const inv = player?.getInventory?.();
-    if (inv && typeof inv.remove === "function") {
-      inv.remove(995, amount);
-      return true;
-    }
+    return takeCoins(player?.getInventory?.(), 995, amount);
   } catch {
     // fall through
   }
@@ -219,11 +257,7 @@ function addCoins(player, amount) {
       player.addCoins(amount);
       return true;
     }
-    const inv = player?.getInventory?.();
-    if (inv && typeof inv.add === "function") {
-      inv.add(995, amount);
-      return true;
-    }
+    return giveCoins(player?.getInventory?.(), 995, amount);
   } catch {
     // fall through
   }
@@ -440,6 +474,7 @@ module.exports = {
   countCoins,
   removeCoins,
   addCoins,
+  _coinHelpersForTests,
   // drinks & dice
   buyDrink,
   playDice,

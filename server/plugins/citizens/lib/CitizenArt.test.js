@@ -116,7 +116,8 @@ describe("CitizenArt", () => {
       getUsername: () => "Bob",
       getInventory: () => ({
         getAmount: (id) => (id === 995 ? buyerCoins : 0),
-        remove: (id, amt) => { if (id === 995) buyerCoins -= amt; },
+        deleteNumber: (id, amt) => { if (id === 995) buyerCoins -= amt; },
+        adds: (id, amt) => { if (id === 995) buyerCoins += amt; },
       }),
     };
     const result = Art.buyArtwork(art.id, buyer, (seller, amt) => {
@@ -137,7 +138,8 @@ describe("CitizenArt", () => {
       username: "Bob",
       getInventory: () => ({
         getAmount: () => 50, // only 50 coins
-        remove: () => {},
+        deleteNumber: () => {},
+        adds: () => {},
       }),
     };
     const result = Art.buyArtwork(art.id, buyer, () => true);
@@ -147,7 +149,7 @@ describe("CitizenArt", () => {
   });
 
   test("buyArtwork fails for unknown or unlisted art", () => {
-    const buyer = { getInventory: () => ({ getAmount: () => 1000, remove: () => {} }) };
+    const buyer = { getInventory: () => ({ getAmount: () => 1000, deleteNumber: () => {}, adds: () => {} }) };
     expect(Art.buyArtwork("nope", buyer, () => true).reason).toBe("not-found");
     const art = Art.createArtwork("Alice", "painting", 50, 0.5, "varrock", 1000);
     expect(Art.buyArtwork(art.id, buyer, () => true).reason).toBe("not-for-sale");

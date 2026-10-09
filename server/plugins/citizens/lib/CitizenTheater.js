@@ -256,15 +256,15 @@ function titleForPlay(playwrightName, genre, kingdomId) {
 }
 
 function takePapyrus(player) {
+  // Canonical: deleteNumber(id, amount) with balance verification. ItemContainer
+  // has no inv.remove(id, amount).
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(PAPYRUS_ID) ?? inv.count?.(PAPYRUS_ID) ?? 0;
-    if (has < 1) return false;
-    if (typeof inv.remove === "function") inv.remove(PAPYRUS_ID, 1);
-    else if (typeof inv.delete === "function") inv.delete(PAPYRUS_ID, 1);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(PAPYRUS_ID) ?? 0;
+    if (before < 1) return false;
+    inv.deleteNumber?.(PAPYRUS_ID, 1);
+    return (inv.getAmount?.(PAPYRUS_ID) ?? 0) === before - 1;
   } catch {
     return false;
   }
@@ -481,15 +481,15 @@ function performanceFor(perfId) {
 }
 
 function takeCoins(player, amount) {
+  // Canonical: deleteNumber(id, amount) with balance verification. ItemContainer
+  // has no inv.remove(id, amount).
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
-    if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
-    else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(COINS_ID, amount);
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before - amount;
   } catch {
     return false;
   }

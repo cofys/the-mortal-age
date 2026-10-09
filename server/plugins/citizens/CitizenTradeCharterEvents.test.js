@@ -49,14 +49,15 @@ function fakePlayer(username, coins, isBot = false) {
     _messages: messages,
     getInventory() {
       return {
-        count: (id) => (id === 995 ? bal : 0),
-        delete: (id, n) => {
+        getAmount: (id) => (id === 995 ? bal : 0),
+        deleteNumber: (id, n) => {
           if (id === 995 && bal >= n) {
             bal -= n;
             return true;
           }
           return false;
         },
+        adds: (id, n) => { if (id === 995) bal += n; },
       };
     },
     _bal: () => bal,

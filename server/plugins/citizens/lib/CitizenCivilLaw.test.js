@@ -51,10 +51,9 @@ function fakePlayer(coins) {
     getUsername: () => "fake",
     getInventory() {
       return {
-        count: () => balance,
         getAmount: () => balance,
-        remove: (id, n) => { balance = Math.max(0, balance - n); },
-        add: (id, n) => { balance += n; },
+        deleteNumber: (id, n) => { balance = Math.max(0, balance - n); },
+        adds: (id, n) => { balance += n; },
       };
     },
     __balance: () => balance,

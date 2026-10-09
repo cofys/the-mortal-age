@@ -17,8 +17,17 @@ function mockPlayer(name, x, y, opts = {}) {
       ? undefined
       : () => ({
           getAmount: () => opts.coins ?? 0,
-          removes: (id, qty) => { opts.removed = [id, qty]; },
-          adds: (id, qty) => { opts.added = [id, qty]; },
+          // Canonical ItemContainer API: deleteNumber(id, amount) actually
+          // reduces the mock balance so the balance-verification in
+          // chargeCoins passes. There is no inv.removes on ItemContainer.
+          deleteNumber: (id, qty) => {
+            opts.coins = Math.max(0, (opts.coins ?? 0) - qty);
+            opts.removed = [id, qty];
+          },
+          adds: (id, qty) => {
+            opts.coins = (opts.coins ?? 0) + qty;
+            opts.added = [id, qty];
+          },
         }),
   };
 }
@@ -136,11 +145,13 @@ check("chargeCoins is defensive", () => {
   assert.deepEqual(rich && undefined, undefined); // placeholder no-op
 });
 
-check("chargeCoins deducts via removes", () => {
+check("chargeCoins reduces the balance and refuses the broke", () => {
   const opts = { coins: 1000 };
   const rich = mockPlayer("P", 0, 0, opts);
-  assert.equal(S.chargeCoins(rich, 500), true);
-  assert.deepEqual(opts.removed, [995, 500]);
+  assert.equal(S.chargeCoins(rich, 1200), false, "broke refuses");
+  assert.equal(opts.coins, 1000, "failed charge must not touch the balance");
+  assert.equal(S.chargeCoins(rich, 300), true);
+  assert.equal(opts.coins, 700, "balance reduced by the charge");
 });
 
 check("payCoins pays via adds", () => {

@@ -91,10 +91,12 @@ function makePlayer(username, opts = {}) {
     isRealPlayer: () => !opts.isBot,
     getInventory: () => ({
       // Real engine ItemContainer shape: getAmount(id), adds(id, amount),
-      // delete(id, amount). add(id, amount) / remove / count do NOT exist.
+      // delete(id, amount), deleteNumber(id, amount).
+      // add(id, amount) / remove / count do NOT exist.
       getAmount: (id) => (id === 995 ? coinsRef.coins : 0),
+      adds: (id, amt) => { if (id === 995 && amt > 0) coinsRef.coins += amt; },
       delete: (id, amt) => { if (id === 995) coinsRef.coins -= amt; },
-      adds: (id, amt) => { if (id === 995) coinsRef.coins += amt; },
+      deleteNumber: (id, amt) => { if (id === 995) coinsRef.coins -= amt; },
     }),
     sendMessage: (text) => messages.push(text),
     _messages: messages,

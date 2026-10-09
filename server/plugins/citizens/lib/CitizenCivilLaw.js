@@ -148,14 +148,52 @@ function nextId(prefix) {
 }
 
 // --- coin helpers ------------------------------------------------------------
+// Canonical engine API only (getAmount / deleteNumber / adds). The old guards
+// probed `inv.count` / `inv.remove` (neither exists on the engine inventory)
+// and `inv.add(COINS_ID, amount)` used the wrong overload — add takes an Item
+// object, so it threw on a live inventory. Every balance move is verified
+// before reporting success.
+
+/** Read a real item amount. Never throws, never invents. */
+function coinCount(inv, id) {
+  try { return inv?.getAmount?.(id) ?? 0; } catch { return 0; }
+}
+
+/**
+ * Remove exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the debit.
+ */
+function takeCoinsInv(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before - amount;
+  } catch { return false; }
+}
+
+/**
+ * Credit exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the credit.
+ */
+function giveCoinsInv(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    inv.adds?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before + amount;
+  } catch { return false; }
+}
+
+/** Test seam: canonical real-API coin helpers (inventory audit). */
+function _coinHelpersForTests() {
+  return { coinCount, takeCoins: takeCoinsInv, giveCoins: giveCoinsInv };
+}
 
 function countCoins(player) {
   try {
-    const inv = player?.getInventory?.();
-    if (!inv) return 0;
-    if (typeof inv.count === "function") return inv.count(COINS_ID) || 0;
-    if (typeof inv.getAmount === "function") return inv.getAmount(COINS_ID) || 0;
-    return 0;
+    return coinCount(player?.getInventory?.(), COINS_ID) || 0;
   } catch {
     return 0;
   }
@@ -165,13 +203,9 @@ function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv || amount <= 0) return 0;
-    const have = countCoins(player);
-    const take = Math.min(have, amount);
+    const take = Math.min(coinCount(inv, COINS_ID), amount);
     if (take <= 0) return 0;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, take);
-    else if (typeof inv.delete === "function") inv.delete(COINS_ID, take);
-    else return 0;
-    return take;
+    return takeCoinsInv(inv, COINS_ID, take) ? take : 0;
   } catch {
     return 0;
   }
@@ -181,11 +215,7 @@ function giveCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv || amount <= 0) return 0;
-    if (typeof inv.add === "function") {
-      inv.add(COINS_ID, amount);
-      return amount;
-    }
-    return 0;
+    return giveCoinsInv(inv, COINS_ID, amount) ? amount : 0;
   } catch {
     return 0;
   }
@@ -682,6 +712,7 @@ function describe(kingdomId) {
 
 module.exports = {
   _setSavePathForTests,
+  _coinHelpersForTests,
   resetForTests,
   save,
   CONTRACT_TYPES,

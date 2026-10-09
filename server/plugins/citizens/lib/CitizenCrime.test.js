@@ -141,8 +141,9 @@ describe("CitizenCrime — sentencing", () => {
     const coins = { amount: 50 };
     const player = {
       getInventory: () => ({
-        count: () => coins.amount,
-        remove: (id, n) => { coins.amount -= n; },
+        getAmount: () => coins.amount,
+        deleteNumber: (id, n) => { coins.amount -= n; },
+        adds: (id, n) => { coins.amount += n; },
       }),
     };
     const r = Crime.applyFine("Alice", 120, player);

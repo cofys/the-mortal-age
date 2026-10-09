@@ -81,10 +81,12 @@ function removeItem(bot, itemId, amount) {
   try {
     const inv = bot.inventory ?? bot.getInventory?.();
     if (!inv) return false;
-    if (typeof inv.remove === "function") inv.remove(itemId, amount);
-    else if (typeof inv.delete === "function") inv.delete(itemId, amount);
-    else return false;
-    return true;
+    // Canonical: deleteNumber(id, amount) with balance verification. ItemContainer
+    // has no inv.remove(id, amount).
+    const before = inv.getAmount?.(itemId) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(itemId, amount);
+    return (inv.getAmount?.(itemId) ?? 0) === before - amount;
   } catch { return false; }
 }
 

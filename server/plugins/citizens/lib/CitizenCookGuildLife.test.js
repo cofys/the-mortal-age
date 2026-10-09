@@ -89,14 +89,13 @@ const fakeInv = new Map(); // username -> coins
 function botFor(name) {
   const key = String(name).toLowerCase();
   // mirrors the REAL inventory contract: getInventory() -> ItemContainer with
-  // getAmount(id) and delete(id, amount). There is no .remove and no .count.
+  // getAmount(id) and deleteNumber(id, amount). There is no .remove and no .count.
   const inv = {
     getAmount: (id) => (id === Guilds.COINS_ID ? (fakeInv.get(key) ?? 0) : 0),
-    delete: (id, n) => {
-      if (id !== Guilds.COINS_ID) return false;
+    deleteNumber: (id, n) => {
+      if (id !== Guilds.COINS_ID) return;
       const have = fakeInv.get(key) ?? 0;
       fakeInv.set(key, Math.max(0, have - n));
-      return true;
     },
   };
   return { username: name, getInventory: () => inv };

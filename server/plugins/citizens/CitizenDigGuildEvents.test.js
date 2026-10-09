@@ -62,10 +62,10 @@ function stubPlayer(username, coins, isBot = false) {
     getUsername: () => username,
     username,
     getInventory: () => ({
-      getAmount: () => coins,
-      count: () => coins,
-      remove: function (id, n) { coins -= n; return true; },
-      add: function (id, n) { coins += n; return true; },
+      // Real ItemContainer API: getAmount(id), adds(id, amount), deleteNumber(id, amount).
+      getAmount: (id) => (id === 995 ? coins : 0),
+      adds: function (id, n) { if (id === 995 && n > 0) coins += n; return true; },
+      deleteNumber: function (id, n) { if (id === 995 && coins >= n) coins -= n; return true; },
     }),
     sendMessage: (t) => messages.push(t),
     _coins: () => coins,

@@ -36,9 +36,9 @@ function mockBot(username, coins, levels) {
     username,
     _coins: coins,
     getInventory: () => ({
-      count: (id) => (id === 995 ? mockBot._store[username] ?? coins : 0),
-      remove: (id, n) => { if (id === 995) mockBot._store[username] = (mockBot._store[username] ?? coins) - n; },
-      add: (id, n) => { if (id === 995) mockBot._store[username] = (mockBot._store[username] ?? coins) + n; },
+      getAmount: (id) => (id === 995 ? mockBot._store[username] ?? coins : 0),
+      deleteNumber: (id, n) => { if (id === 995) mockBot._store[username] = (mockBot._store[username] ?? coins) - n; },
+      adds: (id, n) => { if (id === 995) mockBot._store[username] = (mockBot._store[username] ?? coins) + n; },
     }),
     getSkills: () => ({
       getLevel: (i) => levels?.[i] ?? 10,

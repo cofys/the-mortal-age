@@ -54,15 +54,26 @@ function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
-    if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
-    else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
-    else return false;
-    return true;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    if (before < amount) return false;
+    // Canonical engine API: ItemContainer.deleteNumber(id, amount).
+    // There is no inv.remove(id, amount) and no inv.count(id).
+    inv.deleteNumber?.(COINS_ID, amount);
+    // Honest: the balance must actually have moved, or the fee wasn't taken.
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before - amount;
   } catch {
     return false;
   }
+}
+
+// Best-effort honest refund: canonical adds(id, amount). The old add(id,
+// amount) threw, so "refunded" fees were silently lost.
+function refundCoins(player, amount) {
+  try {
+    const inv = player?.getInventory?.();
+    if (!inv || amount <= 0) return;
+    inv.adds?.(COINS_ID, amount);
+  } catch { /* best-effort */ }
 }
 
 function onStageGuildCommand(player, args) {
@@ -130,7 +141,7 @@ function onStageGuildCommand(player, args) {
       const res = Guilds.submitForCertification(playId, username, kingdomId);
       if (!res.ok) {
         // honest refund: the play failed verification, fee comes back
-        try { player?.getInventory?.()?.add?.(COINS_ID, Guilds.CERT_FEE); } catch { /* best-effort */ }
+        refundCoins(player, Guilds.CERT_FEE);
         say(player, `Could not certify: ${res.reason}. Fee refunded.`);
         return;
       }
@@ -186,7 +197,7 @@ function onStageGuildCommand(player, args) {
       }
       const res = Guilds.postCircuit(kingdomId, target, username, bounty);
       if (!res.ok) {
-        try { player?.getInventory?.()?.add?.(COINS_ID, bounty); } catch { /* best-effort */ }
+        refundCoins(player, bounty);
         say(player, `Could not post: ${res.reason}. Coins refunded.`);
         return;
       }
@@ -237,4 +248,4 @@ function onStageGuildCommand(player, args) {
   }
 }
 
-module.exports = { onStageGuildCommand, STAGEGUILD_USAGE };
+module.exports = { onStageGuildCommand, STAGEGUILD_USAGE, takeCoins, refundCoins };

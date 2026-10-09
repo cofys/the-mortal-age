@@ -140,30 +140,26 @@ function cleanHerbIds() {
 }
 
 function countItem(player, itemId) {
+  // Canonical: ItemContainer.getAmount(id). There is no inv.count(id).
   try {
     const inv = player?.getInventory?.();
     if (!inv) return 0;
-    if (typeof inv.count === "function") return inv.count(itemId);
-    if (typeof inv.getAmount === "function") return inv.getAmount(itemId);
-    return 0;
+    return inv.getAmount?.(itemId) ?? 0;
   } catch {
     return 0;
   }
 }
 
 function removeItem(player, itemId, amount) {
+  // Canonical: deleteNumber(id, amount) with balance verification. There is
+  // no inv.remove(id, amount) on ItemContainer.
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    if (typeof inv.remove === "function") {
-      inv.remove(itemId, amount);
-      return true;
-    }
-    if (typeof inv.delete === "function") {
-      inv.delete(itemId, amount);
-      return true;
-    }
-    return false;
+    const before = inv.getAmount?.(itemId) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(itemId, amount);
+    return (inv.getAmount?.(itemId) ?? 0) === before - amount;
   } catch {
     return false;
   }

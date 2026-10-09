@@ -377,13 +377,51 @@ function release(username) {
 
 // --- sentencing ----------------------------------------------------------------
 
+// --- canonical coin helpers (real engine API: getAmount / deleteNumber / adds) ---
+// The old multi-API guards probed `inv.count` / `inv.remove` / `inv.delete` —
+// `count` and `remove` do not exist on the engine inventory. These three are
+// the only coin paths; every balance move is verified before reporting success.
+
+/** Read a real item amount. Never throws, never invents. */
+function coinCount(inv, id) {
+  try { return inv?.getAmount?.(id) ?? 0; } catch { return 0; }
+}
+
+/**
+ * Remove exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the debit.
+ */
+function takeCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before - amount;
+  } catch { return false; }
+}
+
+/**
+ * Credit exactly `amount` of `id`, verifying the balance moved.
+ * Returns true only when the inventory confirms the credit.
+ */
+function giveCoins(inv, id, amount) {
+  try {
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(id) ?? 0;
+    inv.adds?.(id, amount);
+    return (inv.getAmount?.(id) ?? 0) === before + amount;
+  } catch { return false; }
+}
+
+/** Test seam: canonical real-API coin helpers (inventory audit). */
+function _coinHelpersForTests() {
+  return { coinCount, takeCoins, giveCoins };
+}
+
 function countCoins(player) {
   try {
-    const inv = player?.getInventory?.();
-    if (!inv) return 0;
-    if (typeof inv.count === "function") return inv.count(995);
-    if (typeof inv.getAmount === "function") return inv.getAmount(995);
-    return 0;
+    return coinCount(player?.getInventory?.(), 995);
   } catch {
     return 0;
   }
@@ -393,13 +431,9 @@ function removeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return 0;
-    const have = countCoins(player);
-    const take = Math.min(have, amount);
+    const take = Math.min(coinCount(inv, 995), amount);
     if (take <= 0) return 0;
-    if (typeof inv.remove === "function") inv.remove(995, take);
-    else if (typeof inv.delete === "function") inv.delete(995, take);
-    else return 0;
-    return take;
+    return takeCoins(inv, 995, take) ? take : 0;
   } catch {
     return 0;
   }
@@ -505,4 +539,5 @@ module.exports = {
   load,
   resetForTests,
   _setSavePathForTests,
+  _coinHelpersForTests,
 };
