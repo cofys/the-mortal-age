@@ -35,6 +35,9 @@ before you start. See `COLLAB.md` for the full protocol.
 - [ ] IN PROGRESS — frank-rsps — citizens: kill hash-fiction fabrication in *2 modules (review finding #1, CRITICAL) — the 32 frozen *2 modules derive daily events (ore strikes, gem finds, prices) from hashSeed(username+day) and journalize/speak them as real; the LLM mouth echoes them as truth. Delete or gate the fabrication functions (oreForToday, strikeFor, priceFor, findsFor, doMinerfolkWork pattern) on real engine state; keep honest ambient work chatter. No new modules, no new systems — deletion/gating only. Tests + node --check. Branch push only; PC deploy after.
   Paths: `server/plugins/citizens/lib/*2.js`
 
+- [ ] IN PROGRESS — frank-rsps — citizens: thread goals/intents into CitizenRoutine legs (review finding #2, HIGH) — CitizenRoutine.buildDayPlan runs the commoner day off the wall clock (home→work→market→meal→tavern) even though the decision layer picks activities goal-first. Thread session intents + goal bonuses into the legs: skip low-value legs (e.g. market) when intent bonuses favor work, extend shifts near goal completion, let the picker re-score between legs. Keep HP-gated meal logic untouched. Tests + node --check. Branch push only; PC deploy after.
+  Paths: `server/plugins/citizens/brain/actions/CitizenRoutine.js`, `server/plugins/citizens/brain/CitizenDecisions.js`, `server/plugins/citizens/brain/CitizenIntents.js`
+
 ## NEXT
 
 - [ ] _Empty — add tasks here as they come up. Format:_
