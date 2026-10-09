@@ -17,6 +17,9 @@
  */
 
 const { playerState } = require("../../../bots/brain/ActionState");
+const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
+
 const {
   requestMovement,
   clearMovementRequest,
@@ -96,7 +99,7 @@ function createRefugeeFlightAction(spec, world) {
     state.nextChatAt = nowMs + Math.round(gap / Math.max(0.2, state.human.chatRate));
     if (!chance(state.rng, rate)) return;
     try {
-      player.forceChat?.(pool[Math.floor(state.rng() * pool.length)].slice(0, 120));
+      { const _cvp = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(player, voiceLine(voiceFor(_cvp), { plain: [pool[Math.floor(state.rng() * pool.length)].slice(0, 120)] })); }
     } catch (error) {
       // Cosmetic only.
     }

@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenGuards2 — the citizen militia: gate wardens, wall walkers, night
@@ -91,24 +95,16 @@ const MUSTER_GROUNDS = [
 // === Scripted lines ===
 const DRILL_LINES = {
   [GUARDFOLK_GATE]: [
-    "*stands at ease by the gate, halberd grounded*",
     "Papers? Name? Business inside?",
-    "*checks a merchant's cart with a practiced eye*",
   ],
   [GUARDFOLK_WALL]: [
-    "*walks the parapet, eyes on the treeline*",
     "Wall's quiet today. Good. Quiet's the whole point.",
-    "*leans on the battlements, watching the road*",
   ],
   [GUARDFOLK_SENTRY]: [
-    "*checks the gate chain by lantern light*",
     "All's well on the east post.",
-    "*stamps feet against the night chill*",
   ],
   [GUARDFOLK_MILITIA]: [
-    "*practices shield-wall with the levy line*",
     "Shields up! Spears out! Hold the line!",
-    "*runs spear drills with the neighbors*",
   ],
 };
 
@@ -506,9 +502,17 @@ function doGuardfolkWork(director, record, citizen, type, nowMs) {
     if (!lastFiredByCitizen.has(key)) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(ceremony, { ground: ground.name });
-      citizen.forceChat?.(line);
-      journalize(citizen, `stood the honor guard at ${ground.name}`);
-      seedRumor(`Honor guard ceremony at ${ground.name}!`);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
+      const journalEvent = journalize(record.username, "patrol", `stood the honor guard at ${ground.name}`);
+      const rumor = seedRumor(Math.random, {
+        kind: "ceremony",
+        who: record.username,
+        whoDisplay: record.username,
+        what: `Honor guard ceremony at ${ground.name}`,
+        where: ground.name,
+        whereDisplay: ground.name,
+      });
+      logGuardfolk(director, record, type, "ceremony", ground, journalEvent, rumor);
       return;
     }
   }
@@ -517,16 +521,19 @@ function doGuardfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.45) {
     const line = pickOne(Math.random, DRILL_LINES[type]);
-    citizen.forceChat?.(line);
-    journalize(citizen, `drilled at ${ground.name}`);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
+    const journalEvent = journalize(record.username, "patrol", `drilled at ${ground.name}`);
+    logGuardfolk(director, record, type, "drill", ground, journalEvent, null);
   } else if (roll < 0.75) {
     const line = fill(pickOne(Math.random, MUSTER_LINES), { ground: ground.name });
-    citizen.forceChat?.(line);
-    journalize(citizen, `called the muster at ${ground.name}`);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
+    const journalEvent = journalize(record.username, "patrol", `called the muster at ${ground.name}`);
+    logGuardfolk(director, record, type, "muster", ground, journalEvent, null);
   } else {
     const line = pickOne(Math.random, MILITIA_JOIN_LINES);
-    citizen.forceChat?.(line);
-    journalize(citizen, `recruited for the levy at ${ground.name}`);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
+    const journalEvent = journalize(record.username, "patrol", `recruited for the levy at ${ground.name}`);
+    logGuardfolk(director, record, type, "recruit", ground, journalEvent, null);
   }
 }
 

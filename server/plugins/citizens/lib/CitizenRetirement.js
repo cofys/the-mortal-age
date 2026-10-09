@@ -28,6 +28,10 @@ const { getJournal } = require("./CitizenJournal");
 const { normalizeName } = require("./CitizenBonds");
 const { agentRng, chance } = require("./humanizer");
 const { brainTickDue } = require("./CitizenTickLod");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const RETIREMENT_AGE = 60; // matches the "elderly" cutoff in movementStyleFor
@@ -181,10 +185,7 @@ function pickWisdom(rng) {
 }
 
 const DEFERENCE_FRAMES = [
-  "*bows deeply to Elder {elder}*",
-  "*steps aside for Elder {elder}*",
   "Evening, Elder {elder}. The town is better with you in it.",
-  "*offers Elder {elder} the best seat*",
 ];
 
 function pickDeference(rng, elderName) {
@@ -210,9 +211,7 @@ const CEREMONY_GIFT_FRAMES = [
 ];
 
 const CEREMONY_CHEER_FRAMES = [
-  "*the crowd cheers for Elder {elder}*",
   "To Elder {elder}! *glasses raised*",
-  "*applause echoes through the street*",
 ];
 
 /**
@@ -281,7 +280,7 @@ function citizensNear(director, bot, kingdomId, radius) {
 
 function say(bot, text) {
   try {
-    bot.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch {
     // A shy elder.
   }

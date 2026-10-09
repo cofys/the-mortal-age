@@ -30,6 +30,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const HOBBY_RADIUS = 14; // tiles — close enough to see/hear
@@ -103,28 +107,16 @@ const PURSUITS = {
 
 const SHOW_LINES = {
   [HOBBY_GARDENER]: [
-    "*sniffs a prize rose*",
-    "*holds up a perfect marigold*",
     "Smell that — three years of compost in one bloom.",
-    "*ties up a leaning delphinium*",
   ],
   [HOBBY_BIRDWATCHER]: [
-    "*raises the spyglass*",
-    "*jots in a worn notebook*",
     "Shh — goldfinch, two o'clock, on the alder.",
-    "*points excitedly at the sky*",
   ],
   [HOBBY_COLLECTOR]: [
-    "*polishes a rare coin*",
-    "*holds a stamp to the light*",
     "This one's from the first printing — see the misaligned frame?",
-    "*lays out the collection in neat rows*",
   ],
   [HOBBY_GAMER]: [
-    "*moves a draughts piece*",
-    "*studies the board, chin in hand*",
     "Your move — and mind the trap on the left flank.",
-    "*sets up the pieces for another round*",
   ],
 };
 
@@ -511,7 +503,7 @@ function doHobbyWork(director, record, citizen, hobby, nowMs) {
     if (!lastFiredByCitizen.has(key)) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(pickOne(Math.random, RARE_LINES), { find: rare });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `had a rare ${hobby} moment: ${rare}`);
       seedRumor(`${record.username} found ${rare}!`);
       return;
@@ -529,7 +521,7 @@ function doHobbyWork(director, record, citizen, hobby, nowMs) {
         day: "this " + DAY_NAMES[today],
         gear: CLUB_GEAR[club.hobby] ?? "kit",
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `announced the ${club.name} meetup`);
       return;
     }
@@ -538,14 +530,14 @@ function doHobbyWork(director, record, citizen, hobby, nowMs) {
   // Gamers challenge lingering players to a board game.
   if (hobby === HOBBY_GAMER && Math.random() < 0.3) {
     const line = pickOne(Math.random, CHALLENGE_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, "challenged a passerby to a board game");
     return;
   }
 
   // Routine: hobby pursuit emote.
   const line = pickOne(Math.random, SHOW_LINES[hobby]);
-  citizen.forceChat?.(line);
+  { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   journalize(citizen, `pursued a hobby: ${pursuitFor(name, hobby, nowMs)}`);
 }
 
@@ -560,7 +552,7 @@ function maybeInvitePlayer(record, citizen, hobby) {
     day: DAY_NAMES[clubDay(club)],
   });
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch { /* cosmetic */ }
   return line;
 }

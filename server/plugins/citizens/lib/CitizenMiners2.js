@@ -39,6 +39,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level safeRequire (potters perf lesson): the pro-miner exclusion
 // check runs per citizen per tick, so no lazy requires in that path.
@@ -115,27 +119,15 @@ const COMMUNITY_CLAIMS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [MINERFOLK_PROSPECTOR]: [
-    "*swings the pan in the creek water*",
-    "*studies a likely-looking rock face*",
-    "*taps a boulder with the hammer, listening*",
     "Color here... I can smell the copper in this dirt.",
   ],
   [MINERFOLK_DIGGER]: [
-    "*swings the pickaxe, steady rhythm*",
-    "*shovels spoil into the barrow*",
-    "*sets a timber prop in the drift*",
     "Mind your head — she's a low seam.",
   ],
   [MINERFOLK_CARRIER]: [
-    "*shoulders a heavy ore sack*",
-    "*trundles the barrow up the ramp*",
-    "*tips the load onto the sorting pile*",
     "Heavy as sin, this one. Good sign.",
   ],
   [MINERFOLK_GEMHUNTER]: [
-    "*sifts gravel through the sieve*",
-    "*holds a pebble up to the light*",
-    "*cracks a likely nodule with the hammer*",
     "Sparkle in the pan — could be something!",
   ],
 };
@@ -585,7 +577,7 @@ function doMinerfolkWork(director, record, citizen, type, nowMs) {
         ore: strike.ore,
         claim: claim.name,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(record.username, `struck a rich ${strike.ore} vein at ${claim.name}`);
       seedStrikeRumor(record.username, `A rich ${strike.ore} vein struck at ${claim.name}!`, claim.name);
       return;
@@ -596,7 +588,7 @@ function doMinerfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.4) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `worked at ${claim.name}`);
   } else if (roll < 0.6) {
     const todays = findsFor(name, type, nowMs);
@@ -605,15 +597,15 @@ function doMinerfolkWork(director, record, citizen, type, nowMs) {
       type === MINERFOLK_GEMHUNTER
         ? fill(pickOne(Math.random, GEM_FIND_LINES), { gem: find })
         : fill(pickOne(Math.random, FIND_LINES), { ore: find });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `found ${todays.join(", ")} at ${claim.name}`);
   } else if (roll < 0.75) {
     const line = pickOne(Math.random, HIRE_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `offered hire at ${claim.name}`);
   } else {
     const line = pickOne(Math.random, CLAIM_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `invited a player to work ${claim.name}`);
   }
 }

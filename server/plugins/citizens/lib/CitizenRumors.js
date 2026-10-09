@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenRumors — citizens spread rumors: some true, some exaggerated, some false.
@@ -321,7 +325,7 @@ function tickRumors(director, nowMs, rng = Math.random) {
         const line = rumorLine(rng, rumor);
         if (!line) continue;
 
-        citizen.forceChat?.(line);
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
         rumor.lastSpokeAt = nowMs;
         // Speaking counts as a retelling — the listener may distort it next hop.
         lastSpokeByCitizen.set(record.username, nowMs);

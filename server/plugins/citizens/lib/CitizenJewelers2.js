@@ -39,6 +39,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level requires (perf lesson from the artisan fix): the exclusion
 // modules are linear deps with no back-references to this module, so
@@ -136,28 +140,16 @@ const MASTERPIECES = [
 // === Scripted lines ===
 const WORK_LINES = {
   [GEMFOLK_CUTTER]: [
-    "*holds the stone to the light, squinting*",
-    "*taps the chisel — tick — and a facet falls away*",
     "Cut along the grain and she'll shine; fight her and she'll split.",
-    "*dops the stone and spins the lap*",
   ],
   [GEMFOLK_SETTER]: [
-    "*bends the prongs down with tweezers*",
-    "*sets the stone and checks it from every angle*",
     "A loose stone is a lost stone — prongs tight, always.",
-    "*burnishes the bezel smooth*",
   ],
   [GEMFOLK_POLISHER]: [
-    "*tumbles the stones in the barrel, listening to the rattle*",
-    "*rubs the pebble with polishing compound*",
     "Patience, patience — shine comes to those who wait.",
-    "*rinses the stones and lays them out to dry*",
   ],
   [GEMFOLK_APPRAISER]: [
-    "*peers through the loupe, humming*",
-    "*weighs the stone on the little brass scales*",
     "Mind — this is my opinion, not a certificate. The guild does those.",
-    "*taps the stone and listens to the ring*",
   ],
 };
 
@@ -547,7 +539,7 @@ function doGemfolkWork(director, record, citizen, type, nowMs) {
     if (!lastFiredByCitizen.has(key)) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(pickOne(Math.random, UNVEIL_LINES), { piece: mp });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled a masterpiece at ${workshop.name}: ${mp}`);
       seedRumor(`A masterpiece ${mp} unveiled at ${workshop.name}!`);
       return;
@@ -558,26 +550,26 @@ function doGemfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.4) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${workshop.name}`);
   } else if (roll < 0.65) {
     const projects = projectsFor(name, record.kingdomId, nowMs);
     const piece = projects.length ? projects[0] : "a polished stone";
     const line = fill(pickOne(Math.random, FINISH_LINES), { piece });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `finished ${piece} at ${workshop.name}`);
   } else if (roll < 0.8) {
     if (type === GEMFOLK_APPRAISER) {
       const line = pickOne(Math.random, APPRAISE_LINES);
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } else {
       const line = pickOne(Math.random, COMMISSION_LINES);
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     }
     journalize(citizen, `offered services at ${workshop.name}`);
   } else {
     const line = pickOne(Math.random, LESSON_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered cutting lessons at ${workshop.name}`);
   }
 }

@@ -30,6 +30,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const SPORTS_RADIUS = 14; // tiles — close enough to see/hear
@@ -552,7 +556,7 @@ function doSportsWork(director, record, citizen, season, weekInSeason, day, nowM
           sport: "football",
           kingdom,
         });
-        citizen.forceChat?.(line);
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
         journalize(citizen, "celebrated " + champ + " winning the football championship");
         seedRumor(champ + " are champions of the football league in " + kingdom + "!");
       }
@@ -575,7 +579,7 @@ function doSportsWork(director, record, citizen, season, weekInSeason, day, nowM
       sport: "football",
       day: "Saturday",
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, "announced " + f.home + " vs " + f.away);
   } else if (roll < 0.6) {
     // Call out a result.
@@ -590,7 +594,7 @@ function doSportsWork(director, record, citizen, season, weekInSeason, day, nowM
       as: r.awayGoals,
       winner,
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, "called the score: " + f.home + " " + r.homeGoals + "-" + r.awayGoals + " " + f.away);
   } else if (roll < 0.75) {
     // Racing: cheer a runner.
@@ -599,7 +603,7 @@ function doSportsWork(director, record, citizen, season, weekInSeason, day, nowM
     if (!race || !race.field.length) return;
     const horse = race.field[Math.floor(rng() * race.field.length)];
     const line = fill(pickOne(rng, CHEER_LINES[SPORT_RACING]), { name: horse });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, "cheered the racing at " + race.name);
   } else if (roll < 0.9) {
     // Cheer a team.
@@ -607,7 +611,7 @@ function doSportsWork(director, record, citizen, season, weekInSeason, day, nowM
     const team = teams[Math.floor(rng() * teams.length)];
     const sport = pickOne(rng, [SPORT_FOOTBALL, SPORT_WRESTLING, SPORT_ARCHERY]);
     const line = fill(pickOne(rng, CHEER_LINES[sport]), { team, name: team });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, "cheered for " + team);
   } else {
     // Invite the player.
@@ -615,7 +619,7 @@ function doSportsWork(director, record, citizen, season, weekInSeason, day, nowM
     const team = teams[Math.floor(rng() * teams.length)];
     const sport = pickOne(rng, SPORT_TYPES);
     const line = fill(pickOne(rng, PLAYER_INVITE_LINES), { team, sport: SPORT_NAMES[sport] });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   }
 }
 

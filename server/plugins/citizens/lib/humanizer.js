@@ -119,6 +119,32 @@ function agentRng(seedText) {
   return mulberry32(hashSeed(seedText));
 }
 
+/**
+ * A citizen's "usual spot" near a shared anchor (bank, market, work site).
+ *
+ * Everyone walking to the exact same anchor tile is the stacking bot-tell:
+ * 18 citizens on one tile. Instead each citizen gets a stable personal spot
+ * in a ring around the anchor — deterministic per username (like a real
+ * player's favorite bank booth), spread across the population.
+ *
+ * @param {string} username - stable per-citizen seed
+ * @param {number} x - anchor tile x
+ * @param {number} y - anchor tile y
+ * @param {number} minR - inner ring radius (tiles)
+ * @param {number} maxR - outer ring radius (tiles)
+ * @returns {{x: number, y: number}} the citizen's personal spot
+ */
+function personalSpot(username, x, y, minR = 4, maxR = 10) {
+  const name = String(username ?? "unknown");
+  const angle = (hashSeed(name + ":spot-angle") % 360) * (Math.PI / 180);
+  const span = Math.max(0, maxR - minR);
+  const dist = minR + (span > 0 ? (hashSeed(name + ":spot-dist") % (span + 1)) : 0);
+  return {
+    x: Math.round(x + Math.cos(angle) * dist),
+    y: Math.round(y + Math.sin(angle) * dist),
+  };
+}
+
 module.exports = {
   hashSeed,
   mulberry32,
@@ -128,4 +154,5 @@ module.exports = {
   noisyTile,
   chance,
   humanizerProfile,
+  personalSpot,
 };

@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenAlchemists — alchemist citizens who brew potions, study reactions
@@ -109,10 +113,10 @@ const BREAKTHROUGHS = Object.freeze([
 
 // === Mishap scripts (explosions, fumes, unstable mixtures — cosmetic only) ===
 const MISHAP_LINES = Object.freeze([
-  "*POOF* — purple smoke everywhere!*",
-  "*duck! the retort just spat green flames!*",
-  "*cough* — open a window, that batch went wrong!*",
-  "*a foul smell rolls out of the lab — hold your nose!*",
+  "Whoa! Purple smoke everywhere! Stand back!",
+  "The retort just spat green flames!",
+  "Open a window, that batch went wrong!",
+  "Hold your nose, something's off in there!",
 ]);
 
 // === Fallback botanical ingredients (used only if CitizenFarmers can't load) ===
@@ -286,28 +290,24 @@ function waresFor(username, dateMs) {
 // === Visible work lines (forceChat emotes, zero LLM) ===
 const WORK_LINES = {
   [ALCHEMIST_BREWER]: [
-    "*stirs the cauldron, watching the colour change*",
-    "*decants a vial, checking the hue*",
-    "*weighs the powdered ingredients with care*",
-    "*tastes a drop and winces*",
+    "Brewing up a batch.",
+    "Potions bubbling away.",
+    "Brewer at work here.",
   ],
   [ALCHEMIST_TRANSMUTER]: [
-    "*pours molten metal from crucible to mould*",
-    "*muttering over the circle, chalk in hand*",
-    "*holds the crucible up to the light*",
-    "*scratches another failed equation off the slate*",
+    "Transmuting metals.",
+    "Lead to gold, almost.",
+    "Transmutation in progress.",
   ],
   [ALCHEMIST_SCHOLAR]: [
-    "*logs the reaction in a heavy tome*",
-    "*measures the temperature of the distillate*",
-    "*compares two vials against the light*",
-    "*scribbles a diagram of the apparatus*",
+    "Studying the old texts.",
+    "Alchemical theory here.",
+    "Researching reactions.",
   ],
   [ALCHEMIST_APOTHECARY]: [
-    "*grinds dried herbs into powder*",
-    "*labels a fresh row of bottles*",
-    "*bundles dried remedies for the counter*",
-    "*counts out pills into a paper twist*",
+    "Mixing remedies.",
+    "Apothecary open.",
+    "Herbs and cures here.",
   ],
 };
 
@@ -503,7 +503,7 @@ function doAlchemistWork(director, record, citizen, type, nowMs) {
   if (Math.random() < BREAKTHROUGH_CHANCE) {
     const find = breakthroughFor(record.username, nowMs);
     try {
-      citizen.forceChat?.(breakthroughLineFor(Math.random, find, lab));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [breakthroughLineFor(Math.random, find, lab)] })); }
     } catch {
       // forceChat is best-effort.
     }
@@ -515,7 +515,7 @@ function doAlchemistWork(director, record, citizen, type, nowMs) {
   // Rare mishaps: explosions, fumes, unstable mixtures — cosmetic only.
   if (Math.random() < MISHAP_CHANCE) {
     try {
-      citizen.forceChat?.(mishapLineFor(Math.random));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [mishapLineFor(Math.random)] })); }
     } catch {
       // forceChat is best-effort.
     }
@@ -525,7 +525,7 @@ function doAlchemistWork(director, record, citizen, type, nowMs) {
 
   const line = workLineFor(Math.random, type);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -552,7 +552,7 @@ function doAlchemistHawk(director, citizen, record, type, nowMs) {
   const wares = waresFor(record.username, nowMs);
   const line = hawkLineFor(Math.random, wares, lab);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -566,7 +566,7 @@ function doTeachOffer(citizen, record, type, nowMs) {
   const brew = brewFor(record.username, nowMs);
   const line = teachLineFor(Math.random, brew);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }

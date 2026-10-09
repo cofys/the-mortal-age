@@ -198,6 +198,76 @@
           }
         }
       ]
+    },
+    {
+      "_note": "Decision-layer hinge activities (CitizenDecisions): not repeat — they complete and the brain re-decides. Scored by needs, not schedules.",
+      "actions": [
+        {
+          "type": "citizenMeal"
+        }
+      ],
+      "capacity": 32,
+      "failureCooldownSeconds": 10,
+      "id": "citizen_meal",
+      "mode": "citizen_routine",
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner",
+              "merchant",
+              "guard",
+              "courtier"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "actions": [
+        {
+          "type": "citizenRest"
+        }
+      ],
+      "capacity": 32,
+      "failureCooldownSeconds": 10,
+      "id": "citizen_rest",
+      "mode": "citizen_routine",
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner",
+              "merchant",
+              "guard",
+              "courtier"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "actions": [
+        {
+          "type": "citizenBank"
+        }
+      ],
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "id": "citizen_bank",
+      "mode": "citizen_routine",
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner",
+              "merchant",
+              "guard",
+              "courtier"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

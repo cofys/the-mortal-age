@@ -11,7 +11,7 @@
  *   in:  kingdom:war-declared / kingdom:war-ended  (kingdoms plugin)
  *   in:  kingdom:office-assigned / kingdom:office-vacated (kingdoms plugin;
  *        player office-holders, so citizens address them by title)
- *   in:  citizens:chat-heard                       (stubbed — see chat/CitizenChat.js)
+ *   in:  citizens:chat-heard                       (chat/CitizenChat.js — all nearby citizens hear; top-2 repliers may speak)
  *   out: llm:citizen-register                      (llm-gateway plugin)
  *   out: kingdom:rank-granted                       (kingdoms plugin)
  *
@@ -25,6 +25,11 @@ const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish,
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { initCitizenSocial, onSocialChatResponse } = require("./chat/CitizenSocial");
 const { registerCitizenActionTypes } = require("./brain/CitizenActionTypes");
+const { initCitizenDecisions } = require("./brain/CitizenDecisions");
+const { ATTR_CITIZEN_PERSONALITY } = require("./constants");
+const { voiceFor, voiceLine } = require("./lib/citizenVoice");
+const { sayPublic } = require("./chat/CitizenSayPublic");
+
 const {
   registerCitizenActivities,
   getBaseRegistry,
@@ -35,7 +40,7 @@ const { initPlayerShops } = require("./shop/PlayerShops");
 const { initMarketBoard } = require("./shop/MarketBoard.Shops");
 const { initMarketRegistrar } = require("./shop/MarketRegistrar.Shops");
 const attachWarRefugees = require("./WarRefugees");
-const { onPlayerLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
+const { onPlayerLevelUpNotice, onCitizenLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
 const { onNpcKillWitnessed } = require("./StreetSpectacle");
 const { onLogoutFarewell } = require("./StreetFarewells");
 const { onIdleSeen, clearIdleOnLogout } = require("./StreetIdle");
@@ -97,6 +102,9 @@ function initCitizens(api) {
   registerCitizenActionTypes();
   const added = registerCitizenActivities();
   api.log?.("[citizens] activities registered", { added });
+  // Decision layer: needs-driven activity picker + interrupt hook. Installed
+  // even when the director is idle — it no-ops without citizens.
+  initCitizenDecisions(getBaseRegistry());
   initMarketBoard(api);
   initMarketRegistrar(api);
   if (!citizensEnabled()) {
@@ -200,9 +208,7 @@ function onCitizenAttackedByPlayer({ player, target }) {
   const victimName = target.getUsername?.() ?? "?";
   memory.addGrudge(victimName, attackerName, GRUDGE_ATTACK, "attack");
   try {
-    target.forceChat?.(
-      ATTACK_OUTCRY[Math.floor(Math.random() * ATTACK_OUTCRY.length)]
-    );
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: [ATTACK_OUTCRY[Math.floor(Math.random() * ATTACK_OUTCRY.length)]] })); }
   } catch (error) {
     // Cosmetic.
   }
@@ -285,7 +291,7 @@ function guardIntervention(attacker, victim, kingdomId) {
     } catch { /* non-fatal */ }
     // Shout a warning.
     try {
-      guardBot.forceChat?.(GUARD_INTERVENE_WARNINGS[Math.floor(Math.random() * GUARD_INTERVENE_WARNINGS.length)]);
+      { const _cvp = guardBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(guardBot, voiceLine(voiceFor(_cvp), { plain: [GUARD_INTERVENE_WARNINGS[Math.floor(Math.random() * GUARD_INTERVENE_WARNINGS.length)]] })); }
     } catch { /* non-fatal */ }
     // Engage in combat — the guard defends the city.
     try {
@@ -502,6 +508,7 @@ function onKingdomWarEndedRelief(event) {
 
 function onLevelUpHeard(event) {
   onPlayerLevelUpNotice(event);
+  onCitizenLevelUpNotice(event);
   onMentorLevelUpNotice(event);
 }
 

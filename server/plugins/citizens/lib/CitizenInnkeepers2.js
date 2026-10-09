@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenInnkeepers2 — the community hospitality folk: spare-room hosts,
@@ -100,23 +104,15 @@ const BREWS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [HOSTFOLK_HOST]: [
-    "*plumps the spare-room pillows*",
     "Bed's made up, friend — the spare room's yours for the night.",
-    "*sweeps the guest corner by the hearth*",
   ],
   [HOSTFOLK_BREWER]: [
-    "*racks the latest batch into the cask*",
-    "*tastes the ferment, nodding with approval*",
     "Brew's ready — pull up a stool, the first mug's on me.",
   ],
   [HOSTFOLK_FEASTER]: [
-    "*chalk up the feast-night board*",
-    "*counts chairs for the long table*",
     "Feast night's coming — bring an appetite and a story.",
   ],
   [HOSTFOLK_REGULAR]: [
-    "*nurses a mug in the corner seat*",
-    "*leans in, lowering their voice*",
     "Heard anything interesting lately? I trade gossip for drinks.",
   ],
 };
@@ -529,7 +525,7 @@ function doHostfolkWork(director, record, citizen, type, nowMs) {
     if (!lastFiredByCitizen.has(key)) {
       lastFiredByCitizen.set(key, nowMs);
       const line = fill(feast, { venue: venue.name });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       const dish = dishForFeast(name, record.kingdomId, nowMs);
       journalize(citizen, `hosted feast night at ${venue.name} (serving ${dish})`);
       seedRumor(`Feast night at ${venue.name}! Long table, long tales!`);
@@ -542,7 +538,7 @@ function doHostfolkWork(director, record, citizen, type, nowMs) {
     const rumor = gossipFor(citizen);
     if (rumor) {
       const line = fill(pickOne(Math.random, GOSSIP_LINES), { rumor: rumor.slice(0, 120) });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, "traded gossip at the common room");
       return;
     }
@@ -552,7 +548,7 @@ function doHostfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.45) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked the ${venue.name}`);
   } else if (roll < 0.75) {
     const brew = brewForToday(name, nowMs);
@@ -560,11 +556,11 @@ function doHostfolkWork(director, record, citizen, type, nowMs) {
       brew,
       venue: venue.name,
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `called out ${brew} at ${venue.name}`);
   } else {
     const line = pickOne(Math.random, ROOM_OFFER_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered the spare room near ${venue.name}`);
   }
 }

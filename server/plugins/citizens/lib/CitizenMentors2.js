@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenMentors2 — the mentorfolk: the apprenticeship-and-morals street
@@ -152,43 +156,33 @@ const PITCHES = [
 
 // Morning setup flavor: before 10:00 the mentorfolk are still setting up.
 const SETUP_LINES = [
-  "*pins the guild hiring board to the post*",
-  "*chalks the day's apprenticeship terms on a slate*",
-  "*unrolls the oath book and finds the page*",
-  "*sweeps the pitch clear of yesterday's straw*",
-  "*counts the blank indenture forms, twice*",
-  "*props the soapbox on its sturdy side*",
+  "Hiring board's up.",
+  "Setting up for apprentices.",
+  "Terms are chalked on the slate.",
+  "Just getting the pitch ready.",
 ];
 
 // Work lines per type.
 const WORK_LINES = {
   [RECRUITER]: [
-    "*waves an indenture form at a passing lad*",
-    "*thumps the hiring board for attention*",
-    "*reads the contract terms aloud, slowly*",
-    "*dabs the guild seal in wax, ready*",
-    "*counts the day's signed forms, grinning*",
+    "Recruiting now!",
+    "Join us!",
+    "New members wanted.",
   ],
   [TASKMASTER]: [
-    "*inspects a lad's sweeping with a frown*",
-    "*counts nails into a tin, one by one*",
-    "*runs a thumb along a polished hinge*",
-    "*taps the chore slate with a stick*",
-    "*checks the water buckets are full*",
+    "Tasks assigned.",
+    "Work to do.",
+    "Taskmaster here.",
   ],
   [SOAPBOX]: [
-    "*climbs onto the soapbox, clears {their} throat*",
-    "*shakes a fist at a passing drunk*",
-    "*wags a finger at the dice players*",
-    "*unfurls a scroll of homely proverbs*",
-    "*points sternly at a yawning apprentice*",
+    "Hear me out!",
+    "Speaking now.",
+    "Gather round!",
   ],
   [OATH_WARDEN]: [
-    "*polishes the oath book's brass clasp*",
-    "*dips a quill for the signing*",
-    "*smooths the oath page flat*",
-    "*reads a past oath under {their} breath*",
-    "*blots a fresh signature carefully*",
+    "Oaths witnessed.",
+    "Warden here.",
+    "Swear your oath.",
   ],
 };
 
@@ -578,7 +572,7 @@ function seedRumor(rng, text) {
 /** Say a line in chat (never throws). */
 function forceSay(citizen, text) {
   try {
-    if (citizen?.forceChat) citizen.forceChat(String(text).slice(0, 120));
+    if (citizen?.forceChat) { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
     else if (citizen?.say) citizen.say(String(text).slice(0, 120));
   } catch { /* cosmetic */ }
 }

@@ -40,6 +40,10 @@ const { getJournal } = require("./CitizenJournal");
 const { normalizeName, sendInvite, getInvites, resolveInvite } = require("./CitizenBonds");
 const { KINGDOM_IDS } = require("../brain/CitizenSites");
 const { ROLE_COURTIER } = require("../constants");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Kingdoms plugin is optional at require time (plain-node tests run without
 // it); all live calls are guarded.
@@ -835,7 +839,7 @@ function whisperIntel(director, record, citizen, nowMs) {
         ? pickOne(Math.random, INFORMANT_WHISPERS)
         : "Nothing worth selling today, friend. The streets are quiet.";
     try {
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } catch {
       // Non-fatal.
     }

@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenFarmers2 — the farmfolk: farmhands, tenant farmers, seasonal
@@ -119,45 +123,37 @@ const GARDEN_EXTRAS = {
 // === Scripted work emotes ===
 const WORK_LINES = {
   [FARMFOLK_FARMHAND]: [
-    "*hoeing the back row, steady as the sun*",
-    "*carting manure to the far field*",
-    "*mending the dry-stone wall, one stone at a time*",
-    "*watering the nursery beds*",
-    "*greasing the cart wheels*",
+    "Working the fields.",
+    "Farmhand here.",
+    "Crops need tending.",
   ],
   [FARMFOLK_TENANT]: [
-    "*weeding the rented plot, row by careful row*",
-    "*tying up the bean rows against the wind*",
-    "*saving seed for next year's sowing*",
-    "*chitting the potatoes on the shed shelf*",
-    "*spreading compost on the tired bed*",
+    "Tenant farming.",
+    "Working my plot.",
+    "Harvest coming.",
   ],
   [FARMFOLK_ORCHARD]: [
-    "*pruning the apple boughs*",
-    "*grafting a new plum stock*",
-    "*picking the windfalls before they rot*",
-    "*tying the saplings to their stakes*",
-    "*pressing last week's cider in the shed*",
+    "Orchard work.",
+    "Picking fruit.",
+    "Trees need pruning.",
   ],
   [FARMFOLK_SELLER]: [
-    "*arranges the barrow, polishing the apples with a sleeve*",
-    "*ties up bunches of onions for the stall*",
-    "*chalk-marks the prices on the barrow board*",
+    "Fresh produce!",
+    "Veg for sale!",
+    "Farm goods here.",
   ],
   [FARMFOLK_HARVEST]: [
-    "*swinging the scythe with the gang, stroke for stroke*",
-    "*binding the sheaves as they fall*",
-    "*stooking the barley in the stubble*",
-    "*loading the wain high with hay*",
-    "*stacking the oats before the weather turns*",
+    "Harvest time!",
+    "Reaping today.",
+    "Gathering crops.",
   ],
 };
 
 const HARVEST_OFFSEASON_LINES = [
-  "*laying the hedgerow for the winter*",
-  "*re-thatching the barn against the rains*",
-  "*sharpening the scythes for next year's harvest*",
-  "*mending the harvest ladders*",
+  "Laying hedgerow for winter.",
+  "Re-thatching before the rains.",
+  "Sharpening scythes for next year.",
+  "Mending ladders today.",
 ];
 
 // Daily task rotas — the job of the day, stable per name+type+day.
@@ -630,7 +626,7 @@ function seedRumor(text) {
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
   try {
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch { /* cosmetic */ }
 }
 

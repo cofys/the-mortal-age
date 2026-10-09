@@ -31,6 +31,10 @@
 const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
 const { normalizeName, sendInvite, getInvites } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const EXPLORER_BUCKET = 20; // hash(username) % 20 === 0 -> explorer (~5% of citizens)
@@ -448,7 +452,7 @@ function visibleMoments(director, nowMs) {
     const rng = agentRng(`expedition:tale:${record.username}:${nowMs >> 16}`);
     const line = taleLine(fresh.type, fresh.name, rng).slice(0, 120);
     try {
-      bot.forceChat?.(line);
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } catch {
       continue;
     }
@@ -493,7 +497,7 @@ function shoutExpedition(director, exp, line, nowMs) {
       (p) => p !== bot && isRealPlayer(p) && withinTiles(bot, p, SHOUT_RADIUS)
     );
     if (realPlayers.length === 0) return;
-    bot.forceChat?.(String(line).slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(line).slice(0, 120)] })); }
     // Invite nearby players to join the muster.
     if (exp.phase === "muster" && exp.playerMembers.length < MAX_PLAYER_MEMBERS) {
       for (const p of realPlayers) {

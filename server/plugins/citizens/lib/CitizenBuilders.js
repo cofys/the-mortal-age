@@ -49,6 +49,10 @@ const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { normalizeName } = require("./CitizenBonds");
 const TimingDesync = require("./CitizenTimingDesync");
 const { brainTickDue } = require("./CitizenTickLod");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const PROXIMITY_TILES = 40; // a real player must be this close for visible work
@@ -511,7 +515,7 @@ function doVisibleWork(director, name, info, bot, nowMs) {
     faceToward(bot, site);
     playAnim(director, bot, trade.anim);
     if (chance(Math.random, 0.4)) {
-      bot.forceChat?.(trade.verb.slice(0, 120));
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [trade.verb.slice(0, 120)] })); }
     }
     journalEvent(info.display, trade.journal);
     lastWorkedAt.set(name, nowMs);
@@ -536,7 +540,7 @@ function doSupervise(director, name, info, bot, nowMs) {
     playAnim(director, bot, TRADES.architect.anim);
     if (chance(Math.random, 0.3)) {
       const lines = ["*checks the plans*", "*marks a correction*", "*nods approvingly*"];
-      bot.forceChat?.(lines[Math.floor(Math.random() * lines.length)]);
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [lines[Math.floor(Math.random() * lines.length)]] })); }
     }
     journalEvent(info.display, TRADES.architect.journal);
     lastWorkedAt.set(name, nowMs);
@@ -564,7 +568,7 @@ function maybeOfferHire(director, name, info, bot, nowMs) {
     if (dwell.ticks < DWELL_TICKS) return;
     if (!chance(Math.random, OFFER_CHANCE)) return;
     const trade = TRADES[info.trade];
-    bot.forceChat?.(trade.offer.slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [trade.offer.slice(0, 120)] })); }
     journalEvent(info.display, `Offered ${info.trade} work to a passerby.`);
     lastOfferAt.set(name, nowMs);
     dwellTicks.delete(key);
@@ -585,7 +589,7 @@ function maybeThankHelpers(director, name, info, bot, nowMs) {
       "Many hands make light work — appreciate it!",
       "*grins* You work like one of the crew.",
     ];
-    bot.forceChat?.(thanks[Math.floor(Math.random() * thanks.length)]);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [thanks[Math.floor(Math.random() * thanks.length)]] })); }
     const helper = helpers[0].getUsername?.() ?? "a passerby";
     journalEvent(info.display, `${helper} helped with the construction.`);
     lastThanksAt.set(name, nowMs);
@@ -605,9 +609,7 @@ function maybeCelebrate(director, info, bot, nowMs) {
     if (!latest || nowMs - latest.completedAt > 10 * 60 * 1000) return;
     const nearby = realPlayersWithin(bot, PROXIMITY_TILES);
     if (nearby.length === 0) return;
-    bot.forceChat?.(
-      pickOne(Math.random, CELEBRATION_LINES).slice(0, 120)
-    );
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [pickOne(Math.random, CELEBRATION_LINES).slice(0, 120)] })); }
     lastCelebrationAt.set(info.kingdomId, nowMs);
   } catch (e) {
     console.warn("[citizen-builders] maybeCelebrate failed:", e?.message ?? e);

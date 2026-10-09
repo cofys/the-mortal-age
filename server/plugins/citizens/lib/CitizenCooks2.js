@@ -35,6 +35,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level safeRequire (potters perf lesson): the pro-cook exclusion
 // check runs per citizen per tick, so no lazy requires in that path.
@@ -120,28 +124,16 @@ const COMMUNITY_KITCHENS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [COOKFOLK_HOME]: [
-    "*stirs the pot over the hearth*",
-    "*tastes the stew, adds a pinch of salt*",
     "Dinner's nearly on — mind the little ones at the table.",
-    "*kneads the dough, flour on the elbows*",
   ],
   [COOKFOLK_VENDOR]: [
-    "*flips the kebabs over the coals*",
-    "*wraps a baked potato in a cloth*",
     "Hot food, fair price — step right up!",
-    "*wipes the counter, stacking rolls*",
   ],
   [COOKFOLK_FEAST]: [
-    "*bastes the roast, turning the spit*",
-    "*counts the place settings for the feast*",
     "Forty mouths to feed at the feast — pass me the carving knife!",
-    "*layers the feast pies, golden and steaming*",
   ],
   [COOKFOLK_SOUP]: [
-    "*laddles soup into a chipped bowl*",
-    "*hands a warm loaf to the queue*",
     "Nobody goes hungry tonight — there's always another ladle.",
-    "*stirs the big pot, humming softly*",
   ],
 };
 
@@ -596,7 +588,7 @@ function doCookfolkWork(director, record, citizen, type, nowMs) {
         kitchen: kitchen.name,
         dish: feast.dish,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `served a grand feast at ${kitchen.name}: ${feast.dish}`);
       seedRumor(`Grand feast at ${kitchen.name} — ${feast.dish} for all!`);
       return;
@@ -609,28 +601,28 @@ function doCookfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.35) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `cooked at ${kitchen.name}`);
   } else if (roll < 0.55) {
     const line = fill(pickOne(Math.random, DISH_LINES), { dish });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `served ${todays.join(", ")} at ${kitchen.name}`);
   } else if (roll < 0.7) {
     const price = priceFor(type);
     const line = fill(pickOne(Math.random, SELL_LINES), { dish });
-    citizen.forceChat?.(price > 0 ? `${line} (${price} coins)` : line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [price > 0 ? `${line} (${price} coins)` : line] })); }
     journalize(citizen, `hawked ${dish} at ${kitchen.name}`);
   } else if (roll < 0.82) {
     const line = pickOne(Math.random, type === COOKFOLK_SOUP ? SHARE_LINES : TEACH_LINES);
-    citizen.forceChat?.(fill(line, { dish }));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [fill(line, { dish })] })); }
     journalize(citizen, `shared ${dish} at ${kitchen.name}`);
   } else if (roll < 0.93) {
     const line = fill(pickOne(Math.random, TEACH_LINES), { dish });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `taught ${dish} at ${kitchen.name}`);
   } else {
     const line = pickOne(Math.random, HELP_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `asked for help at ${kitchen.name}`);
   }
 }

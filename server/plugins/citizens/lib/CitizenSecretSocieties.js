@@ -33,6 +33,10 @@
 const { getJournal } = require("./CitizenJournal");
 const { getMemory } = require("./CitizenMemory");
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const MEMBER_PCT = 15; // % of the roster that belongs to some society
@@ -440,7 +444,7 @@ function tickSocieties(director, nowMs) {
           if (rng() >= INITIATE_CHANCE) continue;
           const line = pickOne(rng, INITIATE_LINES[sid] ?? DEFLECT_LINES);
           try {
-            citizen.forceChat?.(line);
+            { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
           } catch {
             /* visible output failures never break the tick */
           }
@@ -489,7 +493,7 @@ function tickSocieties(director, nowMs) {
             if (!withinTiles(citizen, p, DEFLECT_RADIUS)) continue;
             if (isInitiated(p.getUsername?.())) continue; // members may watch
             try {
-              citizen.forceChat?.(pickOne(rng, DEFLECT_LINES));
+              { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: DEFLECT_LINES }, rng)); }
             } catch {
               /* never break the tick */
             }

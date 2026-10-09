@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenHunters — hunter citizens who work the wilds: trackers read trails,
@@ -198,28 +202,24 @@ function trophyFor(username, ground, dateMs) {
 // === Visible work lines (forceChat emotes, zero LLM) ===
 const WORK_LINES = {
   [HUNTER_TRACKER]: [
-    "*kneels and studies the tracks*",
-    "*reads the broken twigs*",
-    "*follows the trail deeper in*",
-    "*marks the spoor with a chalk slash*",
+    "Tracking game.",
+    "On the trail.",
+    "Tracker working.",
   ],
   [HUNTER_BOWMAN]: [
-    "*nocks an arrow*",
-    "*draws the bowstring*",
-    "*sights down the shaft*",
-    "*loosens the string and listens*",
+    "Bow ready.",
+    "Hunting today.",
+    "Arrows nocked.",
   ],
   [HUNTER_TRAPPER]: [
-    "*sets the snare*",
-    "*camouflages the pit trap*",
-    "*baits the deadfall*",
-    "*checks the snare line*",
+    "Setting traps.",
+    "Traps laid.",
+    "Trapper at work.",
   ],
   [HUNTER_BEASTMASTER]: [
-    "*whistles and the hound comes running*",
-    "*feeds the falcon a scrap of meat*",
-    "*sends the hawk circling*",
-    "*brushes down the hunting dog*",
+    "Working with beasts.",
+    "Training today.",
+    "Beastmaster here.",
   ],
 };
 
@@ -437,7 +437,7 @@ function doHuntWork(director, record, citizen, type, nowMs) {
   if (Math.random() < TROPHY_CHANCE) {
     const trophy = trophyFor(record.username, ground, nowMs);
     try {
-      citizen.forceChat?.(trophyLineFor(Math.random, trophy, ground));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [trophyLineFor(Math.random, trophy, ground)] })); }
     } catch {
       // forceChat is best-effort.
     }
@@ -448,7 +448,7 @@ function doHuntWork(director, record, citizen, type, nowMs) {
   // Dangerous ground can bite back (scripted injury, no real damage).
   if (ground && ground.danger === "high" && Math.random() < INJURY_CHANCE) {
     try {
-      citizen.forceChat?.(injuryLineFor(Math.random, ground));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [injuryLineFor(Math.random, ground)] })); }
     } catch {
       // forceChat is best-effort.
     }
@@ -457,7 +457,7 @@ function doHuntWork(director, record, citizen, type, nowMs) {
     return;
   }
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -480,7 +480,7 @@ function doHuntHawk(director, citizen, record, nowMs) {
   const prey = preyFor(record.username, ground, nowMs);
   const line = hawkLineFor(Math.random, prey, ground);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -491,7 +491,7 @@ function doHuntHawk(director, citizen, record, nowMs) {
 function doDangerWarning(citizen, username, ground) {
   const line = warnLineFor(Math.random, ground);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }

@@ -42,6 +42,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level safeRequire (potters perf lesson): the pro-smith exclusion
 // check runs per citizen per tick, so no lazy requires in that path.
@@ -108,28 +112,16 @@ const COMMUNITY_SMITHIES = [
 // === Scripted lines ===
 const WORK_LINES = {
   [SMITHFOLK_FARRIER]: [
-    "*lifts a hoof and cleans it out*",
-    "*hammers a shoe to shape on the anvil*",
     "Easy now, lad — nearly done.",
-    "*nails the shoe on, quick and sure*",
   ],
   [SMITHFOLK_HONER]: [
-    "*draws the scythe along the whetstone*",
-    "*tests the edge with a thumb, careful-like*",
     "She'll cut clean now — mind your fingers.",
-    "*oils a sickle blade against the rust*",
   ],
   [SMITHFOLK_TINKERER]: [
-    "*heats a plowshare cherry-red*",
-    "*straightens a bent harrow tooth*",
     "Cart'll roll true again by supper.",
-    "*rivets a new fitting onto the cart*",
   ],
   [SMITHFOLK_APPRENTICE]: [
-    "*pumps the bellows, cheeks red*",
-    "*fetches coal, arms full of it*",
     "One day I'll swing the hammer proper.",
-    "*sweeps the forge floor clean*",
   ],
 };
 
@@ -590,7 +582,7 @@ function doSmithfolkWork(director, record, citizen, type, nowMs) {
         piece: mw.piece,
         smithy: smithy.name,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled ${mw.piece} at ${smithy.name}`);
       seedRumor(`${mw.piece} unveiled at ${smithy.name}!`);
       return;
@@ -601,26 +593,26 @@ function doSmithfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.4) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${smithy.name}`);
   } else if (roll < 0.6) {
     const jobs = jobsFor(name, type, nowMs);
     const job = jobs.length ? jobs[0] : "a day's work";
     const line = fill(pickOne(Math.random, DONE_LINES), { job });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `finished ${job} at ${smithy.name}`);
   } else if (roll < 0.75) {
     const good = goodForToday(smithy, nowMs);
     const line = fill(pickOne(Math.random, GOODS_LINES), { good });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hawked ${good} at ${smithy.name}`);
   } else if (roll < 0.88) {
     const line = pickOne(Math.random, REPAIR_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered repairs at ${smithy.name}`);
   } else {
     const line = pickOne(Math.random, LESSON_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered smithing lessons at ${smithy.name}`);
   }
 }

@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenTailors — tailor citizens who clothe the cities: clothiers sew
@@ -340,28 +344,28 @@ function masterpieceFor(username, kingdom, dateMs) {
 // === Visible work lines (forceChat emotes, zero LLM) ===
 const WORK_LINES = {
   [TAILOR_CLOTHIER]: [
-    "*pins the pattern to the cloth*",
-    "*snips along the chalk line*",
-    "*stitches the seam with quick even strokes*",
-    "*holds the garment up to the light*",
+    "Pinning patterns today.",
+    "Snipping along the chalk line.",
+    "Stitching seams here.",
+    "Garments made to measure.",
   ],
   [TAILOR_ARMORER]: [
-    "*quilts the gambeson padding*",
-    "*punches eyelets for the laces*",
-    "*stitches a patch onto a worn jerkin*",
-    "*tests the padding with a firm press*",
+    "Quilting padding today.",
+    "Punching eyelets.",
+    "Patching jerkins here.",
+    "Armor clothiers open.",
   ],
   [TAILOR_WEAVER]: [
-    "*throws the shuttle across the loom*",
-    "*beats the weft into place*",
-    "*spools the dyed thread*",
-    "*measures out a fresh bolt*",
+    "Weaving on the loom.",
+    "Fresh bolts measured.",
+    "Thread dyed and ready.",
+    "Weaver at work.",
   ],
   [TAILOR_EMBROIDERER]: [
-    "*threads the needle with silver thread*",
-    "*stitches a rose into the hem*",
-    "*unrolls the goldwork pattern*",
-    "*knots the final stitch and snips*",
+    "Embroidering hems.",
+    "Silver thread work here.",
+    "Stitching roses today.",
+    "Fine needlework open.",
   ],
 };
 
@@ -570,7 +574,7 @@ function doTailorWork(director, record, citizen, type, nowMs) {
   if (Math.random() < MASTERPIECE_CHANCE) {
     const masterpiece = masterpieceFor(record.username, record.kingdom, nowMs);
     try {
-      citizen.forceChat?.(masterpieceLineFor(Math.random, masterpiece, workshop));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [masterpieceLineFor(Math.random, masterpiece, workshop)] })); }
     } catch {
       // forceChat is best-effort.
     }
@@ -579,7 +583,7 @@ function doTailorWork(director, record, citizen, type, nowMs) {
     return;
   }
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -618,7 +622,7 @@ function doTailorHawk(director, citizen, record, type, nowMs) {
     line = styleLineFor(Math.random, styleInfo, workshop) + " " + hawkLineFor(Math.random, wares, workshop);
   }
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -631,7 +635,7 @@ function doCommissionOffer(citizen, record, nowMs) {
   const styleInfo = styleFor(record.kingdom, nowMs);
   const line = commissionLineFor(Math.random, styleInfo);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }

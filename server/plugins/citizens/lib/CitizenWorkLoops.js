@@ -54,6 +54,10 @@ const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { normalizeName } = require("./CitizenBonds");
 const TimingDesync = require("./CitizenTimingDesync");
 const { brainTickDue } = require("./CitizenTickLod");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // --- tuning --------------------------------------------------------------------
 
@@ -513,7 +517,7 @@ function tickCitizenWork(director, record, nowMs) {
       const line = workLine(record, active.trade, rng);
       if (line) {
         try {
-          bot.forceChat?.(line);
+          { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
         } catch {
           // Cosmetic.
         }

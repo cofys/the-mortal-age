@@ -21,6 +21,10 @@ const { getDirector } = require("./director/CitizenDirector");
 const { siteTileByKingdom } = require("./brain/CitizenSites");
 const { needsFor, addMood } = require("./brain/CitizenNeeds");
 const { noisyTile, agentRng } = require("./lib/humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("./constants");
+const { voiceFor, voiceLine } = require("./lib/citizenVoice");
+const { sayPublic } = require("./chat/CitizenSayPublic");
+
 const {
   ROLE_REFUGEE,
   ATTR_REFUGEE_ROUTE,
@@ -99,11 +103,11 @@ function spawnColumn(attackerId, defenderId) {
       if (!bot) continue;
       bot.setAttribute?.(ATTR_REFUGEE_ROUTE, route);
       bot.setAttribute?.(ATTR_REFUGEE_WAR, warKey);
-      // Hungry and scared: starving, broke, frightened. The director's
-      // feeding pass finds no coins, so they stay visibly hungry.
+      // Battered and scared: hurt, broke, frightened. The director's
+      // feeding pass finds no coins, so they stay visibly hurt.
       const needs = needsFor(record.username);
       if (needs) {
-        needs.hunger = 5 + Math.random() * 15;
+        needs.hp = 30 + Math.random() * 20;
         needs.energy = 40 + Math.random() * 20;
       }
       addMood(bot, -30);
@@ -118,7 +122,7 @@ function spawnColumn(attackerId, defenderId) {
         // Non-fatal.
       }
       try {
-        bot.forceChat?.(pick(FLIGHT_CRIES).slice(0, 120));
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [pick(FLIGHT_CRIES).slice(0, 120)] })); }
       } catch {
         // The flight speaks for itself.
       }

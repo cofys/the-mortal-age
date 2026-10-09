@@ -26,6 +26,8 @@ const {
   humanizerProfile,
 } = require("../../lib/humanizer");
 const { getMemory } = require("../../lib/CitizenMemory");
+const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
 
 const ARRIVE_RADIUS = 2;
 const SCAN_RADIUS_TILES = 12;
@@ -33,13 +35,22 @@ const STRANGER_CHALLENGE_COOLDOWN_MS = 60000;
 const GLOBAL_CHALLENGE_COOLDOWN_MS = 20000;
 const OFFICE_ACK_COOLDOWN_MS = 5 * 60 * 1000;
 
-const CHALLENGE_LINES = Object.freeze([
-  "Halt! State your business here.",
-  "Hold it. You don't wear our colours — who sent you?",
-  "Easy, traveller. This street is watched. Move along peaceful.",
-  "Papers? No? Then keep your hands where I can see them.",
-  "Nothing to fear if you've nothing to hide. Carry on.",
-]);
+const CHALLENGE_LINES = Object.freeze({
+  plain: Object.freeze([
+    "Halt! State your business here.",
+    "Hold it. You don't wear our colours — who sent you?",
+    "Easy, traveller. This street is watched. Move along peaceful.",
+    "Papers? No? Then keep your hands where I can see them.",
+    "Nothing to fear if you've nothing to hide. Carry on.",
+  ]),
+  terse: Object.freeze([
+    "halt. business?",
+    "hold it. who sent you?",
+    "easy. move along.",
+    "hands where i can see em.",
+    "nothing to hide, move on.",
+  ]),
+});
 
 const CHALLENGE_LINES_WAR = Object.freeze([
   "HALT! War is on — no strangers pass this line.",
@@ -49,20 +60,31 @@ const CHALLENGE_LINES_WAR = Object.freeze([
   "Press-gangs walk tonight. You look able-bodied... move along, citizen, and stay out of sight.",
 ]);
 
-const GREETING_LINES = Object.freeze([
-  "Quiet watch today.",
-  "All quiet on the walls.",
-  "Mind the pickpockets near the market.",
-]);
+const GREETING_LINES = Object.freeze({
+  plain: Object.freeze([
+    "Quiet watch today.",
+    "All quiet on the walls.",
+    "Mind the pickpockets near the market.",
+  ]),
+  terse: Object.freeze(["quiet today.", "all quiet.", "watch yer purse."]),
+});
 
-const WARNED_LINES = Object.freeze([
-  "You again, {name}. The watch has been warned about you — move along, carefully.",
-  "Hold it, {name}. We remember what you did here. One wrong move.",
-  "I've heard your name, {name}, and not in a good way. Keep walking.",
-]);
+const WARNED_LINES = Object.freeze({
+  plain: Object.freeze([
+    "You again, {name}. The watch has been warned about you — move along, carefully.",
+    "Hold it, {name}. We remember what you did here. One wrong move.",
+    "I've heard your name, {name}, and not in a good way. Keep walking.",
+  ]),
+  terse: Object.freeze([
+    "you again, {name}. warned about you. move along.",
+    "hold it, {name}. we remember. one wrong move.",
+    "{name}. heard things. keep walking.",
+  ]),
+});
 
-function pickWarnedLine(state, username) {
-  return WARNED_LINES[Math.floor(state.rng() * WARNED_LINES.length)].replaceAll(
+function pickWarnedLine(state, username, player) {
+  const personality = player?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+  return voiceLine(voiceFor(personality), WARNED_LINES, state.rng).replaceAll(
     "{name}",
     username
   );
@@ -116,9 +138,16 @@ function createGuardPatrolAction(spec, world) {
     });
   }
 
-  function pickChallengeLine(state, atWar) {
+  function pickChallengeLine(state, atWar, player) {
     const pool = atWar ? CHALLENGE_LINES_WAR : CHALLENGE_LINES;
-    return pool[Math.floor(state.rng() * pool.length)];
+    // War lines stay as-is (urgency overrides voice); peacetime challenges
+    // go through the citizen's voice.
+    if (atWar || !pool.plain) {
+      const flat = atWar ? pool : pool.plain;
+      return flat[Math.floor(state.rng() * flat.length)];
+    }
+    const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+    return voiceLine(voiceFor(personality), pool, state.rng);
   }
 
   function maybeChallenge(ctx, state, kingdomId) {
@@ -168,8 +197,8 @@ function createGuardPatrolAction(spec, world) {
       state.challengedAt.set(username, nowMs);
       state.nextChallengeAt = nowMs + GLOBAL_CHALLENGE_COOLDOWN_MS;
       try {
-        player.forceChat?.(
-          warned ? pickWarnedLine(state, username) : pickChallengeLine(state, atWar)
+        sayPublic(player,
+          warned ? pickWarnedLine(state, username, player) : pickChallengeLine(state, atWar, player)
         );
       } catch (error) {
         // Cosmetic; never break the patrol.
@@ -227,7 +256,7 @@ function createGuardPatrolAction(spec, world) {
       state.nextAcknowledgeAt =
         nowMs + logNormalJitter(state.rng, 30000, state.human.tempoSigma);
       try {
-        player.forceChat?.(pickOfficeAddressLine(state, held[0].title));
+        sayPublic(player, pickOfficeAddressLine(state, held[0].title));
       } catch (error) {
         // Cosmetic; never break the patrol.
       }
@@ -299,9 +328,8 @@ function createGuardPatrolAction(spec, world) {
         state.target = null;
         if (chance(state.rng, 0.12 * state.human.chatRate)) {
           try {
-            player.forceChat?.(
-              GREETING_LINES[Math.floor(state.rng() * GREETING_LINES.length)]
-            );
+            const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+            sayPublic(player, voiceLine(voiceFor(personality), GREETING_LINES, state.rng));
           } catch (error) {
             // Cosmetic only.
           }

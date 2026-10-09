@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenCooks — cook citizens who feed the cities: tavern keepers serve
@@ -288,28 +292,24 @@ function waresFor(username, type, dateMs) {
 // === Visible work lines (forceChat emotes, zero LLM) ===
 const WORK_LINES = {
   [COOK_TAVERN_KEEPER]: [
-    "*pulls a frothing pint*",
-    "*wipes down the bar*",
-    "*slides a platter across the counter*",
-    "*tastes the stew and nods approvingly*",
+    "Tavern's open!",
+    "Hot food here.",
+    "Keeper serving.",
   ],
   [COOK_BAKER]: [
-    "*kneads the dough*",
-    "*slides the loaves into the oven*",
-    "*dusts the counter with flour*",
-    "*pulls out a golden-brown tray*",
+    "Fresh bread!",
+    "Baking today.",
+    "Hot loaves here.",
   ],
   [COOK_CHEF]: [
-    "*flambés the pan*",
-    "*tastes the sauce and adjusts the seasoning*",
-    "*plates the dish with a flourish*",
-    "*sharpens the carving knife*",
+    "Chef at work.",
+    "Cooking up a feast.",
+    "Kitchen's busy.",
   ],
   [COOK_STREET_VENDOR]: [
-    "*turns the skewers on the grill*",
-    "*fans the coals*",
-    "*wraps a hot parcel in paper*",
-    "*calls out the menu to the street*",
+    "Street food here!",
+    "Hot snacks!",
+    "Vendor open.",
   ],
 };
 
@@ -526,7 +526,7 @@ function doCookWork(director, record, citizen, type, nowMs) {
   if (Math.random() < SPECIAL_CHANCE) {
     const special = specialFor(record.username, record.kingdom, nowMs);
     try {
-      citizen.forceChat?.(specialLineFor(Math.random, special, kitchen));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [specialLineFor(Math.random, special, kitchen)] })); }
     } catch {
       // forceChat is best-effort.
     }
@@ -535,7 +535,7 @@ function doCookWork(director, record, citizen, type, nowMs) {
     return;
   }
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -560,7 +560,7 @@ function doCookHawk(director, citizen, record, type, nowMs) {
   const wares = waresFor(record.username, type, nowMs);
   const line = mealLineFor(Math.random, meal, kitchen);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -574,7 +574,7 @@ function doTeachOffer(citizen, record, type, nowMs) {
   const meal = mealFor(record.username, record.kingdom, nowMs);
   const line = teachLineFor(Math.random, meal);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }

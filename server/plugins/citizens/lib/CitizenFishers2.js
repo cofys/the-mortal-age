@@ -38,6 +38,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level safeRequire (potters perf lesson): the pro-fisher exclusion
 // check runs per citizen per tick, so no lazy requires in that path.
@@ -102,27 +106,15 @@ const CRAB_CATCHES = ["crab", "edible crab", "mud crab", "red crab"];
 // === Scripted lines ===
 const CAST_LINES = {
   [FISHERFOLK_NET]: [
-    "*swings the hand net in a wide arc*",
-    "*hauls the net in, hand over hand*",
-    "*mends a tear in the net with quick stitches*",
     "Easy... let her settle... NOW!",
   ],
   [FISHERFOLK_LINE]: [
-    "*casts the line out over the water*",
-    "*reels in slowly, watching the float*",
-    "*baits the hook with a fat worm*",
     "Shhh... you'll scare them off.",
   ],
   [FISHERFOLK_CRAB]: [
-    "*hauls up a crab pot, dripping*",
-    "*sets a baited pot back down gently*",
-    "*ties a crab's claws with twine*",
     "Mind the nippers on that one!",
   ],
   [FISHERFOLK_STALL]: [
-    "*lays the morning's catch out on ice*",
-    "*calls out the day's prices*",
-    "*guts and scales a fish with practiced flicks*",
     "Fresh as the tide, friend — caught this morning!",
   ],
 };
@@ -547,7 +539,7 @@ function doFisherfolkWork(director, record, citizen, type, nowMs) {
         fish: big.fish,
         weight: big.weightKg,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `landed a ${big.weightKg}kg ${big.fish} at ${spot.name}`);
       seedRumor(`A ${big.weightKg}kg ${big.fish} landed at ${spot.name}!`);
       return;
@@ -558,17 +550,17 @@ function doFisherfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.35) {
     const line = pickOne(Math.random, CAST_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `fished at ${spot.name}`);
   } else if (roll < 0.55) {
     const todays = catchFor(name, type, spot, nowMs);
     const fish = todays.length ? todays[0] : "fish";
     const line = fill(pickOne(Math.random, CATCH_LINES), { fish });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `caught ${todays.join(", ")} at ${spot.name}`);
   } else if (roll < 0.7) {
     const line = pickOne(Math.random, TEACH_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `shared fishing wisdom at ${spot.name}`);
   } else if (type === FISHERFOLK_STALL) {
     const todays = catchFor(name, type, spot, nowMs);
@@ -578,13 +570,13 @@ function doFisherfolkWork(director, record, citizen, type, nowMs) {
       spot: spot.name,
       price: priceFor(fish, nowMs),
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `sold fresh ${fish} at the community stall`);
   } else {
     const todays = catchFor(name, type, spot, nowMs);
     const fish = todays.length ? todays[0] : "fish";
     const line = fill(pickOne(Math.random, SHARE_LINES), { fish });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `shared ${fish} with neighbors at ${spot.name}`);
   }
 }

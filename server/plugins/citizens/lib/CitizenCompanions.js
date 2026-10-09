@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenCompanions — citizens invite players on personal outings.
@@ -362,7 +366,7 @@ function sendCompanionInvite(citizen, record, player, nowMs, rng) {
 
   // Visible: the citizen speaks the invitation.
   try {
-    citizen.forceChat(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // Non-fatal — the invite is still pending.
   }

@@ -21,9 +21,13 @@
  */
 
 const { getMemory } = require("./lib/CitizenMemory");
+const { sayPublic } = require("./chat/CitizenSayPublic");
 const { getJournal } = require("./lib/CitizenJournal");
 const { humanizerProfile, chance } = require("./lib/humanizer");
 const { normalizeName } = require("./lib/CitizenBonds");
+const { voiceFor, voiceLine } = require("./lib/citizenVoice");
+const { tryScriptedReaction } = require("./chat/CitizenHeardReactions");
+const { ATTR_CITIZEN_ROLE, ATTR_CITIZEN_PERSONALITY } = require("./constants");
 
 const BOT_HOST_ADDRESS = "bot"; // set by bots/behaviours/spawn/BotPlayerFactory.js
 const NOTICE_RADIUS = 14; // tiles — close enough to actually talk to
@@ -267,7 +271,7 @@ function onPlayerLevelUpNotice(event, nowMs = Date.now()) {
   }
   const line = fillLine(pick(pool), { name: playerName, skill: skillName, level: newLevel });
   try {
-    bot.forceChat?.(line.slice(0, 120));
+    sayPublic(bot, line.slice(0, 120));
   } catch {
     // A shy citizen.
   }
@@ -287,6 +291,141 @@ function onPlayerLevelUpNotice(event, nowMs = Date.now()) {
     });
   } catch {
     // The journal must never break the notice.
+  }
+}
+
+// --- Citizen level-ups ------------------------------------------------------
+// Citizens are full Player objects with real skill managers: they level through
+// the same SkillManager.addExperience path as real players, so the engine
+// already fires the level-up graphic + sound for them (SkillManager.ts:
+// performGraphic(LEVEL_UP_GRAPHIC), Sounds.sendSound LEVEL_UP). What was
+// missing: the announcement and the "gz!" culture. A citizen grinding fishing
+// for hours leveled in total silence — the critical bot tell.
+//
+// So when a CITIZEN levels (citizens:role set, not a real player): the leveler
+// announces it out loud like a player would, and up to two nearby citizens
+// answer with gz through the same scripted reflex real chat uses
+// (tryScriptedReaction — it already pattern-matches level-up announcements,
+// applies its own 60s throttle + personality gate, and speaks via sayPublic
+// so the gz lands in nearby players' chat boxes too).
+
+// A citizen announces at most this often; milestones always announce.
+const CITIZEN_ANNOUNCE_COOLDOWN_MS = 15 * 60 * 1000;
+const CITIZEN_ANNOUNCE_CHANCE = 0.7; // per eligible non-milestone level
+const MAX_GZ_REACTORS = 2;
+
+// Announce lines are shaped to match CitizenHeardReactions' levelup pattern
+// ("ding|just hit|just got|just reached" + a digit), so nearby citizens'
+// tryScriptedReaction reflex fires on them.
+const CITIZEN_ANNOUNCE_LINES = Object.freeze({
+  plain: Object.freeze([
+    "just hit {level} {skill}!",
+    "ding {level} {skill}!",
+    "just got {level} {skill}!",
+    "just reached {level} {skill}!",
+  ]),
+  terse: Object.freeze([
+    "ding. {level} {skill}.",
+    "just hit {level} {skill}.",
+    "just got {level} {skill}.",
+  ]),
+});
+const CITIZEN_MILESTONE_LINES = Object.freeze({
+  plain: Object.freeze([
+    "just hit {level} {skill}!! let's go!",
+    "ding! {level} {skill}! been working toward this",
+    "just reached {level} {skill}!",
+  ]),
+  terse: Object.freeze([
+    "ding. {level} {skill}. big one.",
+    "just hit {level} {skill}. finally.",
+  ]),
+});
+
+const lastCitizenAnnounceAt = new Map(); // username -> timestamp
+
+function isLevelingCitizen(player) {
+  if (!player || isRealPlayer(player)) return false;
+  try {
+    const role = player.getAttribute?.(ATTR_CITIZEN_ROLE);
+    return typeof role === "string" && role.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Pick up to n distinct random elements (Fisher-Yates, no full shuffle). */
+function pickUpTo(array, n, rng = Math.random) {
+  const pool = [...array];
+  const out = [];
+  while (pool.length > 0 && out.length < n) {
+    out.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+  }
+  return out;
+}
+
+function onCitizenLevelUpNotice(event, nowMs = Date.now()) {
+  const { player, skill, oldLevel, newLevel } = event ?? {};
+  if (!isLevelingCitizen(player)) return;
+  if (!Number.isInteger(newLevel) || newLevel <= (oldLevel ?? 0)) return;
+  pruneNoticeCooldowns(nowMs);
+
+  let skillName = "that skill";
+  try {
+    skillName = String(skill?.getName?.() ?? skill?.name ?? "that skill").toLowerCase();
+  } catch {
+    // keep fallback
+  }
+
+  const milestone = isMilestone(newLevel);
+  let username = null;
+  try {
+    username = player.getUsername?.() ?? null;
+  } catch {
+    // anonymous celebration
+  }
+
+  // The leveler announces: milestones always, other levels on chance + cooldown.
+  if (milestone || nowMs - (lastCitizenAnnounceAt.get(username) ?? 0) >= CITIZEN_ANNOUNCE_COOLDOWN_MS) {
+    if (!milestone && !chance(Math.random, CITIZEN_ANNOUNCE_CHANCE)) return;
+    let personality = {};
+    try {
+      personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+    } catch {
+      // voiceless celebration
+    }
+    const voice = voiceFor(personality);
+    const pool = milestone ? CITIZEN_MILESTONE_LINES : CITIZEN_ANNOUNCE_LINES;
+    const line = fillLine(voiceLine(voice, pool), { name: "", skill: skillName, level: newLevel });
+    if (!line) return;
+    try {
+      sayPublic(player, line.slice(0, 80));
+    } catch {
+      return; // couldn't speak — no announcement, no reactions
+    }
+    if (username) lastCitizenAnnounceAt.set(username, nowMs);
+
+    // Nearby citizens gz — the same reflex they'd use on real chat.
+    // The leveler is excluded (nearbyCitizens skips `local === player`).
+    const hearers = nearbyCitizens(player, NOTICE_RADIUS);
+    for (const { record, bot } of pickUpTo(hearers, MAX_GZ_REACTORS)) {
+      try {
+        tryScriptedReaction(record.username, username ?? "someone", line, bot, nowMs);
+      } catch {
+        // One shy citizen never ruins the celebration.
+      }
+    }
+
+    // Milestones go in the journal; the LLM mouth can reminisce truthfully.
+    if (milestone && username) {
+      try {
+        getJournal().log(username, "achievement", `Reached level ${newLevel} ${skillName}.`, {
+          data: { level: newLevel, skill: skillName },
+        });
+      } catch {
+        // The journal must never break the celebration.
+      }
+    }
   }
 }
 
@@ -326,7 +465,7 @@ function onPlayerDeathNotice(event, nowMs = Date.now()) {
     level: "",
   });
   try {
-    bot.forceChat?.(line.slice(0, 120));
+    sayPublic(bot, line.slice(0, 120));
   } catch {
     // A silent citizen.
   }
@@ -345,14 +484,24 @@ function onPlayerDeathNotice(event, nowMs = Date.now()) {
   }
 }
 
+/** Clear celebration cooldowns (tests). */
+function resetForTests() {
+  lastCitizenAnnounceAt.clear();
+}
+
 module.exports = {
   onPlayerLevelUpNotice,
+  onCitizenLevelUpNotice,
   onPlayerDeathNotice,
   // Pure helpers for the unit test.
   isMilestone,
+  isLevelingCitizen,
   warmthOf,
   fillLine,
   LEVEL_LINES,
   MILESTONE_LINES,
   DEATH_LINES,
+  CITIZEN_ANNOUNCE_LINES,
+  CITIZEN_MILESTONE_LINES,
+  resetForTests,
 };

@@ -27,6 +27,10 @@
  */
 
 const { getJournal } = require("./CitizenJournal");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const MYSTERY_WHISPER_RADIUS = 12; // tiles — tavern/street earshot
@@ -445,7 +449,7 @@ function announceToNearby(director, x, y, z, line) {
       if (cz !== z) continue;
       if (Math.max(Math.abs(cx - x), Math.abs(cy - y)) > MYSTERY_WHISPER_RADIUS) continue;
       try {
-        citizen.forceChat?.(line);
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       } catch {
         // One citizen failing to emote is fine.
       }
@@ -483,7 +487,7 @@ function whisperMystery(director, nowMs) {
     const line = whisperLine(rng, mystery);
     if (!line) continue;
     try {
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } catch {
       continue;
     }

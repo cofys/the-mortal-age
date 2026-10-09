@@ -30,6 +30,10 @@ const { getMemory } = require("./CitizenMemory");
 const { normalizeName } = require("./CitizenBonds");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // --- tuning ----------------------------------------------------------------
 
@@ -92,9 +96,7 @@ const PERFORMANCE_LINES = Object.freeze({
     "This one's called 'The Merchant's Regret' — you'll see why!",
   ]),
   [PERFORMER_JUGGLER]: Object.freeze([
-    "*tosses three knives high into the air*",
     "Watch closely — nothing up my sleeves, everything in the air!",
-    "*juggles painted balls, adding one more each pass*",
     "A juggler's got to eat! Toss a coin if you're entertained!",
     "*balances a sword on one fingertip* ...steady... steady...",
     "Five torches! Who wants to see FIVE torches?",
@@ -110,7 +112,6 @@ const PERFORMANCE_LINES = Object.freeze({
   [PERFORMER_MAGICIAN]: Object.freeze([
     "*flourishes an empty hand* ...and now — a coin from thin air!",
     "Pick a card. Any card. No, not that one — the OTHER one. Yes! That one!",
-    "*pulls a silk scarf from a spectator's ear*",
     "Magic, friends! Real magic! (Terms and conditions apply.)",
     "Watch the cup. Watch it closely. Now — where did the ball go?",
     "For my next trick, I'll make your coin... disappear into my hat. Generously.",
@@ -118,12 +119,9 @@ const PERFORMANCE_LINES = Object.freeze({
 });
 
 const CROWD_LINES = Object.freeze([
-  "*applauds warmly*",
   "Bravo! Encore!",
   "Ha! Wonderful!",
-  "*whistles appreciatively*",
   "Well done, well done!",
-  "*claps along with the rhythm*",
   "That's the spirit!",
   "Marvelous!",
 ]);
@@ -337,7 +335,7 @@ function performSet(director, record, bot, type, nowMs) {
   // The act itself is the line — scripted, zero LLM.
   const line = pickOne(Math.random, lines);
   try {
-    bot.forceChat?.(line.slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
   } catch {
     // A silent performer.
   }
@@ -361,7 +359,7 @@ function performSet(director, record, bot, type, nowMs) {
   let applauded = 0;
   for (const { bot: fan, name: fanName } of speakers) {
     try {
-      fan.forceChat?.(pickOne(Math.random, CROWD_LINES).slice(0, 120));
+      { const _cvp = fan.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(fan, voiceLine(voiceFor(_cvp), { plain: [pickOne(Math.random, CROWD_LINES).slice(0, 120)] })); }
     } catch {
       // A silent fan.
     }
@@ -535,7 +533,7 @@ function tipPerformer(event, deps = {}, nowMs = Date.now()) {
     amount,
   });
   try {
-    target.forceChat?.(line.slice(0, 120));
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
   } catch {
     // A silent performer.
   }

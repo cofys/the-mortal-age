@@ -43,6 +43,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level requires (perf lesson from the artisan fix): the exclusion
 // chain modules are linear deps with no back-references to this module,
@@ -114,28 +118,18 @@ const REMEDY_BASES = [
 // === Scripted lines ===
 const CARE_LINES = {
   [CAREGIVER_NEIGHBOR]: [
-    "*sits vigil by the sickbed*",
-    "*brings a bowl of hot soup*",
     "Rest now. I'll keep the lamp lit.",
-    "*changes the cool cloth on the brow*",
   ],
   [CAREGIVER_BONESETTER]: [
-    "*sets the splint straight*",
     "Hold still — this will ache, then mend.",
-    "*binds the break with linen strips*",
     "Keep weight off it a fortnight, mind.",
   ],
   [CAREGIVER_MIDWIFE]: [
-    "*tends the new mother*",
     "The little one feeds well. You're doing fine.",
-    "*wraps the babe warm*",
     "Rest, love. I'll watch them both.",
   ],
   [CAREGIVER_BREWER]: [
-    "*stirs the simmering pot*",
-    "*strains herbs through muslin*",
     "Three drops in hot water, morning and night.",
-    "*labels a corked bottle*",
   ],
 };
 
@@ -587,7 +581,7 @@ function doCareWork(director, record, citizen, type, nowMs) {
         patient: recovered,
         house: house.name,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `${recovered} recovered and is on the mend`);
       seedRumor(`${recovered} has recovered!`);
       return;
@@ -599,7 +593,7 @@ function doCareWork(director, record, citizen, type, nowMs) {
     // Care round: visit today's patient.
     const rounds = roundsFor(name, record.kingdomId, nowMs);
     const line = pickOne(Math.random, CARE_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     const r = rounds[0];
     journalize(
       citizen,
@@ -608,12 +602,12 @@ function doCareWork(director, record, citizen, type, nowMs) {
   } else if (roll < 0.8 && type === CAREGIVER_BREWER) {
     // Brewer: show off today's remedies.
     const remedies = remediesFor(name, nowMs);
-    citizen.forceChat?.(`*bottles ${remedies[0]}*`);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [`*bottles ${remedies[0]}*`] })); }
     journalize(citizen, `brewed ${remedies[0]} at ${house.name}`);
   } else {
     // Lesson offer.
     const line = pickOne(Math.random, LESSON_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered first-aid lessons at ${house.name}`);
   }
 }

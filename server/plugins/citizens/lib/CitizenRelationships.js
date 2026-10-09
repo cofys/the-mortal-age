@@ -17,6 +17,10 @@ const { getMemory } = require("./CitizenMemory");
 const { isFriend, bonds } = require("./CitizenBonds");
 const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const GREET_FRIEND_COOLDOWN_MS = 20 * 60 * 1000; // a friend is hailed at most every 20 min
 const GREET_NEARBY_TILES = 12;
@@ -212,7 +216,7 @@ function tickRelationships(director, now = Date.now()) {
           `Well met, ${playerName}!`,
           `${playerName} — fancy meeting you here!`,
         ];
-        bot.forceChat?.(lines[Math.floor(rng() * lines.length)]);
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [lines[Math.floor(rng() * lines.length)]] })); }
         journalEvent(record.username, `Hailed ${playerName} in passing.`, "social");
         void name;
         break; // one hail per citizen per tick

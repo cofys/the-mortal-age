@@ -22,6 +22,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const ENGINEER_RADIUS = 14; // tiles — close enough to see/hear
@@ -106,28 +110,16 @@ const BREAKTHROUGHS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [ENGINEER_MILLWRIGHT]: [
-    "*trues the millstone edge*",
-    "*fits the gearbox teeth*",
     "Mind the wheel — she turns whether you're ready or not.",
-    "*oils the axle bearings*",
   ],
   [ENGINEER_SIEGE]: [
-    "*winds the torsion skein*",
-    "*sights down the throwing arm*",
     "She'll throw a stone clean over the wall, mark me.",
-    "*checks the frame joints*",
   ],
   [ENGINEER_AQUEDUCT]: [
-    "*levels the arch course*",
-    "*seals the pipe joints with lead*",
     "Water always wins. We just give it somewhere to go.",
-    "*tests the sluice gate*",
   ],
   [ENGINEER_INVENTOR]: [
-    "*tweaks the escapement*",
-    "*sketches a new gear train*",
     "If the spring holds, this changes everything.",
-    "*polishes the brass fittings*",
   ],
 };
 
@@ -517,7 +509,7 @@ function tipEngineer(event, deps = {}, nowMs = Date.now()) {
 
   event.handled = true;
   try {
-    target.forceChat?.("Much obliged! The gears turn smoother with coin in the till.");
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: ["Much obliged! The gears turn smoother with coin in the till."] })); }
   } catch { /* cosmetic */ }
   journalize(target, `received a ${amount}-coin tip from ${player.getUsername?.() ?? "a patron"}`);
   return amount;
@@ -599,7 +591,7 @@ function doEngineerWork(director, record, citizen, type, nowMs) {
         work: gw.work,
         days: gw.lengthDays,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled ${gw.work} at ${workshop.name}`);
       seedRumor(`${gw.work} stands complete at ${workshop.name}!`);
       return;
@@ -613,7 +605,7 @@ function doEngineerWork(director, record, citizen, type, nowMs) {
       const key = "breakthrough:" + workshop.name + ":" + day;
       if (!lastFiredByCitizen.has(key)) {
         lastFiredByCitizen.set(key, nowMs);
-        citizen.forceChat?.(bt);
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [bt] })); }
         journalize(citizen, `announced a breakthrough at ${workshop.name}: "${bt}"`);
         seedRumor(`An inventor at ${workshop.name} claims a breakthrough!`);
         return;
@@ -625,15 +617,15 @@ function doEngineerWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${workshop.name}`);
   } else if (roll < 0.8) {
     const devices = devicesFor(name, record.kingdomId, nowMs);
     const device = devices.length ? devices[0] : "a fine machine";
-    citizen.forceChat?.(fill(pickOne(Math.random, HAWK_LINES), { device }));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, fill(voiceLine(voiceFor(_cvp), { plain: HAWK_LINES }), { device })); }
     journalize(citizen, `hawked ${device} at ${workshop.name}`);
   } else {
-    citizen.forceChat?.(pickOne(Math.random, COMMISSION_LINES));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: COMMISSION_LINES })); }
     journalize(citizen, `offered commissions at ${workshop.name}`);
   }
 }

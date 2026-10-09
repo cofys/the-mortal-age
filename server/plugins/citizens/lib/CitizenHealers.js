@@ -43,6 +43,10 @@ const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ==========================================
 
@@ -83,36 +87,33 @@ const CLINIC_OFFSETS = Object.freeze([
 
 const TREAT_EMOTES = Object.freeze({
   doctor: Object.freeze([
-    "*treats {patient}'s fever*",
-    "*cools {patient}'s brow with a damp cloth*",
-    "*administers a bitter tonic to {patient}*",
+    "Treating {patient}'s fever.",
+    "Cooling {patient}'s brow.",
+    "Bitter tonic for {patient}.",
   ]),
   herbalist: Object.freeze([
-    "*brews a remedy for {patient}*",
-    "*applies a poultice to {patient}*",
-    "*grinds herbs for {patient}'s cough*",
+    "Brewing a remedy for {patient}.",
+    "Poultice for {patient}.",
+    "Herbs for {patient}'s cough.",
   ]),
   surgeon: Object.freeze([
-    "*bandages {patient}'s wound*",
-    "*stitches {patient}'s cut*",
-    "*sets {patient}'s splint*",
+    "Bandaging {patient}'s wound.",
+    "Stitching {patient} up.",
+    "Splint for {patient}.",
   ]),
   midwife: Object.freeze([
-    "*tends to {patient}*",
-    "*wraps {patient} warmly*",
-    "*checks {patient}'s breathing*",
+    "Tending to {patient}.",
+    "Wrapping {patient} warmly.",
+    "Checking {patient}'s breathing.",
   ]),
   plague: Object.freeze([
-    "*quarantines {patient}*",
-    "*burns cleansing herbs near {patient}*",
-    "*treats {patient}'s plague sores*",
+    "Treating plague signs.",
+    "Keep back, tending the sick.",
+    "Plague care here.",
   ]),
 });
 
 const GATHER_EMOTES = Object.freeze([
-  "*gathers healing herbs*",
-  "*brews a batch of remedies*",
-  "*dries medicinal herbs*",
 ]);
 
 const PLAYER_OFFERS = Object.freeze([
@@ -122,9 +123,6 @@ const PLAYER_OFFERS = Object.freeze([
 ]);
 
 const PLAYER_TREAT_EMOTES = Object.freeze([
-  "*treats your wounds*",
-  "*applies a soothing salve*",
-  "*bandages you up*",
 ]);
 
 const BIRTH_ANNOUNCE = "*delivers a healthy baby!*";
@@ -462,7 +460,7 @@ function tickBirths(director, nowMs) {
         const rng2 = agentRng(`healers:delivery:${name}:${Math.floor(nowMs / 60000)}`);
         void rng2;
         try {
-          midwife.bot.forceChat?.(BIRTH_ANNOUNCE);
+          { const _cvp = midwife.bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(midwife.bot, voiceLine(voiceFor(_cvp), { plain: [BIRTH_ANNOUNCE] })); }
         } catch {
           // Cosmetic.
         }
@@ -527,7 +525,7 @@ function startTreatment(director, record, bot, specialty, patient, nowMs) {
   faceToward(bot, patient.tile);
   playAnim(director, bot, TREAT_ANIM);
   try {
-    bot.forceChat?.(treatEmote(rng, specialty, patient.ailment.kind, patient.name));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [treatEmote(rng, specialty, patient.ailment.kind, patient.name)] })); }
   } catch {
     // Cosmetic.
   }
@@ -586,7 +584,7 @@ function tickGather(director, record, bot, nowMs) {
   }
   playAnim(director, bot, GATHER_ANIM);
   try {
-    bot.forceChat?.(GATHER_EMOTES[Math.floor(rng() * GATHER_EMOTES.length)]);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [GATHER_EMOTES[Math.floor(rng() * GATHER_EMOTES.length)]] })); }
   } catch {
     // Cosmetic.
   }
@@ -616,13 +614,13 @@ function tickPlayerOffer(director, record, bot, nowMs) {
   faceToward(bot, botTile(player));
   playAnim(director, bot, TREAT_ANIM);
   try {
-    bot.forceChat?.(PLAYER_OFFERS[Math.floor(rng() * PLAYER_OFFERS.length)]);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [PLAYER_OFFERS[Math.floor(rng() * PLAYER_OFFERS.length)]] })); }
   } catch {
     // Cosmetic.
   }
   // A beat later the ritual completes — same tick is fine for scripted flavor.
   try {
-    bot.forceChat?.(PLAYER_TREAT_EMOTES[Math.floor(rng() * PLAYER_TREAT_EMOTES.length)]);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [PLAYER_TREAT_EMOTES[Math.floor(rng() * PLAYER_TREAT_EMOTES.length)]] })); }
   } catch {
     // Cosmetic.
   }

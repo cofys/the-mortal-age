@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenCartographers — cartographer citizens who map the world: surveyors
@@ -282,32 +286,24 @@ function sailorPorts() {
 // === Line pools ===
 const WORK_LINES = Object.freeze({
   [CARTO_SURVEYOR]: [
-    "*paces out the field, counting under {their} breath*",
-    "*drives a chalked marker into the ground*",
-    "*sights along the measuring chain*",
-    "*notes the bearing in a field book*",
-    "*stretches the chain taut between two stakes*",
+    "Surveying the land.",
+    "Mapping the terrain.",
+    "Surveyor at work.",
   ],
   [CARTO_MAPMAKER]: [
-    "*leans over the chart desk, pen scratching*",
-    "*inks in a coastline with careful strokes*",
-    "*compares two drafts, nodding slowly*",
-    "*shades in the high ground with a steady hand*",
-    "*blots the parchment and holds it to the light*",
+    "Drawing up maps.",
+    "Fresh charts here.",
+    "Mapmaker working.",
   ],
   [CARTO_EXPLORER]: [
-    "*unrolls a travel-stained field sketch*",
-    "*traces a route with a calloused finger*",
-    "*marks an X where the trail went cold*",
-    "*copies bearings from a battered journal*",
-    "*points out a pass no map has ever shown*",
+    "Charting new lands.",
+    "Explorer mapping.",
+    "New territories drawn.",
   ],
   [CARTO_SELLER]: [
-    "*straightens the maps on the stall*",
-    "*calls out the day's charts to passersby*",
-    "*unrolls a map for a closer look*",
-    "*taps a framed masterwork behind the counter*",
-    "*haggles cheerfully over a rolled chart*",
+    "Maps for sale!",
+    "Charts here, cheap!",
+    "Need a map?",
   ],
 });
 
@@ -535,7 +531,7 @@ function tickCartographers(director, nowMs) {
           const hawkVars = { region: featured ? featured.region : region.name, quality: featured ? featured.quality : QUALITY_FINE };
           const hawk = renderLine(pickOne(Math.random, HAWK_LINES), hawkVars);
           try {
-            citizen.forceChat(hawk);
+            { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [hawk] })); }
           } catch {
             // engine call failed — skip silently
           }
@@ -544,7 +540,7 @@ function tickCartographers(director, nowMs) {
           // Surveyors, mapmakers, chart-explorers work visibly
           if (line) {
             try {
-              citizen.forceChat(renderLine(line, { their: "their" }));
+              { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [renderLine(line, { their: "their" })] })); }
             } catch {
               // engine call failed — skip silently
             }
@@ -558,7 +554,7 @@ function tickCartographers(director, nowMs) {
         if (discovery && shouldAnnounce(Math.random, lastAnn, nowMs)) {
           const announce = renderLine(pickOne(Math.random, ANNOUNCE_LINES), { discovery });
           try {
-            citizen.forceChat(announce);
+            { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [announce] })); }
           } catch {
             // engine call failed — skip silently
           }
@@ -578,7 +574,7 @@ function tickCartographers(director, nowMs) {
           }
           if (offer) {
             try {
-              citizen.forceChat(offer);
+              { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [offer] })); }
             } catch {
               // engine call failed — skip silently
             }

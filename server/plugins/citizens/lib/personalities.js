@@ -11,6 +11,7 @@
 const path = require("path");
 const fs = require("fs");
 const { agentRng, chance } = require("./humanizer");
+const { voiceDirective } = require("./citizenVoice");
 const { ROLES } = require("../constants");
 
 const NAMES = JSON.parse(
@@ -181,6 +182,7 @@ function personalityCard(personality, kingdomName, kingdomSituation) {
     `You are ${personality.name}, a ${personality.role} of ${kingdomName ?? "no kingdom"}. ` +
     `You are ${traits}. Quirk: ${personality.quirk}. ` +
     `How you talk: ${voiceLine(personality)} ` +
+    `Texting rules: ${voiceDirective(personality)} ` +
     (kingdomSituation ? `Your land: ${kingdomSituation} ` : "") +
     "Speak plainly and briefly, like a busy person with work to do. " +
     "You do not know everything and you say so. Never break character. " +

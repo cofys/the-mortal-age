@@ -19,6 +19,10 @@
 const { getDirector } = require("./director/CitizenDirector");
 const { ROLE_GUARD, ROLE_MERCHANT } = require("./constants");
 const KingdomStore = require("../kingdoms/KingdomStore");
+const { ATTR_CITIZEN_PERSONALITY } = require("./constants");
+const { voiceFor, voiceLine } = require("./lib/citizenVoice");
+const { sayPublic } = require("./chat/CitizenSayPublic");
+
 const {
   BREAD_ID,
   buyFood,
@@ -109,7 +113,7 @@ function onKingdomRumor(event) {
   const speaker = pick(candidates);
   lastRumorAt.set(speaker.getUsername?.() ?? "", now);
   try {
-    speaker.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = speaker.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(speaker, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch {
     // A silent citizen is fine; the rumor still happened.
   }
@@ -144,7 +148,7 @@ function onPatrolOrdered(event) {
   if (guards.length === 0) return;
   const speaker = pick(guards);
   try {
-    speaker.forceChat?.(pick(PATROL_LINES[level] ?? PATROL_LINES.routine));
+    { const _cvp = speaker.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(speaker, voiceLine(voiceFor(_cvp), { plain: [pick(PATROL_LINES[level] ?? PATROL_LINES.routine)] })); }
   } catch {
     // Silence is acceptable.
   }
@@ -179,7 +183,7 @@ function onWageDay(event) {
   if (!KingdomStore.spendTax(kingdomId, total)) {
     const speaker = pick(guards);
     try {
-      speaker.forceChat?.(pick(GRUMBLE_LINES));
+      { const _cvp = speaker.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(speaker, voiceLine(voiceFor(_cvp), { plain: GRUMBLE_LINES })); }
     } catch {
       // Silent resentment.
     }
@@ -260,13 +264,11 @@ function onPlayerArrived(event) {
   const greeter = candidates[0];
   lastRumorAt.set(greeter.getUsername?.() ?? "", now);
   try {
-    greeter.forceChat?.(
-      pick([
+    { const _cvp = greeter.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(greeter, voiceLine(voiceFor(_cvp), { plain: [pick([
         "New face! Welcome home, traveller.",
         "Well met! Just arrived, have you?",
         "Welcome! Mind the streets after dark.",
-      ])
-    );
+      ])] })); }
   } catch {
     // A shy citizen.
   }
@@ -304,7 +306,7 @@ function speakFear(kingdomIds, lines) {
   lastFearAt.set(key, now);
   const speaker = pick(candidates);
   try {
-    speaker.forceChat?.(pick(lines).slice(0, 120));
+    { const _cvp = speaker.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(speaker, voiceLine(voiceFor(_cvp), { plain: [pick(lines).slice(0, 120)] })); }
   } catch {
     // A silent citizen is fine; the fear still happened.
   }
@@ -374,7 +376,7 @@ function speakDraft(kingdomIds) {
     lastDraftAt.set(kingdomId, now);
     const speaker = pick(guards);
     try {
-      speaker.forceChat?.(pick(DRAFT_LINES).slice(0, 120));
+      { const _cvp = speaker.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(speaker, voiceLine(voiceFor(_cvp), { plain: [pick(DRAFT_LINES).slice(0, 120)] })); }
     } catch {
       // A silent guardsman still serves.
     }

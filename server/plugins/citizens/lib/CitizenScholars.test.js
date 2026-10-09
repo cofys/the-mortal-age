@@ -175,7 +175,7 @@ function lcg(seed) {
     onlinePlayers: () => [player],
   });
   assert.equal(spoken.length, 2, "study line fires after lecture cooldown");
-  assert.ok(spoken[1].startsWith("*"), "study line is an emote");
+  assert.ok(!spoken[1].startsWith("*"), "study line is speech, not an emote");
 
   // Third immediate tick: both gates now on cooldown -> silence.
   tickLectures({

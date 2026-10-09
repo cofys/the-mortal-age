@@ -18,6 +18,7 @@ const {
 const { isKingdomAtWar } = require("../../CitizenEvents");
 const { siteTile, kingdomIdOf } = require("../CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
 const {
   agentRng,
   logNormalJitter,
@@ -150,7 +151,7 @@ function createIdleSocialAction(spec, world) {
         const pool = linesFor(anchorKind, atWar);
         if (chance(state.rng, 0.65)) {
           try {
-            player.forceChat?.(pool[Math.floor(state.rng() * pool.length)]);
+            sayPublic(player, pool[Math.floor(state.rng() * pool.length)]);
           } catch (error) {
             // Cosmetic only.
           }

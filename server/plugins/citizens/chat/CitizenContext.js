@@ -148,8 +148,8 @@ function buildContext(citizenUsername, speakerUsername) {
     const mood = moodWord(needs.mood);
     // "okay" is the default; only mention mood when it colors speech.
     if (mood && mood !== "okay") parts.push(`You feel ${mood}.`);
-    if (needs.hunger != null && needs.hunger < 25) parts.push("You are starving.");
-    else if (needs.hunger != null && needs.hunger < 45) parts.push("Your stomach is growling.");
+    if (needs.hp != null && needs.hp < 30) parts.push("You are badly hurt.");
+    else if (needs.hp != null && needs.hp < 60) parts.push("You are hurt.");
     if (needs.energy != null && needs.energy < 25) parts.push("You are exhausted.");
   }
 

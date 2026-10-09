@@ -1,4 +1,7 @@
 "use strict";
+const { voiceFor, voiceLine } = require("../lib/citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * MerchantShops — real shop fronts for citizen merchants.
@@ -623,7 +626,7 @@ function openStall(api, player, merchant) {
     if (isEnemy(stallMerchantName, stallPlayerName)) {
       player.sendMessage(`${stallMerchantName}: I don't serve your kind. Leave.`);
       try {
-        merchant.forceChat?.("I don't serve enemies.");
+        { const _cvp = merchant.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(merchant, voiceLine(voiceFor(_cvp), { plain: ["I don't serve enemies."] })); }
       } catch {
         // Non-fatal.
       }
@@ -695,7 +698,7 @@ function openStall(api, player, merchant) {
   const greeting = memory.greetingFor(merchantName, playerName);
   if (greeting) {
     try {
-      merchant.forceChat?.(greeting);
+      { const _cvp = merchant.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(merchant, voiceLine(voiceFor(_cvp), { plain: [greeting] })); }
     } catch (error) {
       // Cosmetic.
     }
@@ -804,9 +807,7 @@ function buyFromMerchant(api, player, ware, amount) {
         text: `spends like a lord at ${merchant.getUsername?.() ?? "the"}'s stall — a generous patron!`,
         holder: merchant.getUsername?.() ?? "",
       });
-      merchant.forceChat?.(
-        `${player.getUsername?.() ?? "Friend"}! Generous as ever — the street will hear of it!`
-      );
+      { const _cvp = merchant.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(merchant, voiceLine(voiceFor(_cvp), { plain: [`${player.getUsername?.() ?? "Friend"}! Generous as ever — the street will hear of it!`] })); }
     }
   } catch (error) {
     // Cosmetic.

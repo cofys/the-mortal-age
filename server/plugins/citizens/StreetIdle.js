@@ -35,6 +35,10 @@ const { getMemory } = require("./lib/CitizenMemory");
 const { humanizerProfile, chance } = require("./lib/humanizer");
 const { normalizeName } = require("./lib/CitizenBonds");
 const { warmthOf } = require("./StreetNotices");
+const { ATTR_CITIZEN_PERSONALITY } = require("./constants");
+const { voiceFor, voiceLine } = require("./lib/citizenVoice");
+const { sayPublic } = require("./chat/CitizenSayPublic");
+
 
 const BOT_HOST_ADDRESS = "bot"; // set by bots/behaviours/spawn/BotPlayerFactory.js
 const IDLE_RADIUS = 10; // tiles — close enough to notice someone standing still
@@ -293,7 +297,7 @@ function onIdleSeen(event, nowMs = Date.now()) {
     name: playerName,
   });
   try {
-    bot.forceChat?.(line.slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
   } catch {
     // A silent citizen.
   }

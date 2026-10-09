@@ -44,6 +44,10 @@ const fs = require("fs");
 const path = require("path");
 const { getJournal } = require("./CitizenJournal");
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-fishing-tournaments.json");
 
@@ -111,9 +115,7 @@ const TRASHTALK_LINES = Object.freeze([
 ]);
 
 const CATCH_LINES = Object.freeze([
-  "*{name} hauls in a {fish}!*",
   "{name}: \"That's a beauty! {fish}, right there!\"",
-  "*{name} holds up a {fish} for all to see*",
 ]);
 
 const WIN_LINES = Object.freeze([
@@ -125,7 +127,6 @@ const WIN_LINES = Object.freeze([
 const GRUMBLE_LINES = Object.freeze([
   "{name}: \"The fish were biting everyone else's hooks today...\"",
   "{name}: \"Next time. Next time for sure.\"",
-  "*{name} glares at the leaderboard*",
 ]);
 
 // === State ===
@@ -564,7 +565,7 @@ function announce(director, t, announcement) {
       const citizen = (director.isOnline(record) ? director.getBot(record) : null);
       if (!citizen) continue;
       if (!anyRealPlayerNear(director, citizen, TOURNAMENT_RADIUS)) continue;
-      citizen.forceChat?.(announcement.text.slice(0, 120));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [announcement.text.slice(0, 120)] })); }
       return;
     }
   } catch { /* visible announcement is best-effort */ }
@@ -604,7 +605,7 @@ function banter(director, t, nowMs, rng) {
           fish,
         });
       }
-      citizen.forceChat?.(line.slice(0, 120));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
       trashtalkCooldowns.set(normalizeName(e.username), nowMs);
     }
   } catch (e) {
@@ -654,7 +655,7 @@ function celebrate(director, t, nowMs, rng) {
           name: e.username,
         });
       }
-      citizen.forceChat?.(line.slice(0, 120));
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
       trashtalkCooldowns.set(normalizeName(e.username), nowMs);
     }
   } catch (e) {

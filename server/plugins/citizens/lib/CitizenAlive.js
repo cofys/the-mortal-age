@@ -31,6 +31,10 @@
 const { agentRng, chance, logNormalJitter, humanizerProfile } = require("./humanizer");
 const { getJournal } = require("./CitizenJournal");
 const { brainTickDue } = require("./CitizenTickLod");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // --- tuning ------------------------------------------------------------------
 
@@ -307,7 +311,7 @@ function tickIdleLife(director, record, bot, nowMs) {
   // Small observations, only when watched (nobody monologues to an empty room).
   if (watched && chance(rng, IDLE_OBSERVE_CHANCE * profile.chatRate)) {
     try {
-      bot.forceChat?.(pickOne(rng, IDLE_OBSERVATIONS));
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: IDLE_OBSERVATIONS }, rng)); }
     } catch {
       // Cosmetic.
     }
@@ -365,7 +369,7 @@ function tickSocialAwareness(director, record, bot, nowMs) {
   lastGreetAt.set(name, nowMs);
 
   try {
-    bot.forceChat?.(pickOne(rng, CITIZEN_GREETINGS));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: CITIZEN_GREETINGS }, rng)); }
   } catch {
     // Cosmetic.
   }
@@ -377,7 +381,7 @@ function tickSocialAwareness(director, record, bot, nowMs) {
       const responses = ["Hey!", "Good day!", "Alright, mate.", "You too!"];
       setTimeout(() => {
         try {
-          other.forceChat?.(pickOne(rng, responses));
+          { const _cvp = other.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(other, voiceLine(voiceFor(_cvp), { plain: responses }, rng)); }
         } catch {
           // Cosmetic.
         }
@@ -407,7 +411,7 @@ function tickImperfections(director, record, bot, nowMs) {
     try {
       bot.getMovementQueue?.()?.clear?.();
       if (watched && chance(rng, 0.5)) {
-        bot.forceChat?.(pickOne(rng, DISTRACTION_LINES));
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: DISTRACTION_LINES }, rng)); }
       }
       journalEvent(record.username, "Got distracted by something on the way.", "alive");
     } catch {
@@ -592,7 +596,7 @@ function tickEmoteReactions(director, record, bot, nowMs) {
         // Small delay so it doesn't look instantaneous/robotic.
         setTimeout(() => {
           try {
-            bot.forceChat?.(line);
+            { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
           } catch {
             // Cosmetic.
           }

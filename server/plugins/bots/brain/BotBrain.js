@@ -296,6 +296,22 @@ class BotBrain {
     if (support?.skip === true) {
       return "running";
     }
+    // Decision layer hook (the citizens plugin sets world.decisionTick):
+    // needs-driven interrupts and re-decisions. Generic and optional like
+    // supportTick above — null unless a plugin installs it. Never breaks
+    // the tick: a throwing hook is logged and skipped.
+    try {
+      this.world?.decisionTick?.({
+        player: this.player,
+        state: this.ensureState(),
+        brain: this,
+        nowMs,
+      });
+    } catch (error) {
+      this.world?.log?.("bot_brain_decision_tick_failed", {
+        error: String(error?.message ?? error),
+      });
+    }
     const frame = this.frames[this.frames.length - 1];
     this.debugTick(frame);
     if (!frame) {

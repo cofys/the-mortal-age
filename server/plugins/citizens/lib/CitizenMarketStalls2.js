@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenMarketStalls2 — the stallfolk: amateur market-stall keepers under
@@ -143,12 +147,10 @@ const GOODS = {
 
 // Morning setup flavor: before 10:00 the stallfolk are still setting up.
 const SETUP_LINES = [
-  "*heaves the barrow into place*",
-  "*shakes the blanket out on the cobbles*",
-  "*stacks the crates just so*",
-  "*unfolds the blanket, goods and all*",
-  "*sets the barrow down with a grunt*",
-  "*wipes the crates down and lays out the goods*",
+  "Stall's open!",
+  "Setting up the barrow.",
+  "Goods out, come have a look.",
+  "Just unfolding the blanket.",
 ];
 
 // The stall cries: one pool per stall type.
@@ -517,7 +519,7 @@ function seedRumor(rng, event) {
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
   try {
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch { /* cosmetic */ }
 }
 

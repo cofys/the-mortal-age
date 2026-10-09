@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenWeatherReactions — citizens react to weather and time of day.
@@ -200,7 +204,6 @@ const LINES = {
   ongoingRain: [
     "Still raining, eh?",
     "This rain just won't quit.",
-    "*wring out a soaked sleeve*",
   ],
 };
 
@@ -278,7 +281,7 @@ function walkHome(director, bot, record) {
 
 function say(bot, line) {
   try {
-    bot.forceChat?.(String(line).slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(line).slice(0, 120)] })); }
   } catch {
     // Non-fatal.
   }

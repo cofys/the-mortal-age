@@ -290,6 +290,75 @@ function ensureClanChannel(record, getBot) {
 // Applied every tick for online citizens. Re-applies setFollowing so the
 // brain's activity changes don't permanently break follow. Data tier drives,
 // engine executes.
+//
+// Anti-stacking (Jon, 2026-10-08): three citizens piling on one leader's
+// exact tile is a bot tell. Two guards: max 2 followers per target, and a
+// leader who hasn't moved in 90s is "stuck" — followers give up and go
+// back to their own lives instead of standing on his tile forever.
+
+const MAX_FOLLOWERS_PER_TARGET = 2;
+const LEADER_STUCK_MS = 90 * 1000;
+const LEADER_STUCK_TILES = 2;
+/** targetName -> { x, y, at } — last observed leader position. */
+const leaderPositions = new Map();
+let lastLeaderPruneAt = 0;
+
+function pruneLeaderPositions(nowMs) {
+  if (nowMs - lastLeaderPruneAt < 3600 * 1000) return;
+  lastLeaderPruneAt = nowMs;
+  const cutoff = nowMs - 24 * 3600 * 1000;
+  for (const [k, v] of leaderPositions) {
+    if ((v?.at ?? 0) < cutoff) leaderPositions.delete(k);
+  }
+}
+
+function leaderTile(target) {
+  try {
+    const loc = target?.getLocation?.();
+    if (!loc) return null;
+    return { x: loc.getX(), y: loc.getY() };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * How many online citizen bots are currently following this target?
+ * Used to cap the pile-up.
+ */
+function followerCount(targetName, getBot, director) {
+  let count = 0;
+  const want = String(targetName ?? "").toLowerCase();
+  if (!want) return 0;
+  try {
+    for (const record of director?.roster?.values?.() ?? []) {
+      const bot = getBot ? getBot(record) : null;
+      if (!bot) continue;
+      const following = bot.getFollowing?.();
+      const fname = following?.getUsername?.();
+      if (fname && String(fname).toLowerCase() === want) count++;
+    }
+  } catch {
+    // Count is best-effort.
+  }
+  return count;
+}
+
+/**
+ * True when the leader hasn't meaningfully moved recently — followers
+ * should stop waiting on his tile and do something else.
+ */
+function isLeaderStuck(targetName, target, nowMs) {
+  const key = String(targetName ?? "").toLowerCase();
+  const tile = leaderTile(target);
+  if (!tile) return false;
+  const prev = leaderPositions.get(key);
+  leaderPositions.set(key, { x: tile.x, y: tile.y, at: nowMs });
+  if (!prev) return false; // first sighting — give them a chance
+  const moved = Math.max(Math.abs(tile.x - prev.x), Math.abs(tile.y - prev.y));
+  if (moved > LEADER_STUCK_TILES) return false;
+  return nowMs - prev.at > LEADER_STUCK_MS;
+}
 
 function tickFollow(record, getBot) {
   const name = record.username;
@@ -334,6 +403,27 @@ function tickFollow(record, getBot) {
     try { bot.setFollowing?.(null); } catch { /* non-fatal */ }
     return;
   }
+  // Anti-stacking: a leader who hasn't moved in a while is stuck — stop
+  // piling on his tile and go back to your own life.
+  const nowMs = Date.now();
+  pruneLeaderPositions(nowMs);
+  if (isLeaderStuck(targetName, target, nowMs)) {
+    try { bot.setFollowing?.(null); } catch { /* non-fatal */ }
+    if (follow?.target) clearFollow(name);
+    return;
+  }
+  // Anti-stacking: cap followers per target. The third citizen in line
+  // does something else instead of standing on the leader.
+  try {
+    const current = bot.getFollowing?.();
+    const alreadyFollowing = normalizeName(current?.getUsername?.()) === normalizeName(targetName);
+    if (!alreadyFollowing) {
+      const director = require("../director/CitizenDirector").getDirector?.();
+      if (followerCount(targetName, getBot, director) >= MAX_FOLLOWERS_PER_TARGET) {
+        return; // at capacity — this citizen keeps their own plans
+      }
+    }
+  } catch { /* non-fatal — fall through to normal apply */ }
   // Apply follow if not already following this target.
   try {
     const current = bot.getFollowing?.();

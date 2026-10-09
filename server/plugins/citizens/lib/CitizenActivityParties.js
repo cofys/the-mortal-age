@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenActivityParties — autonomous citizen group activities.
@@ -403,7 +407,7 @@ function maintainParty(director, party, leader, hour) {
     journalEvent(leaderName, line, "social");
     try {
       if (realPlayersNear(leaderBot).length > 0) {
-        try { leaderBot.forceChat?.(line); } catch { /* non-fatal */ }
+        try { { const _cvp = leaderBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(leaderBot, voiceLine(voiceFor(_cvp), { plain: [line] })); } } catch { /* non-fatal */ }
       }
     } catch { /* non-fatal */ }
   }

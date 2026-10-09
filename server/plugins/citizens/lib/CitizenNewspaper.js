@@ -32,6 +32,10 @@ const path = require("path");
 
 const { getJournal } = require("./CitizenJournal");
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const EDITION_INTERVAL_MS = 7 * 24 * 3600 * 1000; // weekly paper
@@ -437,7 +441,7 @@ function tickCrier(director, nowMs) {
 
       if (Math.random() >= CRIER_SHOUT_CHANCE) continue;
 
-      try { crier.forceChat?.(crierShoutLine(Math.random, edition)); } catch { /* best-effort */ }
+      try { { const _cvp = crier.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(crier, voiceLine(voiceFor(_cvp), { plain: [crierShoutLine(Math.random, edition)] })); } } catch { /* best-effort */ }
       lastShoutByCrier.set(crierRec.username, nowMs);
 
       try {

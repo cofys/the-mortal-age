@@ -24,6 +24,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Hoisted exclusion-chain requires (was: lazy require per citizen per tick).
 // The chain is linear with no back-references, so top-level is safe.
@@ -155,28 +159,16 @@ const GREAT_WORKS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [POTTER_VESSEL]: [
-    "*centers a lump of clay on the wheel*",
-    "*pulls the walls of a pot upward*",
     "Wet hands, steady elbows — that's the whole secret.",
-    "*trims the foot ring of a bowl*",
   ],
   [POTTER_TILE]: [
-    "*presses a tile into the wooden mold*",
-    "*trims the edges of a roof tile*",
     "Every roof in the kingdom starts on this bench.",
-    "*stacks greenware tiles to dry*",
   ],
   [POTTER_BRICK]: [
-    "*slashes clay into the brick mold*",
-    "*strikes the excess clay off with a wire*",
     "The builders take a thousand a week — never enough.",
-    "*turns out a row of bricks to dry*",
   ],
   [POTTER_ARTIST]: [
-    "*paints a glaze pattern on a vase*",
-    "*sculpts the features of a clay mask*",
     "Utility feeds the kiln; beauty feeds the soul.",
-    "*burnishes a figurine with a smooth stone*",
   ],
 };
 
@@ -573,7 +565,7 @@ function tipPotter(event, deps = {}, nowMs = Date.now()) {
 
   event.handled = true;
   try {
-    target.forceChat?.(pickOne(Math.random, TIP_THANKS));
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: TIP_THANKS })); }
   } catch { /* cosmetic */ }
   journalize(target, `received a ${amount}-coin tip from ${player.getUsername?.() ?? "a patron"}`);
   return amount;
@@ -655,7 +647,7 @@ function doPotterWork(director, record, citizen, type, nowMs) {
         work: gw.work,
         days: gw.lengthDays,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled ${gw.work} at ${workshop.name}`);
       seedRumor(`${gw.work} stands complete at ${workshop.name}!`);
       return;
@@ -672,7 +664,7 @@ function doPotterWork(director, record, citizen, type, nowMs) {
         piece: mw,
         fuel: fuelForToday(nowMs),
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled a masterwork at ${workshop.name}: ${mw}`);
       seedRumor(`A masterwork ${mw} unveiled at ${workshop.name}!`);
       return;
@@ -683,7 +675,7 @@ function doPotterWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.45) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${workshop.name}`);
   } else if (roll < 0.75) {
     const pieces = piecesFor(name, record.kingdomId, nowMs);
@@ -692,11 +684,11 @@ function doPotterWork(director, record, citizen, type, nowMs) {
       piece,
       demand: demandForToday(nowMs),
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hawked ${piece} at ${workshop.name}`);
   } else {
     const line = pickOne(Math.random, COMMISSION_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered commissions at ${workshop.name}`);
   }
 }

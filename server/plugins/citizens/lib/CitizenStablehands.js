@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenStablehands — stablehand citizens who care for horses, warhorses,
@@ -264,35 +268,31 @@ function feedFor(dateMs) {
 
 // === Line pools ===
 const GROOM_WORK = [
-  "*brushes down the {coat} {mount}*",
-  "*mucks out the stall*",
-  "*fills the water trough*",
-  "*picks the hooves clean*",
-  "*braids the mane neatly*",
-  "*rubs the coat to a shine*",
+  "Grooming the {mount} now.",
+  "Just brushing down.",
+  "Mucking out the stall.",
+  "Filling the trough.",
 ];
 
 const TRAINER_WORK = [
-  "*puts the {coat} {mount} through its paces*",
-  "*lunges the young horse in a circle*",
-  "*adjusts the saddle and girth*",
-  "*calls the horse to a canter*",
-  "*works the warhorse at the gallop*",
+  "Putting them through paces.",
+  "Training the young one.",
+  "Just adjusting tack.",
+  "Working on the canter.",
 ];
 
 const BREEDER_WORK = [
-  "*checks the mare's condition*",
-  "*leads the stallion to the paddock*",
-  "*notes the foal's bloodline in the stud book*",
-  "*weighs the newborn foal*",
+  "Checking the mare.",
+  "Leading them to the paddock.",
+  "Noting bloodlines.",
+  "New foal doing well.",
 ];
 
 const VET_WORK = [
-  "*poultices the lame leg*",
-  "*checks the horse's teeth*",
-  "*mixes a soothing mash*",
-  "*bandages the foreleg carefully*",
-  "*listens to the horse's breathing*",
+  "Poulticing that leg.",
+  "Checking teeth now.",
+  "Mixing a mash.",
+  "Bandaging up.",
 ];
 
 const STABLE_OFFERS = [
@@ -346,7 +346,7 @@ function logWork(username, kind, text) {
 
 function forceSay(bot, line) {
   try {
-    bot.forceChat?.(String(line).slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(line).slice(0, 120)] })); }
   } catch {
     // Cosmetic only.
   }

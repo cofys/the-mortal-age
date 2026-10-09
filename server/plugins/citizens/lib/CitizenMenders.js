@@ -33,6 +33,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const MENDER_RADIUS = 14; // tiles — close enough to see/hear
@@ -114,28 +118,16 @@ const REPAIRABLES = {
 // === Scripted lines ===
 const WORK_LINES = {
   [MENDER_SEAMSTRESS]: [
-    "*stitches a torn hem with quick even strokes*",
-    "*threads a needle and squints at the light*",
     "This cloak will outlive us all when I'm done with it.",
-    "*patches an elbow with matching cloth*",
   ],
   [MENDER_TINKER]: [
-    "*taps a hammer head straight on the anvil*",
-    "*oils a stiff hinge until it swings free*",
     "Give it a day and it'll cut like new.",
-    "*files a burr off a hatchet edge*",
   ],
   [MENDER_COBBLER]: [
-    "*hammers a new sole into place*",
-    "*waxes a thread and pulls it through the leather*",
     "These boots have another hundred miles in them.",
-    "*polishes a repaired shoe to a shine*",
   ],
   [MENDER_HANDYMAN]: [
-    "*tightens a wobbly chair leg*",
-    "*plugs a cracked bucket with pitch*",
     "Nothing a bit of care won't fix.",
-    "*rehangs a door so it swings true*",
   ],
 };
 
@@ -544,7 +536,7 @@ function doMenderWork(director, record, citizen, type, nowMs) {
         name: "Widow Hettie",
         item: job.item,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `finished a masterwork restoration of ${job.item}`);
       seedRumor(`A masterwork restoration at ${stall.name} — ${job.item} made better than new!`);
       return;
@@ -555,7 +547,7 @@ function doMenderWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `mending at ${stall.name}`);
   } else if (roll < 0.75 && jobs.length) {
     const job = pickOne(Math.random, jobs);
@@ -564,11 +556,11 @@ function doMenderWork(director, record, citizen, type, nowMs) {
       price: job.price,
       name: "young Pip",
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `finished repairing ${job.item} for ${job.price} coins`);
   } else {
     const line = pickOne(Math.random, INVITE_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered mending lessons at ${stall.name}`);
   }
 }
@@ -582,7 +574,7 @@ function thankCustomer(citizen, customerName) {
     const line = fill(pickOne(Math.random, THANKS_LINES), {
       name: String(customerName ?? "friend"),
     });
-    citizen?.forceChat?.(line);
+    { const _cvp = citizen?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `thanked ${customerName} for their custom`);
     return line;
   } catch {

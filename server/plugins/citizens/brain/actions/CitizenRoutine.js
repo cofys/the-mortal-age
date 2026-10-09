@@ -37,9 +37,12 @@ const {
   agentRng,
   logNormalJitter,
   noisyTile,
+  personalSpot,
   chance,
   humanizerProfile,
 } = require("../../lib/humanizer");
+const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
 
 const KIND_HOME = "home";
 const KIND_WORK = "work";
@@ -61,14 +64,24 @@ const CATCH_PRICE = 4;
 const COINS_ID = 995;
 const BREAD_ID = 2309;
 
-const FISHING_LINES = Object.freeze([
-  "Come on, bite...",
-  "The river's generous today.",
-  "Caught a boot last week. A BOOT.",
-  "Quiet water, full net. That's the way.",
-  "My father fished this same spot.",
-  "Shh — you'll scare them off.",
-]);
+const FISHING_LINES = Object.freeze({
+  plain: Object.freeze([
+    "Come on, bite...",
+    "The river's generous today.",
+    "Caught a boot last week. A BOOT.",
+    "Quiet water, full net. That's the way.",
+    "My father fished this same spot.",
+    "Shh — you'll scare them off.",
+  ]),
+  terse: Object.freeze([
+    "bite...",
+    "good water today.",
+    "caught a boot once.",
+    "quiet. good.",
+    "dad fished here.",
+    "shh.",
+  ]),
+});
 
 function minutesNow() {
   const now = new Date();
@@ -150,16 +163,18 @@ function walkTo(player, tile) {
   // the drunk weaves, the nervous darts. Applied here so every routine
   // leg carries the citizen's physical personality.
   let target = { x: tile.x, y: tile.y };
+  const username = player.getUsername?.() ?? "unknown";
   try {
     const { styleWalkTarget } = require("../../lib/CitizenAlive");
     const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
-    const username = player.getUsername?.() ?? "unknown";
     target = styleWalkTarget({ username, personality }, tile.x, tile.y);
   } catch {
     // Fall back to the unstyled target.
   }
-  const noisy = noisyTile(target.x, target.y, 3, null);
-  requestMovement(player, noisy.x, noisy.y, {
+  // Personal spot, not just noise: ten fishers should spread along the
+  // dock, not pile on the same tile with ±3 jitter.
+  const spot = personalSpot(username, target.x, target.y, 2, 8);
+  requestMovement(player, spot.x, spot.y, {
     reason: "citizen_routine",
     basicPather: true,
     z: tile.z ?? 0,
@@ -316,9 +331,8 @@ function createCitizenRoutineAction(spec, world) {
     state.casts += 1;
     if (chance(state.rng, 0.5 * state.human.chatRate)) {
       try {
-        player.forceChat?.(
-          FISHING_LINES[Math.floor(state.rng() * FISHING_LINES.length)]
-        );
+        const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+        sayPublic(player, voiceLine(voiceFor(personality), FISHING_LINES, state.rng));
       } catch (error) {
         // Cosmetic only.
       }

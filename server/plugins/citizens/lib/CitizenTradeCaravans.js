@@ -35,6 +35,10 @@ const { agentRng, chance } = require("./humanizer");
 const { normalizeName, sendInvite, getInvites, resolveInvite } = require("./CitizenBonds");
 const { KINGDOM_IDS } = require("../brain/CitizenSites");
 const { ROLE_MERCHANT, ROLE_GUARD } = require("../constants");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 let KingdomStore = null;
 try {
@@ -575,7 +579,7 @@ function shoutPhase(director, caravan, nowMs) {
   }
   if (line) {
     try {
-      bot.forceChat?.(line);
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     } catch {
       // Non-fatal.
     }

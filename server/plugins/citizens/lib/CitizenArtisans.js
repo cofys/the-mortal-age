@@ -44,6 +44,10 @@ const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const ARTISANS_PER_TRADE_PER_KINGDOM = 1; // scarcity: one master per trade per town
@@ -542,7 +546,7 @@ function tickDwell(director, name, info, bot, nowMs) {
       const id = commissionItem(name, p.getUsername(), info.trade, null, null, nowMs);
       if (id) {
         try {
-          bot.forceChat?.(`A commission for ${p.getUsername()}! I'll have it ready soon.`);
+          { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [`A commission for ${p.getUsername()}! I'll have it ready soon.`] })); }
         } catch {
           // Cosmetic.
         }
@@ -594,7 +598,7 @@ function tickArtisanCitizen(director, record, nowMs) {
   if (unrevealed) {
     unrevealed.revealed = true;
     try {
-      bot.forceChat?.(`Behold — ${unrevealed.name}!`);
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [`Behold — ${unrevealed.name}!`] })); }
     } catch {
       // Cosmetic.
     }
@@ -607,7 +611,7 @@ function tickArtisanCitizen(director, record, nowMs) {
     if (normalizeName(c.artisan) === name && c.completedAt && !c.announced) {
       c.announced = true;
       try {
-        bot.forceChat?.(`${c.commissioner}, your commission is ready — ${c.item}, ${c.detail}!`);
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [`${c.commissioner}, your commission is ready — ${c.item}, ${c.detail}!`] })); }
       } catch {
         // Cosmetic.
       }
@@ -625,7 +629,7 @@ function tickArtisanCitizen(director, record, nowMs) {
     if (chance(rng, OFFER_CHANCE)) {
       lastOfferAt.set(name, nowMs);
       try {
-        bot.forceChat?.(pickOne(rng, COMMISSION_OFFERS));
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: COMMISSION_OFFERS }, rng)); }
       } catch {
         // Cosmetic.
       }
@@ -642,7 +646,7 @@ function tickArtisanCitizen(director, record, nowMs) {
       if (chance(rng, TEACH_CHANCE)) {
         lastTeachAt.set(name, nowMs);
         try {
-          bot.forceChat?.(`*shows ${apprentice} the ${def.label}'s trade*`);
+          { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [`*shows ${apprentice} the ${def.label}'s trade*`] })); }
         } catch {
           // Cosmetic.
         }
@@ -660,7 +664,7 @@ function tickArtisanCitizen(director, record, nowMs) {
   lastWorkAt.set(name, nowMs);
   walkTo(director, bot, tile);
   try {
-    bot.forceChat?.(def.verb);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [def.verb] })); }
   } catch {
     // Cosmetic.
   }

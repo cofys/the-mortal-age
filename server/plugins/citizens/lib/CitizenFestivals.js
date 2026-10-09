@@ -26,6 +26,10 @@
 const { getJournal } = require("./CitizenJournal");
 const { normalizeName } = require("./CitizenBonds");
 const { agentRng } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const FESTIVAL_DURATION_DAYS = 3; // each festival runs 3 days
@@ -281,7 +285,7 @@ function tickFestivals(director, nowMs) {
       const line = fillLine(pickOne(rng, pool ?? FESTIVAL_LINES.mild), festival);
       lastChatByCitizen.set(key, nowMs);
       try {
-        citizen.forceChat?.(line.slice(0, 120));
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
       } catch {
         // A shy celebrant.
       }

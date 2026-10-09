@@ -280,6 +280,10 @@ function createBotActivityRegistry(options = {}) {
   const slots = new Map();
   const lastActivityByPlayer = new WeakMap();
   const blockedUntilByPlayer = new WeakMap();
+  // Optional scored-activity picker (the citizens plugin sets one): consulted
+  // before the default sticky-random choice. Must return a candidate from the
+  // given list, or null to fall back. A throwing picker never breaks the brain.
+  let activityPicker = null;
 
   function isBlocked(player, activityId, nowMs) {
     const until = blockedUntilByPlayer.get(player)?.get(activityId);
@@ -307,6 +311,17 @@ function createBotActivityRegistry(options = {}) {
         !!activity && (slots.get(activity.id) ?? 0) < activity.capacity
       );
     },
+    /**
+     * Installs the scored-activity picker (see pickActivity). Pass null to
+     * restore the default sticky-random choice.
+     */
+    setActivityPicker(fn) {
+      activityPicker = typeof fn === "function" ? fn : null;
+    },
+    /** The current candidate list for a player (requires/capacity/blocked). */
+    listAvailable(player, nowMs = Date.now()) {
+      return available(player, nowMs);
+    },
     occupy(activity) {
       slots.set(activity.id, (slots.get(activity.id) ?? 0) + 1);
     },
@@ -325,6 +340,20 @@ function createBotActivityRegistry(options = {}) {
     pickActivity(player, nowMs = Date.now()) {
       const previousId = lastActivityByPlayer.get(player);
       const candidates = available(player, nowMs);
+      if (activityPicker) {
+        let picked = null;
+        try {
+          picked = activityPicker(player, candidates, nowMs) ?? null;
+        } catch (error) {
+          world?.log?.("bot_activity_picker_failed", {
+            error: String(error?.message ?? error),
+          });
+        }
+        if (picked && candidates.includes(picked)) {
+          lastActivityByPlayer.set(player, picked.id);
+          return picked;
+        }
+      }
       const previous = candidates.find((activity) => activity.id === previousId);
       const picked = previous ?? candidates[Math.floor(Math.random() * candidates.length)] ?? null;
       if (picked) {

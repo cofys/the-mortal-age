@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenArtisans2 — the woodfolk: bowl turners shaping green wood on pole
@@ -163,23 +167,17 @@ const LESSONS = [
 
 // === Scripted lines ===
 const TURN_LINES = [
-  "*treads the pole lathe, shavings curling*",
   "Green {wood} turns sweet — dry wood fights you.",
-  "*hollows a bowl with the gouge, steady as Sunday*",
   "Another bowl for the pile — {wood} this time!",
 ];
 
 const WEAVE_LINES = [
-  "*weaves willow withies, over-under-over*",
   "Soak the rush first or it snaps — that's the trick.",
-  "*stakes out a {basket} frame*",
   "Baskets for market day! {basket}, strong and light!",
 ];
 
 const WHITTLE_LINES = [
-  "*shaves a curl of wood with the knife*",
   "Mind the grain — cut with it, never against.",
-  "*carves a tiny horse, ears and all*",
   "Spoons, pegs, toys — whittling's honest work.",
 ];
 
@@ -620,7 +618,7 @@ function seedRumor(text) {
 /** Scripted speech via forceChat; never throws. */
 function forceSay(citizen, text) {
   try {
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch { /* cosmetic */ }
 }
 

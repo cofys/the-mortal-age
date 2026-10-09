@@ -24,6 +24,10 @@ const { getJournal } = require("./CitizenJournal");
 const { warmthOf } = require("../StreetNotices");
 const { agentRng, chance } = require("./humanizer");
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const TOAST_RADIUS = 14; // tiles — close enough to hear the toast
 const TOAST_FRESH_MS = 12 * 3600 * 1000; // journal news older than this is stale
@@ -212,7 +216,7 @@ function tickTavernHangout(director, kingdomId, hangout, nowMs) {
     "social"
   );
   try {
-    bot.forceChat?.(line);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // A shy toastmaster.
   }

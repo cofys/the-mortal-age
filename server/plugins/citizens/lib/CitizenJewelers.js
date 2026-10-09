@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenJewelers — jeweler citizens who cut gems, craft jewelry, and trade
@@ -146,28 +150,24 @@ const MASTERPIECES = Object.freeze([
 // === Visible work lines (forceChat emotes, zero LLM) ===
 const WORK_LINES = Object.freeze({
   "gem cutter": [
-    "*taps the chisel, a sliver of sapphire falls away*",
-    "*holds a ruby to the light, checking the facet*",
-    "*grinds a diamond against the wheel, sparks flying*",
-    "*polishes an emerald until it gleams*",
+    "Cutting gems today.",
+    "Facets and fire.",
+    "Gemcutter at work.",
   ],
   goldsmith: [
-    "*pours molten gold into the mold*",
-    "*hammers a gold band into shape*",
-    "*sets a ruby into a ring, seating it true*",
-    "*burnishes a silver necklace to a mirror shine*",
+    "Working gold.",
+    "Goldsmith here.",
+    "Shaping precious metals.",
   ],
   appraiser: [
-    "*weighs a diamond on the brass scales*",
-    "*peers through the loupe at an emerald's flaws*",
-    "*taps a gold coin, listening for the ring of truth*",
-    "*marks a valuation on the scroll with a flourish*",
+    "Appraising valuables.",
+    "What's it worth?",
+    "Appraiser open.",
   ],
   trader: [
-    "*lays out a velvet tray of loose gems*",
-    "*haggles over a pouch of diamonds*",
-    "*counts gold coins into a customer's hand*",
-    "*wraps a necklace in soft cloth for a buyer*",
+    "Trading gems.",
+    "Jewels bought and sold.",
+    "Trader here.",
   ],
 });
 
@@ -461,7 +461,7 @@ function doJewelerWork(director, record, citizen, type, nowMs) {
     const masterpiece = masterpieceFor(record.username, nowMs);
     if (masterpiece) {
       try {
-        citizen.forceChat?.(masterpieceLineFor(Math.random, masterpiece));
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [masterpieceLineFor(Math.random, masterpiece)] })); }
       } catch {
         // forceChat is best-effort.
       }
@@ -472,7 +472,7 @@ function doJewelerWork(director, record, citizen, type, nowMs) {
     }
   }
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -504,7 +504,7 @@ function doJewelerHawk(director, citizen, record, type, nowMs) {
   const wares = waresFor(record.username, type, nowMs);
   const line = hawkLineFor(Math.random, type, wares, metalsFor());
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -514,7 +514,7 @@ function doJewelerHawk(director, citizen, record, type, nowMs) {
 function doJewelerCommission(director, citizen, record, type) {
   const line = commissionLineFor(Math.random, type);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }

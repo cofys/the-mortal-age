@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenMiners — miner citizens who work the mines: prospectors read the
@@ -184,28 +188,24 @@ function oreFor(username, dateMs) {
 // === Visible work lines (forceChat emotes, zero LLM) ===
 const WORK_LINES = {
   [MINER_PROSPECTOR]: [
-    "*taps the rock wall, listening*",
-    "*studies the stone face*",
-    "*marks a promising seam with chalk*",
-    "*sniffs the air for gas*",
+    "Prospecting.",
+    "New veins?",
+    "Panning today.",
   ],
   [MINER_DIGGER]: [
-    "*swings the pickaxe*",
-    "*chips at the rock face*",
-    "*hauls a cart of ore*",
-    "*wedges a timber prop into place*",
+    "Digging deep.",
+    "Pickaxe swinging.",
+    "Miner at work.",
   ],
   [MINER_SMELTER]: [
-    "*stokes the furnace*",
-    "*pours the molten metal*",
-    "*quenches the fresh ingots*",
-    "*rakes the coals*",
+    "Smelting ore.",
+    "Furnace hot.",
+    "Metal pouring.",
   ],
   [MINER_GEMCUTTER]: [
-    "*facets a gemstone*",
-    "*polishes a sapphire*",
-    "*examines a rough stone against the light*",
-    "*sets a cut gem aside*",
+    "Cutting gems.",
+    "Facets shining.",
+    "Gemcutter working.",
   ],
 };
 
@@ -397,7 +397,7 @@ function doMineWork(director, record, citizen, type, nowMs) {
   const line = workLineFor(Math.random, type);
   if (!line) return;
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -427,7 +427,7 @@ function doRichVeinCallout(director, citizen, record, nowMs) {
   const ore = oreFor(record.username, nowMs);
   const line = richVeinLineFor(Math.random, mine, ore);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -438,7 +438,7 @@ function doRichVeinCallout(director, citizen, record, nowMs) {
 function doHazardWarning(citizen, username) {
   const line = hazardLineFor(Math.random);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }

@@ -36,6 +36,7 @@ const {
   humanizerProfile,
 } = require("../../lib/humanizer");
 const { hawkerLine } = require("../../lib/CitizenHawker");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
 
 const COINS = 995; // ItemIds.COINS, verified in ItemIdentifiers.ts
 
@@ -182,7 +183,7 @@ function createMerchantAction(spec, world) {
 
   function say(player, state, line) {
     try {
-      player.forceChat?.(line);
+      sayPublic(player, line);
     } catch (error) {
       // Cosmetic only.
     }

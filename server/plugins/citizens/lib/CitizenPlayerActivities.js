@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenPlayerActivities — let real players JOIN citizen activities.
@@ -160,7 +164,7 @@ function offerActivityToPlayers(director, record, party, opts) {
     if (players.length > 0) {
       const line = pickOne(rng, opts.formLines ?? ["We're heading out — anyone's welcome!"]);
       try {
-        bot.forceChat?.(line);
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       } catch {
         // Non-fatal.
       }

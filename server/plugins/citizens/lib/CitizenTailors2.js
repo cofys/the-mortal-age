@@ -36,6 +36,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level safeRequire (potters perf lesson): the pro-tailor exclusion
 // check runs per citizen per tick, so no lazy requires in that path.
@@ -111,28 +115,19 @@ const SEWING_CIRCLES = [
 // === Scripted lines ===
 const WORK_LINES = {
   [SEWFOLK_SEAMSTRESS]: [
-    "*pins a seam with her teeth, hands full of pins*",
-    "*stitches a hem in quick, even rows*",
     "Cut twice, measure once — grandmother's rule.",
     "*tries a sleeve against young Tomas's arm* Nearly fits!",
   ],
   [SEWFOLK_QUILTER]: [
-    "*squares another patch — blue gingham, yellow calico*",
-    "*rocks the quilting frame with three neighbors*",
     "Every patch is somebody's old dress. Nothing wasted.",
-    "*knots off a thread and bites it free*",
   ],
   [SEWFOLK_PATTERN]: [
-    "*chalk-marks a bodice pattern on brown paper*",
     "This bodice fits if you lengthen the dart — see?",
     "*pins pattern pieces to the cloth* Mind the grain!",
-    "*copies a sleeve pattern for Widow Fern*",
   ],
   [SEWFOLK_DYER]: [
-    "*stirs the dye vat with a long ash pole*",
     "*lifts dripping cloth from the madder bath* Red as a sunset!",
     "Woad for blue, madder for red — the garden gives it all.",
-    "*hangs dyed skeins to dry in the sun*",
   ],
 };
 
@@ -541,7 +536,7 @@ function doSewfolkWork(director, record, citizen, type, nowMs) {
         quilt: q.quilt,
         days: q.days,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled the ${q.quilt} at ${circle.name}`);
       seedRumor(`The ${q.quilt} is finished at ${circle.name}!`);
       return;
@@ -552,16 +547,16 @@ function doSewfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `sewed at ${circle.name}`);
   } else if (roll < 0.75) {
     const projects = projectsFor(name, record.kingdomId, nowMs);
     const garment = projects.length ? projects[0] : "a fine garment";
-    citizen.forceChat?.(`Nearly done — ${garment} for little ${name}.`);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [`Nearly done — ${garment} for little ${name}.`] })); }
     journalize(citizen, `finished ${garment} at ${circle.name}`);
   } else {
     const line = pickOne(Math.random, SHARE_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `shared patterns at ${circle.name}`);
   }
 }

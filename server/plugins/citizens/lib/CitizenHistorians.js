@@ -36,6 +36,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const HISTORIAN_RADIUS = 14; // tiles — close enough to see/hear
@@ -83,28 +87,16 @@ const ARCHIVES = [
 // === Scripted frames ===
 const RECORD_LINES = {
   [HISTORIAN_CHRONICLER]: [
-    "*dips a quill and writes in a steady hand*",
-    "*dates a fresh page in the chronicle*",
     "History is being made as we speak — someone must write it down.",
-    "*presses the page dry with blotting sand*",
   ],
   [HISTORIAN_ARCHIVIST]: [
-    "*slides a scroll into its pigeon-hole*",
-    "*dusts a stack of records with a cloth*",
     "Everything in its place, and every place recorded.",
-    "*checks a shelf twice, then nods*",
   ],
   [HISTORIAN_GENEALOGIST]: [
-    "*unrolls a long parchment of names*",
-    "*traces a family line with a fingertip*",
     "Your grandfather's grandfather was a hero, lad. It's all here.",
-    "*cross-references two family trees, nodding slowly*",
   ],
   [HISTORIAN_LOREKEEPER]: [
-    "*mends the spine of a cracked old tome*",
-    "*reads a faded legend aloud under breath*",
     "The old stories fade if nobody keeps them. I keep them.",
-    "*lights a candle over the fragile pages*",
   ],
 };
 
@@ -672,7 +664,7 @@ function doHistorianWork(director, record, citizen, type, nowMs) {
       kingdom: ch.kingdom,
       entry: ch.entries[0] || "a quiet day",
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `entered today's chronicle at ${archive.name}`);
     seedRumor(citizen, `wrote today's chronicle of ${ch.kingdom}`, archive.name);
     return;
@@ -682,7 +674,7 @@ function doHistorianWork(director, record, citizen, type, nowMs) {
   // before any routine flavor — real requests deserve real replies.
   const pending = pendingLedgerFor(director, citizen, HISTORIAN_RADIUS, nowMs);
   if (pending && Math.random() < 0.6) {
-    citizen.forceChat?.(LEDGER_ACK_LINES[pending.kind]);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [LEDGER_ACK_LINES[pending.kind]] })); }
     journalize(citizen, `answered a ${pending.kind} request from ${pending.playerName} at ${archive.name}`);
     return;
   }
@@ -691,29 +683,29 @@ function doHistorianWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.5) {
     const line = pickOne(Math.random, RECORD_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `recorded events at ${archive.name}`);
   } else if (roll < 0.75) {
     const line = fill(pickOne(Math.random, READ_LINES), { kingdom: kingdomName(kid) });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     const note = librarianNoteFor(record.username, kid, nowMs);
     if (note) journalize(citizen, `${note} (via the librarians' catalog)`);
   } else if (type === HISTORIAN_LOREKEEPER) {
     const preserved = preservedLegendFor(kid, nowMs);
     if (preserved) {
-      citizen.forceChat?.("*copies a fading legend into the permanent record*");
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: ["*copies a fading legend into the permanent record*"] })); }
       journalize(citizen, preserved.text);
       seedRumor(citizen, `preserved the fading legend of ${preserved.legend}`, archive.name);
     } else {
       const line = pickOne(Math.random, RECORD_LINES[type]);
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     }
   } else if (type === HISTORIAN_GENEALOGIST) {
-    citizen.forceChat?.("Bring me your grandfather's name and I'll find the rest of him.");
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: ["Bring me your grandfather's name and I'll find the rest of him."] })); }
     journalize(citizen, `offered to trace family lines at ${archive.name}`);
   } else {
     const line = pickOne(Math.random, type === HISTORIAN_CHRONICLER ? CONTRIBUTION_LINES : COMMISSION_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered historical services at ${archive.name}`);
   }
 }

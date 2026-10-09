@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenSailors — sailor citizens who crew the ships: deckhands haul lines,
@@ -244,32 +248,24 @@ function isStorm(weather) {
 // === Visible work lines (forceChat emotes, zero LLM) ===
 const WORK_LINES = {
   [SAILOR_DECKHAND]: [
-    "*hauls the mooring line*",
-    "*swabs the deck*",
-    "*climbs the rigging*",
-    "*coils the rope*",
-    "*scrapes the barnacles*",
+    "Swabbing decks.",
+    "Deckhand working.",
+    "Shipshape here.",
   ],
   [SAILOR_NAVIGATOR]: [
-    "*studies the charts*",
-    "*sights the North Star*",
-    "*plots the course*",
-    "*checks the compass*",
-    "*marks the tide table*",
+    "Charting course.",
+    "Navigating.",
+    "Stars aligned.",
   ],
   [SAILOR_CAPTAIN]: [
-    "*paces the quarterdeck*",
-    "*inspects the rigging*",
-    "*checks the manifest*",
-    "*tests the wind*",
-    "*polishes the ship's bell*",
+    "Captain on deck.",
+    "Orders given.",
+    "Ship's ready.",
   ],
   [SAILOR_DOCKWORKER]: [
-    "*hauls the cargo crate*",
-    "*loads the barrel*",
-    "*stacks the sacks*",
-    "*rolls the cask down the gangplank*",
-    "*tallies the cargo*",
+    "Loading cargo.",
+    "Dock work.",
+    "Unloading today.",
   ],
 };
 
@@ -468,7 +464,7 @@ function doSailorWork(director, record, citizen, type, nowMs) {
   const line = workLineFor(Math.random, type, weather);
   if (!line) return;
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -493,7 +489,7 @@ function doPassageOffer(director, citizen, record, nowMs) {
   const dest = destinationFor(record.username, record.kingdom, nowMs);
   const line = offerLineFor(Math.random, ship, dest);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }
@@ -509,7 +505,7 @@ function doArrival(director, citizen, record, nowMs) {
   const ship = shipFor(record.username, record.kingdom);
   const line = arrivalLineFor(Math.random, ship, ship.port);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch {
     // forceChat is best-effort.
   }

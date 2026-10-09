@@ -32,6 +32,10 @@
 const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 const {
   hashName,
   isAway,
@@ -590,7 +594,7 @@ function visibleMoments(director, events, nowMs) {
     const line = renderEventLine(ev, rng);
     if (!line) continue;
     try {
-      bot.forceChat?.(String(line).slice(0, 120));
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [String(line).slice(0, 120)] })); }
     } catch {
       continue;
     }

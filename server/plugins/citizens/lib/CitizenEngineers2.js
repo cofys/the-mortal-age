@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenEngineers2 — the engineerfolk: amateur engineering-life folk under
@@ -138,43 +142,33 @@ const CORNERS = [
 
 // Morning setup flavor: before 10:00 the engineerfolk are still setting up.
 const SETUP_LINES = [
-  "*lays out the mending tools in a row*",
-  "*counts the spare washers, twice*",
-  "*oils {their} hammer and tests the swing*",
-  "*chalk-marks the day's mending prices on a slate*",
-  "*sorts the gear crate: big cogs at the bottom*",
-  "*unrolls the oil-cloth and folds it square*",
+  "Tools out, ready for mending.",
+  "Setting up the workbench.",
+  "Prices are on the slate.",
+  "Just laying out my tools.",
 ];
 
 // Work lines per type.
 const WORK_LINES = {
   [TINKER]: [
-    "*patches a kettle with a dab of solder*",
-    "*picks a lock open, grinning*",
-    "*trues a bent hinge with {their} hammer*",
-    "*reseats a kettle handle*",
-    "*blackens a pan bottom over {their} little brazier*",
+    "Tinkering away.",
+    "Fixing gadgets.",
+    "Tinker at work.",
   ],
   [GREASE_MONKEY]: [
-    "*hefts an oil can onto {their} shoulder*",
-    "*counts washers into a paper poke*",
-    "*wipes grease off a bolt bag*",
-    "*straps a lunch parcel for the workshop lads*",
-    "*polishes a spare cog till it shines*",
+    "Oiling the gears.",
+    "Grease monkey working.",
+    "Machines maintained.",
   ],
   [RIVET_HAND]: [
-    "*hammers a rivet home, ping!*",
-    "*wedging a loose plate back into place*",
-    "*grinds a burr off a shaft end*",
-    "*sets a new pin in a wobbling joint*",
-    "*peens a rivet head smooth*",
+    "Riveting today.",
+    "Metalwork here.",
+    "Rivets and steel.",
   ],
   [SIGNALER]: [
-    "*runs a flag up and down for practice*",
-    "*trills a two-note whistle code*",
-    "*waves the green flag, then the red, then shrugs*",
-    "*polishes the whistle chain*",
-    "*flashes the lamp-shutters: long, short, long*",
+    "Signals ready.",
+    "Signaling today.",
+    "Flags up.",
   ],
 };
 
@@ -543,7 +537,7 @@ function seedRumor(rng, text) {
 /** Say a line in chat (never throws). */
 function forceSay(citizen, text) {
   try {
-    if (citizen?.forceChat) citizen.forceChat(String(text).slice(0, 120));
+    if (citizen?.forceChat) { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
     else if (citizen?.say) citizen.say(String(text).slice(0, 120));
   } catch { /* cosmetic */ }
 }

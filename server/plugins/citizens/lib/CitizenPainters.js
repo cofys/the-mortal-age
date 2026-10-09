@@ -40,6 +40,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning: all magic numbers here ===
 const PAINTER_RADIUS = 14; // tiles — close enough to see the easel
@@ -128,12 +132,6 @@ const SUBJECTS = Object.freeze({
 
 // === Scripted lines (data tier; the LLM riffs via the journal) ===
 const WORK_EMOTES = Object.freeze([
-  "*mixes pigments on the palette*",
-  "*steps back to study the canvas*",
-  "*dabs at the canvas with a fine brush*",
-  "*squints at the light, then paints*",
-  "*washes brushes in a jar of turpentine*",
-  "*sketches quick lines in charcoal*",
 ]);
 
 const HAWK_LINES = Object.freeze([
@@ -161,10 +159,7 @@ const MINIATURE_LINES = Object.freeze([
 ]);
 
 const MURAL_LINES = Object.freeze([
-  "*lays fresh plaster for the mural*",
-  "*paints broad strokes across the wall*",
   "The city wall will wear my mural for a hundred years!",
-  "*mixes a bucket of ochre for the mural*",
 ]);
 
 const TIP_THANKS = Object.freeze([
@@ -491,7 +486,7 @@ function tipPainter(event, deps = {}, nowMs = Date.now()) {
 
   event.handled = true;
   try {
-    target.forceChat?.(pickOne(Math.random, TIP_THANKS));
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: TIP_THANKS })); }
   } catch { /* cosmetic */ }
   journalize(target, `received a ${amount}-coin tip from ${player.getUsername?.() ?? "a patron"}`);
   return amount;
@@ -576,14 +571,14 @@ function paintScene(director, record, citizen, type, nowMs) {
     const line = fill(pickOne(Math.random, MASTERPIECE_LINES), {
       subject: work ? `${work.subject} (${work.quality})` : "a new work",
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `unveiled a masterpiece at ${studio.name}`);
     seedRumor(`A masterpiece unveiled at ${studio.name} — come see it!`);
     return;
   }
 
   if (type === PAINTER_MURALIST) {
-    citizen.forceChat?.(pickOne(Math.random, MURAL_LINES));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: MURAL_LINES })); }
     journalize(citizen, `worked on the mural at ${studio.name}`);
     return;
   }
@@ -595,13 +590,13 @@ function paintScene(director, record, citizen, type, nowMs) {
       subject: work.subject,
       quality: work.quality,
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hawked "${work.subject}" (${work.quality}) at ${studio.name}`);
     return;
   }
 
   // Fallback: work emotes.
-  citizen.forceChat?.(pickOne(Math.random, WORK_EMOTES));
+  { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: WORK_EMOTES })); }
 }
 
 /**
@@ -614,7 +609,7 @@ function maybeOfferCommission(record, citizen, type) {
       ? pickOne(Math.random, MINIATURE_LINES)
       : pickOne(Math.random, COMMISSION_LINES);
   try {
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
   } catch { /* cosmetic */ }
   return line;
 }

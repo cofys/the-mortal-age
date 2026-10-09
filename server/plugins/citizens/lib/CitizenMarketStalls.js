@@ -44,6 +44,10 @@ const { agentRng, chance } = require("./humanizer");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { normalizeName } = require("./CitizenBonds");
 const { ATTR_MARKET_WARES } = require("../constants");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // --- tuning --------------------------------------------------------------------
 
@@ -416,7 +420,7 @@ function setupStall(director, record, bot, todayKey, nowMs) {
   }
   walkTo(director, bot, spot);
   try {
-    bot.forceChat?.("*sets up their stall for the day*");
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: ["*sets up their stall for the day*"] })); }
   } catch {
     // Cosmetic.
   }
@@ -439,7 +443,7 @@ function closeStall(director, record, bot) {
   const anchor = marketTile(record.kingdomId);
   if (anchor) walkTo(director, bot, anchor);
   try {
-    bot.forceChat?.("*packs up the stall for the night*");
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: ["*packs up the stall for the night*"] })); }
   } catch {
     // Cosmetic.
   }
@@ -490,7 +494,7 @@ function tickHaggleOffers(director, record, bot, name, nowMs) {
     }
     const line = HAGGLE_OFFER_LINES[Math.floor(rng() * HAGGLE_OFFER_LINES.length)];
     try {
-      bot.forceChat?.(fillLine(line, { player: playerName, pct }));
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [fillLine(line, { player: playerName, pct })] })); }
     } catch {
       // Cosmetic.
     }
@@ -514,7 +518,7 @@ function tickSalesPitch(director, record, bot, name, nowMs) {
   const ware = state.wares[Math.floor(rng() * state.wares.length)];
   const line = PITCH_LINES[Math.floor(rng() * PITCH_LINES.length)];
   try {
-    bot.forceChat?.(fillLine(line, { ware: ware.name }));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [fillLine(line, { ware: ware.name })] })); }
   } catch {
     // Cosmetic.
   }

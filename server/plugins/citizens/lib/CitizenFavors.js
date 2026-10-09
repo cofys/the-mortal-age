@@ -31,6 +31,10 @@
 const { getMemory } = require("./CitizenMemory");
 const { isEnemy } = require("./CitizenBonds");
 const { agentRng, chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const COINS = 995;
 
@@ -320,7 +324,7 @@ function issueAsk(bot, player, favor) {
   const playerName = player.getUsername?.() ?? favor.player;
   const text = askText(favor, playerName);
   try {
-    bot.forceChat?.(`${playerName}, a favor? ${describeFavor(favor)}.`);
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [`${playerName}, a favor? ${describeFavor(favor)}.`] })); }
   } catch {
     // Cosmetic.
   }
@@ -354,7 +358,7 @@ function tickFavors(record, getBot, nearbyPlayers, deps) {
       memTone(name, favor.player, -1); // ignored — a mild cold shoulder later
       journalEvent(name, `${favor.player} ignored my favor ask. Noted.`);
       try {
-        bot?.forceChat?.("Hmph. Never mind then.");
+        { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: ["Hmph. Never mind then."] })); }
       } catch {
         // Cosmetic.
       }
@@ -464,7 +468,7 @@ function autoComplete(bot, player, favor) {
     }
     journalEvent(favor.citizen, `${favor.player} brought ${favor.qty}x ${favor.itemName}. Paid ${paid}.`);
     try {
-      bot?.forceChat?.("You're a lifesaver, thank you!");
+      { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: ["You're a lifesaver, thank you!"] })); }
       player.sendMessage?.(
         paid >= reward
           ? `${favor.citizen} takes the goods and pays you ${paid} coins.`
@@ -490,7 +494,7 @@ function autoComplete(bot, player, favor) {
     }
     journalEvent(favor.citizen, `${favor.player} spared me ${favor.coins} coins. A true friend.`);
     try {
-      bot?.forceChat?.("Bless you, I'll not forget this!");
+      { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: ["Bless you, I'll not forget this!"] })); }
       player.sendMessage?.(`${favor.citizen} is deeply grateful for your ${favor.coins} coins.`);
     } catch {
       // Cosmetic.
@@ -528,7 +532,7 @@ function progressGuard(bot, player, favor) {
     memTone(favor.citizen, favor.player, 2);
     journalEvent(favor.citizen, `${favor.player} stood guard with me. Paid ${paid}.`);
     try {
-      bot?.forceChat?.("All quiet thanks to you. Much obliged!");
+      { const _cvp = bot?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: ["All quiet thanks to you. Much obliged!"] })); }
       player.sendMessage?.(`${favor.citizen} thanks you for standing guard (+${paid} coins).`);
     } catch {
       // Cosmetic.

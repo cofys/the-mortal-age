@@ -34,6 +34,10 @@ const { getJournal } = require("./CitizenJournal");
 const { normalizeName, isFriend } = require("./CitizenBonds");
 const { agentRng, chance } = require("./humanizer");
 const { brainTickDue } = require("./CitizenTickLod");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-funerals.json");
 
@@ -550,7 +554,7 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function forceChat(citizen, text) {
   try {
-    citizen.forceChat?.(String(text).slice(0, 120));
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [String(text).slice(0, 120)] })); }
   } catch {
     // Non-fatal.
   }

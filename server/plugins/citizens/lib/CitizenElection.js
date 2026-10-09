@@ -43,6 +43,10 @@ const path = require("path");
 const { getJournal } = require("./CitizenJournal");
 const { isFriend, normalizeName } = require("./CitizenBonds");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-elections.json");
 
@@ -79,12 +83,10 @@ const POSITIONS = Object.freeze({
     }),
     stumps: Object.freeze({
       "pro-trade": [
-        "*a vote for {name} is a vote for full coinpurses!*",
         "Trade built this town, and {name} will keep the roads busy!",
         "{name} says: lower taxes, fuller stalls, happier purses!",
       ],
       "pro-tradition": [
-        "*a vote for {name} is a vote for the old ways!*",
         "This town stood for a hundred years — {name} will keep it standing!",
         "{name} says: honor the charter, honor our founders!",
       ],
@@ -105,12 +107,10 @@ const POSITIONS = Object.freeze({
     }),
     stumps: Object.freeze({
       strict: [
-        "*{name} will keep these streets safe — no exceptions!*",
         "Lock your doors tonight, criminals — {name} is coming!",
         "{name} says: order first, mercy later!",
       ],
       lenient: [
-        "*{name} believes in second chances!*",
         "A sheriff should protect, not punish — vote {name}!",
         "{name} says: the curfew ends the day I take the badge!",
       ],
@@ -131,12 +131,10 @@ const POSITIONS = Object.freeze({
     }),
     stumps: Object.freeze({
       innovator: [
-        "*{name} will drag this guild into the future!*",
         "New tools, new methods, new markets — vote {name}!",
         "{name} says: the old codes are holding us back!",
       ],
       traditionalist: [
-        "*{name} guards the craft our masters taught us!*",
         "A guild without tradition is just a shop — vote {name}!",
         "{name} says: the old codes made us great!",
       ],
@@ -604,7 +602,7 @@ function announce(director, race, announcement, nowMs) {
       break;
     }
     if (speaker) {
-      speaker.forceChat?.(announcement.text.slice(0, 120));
+      { const _cvp = speaker.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(speaker, voiceLine(voiceFor(_cvp), { plain: [announcement.text.slice(0, 120)] })); }
     }
   } catch { /* visible announcement is best-effort */ }
 }
@@ -626,7 +624,7 @@ function stumpForCandidates(director, nowMs) {
         const pool = def.stumps[c.stance] ?? [];
         if (!pool.length) continue;
         const line = pool[Math.floor(Math.random() * pool.length)].replaceAll("{name}", c.username);
-        citizen.forceChat?.(line.slice(0, 120));
+        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
         stumpCooldowns.set(normalizeName(c.username), nowMs);
       }
     }

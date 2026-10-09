@@ -1,4 +1,8 @@
 "use strict";
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 /**
  * CitizenGuardPatrols — the visible watch: guards walk their beat like they
@@ -314,7 +318,7 @@ function tickGuard(director, record, bot, nowMs, night, rng) {
     if (nowMs - last >= TORCH_ANNOUNCE_COOLDOWN_MS) {
       const line = pickOne(rng, TORCH_LINES);
       try {
-        bot.forceChat?.(line);
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       } catch { /* cosmetic */ }
       journal(director, username, "patrol", "Lit the torches — the night watch begins.");
       lastTorchAnnounce.set(username, nowMs);
@@ -328,7 +332,7 @@ function tickGuard(director, record, bot, nowMs, night, rng) {
     if (shouldFire(rng, last, nowMs, cooldown, CHECKIN_CHANCE)) {
       const line = pickCheckInLine(rng, night);
       try {
-        bot.forceChat?.(line.slice(0, 120));
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
       } catch { /* cosmetic */ }
       journal(director, username, "patrol", `Beat check-in: ${line}`);
       lastCheckIn.set(username, nowMs);
@@ -361,7 +365,7 @@ function tickDisturbance(director, record, bot, me, nowMs, rng, seen) {
       if (notorietyOf(pname, nowMs) >= NOTORIETY_THRESHOLD) {
         const line = fillLine(pickOne(rng, DISTURBANCE_LINES), { name: pname });
         try {
-          bot.forceChat?.(line.slice(0, 120));
+          { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
         } catch { /* cosmetic */ }
         walkTo(director, bot, t);
         journal(director, username, "patrol", `Responded to disturbance: ${pname}.`, { target: pname });
@@ -385,7 +389,7 @@ function tickDisturbance(director, record, bot, me, nowMs, rng, seen) {
         if (chebyshev(me.x, me.y, tile.x, tile.y) > RESPONSE_RADIUS) continue;
         const line = pickOne(rng, DISTURBANCE_QUERY_LINES);
         try {
-          bot.forceChat?.(line.slice(0, 120));
+          { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
         } catch { /* cosmetic */ }
         walkTo(director, bot, tile);
         journal(director, username, "patrol", `Responded to shouting near ${other.username}.`);
@@ -424,7 +428,7 @@ function tickEscort(director, record, bot, me, nowMs, rng) {
   const pname = player.getUsername?.() ?? "?";
   const line = pickOne(rng, ESCORT_OFFER_LINES);
   try {
-    bot.forceChat?.(line.slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
   } catch { /* cosmetic */ }
   journal(director, username, "patrol", `Offered ${pname} an escort.`);
   lastEscortOffer.set(username, nowMs);
@@ -452,7 +456,7 @@ function tickVipEscort(director, record, bot, me, nowMs, rng, seen) {
     if (!t || chebyshev(me.x, me.y, t.x, t.y) > 6) continue;
     const line = fillLine(pickOne(rng, VIP_ESCORT_LINES), { name: other.username });
     try {
-      bot.forceChat?.(line.slice(0, 120));
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
     } catch { /* cosmetic */ }
     walkTo(director, bot, { x: t.x + 1, y: t.y, z: t.z });
     journal(director, record.username, "patrol", `Escorting ${other.username} a ways.`);
@@ -487,7 +491,7 @@ function tickReassured(director, others, guards, nowMs, rng) {
     if (realPlayersWithin(bot, CHECKIN_RADIUS).length === 0) continue;
     const line = pickOne(rng, REASSURE_LINES);
     try {
-      bot.forceChat?.(line.slice(0, 120));
+      { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
     } catch { /* cosmetic */ }
     journal(director, record.username, "social", "Feels safer with the watch about.");
     lastReassure.set(record.username, nowMs);

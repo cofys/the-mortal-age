@@ -28,6 +28,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const PET_RADIUS = 14; // tiles — close enough to see/hear
@@ -96,28 +100,16 @@ const SHOW_VENUES = [
 // === Scripted lines ===
 const CARE_LINES = {
   [PET_CAT]: [
-    "*scratches {pet} behind the ears*",
-    "*sets down a saucer of milk*",
     "Careful — {pet} bites when she's happy. It's a compliment, mostly.",
-    "*dangles a feather toy for {pet}*",
   ],
   [PET_DOG]: [
-    "*throws a stick for {pet}*",
-    "*rubs {pet}'s belly*",
     "Who's a good boy? {pet} is. Yes he is.",
-    "*clips the leash on {pet}*",
   ],
   [PET_BIRD]: [
-    "*whistles back at {pet}*",
-    "*offers {pet} a sunflower seed*",
     "{pet} learned a new tune this morning — listen!",
-    "*cleans {pet}'s cage*",
   ],
   [PET_EXOTIC]: [
-    "*lets {pet} climb onto a shoulder*",
-    "*mists {pet}'s terrarium*",
     "Don't stare — {pet} gets shy. Or hungry. Hard to tell.",
-    "*warms the heat rock for {pet}*",
   ],
 };
 
@@ -549,7 +541,7 @@ function doPetOwnerWork(director, record, citizen, type, nowMs) {
         personality: winner.personality,
         venue: venue.name,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `saw ${winner.pet} win best in show at ${venue.name}`);
       seedRumor(`${winner.pet} won best in show at ${venue.name}!`);
       return;
@@ -560,23 +552,23 @@ function doPetOwnerWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.4) {
     const line = fill(pickOne(Math.random, CARE_LINES[type]), slots);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `cared for ${pet.name} the ${pet.type}`);
   } else if (roll < 0.6) {
     const line = fill(pickOne(Math.random, SHOWOFF_LINES[type]), slots);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `showed off ${pet.name} the ${pet.type}`);
   } else if (roll < 0.8) {
     const line = fill(pickOne(Math.random, SHOW_ANNOUNCE_LINES), slots);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `announced the ${venue.name} pet show`);
   } else if (roll < 0.9) {
     const line = fill(pickOne(Math.random, ADOPT_LINES), slots);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `talked about pet adoption`);
   } else {
     const line = fill(pickOne(Math.random, TRADE_LINES), slots);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `talked about pet trading`);
   }
 }

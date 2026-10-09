@@ -32,6 +32,10 @@ const { skillStore, SKILLS } = require("./CitizenSkilling");
 const { warmthOf } = require("../StreetNotices");
 const { normalizeName } = require("./CitizenBonds");
 const { agentRng, chance } = require("./humanizer");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 const BOT_HOST_ADDRESS = "bot"; // set by bots/behaviours/spawn/BotPlayerFactory.js
 const MENTOR_RADIUS = 14; // tiles — close enough to actually talk to
@@ -414,7 +418,7 @@ function onMentorLevelUpNotice(event, nowMs = Date.now()) {
   );
 
   try {
-    bot.forceChat?.((intro + tip).slice(0, 120));
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [(intro + tip).slice(0, 120)] })); }
   } catch {
     // A shy master.
   }

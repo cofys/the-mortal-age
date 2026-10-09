@@ -24,6 +24,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Hoisted exclusion-chain requires (was: lazy require per citizen per tick).
 // The chain is linear with no back-references, so top-level is safe.
@@ -146,28 +150,16 @@ const GREAT_WORKS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [GLASSBLOWER_VESSEL]: [
-    "*gathers molten glass on the pipe*",
-    "*blows into the pipe, cheeks puffed*",
     "Mind the punt — she'll crack if she cools too fast.",
-    "*spins the blowpipe, evening the gather*",
   ],
   [GLASSBLOWER_WINDOW]: [
-    "*cuts a diamond of blue glass*",
-    "*sets a pane into the lead came*",
     "Blue for the sky, red for the blood of kings.",
-    "*solders the joints with a steady hand*",
   ],
   [GLASSBLOWER_ORNAMENT]: [
-    "*pulls a thread of glass into a swan's neck*",
-    "*marvers the gather on the steel table*",
     "Pretty things pay the rent — nobody buys ugly.",
-    "*flashes the piece in the glory hole*",
   ],
   [GLASSBLOWER_FURNACE]: [
-    "*stokes the furnace mouth*",
-    "*banks the coals for the night shift*",
     "Eleven hundred degrees and climbing — mind your eyebrows.",
-    "*checks the annealing oven*",
   ],
 };
 
@@ -563,7 +555,7 @@ function tipGlassblower(event, deps = {}, nowMs = Date.now()) {
 
   event.handled = true;
   try {
-    target.forceChat?.(pickOne(Math.random, TIP_THANKS));
+    { const _cvp = target.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(target, voiceLine(voiceFor(_cvp), { plain: TIP_THANKS })); }
   } catch { /* cosmetic */ }
   journalize(target, `received a ${amount}-coin tip from ${player.getUsername?.() ?? "a patron"}`);
   return amount;
@@ -645,7 +637,7 @@ function doGlassblowerWork(director, record, citizen, type, nowMs) {
         work: gw.work,
         days: gw.lengthDays,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled ${gw.work} at ${workshop.name}`);
       seedRumor(`${gw.work} stands complete at ${workshop.name}!`);
       return;
@@ -662,7 +654,7 @@ function doGlassblowerWork(director, record, citizen, type, nowMs) {
         piece: mw,
         jewel: jewelForToday(nowMs),
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `unveiled a masterwork at ${workshop.name}: ${mw}`);
       seedRumor(`A masterwork ${mw} unveiled at ${workshop.name}!`);
       return;
@@ -673,7 +665,7 @@ function doGlassblowerWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.45) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${workshop.name}`);
   } else if (roll < 0.75) {
     const pieces = piecesFor(name, record.kingdomId, nowMs);
@@ -682,11 +674,11 @@ function doGlassblowerWork(director, record, citizen, type, nowMs) {
       piece,
       glass: glasswareForToday(nowMs),
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hawked ${piece} at ${workshop.name}`);
   } else {
     const line = pickOne(Math.random, COMMISSION_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered commissions at ${workshop.name}`);
   }
 }

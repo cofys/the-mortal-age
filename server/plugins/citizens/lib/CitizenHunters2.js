@@ -39,6 +39,10 @@
  */
 
 const { normalizeName } = require("./CitizenBonds");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // Top-level safeRequire (potters perf lesson): the pro-hunter exclusion
 // check runs per citizen per tick, so no lazy requires in that path.
@@ -108,27 +112,15 @@ const COMMUNITY_GROUNDS = [
 // === Scripted lines ===
 const WORK_LINES = {
   [HUNTFOLK_TRACKER]: [
-    "*crouches to read the tracks*",
-    "*brushes the leaf litter aside, studying the prints*",
     "Two deer passed here before dawn — see the cloven marks?",
-    "*follows a broken twig trail into the brush*",
   ],
   [HUNTFOLK_BOWMAN]: [
-    "*draws the bow, steady as stone*",
-    "*nocks an arrow, sighting down the meadow*",
-    "*looses — clean shot through the brush*",
     "Patience, lad. The arrow flies straighter when you're calm.",
   ],
   [HUNTFOLK_TRAPPER]: [
-    "*sets a snare in the rabbit run*",
-    "*bends a sapling into a spring trap*",
-    "*baits a box trap with turnip tops*",
     "Check the snares at dawn — rabbit for the pot by noon.",
   ],
   [HUNTFOLK_FALCONER]: [
-    "*casts the falcon from the glove*",
-    "*swings the lure, calling the bird down*",
-    "*feeds the hawk a strip of rabbit*",
     "She hunts the sky; I just carry the glove.",
   ],
 };
@@ -563,7 +555,7 @@ function doHuntfolkWork(director, record, citizen, type, nowMs) {
         hunter: name,
         ground: ground.name,
       });
-      citizen.forceChat?.(line);
+      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       journalize(citizen, `bagged a ${trophy.trophy} at ${ground.name}`);
       seedRumor(`A ${trophy.trophy} bagged at ${ground.name}!`);
       return;
@@ -574,18 +566,18 @@ function doHuntfolkWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.35) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hunted at ${ground.name}`);
   } else if (roll < 0.55) {
     const todays = bagFor(name, ground, nowMs);
     const game = todays.length ? todays[0] : "rabbit";
     const lines = type === HUNTFOLK_FALCONER ? FALCON_LINES : BAG_LINES;
     const line = fill(pickOne(Math.random, lines), { game });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `bagged ${todays.join(", ")} at ${ground.name}`);
   } else if (roll < 0.7) {
     const line = pickOne(Math.random, SHARE_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `shared the bag at ${ground.name}`);
   } else if (roll < 0.85) {
     const todays = bagFor(name, ground, nowMs);
@@ -594,11 +586,11 @@ function doHuntfolkWork(director, record, citizen, type, nowMs) {
       game,
       dish: dishForToday(record.kingdomId, nowMs),
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hawked ${game} at ${ground.name}`);
   } else {
     const line = pickOne(Math.random, JOIN_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `invited a player to the hunt at ${ground.name}`);
   }
 }

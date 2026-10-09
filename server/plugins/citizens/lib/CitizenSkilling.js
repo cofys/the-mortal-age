@@ -35,6 +35,10 @@
 
 const path = require("path");
 const fs = require("fs");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 const {
   isFriend,
   isEnemy,
@@ -309,7 +313,7 @@ function shoutIfWatched(director, record, line) {
     const bot = director.getBot(record);
     if (bot && realPlayersNear(bot).length > 0) {
       try {
-        bot.forceChat?.(line);
+        { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); }
       } catch {
         // Non-fatal.
       }

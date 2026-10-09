@@ -34,6 +34,10 @@
 
 const { normalizeName } = require("./CitizenBonds");
 const { isHobbyVisible } = require("./CitizenPrimaryHobby"); // Phase 2: visibility weighting
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { voiceFor, voiceLine } = require("./citizenVoice");
+const { sayPublic } = require("../chat/CitizenSayPublic");
+
 
 // === Tuning ===
 const STORYTELLER_RADIUS = 14; // tiles — close enough to see/hear
@@ -119,28 +123,16 @@ const TALES_BY_TYPE = {
 // === Scripted lines ===
 const WORK_LINES = {
   [STORYTELLER_ELDER]: [
-    "*settles into a chair by the fire*",
-    "*raps a walking stick on the floor*",
     "Gather round, then — this one happened before your father was born.",
-    "*smooths a white beard and begins*",
   ],
   [STORYTELLER_TRAVELER]: [
-    "*unrolls a travel-stained map across a knee*",
-    "*pats the dust from a cloak*",
     "You've never left the city, have you? Then listen.",
-    "*leans forward, voice dropping*",
   ],
   [STORYTELLER_GRANDPARENT]: [
-    "*chuckles, rocking back and forth*",
-    "*taps a grandchild on the nose*",
     "Ah, you want a story? Sit. Sit.",
-    "*wipes flour from an apron and begins*",
   ],
   [STORYTELLER_EPIC]: [
-    "*rises to full height, arms spread*",
-    "*claps twice for silence*",
     "Hearken! The old tales demand an audience!",
-    "*drives a staff into the ground for emphasis*",
   ],
 };
 
@@ -592,7 +584,7 @@ function doStorytellerWork(director, record, citizen, type, nowMs) {
     lastFiredByCitizen.set(legendKey, nowMs);
     const legend = legendFor(gathering, nowMs);
     const line = fill(pickOne(Math.random, LEGEND_LINES), { legend: legend.verse });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `grew the legend at ${gathering.name}: ${legend.verse}`);
     seedRumor(`The storytellers at ${gathering.name} have grown a new verse: ${legend.verse}`);
     return;
@@ -602,7 +594,7 @@ function doStorytellerWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.45) {
     const line = pickOne(Math.random, WORK_LINES[type]);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `settled in to tell tales at ${gathering.name}`);
   } else if (roll < 0.75) {
     const t = taleFor(name, record.kingdomId, nowMs);
@@ -610,11 +602,11 @@ function doStorytellerWork(director, record, citizen, type, nowMs) {
       gathering: gathering.name,
       tale: t.tale,
     });
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `told a ${type} tale at ${gathering.name}: ${t.tale}`);
   } else {
     const line = pickOne(Math.random, REQUEST_LINES);
-    citizen.forceChat?.(line);
+    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `offered tales to listeners at ${gathering.name} (the oral version of ${oralTaleForToday(nowMs)})`);
   }
 }
