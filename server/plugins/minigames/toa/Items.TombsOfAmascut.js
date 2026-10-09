@@ -217,9 +217,4 @@ module.exports = function registerTombsItems(api) {
   api.onItemOnItem("Arcane sigil", "Elidinis' ward", fortifyWard);
   api.onItemOnItem("Thread of Elidinis", "Rune pouch", threadRunePouch);
   for (const name of ["Eye of the Corruptor", "Breach of the Scarab", "Jewel of the Sun"]) api.onItemOnItem("Keris partisan", name, useKerisJewel);
-  for (const rune of ["Soul rune", "Chaos rune"]) {
-    api.onItemOnItem(rune, "Tumeken's shadow", chargeShadow);
-    api.onItemOnItem(rune, "Tumeken's shadow (uncharged)", chargeShadow);
-  }
-  api.onItemAction("Tumeken's shadow", { Check: checkShadow, Uncharge: unchargeShadow });
 };
