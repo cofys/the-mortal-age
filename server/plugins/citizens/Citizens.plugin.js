@@ -38,6 +38,7 @@ const { onPressGuildCommand, PRESSGUILD_USAGE } = require("./CitizenPressGuildEv
 const { onBankGuildCommand, BANKGUILD_USAGE } = require("./CitizenBankGuildEvents");
 const { onInsureGuildCommand, INSUREGUILD_USAGE } = require("./CitizenInsureGuildEvents");
 const { onLawGuildCommand, LAWGUILD_USAGE } = require("./CitizenLawGuildEvents");
+const { onDiploCorpsCommand, DIPLOCORPS_USAGE } = require("./CitizenDiploCorpsEvents");
 const { onGalleryCommand, GALLERY_USAGE } = require("./CitizenGalleryEvents");
 const { onLibraryCommand, LIBRARY_USAGE } = require("./CitizenLibraryEvents");
 const { onObservatoryCommand, OBSERVATORY_USAGE } = require("./CitizenObservatoryEvents");
@@ -798,6 +799,12 @@ module.exports = {
       onLawGuildCommand,
       PlayerRights.NONE,
       LAWGUILD_USAGE
+    );
+    api.registerCommand(
+      "diploguild",
+      onDiploCorpsCommand,
+      PlayerRights.NONE,
+      DIPLOCORPS_USAGE
     );
   },
 };

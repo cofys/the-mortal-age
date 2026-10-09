@@ -716,6 +716,35 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "diplomatic corps" / "diplomat guild" / "mediation" — the diplomatic
+  // corps (guild layer). Placed before the treaty block; keywords are
+  // distinct from it ("ambassador" alone stays with the treaty block).
+  if (/\b(diplomatic corps|diplomat'?s guild|diplomat guild|mediation|border review|hot border|cultural exchange|diplomatic protocol|corps of diplomats)\b/.test(said)) {
+    try {
+      const Corps = require("../lib/CitizenDiplomaticCorps");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Corps.describe(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "diplocorps_status", {
+        username: citizenUsername,
+        members: desc?.members ?? 0,
+        ambassadors: desc?.ambassadors ?? 0,
+        treasury: desc?.treasury ?? 0,
+        mediationFund: desc?.mediationFund ?? 0,
+        crisis: desc?.crisis ?? false,
+        openClaims: desc?.openClaims ?? 0,
+        isMember: citizenUsername ? Corps.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Corps.guildRankOf(citizenUsername) : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "any treaties" / "embassy" / "summit" / "ambassador" — citizen treaties.
   // (Excludes "marriage alliance" — that belongs to the dynastic block below.)
   if (/\b(any treaties?|peace treaty|trade treaty|any embass|ambassador|summit|foreign relations)\b/.test(said) ||

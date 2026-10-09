@@ -73,6 +73,7 @@ const { createCitizenBankerWorkAction } = require("./actions/CitizenBankerWork")
 const { createCitizenInsurerWorkAction } = require("./actions/CitizenInsurerWork");
 const { createCitizenInsureGuildAction } = require("./actions/CitizenInsureGuild");
 const { createCitizenLawGuildAction } = require("./actions/CitizenLawGuild");
+const { createCitizenDiploCorpsAction } = require("./actions/CitizenDiploCorps");
 const { createCitizenTeamPlayAction } = require("./actions/CitizenTeamPlay");
 const { createCitizenResearchAction } = require("./actions/CitizenResearch");
 const { createIdleSocialAction } = require("./actions/IdleSocial");
@@ -190,6 +191,7 @@ registerBotActionType("citizenCompete", createCitizenCompeteAction);
   registerBotActionType("citizenInsurerWork", createCitizenInsurerWorkAction);
   registerBotActionType("citizenInsureGuild", createCitizenInsureGuildAction);
   registerBotActionType("citizenLawGuild", createCitizenLawGuildAction);
+  registerBotActionType("citizenDiploCorps", createCitizenDiploCorpsAction);
   registerBotActionType("citizenTeamPlay", createCitizenTeamPlayAction);
   registerBotActionType("citizenResearch", createCitizenResearchAction);
   registerBotActionType("idleSocial", createIdleSocialAction);

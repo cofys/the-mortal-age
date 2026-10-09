@@ -97,6 +97,8 @@ const DEEDS = Object.freeze({
   fraudster: Object.freeze({ points: -8, label: "was expelled from the underwriters' guild for insurance fraud" }),
   barmaster: Object.freeze({ points: 8, label: "rose to counselor of the bar association" }),
   disbarred: Object.freeze({ points: -8, label: "was expelled from the bar association for legal misconduct" }),
+  peacemaker: Object.freeze({ points: 8, label: "rose to ambassador of the diplomatic corps" }),
+  traitor: Object.freeze({ points: -8, label: "was expelled from the diplomatic corps for treason" }),
   financier: Object.freeze({ points: 8, label: "built a banking fortune" }),
   defaulter: Object.freeze({ points: -8, label: "defaulted on a bank loan" }),
   underwriter: Object.freeze({ points: 8, label: "underwrote a thriving insurance book" }),
