@@ -209,6 +209,17 @@ NPCs are spawned in v1; the tagging helper is ready for when they are.
 **Rank ladder** (v1, shared by all five powers):
 Outsider → Subject → Man-at-arms → Knight → Lord → Regent → Monarch.
 
+**Earned promotions** (2026-10-09): the ladder is now a real progression
+path, not an owner tool. `Influence.Kingdoms` settles promotions after any
+influence lands (fealty, `kingdom:donation-made`, `kingdom:task-completed`):
+effective influence ≥ 100 → Man-at-arms, 300 → Knight, 800 → Lord,
+2000 → Regent — emitted as `kingdom:rank-granted` (`via: "service"`), one
+hop to the highest earned rank. Never demotes (influence decays; honors
+don't), never Monarch (the great rulers' fates are questline content),
+only for the kingdom the player serves, and bots are excluded (the citizens
+director owns their promotions). Your home-kingdom choice at creation is
+the first rung of this ladder.
+
 ## The five great powers (seed data)
 
 From the world bible; treasuries are v1 seed numbers, not canon.
@@ -256,8 +267,10 @@ they're the seam future LLM hooks (AI citizens, court agents) will read.
 - `kingdom:territory-entered` / `kingdom:territory-left` `{ player, kingdomId, name }`
   — emitted by the Areas. **No core listener in v1**; reserved for external
   consumers (AI citizens reacting to border crossings).
-- `kingdom:rank-granted` `{ player, kingdomId, rank?, title? }` — join or
+- `kingdom:rank-granted` `{ player, kingdomId, rank?, title?, via? }` — join or
   promotion; writes `kingdom:id` / `kingdom:rank`, appends to `kingdom:titles`.
+  `via: "service"` marks an earned promotion from the influence settle
+  (see "Earned promotions" under Data model).
 - `kingdom:tax-collected` `{ kingdomId, amount, source? }` — revenue lands in
   the treasury. (Nothing collects tax yet — see stubs.)
 - `kingdom:war-declared` `{ attackerId, defenderId, declaredBy?, reason?, resolveAt? }`

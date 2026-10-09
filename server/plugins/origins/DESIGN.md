@@ -300,7 +300,9 @@ Persisted attributes (kebab-case, namespaced):
 - `origin:id` — the chosen origin id (`asgarnia` | `misthalin` | `kandarin` | `morytania` | `keldagrim` | `wanderer`)
 - `kingdom:id` — set through the kingdoms plugin's own `joinKingdom` helper,
   which emits `kingdom:rank-granted` → rank `Subject`. Home is initial
-  citizenship; the player rises within the hierarchy from there. The Wanderer
+  citizenship; the player rises within the hierarchy from there — promotions
+  are earned through service (influence thresholds; see
+  `server/plugins/kingdoms/DESIGN.md`, "Earned promotions"). The Wanderer
   sets no kingdom.
 
 Commands: `::origin` (everyone) shows your home, or opens the choice if you
