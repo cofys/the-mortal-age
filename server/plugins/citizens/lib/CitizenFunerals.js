@@ -425,7 +425,17 @@ function recordDeath(director, record, cause, nowMs) {
     journalEvent(display, `${cause}. The town mourns.`, "social");
     try {
       const mem = require("./CitizenMemory").getMemory();
-      mem?.addGossip?.(deceasedRec.kingdomId, "death", `${display} ${cause}.`, nowMs);
+      // seedGossip is the canonical gossip API (spreadGossipTick walks it
+      // along social links on the director tick). addGossip never existed —
+      // the old call silently no-op'd.
+      mem?.seedGossip?.({
+        kingdomId: deceasedRec.kingdomId,
+        kind: "death",
+        subject: deceasedRec.username,
+        subjectDisplay: display,
+        text: `${display} ${cause}.`,
+        holder: deceasedRec.username,
+      });
     } catch {
       // Gossip is best-effort.
     }
