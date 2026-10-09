@@ -54,9 +54,14 @@ function standingPayload(player, kingdomId) {
       const username = player.getUsername ? player.getUsername() : null;
       const offices = Offices.getOffices(kingdomId) || [];
       for (const o of offices) {
-        const officeId = Offices.officeIdFor(kingdomId, o.office || o);
+        const officeId = o.officeId || Offices.officeIdFor(kingdomId, o.office || o);
         const holder = Offices.holderOf(officeId);
-        if (holder && username && String(holder).toLowerCase() === String(username).toLowerCase()) {
+        if (
+          holder &&
+          holder.kind === "player" &&
+          username &&
+          String(holder.ref).toLowerCase() === String(username).toLowerCase()
+        ) {
           office = {
             office: o.office || o,
             title: o.title || o.office || String(o),

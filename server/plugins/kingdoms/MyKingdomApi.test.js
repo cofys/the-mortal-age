@@ -176,7 +176,7 @@ test("office holder detected", () => {
   require.cache[officesPath].exports = {
     getOffices: () => [{ office: "steward", title: "Steward", description: "Keeps the books." }],
     officeIdFor: (kid, o) => `${kid}:${o}`,
-    holderOf: () => "TestPlayer",
+    holderOf: () => ({ kind: "player", ref: "TestPlayer" }),
   };
   delete require.cache[apiPath];
   stubSiblingsKeepOffices();

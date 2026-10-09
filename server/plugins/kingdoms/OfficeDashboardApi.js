@@ -104,6 +104,18 @@ function checkHolder(player, officeId) {
   return { ok: true, office, username };
 }
 
+/**
+ * Office-kind gate: an action belongs to exactly one seal. checkHolder proves
+ * the caller holds the office named by officeId; this proves the office is
+ * the RIGHT KIND for the action — a steward cannot set patrols, a marshal
+ * cannot levy taxes, etc. grant-treasury is the documented exception (any
+ * held office may grant) and skips this gate.
+ */
+function requireKind(action, office, kind) {
+  if (office && office.office === kind) return null;
+  return describeAction(action, false, "Those seals are not yours to wield.");
+}
+
 // --- per-office payloads -----------------------------------------------------
 
 function stewardPayload(kingdomId) {
@@ -234,6 +246,8 @@ function runOfficeAction(api, player, action, query) {
     case "set-tax-rate": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "steward");
+      if (kindGate) return kindGate;
       const rate = Number(query.get("rate"));
       if (OfficeTools.setTaxRate(office.kingdomId, rate, username)) {
         return describeAction(action, true, `The levy is set at ${rate}x.`);
@@ -243,6 +257,8 @@ function runOfficeAction(api, player, action, query) {
     case "approve-petition": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "steward");
+      if (kindGate) return kindGate;
       const petitionId = (query.get("petitionId") || "").trim();
       if (OfficeTools.approvePetition(office.kingdomId, petitionId, username)) {
         return describeAction(action, true, "Granted. The petition leaves the queue.");
@@ -252,6 +268,8 @@ function runOfficeAction(api, player, action, query) {
     case "deny-petition": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "steward");
+      if (kindGate) return kindGate;
       const petitionId = (query.get("petitionId") || "").trim();
       if (OfficeTools.denyPetition(office.kingdomId, petitionId, username)) {
         return describeAction(action, true, "Denied. The petitioner leaves - the street may talk.");
@@ -290,6 +308,8 @@ function runOfficeAction(api, player, action, query) {
     case "set-target-peace": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "quartermaster");
+      if (kindGate) return kindGate;
       const value = Math.floor(Number(query.get("value")) || 0);
       if (OfficeTools.setStockpileTarget(office.kingdomId, false, value)) {
         return describeAction(action, true, `Peacetime stores target: ${formatCoins(value)} units.`);
@@ -299,6 +319,8 @@ function runOfficeAction(api, player, action, query) {
     case "set-target-war": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "quartermaster");
+      if (kindGate) return kindGate;
       const value = Math.floor(Number(query.get("value")) || 0);
       if (OfficeTools.setStockpileTarget(office.kingdomId, true, value)) {
         return describeAction(action, true, `Wartime stores target: ${formatCoins(value)} units.`);
@@ -308,6 +330,8 @@ function runOfficeAction(api, player, action, query) {
     case "issue-supply-order": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "quartermaster");
+      if (kindGate) return kindGate;
       const units = Math.floor(Number(query.get("units")) || 0);
       const price = Math.floor(Number(query.get("price")) || 0);
       if (OfficeTools.setSupplyOrder(office.kingdomId, { units, pricePer: price, by: username })) {
@@ -322,6 +346,8 @@ function runOfficeAction(api, player, action, query) {
     case "cancel-supply-order": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "quartermaster");
+      if (kindGate) return kindGate;
       OfficeTools.clearSupplyOrder(office.kingdomId);
       return describeAction(action, true, "The supply order is withdrawn.");
     }
@@ -330,6 +356,8 @@ function runOfficeAction(api, player, action, query) {
     case "set-patrol": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "marshal");
+      if (kindGate) return kindGate;
       const target = (query.get("target") || "home").trim();
       const guards = Math.floor(Number(query.get("guards")) || 0);
       if (OfficeTools.setPatrolOrder(office.kingdomId, { target, guards, by: username })) {
@@ -345,12 +373,16 @@ function runOfficeAction(api, player, action, query) {
     case "clear-patrol": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "marshal");
+      if (kindGate) return kindGate;
       OfficeTools.clearPatrolOrder(office.kingdomId);
       return describeAction(action, true, "The patrols stand down.");
     }
     case "set-war-levy": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "marshal");
+      if (kindGate) return kindGate;
       const levy = Number(query.get("levy"));
       if (OfficeTools.setWarLevy(office.kingdomId, levy, username)) {
         return describeAction(action, true, `The war levy stands at ${levy}x.`);
@@ -362,6 +394,8 @@ function runOfficeAction(api, player, action, query) {
     case "plant-rumor": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "spymaster");
+      if (kindGate) return kindGate;
       const target = (query.get("target") || "").trim();
       const templateIdx = Math.floor(Number(query.get("template")) || 0);
       const make = RUMOR_TEMPLATES[templateIdx];
@@ -388,7 +422,14 @@ function runOfficeAction(api, player, action, query) {
     case "suppress-rumor": {
       const { ok, office } = checkHolder(player, officeId);
       if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const kindGate = requireKind(action, office, "spymaster");
+      if (kindGate) return kindGate;
       const index = Math.floor(Number(query.get("index")) || 0);
+      // Validate BEFORE spending: a bad index must not cost the treasury.
+      const circulating = OfficeTools.getRumors(office.kingdomId);
+      if (index < 0 || index >= circulating.length) {
+        return describeAction(action, false, "That whisper is already gone.");
+      }
       if (!Store.spendTax(office.kingdomId, SUPPRESS_RUMOR_COST)) {
         return describeAction(action, false, "The coffers cannot fund this silence.");
       }
@@ -466,7 +507,7 @@ function attach(api) {
 
       if (player && (action === "open" || action === "close")) {
         try {
-          player.setAttribute(OFFICE_OPEN_ATTRIBUTE, action === "open" ? "1" : "0");
+          player.setAttribute(OFFICE_OPEN_ATTRIBUTE, action === "open" ? "1" : "");
         } catch (e) {
           console.warn("[office-api] flag update failed", e?.message ?? e);
         }
