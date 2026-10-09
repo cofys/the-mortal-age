@@ -708,6 +708,49 @@ class CitizenDirector {
     // LOD bands must update on the fast tick, not just the slow 60s tick.
     // Otherwise citizens stay "asleep" for up to a minute after a player
     // arrives, appearing frozen. This is cheap distance math.
+    // Movement safety net (fast tick): if citizen brains aren't ticking
+    // (attachBrain failure), the director handles movement directly so
+    // citizens visibly move. Dispatches queued requests and wanders idle
+    // citizens (15% per tick, 3-5 tiles).
+    try {
+      const nav = require("../../bots/behaviours/navigation/BotNavigation");
+      const { peekMovementRequest, dispatchMovementRequest, requestMovement, clearMovementRequest } = nav;
+      for (const record of this.roster.values()) {
+        if (!this.isOnline(record)) continue;
+        const bot = this.getBot(record);
+        if (!bot) continue;
+        if (bot.getMovementQueue?.()?.size?.() > 0) continue;
+        const req = peekMovementRequest(bot);
+        if (req) {
+          try {
+            const result = dispatchMovementRequest(bot, req);
+            if (result?.hasRoute === true) clearMovementRequest(bot);
+          } catch {}
+          continue;
+        }
+        if (Math.random() < 0.15) {
+          try {
+            const loc = bot.getLocation?.();
+            if (!loc) continue;
+            const dx = Math.floor(Math.random() * 11) - 5;
+            const dy = Math.floor(Math.random() * 11) - 5;
+            if (dx === 0 && dy === 0) continue;
+            requestMovement(bot, loc.getX() + dx, loc.getY() + dy, {
+              reason: "director_wander",
+              basicPather: true,
+              z: loc.getZ?.() ?? 0,
+            });
+            const req2 = peekMovementRequest(bot);
+            if (req2) {
+              const r2 = dispatchMovementRequest(bot, req2);
+              if (r2?.hasRoute === true) clearMovementRequest(bot);
+            }
+          } catch {}
+        }
+      }
+    } catch (error) {
+      this.log("director movement failed", { error: String(error?.message ?? error) });
+    }
     try {
       tickLodBands(this, Date.now());
     } catch (error) {
@@ -1545,12 +1588,23 @@ class CitizenDirector {
       // Non-fatal: bot remains in the add-player queue.
     }
 
-    const activity =
+    const activityId =
       record.merchantKind === "prime"
-        ? this.registry.byId.get(ACTIVITY_PRIME_MERCHANT)
-        : this.registry.byId.get(ROLE_ACTIVITY[record.role]);
-    if (activity) {
-      attachBrain({
+        ? ACTIVITY_PRIME_MERCHANT
+        : ROLE_ACTIVITY[record.role];
+    const activity = activityId ? this.registry.byId.get(activityId) : null;
+    if (!activity) {
+      // ROOT CAUSE FIX: Log when activity lookup fails instead of silently
+      // skipping attachBrain. This was causing citizens to spawn without
+      // brains, leaving them frozen (entry.brain null → BotBehaviorTask skips).
+      this.log("spawn failed: no activity for role", {
+        citizen: record.username,
+        role: record.role,
+        activityId: activityId ?? "(undefined - ROLE_ACTIVITY missing role)",
+        merchantKind: record.merchantKind ?? null,
+      });
+    } else {
+      const attached = attachBrain({
         runtime,
         registry: this.registry,
         world: this.world,
@@ -1560,7 +1614,17 @@ class CitizenDirector {
         resetMovementState,
         nowMs: Date.now(),
       });
-      record.currentActivityId = activity.id;
+      if (!attached) {
+        // ROOT CAUSE FIX: Log when attachBrain fails instead of silently
+        // continuing. The brain is required for movement.
+        this.log("spawn failed: attachBrain returned false", {
+          citizen: record.username,
+          role: record.role,
+          activityId: activity.id,
+        });
+      } else {
+        record.currentActivityId = activity.id;
+      }
     }
 
     // The LLM mouth learns who this person is (llm-gateway contract).
@@ -1782,58 +1846,6 @@ class CitizenDirector {
       tickLodBands(this, nowMs);
     } catch (error) {
       this.log("tick-lod failed", { error: String(error?.message ?? error) });
-    }
-    // Movement: citizen brains may not be ticking (attachBrain silent
-    // failure), but the director tick runs. Handle movement here directly
-    // so citizens visibly move even without a brain tick.
-    try {
-      const nav = require("../../bots/behaviours/navigation/BotNavigation");
-      const { peekMovementRequest, dispatchMovementRequest, requestMovement, clearMovementRequest } = nav;
-      let _onlineCount = 0;
-      let _wanderCount = 0;
-      for (const record of this.roster.values()) {
-        if (!this.isOnline(record)) continue;
-        _onlineCount++;
-        const bot = this.getBot(record);
-        if (!bot) continue;
-        // Skip if already moving
-        if (bot.getMovementQueue?.()?.size?.() > 0) continue;
-        // Dispatch any queued request first
-        const req = peekMovementRequest(bot);
-        if (req) {
-          try {
-            const result = dispatchMovementRequest(bot, req);
-            if (result?.hasRoute === true) clearMovementRequest(bot);
-          } catch {}
-          continue;
-        }
-        // No queued movement: wander occasionally (10% per tick) to a nearby tile
-        // This gives visible life even when the brain isn't running.
-        if (Math.random() < 0.10) {
-          try {
-            const loc = bot.getLocation?.();
-            if (!loc) continue;
-            const dx = Math.floor(Math.random() * 11) - 5; // -5 to +5
-            const dy = Math.floor(Math.random() * 11) - 5;
-            if (dx === 0 && dy === 0) continue;
-            const tx = loc.getX() + dx;
-            const ty = loc.getY() + dy;
-            _wanderCount++; requestMovement(bot, tx, ty, { reason: "director_wander", basicPather: true, z: loc.getZ?.() ?? 0 });
-            // Dispatch immediately
-            const req2 = peekMovementRequest(bot);
-            if (req2) {
-              const result2 = dispatchMovementRequest(bot, req2);
-              if (result2?.hasRoute === true) clearMovementRequest(bot);
-            }
-          } catch {}
-        }
-      }
-      if (!global._moveDiagLogged) {
-        global._moveDiagLogged = true;
-        console.log(`[DIAG-MOVE] online=${_onlineCount}, wandered=${_wanderCount}`);
-      }
-    } catch (error) {
-      this.log("director movement failed", { error: String(error?.message ?? error) });
     }
     for (const record of this.roster.values()) {
       const online = this.isOnline(record);
