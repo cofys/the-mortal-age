@@ -59,6 +59,7 @@ const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenFishing = require("../brain/actions/CitizenFishing");
 const CitizenActivityChatter = require("../chat/CitizenActivityChatter");
+const PartyPlay = require("../lib/CitizenPartyPlay");
 const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
@@ -2209,6 +2210,14 @@ class CitizenDirector {
       CitizenApprentices.tickApprenticeships(this, nowMs);
     } catch (error) {
       this.log("apprenticeships failed", { error: String(error?.message ?? error) });
+    }
+    // Party play: citizens in player-led parties assist in combat (real
+    // combat engine), eat at low HP, retreat when overwhelmed, share loot.
+    // Zero LLM.
+    try {
+      PartyPlay.tickPartyPlay(this);
+    } catch (error) {
+      this.log("party play failed", { error: String(error?.message ?? error) });
     }
     // Citizen artisans: master craftspeople with workshops, masterpieces,
     // commissions, and renown. Deterministic trade assignment, data tier,
