@@ -445,7 +445,9 @@ function executePlayerSale(api, buyer, stall, itemId, amount) {
     }
   }
   const cost = qty * price;
-  const tax = Math.floor(cost * Store.MARKET_TAX_RATE);
+  // The crown's market tax: base 5%, scaled by the steward's tax-rate seal
+  // and the marshal's war levy. Real coins from the buyer's purse.
+  const tax = Math.floor(cost * KingdomStore.getMarketTaxRate(stall.kingdomId));
   stall.stock[id] = stock - qty;
   stall.till = (stall.till ?? 0) + (cost - tax);
   Store.logSale(stall.ownerKey, {
@@ -464,6 +466,7 @@ function executePlayerSale(api, buyer, stall, itemId, amount) {
       // Grant before emitting: kingdom:tax-collected is a notification that
       // the money already moved (the listener must not grant again).
       KingdomStore.grantTax(stall.kingdomId, tax);
+      KingdomStore.recordIncome(stall.kingdomId, "player-stall", tax);
       api.emitCustomEvent("kingdom:tax-collected", {
         kingdomId: stall.kingdomId,
         amount: tax,

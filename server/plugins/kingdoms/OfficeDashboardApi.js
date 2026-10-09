@@ -124,10 +124,15 @@ function stewardPayload(kingdomId) {
     treasury: kingdom.treasury ?? 0,
     grantCap: Treasury.GRANT_MAX,
     taxRate: OfficeTools.getTaxRate(kingdomId),
+    marketTaxRate: Store.getMarketTaxRate(kingdomId),
     lastTax: flagOf(kingdomId, "sim:last-tax") ?? 0,
     lastWages: flagOf(kingdomId, "sim:last-wages") ?? 0,
     atWar: atWar(kingdomId),
     warLevy: atWar(kingdomId) ? OfficeTools.getWarLevy(kingdomId) : null,
+    // Every coin accounted for: lifetime income per real source, plus
+    // what arrived in the last day. The crown mints nothing.
+    incomeSources: Store.getIncomeTotals(kingdomId),
+    incomeLastDay: Store.getRecentIncome(kingdomId, 24 * 60 * 60 * 1000),
     petitions: OfficeTools.getPetitions(kingdomId).map((p) => ({
       id: p.id,
       text: p.text,

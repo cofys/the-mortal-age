@@ -36,9 +36,6 @@ const Store = require("./KingdomStore");
 
 // A fresh pact cools the border between the partners almost to calm.
 const TENSION_AFTER_PACT = 10;
-// The trade bonus: a cut of every peacetime tax collection, for having
-// open roads with an ally.
-const TRADE_BONUS_RATE = 0.08;
 
 let pluginApi = null;
 const lastNoticeAt = new Map(); // `${kingdomId}:${kind}` -> timestamp
@@ -176,26 +173,15 @@ function onWarDeclared(event) {
 }
 
 /**
- * kingdom:tax-collected — the trade bonus. A kingdom at peace that holds
- * an ally earns a cut on top of every tax collection: open roads, full
- * coffers. Wartime trade is blockades and seizures, not bonuses.
+ * kingdom:tax-collected — pact trade is felt, not minted. The old trade
+ * bonus created coins from nothing on every tax collection; the crown mints
+ * nothing now. Alliances still pay: honored war demands move real treasury
+ * coin across the pact roads (Diplomacy), and pact strength steadies tension.
  */
 function onTaxCollected(event) {
-  const kingdomId = event?.kingdomId;
-  const amount = Math.floor(event?.amount ?? 0);
-  if (!kingdomId || !(amount > 0) || event?.wartime) return;
-  if (Store.alliesOf(kingdomId).length === 0) return;
-  const bonus = Math.max(1, Math.floor(amount * TRADE_BONUS_RATE));
-  Store.grantTax(kingdomId, bonus);
-  Store.save();
-  if (noticeDue(kingdomId, "trade-bonus", 6 * 60 * 60 * 1000)) {
-    pluginApi.emitCustomEvent("kingdom:rumor", {
-      kingdomId,
-      text:
-        `They say the Steward counts an extra ${bonus} coins this season — ` +
-        `pact trade with ${Store.alliesOf(kingdomId).map(nameOf).join(" and ")} fills the coffers.`,
-    });
-  }
+  // Intentionally a no-op: the money already moved at the real source
+  // (market tax, fealty dues, donations). See Events.Kingdoms — never
+  // grantTax on a notification.
 }
 
 /** The realm's pacts, for ::alliances and future consumers. */
@@ -225,4 +211,5 @@ module.exports = attachAlliances;
 module.exports.attachAlliances = attachAlliances;
 module.exports.pactSummary = pactSummary;
 module.exports.TENSION_AFTER_PACT = TENSION_AFTER_PACT;
-module.exports.TRADE_BONUS_RATE = TRADE_BONUS_RATE;
+// Test seam: the tax listener must never mint.
+module.exports.onTaxCollected = onTaxCollected;

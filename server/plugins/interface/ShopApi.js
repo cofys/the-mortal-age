@@ -133,7 +133,7 @@ function stallSummary(stall) {
     weeklyRent,
     rentDebt: Math.max(0, Math.floor(stall.rentDebt ?? 0)),
     dailyWage: Store.DAILY_WAGE,
-    taxRate: Store.MARKET_TAX_RATE,
+    taxRate: KingdomStore.getMarketTaxRate(stall.kingdomId),
   };
 }
 

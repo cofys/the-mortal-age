@@ -377,6 +377,7 @@ function donateToKingdom(player, kingdomId, amount) {
   inventory.delete(COINS_ID, amount);
   inventory.refreshItems?.();
   Store.grantTax(kingdomId, amount);
+  Store.recordIncome(kingdomId, "donation", amount);
   Store.save();
   pluginApi.emitCustomEvent("kingdom:donation-made", { player, kingdomId, amount });
   player.sendMessage(

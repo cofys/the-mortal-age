@@ -254,7 +254,7 @@ function executeSale(director, bot, record, stall, itemId, qty, price) {
     return false;
   }
 
-  const tax = Math.floor(cost * Store.MARKET_TAX_RATE);
+  const tax = Math.floor(cost * KingdomStore.getMarketTaxRate(stall.kingdomId));
   stall.stock[itemId] = stock - qty;
   stall.till = (stall.till ?? 0) + (cost - tax);
   try {
@@ -265,6 +265,7 @@ function executeSale(director, bot, record, stall, itemId, qty, price) {
   if (tax > 0) {
     try {
       KingdomStore.grantTax(stall.kingdomId, tax);
+      KingdomStore.recordIncome(stall.kingdomId, "player-stall", tax);
       director.api?.emitCustomEvent?.("kingdom:tax-collected", {
         kingdomId: stall.kingdomId,
         amount: tax,

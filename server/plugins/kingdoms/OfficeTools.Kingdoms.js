@@ -304,8 +304,8 @@ const PETITION_TEMPLATES = [
   },
   {
     kind: "charter",
-    text: () => `A guildmaster offers {amt} coins for a trading charter in ${"{capital}"}.`,
-    cost: () => -(200 + Math.floor(Math.random() * 3) * 100), // pays 200-400 INTO the treasury
+    text: () => `A guildmaster seeks a trading charter in ${"{capital}"} — honor, not coin.`,
+    cost: () => 0, // Charters grant prestige, never coins: the crown mints nothing.
   },
 ];
 

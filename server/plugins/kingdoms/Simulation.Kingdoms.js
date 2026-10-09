@@ -49,6 +49,9 @@ const Tension = require("./Tension.Kingdoms");
 
 // ~10 minutes at 600ms/tick.
 const SIM_TICK_TICKS = 1000;
+// Income window for the steward's report: slightly wider than the tick so
+// no real tax falls through the cracks between ticks.
+const SIM_TICK_WINDOW_MS = 12 * 60 * 1000;
 // Don't announce the same kind of office news more often than this.
 const NOTICE_COOLDOWN_MS = 45 * 60 * 1000;
 
@@ -162,7 +165,14 @@ function pick(array) {
   return array[Math.floor(Math.random() * array.length)];
 }
 
-/** Steward: taxes in. Returns the amount collected (0 when vacant). */
+/**
+ * Steward: reports on real tax income. The crown mints nothing — every coin
+ * in the treasury arrived through a real flow (market taxes on player sales,
+ * fealty dues, donations). The steward's tax-rate seal scales the market tax
+ * players actually pay; this tick reports what the realm earned, and the
+ * quartermaster stockpiles a share of the real revenue.
+ * Returns the real income collected since the last tick (0 when vacant).
+ */
 function stewardTick(kingdom, warsHere) {
   const held = holderKind(kingdom.id, "steward");
   if (!held) {
@@ -176,17 +186,10 @@ function stewardTick(kingdom, warsHere) {
   }
   const wartime = warsHere.length > 0;
   const rate = OfficeTools.getTaxRate(kingdom.id);
-  const levy = wartime ? OfficeTools.getWarLevy(kingdom.id) : 1;
-  const base = 180 + Math.floor(Math.random() * 240);
-  const amount = Math.max(1, Math.floor(base * rate * levy));
-  const treasury = Store.grantTax(kingdom.id, amount);
-  Store.setFlag(kingdom.id, "sim:last-tax", amount);
-  pluginApi.emitCustomEvent("kingdom:tax-collected", {
-    kingdomId: kingdom.id,
-    amount,
-    wartime,
-    treasury,
-  });
+  // Real income since the previous realm tick — market taxes, fealty dues,
+  // donations. No minting: if the realm earned nothing, the report says so.
+  const income = Store.getRecentIncome(kingdom.id, SIM_TICK_WINDOW_MS);
+  Store.setFlag(kingdom.id, "sim:last-tax", income);
   // A heavy hand fills the coffers and empties the streets' patience.
   if (rate >= 1.5 && Math.random() < 0.6) {
     OfficeTools.emitUnrest(kingdom.id, "taxes");
@@ -195,11 +198,11 @@ function stewardTick(kingdom, warsHere) {
   OfficeTools.tickPetitions(kingdom, held);
   if (noticeDue(kingdom.id, "tax")) {
     announceToRealm(
-      `[Realm] The Steward of ${kingdom.name} has collected ${amount} coins in taxes` +
+      `[Realm] The Steward of ${kingdom.name} reports ${income} coins in taxes` +
         (wartime ? " — the war levy weighs heavy." : ".")
     );
   }
-  return amount;
+  return income;
 }
 
 /** Quartermaster: the war stockpile. Skims revenue in peace, burns in war. */
@@ -405,5 +408,6 @@ module.exports = function attachSimulation(api) {
 
 // Test seams.
 module.exports.simTick = simTick;
+module.exports.stewardTick = stewardTick;
 module.exports.stockpileOf = stockpileOf;
 module.exports.onSupplyDonated = onSupplyDonated;

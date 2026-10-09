@@ -128,6 +128,92 @@ function spendTax(id, amount) {
   return true;
 }
 
+// --- treasury income ledger --------------------------------------------------
+// Every coin entering a treasury is recorded with its source, so the court's
+// books are auditable: no income may appear without a real origin (market
+// taxes from player sales, fealty dues from player purses, donations,
+// war-demand transfers, plunder). Callers record income at the same site
+// where they call grantTax; the ledger is accounting, not a second money
+// movement. No save: callers save (same convention as setFlag/grantTax).
+
+const INCOME_LEDGER_FLAG = "treasury:income-ledger";
+const INCOME_TOTALS_FLAG = "treasury:income-totals";
+const INCOME_LEDGER_CAP = 100;
+
+/** Known income sources. New real flows add a key here. */
+const INCOME_SOURCES = [
+  "player-stall", // 5% market tax on player stall sales (buyer's purse)
+  "fealty", // fealty dues taken from a player's purse
+  "promotion", // promotion tax taken from a player's purse
+  "task", // kingdom-task tax taken from a player's purse
+  "donation", // ::donate from a player's purse
+  "war-demand", // honored war demand: ally treasury -> this treasury
+  "plunder", // seized war chest (player-funded) after a crushed founding
+];
+
+function recordIncome(id, source, amount) {
+  const kingdom = getKingdom(id);
+  if (!kingdom || !(amount > 0)) return;
+  const coins = Math.floor(amount);
+  const key = INCOME_SOURCES.includes(source) ? source : "other";
+  const ledger = Array.isArray(kingdom.flags[INCOME_LEDGER_FLAG])
+    ? kingdom.flags[INCOME_LEDGER_FLAG]
+    : [];
+  ledger.push({ at: Date.now(), source: key, amount: coins });
+  kingdom.flags[INCOME_LEDGER_FLAG] = ledger.slice(-INCOME_LEDGER_CAP);
+  const totals = { ...(kingdom.flags[INCOME_TOTALS_FLAG] ?? {}) };
+  totals[key] = (totals[key] ?? 0) + coins;
+  kingdom.flags[INCOME_TOTALS_FLAG] = totals;
+}
+
+/** Lifetime income per source for a kingdom: { source: coins }. */
+function getIncomeTotals(id) {
+  const totals = getKingdom(id)?.flags?.[INCOME_TOTALS_FLAG];
+  return totals && typeof totals === "object" ? { ...totals } : {};
+}
+
+/** Coins recorded from real income in the last windowMs milliseconds. */
+function getRecentIncome(id, windowMs) {
+  const ledger = getKingdom(id)?.flags?.[INCOME_LEDGER_FLAG];
+  if (!Array.isArray(ledger) || !(windowMs > 0)) return 0;
+  const since = Date.now() - windowMs;
+  return ledger.reduce((sum, e) => (e && e.at >= since ? sum + (e.amount ?? 0) : sum), 0);
+}
+
+// --- market tax rate ---------------------------------------------------------
+// The steward's tax-rate seal sets the real market tax players pay on stall
+// sales: base 5%, scaled by the steward's multiplier (0.5x/1x/1.5x/2x), and
+// by the marshal's war levy while the kingdom is at war. Flag keys mirror
+// OfficeTools (the write side); this module only reads.
+
+const MARKET_TAX_BASE = 0.05;
+const TAX_RATE_FLAG = "sim:tax-rate";
+const WAR_LEVY_FLAG = "sim:war-levy";
+const TAX_MULTIPLIERS = [0.5, 1, 1.5, 2];
+const WAR_LEVY_MULTIPLIERS = [1.2, 1.6, 2.0, 2.5];
+
+function kingdomAtWar(id) {
+  try {
+    return getActiveWars().some((w) => w.active && (w.attackerId === id || w.defenderId === id));
+  } catch {
+    return false;
+  }
+}
+
+/** Effective market-tax fraction for stall sales in this kingdom's markets. */
+function getMarketTaxRate(id) {
+  const kingdom = getKingdom(id);
+  const taxFlag = kingdom?.flags?.[TAX_RATE_FLAG];
+  const mult = TAX_MULTIPLIERS.includes(taxFlag) ? taxFlag : 1;
+  let rate = MARKET_TAX_BASE * mult;
+  if (kingdomAtWar(id)) {
+    const levyFlag = kingdom?.flags?.[WAR_LEVY_FLAG];
+    const levy = WAR_LEVY_MULTIPLIERS.includes(levyFlag) ? levyFlag : 1.6;
+    rate *= levy;
+  }
+  return rate;
+}
+
 function declareWar({ attackerId, defenderId, declaredBy = null, reason = null, resolveAt = null }) {
   const wars = load().wars;
   const open = wars.find(
@@ -282,6 +368,11 @@ module.exports = {
   setFlag,
   grantTax,
   spendTax,
+  recordIncome,
+  getIncomeTotals,
+  getRecentIncome,
+  getMarketTaxRate,
+  INCOME_SOURCES,
   declareWar,
   endWar,
   getActiveWars,

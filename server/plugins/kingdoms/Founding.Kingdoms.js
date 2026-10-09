@@ -640,6 +640,7 @@ function resolveCrushed(kingdom, gpId, gpName, strength, force, chance) {
   const chest = kingdom.flags?.[FLAG_WAR_CHEST] ?? 0;
   if (chest > 0 && Store.getKingdom(gpId)) {
     Store.grantTax(gpId, chest);
+    Store.recordIncome(gpId, "plunder", chest);
     ledger(kingdom, "plunder", "the war chest, seized", chest);
   }
   const cost = costSummary(Store.getKingdom(kingdom.id) ?? kingdom);

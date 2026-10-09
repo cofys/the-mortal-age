@@ -394,6 +394,7 @@ function onWarDemand(event) {
     const gift = WAR_DEMAND_GIFT_MIN + Math.floor(Math.random() * (WAR_DEMAND_GIFT_MAX - WAR_DEMAND_GIFT_MIN + 1));
     if (Store.spendTax(ally, gift)) {
       Store.grantTax(kingdomId, gift);
+      Store.recordIncome(kingdomId, "war-demand", gift);
     }
     Store.adjustAlliance(kingdomId, ally, { strengthDelta: 1 });
     Store.setRawTension(kingdomId, ally, Math.max(0, Tension.getTension(kingdomId, ally) - 5));

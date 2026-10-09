@@ -91,6 +91,7 @@ function collectTax(player, kingdomId, kind, emitEvent) {
     return 0;
   }
   Store.grantTax(kingdomId, taken);
+  Store.recordIncome(kingdomId, kind, taken);
   Store.setFlag(kingdomId, LAST_TAX_FLAG, { at: Date.now(), amount: taken, source: kind });
   Store.save();
   try {
