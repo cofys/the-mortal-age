@@ -721,6 +721,53 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "what god do you worship" — player asks about the citizen's faith.
+  if (/\b(what god do you worship|who do you worship|what is your faith|do you believe in|are you religious)\b/.test(said)) {
+    try {
+      const Faith = require("../lib/CitizenFaith");
+      const s = Faith.faithSummary(citizenUsername);
+      if (!s) return false;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "faith_describe", s);
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "pray with me" — player asks the citizen to pray together.
+  if (/\b(pray with me|let us pray|say a prayer)\b/.test(said)) {
+    try {
+      const Faith = require("../lib/CitizenFaith");
+      const s = Faith.faithSummary(citizenUsername);
+      if (!s) return false;
+      Faith.adjustDevotion(citizenUsername, 2);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "faith_pray", s);
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "where is the temple" — player asks about the local temple.
+  if (/\b(where is the temple|is there a temple|where do you pray|where is the chapel)\b/.test(said)) {
+    try {
+      const Faith = require("../lib/CitizenFaith");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const bonus = record?.kingdomId ? Faith.templeBonus(record.kingdomId) : 0;
+      const s = Faith.faithSummary(citizenUsername) ?? {};
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "faith_temple", {
+        ...s,
+        templeTier: bonus,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   return false;
 }
 
@@ -760,6 +807,15 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, extra) {
       gov_nominated: `${display}: Done — your name's on the ballot. Good luck!`,
       gov_nomination_failed: `${display}: Hmm, that didn't go through. Maybe you're already running.`,
       gov_endorsed: `${display}: Noted — I'll remember you spoke well of ${extra?.name ?? "them"}.`,
+      faith_describe: extra
+        ? `${display}: I follow ${extra.godName}${extra.epithet ? ` ${extra.epithet}` : ""}${extra.priest ? " — I serve as a priest" : ""}.`
+        : `${display} shrugs.`,
+      faith_pray: extra
+        ? `${display}: ${extra.godName === "The Silent One" ? "..." : "Aye, let's pray together."}`
+        : `${display} nods.`,
+      faith_temple: extra?.templeTier > 0
+        ? `${display}: We have a fine chapel here — tier ${extra.templeTier}. Come pray with us sometime.`
+        : `${display}: No grand temple here, but any quiet corner will do for prayer.`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM

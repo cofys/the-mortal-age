@@ -179,6 +179,8 @@ const Aging = require("../lib/CitizenAging");
 const CitizenFamilies = require("../lib/CitizenFamilies");
 const { tickGovernments } = require("../lib/CitizenGovernmentLife");
 const CitizenGovernment = require("../lib/CitizenGovernment");
+const { tickFaith } = require("../lib/CitizenFaithLife");
+const CitizenFaith = require("../lib/CitizenFaith");
 const { tickWeatherReactions } = require("../lib/CitizenWeatherReactions");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
@@ -2792,6 +2794,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("governments failed", { error: String(error?.message ?? error) });
     }
+    // Citizen faith: gods, devotion, priests, holy days, holy wars.
+    // Data tier, zero LLM.
+    try {
+      tickFaith(this, nowMs);
+    } catch (error) {
+      this.log("faith failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -2859,6 +2868,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen government save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenFaith.save()) {
+        this.log("citizen faith saved");
+      }
+    } catch (error) {
+      this.log("citizen faith save failed", {
         error: String(error?.message ?? error),
       });
     }
