@@ -227,6 +227,8 @@ const { tickCovertDiplomacy } = require("../lib/CitizenDiplomacyLife");
 const CitizenDiplomacy = require("../lib/CitizenDiplomacy");
 const { tickTreaties } = require("../lib/CitizenTreatyLife");
 const CitizenTreaties = require("../lib/CitizenTreaties");
+const { tickEspionage } = require("../lib/CitizenEspionageLife");
+const CitizenEspionage = require("../lib/CitizenEspionage");
 const { tickLeagues } = require("../lib/CitizenLeagueLife");
 const CitizenLeagues = require("../lib/CitizenLeagues");
 const { tickDiscoveryLife } = require("../lib/CitizenDiscoveryLife");
@@ -3036,6 +3038,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("treaties failed", { error: String(error?.message ?? error) });
     }
+    // Citizen espionage operations: covert ops, counter-intelligence,
+    // spy networks. Data tier, zero LLM. (CitizenDiplomacy owns passive
+    // intel gathering; this owns what happens after the intel.)
+    try {
+      tickEspionage(this, nowMs);
+    } catch (error) {
+      this.log("espionage failed", { error: String(error?.message ?? error) });
+    }
     // Citizen team leagues: seasons, fixtures, standings, championships.
     // Data tier, zero LLM. (CitizenSports owns hash-derived spectator
     // fixtures; CitizenTournaments owns individual brackets.)
@@ -3516,6 +3526,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen treaties save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenEspionage.save()) {
+        this.log("citizen espionage saved");
+      }
+    } catch (error) {
+      this.log("citizen espionage save failed", {
         error: String(error?.message ?? error),
       });
     }

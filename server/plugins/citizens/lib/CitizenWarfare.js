@@ -198,7 +198,16 @@ function findMilitia(director, key, kingdomId) {
 function tryMusterMilitia(director, war, kingdomId) {
   const key = warKey(war);
   const rng = agentRng(`militia:${key}:${kingdomId}:${Date.now() >> 16}`);
-  if (!chance(rng, MUSTER_CHANCE)) return false;
+  // Fresh intelligence on the enemy musters a stronger levy — read
+  // defensively from the espionage layer (never required).
+  let intelAdv = 0;
+  try {
+    const enemyEarly = kingdomId === war.attackerId ? war.defenderId : war.attackerId;
+    intelAdv = require("./CitizenEspionage").intelAdvantageFor?.(kingdomId, enemyEarly) ?? 0;
+  } catch {
+    intelAdv = 0;
+  }
+  if (!chance(rng, MUSTER_CHANCE + intelAdv * 0.15)) return false;
 
   // Leader: an on-duty guard of the kingdom.
   let leaderRec = null;
@@ -237,8 +246,9 @@ function tryMusterMilitia(director, war, kingdomId) {
     [rest[i], rest[j]] = [rest[j], rest[i]];
   }
   const companions = [];
+  const companionCap = MAX_COMPANIONS + Math.round(intelAdv * 2);
   for (const c of [...friends, ...rest]) {
-    if (companions.length >= MAX_COMPANIONS) break;
+    if (companions.length >= companionCap) break;
     companions.push(c.username);
   }
   if (companions.length < MIN_COMPANIONS) return false;

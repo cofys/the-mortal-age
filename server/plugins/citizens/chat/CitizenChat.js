@@ -681,6 +681,30 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "any spies" / "covert" / "infiltrate" — citizen espionage.
+  // (Passive "what news from <kingdom>" stays with CitizenDiplomacy.)
+  if (/\b(any sp(y|ies)|covert ops?|infiltrat\w*|spymaster|caught.*spy|spy network)\b/.test(said)) {
+    try {
+      const Espionage = require("../lib/CitizenEspionage");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const net = kingdomId ? Espionage.networkFor(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "espionage_status", {
+        username: citizenUsername,
+        hasNetwork: !!net,
+        spies: net?.spies?.length ?? 0,
+        handlers: net?.handlers?.length ?? 0,
+        liveOps: kingdomId ? Espionage.pendingOperationsFor(kingdomId).length : 0,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "any news" / "what's the news" / "is there a paper" — journalism.
   if (/\b(any news|what'?s the news|latest news|is there a paper|buy a paper|any papers|subscribe|any journalists?|any reporters?)\b/.test(said)) {    try {
       const Press = require("../lib/CitizenPress");

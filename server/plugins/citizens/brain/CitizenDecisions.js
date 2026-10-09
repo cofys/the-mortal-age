@@ -126,6 +126,7 @@ const ACT_CHART = "citizen_chart";
 const ACT_REPORT = "citizen_report";
 const ACT_BANKERWORK = "citizen_bankerwork";
 const ACT_INSURERWORK = "citizen_insurerwork";
+const ACT_SPY = "citizen_spymaster";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -159,7 +160,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -896,6 +897,40 @@ function diplomatInfo(player) {
     };
   } catch {
     return { hasMission: false, hottestBorder: null, hottestTension: 0, calmestBorder: null, calmestTension: 101, fame: 0 };
+  }
+}
+
+function spyInfo(player) {
+  try {
+    const Espionage = require("../lib/CitizenEspionage");
+    const { kingdomIdOf } = require("./CitizenSites");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const home = kingdomIdOf(player);
+    const liveOps = Espionage.pendingOperationsFor(home).filter(
+      (o) => String(o.operative ?? "").toLowerCase() === String(username).toLowerCase()
+    );
+    const network = Espionage.networkFor(home);
+    const isCounter = Espionage.counterAgentsOf(home).some(
+      (a) => String(a).toLowerCase() === String(username).toLowerCase()
+    );
+    // Hottest foreign border — where covert work matters.
+    let hottestTension = 0;
+    try {
+      const Tension = require("../../kingdoms/Tension.Kingdoms");
+      for (const k of Espionage.kingdoms()) {
+        if (k === home) continue;
+        const t = Tension.getTension?.(home, k) ?? 0;
+        if (t > hottestTension) hottestTension = t;
+      }
+    } catch { /* tension unreadable */ }
+    return {
+      hasOperation: liveOps.length > 0,
+      hasNetwork: !!network,
+      isCounterAgent: isCounter,
+      hottestTension,
+    };
+  } catch {
+    return { hasOperation: false, hasNetwork: false, isCounterAgent: false, hottestTension: 0 };
   }
 }
 
@@ -1802,6 +1837,7 @@ function snapshot(player) {
 
 compete: competeInfo(player),
     diplomat: diplomatInfo(player),
+    spy: spyInfo(player),
     explore: exploreInfo(player),
     invent: inventInfo(player),
     construct: constructInfo(player),
@@ -1836,7 +1872,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2257,7 +2293,7 @@ case ACT_COMPETE: {
       const d = diplomat ?? { hasMission: false, hottestTension: 0, calmestTension: 101, fame: 0 };
       const sneaky = personality?.sneaky ?? personality?.mischievous ?? 0;
       const charisma = personality?.charisma ?? personality?.charming ?? 0;
-      const canSpy = sneaky > 0.6 && (thievingLevel ?? 1) >= 20;
+      const canSpy = sneaky > 0.6 && (thiefLevel ?? 1) >= 20;
       const canBroker = charisma > 0.6 && (d.fame ?? 0) >= 40;
       if (!d.hasMission && !canSpy && !canBroker) return 4; // nothing to do
       if (d.hasMission) return 24; // the mission is active — see it through
@@ -2270,6 +2306,33 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody spies drunk well
+      return s;
+    }
+    case ACT_SPY: {
+      // Espionage operations: spymasters run covert ops where borders run
+      // hot; counter-agents patrol at home. A human spymaster moves when
+      // it matters and never when hurt, weary, or drunk.
+      const sp = spy ?? { hasOperation: false, hasNetwork: false, isCounterAgent: false, hottestTension: 0 };
+      const sneaky = personality?.sneaky ?? personality?.mischievous ?? 0;
+      const canOperate = sneaky > 0.6 && (thiefLevel ?? 1) >= 25 && sp.hasNetwork;
+      if (sp.isCounterAgent) {
+        let s = 14; // counter-agents patrol — steady, quiet work
+        if (criticalHp || exhausted) s -= 70;
+        else if (hurt) s -= 30;
+        else if (weary) s -= 25;
+        if (drunk) s -= 20;
+        return s;
+      }
+      if (!canOperate) return 4; // nothing to do in the shadows
+      if (sp.hasOperation) return 24; // the operation is live — see it through
+      let s = 12;
+      if ((sp.hottestTension ?? 0) >= 50) s += 10; // hot border needs shadows
+      else if ((sp.hottestTension ?? 0) >= 35) s += 4;
+      else s += 1; // calm borders don't need covert work
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // nobody runs ops drunk well
       return s;
     }
     case ACT_EXPLORE: {
@@ -3028,7 +3091,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

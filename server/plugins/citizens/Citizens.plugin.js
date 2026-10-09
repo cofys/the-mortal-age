@@ -25,6 +25,7 @@ const { onInsuranceCommand, onPlayerDeathInsured, USAGE: INSURANCE_USAGE } = req
 const { onContractCommand, onWillCommand, onDisputeCommand, onRepresentCommand, CONTRACT_USAGE, WILL_USAGE, DISPUTE_USAGE, REPRESENT_USAGE } = require("./CitizenCivilEvents");
 const { onTreatyCommand, USAGE: TREATY_USAGE } = require("./CitizenTreatyEvents");
 const { setEmitter: setTreatyEmitter } = require("./lib/CitizenTreatyLife");
+const { onSpyCommand, USAGE: SPY_USAGE } = require("./CitizenSpyEvents");
 const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { initCitizenSocial, onSocialChatResponse } = require("./chat/CitizenSocial");
@@ -683,6 +684,12 @@ module.exports = {
       onTreatyCommand,
       PlayerRights.NONE,
       TREATY_USAGE
+    );
+    api.registerCommand(
+      "spy",
+      onSpyCommand,
+      PlayerRights.NONE,
+      SPY_USAGE
     );
   },
 };
