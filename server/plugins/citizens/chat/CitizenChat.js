@@ -695,6 +695,34 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "players' guild" / "stage guild" / "theater guild" / "play certification"
+  // / "critics' choice" / "touring circuit" — player asks about the Players'
+  // Guild. (The theater block below owns "playwright", "troupe", "touring".)
+  if (/\b(players'? guild|stage guild|theatre guild|theater guild|guild of players|play certification|certify (a|my) play|certified play|critics'? choice|critic'?s laurel|touring circuit|stage code|stagemaster)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenStageGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "stageguild_status", {
+        username: citizenUsername,
+        exists: desc.exists ?? false,
+        memberCount: desc.memberCount ?? 0,
+        stagemasters: desc.stagemasters ?? 0,
+        certified: desc.certified ?? 0,
+        openCircuits: desc.openCircuits ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "playwright" / "troupe" / "touring" — player asks about theater
   // production. (The entertainment theater block owns the house shows;
   // this owns playwrights, troupes, and touring.)
