@@ -115,6 +115,7 @@ const CitizenBuilders = require("../lib/CitizenBuilders");
 const CitizenRetirement = require("../lib/CitizenRetirement");
 const { tickElections } = require("../lib/CitizenElection");
 const CitizenRelationships = require("../lib/CitizenRelationships");
+const BrainRelationships = require("../brain/CitizenRelationships");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
 const { tickTavernGames } = require("../lib/CitizenTavernGames");
@@ -2705,6 +2706,13 @@ class CitizenDirector {
       CitizenRelationships.tickRelationships(this, nowMs);
     } catch (error) {
       this.log("relationships failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen↔citizen bond formation: rapport from real interactions and
+    // personality compatibility promotes into friends/rivals. Data tier.
+    try {
+      BrainRelationships.tickRelationships(this, nowMs);
+    } catch (error) {
+      this.log("bond formation failed", { error: String(error?.message ?? error) });
     }
     // Citizen secret societies: hidden orders (Gilded Ledger, Shadow Circle,
     // Old Guard) hold night meetings, advance agendas, and quietly recruit

@@ -226,6 +226,16 @@ function onSocialChatResponse(payload) {
   // Natural endings: max turns, or a coin flip (conversations trail off).
   if (thread.turn >= thread.maxTurns || Math.random() < 0.25) {
     threads.delete(threadId);
+    // A real conversation happened: warm the pair's rapport (brain layer).
+    try {
+      require("../brain/CitizenRelationships").noteInteraction(
+        thread.a,
+        thread.b,
+        "chatted"
+      );
+    } catch {
+      // Rapport must never break social.
+    }
     return;
   }
 
