@@ -279,6 +279,8 @@ const { tickBankingLife } = require("../lib/CitizenBankingLife");
 const CitizenBanking = require("../lib/CitizenBanking");
 const { tickInsuranceLife } = require("../lib/CitizenInsuranceLife");
 const CitizenInsurance = require("../lib/CitizenInsurance");
+const { tickInsureGuildLife } = require("../lib/CitizenInsureGuildLife");
+const CitizenInsureGuilds = require("../lib/CitizenInsureGuilds");
 const { tickCivilLife } = require("../lib/CitizenCivilLife");
 const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -3275,6 +3277,15 @@ class CitizenDirector {
     } catch (error) {
       this.log("insurance failed", { error: String(error?.message ?? error) });
     }
+    // Underwriters' association: membership, dues, solvency reviews,
+    // reinsurance, actuarial school, ethics tribunal. Data tier, zero LLM.
+    // (CitizenInsurance owns policies/premiums/pool/claims; this owns the
+    // profession's guild layer only.)
+    try {
+      tickInsureGuildLife(this, nowMs);
+    } catch (error) {
+      this.log("insure guild failed", { error: String(error?.message ?? error) });
+    }
     // Citizen civil law: contracts, wills, disputes, judgments.
     // Data tier, zero LLM. (CitizenJusticeLife owns criminal trials;
     // CitizenLegalLife owns judges/appeals/pardons.)
@@ -3674,6 +3685,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen insurance save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenInsureGuilds.save()) {
+        this.log("citizen insure guild saved");
+      }
+    } catch (error) {
+      this.log("citizen insure guild save failed", {
         error: String(error?.message ?? error),
       });
     }

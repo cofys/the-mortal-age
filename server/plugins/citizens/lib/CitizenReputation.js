@@ -93,6 +93,8 @@ const DEEDS = Object.freeze({
   fabricator: Object.freeze({ points: -8, label: "was expelled from the press guild for fabrication" }),
   vaultkeeper: Object.freeze({ points: 8, label: "certified a bank branch for the bankers' guild" }),
   embezzler: Object.freeze({ points: -8, label: "was expelled from the bankers' guild for ledger tampering" }),
+  guarantor: Object.freeze({ points: 8, label: "backstopped the realm's insurers through the underwriters' guild" }),
+  fraudster: Object.freeze({ points: -8, label: "was expelled from the underwriters' guild for insurance fraud" }),
   financier: Object.freeze({ points: 8, label: "built a banking fortune" }),
   defaulter: Object.freeze({ points: -8, label: "defaulted on a bank loan" }),
   underwriter: Object.freeze({ points: 8, label: "underwrote a thriving insurance book" }),

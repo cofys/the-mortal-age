@@ -621,6 +621,28 @@ function flushOwedPayouts() {
 
 // === Insurers ===
 
+/**
+ * Reduce payoutsOwed for a claimant by `amount` — used when the underwriters'
+ * guild pays the owed claim from its own reinsurance fund, so the pool never
+ * double-pays when it recovers. Returns the coins actually covered (never
+ * more than was owed). Additive seam for the guild layer; the pool, claims,
+ * and policy logic are untouched.
+ */
+function coverOwedPayout(username, amount) {
+  const st = data();
+  const key = norm(username);
+  const owed = st.payoutsOwed[key];
+  if (!owed || owed <= 0) return 0;
+  const covered = Math.min(owed, Math.max(0, Math.floor(Number(amount) || 0)));
+  if (covered <= 0) return 0;
+  const rest = owed - covered;
+  if (rest <= 0) delete st.payoutsOwed[key];
+  else st.payoutsOwed[key] = rest;
+  st.totalClaims += covered;
+  dirty = true;
+  return covered;
+}
+
 function setDeathWatermark(ts) {
   const st = data();
   const t = Math.floor(Number(ts) || 0);
@@ -718,6 +740,7 @@ module.exports = {
   fileClaim,
   settleTravelDanger,
   flushOwedPayouts,
+  coverOwedPayout,
   setDeathWatermark,
   registerInsurer,
   insurerFor,

@@ -847,6 +847,35 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "underwriters guild" / "insurance guild" / "reinsurance" — the
+  // underwriters' association (guild layer). Placed before the insurance
+  // block; keywords are distinct from it ("my policies", "buy policy", ...).
+  if (/\b(underwriters'? guild|insurance guild|reinsurance|underwriting standards|solvency review|actuarial school)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenInsureGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "insureguild_status", {
+        username: citizenUsername,
+        members: desc?.members ?? 0,
+        actuaries: desc?.actuaries ?? 0,
+        treasury: desc?.treasury ?? 0,
+        reinsuranceFund: desc?.reinsuranceFund ?? 0,
+        poolStatus: desc?.poolStatus ?? "unknown",
+        openClaims: desc?.openClaims ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a bank" / "my balance" / "open account" — banking.
   if (/\b(is there a bank|any bankers?|my balance|open an? account|bank balance|any loans?|borrow coins|deposit coins|withdraw coins)\b/.test(said)) {
     try {
