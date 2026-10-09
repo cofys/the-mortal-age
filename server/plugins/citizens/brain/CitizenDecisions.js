@@ -109,7 +109,8 @@ const ACT_CREATEART = "citizen_createart";
 const ACT_COMPETE = "citizen_compete";
 const ACT_DIPLOMAT = "citizen_diplomat";
 const ACT_EXPLORE = "citizen_explore";
-const ACT_INVENT = "citizen_invent";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
+const ACT_INVENT = "citizen_invent";
+const ACT_PHILOSOPHIZE = "citizen_philosophize";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
@@ -137,7 +138,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_INVENT,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_INVENT, ACT_PHILOSOPHIZE,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -856,6 +857,33 @@ function inventInfo(player) {
 }
 
 /**
+ * Philosophy readiness: is this citizen a philosopher, can they contemplate,
+ * are they thoughtful? Defensive: missing module scores as unable.
+ */
+function philosophyInfo(player) {
+  try {
+    const Philosophy = require("../lib/CitizenPhilosophy");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isPhil = Philosophy.isPhilosopher(username);
+    const wisdom = Philosophy.wisdomFor(username);
+    const canCont = Philosophy.canContemplate(username, Date.now());
+
+    let isThoughtful = false;
+    try {
+      const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+      const p = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+      const traits = p.traits ?? [];
+      isThoughtful = traits.includes("thoughtful") || traits.includes("curious")
+        || traits.includes("wise") || traits.includes("philosophical");
+    } catch { /* personality unreadable */ }
+
+    return { isPhilosopher: isPhil, wisdom, canContemplate: canCont, isThoughtful };
+  } catch {
+    return { isPhilosopher: false, wisdom: 0, canContemplate: false, isThoughtful: false };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1264,7 +1292,9 @@ function snapshot(player) {
 compete: competeInfo(player),
     diplomat: diplomatInfo(player),
     explore: exploreInfo(player),
-    invent: inventInfo(player),    drunk: isDrunk(player),
+    invent: inventInfo(player),
+    philosophy: philosophyInfo(player),
+    drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
     hour: new Date().getHours(), // server-local, per the timezone rule
@@ -1284,7 +1314,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, philosophy, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1678,6 +1708,26 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody invents drunk well
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_PHILOSOPHIZE: {
+      // Philosophy: contemplate at the academy, gain wisdom, join debates.
+      // The thoughtful are drawn to it; philosophers return to deepen their
+      // wisdom. Contemplation has a cooldown — no point going when the mind
+      // is still digesting the last session. The hurt and weary stay home.
+      const v = philosophy ?? { isPhilosopher: false, wisdom: 0, canContemplate: false, isThoughtful: false };
+      if (!v.isThoughtful && !v.isPhilosopher) return 4; // not a thinker
+      if (v.isPhilosopher && !v.canContemplate) return 4; // mind still digesting
+      let s = 20;
+      if (v.isPhilosopher) s += 10; // committed to the path
+      if (v.isThoughtful) s += 8; // temperament draws them
+      s += Math.min((v.wisdom ?? 0) * 0.2, 10); // the wise seek more wisdom
+      if (goalType === GOAL_MASTER_TRADE) s -= 6; // philosophy doesn't pay
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // nobody philosophizes drunk well
       if (mood < 20) s -= 8;
       return s;
     }
@@ -2167,7 +2217,7 @@ module.exports = {
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_INVENT,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_INVENT, ACT_PHILOSOPHIZE,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

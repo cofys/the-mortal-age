@@ -1047,6 +1047,27 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a philosopher" / "what is your philosophy" — player asks about philosophy.
+  if (/\b(is there a philosopher|any philosophers|what is your philosophy|what do you believe|philosophy|the academy|schools of thought|are you a philosopher)\b/.test(said)) {
+    try {
+      const Phil = require("../lib/CitizenPhilosophy");
+      const isPhil = Phil.isPhilosopher(citizenUsername);
+      const phil = Phil.philosopherFor(citizenUsername);
+      const school = phil ? Phil.schoolFor(phil.school) : null;
+      const sages = Phil.topSages(3);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "philosophy_status", {
+        username: citizenUsername,
+        isPhilosopher: isPhil,
+        school: school ? school.name : null,
+        wisdom: phil ? phil.wisdom : 0,
+        topSages: sages.map((s) => ({ username: s.username, wisdom: s.wisdom })),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a guild" / "what guild am i in" — player asks about trade guilds.
   if (/\b(is there a guild|what guilds are there|are there guilds|tell me about guilds|what guild am i in|am i in a guild|what is my guild)\b/.test(said)) {
     try {
@@ -1318,6 +1339,9 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, extra) {
       school_educated: extra?.educated
         ? `${display}: Aye, I went to school as a child. It serves me well — I pick things up ${extra.bonus}% faster.`
         : `${display}: No schooling for me, I'm afraid. I learned what I know the hard way.`,
+      philosophy_status: extra?.isPhilosopher
+        ? `${display}: I walk the path of the ${extra.school} — my wisdom stands at ${extra.wisdom}.${extra.topSages?.length ? ` The wisest among us: ${extra.topSages.map((s) => s.username).join(", ")}.` : ""}`
+        : `${display}: Philosophy? The academy welcomes all curious minds. Come contemplate with us.`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM

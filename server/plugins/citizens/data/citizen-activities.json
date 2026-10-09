@@ -802,6 +802,27 @@
           "type": "citizenInvent"
         }
       ]
+    },
+    {
+      "id": "citizen_philosophize",
+      "mode": "citizen_philosophize",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenPhilosophize"
+        }
+      ]
     }
   ]
 }

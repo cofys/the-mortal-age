@@ -217,7 +217,10 @@ const CitizenDiplomacy = require("../lib/CitizenDiplomacy");
 const { tickDiscoveryLife } = require("../lib/CitizenDiscoveryLife");
 const CitizenDiscovery = require("../lib/CitizenDiscovery");
 const { tickInventionLife } = require("../lib/CitizenInventionLife");
-const CitizenInventions = require("../lib/CitizenInventions");const { tickShoppers } = require("../shop/CitizenShoppers");
+const CitizenInventions = require("../lib/CitizenInventions");
+const { tickPhilosophy } = require("../lib/CitizenPhilosophyLife");
+const CitizenPhilosophy = require("../lib/CitizenPhilosophy");
+const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
 const CitizenBonds = require("../lib/CitizenBonds");
@@ -2955,6 +2958,13 @@ class CitizenDirector {
       tickInventionLife(this, nowMs);
     } catch (error) {
       this.log("invention failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen philosophy: debates, sage announcements, wisdom.
+    // Data tier, zero LLM. (CitizenFaith owns gods/devotion/priests.)
+    try {
+      tickPhilosophy(this, nowMs);
+    } catch (error) {
+      this.log("philosophy failed", { error: String(error?.message ?? error) });
     }    try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3165,6 +3175,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen inventions save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenPhilosophy.save()) {
+        this.log("citizen philosophy saved");
+      }
+    } catch (error) {
+      this.log("citizen philosophy save failed", {
         error: String(error?.message ?? error),
       });
     }
