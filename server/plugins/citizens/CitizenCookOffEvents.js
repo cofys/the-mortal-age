@@ -51,9 +51,16 @@ function kingdomOf(player) {
   }
 }
 
+function safeRequire(p) {
+  try { return require(p); } catch { return null; }
+}
+
 function cookingLevel(player) {
   try {
-    const Skill = require("../src/main/typescript/elvarg/game/model/Skill")?.Skill;
+    // NOTE: path is ../../src/... (server/src) — the old ../src/... pointed
+    // at server/plugins/src, which does not exist, so every player read as
+    // Cooking 1 and enter/invent were impossible.
+    const Skill = safeRequire("../../src/main/typescript/elvarg/game/model/Skill")?.Skill;
     const mgr = player?.getSkillManager?.();
     if (!mgr || typeof mgr.getCurrentLevel !== "function") return 1;
     const lvl = Skill ? mgr.getCurrentLevel(Skill.COOKING) : mgr.getCurrentLevel("cooking");
@@ -65,12 +72,24 @@ function coinsOf(player) {
   try { return player?.getInventory?.()?.getAmount?.(COINS_ID) ?? 0; } catch { return 0; }
 }
 
+function amountIn(inv, id) {
+  try { return typeof inv?.getAmount === "function" ? inv.getAmount(id) : 0; } catch { return 0; }
+}
+
 function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
-    if (!inv || coinsOf(player) < amount) return false;
-    inv.remove?.(COINS_ID, amount);
-    return true;
+    if (!inv) return false;
+    const before = amountIn(inv, COINS_ID);
+    if (before < amount) return false;
+    // Canonical engine API: ItemContainer.deleteNumber(id, amount).
+    // There is no inv.remove(id, amount) — the old call was a silent no-op
+    // that still returned true, so purchases/inventions spent nothing.
+    if (typeof inv.deleteNumber === "function") inv.deleteNumber(COINS_ID, amount);
+    else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
+    else return false;
+    // Honest: the balance must actually have moved, or the fee wasn't taken.
+    return amountIn(inv, COINS_ID) === before - amount;
   } catch { return false; }
 }
 
@@ -86,24 +105,31 @@ function creditSeller(sellerName, amount) {
   } catch { return false; }
 }
 
-/** Defensively resolve an ingredient name to a real item id. */
+let _itemTable = null; // lazy cache of the engine item definitions
+
+/**
+ * Defensively resolve an ingredient name to a real item id from the engine
+ * item definitions (server/data/definitions/item-gameplay.json — a flat
+ * array of { id, name }). The old code required table files that do not
+ * exist, so EVERY invention failed; and even with a table it only read a
+ * keyed { items } map shape. Returns the lowest matching id, or null —
+ * the caller refuses honestly rather than inventing an id.
+ */
 function resolveItemId(name) {
-  const key = String(name || "").toLowerCase().trim();
+  const key = String(name || "").toLowerCase().trim().replace(/_/g, " ");
   if (!key) return null;
   try {
-    const tables = [
-      require("../data/item-gameplay.json"),
-      require("./data/item-gameplay.json"),
-    ];
-    for (const table of tables) {
-      if (!table) continue;
-      const items = table.items ?? table;
-      const upper = key.toUpperCase().replace(/ /g, "_");
-      if (items[upper]?.id != null) return items[upper].id;
-      if (items[key]?.id != null) return items[key].id;
+    if (!_itemTable) {
+      const rows = require("../../data/definitions/item-gameplay.json");
+      _itemTable = Array.isArray(rows) ? rows : [];
     }
-  } catch { /* fall through */ }
-  return null;
+    let best = null;
+    for (const row of _itemTable) {
+      if (String(row?.name || "").toLowerCase().replace(/_/g, " ") !== key) continue;
+      if (best == null || row.id < best) best = row.id;
+    }
+    return best;
+  } catch { return null; }
 }
 
 function onCookOffCommand(player, args) {
@@ -157,13 +183,27 @@ function onCookOffCommand(player, args) {
       if (lvl < 25) { say(player, "You need Cooking 25 to invent recipes."); return; }
       const inv = player?.getInventory?.();
       if (!inv) { say(player, "No inventory — cannot invent."); return; }
+      // Pre-validate ALL ingredients before consuming any: inventRecipe does
+      // not roll back, so a late failure would otherwise eat the early ones.
+      for (const ing of ings) {
+        const id = resolveItemId(ing);
+        if (id == null || (inv.getAmount?.(id) ?? 0) < 1) {
+          say(player, "Invention failed — you need one of each ingredient in your inventory.");
+          return;
+        }
+      }
       const consume = (chef, ingName) => {
         const id = resolveItemId(ingName);
         if (id == null) return false;
         try {
-          if ((inv.getAmount?.(id) ?? 0) < 1) return false;
-          inv.remove?.(id, 1);
-          return true;
+          // Canonical engine API: ItemContainer.deleteNumber(id, amount).
+          // inv.remove(id, 1) was a silent no-op — inventions were free.
+          const before = (inv.getAmount?.(id) ?? 0);
+          if (before < 1) return false;
+          if (typeof inv.deleteNumber === "function") inv.deleteNumber(id, 1);
+          else if (typeof inv.delete === "function") inv.delete(id, 1);
+          else return false;
+          return (inv.getAmount?.(id) ?? 0) === before - 1;
         } catch { return false; }
       };
       const r = CookOffs.inventRecipe(username, null, ings, lvl, consume, Date.now());
@@ -199,7 +239,8 @@ function onCookOffCommand(player, args) {
       const ok = CookOffs.buyListedRecipe(recipeId, username,
         (n, amt) => takeCoins(player, amt),
         (seller, amt) => creditSeller(seller, amt),
-        (n, amt) => { try { player?.getInventory?.()?.add?.(COINS_ID, amt); } catch { /* refund best-effort */ } });
+        // Refund best-effort: canonical adds(id, amount); add(id, amount) was the wrong overload.
+        (n, amt) => { try { player?.getInventory?.()?.adds?.(COINS_ID, amt); } catch { /* refund best-effort */ } });
       say(player, ok ? `You bought "${r.name}" for ${r.soldFor} coins!` : "Purchase failed — check the price and your coins.");
       return;
     }

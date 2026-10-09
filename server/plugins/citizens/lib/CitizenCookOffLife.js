@@ -144,16 +144,24 @@ function cookingLevel(player) {
   } catch { return 1; }
 }
 
-function coinsOf(player) {
-  try { return player?.getInventory?.()?.getAmount?.(COINS_ID) ?? 0; } catch { return 0; }
+function amountIn(inv, id) {
+  try { return typeof inv?.getAmount === "function" ? inv.getAmount(id) : 0; } catch { return 0; }
 }
 
 function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
-    if (!inv || coinsOf(player) < amount) return false;
-    inv.remove?.(COINS_ID, amount);
-    return true;
+    if (!inv) return false;
+    const before = amountIn(inv, COINS_ID);
+    if (before < amount) return false;
+    // Canonical engine API: ItemContainer.deleteNumber(id, amount).
+    // There is no inv.remove(id, amount) — the old call was a silent no-op
+    // that still returned true, inflating the prize pot with uncollected fees.
+    if (typeof inv.deleteNumber === "function") inv.deleteNumber(COINS_ID, amount);
+    else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
+    else return false;
+    // Honest: the balance must actually have moved, or the fee wasn't taken.
+    return amountIn(inv, COINS_ID) === before - amount;
   } catch { return false; }
 }
 
@@ -163,9 +171,15 @@ function payPrize(director, username, amount) {
     if (!bot) return false; // offline — honestly skip, never invent
     const player = bot.player ?? bot;
     const inv = player?.inventory ?? player?.getInventory?.();
-    if (!inv?.add) return false;
-    inv.add(COINS_ID, amount);
-    return true;
+    if (!inv) return false;
+    const before = amountIn(inv, COINS_ID);
+    // Canonical engine API: ItemContainer.adds(id, amount). The old
+    // inv.add(COINS_ID, amount) hit the wrong overload (add(item, refresh)
+    // expects an Item object) and threw, so prizes silently never landed.
+    if (typeof inv.adds !== "function") return false;
+    inv.adds(COINS_ID, amount);
+    // Honest: the prize must actually be in the inventory.
+    return amountIn(inv, COINS_ID) === before + amount;
   } catch { return false; }
 }
 

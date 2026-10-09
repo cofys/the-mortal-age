@@ -54,9 +54,11 @@ function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
+    // Canonical: ItemContainer.getAmount(id), deleteNumber/delete(id, amount).
+    // There is no inv.count(id) and no inv.remove(id, amount).
+    const has = typeof inv.getAmount === "function" ? inv.getAmount(COINS_ID) : 0;
     if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
+    if (typeof inv.deleteNumber === "function") inv.deleteNumber(COINS_ID, amount);
     else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
     else return false;
     return true;
@@ -135,16 +137,22 @@ function onMusicGuildCommand(player, args) {
         say(player, "Usage: ::musicguild certify <concertId> <title>");
         return;
       }
-      const m = Guilds.memberOf(username);
-      const mentored = m && Guilds.load().mentorships[username.toLowerCase()];
-      const fee = mentored ? 0 : Guilds.CERT_FEE;
-      if (fee > 0 && !takeCoins(player, fee)) {
-        say(player, `Certification costs ${fee} coins.`);
+      // Validate BEFORE touching the player's coins: certifyPerformance
+      // creates the certification and pays the bounty, so a failed
+      // validation after the fee was taken would silently eat the coins.
+      const pre = Guilds.canCertify(kingdomId, username, concertId);
+      if (!pre.ok) {
+        say(player, `Certification failed: ${pre.reason}.`);
+        return;
+      }
+      if (pre.fee > 0 && !takeCoins(player, pre.fee)) {
+        say(player, `Certification costs ${pre.fee} coins.`);
         return;
       }
       const res = Guilds.certifyPerformance(kingdomId, username, concertId, title);
       if (!res.ok) {
-        // Refund the fee on failure — honest economics.
+        // Unreachable in the same tick — the pre-flight above already
+        // passed — but stay honest if the ledger ever disagrees.
         say(player, `Certification failed: ${res.reason}.`);
         return;
       }

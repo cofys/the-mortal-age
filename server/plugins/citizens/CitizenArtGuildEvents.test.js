@@ -60,6 +60,7 @@ Module.prototype.require = function (id) {
 const { onArtGuildCommand, ARTGUILD_USAGE } = require("./CitizenArtGuildEvents");
 
 const coinsRef = { coins: 1000 };
+const invCalls = []; // tracks canonical inventory calls for regression tests
 function makePlayer(username, opts = {}) {
   const messages = [];
   return {
@@ -67,10 +68,16 @@ function makePlayer(username, opts = {}) {
     getUsername: () => username,
     isBot: !!opts.isBot,
     isRealPlayer: () => !opts.isBot,
+    // Mirrors the real ItemContainer contract: getAmount(id),
+    // deleteNumber(id, amount), adds(id, amount). There is no inv.count(id),
+    // no inv.remove(id, amount), and add(id, amount) is the wrong signature
+    // (add takes an Item object). The stubs deliberately expose ONLY the
+    // canonical API so any dead/wrong-API call in the command fails loudly.
     getInventory: () => ({
       getAmount: (id) => (id === 995 ? coinsRef.coins : 0),
-      remove: (id, amt) => { if (id === 995) coinsRef.coins -= amt; },
-      add: (id, amt) => { if (id === 995) coinsRef.coins += amt; },
+      deleteNumber: (id, amt) => { invCalls.push(["deleteNumber", id, amt]); if (id === 995) coinsRef.coins -= amt; },
+      delete: (id, amt) => { invCalls.push(["delete", id, amt]); if (id === 995) coinsRef.coins -= amt; },
+      adds: (id, amt) => { invCalls.push(["adds", id, amt]); if (id === 995) coinsRef.coins += amt; },
     }),
     sendMessage: (text) => messages.push(text),
     _messages: messages,
@@ -84,6 +91,7 @@ function test(name, fn) {
   Guilds._setSavePathForTests(p);
   Guilds.resetForTests();
   coinsRef.coins = 1000;
+  invCalls.length = 0;
   careers = {};
   artworks = {};
   artistWorks = {};
@@ -152,6 +160,44 @@ test("certify refunds the fee on failure", () => {
   onArtGuildCommand(player, "certify nope");
   assert.ok(player._messages[1].includes("Certification failed"));
   assert.strictEqual(coinsRef.coins, 1000); // refunded
+});
+
+test("dues are taken through deleteNumber (canonical ItemContainer contract)", () => {
+  // Regression: takeCoins used inv.remove(id, amount) and inv.count(id) —
+  // neither exists on the engine ItemContainer, so dues silently never
+  // collected. The player stub exposes only the canonical API.
+  careers = { "painty pete": "artist" };
+  const player = makePlayer("Painty Pete");
+  onArtGuildCommand(player, "join");
+  Guilds.memberOf("painty pete").duesPaidUntilMs = Date.now() - 1000; // dues due
+  onArtGuildCommand(player, "dues");
+  assert.ok(player._messages[1].includes("Dues paid"));
+  assert.strictEqual(coinsRef.coins, 1000 - Guilds.DUES_WEEKLY);
+  assert.ok(invCalls.some(([m, id, amt]) => m === "deleteNumber" && id === 995 && amt === Guilds.DUES_WEEKLY),
+    "coins taken via deleteNumber(995, dues)");
+});
+
+test("failed certify refunds through adds, not the wrong add(id,amount)", () => {
+  // Regression: giveCoins called inv.add(COINS_ID, amount), but the engine
+  // add(item, refresh) takes an Item object — the canonical id/amount form
+  // is adds(id, amount). A failed certification must honestly return the fee.
+  careers = { "painty pete": "artist" };
+  const player = makePlayer("Painty Pete");
+  onArtGuildCommand(player, "join");
+  onArtGuildCommand(player, "certify nope");
+  assert.ok(invCalls.some(([m, id, amt]) => m === "adds" && id === 995 && amt === Guilds.CERT_FEE),
+    `refund must land via adds(995, fee); calls were: ${JSON.stringify(invCalls)}`);
+  assert.strictEqual(coinsRef.coins, 1000);
+});
+
+test("patron bounty posts through deleteNumber and refunds on failure", () => {
+  careers = { "rich rita": "artist" };
+  const sponsor = makePlayer("Rich Rita");
+  onArtGuildCommand(sponsor, "join");
+  onArtGuildCommand(sponsor, "patron painting 200");
+  assert.strictEqual(coinsRef.coins, 1000 - 200);
+  assert.ok(invCalls.some(([m, id, amt]) => m === "deleteNumber" && id === 995 && amt === 200),
+    "bounty stake taken via deleteNumber");
 });
 
 test("seals reports the best grade", () => {

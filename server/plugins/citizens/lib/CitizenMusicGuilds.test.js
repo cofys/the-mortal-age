@@ -397,6 +397,57 @@ test("tryPromote novice to minstrel needs tenure, credits, cert", () => {
   } finally { restore(); }
 });
 
+// === Certification pre-flight ===
+
+test("canCertify ok returns the fee without mutating", () => {
+  const concerts = {
+    "c1": { performers: ["Lute Larry"], quality: 8, title: "Preflight Tune" },
+  };
+  const restore = installStubs({ professionals: ["lute larry"], concerts });
+  try {
+    Guilds.joinGuild("Lute Larry", "varrock");
+    const r = Guilds.canCertify("varrock", "Lute Larry", "c1");
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.fee, Guilds.CERT_FEE);
+    assert.deepStrictEqual(Object.keys(Guilds.load().certifications), [], "pre-flight creates nothing");
+  } finally { restore(); }
+});
+
+test("canCertify fails for non-member, no concert, non-performer, duplicates", () => {
+  const concerts = {
+    "c1": { performers: ["Lute Larry"], quality: 8, title: "Dup Tune" },
+    "c2": { performers: ["Bob"], quality: 8, title: "Bob Tune" },
+  };
+  const restore = installStubs({ professionals: ["lute larry"], concerts });
+  try {
+    assert.strictEqual(Guilds.canCertify("varrock", "Stranger", "c1").reason, "not-a-member");
+    Guilds.joinGuild("Lute Larry", "varrock");
+    assert.strictEqual(Guilds.canCertify("varrock", "Lute Larry", "nope").reason, "no-such-concert");
+    assert.strictEqual(Guilds.canCertify("varrock", "Lute Larry", "c2").reason, "not-a-performer");
+    const r = Guilds.certifyPerformance("varrock", "Lute Larry", "c1", "Dup Tune");
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(Guilds.canCertify("varrock", "Lute Larry", "c1").reason, "already-certified");
+  } finally { restore(); }
+});
+
+test("canCertify waives the fee for mentored novices", () => {
+  const concerts = {
+    "c1": { performers: ["Lute Larry"], quality: 8, title: "Mentor Tune" },
+  };
+  const restore = installStubs({ professionals: ["maestro max", "lute larry"], concerts });
+  try {
+    Guilds.joinGuild("Maestro Max", "varrock");
+    Guilds.joinGuild("Lute Larry", "varrock");
+    const st = Guilds.load();
+    st.members["maestro max"].rank = "maestro";
+    Guilds.touch();
+    Guilds.takeApprentice("Maestro Max", "Lute Larry");
+    const r = Guilds.canCertify("varrock", "Lute Larry", "c1");
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.fee, 0);
+  } finally { restore(); }
+});
+
 // === Persistence ===
 
 test("save round-trip preserves state", () => {

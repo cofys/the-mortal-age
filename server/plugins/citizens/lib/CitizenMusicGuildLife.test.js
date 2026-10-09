@@ -23,7 +23,10 @@ function installStubs(opts = {}) {
     },
     "./CitizenCareers": { careerOf: () => null },
     "../brain/CitizenSites": {
-      KINGDOM_IDS: ["varrock"],
+      KINGDOM_IDS: ["varrock", "falador"],
+      // The real CitizenSites.kingdomIdOf reads player.getAttribute and
+      // silently returns KINGDOM_IDS[0] for plain roster records — the local
+      // helper in the life module must prefer record.kingdomId instead.
       kingdomIdOf: () => "varrock",
     },
     "./CitizenReputation": { awardDeed: () => {} },
@@ -46,17 +49,27 @@ function freshSave() {
 
 function makeDirector(members = []) {
   // Minimal director stub: roster of online records with bots.
-  const records = members.map((name) => ({
-    username: name,
-    getUsername: () => name,
-  }));
+  // Roster records are plain objects with a real kingdomId field (the
+  // director's roster), NOT player entities.
+  const records = members.map((m) => {
+    const name = typeof m === "string" ? m : m.name;
+    return {
+      username: name,
+      getUsername: () => name,
+      kingdomId: typeof m === "string" ? "varrock" : (m.kingdomId || "varrock"),
+    };
+  });
   const bots = {};
-  for (const name of members) {
+  for (const record of records) {
+    const name = record.username;
+    // Mirrors the real ItemContainer contract: getAmount(id),
+    // deleteNumber(id, amount). There is no inv.count(id) and no
+    // inv.remove(id, amount).
     bots[name.toLowerCase()] = {
       coins: 1000,
       inventory: {
         getAmount: (id) => (id === 995 ? bots[name.toLowerCase()].coins : 0),
-        remove: (id, amt) => { if (id === 995) bots[name.toLowerCase()].coins -= amt; },
+        deleteNumber: (id, amt) => { if (id === 995) bots[name.toLowerCase()].coins -= amt; },
       },
     };
   }
@@ -168,6 +181,64 @@ test("tick runs music school with maestro", () => {
   Life.tickMusicGuildLife(director, Date.now());
   const m = Guilds.memberOf("Lute Larry");
   assert.strictEqual(m.trainingCredits, 1);
+});
+
+test("tick collects dues into the member's OWN kingdom (was: all to first kingdom)", () => {
+  // The sites stub's kingdomIdOf always returns "varrock" (the silent
+  // first-kingdom fallback for plain records). The life module must route by
+  // record.kingdomId instead.
+  const restore = installStubs({ professionals: ["lute larry", "fiddle fred"] });
+  try {
+    Guilds.joinGuild("Lute Larry", "varrock");
+    Guilds.joinGuild("Fiddle Fred", "falador");
+    const st = Guilds.load();
+    st.members["lute larry"].duesPaidUntilMs = Date.now() - 1000;
+    st.members["fiddle fred"].duesPaidUntilMs = Date.now() - 1000;
+    Guilds.touch();
+    const director = makeDirector([
+      { name: "Lute Larry", kingdomId: "varrock" },
+      { name: "Fiddle Fred", kingdomId: "falador" },
+    ]);
+    const larryBot = director.getBot({ username: "Lute Larry" });
+    const fredBot = director.getBot({ username: "Fiddle Fred" });
+    Life.tickMusicGuildLife(director, Date.now());
+    assert.strictEqual(larryBot.inventory.getAmount(995), 975, "varrock member pays");
+    assert.strictEqual(fredBot.inventory.getAmount(995), 975, "falador member pays");
+    assert.strictEqual(Guilds.guildTreasuryFor("varrock").treasury, 20, "varrock treasury gets varrock dues");
+    assert.strictEqual(Guilds.guildTreasuryFor("falador").treasury, 20, "falador treasury gets falador dues");
+  } finally { restore(); }
+});
+
+test("tick collects dues through deleteNumber only (no dead inv.remove)", () => {
+  const director = makeDirector(["Lute Larry"]);
+  Guilds.joinGuild("Lute Larry", "varrock");
+  const st = Guilds.load();
+  st.members["lute larry"].duesPaidUntilMs = Date.now() - 1000;
+  Guilds.touch();
+  const bot = director.getBot({ username: "Lute Larry" });
+  assert.strictEqual(typeof bot.inventory.remove, "undefined", "stub exposes no dead remove()");
+  Life.tickMusicGuildLife(director, Date.now());
+  assert.strictEqual(bot.inventory.getAmount(995), 975, "dues taken via deleteNumber");
+});
+
+test("music school uses only this kingdom's maestros", () => {
+  // A maestro from another kingdom must not teach this kingdom's school.
+  const restore = installStubs({ professionals: ["lute larry", "fiddle fred", "maestro max"] });
+  try {
+    Guilds.joinGuild("Lute Larry", "varrock");
+    Guilds.joinGuild("Fiddle Fred", "varrock");
+    Guilds.joinGuild("Maestro Max", "falador");
+    const st = Guilds.load();
+    st.members["maestro max"].rank = "maestro";
+    Guilds.touch();
+    const director = makeDirector([
+      { name: "Lute Larry", kingdomId: "varrock" },
+      { name: "Fiddle Fred", kingdomId: "varrock" },
+      { name: "Maestro Max", kingdomId: "falador" },
+    ]);
+    Life.tickMusicGuildLife(director, Date.now());
+    assert.strictEqual(Guilds.memberOf("Lute Larry").trainingCredits, 0, "no cross-kingdom maestro teaching");
+  } finally { restore(); }
 });
 
 console.log(`\n${passed} tests passed`);

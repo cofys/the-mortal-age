@@ -55,9 +55,11 @@ function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
+    // Canonical: ItemContainer.getAmount(id), deleteNumber/delete(id, amount).
+    // There is no inv.count(id) and no inv.remove(id, amount).
+    const has = typeof inv.getAmount === "function" ? inv.getAmount(COINS_ID) : 0;
     if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
+    if (typeof inv.deleteNumber === "function") inv.deleteNumber(COINS_ID, amount);
     else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
     else return false;
     return true;
@@ -70,7 +72,10 @@ function giveCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv || amount <= 0) return false;
-    if (typeof inv.add === "function") { inv.add(COINS_ID, amount); return true; }
+    // Canonical id/amount form is adds(id, amount): add(item, refresh) takes
+    // an Item object, not (id, amount). The wrong signature would throw (or
+    // corrupt) and silently break honest refunds.
+    if (typeof inv.adds === "function") { inv.adds(COINS_ID, amount); return true; }
     return false;
   } catch {
     return false;

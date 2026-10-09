@@ -333,13 +333,18 @@ function normalizeTitle(title) {
   return String(title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function certifyPerformance(kingdomId, username, concertId, title) {
+/**
+ * Non-mutating pre-flight for certification. The ::musicguild certify command
+ * validates with this BEFORE taking the player's fee — certifyPerformance
+ * creates the certification and pays the bounty, so validating first is the
+ * only way a failed validation can never cost the player coins.
+ */
+function validateCertification(kingdomId, username, concertId) {
   const st = load();
   const key = normalizeName(username);
   const m = st.members[key];
   if (!m) return { ok: false, reason: "not-a-member" };
   if (m.suspended) return { ok: false, reason: "suspended" };
-  const g = ensureGuild(kingdomId);
 
   // Verify the performance is REAL: the claimant played in a real resolved
   // concert. We read the music-dance ledger defensively — never invent.
@@ -365,8 +370,25 @@ function certifyPerformance(kingdomId, username, concertId, title) {
   // Mentored novices certify free; everyone else pays the real fee.
   const mentored = st.mentorships[key];
   const fee = mentored ? 0 : CERT_FEE;
+  return { ok: true, fee, quality, mentored: !!mentored, concertTitle: concert.title };
+}
 
-  const grade = quality >= GRADE_A_QUALITY ? "A" : quality >= GRADE_B_QUALITY ? "B" : "C";
+/** Public pre-flight: can this musician certify this concert, and at what fee? */
+function canCertify(kingdomId, username, concertId) {
+  const v = validateCertification(kingdomId, username, concertId);
+  if (!v.ok) return v;
+  return { ok: true, fee: v.fee };
+}
+
+function certifyPerformance(kingdomId, username, concertId, title) {
+  const v = validateCertification(kingdomId, username, concertId);
+  if (!v.ok) return v;
+  const st = load();
+  const key = normalizeName(username);
+  const m = st.members[key];
+  const g = ensureGuild(kingdomId);
+
+  const grade = v.quality >= GRADE_A_QUALITY ? "A" : v.quality >= GRADE_B_QUALITY ? "B" : "C";
   const certId = `cert-${st.nextCertId++}`;
   const now = Date.now();
   st.certifications[certId] = {
@@ -374,10 +396,10 @@ function certifyPerformance(kingdomId, username, concertId, title) {
     kingdomId,
     musician: username,
     concertId,
-    title: String(title || concert.title || "untitled performance"),
-    quality,
+    title: String(title || v.concertTitle || "untitled performance"),
+    quality: v.quality,
     grade,
-    feePaid: fee,
+    feePaid: v.fee,
     bountyPaid: 0,
     bountyOwed: 0,
     certifiedMs: now,
@@ -408,7 +430,7 @@ function certifyPerformance(kingdomId, username, concertId, title) {
 
   // Mentorship ends after the first certification; the certification counts
   // double toward promotion while mentored.
-  if (mentored) {
+  if (v.mentored) {
     delete st.mentorships[key];
     m.certificationsConducted = (m.certificationsConducted || 0) + 2;
   } else {
@@ -418,7 +440,7 @@ function certifyPerformance(kingdomId, username, concertId, title) {
   // Update prestige from real counts.
   updatePrestige(kingdomId);
   touch();
-  return { ok: true, certId, grade, fee, bountyPaid: paid, bountyOwed: owed };
+  return { ok: true, certId, grade, fee: v.fee, bountyPaid: paid, bountyOwed: owed };
 }
 
 function sealFor(certId) {
@@ -763,6 +785,8 @@ module.exports = {
   recordMissedDues,
   // certification
   normalizeTitle,
+  validateCertification,
+  canCertify,
   certifyPerformance,
   sealFor,
   gradeFor,

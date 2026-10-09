@@ -17,11 +17,14 @@ CookOffs.setSaveFile(tmpSave);
 const { onCookOffCommand, COOKOFF_USAGE } = require("./CitizenCookOffEvents");
 
 function stubPlayer(username, { coins = 500, cooking = 60, kingdomId = "misthalin", isBot = false, inventory = null } = {}) {
+  // Mock mirrors the REAL engine ItemContainer API: getAmount(id),
+  // deleteNumber(id, amount), adds(id, amount). There is no inv.remove(id, amt)
+  // and no inv.add(id, amt) — those were the silent no-ops being fixed.
   const inv = inventory || {
-    _items: { 995: coins, 1001: 3, 1002: 3 }, // coins + fake ingredient items
+    _items: { 995: coins, 1942: 3, 1957: 3 }, // coins + real potato/onion item ids
     getAmount(id) { return this._items[id] ?? 0; },
-    remove(id, amt) { if ((this._items[id] ?? 0) < amt) return false; this._items[id] -= amt; return true; },
-    add(id, amt) { this._items[id] = (this._items[id] ?? 0) + amt; },
+    deleteNumber(id, amt) { if ((this._items[id] ?? 0) >= amt) this._items[id] -= amt; return this; },
+    adds(id, amt) { if (amt > 0) this._items[id] = (this._items[id] ?? 0) + amt; return this; },
   };
   const messages = [];
   return {
@@ -127,6 +130,72 @@ test("unknown subcommand shows usage", () => {
   const p = stubPlayer("Alice");
   onCookOffCommand(p, "frobnicate");
   assert.ok(p._messages[0].includes("::cookoff"));
+});
+
+test("invent consumes real ingredients from the engine item table", () => {
+  const p = stubPlayer("Gordon", { cooking: 60 });
+  onCookOffCommand(p, "invent potato onion");
+  assert.ok(p._messages[0].includes("Invented"), `succeeds, got: ${p._messages[0]}`);
+  assert.strictEqual(p._inv.getAmount(1942), 2, "potato really consumed");
+  assert.strictEqual(p._inv.getAmount(1957), 2, "onion really consumed");
+  assert.strictEqual(CookOffs.recipesByChef("Gordon").length, 1, "recipe recorded");
+});
+
+test("invent with an unresolvable ingredient fails without eating anything", () => {
+  const p = stubPlayer("Gordon", { cooking: 60 });
+  const before = p._inv.getAmount(1942);
+  onCookOffCommand(p, "invent potato honey");
+  assert.ok(p._messages[0].includes("Invention failed"), `honest refusal, got: ${p._messages[0]}`);
+  assert.strictEqual(p._inv.getAmount(1942), before, "no partial consumption on failure");
+  assert.strictEqual(CookOffs.recipesByChef("Gordon").length, 0, "no recipe recorded");
+});
+
+test("invent fails honestly when the ingredient is not held", () => {
+  const empty = {
+    _items: { 995: 500 },
+    getAmount(id) { return this._items[id] ?? 0; },
+    deleteNumber(id, amt) { if ((this._items[id] ?? 0) >= amt) this._items[id] -= amt; return this; },
+    adds(id, amt) { if (amt > 0) this._items[id] = (this._items[id] ?? 0) + amt; return this; },
+  };
+  const p = stubPlayer("Gordon", { cooking: 60, inventory: empty });
+  onCookOffCommand(p, "invent potato onion");
+  assert.ok(p._messages[0].includes("Invention failed"), `honest refusal, got: ${p._messages[0]}`);
+});
+
+test("enter takes the real fee through the canonical API", () => {
+  // Stub CitizenSites so the command path sees a kingdom.
+  const sitesPath = path.resolve(__dirname, "./brain/CitizenSites.js");
+  require.cache[sitesPath] = {
+    id: sitesPath, filename: sitesPath, loaded: true,
+    exports: { KINGDOM_IDS: ["misthalin"], kingdomIdOf: () => "misthalin" },
+  };
+  CookOffs.scheduleCookOff("misthalin", Date.now());
+  const rich = stubPlayer("Rich", { coins: 500, cooking: 60 });
+  onCookOffCommand(rich, "enter");
+  assert.ok(rich._messages[0].includes("Entered"), `entered, got: ${rich._messages[0]}`);
+  assert.strictEqual(rich._inv.getAmount(995), 400, "entry fee really taken");
+  delete require.cache[sitesPath];
+});
+
+test("enter refuses when deleteNumber is a no-op (old inv.remove shape)", () => {
+  const sitesPath = path.resolve(__dirname, "./brain/CitizenSites.js");
+  require.cache[sitesPath] = {
+    id: sitesPath, filename: sitesPath, loaded: true,
+    exports: { KINGDOM_IDS: ["misthalin"], kingdomIdOf: () => "misthalin" },
+  };
+  const noopInv = {
+    _items: { 995: 500 },
+    getAmount(id) { return this._items[id] ?? 0; },
+    deleteNumber() { return this; }, // engine-shaped no-op
+    adds(id, amt) { if (amt > 0) this._items[id] = (this._items[id] ?? 0) + amt; return this; },
+  };
+  CookOffs.scheduleCookOff("misthalin", Date.now());
+  const cheater = stubPlayer("Cheater", { coins: 500, cooking: 60, inventory: noopInv });
+  onCookOffCommand(cheater, "enter");
+  assert.ok(cheater._messages[0].includes("Could not enter"), `refused, got: ${cheater._messages[0]}`);
+  const open = CookOffs.openCookOff("misthalin");
+  assert.ok(!open.entries.some((e) => e.chef === "Cheater"), "no free entry");
+  delete require.cache[sitesPath];
 });
 
 console.log(`CookOff events: ${passed} passed`);

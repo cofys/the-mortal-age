@@ -19,12 +19,15 @@ CookOffs.setSaveFile(tmpSave);
 const NOW = 1_700_000_000_000;
 const WEEK = 7 * 24 * 3600 * 1000;
 
-function makeBot(username, { career = "chef", cooking = 50, coins = 500, kingdomId = "misthalin", reputation = 60 } = {}) {
-  const inv = {
+function makeBot(username, { career = "chef", cooking = 50, coins = 500, kingdomId = "misthalin", reputation = 60, inventory = null } = {}) {
+  // Mock mirrors the REAL engine ItemContainer API: getAmount(id),
+  // deleteNumber(id, amount), adds(id, amount). There is no inv.remove(id, amt)
+  // and no inv.add(id, amt) — those were the silent no-ops being fixed.
+  const inv = inventory || {
     _coins: coins,
     getAmount(id) { return id === 995 ? this._coins : 0; },
-    remove(id, amt) { if (id === 995 && this._coins >= amt) { this._coins -= amt; return true; } return false; },
-    add(id, amt) { if (id === 995) this._coins += amt; },
+    deleteNumber(id, amt) { if (id === 995 && this._coins >= amt) this._coins -= amt; return this; },
+    adds(id, amt) { if (id === 995 && amt > 0) this._coins += amt; return this; },
   };
   return {
     username, career, kingdomId, reputation,
@@ -135,6 +138,54 @@ test("tick does not resolve without 3 judges available", () => {
   }
   tickCookOffLife(d, NOW + CookOffs.COOKOFF_OPEN_MS + 1000);
   assert.ok(!CookOffs.cookOffById(open.id).resolvedAt, "waits honestly for judges");
+});
+
+test("entry fee refused when deleteNumber is a no-op (old inv.remove shape)", () => {
+  // Regression: the old inv.remove?.(id, amt) silently did nothing yet
+  // returned true, inflating the pot with uncollected fees.
+  const noopInv = {
+    _coins: 500,
+    getAmount(id) { return id === 995 ? this._coins : 0; },
+    deleteNumber() { return this; }, // engine-shaped no-op
+    adds(id, amt) { if (id === 995) this._coins += amt; return this; },
+  };
+  const cheater = makeBot("Cheater", { cooking: 80, inventory: noopInv });
+  const d = makeDirector([cheater]);
+  tickCookOffLife(d, NOW);
+  const open = CookOffs.openCookOff("misthalin");
+  assert.ok(!open.entries.some((e) => e.chef === "Cheater"), "no free entry on no-op delete");
+  assert.strictEqual(open.pot, 0, "pot not inflated by uncollected fee");
+});
+
+test("prize skipped honestly when adds is unavailable (old inv.add shape)", () => {
+  // Regression: the old inv.add(id, amt) hit the wrong engine overload and
+  // threw, so winners were announced but prizes never landed.
+  const noAddsInv = {
+    _coins: 500,
+    getAmount(id) { return id === 995 ? this._coins : 0; },
+    deleteNumber(id, amt) { if (id === 995 && this._coins >= amt) this._coins -= amt; return this; },
+    // no adds() — prize cannot be delivered
+  };
+  const gordon = makeBot("Gordon", { cooking: 90, coins: 500 });
+  const julia = makeBot("Julia", { cooking: 60, inventory: noAddsInv });
+  const judges = [
+    makeBot("Judge1", { career: "noble", cooking: 1, reputation: 90 }),
+    makeBot("Judge2", { career: "merchant", cooking: 1, reputation: 85 }),
+    makeBot("Judge3", { career: "scholar", cooking: 1, reputation: 80 }),
+  ];
+  const d = makeDirector([gordon, julia, ...judges]);
+  tickCookOffLife(d, NOW);
+  const open = CookOffs.openCookOff("misthalin");
+  for (const chef of ["Gordon", "Julia"]) {
+    for (const round of CookOffs.ROUNDS) {
+      CookOffs.recordRoundScore(open.id, chef, round, chef === "Gordon" ? 90 : 50, 0.5);
+    }
+  }
+  tickCookOffLife(d, NOW + CookOffs.COOKOFF_OPEN_MS + 1000);
+  const done = CookOffs.cookOffById(open.id);
+  assert.ok(done.resolvedAt, "resolved");
+  assert.strictEqual(julia.player.inventory._coins, 400, "runner-up prize NOT delivered without adds");
+  assert.ok(gordon.player.inventory._coins > 400, "winner with working adds still paid");
 });
 
 console.log(`CookOff Life tick: ${passed} passed`);

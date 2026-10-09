@@ -318,7 +318,9 @@ function recordDuesPayment(username, nowMs) {
   const g = ensureGuild(m.kingdomId);
   g.treasury += (DUES_WEEKLY - DUES_PATRON_SHARE);
   g.patronFund += DUES_PATRON_SHARE;
-  m.duesPaidUntilMs = nowMs + DUES_PERIOD_MS;
+  // Never discard banked coverage: a payment made while still covered extends
+  // from the later of the existing coverage or now (canonical guild behavior).
+  m.duesPaidUntilMs = Math.max(m.duesPaidUntilMs || 0, nowMs) + DUES_PERIOD_MS;
   m.missedDues = 0;
   if (m.suspended) m.suspended = false; // caught up — lift suspension
   touch();

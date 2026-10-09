@@ -132,6 +132,24 @@ test("dues: payment clears, two misses suspend", () => {
   } finally { restore(); }
 });
 
+test("dues: payment extends banked coverage instead of resetting it", () => {
+  // Regression: recordDuesPayment set duesPaidUntilMs = nowMs + PERIOD,
+  // discarding any banked coverage when paid while still covered. The
+  // canonical guild behavior extends from the later of existing coverage
+  // or now.
+  const restore = installStubs({ careers: { "painty pete": "artist" } });
+  try {
+    Guilds.joinGuild("Painty Pete", "varrock");
+    const now = Date.now();
+    const banked = now + 3 * 24 * 60 * 60 * 1000; // 3 days of coverage left
+    Guilds.memberOf("painty pete").duesPaidUntilMs = banked;
+    Guilds.recordDuesPayment("painty pete", now);
+    const expected = banked + 7 * 24 * 60 * 60 * 1000;
+    assert.strictEqual(Guilds.memberOf("painty pete").duesPaidUntilMs, expected,
+      "banked coverage must be extended, not discarded");
+  } finally { restore(); }
+});
+
 // === Certification ===
 
 function certStubs() {

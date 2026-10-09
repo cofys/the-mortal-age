@@ -63,12 +63,29 @@ function usernameOf(record) {
   } catch { return ""; }
 }
 
+/**
+ * Roster records are plain objects with a real kingdomId field — they are
+ * NOT player entities, so CitizenSites.kingdomIdOf(record) would silently
+ * return KINGDOM_IDS[0] (it reads player.getAttribute). Prefer the real
+ * record field; only fall back to the sites seam for actual player entities.
+ */
+function kingdomIdOf(record) {
+  if (record && typeof record.getAttribute === "function") {
+    try {
+      const S = sitesApi();
+      return (S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(record) : null) || record.kingdomId || null;
+    } catch { return record.kingdomId || null; }
+  }
+  return record?.kingdomId || null;
+}
+
 function hasItem(bot, itemId, amount) {
   try {
     const inv = bot.inventory ?? bot.getInventory?.();
     if (!inv) return false;
-    const n = inv.getAmount?.(itemId) ?? inv.count?.(itemId) ?? 0;
-    return n >= amount;
+    // Canonical: ItemContainer.getAmount(id). There is no inv.count(id).
+    if (typeof inv.getAmount === "function") return inv.getAmount(itemId) >= amount;
+    return false;
   } catch { return false; }
 }
 
@@ -76,10 +93,11 @@ function removeItem(bot, itemId, amount) {
   try {
     const inv = bot.inventory ?? bot.getInventory?.();
     if (!inv) return false;
-    if (typeof inv.remove === "function") inv.remove(itemId, amount);
-    else if (typeof inv.delete === "function") inv.delete(itemId, amount);
-    else return false;
-    return true;
+    // Canonical: deleteNumber(id, amount) / delete(id, amount). ItemContainer
+    // has no inv.remove(id, amount).
+    if (typeof inv.deleteNumber === "function") { inv.deleteNumber(itemId, amount); return true; }
+    if (typeof inv.delete === "function") { inv.delete(itemId, amount); return true; }
+    return false;
   } catch { return false; }
 }
 
@@ -90,10 +108,8 @@ function announce(director, kingdomId, text, nowMs) {
     lastAnnounce.set(kingdomId, nowMs);
     const roster = onlineRoster(director);
     const near = roster.find((r) => {
-      try {
-        const S = sitesApi();
-        return S && typeof S.kingdomIdOf === "function" && S.kingdomIdOf(r) === kingdomId;
-      } catch { return false; }
+      try { return kingdomIdOf(r) === kingdomId; }
+      catch { return false; }
     });
     const bot = near ? botFor(director, near) : null;
     if (bot && typeof sayPublic === "function") sayPublic(bot, text);
@@ -112,10 +128,8 @@ function tickMusicGuildLife(director, nowMs = Date.now()) {
       const roster = onlineRoster(director);
       for (const record of roster) {
         let rkid = null;
-        try {
-          const S = sitesApi();
-          rkid = S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(record) : null;
-        } catch { rkid = null; }
+        try { rkid = kingdomIdOf(record); }
+        catch { rkid = null; }
         if (rkid !== kid) continue;
         const name = usernameOf(record);
         const m = Guilds.memberOf(name);
@@ -185,7 +199,14 @@ function tickMusicGuildLife(director, nowMs = Date.now()) {
         const lastC = lastClass.get(kid) || 0;
         if (nowMs - lastC >= CLASS_COOLDOWN_MS) {
           lastClass.set(kid, nowMs);
-          const master = roster.map(usernameOf).find((n) => Guilds.guildRankOf(n) === Guilds.RANK_MAESTRO);
+          // The school is per-kingdom: only maestros of THIS kingdom teach.
+          // The raw roster spans kingdoms, so filter by the record's real
+          // kingdomId (never the sites seam's silent-first-kingdom fallback).
+          const kingdomRoster = roster.filter((r) => {
+            try { return kingdomIdOf(r) === kid; }
+            catch { return false; }
+          });
+          const master = kingdomRoster.map(usernameOf).find((n) => Guilds.guildRankOf(n) === Guilds.RANK_MAESTRO);
           if (master) {
             const res = Guilds.holdClass(kid, master);
             if (res.ok && res.taught > 0) {

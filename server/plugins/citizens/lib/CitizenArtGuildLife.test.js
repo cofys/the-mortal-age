@@ -31,7 +31,11 @@ function installStubs() {
       sayPublic: (bot, text) => { said.push(text); },
     },
     "../brain/CitizenSites": {
-      KINGDOM_IDS: ["varrock"],
+      // KINGDOM_IDS[0] is the engine's silent fallback: the real
+      // CitizenSites.kingdomIdOf reads player.getAttribute and returns the
+      // first kingdom for plain roster records — the life module's local
+      // kingdomIdOf(record) helper must prefer record.kingdomId instead.
+      KINGDOM_IDS: ["varrock", "falador"],
       kingdomIdOf: () => "varrock",
       siteTileByKingdom: () => ({ x: 3200, y: 3200, z: 0 }),
     },
@@ -56,19 +60,27 @@ function installStubs() {
 
 const { tickArtGuildLife, resetForTests } = require("./CitizenArtGuildLife");
 
+// Roster records are plain objects with a real kingdomId field (the
+// director's roster), NOT player entities. Each record tracks its own coins.
 function makeRecord(username, opts = {}) {
-  return {
+  const rec = {
     username,
+    kingdomId: opts.kingdomId || "varrock",
     getUsername: () => username,
     coins: opts.coins ?? 1000,
-    inventory: {
-      getAmount: (id) => (id === 995 ? makeRecord.coinsRef.coins : 0),
-      remove: (id, amt) => { if (id === 995) makeRecord.coinsRef.coins -= amt; },
-    },
+    inventory: null,
     getInventory() { return this.inventory; },
   };
+  // Canonical ItemContainer contract only: getAmount(id),
+  // deleteNumber(id, amount). There is no inv.count(id) and no
+  // inv.remove(id, amount) — the stubs deliberately expose ONLY the
+  // canonical API so any dead-API call in the life tick fails loudly.
+  rec.inventory = {
+    getAmount: (id) => (id === 995 ? rec.coins : 0),
+    deleteNumber: (id, amt) => { if (id === 995) rec.coins = Math.max(0, rec.coins - amt); },
+  };
+  return rec;
 }
-makeRecord.coinsRef = { coins: 1000 };
 
 function makeDirector(records) {
   const byName = new Map(records.map((r) => [r.username.toLowerCase(), r]));
@@ -88,7 +100,6 @@ function test(name, fn) {
   careers = {};
   artworks = {};
   artistWorks = {};
-  makeRecord.coinsRef.coins = 1000;
   const restore = installStubs();
   try {
     fn();
@@ -112,14 +123,13 @@ test("tick collects dues from online members with coins", () => {
   const director = makeDirector([rec]);
   tickArtGuildLife(director, Date.now());
   assert.ok(Guilds.memberOf("painty pete").duesPaidUntilMs > Date.now());
-  assert.strictEqual(makeRecord.coinsRef.coins, 1000 - Guilds.DUES_WEEKLY);
+  assert.strictEqual(rec.coins, 1000 - Guilds.DUES_WEEKLY);
 });
 
 test("tick records a miss (not a crime) for broke members", () => {
   careers = { "painty pete": "artist" };
   Guilds.joinGuild("Painty Pete", "varrock");
   Guilds.memberOf("painty pete").duesPaidUntilMs = Date.now() - 1000;
-  makeRecord.coinsRef.coins = 0;
   const rec = makeRecord("painty pete", { coins: 0 });
   const director = makeDirector([rec]);
   tickArtGuildLife(director, Date.now());
@@ -141,10 +151,10 @@ test("tick is throttled by the cooldown", () => {
   const director = makeDirector([rec]);
   const now = Date.now();
   tickArtGuildLife(director, now);
-  const afterFirst = makeRecord.coinsRef.coins;
+  const afterFirst = rec.coins;
   // Second tick inside the cooldown: no second dues collection.
   tickArtGuildLife(director, now + 1000);
-  assert.strictEqual(makeRecord.coinsRef.coins, afterFirst);
+  assert.strictEqual(rec.coins, afterFirst);
 });
 
 test("tick settles ripe tribunal cases", () => {
@@ -174,6 +184,44 @@ test("tick settles ripe tribunal cases", () => {
   const kase = Guilds.load().cases[rep.caseId];
   assert.strictEqual(kase.status, "convicted");
   assert.ok(!Guilds.isGuildMember("copy cat"));
+});
+
+test("dues are collected per-kingdom, not all routed to the first kingdom", () => {
+  // Regression: the life tick called CitizenSites.kingdomIdOf(record) on
+  // plain roster records; the engine silently returns KINGDOM_IDS[0] for
+  // anything without a player getAttribute, so every kingdom's members
+  // were processed under varrock's tick. The local helper must prefer the
+  // record's own kingdomId field.
+  careers = { "anya": "artist", "borin": "artist" };
+  Guilds.joinGuild("Anya", "varrock");
+  Guilds.joinGuild("Borin", "falador");
+  Guilds.memberOf("anya").duesPaidUntilMs = Date.now() - 1000;
+  Guilds.memberOf("borin").duesPaidUntilMs = Date.now() - 1000;
+  const anya = makeRecord("Anya", { kingdomId: "varrock", coins: 100 });
+  const borin = makeRecord("Borin", { kingdomId: "falador", coins: 100 });
+  const director = makeDirector([anya, borin]);
+  tickArtGuildLife(director, Date.now());
+  assert.strictEqual(anya.coins, 100 - Guilds.DUES_WEEKLY, "varrock member pays");
+  assert.strictEqual(borin.coins, 100 - Guilds.DUES_WEEKLY, "falador member pays");
+  assert.strictEqual(Guilds.guildTreasuryFor("varrock").treasury, 20, "varrock dues land in varrock's treasury");
+  assert.strictEqual(Guilds.guildTreasuryFor("falador").treasury, 20, "falador dues land in falador's treasury");
+  assert.strictEqual(Guilds.memberOf("anya").missedDues, 0);
+  assert.strictEqual(Guilds.memberOf("borin").missedDues, 0);
+});
+
+test("a record with no kingdomId is skipped, not silently attributed to varrock", () => {
+  // The honest behavior when the record carries no kingdom: skip it rather
+  // than inventing KINGDOM_IDS[0] attribution (which would mis-collect dues
+  // and mis-route announcements).
+  careers = { "ghost": "artist" };
+  Guilds.joinGuild("Ghost", "varrock");
+  Guilds.memberOf("ghost").duesPaidUntilMs = Date.now() - 1000;
+  const rec = makeRecord("Ghost", { coins: 100 });
+  delete rec.kingdomId;
+  const director = makeDirector([rec]);
+  tickArtGuildLife(director, Date.now());
+  assert.strictEqual(rec.coins, 100, "no coins taken without a kingdom");
+  assert.strictEqual(Guilds.memberOf("ghost").missedDues, 0, "no miss recorded without a kingdom");
 });
 
 console.log(`\n${passed} tests passed`);
