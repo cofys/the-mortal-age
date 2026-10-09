@@ -158,6 +158,7 @@ const { tickStallfolk } = require("../lib/CitizenMarketStalls2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
+const { attachDeathRespawn, saveIfDirty: saveDeathsIfDirty } = require("../lib/CitizenDeathRespawn");
 const { tickCaravans } = require("../lib/CitizenTradeCaravans");
 const { tickCaravanShouts } = require("../lib/CitizenTradeCaravans");
 const { tickDiplomacy, tickDiplomatShouts } = require("../lib/CitizenDiplomats");
@@ -1436,6 +1437,19 @@ class CitizenDirector {
     bot.setPlayerBot?.(true);
     bot.setAttribute?.(ATTR_SKIP_PERSISTENCE, true);
 
+    // Persistent death-respawn: the engine's PlayerDeathTask revives dead
+    // bots and teleports them to bot.__botResolveRespawnLocation() when set.
+    // Citizens wake at their hearth (home tile), not DEFAULT_LOCATION.
+    // Re-attached on every materialization, so it survives restarts.
+    try {
+      attachDeathRespawn(bot, record);
+    } catch (error) {
+      this.log("death respawn attach failed", {
+        citizen: record.username,
+        error: String(error?.message ?? error),
+      });
+    }
+
     // Kingdom membership: through the kingdoms plugin's event (its Events
     // module applies the attributes), plus direct attributes for immediacy.
     const rank = ROLE_RANK[record.role] ?? "Subject";
@@ -2658,6 +2672,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen funerals save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (saveDeathsIfDirty()) {
+        this.log("citizen deaths saved");
+      }
+    } catch (error) {
+      this.log("citizen deaths save failed", {
         error: String(error?.message ?? error),
       });
     }

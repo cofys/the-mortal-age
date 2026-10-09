@@ -247,8 +247,17 @@ riffs on them later) and lands in the citizen's journal. Unit checks:
   public-chat packets to plugins, and every nearby citizen emits
   `citizens:chat-heard`; only the selected repliers get `shouldReply`, the
   rest are the crowd that heard and remembered).
-- Citizen death respawn (no persistent respawn resolver; cities are safe, but
-  a killed citizen currently stays dead until its next scheduled wake).
+- Citizen death respawn (Done 2026-10-08: `lib/CitizenDeathRespawn.js` —
+  `CitizenDirector.spawnCitizen` attaches the engine's
+  `__botResolveRespawnLocation` seam on every materialization so a killed
+  citizen wakes at their hearth (pure function of the roster record), not
+  `DEFAULT_LOCATION`; the persisted death counter in
+  `data/saves/citizen-deaths.json` gives each death its deterministic
+  sequence; the roster record is untouched so personality/memory/journal/
+  kinship survive; spouse/partner/close friends get the death journaled plus
+  a `heardAbout` memory and a `death` gossip; a held office is unbound and
+  `tickOffices` refills it via `kingdom:office-seeks-holder`. Combat death is
+  temporary — `CitizenFunerals` still owns permanent (mortality-roll) death.)
 - Merchant customer side is abstract (sales tick, no real trade windows);
   a shop-front interface can replace `sellTick` later. (Done 2026-10-06:
   `shop/MerchantShops.js` — Trade player-option opens a stall backed by the

@@ -41,6 +41,7 @@ const { initMarketBoard } = require("./shop/MarketBoard.Shops");
 const { initMarketRegistrar } = require("./shop/MarketRegistrar.Shops");
 const attachWarRefugees = require("./WarRefugees");
 const { onPlayerLevelUpNotice, onCitizenLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
+const { onCitizenDeath } = require("./lib/CitizenDeathRespawn");
 const { onNpcKillWitnessed } = require("./StreetSpectacle");
 const { onLogoutFarewell } = require("./StreetFarewells");
 const { onIdleSeen, clearIdleOnLogout } = require("./StreetIdle");
@@ -514,6 +515,24 @@ function onLevelUpHeard(event) {
 
 function onDeathSeen(event) {
   onPlayerDeathNotice(event);
+  recordCitizenDeathSeen(event);
+}
+
+/**
+ * A citizen bot died: record it in the persistent death ledger (identity,
+ * kin, office, hearth respawn) via CitizenDeathRespawn.onCitizenDeath.
+ * Real players pass through untouched (the isCitizenBot filter).
+ */
+function recordCitizenDeathSeen(event) {
+  try {
+    const player = event?.player;
+    if (!isCitizenBot(player)) return;
+    const director = getDirector();
+    if (!director?.roster) return;
+    onCitizenDeath(director, player, event);
+  } catch {
+    // Non-fatal: death recording must never break the death path.
+  }
 }
 
 /** A monster died in view of the street: citizens react to the fight. */
