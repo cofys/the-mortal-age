@@ -122,6 +122,10 @@ provider-level vars as fallback.
    `SqliteMemoryStore` logs a marker and delegates to the in-memory store.
    Cards/notes/history do not survive a restart. Same interface; swap when a
    driver lands. Set `LLM_GATEWAY_DB=/path/to/db.sqlite` to select it.
+   NOTE: the default memory store is now `JsonMemoryStore` (JSON file at
+   `data/saves/llm-gateway-memory.json`, env `LLM_GATEWAY_MEMORY_FILE`) —
+   conversation memory DOES survive restarts; the SQLite path only matters
+   if Jon prefers it over JSON when a driver lands.
 3. **Public-chat interception** — `ChatPacketListener.handleText` broadcasts
    public chat without emitting a plugin hook, so the gateway currently
    intercepts only private messages to citizen bots. Options when Jon wants it:
@@ -140,7 +144,15 @@ provider-level vars as fallback.
 4. Optional tuning: `GEMINI_MODEL` / `GROQ_MODEL`,
    `GEMINI_RPM` / `GROQ_RPM`, `LLM_GATEWAY_DAILY_BUDGET`,
    `LLM_GATEWAY_MOUTH=0` (disable default mouth if the citizens plugin speaks
-   replies itself), `LLM_GATEWAY_DB` (SQLite path when a driver exists).
+   replies itself), `LLM_GATEWAY_DB` (SQLite path when a driver exists),
+   `LLM_GATEWAY_MEMORY_FILE` (JSON memory path; empty = in-memory only),
+   `LLM_GATEWAY_USAGE_FILE` (usage rollup path; empty = in-memory only),
+   `LLM_GATEWAY_PUBLIC_PER_PLAYER_MAX` (default 4) /
+   `LLM_GATEWAY_PUBLIC_PER_PLAYER_WINDOW_MS` (default 300000) /
+   `LLM_GATEWAY_PM_PER_PLAYER_DAILY_MAX` (default 200) — per-player reply
+   throttles that close the spam-farming vector,
+   `LLM_GATEWAY_PUBLIC_FLAGSHIP_FIRST_CONTACT=1` (route first-contact public
+   replies to flagship instead of lite).
 5. The citizens plugin registers each citizen's personality via
    `llm:citizen-register` { username, personalityCard, replyCooldownMs? } —
    until a bot is registered it stays silent even with keys configured.

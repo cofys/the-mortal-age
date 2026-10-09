@@ -53,6 +53,7 @@
 
 const { GeminiProvider } = require("./providers/GeminiProvider");
 const { GroqProvider } = require("./providers/GroqProvider");
+const { UsageTracker } = require("./UsageTracker");
 
 const MAX_QUEUE_WAIT_MS = 30_000;
 const CIRCUIT_COOLDOWN_MS = 60_000;
@@ -266,6 +267,11 @@ class ProviderChain {
     this.dailyBudget = Number.isFinite(envBudget) ? Math.max(0, Math.floor(envBudget)) : 1000;
     this.callsToday = 0;
     this.callsDay = dailyKey();
+    // Quota telemetry: per-slot daily counters + warn-once alerts at
+    // 50/80/100% of the daily backstop + a debounced JSON rollup in
+    // data/saves. The ops overlay reads it via status().usage.
+    // LLM_GATEWAY_USAGE_FILE="" keeps it in-memory only (tests).
+    this.usage = new UsageTracker({ budget: this.dailyBudget });
   }
 
   budgetExceeded() {
@@ -324,6 +330,9 @@ class ProviderChain {
         circuit.recordSuccess();
         this.callsToday += 1;
         this.dailyCaps.record(slot.key, slot.def, estimate);
+        // Telemetry: provider-reported tokens where available, else the same
+        // conservative estimate the caps use. Never on a failure path.
+        this.usage.record(slot.key, result.tokensUsed ?? estimate);
         return { ...result, provider: slot.def.provider, model: slot.def.model };
       }
       circuit.recordFailure(result.reason);
@@ -355,6 +364,9 @@ class ProviderChain {
       }),
       dailyBudget: this.dailyBudget,
       callsToday: this.callsToday,
+      // Quota telemetry for the ops overlay: per-slot daily counters,
+      // 50/80/100% backstop alerts, and the persisted multi-day history.
+      usage: this.usage.snapshot(),
     };
   }
 }

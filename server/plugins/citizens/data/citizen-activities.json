@@ -718,27 +718,6 @@
           "type": "citizenCreateArt"
         }
       ]
-    },
-    {
-      "id": "citizen_compete",
-      "mode": "citizen_compete",
-      "repeat": false,
-      "capacity": 12,
-      "failureCooldownSeconds": 30,
-      "requires": [
-        {
-          "citizen": {
-            "roles": [
-              "commoner"
-            ]
-          }
-        }
-      ],
-      "actions": [
-        {
-          "type": "citizenCompete"
-        }
-      ]
     }
   ]
 }
