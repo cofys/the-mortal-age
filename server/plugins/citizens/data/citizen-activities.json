@@ -781,6 +781,27 @@
           "type": "citizenExplore"
         }
       ]
+    },
+    {
+      "id": "citizen_invent",
+      "mode": "citizen_invent",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenInvent"
+        }
+      ]
     }
   ]
 }

@@ -1031,6 +1031,22 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "what was invented" / "is there an inventor" — player asks about inventions.
+  if (/\b(what was invented|what inventions|any inventions|is there an inventor|who invented|the workshop|inventions)\b/.test(said)) {
+    try {
+      const Inv = require("../lib/CitizenInventions");
+      const inventions = Inv.allInventions().slice(-5); // most recent 5
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "invention_status", {
+        username: citizenUsername,
+        count: Inv.allInventions().length,
+        recent: inventions.map((inv) => ({ label: inv.label, inventor: inv.inventor })),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a guild" / "what guild am i in" — player asks about trade guilds.
   if (/\b(is there a guild|what guilds are there|are there guilds|tell me about guilds|what guild am i in|am i in a guild|what is my guild)\b/.test(said)) {
     try {

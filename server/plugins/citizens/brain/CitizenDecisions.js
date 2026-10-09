@@ -108,7 +108,8 @@ const ACT_CREATEART = "citizen_createart";
 
 const ACT_COMPETE = "citizen_compete";
 const ACT_DIPLOMAT = "citizen_diplomat";
-const ACT_EXPLORE = "citizen_explore";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
+const ACT_EXPLORE = "citizen_explore";
+const ACT_INVENT = "citizen_invent";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
@@ -136,7 +137,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_INVENT,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -801,6 +802,60 @@ function exploreInfo(player) {
 }
 
 /**
+ * Invention readiness: Crafting level, creativity, active projects,
+ * affordable blueprints. Returns { craftingLevel, isCreative,
+ * activeProjects, affordableCount }.
+ * Defensive: a missing/broken module scores as unable to invent.
+ */
+function inventInfo(player) {
+  try {
+    let craftingLevel = 1;
+    try {
+      craftingLevel = player?.getSkills?.()?.getLevel?.("crafting")
+        ?? player?.skills?.crafting ?? 1;
+    } catch { /* crafting unreadable */ }
+
+    let isCreative = false;
+    try {
+      const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
+      const p = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+      const traits = p.traits ?? [];
+      isCreative = traits.includes("creative") || traits.includes("inventive")
+        || traits.includes("curious");
+    } catch { /* personality unreadable */ }
+
+    let activeProjects = 0;
+    let affordableCount = 0;
+    try {
+      const Inventions = require("../lib/CitizenInventions");
+      const username = player?.getUsername?.() ?? player?.username ?? "";
+      activeProjects = Inventions.projectsFor(username).length;
+      // Count affordable blueprints (materials in inventory + level).
+      const inv = player?.getInventory?.();
+      if (inv) {
+        for (const [bpId, bp] of Object.entries(Inventions.blueprints())) {
+          if (craftingLevel < bp.craftingLevel) continue;
+          let ok = true;
+          for (const [itemId, amount] of Object.entries(bp.materials)) {
+            let have = 0;
+            try {
+              if (typeof inv.getAmount === "function") have = inv.getAmount(Number(itemId)) ?? 0;
+              else if (typeof inv.count === "function") have = inv.count(Number(itemId)) ?? 0;
+            } catch { /* best-effort */ }
+            if (have < amount) { ok = false; break; }
+          }
+          if (ok) affordableCount++;
+        }
+      }
+    } catch { /* inventions unreadable */ }
+
+    return { craftingLevel, isCreative, activeProjects, affordableCount };
+  } catch {
+    return { craftingLevel: 1, isCreative: false, activeProjects: 0, affordableCount: 0 };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1208,7 +1263,8 @@ function snapshot(player) {
 
 compete: competeInfo(player),
     diplomat: diplomatInfo(player),
-    explore: exploreInfo(player),    drunk: isDrunk(player),
+    explore: exploreInfo(player),
+    invent: inventInfo(player),    drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
     hour: new Date().getHours(), // server-local, per the timezone rule
@@ -1228,7 +1284,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1592,6 +1648,36 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody explores drunk well
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_INVENT: {
+      // Invention: research blueprints at the workshop. Crafters with
+      // materials invent; the creative can't resist tinkering. An active
+      // project pulls the inventor back to the bench. No affordable
+      // blueprint and no active project means no inventing — a human
+      // can't research without materials. The hurt and weary stay home.
+      const v = invent ?? { craftingLevel: 1, isCreative: false, activeProjects: 0, affordableCount: 0 };
+      if ((v.activeProjects ?? 0) > 0) {
+        // Active research — finish what you started.
+        let s = 30;
+        if (v.isCreative) s += 8;
+        if (criticalHp || exhausted) s -= 70;
+        else if (hurt) s -= 30;
+        else if (weary) s -= 25;
+        if (drunk) s -= 20;
+        return s;
+      }
+      if ((v.affordableCount ?? 0) <= 0) return 4; // no materials, no research
+      let s = 22 + Math.min((v.craftingLevel ?? 1) * 0.4, 14);
+      if (v.isCreative) s += 14; // creativity is the engine
+      if ((v.affordableCount ?? 0) >= 3) s += 6; // spoiled for choice
+      if (goalType === GOAL_MASTER_TRADE) s += 8; // patents pay royalties
+      else if (goalType === GOAL_SAVE_GOLD) s += 6; // inventions sell
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // nobody invents drunk well
       if (mood < 20) s -= 8;
       return s;
     }
@@ -2081,7 +2167,7 @@ module.exports = {
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_INVENT,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

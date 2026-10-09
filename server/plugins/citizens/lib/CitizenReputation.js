@@ -68,6 +68,7 @@ const DEEDS = Object.freeze({
   champion: Object.freeze({ points: 8, label: "tournament champion" }),
   finalist: Object.freeze({ points: 3, label: "tournament finalist" }),
   peacemaker: Object.freeze({ points: 8, label: "marriage alliance broker" }),
+  inventor: Object.freeze({ points: 8, label: "invention breakthrough" }),
   betrayal: Object.freeze({ points: -6, label: "betrayal" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),
 });

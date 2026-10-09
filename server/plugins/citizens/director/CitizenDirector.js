@@ -215,7 +215,9 @@ const CitizenTournaments = require("../lib/CitizenTournaments");
 const { tickCovertDiplomacy } = require("../lib/CitizenDiplomacyLife");
 const CitizenDiplomacy = require("../lib/CitizenDiplomacy");
 const { tickDiscoveryLife } = require("../lib/CitizenDiscoveryLife");
-const CitizenDiscovery = require("../lib/CitizenDiscovery");const { tickShoppers } = require("../shop/CitizenShoppers");
+const CitizenDiscovery = require("../lib/CitizenDiscovery");
+const { tickInventionLife } = require("../lib/CitizenInventionLife");
+const CitizenInventions = require("../lib/CitizenInventions");const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
 const CitizenBonds = require("../lib/CitizenBonds");
@@ -2946,6 +2948,13 @@ class CitizenDirector {
       tickDiscoveryLife(this, nowMs);
     } catch (error) {
       this.log("discovery failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen inventions: research progress, breakthroughs, patents.
+    // Data tier, zero LLM. (CitizenEngineers owns the flavor layer.)
+    try {
+      tickInventionLife(this, nowMs);
+    } catch (error) {
+      this.log("invention failed", { error: String(error?.message ?? error) });
     }    try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3147,6 +3156,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen discoveries save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenInventions.save()) {
+        this.log("citizen inventions saved");
+      }
+    } catch (error) {
+      this.log("citizen inventions save failed", {
         error: String(error?.message ?? error),
       });
     }
