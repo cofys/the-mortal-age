@@ -130,21 +130,38 @@ function resolveConcert(director, MD, concert, nowMs) {
   const res = MD.resolveConcert(concert.id, nowMs);
   if (!res) return;
   const { payouts, hallShare } = res;
-  // Move real coins to performers (online only; offline payouts are lost —
-  // honest, never invented).
+  // Move real coins to performers with VERIFIED delivery: online bots get
+  // real inventory coins, everyone else gets their REAL bank account, and
+  // anything still undelivered is owed honestly. The old shape dropped
+  // offline shares entirely ("offline payouts are lost") and ignored the
+  // giveCoins return — the vanishing-coins class.
   for (const payout of payouts) {
     try {
+      const amount = Math.floor(payout.amount);
+      if (!(amount > 0)) continue;
       const record = director.roster?.get?.(normalizeName(payout.username));
       const bot = record && director.isOnline?.(record) ? director.getBot?.(record) : null;
-      if (bot && payout.amount > 0) MD.giveCoins?.(bot, payout.amount);
+      if (typeof MD.payPerformer === "function") {
+        if (!MD.payPerformer(payout.username, bot, amount)) MD.owePayout?.(payout.username, amount);
+      }
     } catch { /* one bad payout never breaks the tick */ }
   }
-  // Hall share to the kingdom treasury (defensive).
+  // Hall share to the kingdom treasury via the REAL KingdomStore API
+  // (grantTax). The old addToTreasury call targeted a dead API — the
+  // optional chain no-op'd and the 25% hall share of real ticket revenue
+  // silently vanished (vanishing-coins class).
   if (hallShare > 0) {
     try {
       const KS = require("../../kingdoms/KingdomStore");
-      KS.addToTreasury?.(concert.kingdomId, hallShare);
-    } catch { /* treasury unavailable — the coins stay unclaimed, not invented */ }
+      if (typeof KS.grantTax === "function") {
+        KS.grantTax(concert.kingdomId, hallShare);
+        if (typeof KS.save === "function") KS.save();
+      } else {
+        // treasury unreachable — accrue honestly on the concert record for
+        // a later retry instead of dropping the coins.
+        concert.hallShareOwed = (concert.hallShareOwed || 0) + hallShare;
+      }
+    } catch { /* treasury unavailable — the coins stay honestly owed, not invented */ }
   }
   // Fame for headliners.
   try {
@@ -191,6 +208,19 @@ function tickMusicDance(director, nowMs) {
   try {
     const kingdoms = ["misthalin", "asgarnia", "kandarin", "morytania", "keldagrim"];
     const fest = festivalActive(nowMs);
+
+    // Retry honestly-owed performer payouts from earlier failed deliveries.
+    try {
+      for (const { username, amount } of MD.owedPayoutList?.() ?? []) {
+        try {
+          const record = director.roster?.get?.(normalizeName(username));
+          const bot = record && director.isOnline?.(record) ? director.getBot?.(record) : null;
+          if (typeof MD.payPerformer === "function" && MD.payPerformer(username, bot, amount)) {
+            MD.clearOwedPayout?.(username);
+          }
+        } catch { /* one bad payout never breaks the tick */ }
+      }
+    } catch { /* owed retry never breaks the tick */ }
 
     for (const kingdomId of kingdoms) {
       try {

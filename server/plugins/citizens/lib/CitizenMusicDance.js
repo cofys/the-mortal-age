@@ -133,6 +133,7 @@ function blankState() {
     troupes: [],
     halls: Object.create(null),
     concerts: [],
+    payoutsOwed: Object.create(null), // norm -> coins honestly owed when a performer payout failed
   };
 }
 
@@ -448,6 +449,66 @@ function practice(username, player, kind, nowMs) {
 }
 
 // === Coins (honest, real inventories) ===
+
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
+/**
+ * Pay a performer's concert share: real inventory when the bot is reachable,
+ * else their REAL bank account. Returns true only when the coins were
+ * actually delivered. Dropping offline shares (the old life-tick shape —
+ * "offline payouts are lost") is the vanishing-coins bug: the buyers' coins
+ * were already taken, but the earner never receives them.
+ */
+function payPerformer(username, bot, amount) {
+  amount = Math.floor(amount);
+  if (!(amount > 0)) return true;
+  try {
+    if (bot && giveCoins(bot, amount)) return true;
+  } catch { /* fall through to the bank */ }
+  try {
+    const B = bankingApi();
+    const acct = B && typeof B.accountFor === "function" ? B.accountFor(username) : null;
+    if (acct) {
+      acct.balance = (Number(acct.balance) || 0) + amount;
+      if (typeof B.markDirty === "function") B.markDirty();
+      return true;
+    }
+  } catch { /* banking is best-effort */ }
+  return false;
+}
+
+/** Record a performer payout as honestly owed when delivery failed. */
+function owePayout(username, amount) {
+  const st = load();
+  const key = normalizeName(username);
+  amount = Math.floor(amount);
+  if (!key || !(amount > 0)) return 0;
+  if (!st.payoutsOwed || typeof st.payoutsOwed !== "object") st.payoutsOwed = Object.create(null);
+  st.payoutsOwed[key] = (st.payoutsOwed[key] || 0) + amount;
+  markDirty();
+  return st.payoutsOwed[key];
+}
+
+/** Snapshot of honestly-owed performer payouts: [{ username, amount }]. */
+function owedPayoutList() {
+  const st = load();
+  const owed = st.payoutsOwed && typeof st.payoutsOwed === "object" ? st.payoutsOwed : {};
+  return Object.keys(owed).map((k) => ({ username: k, amount: owed[k] }));
+}
+
+/** Clear an owed performer payout after successful delivery. */
+function clearOwedPayout(username) {
+  const st = load();
+  const key = normalizeName(username);
+  if (st.payoutsOwed && key in st.payoutsOwed) {
+    delete st.payoutsOwed[key];
+    markDirty();
+    return true;
+  }
+  return false;
+}
 function coinCount(player) {
   try {
     const inv = player?.inventory ?? player?.inv ?? null;
@@ -649,6 +710,10 @@ module.exports = {
   coinCount,
   takeCoins,
   giveCoins,
+  payPerformer,
+  owePayout,
+  owedPayoutList,
+  clearOwedPayout,
   // persistence
   load,
   save,

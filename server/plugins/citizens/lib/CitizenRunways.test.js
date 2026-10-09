@@ -300,5 +300,64 @@ test("giveCoins credits via adds", () => {
   assert.strictEqual(p._inv.coins, 350, "balance credited");
 });
 
+// --- vanishing-coins: crown venue share + verified model purses ---
+
+test("settleShow accrues the crown venue share honestly when no coinSink is given", () => {
+  const b = setupShow("kandarin");
+  assert(b.ok, `book failed: ${b.reason}`);
+  const rich = mockPlayer("CrownFan", 10000, 0, 0);
+  Runways.buyTicket(rich, b.show.id);
+  const show = Runways.showFor(b.show.id);
+  show.endsAt = Date.now() - 1; // force finished
+  const venueBefore = Runways.venueFor("kandarin").crownRevenue || 0;
+  const s = Runways.settleShow(b.show.id); // no coinSink: the production call shape
+  assert(s.ok, "settled");
+  const expected = Math.floor(show.revenue * 2500 / 10000);
+  assert(expected > 0, "the ticket sale must produce a crown share");
+  assert.strictEqual(
+    (Runways.venueFor("kandarin").crownRevenue || 0) - venueBefore,
+    expected,
+    `crown share ${expected} accrued on the venue, not dropped`
+  );
+});
+
+test("settleShow still honors an explicit coinSink instead of accruing", () => {
+  const b = setupShow("asgarnia");
+  assert(b.ok, `book failed: ${b.reason}`);
+  const rich = mockPlayer("SinkFan", 10000, 0, 0);
+  Runways.buyTicket(rich, b.show.id);
+  const show = Runways.showFor(b.show.id);
+  show.endsAt = Date.now() - 1;
+  let sunk = 0;
+  const s = Runways.settleShow(b.show.id, (coins) => { sunk += coins; });
+  assert(s.ok, "settled");
+  const expected = Math.floor(show.revenue * 2500 / 10000);
+  assert.strictEqual(sunk, expected, "sink received the crown share");
+  assert(!(Runways.venueFor("asgarnia").crownRevenue > 0), "nothing double-booked on the venue");
+});
+
+test("payModelPurse delivers to a reachable bot inventory", () => {
+  const bot = mockPlayer("ModelPay", 0, 0, 0);
+  assert.strictEqual(Runways.payModelPurse("ModelPay", bot, 150), true);
+  assert.strictEqual(bot._inv.coins, 150, "real inventory credited");
+});
+
+test("payModelPurse falls back to the real bank account when inventory is unreachable", () => {
+  const Banking = require("./CitizenBanking");
+  Banking.resetForTests();
+  const before = Banking.accountFor("BankFallback").balance;
+  assert.strictEqual(Runways.payModelPurse("BankFallback", null, 175), true);
+  assert.strictEqual(Banking.accountFor("BankFallback").balance, before + 175, "bank account credited");
+  Banking.resetForTests();
+});
+
+test("oweModelPurse / purseOwedList / clearPurseOwed round-trip", () => {
+  assert.strictEqual(Runways.oweModelPurse("OwedModel", 200), 200);
+  const list = Runways.purseOwedList();
+  assert(list.some((e) => e.username === "owedmodel" && e.amount === 200), "owed entry listed");
+  assert.strictEqual(Runways.clearPurseOwed("OwedModel"), true);
+  assert(!Runways.purseOwedList().some((e) => e.username === "owedmodel"), "cleared");
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

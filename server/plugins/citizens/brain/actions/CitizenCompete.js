@@ -219,7 +219,19 @@ function createCitizenCompeteAction(spec, world) {
           if (!T.removeCoins(player, fee)) return "success";
           const res = T.enterTournament(tournament.id, name, rating, now);
           if (!res.ok) {
-            T.addCoins(player, fee); // refund — never eat real coins
+            // refund — never eat real coins. Verified: if the inventory
+            // credit fails, the fee goes to the citizen's REAL bank account
+            // rather than vanishing (the vanishing-coins class).
+            if (!T.addCoins(player, fee)) {
+              try {
+                const B = require("../../lib/CitizenBanking");
+                const acct = B && typeof B.accountFor === "function" ? B.accountFor(name) : null;
+                if (acct) {
+                  acct.balance = (Number(acct.balance) || 0) + fee;
+                  if (typeof B.markDirty === "function") B.markDirty();
+                }
+              } catch { /* banking is best-effort */ }
+            }
             return "success";
           }
           return "success"; // entered — brain re-decides

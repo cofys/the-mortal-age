@@ -25,12 +25,15 @@ function stubPlayer(username, coins) {
   return {
     username,
     getUsername: () => username,
+    // Canonical engine ItemContainer shape: getAmount(id),
+    // deleteNumber(id, n), adds(id, n). The old count/remove/add shapes
+    // do not exist on the real container and masked dead payout paths.
     getInventory: () => ({
-      count: (id) => (id === 995 ? balance : 0),
-      remove: (id, n) => {
+      getAmount: (id) => (id === 995 ? balance : 0),
+      deleteNumber: (id, n) => {
         if (id === 995) balance = Math.max(0, balance - n);
       },
-      add: (id, n) => {
+      adds: (id, n) => {
         if (id === 995) balance += n;
       },
     }),

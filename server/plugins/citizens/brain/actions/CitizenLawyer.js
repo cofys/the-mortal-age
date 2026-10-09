@@ -41,7 +41,8 @@ function countCoins(player) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return 0;
-    if (typeof inv.count === "function") return inv.count(COINS_ITEM_ID) || 0;
+    // Canonical engine API: ItemContainer.getAmount(id). inv.count does not
+    // exist on the engine container.
     if (typeof inv.getAmount === "function") return inv.getAmount(COINS_ITEM_ID) || 0;
     return 0;
   } catch {
@@ -50,18 +51,33 @@ function countCoins(player) {
 }
 
 function moveCoins(fromPlayer, toPlayer, amount) {
+  // Canonical engine APIs with balance verification: deleteNumber(id, n)
+  // and adds(id, n). The old inv.remove/add shapes were dead on the real
+  // ItemContainer (remove doesn't exist; add takes an Item instance, not
+  // (id, amount)) — a stale mock's shapes masked it, and debit could
+  // succeed while delivery threw: vanishing coins. A failed credit rolls
+  // the debit back, so coins are never lost mid-move.
   try {
     const fromInv = fromPlayer?.getInventory?.();
     const toInv = toPlayer?.getInventory?.();
     if (!fromInv || !toInv || amount <= 0) return 0;
-    const have = countCoins(fromPlayer);
-    const take = Math.min(have, amount);
+    if (typeof fromInv.deleteNumber !== "function" || typeof toInv.adds !== "function") return 0;
+    if (typeof fromInv.getAmount !== "function" || typeof toInv.getAmount !== "function") return 0;
+    const take = Math.min(countCoins(fromPlayer), Math.floor(amount));
     if (take <= 0) return 0;
-    if (typeof fromInv.remove === "function") fromInv.remove(COINS_ITEM_ID, take);
-    else if (typeof fromInv.delete === "function") fromInv.delete(COINS_ITEM_ID, take);
-    else return 0;
-    if (typeof toInv.add === "function") toInv.add(COINS_ITEM_ID, take);
-    return take;
+    const beforeFrom = fromInv.getAmount(COINS_ITEM_ID);
+    const beforeTo = toInv.getAmount(COINS_ITEM_ID);
+    fromInv.deleteNumber(COINS_ITEM_ID, take);
+    toInv.adds(COINS_ITEM_ID, take);
+    const debited = fromInv.getAmount(COINS_ITEM_ID) === beforeFrom - take;
+    const credited = toInv.getAmount(COINS_ITEM_ID) === beforeTo + take;
+    if (debited && credited) return take;
+    // Roll back whatever half moved — never lose coins.
+    try {
+      if (credited) toInv.deleteNumber(COINS_ITEM_ID, take);
+      if (debited) fromInv.adds(COINS_ITEM_ID, take);
+    } catch { /* rollback is best-effort */ }
+    return 0;
   } catch {
     return 0;
   }
