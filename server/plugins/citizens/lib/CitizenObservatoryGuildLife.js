@@ -93,7 +93,11 @@ function announce(director, kingdomId, text, nowMs) {
     const near = roster.find((r) => {
       try {
         const S = sitesApi();
-        return S && typeof S.kingdomIdOf === "function" && S.kingdomIdOf(r) === kingdomId;
+        // Plain roster records carry kingdomId; the brain read is only the
+        // live-entity fallback (it pins plain records to KINGDOM_IDS[0]).
+        const rkid = r?.kingdomId ||
+          (S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(r) : null);
+        return rkid === kingdomId;
       } catch { return false; }
     });
     const bot = near ? botFor(director, near) : null;
@@ -124,7 +128,10 @@ function tickObservatoryGuildLife(director, nowMs = Date.now()) {
         let rkid = null;
         try {
           const S = sitesApi();
-          rkid = S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(record) : null;
+          // Plain roster record first — the brain read silently pins plain
+          // records to the first kingdom (no getAttribute).
+          rkid = record?.kingdomId ||
+            (S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(record) : null);
         } catch { rkid = null; }
         if (rkid !== kid) continue;
         const name = usernameOf(record);
@@ -194,7 +201,16 @@ function tickObservatoryGuildLife(director, nowMs = Date.now()) {
         const lastC = lastClass.get(kid) || 0;
         if (nowMs - lastC >= CLASS_COOLDOWN_MS) {
           lastClass.set(kid, nowMs);
-          const master = roster.map(usernameOf).find((n) => Guilds.guildRankOf(n) === Guilds.RANK_STARMASTER);
+          // The teaching starmaster must belong to THIS kingdom. Roster records
+          // are plain ({username, kingdomId}), so scope by the record field —
+          // a foreign starmaster must not teach another kingdom's school.
+          const masterRec = roster.find((r) => {
+            try {
+              return (r?.kingdomId ?? null) === kid &&
+                Guilds.guildRankOf(usernameOf(r)) === Guilds.RANK_STARMASTER;
+            } catch { return false; }
+          });
+          const master = masterRec ? usernameOf(masterRec) : null;
           if (master) {
             const res = Guilds.holdClass(kid, master);
             if (res.ok && res.taught > 0) {
