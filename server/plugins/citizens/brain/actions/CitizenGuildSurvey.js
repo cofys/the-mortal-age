@@ -157,9 +157,15 @@ function createCitizenGuildSurveyAction(spec, world) {
               const apprentice = Guilds.mentoredBy(username);
               if (apprentice) {
                 const { getJournal } = require("../../lib/CitizenJournal");
-                getJournal().log?.("guild-mentoring", {
-                  master: username, apprentice, kingdomId: state.kingdomId,
-                });
+                // Canonical shape (CitizenJournal.js:79): log(citizenName,
+                // kind, text, opts). The old 2-arg call passed the data object
+                // as `kind` with no `text`, so log() returned null silently.
+                getJournal().log?.(
+                  username,
+                  "guild-mentoring",
+                  `${username} reviewed charts with apprentice ${apprentice} at the guild hall.`,
+                  { data: { master: username, apprentice, kingdomId: state.kingdomId } }
+                );
               }
             }
           } catch { /* journaling is optional */ }

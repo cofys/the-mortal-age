@@ -657,33 +657,6 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
-  // "chefs' guild" / "culinary code" / "recipe certification" — player asks
-  // about the culinary profession's association. (CitizenCookOffs owns the
-  // live cooking circuit; this owns the guild layer only.)
-  if (/\b(chefs'? guild|culinary code|recipe certification|certify (a|my) recipe|certified recipe|golden ladle|kitchen inspection|chef de cuisine|sous chef)\b/.test(said)) {
-    try {
-      const Guilds = require("../lib/CitizenCookGuilds");
-      let kingdomId = null;
-      try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
-      } catch { /* no sites */ }
-      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
-      notifyCitizenSpoke(citizenUsername, speakerUsername, "cookguild_status", {
-        username: citizenUsername,
-        exists: desc.exists ?? false,
-        memberCount: desc.memberCount ?? 0,
-        sealed: desc.sealed ?? 0,
-        hygiene: desc.hygiene ?? 100,
-        treasury: desc.treasury ?? 0,
-        prestige: desc.prestige ?? 0,
-      });
-    } catch {
-      return false;
-    }
-    return true;
-  }
-
   // "cook-off" / "cooking competition" / "recipe" — player asks about the
   // cooking circuit. (CitizenCuisine owns the monthly best-dish showcases;
   // this owns live cook-offs, judging panels, and recipes.)
@@ -1660,11 +1633,14 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   if (/\b(map guild|cartographers'? guild|guild hall|certify|certification|guild seal|surveyor|guildmaster)\b/.test(said)) {
     try {
       const Guilds = require("../lib/CitizenMapGuilds");
+      // handleSocialKeyword only has the citizen's username (a string), and
+      // CitizenSites.kingdomIdOf needs a player entity (getAttribute) — a
+      // string silently yields KINGDOM_IDS[0]. The guild's own member record
+      // carries the citizen's real kingdom; non-members have no guild context.
       let kingdomId = null;
       try {
-        const { kingdomIdOf } = require("../brain/CitizenSites");
-        kingdomId = kingdomIdOf(citizenUsername);
-      } catch { /* no sites */ }
+        kingdomId = Guilds.memberOf(citizenUsername)?.kingdomId || null;
+      } catch { /* no guild */ }
       const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
       notifyCitizenSpoke(citizenUsername, speakerUsername, "guild_status", {
         username: citizenUsername,

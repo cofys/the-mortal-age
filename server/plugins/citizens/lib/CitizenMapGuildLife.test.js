@@ -14,10 +14,23 @@ const path = require("path");
 const sitesPath = path.resolve(__dirname, "../brain/CitizenSites.js");
 require.cache[sitesPath] = {
   id: sitesPath, filename: sitesPath, loaded: true,
-  exports: { KINGDOM_IDS: ["varrock"], kingdomIdOf: (r) => r.kingdomId || "varrock" },
+  // Mirrors the REAL CitizenSites.kingdomIdOf contract: it needs a player
+  // entity with getAttribute; plain roster records silently fall back to
+  // KINGDOM_IDS[0]. This is the exact trap the guild life tick must not fall
+  // into when resolving a citizen's kingdom from a roster record.
+  exports: {
+    KINGDOM_IDS: ["varrock", "falador"],
+    kingdomIdOf: (player) => {
+      try {
+        const id = player && typeof player.getAttribute === "function"
+          ? player.getAttribute("citizens:kingdom-id") : null;
+        return (id === "varrock" || id === "falador") ? id : "varrock";
+      } catch { return "varrock"; }
+    },
+  },
 };
 
-const fakeListings = { varrock: [] };
+const fakeListings = { varrock: [], falador: [] };
 const fakeCartographers = new Set();
 const mapsPath = path.resolve(__dirname, "./CitizenMaps.js");
 require.cache[mapsPath] = {
@@ -70,8 +83,10 @@ function makeDirector(records) {
 function reset() {
   Guilds.resetForTests();
   resetForTests();
+  require("./CitizenJournal").getJournal().resetForTests();
   fakeCartographers.clear();
   fakeListings.varrock = [];
+  fakeListings.falador = [];
 }
 
 let passed = 0;
@@ -153,6 +168,45 @@ test("tick expires bounties and refunds the treasury", () => {
   assert.strictEqual(Guilds.guildTreasuryFor("varrock"), 500);
   assert.strictEqual(Guilds.activeBounties("varrock").length, 0);
   assert.ok(st);
+});
+
+test("suspension is journaled with the canonical (name, kind, text) shape", () => {
+  const { getJournal } = require("./CitizenJournal");
+  fakeCartographers.add("yara");
+  Guilds.joinGuild("Yara", "varrock");
+  const m = Guilds.memberOf("Yara");
+  m.duesPaidUntil = Date.now() - 1000;
+  const bot = makeBot("Yara", 0); // broke
+  const d = makeDirector([makeRecord("Yara", bot, "varrock")]);
+  tickMapGuildLife(d, Date.now());
+  resetForTests(); // bypass the 30-min throttle for the second collection
+  m.duesPaidUntil = Date.now() - 1000;
+  tickMapGuildLife(d, Date.now());
+  assert.ok(Guilds.memberOf("Yara").suspended);
+  // Regression: the old journal helper called log(kind, data) with no text,
+  // so CitizenJournal.log() returned null and nothing was ever recorded.
+  const events = getJournal().recent("Yara");
+  const e = events.find((x) => x.kind === "guild-suspended");
+  assert.ok(e, "expected a guild-suspended journal entry for Yara");
+  assert.ok(e.text && e.text.length > 0, "journal text must be non-empty");
+});
+
+test("auto-submit resolves the citizen's real kingdom, not KINGDOM_IDS[0]", () => {
+  fakeCartographers.add("fay");
+  Guilds.joinGuild("Fay", "falador");
+  Guilds.creditTreasury("falador", 1000);
+  fakeListings.falador.push({ map: { id: "fm1", creator: "Fay", type: "world", quality: 8 }, price: 100 });
+  const bot = makeBot("Fay", 200);
+  const d = makeDirector([makeRecord("Fay", bot, "falador")]);
+  tickMapGuildLife(d, Date.now());
+  // Regression: the old helper fed the roster record into
+  // CitizenSites.kingdomIdOf, which silently returned KINGDOM_IDS[0]
+  // ("varrock") for any non-player object, so falador members never
+  // auto-submitted and falador announcements never found a bot.
+  assert.strictEqual(Guilds.certifiedGradeFor("fm1"), "B");
+  assert.strictEqual(Guilds.guildTreasuryFor("varrock"), 0);
+  // Fee (50) credited to the falador treasury; grade-B bounty (60) paid out.
+  assert.strictEqual(Guilds.guildTreasuryFor("falador"), 1000 - 60 + 50);
 });
 
 console.log(`CitizenMapGuildLife: ${passed} tests passed`);

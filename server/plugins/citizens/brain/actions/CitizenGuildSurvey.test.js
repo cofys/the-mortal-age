@@ -171,4 +171,34 @@ test("null player is safe", () => {
   assert.strictEqual(a.update({ player: null, nowMs: 1 }), "success");
 });
 
+test("master's final round journals with the canonical (name, kind, text) shape", () => {
+  // Regression: the old call was log("guild-mentoring", {...}) with no
+  // citizenName or text, so CitizenJournal.log() returned null silently.
+  const { getJournal } = require("../../lib/CitizenJournal");
+  getJournal().resetForTests();
+  const stub = require.cache[guildsPath].exports;
+  const origRank = stub.guildRankOf;
+  const origMentored = stub.mentoredBy;
+  stub.guildRankOf = () => "master";
+  stub.mentoredBy = () => "Mia";
+  try {
+    members.add("gwen");
+    const a = createCitizenGuildSurveyAction({}, {});
+    const p = stubPlayer("Gwen", { x: 0, y: 0, z: 0 });
+    let nowMs = 1000000;
+    a.update({ player: p, nowMs }); // init -> outbound
+    p.getPosition = () => ({ ...HALL_TILE });
+    for (let i = 0; i < 5; i++) { nowMs += 9000; a.update({ player: p, nowMs }); }
+    assert.strictEqual(p.__guildState.roundsDone, 3);
+    const events = getJournal().recent("Gwen");
+    const e = events.find((x) => x.kind === "guild-mentoring");
+    assert.ok(e, "expected a guild-mentoring journal entry for Gwen");
+    assert.ok(e.text && e.text.includes("Mia"), "journal text must name the apprentice");
+  } finally {
+    stub.guildRankOf = origRank;
+    stub.mentoredBy = origMentored;
+    members.clear();
+  }
+});
+
 console.log(`CitizenGuildSurvey: ${passed} tests passed`);

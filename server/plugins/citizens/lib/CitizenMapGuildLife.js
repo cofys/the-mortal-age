@@ -40,10 +40,17 @@ function usernameOf(record) {
 }
 
 function kingdomIdOf(record) {
-  try {
-    const { kingdomIdOf } = require("../brain/CitizenSites");
-    return kingdomIdOf(record) || record.kingdomId || null;
-  } catch { return record.kingdomId || null; }
+  // Roster records are plain objects with a real kingdomId field — they are
+  // NOT player entities, so CitizenSites.kingdomIdOf(record) would silently
+  // return KINGDOM_IDS[0] (it needs player.getAttribute). Prefer the real
+  // record field; use the sites seam only for actual player entities.
+  if (record && typeof record.getAttribute === "function") {
+    try {
+      const { kingdomIdOf } = require("../brain/CitizenSites");
+      return kingdomIdOf(record) || record.kingdomId || null;
+    } catch { return record.kingdomId || null; }
+  }
+  return record?.kingdomId || null;
 }
 
 function hasItem(bot, itemId, amount) {
@@ -75,10 +82,14 @@ function awardDeed(username, deedKind) {
   } catch { /* fame is optional */ }
 }
 
-function journal(kind, data) {
+// Canonical journal shape (CitizenJournal.js:79): log(citizenName, kind,
+// text, opts). The old 2-arg call passed the data object as `kind` with no
+// `text`, so log() returned null silently and guild events were never recorded.
+function journal(citizenName, kind, text, data) {
   try {
+    if (!citizenName || !text) return;
     const { getJournal } = require("./CitizenJournal");
-    getJournal().log?.(kind, data);
+    getJournal().log?.(citizenName, kind, text, data ? { data } : {});
   } catch { /* journal optional */ }
 }
 
@@ -93,7 +104,7 @@ function nearestBot(director, kingdomId) {
   return null;
 }
 
-function announce(director, kingdomId, text, kind, nowMs) {
+function announce(director, kingdomId, citizenName, text, kind, nowMs) {
   try {
     const last = lastAnnounce.get(kingdomId) || 0;
     if (last > 0 && nowMs - last < ANNOUNCE_COOLDOWN_MS) return;
@@ -103,7 +114,7 @@ function announce(director, kingdomId, text, kind, nowMs) {
       const { sayPublic } = require("../chat/CitizenSayPublic");
       if (sayPublic) sayPublic(bot, text);
     }
-    journal(kind, { kingdomId, text });
+    journal(citizenName, kind, text, { kingdomId });
   } catch { /* announcements never break the tick */ }
 }
 
@@ -137,7 +148,9 @@ function collectDues(director, nowMs) {
       } else {
         if (Guilds.recordDuesMissed(username)) {
           suspended++;
-          journal("guild-suspended", { username });
+          journal(username, "guild-suspended",
+            `${username} was suspended from the cartographers' guild — dues missed twice.`,
+            { username });
         }
       }
     } catch { /* one bad citizen never breaks dues */ }
@@ -207,20 +220,25 @@ function settleCertifications(director, nowMs) {
         const promoted = Guilds.checkPromotion(cert.creator);
         if (promoted === Guilds.RANK_MASTER) {
           awardDeed(cert.creator, "guildmaster");
-          journal("guild-promotion", { username: cert.creator, rank: promoted, kingdomId: cert.kingdomId });
-          announce(director, cert.kingdomId,
+          journal(cert.creator, "guild-promotion",
+            `${cert.creator} was raised to ${promoted} of the cartographers' guild.`,
+            { username: cert.creator, rank: promoted, kingdomId: cert.kingdomId });
+          announce(director, cert.kingdomId, cert.creator,
             `${cert.creator} has been raised to Guildmaster of the cartographers!`,
             "guild-master", nowMs);
         } else if (promoted) {
-          journal("guild-promotion", { username: cert.creator, rank: promoted, kingdomId: cert.kingdomId });
+          journal(cert.creator, "guild-promotion",
+            `${cert.creator} was raised to ${promoted} of the cartographers' guild.`,
+            { username: cert.creator, rank: promoted, kingdomId: cert.kingdomId });
         }
       }
       if (cert.grade === "A") {
-        announce(director, cert.kingdomId,
+        announce(director, cert.kingdomId, cert.creator,
           `The guild seals ${cert.creator}'s ${cert.type} chart with the master seal — a flawless survey.`,
           "guild-certification", nowMs);
       }
-      journal("guild-certification", {
+      journal(cert.creator, "guild-certification",
+        `${cert.creator}'s ${cert.type} chart was sealed by the guild — grade ${cert.grade}.`, {
         creator: cert.creator, type: cert.type, grade: cert.grade,
         kingdomId: cert.kingdomId, bountyPaid: cert.bountyPaid ?? 0, bountyOwed: cert.bountyOwed ?? 0,
       });
@@ -251,7 +269,9 @@ function payOwedBounties(director) {
           } catch { /* inventory write failed — stays owed */ }
         }
         if (!paidOut) continue; // offline or no inventory — stays owed
-        journal("guild-bounty-paid", { username, mapId: cert.mapId, amount: cert.bountyOwed });
+        journal(username, "guild-bounty-paid",
+          `The guild paid ${username} ${cert.bountyOwed} owed coins for chart ${cert.mapId}.`,
+          { username, mapId: cert.mapId, amount: cert.bountyOwed });
         cert.bountyOwed = 0;
         paid++;
       }
@@ -284,7 +304,9 @@ function tickMapGuildLife(director, nowMs) {
         const promoted = Guilds.checkPromotion(username);
         if (promoted === Guilds.RANK_MASTER) {
           awardDeed(username, "guildmaster");
-          journal("guild-promotion", { username, rank: promoted });
+          journal(username, "guild-promotion",
+            `${username} was raised to ${promoted} of the cartographers' guild.`,
+            { username, rank: promoted });
         }
       }
     } catch { /* promotions never break the tick */ }
