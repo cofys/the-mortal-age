@@ -639,6 +639,88 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "who is the mayor" — player asks about the town council.
+  if (/\b(who is the mayor|who runs this town|who is on the council|town council)\b/.test(said)) {
+    try {
+      const Gov = require("../lib/CitizenGovernment");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      if (!record?.kingdomId) return false;
+      const d = Gov.describeCouncil(record.kingdomId);
+      if (!d) return false;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "gov_mayor", d);
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "when is the election" — player asks about the next election.
+  if (/\b(when is the election|next election|when do we vote)\b/.test(said)) {
+    try {
+      const Gov = require("../lib/CitizenGovernment");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      if (!record?.kingdomId) return false;
+      const council = Gov.getCouncil(record.kingdomId);
+      if (!council) return false;
+      const days = Math.max(0, Math.ceil((council.nextElectionAtMs - Date.now()) / 86400000));
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "gov_election", { days });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "i want to run for mayor" — player nominates themselves.
+  if (/\b(i want to run|nominate me|put me on the ballot|i'll run for)\b/.test(said)) {
+    try {
+      const Gov = require("../lib/CitizenGovernment");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      if (!record?.kingdomId) return false;
+      // The citizen must know the player (friend) to vouch for them.
+      const Bonds = require("../lib/CitizenBonds");
+      if (!Bonds.isFriend(citizenUsername, speakerUsername)) return false;
+      const ok = Gov.nominateCandidate(
+        record.kingdomId,
+        speakerUsername,
+        speakerUsername,
+        true,
+        Date.now()
+      );
+      notifyCitizenSpoke(citizenUsername, speakerUsername, ok ? "gov_nominated" : "gov_nomination_failed");
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "i endorse Alice" — player endorses a candidate.
+  const endorseMatch = said.match(/\bi endorse ([a-z0-9 _-]{2,20})\b/);
+  if (endorseMatch) {
+    try {
+      const Gov = require("../lib/CitizenGovernment");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      if (!record?.kingdomId) return false;
+      const ok = Gov.endorseCandidate(record.kingdomId, endorseMatch[1].trim(), speakerUsername);
+      if (ok) notifyCitizenSpoke(citizenUsername, speakerUsername, "gov_endorsed", { name: endorseMatch[1].trim() });
+      else return false;
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   return false;
 }
 
@@ -647,7 +729,7 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
  * from the citizen). The LLM will pick up the new relationship in context
  * on the next exchange.
  */
-function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
+function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, extra) {
   if (!pluginApi) return;
   try {
     const { getDirector } = require("../director/CitizenDirector");
@@ -671,6 +753,13 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind) {
       companion_accept: `${display}: Wonderful! Let's go — right now, while the mood's right.`,
       companion_decline: `${display}: Ah, that's a shame. Maybe another time.`,
       companion_invite: `${display}: Wonderful! Let's go — right now, while the mood's right.`,
+      gov_mayor: extra
+        ? `${display}: ${extra.mayor} is our mayor${extra.councilors.length ? `, with ${extra.councilors.join(", ")} on the council` : ""}${extra.laws.length ? `. Current laws: ${extra.laws.join(", ")}` : ""}.`
+        : `${display} nods.`,
+      gov_election: `${display}: The next election is in ${extra?.days ?? "?"} days. Make your voice heard!`,
+      gov_nominated: `${display}: Done — your name's on the ballot. Good luck!`,
+      gov_nomination_failed: `${display}: Hmm, that didn't go through. Maybe you're already running.`,
+      gov_endorsed: `${display}: Noted — I'll remember you spoke well of ${extra?.name ?? "them"}.`,
     };
     const msg = messages[kind] ?? `${display} nods.`;
     // Send as a game message "from" the citizen (the citizen's next LLM

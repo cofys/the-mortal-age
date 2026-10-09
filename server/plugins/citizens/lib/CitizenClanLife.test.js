@@ -1,0 +1,263 @@
+// CitizenClanLife unit checks — tick dynamics with stubbed engine deps.
+const assert = require("node:assert/strict");
+const path = require("node:path");
+
+// Stub BotNavigation (lazy-required inside moveBot) before loading ClanLife.
+const navPath = require.resolve("../../bots/behaviours/navigation/BotNavigation");
+const navCalls = [];
+require.cache[navPath] = {
+  exports: {
+    requestMovement: (bot, x, y, opts) => {
+      navCalls.push({ bot, x, y, opts });
+      return true;
+    },
+    peekMovementRequest: () => null,
+    dispatchMovementRequest: () => ({ hasRoute: true }),
+    clearMovementRequest: () => {},
+  },
+};
+
+// Stub sayPublic to capture speech.
+const sayPath = require.resolve("../chat/CitizenSayPublic");
+const said = [];
+require.cache[sayPath] = {
+  exports: { sayPublic: (bot, text) => { said.push(String(text)); return true; } },
+};
+
+const Clans = require("./CitizenClans");
+const Bonds = require("./CitizenBonds");
+const { getJournal } = require("./CitizenJournal");
+const Life = require("./CitizenClanLife");
+
+const always = () => 0; // rng: every chance() passes
+const never = () => 0.999999; // rng: every chance() fails
+// Sequenced rng: first pickOne -> members[0], second pickOne -> members[1],
+// then 0 (chance always passes).
+function seq() {
+  const vals = [0, 0.6, 0];
+  let i = 0;
+  return () => vals[(i++) % vals.length];
+}
+
+function rec(username, role = "commoner", kingdomId = "varrock", goalType = null, traits = []) {
+  return {
+    username,
+    displayName: username,
+    role,
+    kingdomId,
+    goal: goalType ? { type: goalType } : null,
+    personality: { traits },
+  };
+}
+
+function fakeBot(username, x = 3000, y = 3000, z = 0) {
+  let following = null;
+  return {
+    getUsername: () => username,
+    getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => z }),
+    getMovementQueue: () => ({ size: () => 0 }),
+    setFollowing: (t) => { following = t; },
+    getFollowing: () => following,
+  };
+}
+
+function fakeDirector(records, onlineNames) {
+  const roster = new Map();
+  for (const r of records) roster.set(r.username.toLowerCase(), r);
+  const bots = new Map();
+  for (const n of onlineNames ?? []) {
+    const r = roster.get(String(n).toLowerCase());
+    if (r) bots.set(String(n).toLowerCase(), fakeBot(r.username));
+  }
+  return {
+    roster,
+    api: null,
+    getBot: (record) => bots.get(String(record?.username ?? "").toLowerCase()) ?? null,
+    isOnline: (record) => bots.has(String(record?.username ?? "").toLowerCase()),
+    _bots: bots,
+  };
+}
+
+function befriend(a, b) {
+  Bonds.addFriend(a, b);
+  Bonds.addFriend(b, a);
+}
+
+let passed = 0;
+function check(name, fn) {
+  Clans.resetForTests();
+  getJournal().resetForTests();
+  said.length = 0;
+  navCalls.length = 0;
+  fn();
+  passed++;
+  console.log("ok - " + name);
+}
+
+// --- formation ------------------------------------------------------------------
+
+check("maybeFoundClan founds and seeds mutual friends", () => {
+  const founder = rec("ClanFounderA", "commoner", "varrock", "master_trade", ["outgoing"]);
+  const f1 = rec("ClanFriend1", "commoner", "varrock", "master_trade", []);
+  const f2 = rec("ClanFriend2", "commoner", "varrock", "master_trade", []);
+  const f3 = rec("ClanFriend3", "commoner", "varrock", null, []);
+  const d = fakeDirector([founder, f1, f2, f3], ["ClanFounderA"]);
+  befriend("ClanFounderA", "ClanFriend1");
+  befriend("ClanFounderA", "ClanFriend2");
+  befriend("ClanFounderA", "ClanFriend3");
+  const ok = Life.maybeFoundClan(d, founder, always);
+  assert.equal(ok, true);
+  const clan = Clans.clanOf("ClanFounderA");
+  assert.ok(clan);
+  assert.equal(clan.kind, Clans.KIND_CRAFT);
+  assert.ok((clan.members?.length ?? 0) >= 2, "friends joined");
+  assert.ok(said.length > 0, "founder announced");
+});
+
+check("maybeFoundClan does nothing when chance fails or ineligible", () => {
+  const founder = rec("ClanFounderB", "commoner", "varrock", null, ["outgoing"]);
+  const d = fakeDirector([founder], ["ClanFounderB"]);
+  assert.equal(Life.maybeFoundClan(d, founder, never), false);
+  assert.equal(Clans.clanCount(), 0);
+  const shy = rec("ShyFounder", "commoner", "varrock", null, ["taciturn"]);
+  const d2 = fakeDirector([shy], ["ShyFounder"]);
+  befriend("ShyFounder", "ClanFriend1");
+  assert.equal(Life.maybeFoundClan(d2, shy, always), false);
+});
+
+// --- growth -----------------------------------------------------------------------
+
+check("maybeGrowClan invites a member's friend", () => {
+  const founder = rec("GrowFounder", "commoner", "varrock", null, ["outgoing"]);
+  const d = fakeDirector([founder, rec("GrowPal", "commoner", "varrock")], ["GrowFounder"]);
+  const clan = Clans.createClan("GrowFounder", "GrowFounder", "varrock", Clans.KIND_SOCIAL);
+  befriend("GrowFounder", "GrowPal");
+  assert.equal(Life.maybeGrowClan(d, clan, always), true);
+  assert.equal(Clans.clanOf("GrowPal")?.id, clan.id);
+});
+
+// --- outings -------------------------------------------------------------------------
+
+check("maybeStartOuting creates outing, follows members, nudges leader", () => {
+  const founder = rec("OutFounder", "commoner", "varrock", null, ["outgoing"]);
+  const m1 = rec("OutM1", "commoner", "varrock");
+  const d = fakeDirector([founder, m1], ["OutFounder", "OutM1"]);
+  const clan = Clans.createClan("OutFounder", "OutFounder", "varrock", Clans.KIND_SKILL);
+  Clans.addMember(clan.id, "OutM1", "OutM1");
+  assert.equal(Life.maybeStartOuting(d, clan, always, Date.now()), true);
+  assert.ok(clan.activeOuting, "outing active");
+  assert.ok(["fishing", "mining"].includes(clan.activeOuting.activity));
+  assert.equal(Bonds.getFollow("OutM1")?.reason, "clan_outing");
+  assert.ok(navCalls.length > 0, "leader nudged toward destination");
+  assert.ok(said.length > 0, "outing announced");
+});
+
+check("maintainOuting ends on timeout and clears follows", () => {
+  const founder = rec("OutFounder2", "commoner", "varrock", null, ["outgoing"]);
+  const m1 = rec("OutM1b", "commoner", "varrock");
+  const d = fakeDirector([founder, m1], ["OutFounder2", "OutM1b"]);
+  const clan = Clans.createClan("OutFounder2", "OutFounder2", "varrock", Clans.KIND_SOCIAL);
+  Clans.addMember(clan.id, "OutM1b", "OutM1b");
+  const now = Date.now();
+  Life.maybeStartOuting(d, clan, always, now);
+  assert.ok(clan.activeOuting);
+  Life.maintainOuting(d, clan, always, now + 31 * 60 * 1000);
+  assert.equal(clan.activeOuting, null);
+  assert.equal(Bonds.getFollow("OutM1b"), null);
+});
+
+// --- celebrations ----------------------------------------------------------------------
+
+check("tickCelebrations celebrates a member's real achievement", () => {
+  const founder = rec("CelFounder", "commoner", "varrock", null, ["outgoing"]);
+  const m1 = rec("CelM1", "commoner", "varrock");
+  const d = fakeDirector([founder, m1], ["CelFounder", "CelM1"]);
+  const clan = Clans.createClan("CelFounder", "CelFounder", "varrock", Clans.KIND_SOCIAL);
+  Clans.addMember(clan.id, "CelM1", "CelM1");
+  const t0 = Date.now();
+  clan.lastCelebScan = t0 - 1000;
+  getJournal().log("CelM1", "achievement", "Reached level 50 fishing.", {
+    data: { level: 50, skill: "fishing" },
+    at: t0,
+  });
+  Life.tickCelebrations(d, clan, always, t0 + 5000);
+  assert.ok(clan.lastCelebScan >= t0, "scan cursor advanced");
+  assert.ok(said.some((s) => /celm1/i.test(s)), "a clanmate congratulated");
+  assert.ok(
+    (getJournal().recent("CelFounder", 5) ?? []).some((e) => /celebrated/i.test(e.text)),
+    "celebration journaled"
+  );
+});
+
+check("tickCelebrations ignores stale achievements", () => {
+  const founder = rec("CelFounder2", "commoner", "varrock", null, ["outgoing"]);
+  const d = fakeDirector([founder], ["CelFounder2"]);
+  const clan = Clans.createClan("CelFounder2", "CelFounder2", "varrock", Clans.KIND_SOCIAL);
+  const t0 = Date.now();
+  clan.lastCelebScan = t0;
+  getJournal().log("CelFounder2", "achievement", "Reached level 50 fishing.", {
+    data: { level: 50, skill: "fishing" },
+    at: t0 - 5000,
+  });
+  Life.tickCelebrations(d, clan, always, t0 + 5000);
+  assert.equal(said.length, 0, "no celebration for old news");
+});
+
+// --- moots -------------------------------------------------------------------------------
+
+check("achievementScore counts in-window achievements only", () => {
+  const now = Date.now();
+  getJournal().log("ScoreA", "achievement", "leveled", { data: { level: 10, skill: "x" }, at: now - 1000 });
+  getJournal().log("ScoreA", "achievement", "leveled", { data: { level: 11, skill: "x" }, at: now - 8 * 24 * 3600 * 1000 });
+  getJournal().log("ScoreA", "social", "chatted", { at: now - 1000 });
+  assert.equal(Life.achievementScore(["ScoreA"], now - 7 * 24 * 3600 * 1000), 1);
+});
+
+check("tickMoots scores two clans and announces a winner", () => {
+  const now = Date.now();
+  const mk = (u) => rec(u, "commoner", "varrock", null, u === "MootA1" || u === "MootB1" ? ["outgoing"] : []);
+  const d = fakeDirector(["MootA1", "MootA2", "MootB1", "MootB2"].map(mk), ["MootA1", "MootB1"]);
+  const ca = Clans.createClan("MootA1", "MootA1", "varrock", Clans.KIND_SKILL);
+  Clans.addMember(ca.id, "MootA2", "MootA2");
+  const cb = Clans.createClan("MootB1", "MootB1", "varrock", Clans.KIND_SKILL);
+  Clans.addMember(cb.id, "MootB2", "MootB2");
+  getJournal().log("MootA1", "achievement", "leveled", { data: { level: 40, skill: "fishing" }, at: now - 1000 });
+  getJournal().log("MootA2", "achievement", "leveled", { data: { level: 41, skill: "fishing" }, at: now - 2000 });
+  getJournal().log("MootB1", "achievement", "leveled", { data: { level: 30, skill: "mining" }, at: now - 3000 });
+  Life.tickMoots(d, always, now);
+  assert.ok(Clans.lastMootAt("varrock") >= now - 1000, "moot stamped");
+  assert.ok(said.some((s) => /moot/i.test(s)), "winner announced");
+  // Second tick within the window does nothing.
+  said.length = 0;
+  Life.tickMoots(d, always, now + 1000);
+  assert.equal(said.length, 0, "moot on cooldown");
+});
+
+// --- warmth -------------------------------------------------------------------------------
+
+check("tickWarmth greets nearby clanmates", () => {
+  const founder = rec("WarmFounder", "commoner", "varrock", null, ["outgoing"]);
+  const m1 = rec("WarmM1", "commoner", "varrock");
+  const d = fakeDirector([founder, m1], ["WarmFounder", "WarmM1"]);
+  // Move the two bots next to each other.
+  d._bots.set("warmfounder", fakeBot("WarmFounder", 3000, 3000, 0));
+  d._bots.set("warmm1", fakeBot("WarmM1", 3002, 3001, 0));
+  const clan = Clans.createClan("WarmFounder", "WarmFounder", "varrock", Clans.KIND_SOCIAL);
+  Clans.addMember(clan.id, "WarmM1", "WarmM1");
+  Life.tickWarmth(d, clan, seq());
+  assert.ok(said.length > 0, "greeting spoken");
+});
+
+check("tickClans runs end-to-end without throwing", () => {
+  const founder = rec("TickFounder", "commoner", "varrock", "master_trade", ["outgoing"]);
+  const f1 = rec("TickF1", "commoner", "varrock", "master_trade", []);
+  const f2 = rec("TickF2", "commoner", "varrock", "master_trade", []);
+  const f3 = rec("TickF3", "commoner", "varrock", null, []);
+  const d = fakeDirector([founder, f1, f2, f3], ["TickFounder", "TickF1"]);
+  befriend("TickFounder", "TickF1");
+  befriend("TickFounder", "TickF2");
+  befriend("TickFounder", "TickF3");
+  assert.doesNotThrow(() => Life.tickClans(d, Date.now()));
+});
+
+console.log(`\n${passed} checks passed`);
