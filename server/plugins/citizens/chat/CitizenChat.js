@@ -970,6 +970,52 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a guild" / "what guild am i in" — player asks about trade guilds.
+  if (/\b(is there a guild|what guilds are there|are there guilds|tell me about guilds|what guild am i in|am i in a guild|what is my guild)\b/.test(said)) {
+    try {
+      const G = require("../lib/CitizenGuilds");
+      const aboutSelf = /\b(am i|my)\b/.test(said);
+      if (aboutSelf) {
+        const m = G.membershipFor(speakerUsername);
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "guild_status", {
+          username: speakerUsername,
+          member: !!m,
+          guildId: m?.guildId ?? null,
+          guildName: m ? G.guildFor(m.guildId)?.name : null,
+          rank: m?.rank ?? null,
+          rankLabel: m ? G.rankLabel(m.rank) : null,
+          favor: m?.favor ?? 0,
+        });
+      } else {
+        const list = Object.values(G.guilds()).map((g) => ({ id: g.id, name: g.name }));
+        notifyCitizenSpoke(citizenUsername, speakerUsername, "guild_list", { guilds: list });
+      }
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "are you in a guild" — player asks about THIS citizen's guild.
+  if (/\b(are you in a guild|what guild are you in|do you belong to a guild)\b/.test(said)) {
+    try {
+      const G = require("../lib/CitizenGuilds");
+      const m = G.membershipFor(citizenUsername);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "guild_status", {
+        username: citizenUsername,
+        member: !!m,
+        guildId: m?.guildId ?? null,
+        guildName: m ? G.guildFor(m.guildId)?.name : null,
+        rank: m?.rank ?? null,
+        rankLabel: m ? G.rankLabel(m.rank) : null,
+        favor: m?.favor ?? 0,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where is the prison" — player asks about the gaol.
   if (/\b(where is the prison|is there a jail|where is the gaol|who is in jail|is there a prison)\b/.test(said)) {
     try {

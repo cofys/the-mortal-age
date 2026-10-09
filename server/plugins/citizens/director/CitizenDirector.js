@@ -203,6 +203,8 @@ const { tickSeasonLife } = require("../lib/CitizenSeasonLife");
 const { tickDayNight } = require("../lib/CitizenDayNightLife");
 const { tickReputation } = require("../lib/CitizenReputationLife");
 const CitizenReputation = require("../lib/CitizenReputation");
+const { tickGuilds } = require("../lib/CitizenGuildLife");
+const CitizenGuilds = require("../lib/CitizenGuilds");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -2892,6 +2894,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("reputation failed", { error: String(error?.message ?? error) });
     }
+    // Citizen guilds: favor decay, rank announcements, mission expiry,
+    // rivalry drift, training favor. Data tier, zero LLM.
+    try {
+      tickGuilds(this, nowMs);
+    } catch (error) {
+      this.log("guilds failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3040,6 +3049,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen reputation save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenGuilds.save()) {
+        this.log("citizen guilds saved");
+      }
+    } catch (error) {
+      this.log("citizen guilds save failed", {
         error: String(error?.message ?? error),
       });
     }

@@ -655,6 +655,27 @@
           "type": "citizenEntertain"
         }
       ]
+    },
+    {
+      "id": "citizen_guild",
+      "mode": "citizen_guild",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenGuild"
+        }
+      ]
     }
   ]
 }

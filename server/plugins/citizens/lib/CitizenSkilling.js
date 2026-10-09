@@ -432,6 +432,16 @@ function grantXpWithCelebration(director, record, skillId, amount) {
   } catch {
     // School records are garnish; the base XP always lands.
   }
+  // Guild members training their guild's skill earn +10% XP.
+  try {
+    const Guilds = require("./CitizenGuilds");
+    const g = Guilds.guildFor(Guilds.guildIdFor(record.username));
+    if (g && (skillId === g.skill || (g.altSkills ?? []).includes(skillId))) {
+      bonus += Guilds.trainingBonusFor(record.username);
+    }
+  } catch {
+    // Guild records are garnish; the base XP always lands.
+  }
   const boosted = bonus > 0 ? Math.max(1, Math.round(amount * (1 + bonus))) : amount;
   const { leveled, level } = skillStore.addXp(record.username, skillId, boosted);
   if (leveled) {

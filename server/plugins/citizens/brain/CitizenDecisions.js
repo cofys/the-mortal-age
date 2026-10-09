@@ -102,6 +102,7 @@ const ACT_THIEVE = "citizen_thieve";
 const ACT_BUILD = "citizen_build";
 const ACT_TRAVEL = "citizen_travel";
 const ACT_ENTERTAIN = "citizen_entertain";
+const ACT_GUILD = "citizen_guild";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -125,6 +126,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_FARM,
   ACT_THIEVE,
   ACT_TRAVEL,
+  ACT_GUILD,
   ACT_MINE,
   ACT_CHOP,
 ]);
@@ -587,6 +589,30 @@ function entertainInfo(player) {
 }
 
 /**
+ * Guild status for the decision layer: membership, rank, active mission,
+ * and whether the citizen qualifies for any guild hall visit.
+ * Defensive: a missing/broken guild module scores as guildless.
+ */
+function guildInfo(player) {
+  try {
+    const G = require("../lib/CitizenGuilds");
+    const username = player?.username ?? player?.getUsername?.() ?? null;
+    if (!username) return { member: false, guildId: null, rank: null, hasMission: false };
+    const m = G.membershipFor(username);
+    if (!m) return { member: false, guildId: null, rank: null, hasMission: false };
+    return {
+      member: true,
+      guildId: m.guildId,
+      rank: m.rank,
+      favor: m.favor,
+      hasMission: !!m.mission,
+    };
+  } catch {
+    return { member: false, guildId: null, rank: null, hasMission: false };
+  }
+}
+
+/**
  * Drunkenness check: is this citizen currently drunk?
  * Defensive: a missing/broken entertainment module scores as sober.
  */
@@ -1002,6 +1028,7 @@ function snapshot(player) {
     reputation: reputationOf(player),
     travel: travelInfo(player),
     entertain: entertainInfo(player),
+    guild: guildInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
@@ -1022,7 +1049,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, drunk, climate, night, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, drunk, climate, night, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1273,6 +1300,28 @@ function scoreActivity(activityId, snap) {
       if (goalType === GOAL_MASTER_TRADE) s -= 6; // traders save, not spend
       else if (goalType === GOAL_SAVE_GOLD) s -= 10; // fun spends, not saves
       if (drunk) s -= 20; // already drunk — one more ale is a bad idea
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      return s;
+    }
+    case ACT_GUILD: {
+      // Guilds: the professional's home. Members train for favor and work
+      // missions; the ambitious join for rank and reputation. Non-members
+      // with a qualifying skill can walk in and sign up (dues are real).
+      const gd = guild ?? { member: false };
+      let s = 18;
+      if (gd.member) {
+        s += 8; // members keep their rank warm
+        if (!gd.hasMission) s += 10; // a mission waiting is a reason to visit
+        if (gd.rank === "novice") s += 6; // novices grind toward member
+      } else {
+        // The ambitious and career-driven seek a guild to join.
+        const ambitious = personality?.ambitious ?? personality?.driven ?? 0;
+        if (ambitious > 0.6) s += 12;
+        if (goalType === GOAL_MASTER_TRADE) s += 6; // merchants guild calls
+      }
+      if (goalType === GOAL_SAVE_GOLD && !gd.member) s -= 8; // dues cost coins
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -1759,6 +1808,7 @@ module.exports = {
   ACT_BUILD,
   ACT_TRAVEL,
   ACT_ENTERTAIN,
+  ACT_GUILD,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,

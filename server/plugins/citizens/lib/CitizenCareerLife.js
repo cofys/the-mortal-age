@@ -221,13 +221,22 @@ function payWages(director, nowMs) {
       if (nowMs - (rec.lastWageAt ?? 0) < DAY_MS) continue;
       const wage = Careers.dailyWage(rec.career, rec.rank);
       rec.lastWageAt = nowMs;
-      if (wage <= 0) continue; // trade careers earn by selling
+      // Guild premium: veteran+ guild members earn a bonus the guild
+      // vouches for (real coins, same honest path as the base wage).
+      let guildBonus = 0;
+      try {
+        guildBonus = require("./CitizenGuilds").wageBonusFor(name) ?? 0;
+      } catch {
+        // guild records are garnish; the base wage always lands
+      }
+      const totalWage = wage + guildBonus;
+      if (totalWage <= 0) continue; // trade careers earn by selling
       if (bot) {
-        const paid = giveCoins(bot, wage);
+        const paid = giveCoins(bot, totalWage);
         if (paid > 0) journalEvent(name, `earned the day's wage: ${paid} coins`);
-        else rec.savings += wage; // inventory full or odd — bank it
+        else rec.savings += totalWage; // inventory full or odd — bank it
       } else {
-        rec.savings += wage; // offline: accrue until they materialize
+        rec.savings += totalWage; // offline: accrue until they materialize
       }
     } catch {
       // Per-citizen failures must not break the tick.
