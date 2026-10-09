@@ -58,6 +58,7 @@ const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenFishing = require("../brain/actions/CitizenFishing");
+const CitizenActivityChatter = require("../chat/CitizenActivityChatter");
 const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
@@ -2192,6 +2193,14 @@ class CitizenDirector {
       CitizenFishing.tickCitizenFishing(this);
     } catch (error) {
       this.log("citizen fishing failed", { error: String(error?.message ?? error) });
+    }
+    // Visible activity chatter: citizens in skilling sessions talk about the
+    // grind (milestone-aware, personality-scaled) and announce session goals
+    // once per session. Watched-only, throttled. Zero LLM.
+    try {
+      CitizenActivityChatter.tickActivityChatter(this);
+    } catch (error) {
+      this.log("citizen chatter failed", { error: String(error?.message ?? error) });
     }
     // Master-apprentice pairings: masters (level 60+ trade) take on young
     // citizens, who gain real trade XP each slow tick and graduate at 40.
