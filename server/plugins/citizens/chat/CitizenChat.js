@@ -1343,6 +1343,33 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a concert" — player asks about concerts, dance halls, lessons.
+  if (/\b(is there a concert|any concerts|when is the concert|dance hall|is there dancing|music lesson|learn music|learn to dance|who is in the orchestra)\b/.test(said)) {
+    try {
+      const MD = require("../lib/CitizenMusicDance");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? null;
+      const hall = kingdomId ? MD.danceHallOfKingdom(kingdomId) : null;
+      const concert = kingdomId ? MD.concertFor(kingdomId) : null;
+      const ensembles = MD.ensembles();
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "musicdance_status", {
+        hasHall: !!hall,
+        hallName: hall?.name ?? null,
+        concertScheduled: !!concert,
+        ensembleName: concert?.ensembleName ?? null,
+        ticketPrice: concert ? concert.ticketPrice : MD.TICKET_PRICE,
+        lessonPrice: MD.LESSON_PRICE,
+        ensembleCount: ensembles.length,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where can I travel" / "take me to X" — player asks about ships/caravans.
   if (/\b(where can i travel|how do i travel|is there a ship|is there a caravan|take me to|i want to travel|can you take me)\b/.test(said)) {
     try {

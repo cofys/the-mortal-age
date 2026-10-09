@@ -105,6 +105,7 @@ const ACT_ENTERTAIN = "citizen_entertain";
 const ACT_GUILD = "citizen_guild";
 const ACT_PETCARE = "citizen_petcare";
 const ACT_CREATEART = "citizen_createart";
+const ACT_PERFORM = "citizen_perform";
 
 const ACT_COMPETE = "citizen_compete";
 const ACT_DIPLOMAT = "citizen_diplomat";
@@ -139,6 +140,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_GUILD,
   ACT_PETCARE,
   ACT_CREATEART,
+  ACT_PERFORM,
 
 ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MINE,
@@ -699,6 +701,26 @@ function artInfo(player) {
     return { canCreate: false, medium: null };
   } catch {
     return { canCreate: false, medium: null };
+  }
+}
+
+/**
+ * Performance info: is this citizen a musician or dancer, and is there a
+ * stage to play? Defensive: a missing/broken module scores as unable.
+ */
+function performInfo(player) {
+  try {
+    const MD = require("../lib/CitizenMusicDance");
+    const username = player?.getUsername?.() ?? player?.getName?.() ?? "";
+    if (!username) return { canPerform: false, music: 0, dance: 0 };
+    const music = MD.musicOf(username);
+    const dance = MD.danceOf(username);
+    const canPerform = music >= 20 || dance >= 20;
+    const inEnsemble = !!MD.ensembleOf(username);
+    const inTroupe = !!MD.troupeOf(username);
+    return { canPerform, music, dance, inEnsemble, inTroupe };
+  } catch {
+    return { canPerform: false, music: 0, dance: 0 };
   }
 }
 
@@ -1398,6 +1420,7 @@ function snapshot(player) {
     guild: guildInfo(player),
     pets: petInfo(player),
     art: artInfo(player),
+    perform: performInfo(player),
 
 compete: competeInfo(player),
     diplomat: diplomatInfo(player),
@@ -1427,7 +1450,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1732,6 +1755,28 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
+      return s;
+    }
+
+    case ACT_PERFORM: {
+      // Performance: musicians and dancers seek the stage. A human
+      // performer practices daily, shows up for the ensemble, and lives
+      // for the concert hall — the unskilled have no business on stage.
+      const pi = perform ?? { canPerform: false };
+      if (!pi.canPerform) return 4; // no skill, no stage
+      let s = 14;
+      const creativity = personality?.creativity ?? personality?.creative ?? 0;
+      if (creativity > 0.7) s += 12; // born performers seek it out
+      else if (creativity > 0.5) s += 6;
+      const sociable = personality?.sociable ?? personality?.extroverted ?? 0;
+      if (sociable > 0.7) s += 6; // the stage loves a crowd
+      if (pi.inEnsemble || pi.inTroupe) s += 8; // booked groups rehearse
+      if (goalType === GOAL_MASTER_TRADE) s += 4; // lessons and tickets pay
+      if (mood != null && mood < 30) s += 4; // music as solace
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // drunk performers are a liability
       return s;
     }
 
@@ -2379,6 +2424,7 @@ module.exports = {
   ACT_GUILD,
   ACT_PETCARE,
   ACT_CREATEART,
+  ACT_PERFORM,
 
 ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MEAL,
