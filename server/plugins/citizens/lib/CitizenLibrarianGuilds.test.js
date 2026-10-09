@@ -41,7 +41,15 @@ function installStubs(opts = {}) {
       awardDeed: (u, deed) => { (opts.deeds = opts.deeds || []).push([u, deed]); },
     },
     "./CitizenBanking": {
-      creditAccount: (u, amt) => { (opts.credits = opts.credits || []).push([u, amt]); return true; },
+      // Real contract: accountFor(username) -> live account record,
+      // markDirty() -> persist. creditAccount does NOT exist.
+      accountFor: (u) => {
+        const key = String(u || "").toLowerCase().trim();
+        (opts.bankAccounts = opts.bankAccounts || {})[key] =
+          (opts.bankAccounts || {})[key] || { balance: 0 };
+        return opts.bankAccounts[key];
+      },
+      markDirty: () => { opts.bankDirty = true; },
     },
     "./CitizenBonds": { normalizeName: (s) => String(s || "").toLowerCase().trim() },
   };
@@ -354,7 +362,10 @@ test("scriptorium bounty: post, claim, pay", () => {
     const pay = Guilds.payBounty(b.bountyId);
     assert.strictEqual(pay.ok, true);
     assert.strictEqual(pay.amount, 500);
-    assert.deepStrictEqual(opts.credits, [["Alice", 500]]);
+    // The bounty really lands in the claimant's bank account (real
+    // accountFor/markDirty contract — creditAccount does not exist).
+    assert.strictEqual((opts.bankAccounts || {}).alice.balance, 500);
+    assert.strictEqual(opts.bankDirty, true);
     // Cannot claim twice.
     assert.strictEqual(Guilds.claimBounty(b.bountyId, "Alice", "cert-1").ok, false);
   } finally { restore(); }

@@ -71,7 +71,9 @@ function giveCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv || amount <= 0) return false;
-    if (typeof inv.add === "function") { inv.add(COINS_ID, amount); return true; }
+    // Real ItemContainer shape: adds(id, amount). add(item, refresh) takes
+    // an Item object, not (id, amount) — same pattern as ArtGuildEvents.
+    if (typeof inv.adds === "function") { inv.adds(COINS_ID, amount); return true; }
     return false;
   } catch {
     return false;

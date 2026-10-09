@@ -29,6 +29,7 @@ const Module = require("module");
 const origRequire = Module.prototype.require;
 
 const said = [];
+const saidBy = [];
 let careers = {};
 let books = {};
 
@@ -36,11 +37,17 @@ function installStubs() {
   const stubs = {
     "./CitizenLibrarianGuilds": Guilds,
     "../chat/CitizenSayPublic": {
-      sayPublic: (bot, text) => { said.push(text); },
+      sayPublic: (bot, text) => { said.push(text); saidBy.push(bot); },
     },
     "../brain/CitizenSites": {
-      KINGDOM_IDS: ["varrock"],
-      kingdomIdOf: () => "varrock",
+      // Real brain contract: plain roster records carry kingdomId; the
+      // brain read falls back to KINGDOM_IDS[0] for anything without the
+      // kingdom attribute. Mocks must mirror this, not mask it.
+      KINGDOM_IDS: ["varrock", "falador"],
+      kingdomIdOf: (player) => {
+        const id = player?.getAttribute?.("kingdom:id");
+        return typeof id === "string" && (id === "varrock" || id === "falador") ? id : "varrock";
+      },
       siteTileByKingdom: () => ({ x: 3200, y: 3200, z: 0 }),
     },
     "./CitizenLibraries": {
@@ -69,6 +76,7 @@ function test(name, fn) {
   careers = {};
   books = {};
   said.length = 0;
+  saidBy.length = 0;
   const restore = installStubs();
   const Life = loadLifeFresh();
   freshSave(Life);
@@ -95,6 +103,10 @@ function fakeDirector(records) {
 
 function fakeRecord(username) {
   return { username, getUsername: () => username };
+}
+
+function fakeRecordIn(username, kingdomId) {
+  return { username, kingdomId, getUsername: () => username };
 }
 
 function botWithCoins(coins) {
@@ -194,6 +206,61 @@ test("tick grants the golden quill and announces", (Life) => {
 test("tick never throws with a broken director", (Life) => {
   Life.tickLibrarianGuildLife(null, Date.now());
   Life.tickLibrarianGuildLife({}, Date.now());
+});
+
+test("announcement for a non-first kingdom is spoken by that kingdom's bot", (Life) => {
+  // Roster records are plain objects with a kingdomId field; the brain's
+  // kingdomIdOf falls back to KINGDOM_IDS[0] for them. The tick must read
+  // the record's own kingdomId, or falador's news is never spoken at all.
+  careers = { alice: "librarian", vic: "librarian" };
+  Guilds.joinGuild("Alice", "falador");
+  Guilds.joinGuild("Vic", "varrock");
+  // varrock's collection is healthy (Vic has a real book); only falador
+  // triggers the collection audit.
+  books = { "book-v": { id: "book-v", title: "V Work", subject: "lore", author: "vic", kingdomId: "varrock", quality: 8 } };
+  const director = {
+    roster: [fakeRecordIn("Vic", "varrock"), fakeRecordIn("Alice", "falador")],
+    isOnline: () => true,
+    getBot: (r) => ({ __who: r.username }),
+  };
+  Life.tickLibrarianGuildLife(director, Date.now());
+  const idx = said.findIndex((s) => s.includes("collection audit"));
+  assert.ok(idx >= 0, "expected a falador collection-audit announcement");
+  assert.strictEqual(saidBy[idx].__who, "Alice");
+});
+
+test("announcement for the first kingdom is not spoken by another kingdom's bot", (Life) => {
+  careers = { alice: "librarian", vic: "librarian" };
+  Guilds.joinGuild("Alice", "falador");
+  Guilds.joinGuild("Vic", "varrock");
+  // falador's collection is healthy (Alice has a real book); only varrock
+  // triggers the audit. Alice is listed FIRST in the roster.
+  books = { "book-a": { id: "book-a", title: "A Work", subject: "lore", author: "alice", kingdomId: "falador", quality: 8 } };
+  const director = {
+    roster: [fakeRecordIn("Alice", "falador"), fakeRecordIn("Vic", "varrock")],
+    isOnline: () => true,
+    getBot: (r) => ({ __who: r.username }),
+  };
+  Life.tickLibrarianGuildLife(director, Date.now());
+  const idx = said.findIndex((s) => s.includes("collection audit"));
+  assert.ok(idx >= 0, "expected a varrock collection-audit announcement");
+  assert.strictEqual(saidBy[idx].__who, "Vic");
+});
+
+test("tick collects dues for members in non-first kingdoms", (Life) => {
+  careers = { alice: "librarian" };
+  Guilds.joinGuild("Alice", "falador");
+  Guilds.memberOf("Alice").duesPaidUntilMs = Date.now() - 1000; // dues due
+  const director = {
+    roster: [fakeRecordIn("Alice", "falador")],
+    isOnline: () => true,
+    getBot: () => botWithCoins(1000),
+  };
+  Life.tickLibrarianGuildLife(director, Date.now());
+  assert.ok(Guilds.memberOf("Alice").duesPaidUntilMs > Date.now());
+  // Credited to the member's own guild, not the first kingdom's.
+  assert.strictEqual(Guilds.guildTreasuryFor("falador").treasury, 20);
+  assert.strictEqual(Guilds.guildTreasuryFor("varrock").treasury, 0);
 });
 
 console.log(`\n${passed} tests passed`);

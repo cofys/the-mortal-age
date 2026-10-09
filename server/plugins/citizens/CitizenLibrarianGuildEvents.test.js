@@ -27,14 +27,29 @@ const librariesStub = {
 };
 const careersStub = { careerOf: (u) => careers[String(u || "").toLowerCase()] || null };
 const reputationStub = { awardDeed: () => {} };
-const bankingStub = { creditAccount: () => true };
+const bankAccounts = {};
+const bankingStub = {
+  // Real contract: accountFor(username) -> live account record,
+  // markDirty() -> persist. creditAccount does NOT exist.
+  accountFor: (u) => {
+    const key = String(u || "").toLowerCase().trim();
+    bankAccounts[key] = bankAccounts[key] || { balance: 0 };
+    return bankAccounts[key];
+  },
+  markDirty: () => {},
+};
 const bondsStub = { normalizeName: (s) => String(s || "").toLowerCase().trim() };
 
 const stubs = {
   // Keys as the events module requires them (relative to citizens/).
   "./lib/CitizenLibrarianGuilds": Guilds,
   "./brain/CitizenSites": {
-    kingdomIdOf: () => "varrock",
+    // Real brain contract: KINGDOM_IDS[0] for anything without the kingdom attribute.
+    KINGDOM_IDS: ["varrock", "falador"],
+    kingdomIdOf: (player) => {
+      const id = player?.getAttribute?.("kingdom:id");
+      return typeof id === "string" && (id === "varrock" || id === "falador") ? id : "varrock";
+    },
   },
   "./lib/CitizenLibraries": librariesStub,
   "./lib/CitizenCareers": careersStub,
@@ -48,7 +63,13 @@ const stubs = {
   "./CitizenBanking": bankingStub,
   "./CitizenBonds": bondsStub,
   "../brain/CitizenSites": {
-    kingdomIdOf: () => "varrock",
+    // Real brain contract: KINGDOM_IDS[0] for anything without the
+    // kingdom attribute (plain records, mock players).
+    KINGDOM_IDS: ["varrock", "falador"],
+    kingdomIdOf: (player) => {
+      const id = player?.getAttribute?.("kingdom:id");
+      return typeof id === "string" && (id === "varrock" || id === "falador") ? id : "varrock";
+    },
     siteTileByKingdom: () => ({ x: 3200, y: 3200, z: 0 }),
   },
 };
@@ -69,9 +90,11 @@ function makePlayer(username, opts = {}) {
     isBot: !!opts.isBot,
     isRealPlayer: () => !opts.isBot,
     getInventory: () => ({
+      // Real engine ItemContainer shape: getAmount(id), adds(id, amount),
+      // delete(id, amount). add(id, amount) / remove / count do NOT exist.
       getAmount: (id) => (id === 995 ? coinsRef.coins : 0),
-      remove: (id, amt) => { if (id === 995) coinsRef.coins -= amt; },
-      add: (id, amt) => { if (id === 995) coinsRef.coins += amt; },
+      delete: (id, amt) => { if (id === 995) coinsRef.coins -= amt; },
+      adds: (id, amt) => { if (id === 995) coinsRef.coins += amt; },
     }),
     sendMessage: (text) => messages.push(text),
     _messages: messages,
@@ -87,6 +110,7 @@ function test(name, fn) {
   coinsRef.coins = 1000;
   careers = {};
   books = {};
+  for (const k of Object.keys(bankAccounts)) delete bankAccounts[k];
   try {
     fn();
     passed++;
@@ -214,6 +238,8 @@ test("scriptorium posts a bounty and the author claims it", () => {
   onLibrarianGuildCommand(author, `claim ${bountyId} ${certId}`);
   const last = author._messages[author._messages.length - 1];
   assert.ok(last.includes("Bounty claimed") || last.includes("claimed"), `got: ${last}`);
+  // The bounty really lands in the claimant's bank account.
+  assert.strictEqual(bankAccounts["bookish berta"].balance, 200);
 });
 
 test("index proposes a book for the Restricted Index", () => {
