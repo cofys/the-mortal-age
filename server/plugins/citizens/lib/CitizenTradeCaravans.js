@@ -384,8 +384,19 @@ function settleCaravan(director, caravan, nowMs) {
   const rng = agentRng(`caravan:settle:${caravan.id}`);
   const attack = resolveBanditAttack(rng, caravan.risk);
   const net = netProfit(gross, attack.lossPct);
+  // Trade treaties pay a real caravan profit bonus between treaty partners.
+  // Read defensively: an active trade treaty means open roads and full
+  // markets. (Alliance pacts pay their own trade bonus through the
+  // kingdoms tax-day path — this is trade-treaty only, no double-count.)
+  let bonus = 0;
+  try {
+    bonus = require("./CitizenTreaties").tradeBonusFor(caravan.from, caravan.to, nowMs) ?? 0;
+  } catch {
+    bonus = 0;
+  }
+  const netWithBonus = bonus > 0 ? Math.round(net * (1 + bonus)) : net;
   const shares = splitShares(
-    net,
+    netWithBonus,
     caravan.guards.length,
     caravan.playerGuards.length,
     caravan.playerTraders.length,
@@ -408,7 +419,7 @@ function settleCaravan(director, caravan, nowMs) {
     payPlayer(director, pg, caravan.wage, `guarding the ${destCity} caravan`);
     journalEvent(caravan.leader, `${pg} rode guard for us — paid ${caravan.wage} coins.`, "trade");
   }
-  const traderCut = Math.round((net * TRADER_SHARE_PCT) / 100);
+  const traderCut = Math.round((netWithBonus * TRADER_SHARE_PCT) / 100);
   for (const pt of caravan.playerTraders) {
     payPlayer(director, pt, traderCut, `trading on the ${destCity} caravan`);
     journalEvent(caravan.leader, `${pt} traded with the caravan — ${traderCut} coins profit share.`, "trade");

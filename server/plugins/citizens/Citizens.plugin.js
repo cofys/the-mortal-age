@@ -23,6 +23,8 @@ const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/ri
 const { onWarDeclared, onWarEnded, onOfficeAssigned, onOfficeVacated } = require("./CitizenEvents");
 const { onInsuranceCommand, onPlayerDeathInsured, USAGE: INSURANCE_USAGE } = require("./CitizenInsuranceEvents");
 const { onContractCommand, onWillCommand, onDisputeCommand, onRepresentCommand, CONTRACT_USAGE, WILL_USAGE, DISPUTE_USAGE, REPRESENT_USAGE } = require("./CitizenCivilEvents");
+const { onTreatyCommand, USAGE: TREATY_USAGE } = require("./CitizenTreatyEvents");
+const { setEmitter: setTreatyEmitter } = require("./lib/CitizenTreatyLife");
 const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { initCitizenSocial, onSocialChatResponse } = require("./chat/CitizenSocial");
@@ -606,6 +608,9 @@ module.exports = {
   register(api) {
     initCitizens(api);
     attachWarRefugees(api);
+    // Treaty ratifications emit kingdom:alliance-formed through the plugin
+    // api — the kingdoms layer persists the pact (complement, not duplicate).
+    setTreatyEmitter((eventName, payload) => api.emitCustomEvent(eventName, payload));
     api.onCustomEvent(EVENT_WAR_DECLARED, onKingdomWarDeclared);
     api.onCustomEvent(EVENT_WAR_ENDED, onKingdomWarEnded);
     api.onCustomEvent(EVENT_WAR_DECLARED, onKingdomWarDeclaredFear);
@@ -672,6 +677,12 @@ module.exports = {
       onRepresentCommand,
       PlayerRights.NONE,
       REPRESENT_USAGE
+    );
+    api.registerCommand(
+      "treaty",
+      onTreatyCommand,
+      PlayerRights.NONE,
+      TREATY_USAGE
     );
   },
 };

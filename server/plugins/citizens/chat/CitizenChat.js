@@ -657,9 +657,32 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
-  // "any news" / "what's the news" / "is there a paper" — journalism.
-  if (/\b(any news|what'?s the news|latest news|is there a paper|buy a paper|any papers|subscribe|any journalists?|any reporters?)\b/.test(said)) {
+  // "any treaties" / "embassy" / "summit" / "ambassador" — citizen treaties.
+  // (Excludes "marriage alliance" — that belongs to the dynastic block below.)
+  if (/\b(any treaties?|peace treaty|trade treaty|any embass|ambassador|summit|foreign relations)\b/.test(said) ||
+      (/\balliance\b/.test(said) && !/\bmarriage alliance\b/.test(said))) {
     try {
+      const Treaties = require("../lib/CitizenTreaties");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Treaties.describe(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "treaty_status", {
+        username: citizenUsername,
+        treaties: desc?.treaties ?? [],
+        embassies: desc?.embassies ?? [],
+        pendingProposals: desc?.pendingProposals ?? [],
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "any news" / "what's the news" / "is there a paper" — journalism.
+  if (/\b(any news|what'?s the news|latest news|is there a paper|buy a paper|any papers|subscribe|any journalists?|any reporters?)\b/.test(said)) {    try {
       const Press = require("../lib/CitizenPress");
       let kingdomId = null;
       try {
