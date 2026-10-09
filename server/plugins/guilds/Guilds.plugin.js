@@ -26,6 +26,27 @@ function isCitizenBot(player) {
   return player?.getHostAddress?.() === BOT_HOST_ADDRESS;
 }
 
+/** Citizen-sent guild invites: outcome memory, best-effort (never throws). */
+function citizenGuildInvites() {
+  try {
+    return require("../citizens/lib/CitizenGuildInvites");
+  } catch {
+    return null;
+  }
+}
+
+/** The inviting citizen welcomes a new member out loud, if nearby. */
+function welcomeToGuild(outcome, playerName) {
+  if (!outcome?.citizenUsername) return;
+  try {
+    const { getDirector } = require("../citizens/director/CitizenDirector");
+    const director = getDirector?.();
+    citizenGuildInvites()?.welcomeNewMember(director, outcome, playerName);
+  } catch {
+    // Non-fatal.
+  }
+}
+
 function playerKingdomId(player) {
   try {
     return require("./../quests/mortal/QuestUtil").playerKingdomId(player);
@@ -200,6 +221,16 @@ function handleGuildKeyword(player, text) {
     // Determine kind: citizen bot vs real player.
     const kind = isCitizenBot(player) ? "citizen" : "player";
     const res = Registry.acceptInvite(inv.guildId, speaker, speaker, kind);
+    if (!res.error) {
+      // Citizen-sent invite? Record the acceptance in CitizenMemory and
+      // let the inviter welcome the new member out loud.
+      try {
+        const outcome = citizenGuildInvites()?.resolveOutcome(speaker, inv.guildId, true);
+        if (outcome) welcomeToGuild(outcome, speaker);
+      } catch {
+        // Non-fatal.
+      }
+    }
     send(player, res.error ?? `Welcome to ${inv.guildName}!`);
     return true;
   }
@@ -209,7 +240,15 @@ function handleGuildKeyword(player, text) {
       send(player, "You have no pending guild invites.");
       return true;
     }
-    Registry.declineInvite(invites[0].guildId, speaker);
+    const declined = Registry.declineInvite(invites[0].guildId, speaker);
+    if (declined) {
+      // Citizen-sent invite? Record the decline (7-day no-re-ask).
+      try {
+        citizenGuildInvites()?.resolveOutcome(speaker, invites[0].guildId, false);
+      } catch {
+        // Non-fatal.
+      }
+    }
     send(player, "Invite declined.");
     return true;
   }

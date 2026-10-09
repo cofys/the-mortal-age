@@ -111,6 +111,7 @@ const { tickMessengers2 } = require("../lib/CitizenMessengers2");
 const CitizenCartographers = require("../lib/CitizenCartographers");
 const { tickMapfolk } = require("../lib/CitizenCartographers2");
 const CitizenCompanions = require("../lib/CitizenCompanions");
+const CitizenGuildInvites = require("../lib/CitizenGuildInvites");
 const CitizenApprentices = require("../lib/CitizenApprentices");
 const CitizenArtisans = require("../lib/CitizenArtisans");
 const CitizenBuilders = require("../lib/CitizenBuilders");
@@ -1524,6 +1525,15 @@ class CitizenDirector {
       CitizenCompanions.tickCompanions(this, Date.now());
     } catch (error) {
       this.log("companions (proximity) failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen-initiated guild invites: guild officer/founder citizens who
+    // are friends with a nearby real player invite them to their guild via
+    // the existing guild registry; outcomes recorded in CitizenMemory with
+    // a 7-day no-re-ask after a decline. Data tier, zero LLM.
+    try {
+      CitizenGuildInvites.tickGuildInvites(this, Date.now());
+    } catch (error) {
+      this.log("guild invites (proximity) failed", { error: String(error?.message ?? error) });
     }
     // Master-apprentice life: apprentices follow their masters and the
     // pair exchange scripted trade chatter — only while a real player is

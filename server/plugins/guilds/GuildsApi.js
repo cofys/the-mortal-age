@@ -113,6 +113,12 @@ function handle(query) {
     if (!g) return err("No such guild.");
     const res = Registry.acceptInvite(g.id, playerName, displayOf(player), "player");
     if (res.error) return err(res.error);
+    // Citizen-sent invite? Record the acceptance in CitizenMemory.
+    try {
+      require("../citizens/lib/CitizenGuildInvites")?.resolveOutcome(playerName, g.id, true);
+    } catch {
+      // Non-fatal.
+    }
     return { joined: Registry.guildSummary(g.id) };
   }
 
@@ -120,7 +126,15 @@ function handle(query) {
     const key = (query.get("guild") || "").trim();
     const g = Registry.getGuild(key) ?? Registry.getGuildByName(key);
     if (!g) return err("No such guild.");
-    Registry.declineInvite(g.id, playerName);
+    const declined = Registry.declineInvite(g.id, playerName);
+    if (declined) {
+      // Citizen-sent invite? Record the decline (7-day no-re-ask).
+      try {
+        require("../citizens/lib/CitizenGuildInvites")?.resolveOutcome(playerName, g.id, false);
+      } catch {
+        // Non-fatal.
+      }
+    }
     return { declined: true };
   }
 
