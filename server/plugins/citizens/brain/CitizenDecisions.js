@@ -129,6 +129,7 @@ const ACT_INSURERWORK = "citizen_insurerwork";
 const ACT_SPY = "citizen_spymaster";
 const ACT_DIG = "citizen_excavate";
 const ACT_STAGE = "citizen_rehearse";
+const ACT_RUNWAY = "citizen_runway";
 const ACT_TRAIN = "citizen_train";
 const ACT_COOKOFF = "citizen_cookoff";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
@@ -164,7 +165,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_TRAIN, ACT_COOKOFF, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1491,6 +1492,38 @@ function stageInfo(player) {
   }
 }
 
+/**
+ * Runway info: is this citizen a designer or house member, and is there
+ * runway work in their kingdom? Defensive — missing modules degrade to
+ * the honest unable-to-stage shape.
+ */
+function runwayInfo(player) {
+  try {
+    const Runways = require("../lib/CitizenRunways");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isDesigner = Runways.isDesigner(username);
+    let expressive = 0;
+    try {
+      const personality = player?.getAttribute?.("citizens:personality") ?? {};
+      expressive = personality.expressiveness ?? personality.creativity ?? personality.sociability ?? 0;
+    } catch { /* personality unreadable */ }
+    let inHouse = false, upcomingShows = 0, openVenue = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      if (kid) {
+        openVenue = !!Runways.venueFor(kid);
+        const house = Runways.houseForDesigner(username);
+        inHouse = !!house;
+        upcomingShows = Runways.upcomingShows(kid).length;
+      }
+    } catch { /* sites unreadable */ }
+    return { isDesigner, expressive, inHouse, upcomingShows, openVenue };
+  } catch {
+    return { isDesigner: false, expressive: 0, inHouse: false, upcomingShows: 0, openVenue: false };
+  }
+}
+
 function trainInfo(player) {
   try {
     const Athletics = require("../lib/CitizenAthletics");
@@ -1981,6 +2014,7 @@ compete: competeInfo(player),
     ins: insurerInfo(player),
     dig: digInfo(player),
     stage: stageInfo(player),
+    runway: runwayInfo(player),
     train: trainInfo(player),
     cookoff: cookoffInfo(player),
     surgery: surgeryInfo(player),
@@ -2004,7 +2038,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, train, cookoff, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, runway, train, cookoff, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2531,6 +2565,25 @@ case ACT_COMPETE: {
       if ((st.upcomingShows ?? 0) > 0) s += 8; // a booked show pulls rehearsers
       if (st.isPlaywright) s += 6; // playwrights polish their work
       if ((st.expressive ?? 0) >= 0.7) s += 4;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_RUNWAY: {
+      // Runway fashion: house members stage toward booked shows; designers
+      // sketch when the venue is open. The expressive are drawn to the
+      // runway. The hurt and weary stay home.
+      const rw = runway ?? { isDesigner: false, expressive: 0, inHouse: false, upcomingShows: 0, openVenue: false };
+      if (!rw.inHouse && !rw.isDesigner && (rw.expressive ?? 0) < 0.5) return 4;
+      if (!rw.openVenue) return 4; // honest — no runway venue, no staging
+      let s = 16;
+      if (rw.inHouse) s += 10; // the house calls
+      if ((rw.upcomingShows ?? 0) > 0) s += 8; // a booked show pulls stagers
+      if (rw.isDesigner) s += 6; // designers polish their collections
+      if ((rw.expressive ?? 0) >= 0.7) s += 4;
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -3294,7 +3347,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_TRAIN, ACT_COOKOFF, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

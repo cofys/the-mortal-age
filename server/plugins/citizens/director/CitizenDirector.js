@@ -235,6 +235,8 @@ const { tickArchLife } = require("../lib/CitizenArchaeologyLife");
 const CitizenArchaeology = require("../lib/CitizenArchaeology");
 const { tickTheaterLife } = require("../lib/CitizenTheaterLife");
 const CitizenTheater = require("../lib/CitizenTheater");
+const { tickRunwayLife } = require("../lib/CitizenRunwayLife");
+const CitizenRunways = require("../lib/CitizenRunways");
 const { tickAthleticsLife } = require("../lib/CitizenAthleticsLife");
 const CitizenAthletics = require("../lib/CitizenAthletics");
 const { tickCookOffLife } = require("../lib/CitizenCookOffLife");
@@ -3080,6 +3082,15 @@ class CitizenDirector {
     } catch (error) {
       this.log("theater failed", { error: String(error?.message ?? error) });
     }
+    // Citizen runways: designers, houses, seasonal collections, ticketed
+    // runway shows, ateliers, fashion-week tours. Data tier, zero LLM.
+    // (CitizenFashion owns trends, clothing shops, style competitions;
+    // CitizenTheater owns playhouses and troupes.)
+    try {
+      tickRunwayLife(this, nowMs);
+    } catch (error) {
+      this.log("runways failed", { error: String(error?.message ?? error) });
+    }
     // Citizen athletics: athletes, training, fitness, stadiums, records.
     // Data tier, zero LLM. (CitizenSports owns the leagues and fixtures;
     // this owns the athlete profession layer.)
@@ -3612,6 +3623,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen theater save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenRunways.save()) {
+        this.log("citizen runways saved");
+      }
+    } catch (error) {
+      this.log("citizen runways save failed", {
         error: String(error?.message ?? error),
       });
     }

@@ -29,6 +29,7 @@ const { onSpyCommand, USAGE: SPY_USAGE } = require("./CitizenSpyEvents");
 const { onCharterCommand, CHARTER_USAGE } = require("./CitizenTradeCharterEvents");
 const { onDigCommand, DIG_USAGE } = require("./CitizenArchaeologyEvents");
 const { onStageCommand, STAGE_USAGE } = require("./CitizenTheaterEvents");
+const { onRunwayCommand, RUNWAY_USAGE } = require("./CitizenRunwayEvents");
 const { onAthleticsCommand, ATHLETICS_USAGE } = require("./CitizenAthleticsEvents");
 const { onCookOffCommand, COOKOFF_USAGE } = require("./CitizenCookOffEvents");
 const { onOfferConfirmed: onCharterOfferConfirmed } = require("./lib/CitizenCharterToll");
@@ -716,6 +717,12 @@ module.exports = {
       onStageCommand,
       PlayerRights.NONE,
       STAGE_USAGE
+    );
+    api.registerCommand(
+      "runway",
+      onRunwayCommand,
+      PlayerRights.NONE,
+      RUNWAY_USAGE
     );
     api.registerCommand(
       "athletics",

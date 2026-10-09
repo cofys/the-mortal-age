@@ -1736,6 +1736,30 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "designer" / "runway" / "fashion week" / "collection" — player asks about
+  // runway fashion-show production. (The fashion block owns trends, clothing
+  // shops, and style competitions; this owns designers, houses, collections,
+  // runway shows, and ateliers.)
+  if (/\b(fashion designer|runway show|fashion week|new collection|atelier|who designed|catwalk)\b/.test(said)) {
+    try {
+      const Runways = require("../lib/CitizenRunways");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? "unknown";
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "runway_status", {
+        houses: Runways.housesIn(kingdomId).slice(0, 3).map((h) => ({ name: h.name, members: h.members.length })),
+        collections: Runways.collectionsIn(kingdomId).slice(0, 3).map((c) => ({ name: c.name, theme: c.theme })),
+        upcoming: Runways.upcomingShows(kingdomId).slice(0, 3).map((s) => ({ collection: s.collectionName, house: s.houseName, price: s.ticketPrice })),
+        ateliers: Runways.ateliersIn(kingdomId).slice(0, 3).map((a) => a.owner),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "what's in fashion" — player asks about trends, shops, competitions.
   if (/\b(what.s in fashion|fashion trend|what.s trendy|is there a tailor|clothing shop|buy clothes|style competition|best dressed|what.s the style)\b/.test(said)) {
     try {
