@@ -229,4 +229,17 @@ test("persistence round-trips through the save file", () => {
   assert.strictEqual(CookOffs.recipesByChef("Gordon").length, 1, "recipe survived");
 });
 
+
+test("allRecipes enumerates the full ledger as defensive copies", () => {
+  const a = CookOffs.inventRecipe("Gordon", "Honey apple tart", ["honey", "apple", "wheat"], 80, () => true, NOW);
+  const b = CookOffs.inventRecipe("Heston", "Smoke & oak", ["beef", "oak"], 70, () => true, NOW);
+  assert.ok(a && b, "recipes invented");
+  const all = CookOffs.allRecipes();
+  assert.strictEqual(all.length, 2, "full ledger enumerated");
+  assert.ok(all.every((r) => r.id && r.name && r.inventor && Number.isFinite(r.createdAt)),
+    "records carry the fields guild scans need");
+  all[0].name = "MUTATED";
+  assert.notStrictEqual(CookOffs.recipeById(a.id).name, "MUTATED", "defensive copies — ledger not mutated");
+});
+
 console.log(`CookOffs data tier: ${passed} passed`);

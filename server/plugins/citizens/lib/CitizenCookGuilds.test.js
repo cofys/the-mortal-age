@@ -16,12 +16,30 @@ const os = require("os");
 // --- stubs (must be installed before requiring the guild module) ---
 
 const sitesPath = path.resolve(__dirname, "../brain/CitizenSites.js");
+// Mirror the REAL CitizenSites contract, trap included:
+//   siteTile(player, kind) -> kingdomIdOf(player) reads getAttribute — a plain
+//   object silently resolves to the FIRST kingdom.
+//   siteTileByKingdom(kingdomId, kind) -> the honest per-kingdom anchor.
+const MARKET_TILES = {
+  varrock: { x: 3200, y: 3200, z: 0 },
+  falador: { x: 3000, y: 3000, z: 0 },
+};
 require.cache[sitesPath] = {
   id: sitesPath, filename: sitesPath, loaded: true,
   exports: {
     KINGDOM_IDS: ["varrock", "falador"],
-    kingdomIdOf: () => "varrock",
-    siteTile: () => ({ x: 3200, y: 3200, z: 0 }),
+    kingdomIdOf: (player) => {
+      const id = player?.getAttribute?.("citizens:kingdom-id");
+      return (typeof id === "string" && MARKET_TILES[id]) ? id : "varrock";
+    },
+    siteTile: (player, kind) => {
+      // real trap: plain objects (no getAttribute) -> first kingdom
+      const id = player?.getAttribute?.("citizens:kingdom-id");
+      const kid = (typeof id === "string" && MARKET_TILES[id]) ? id : "varrock";
+      return kind === "market" ? { ...MARKET_TILES[kid] } : null;
+    },
+    siteTileByKingdom: (kid, kind) =>
+      (MARKET_TILES[kid] && kind === "market") ? { ...MARKET_TILES[kid] } : null,
   },
 };
 
@@ -62,6 +80,8 @@ require.cache[cookoffsPath] = {
       const n = String(u || "").toLowerCase();
       return [...fakeCookOffs.recipes.values()].filter((r) => r.inventor.toLowerCase() === n);
     },
+    // mirrors the real read-only ledger enumerator
+    allRecipes: () => [...fakeCookOffs.recipes.values()].map((r) => ({ ...r })),
   },
 };
 
@@ -105,6 +125,89 @@ check("ensureGuild creates a hall and treasury", () => {
   assert.ok(g.hallTile && typeof g.hallTile.x === "number", "hall tile");
   assert.strictEqual(g.treasury, 0);
   assert.strictEqual(g.hygiene, 100);
+});
+
+check("hallTileFor anchors each kingdom at its OWN market", () => {
+  // Regression: siteTile({ kingdomId }, "market") resolved kingdomIdOf() off a
+  // plain object -> first kingdom's market for EVERY kingdom.
+  const v = Guilds.hallTileFor("varrock");
+  const f = Guilds.hallTileFor("falador");
+  assert.deepStrictEqual([v.x, v.y], [3200 - 6, 3200 + 4], "varrock hall near varrock market");
+  assert.deepStrictEqual([f.x, f.y], [3000 - 6, 3000 + 4], "falador hall near falador market, not varrock's");
+});
+
+check("suspended member catches up and is unsuspended by paying dues", () => {
+  // Regression: the old guard rejected dues from suspended members, and the
+  // un-suspend line was unreachable — suspension was permanent.
+  makeChef("Gordon");
+  Guilds.joinGuild("Gordon", "varrock");
+  Guilds.recordMissedDues("Gordon", Date.now());
+  Guilds.recordMissedDues("Gordon", Date.now());
+  assert.strictEqual(Guilds.memberOf("Gordon").suspended, true);
+  const res = Guilds.recordDuesPayment("Gordon", Date.now());
+  assert.strictEqual(res.ok, true, "suspended member may pay to catch up");
+  assert.strictEqual(Guilds.memberOf("Gordon").suspended, false, "good standing restored");
+  assert.strictEqual(Guilds.memberOf("Gordon").missedDues, 0);
+});
+
+check("retryOwedBounties never spends one kingdom's treasury on another's debts", () => {
+  // Regression: the retry looped ALL owed bounties without a kingdom filter.
+  makeChef("Gordon");
+  Guilds.joinGuild("Gordon", "varrock");
+  makeChef("Heston");
+  Guilds.joinGuild("Heston", "falador");
+  makeRecipe("r-v", "Gordon", 9);
+  makeRecipe("r-f", "Heston", 9);
+  Guilds.submitRecipe("Gordon", "varrock", "r-v", Date.now());
+  Guilds.submitRecipe("Heston", "falador", "r-f", Date.now());
+  Guilds.settleCertification("varrock", "r-v", Date.now()); // broke: owed
+  Guilds.settleCertification("falador", "r-f", Date.now()); // broke: owed
+  assert.strictEqual(Object.keys(Guilds.serialize().bountiesOwed).length, 2);
+  Guilds.guildOf("varrock").treasury = 1000;
+  const retry = Guilds.retryOwedBounties("varrock");
+  assert.strictEqual(retry.paid, Guilds.CERT_BOUNTY.A, "only varrock's own debt paid");
+  const still = Object.keys(Guilds.serialize().bountiesOwed);
+  assert.strictEqual(still.length, 1, "falador's debt untouched");
+  assert.ok(still[0].includes(":falador:"), "the surviving debt is falador's");
+});
+
+check("retryOwedLadle pays the owed golden-ladle prize when funds arrive", () => {
+  // Regression: ladleOwed was written but never retried anywhere.
+  makeChef("Gordon");
+  Guilds.joinGuild("Gordon", "varrock");
+  makeRecipe("r-1", "Gordon", 9);
+  Guilds.submitRecipe("Gordon", "varrock", "r-1", Date.now());
+  Guilds.settleCertification("varrock", "r-1", Date.now());
+  const ladle = Guilds.grantLadle("varrock", Date.now()); // broke treasury
+  assert.strictEqual(ladle.ok, true);
+  assert.strictEqual(ladle.owed, Guilds.LADLE_PRIZE);
+  Guilds.guildOf("varrock").treasury = 500;
+  const retry = Guilds.retryOwedLadle("varrock");
+  assert.strictEqual(retry.paid, Guilds.LADLE_PRIZE);
+  assert.strictEqual(Guilds.serialize().ladleOwed.varrock || 0, 0, "ladle debt cleared");
+});
+
+check("scanRecipeTheft flags a later same-name recipe by another inventor", () => {
+  // Regression: the scan called O.allRecipes(), which did not exist on the
+  // real CitizenCookOffs — the theft detector always returned [].
+  makeRecipe("r-orig", "Gordon", 6, Date.now() - 10000);
+  fakeCookOffs.recipes.get("r-orig").name = "Fire Stew";
+  makeRecipe("r-copy", "Heston", 5, Date.now());
+  fakeCookOffs.recipes.get("r-copy").name = "fire  stew!";
+  const hits = Guilds.scanRecipeTheft();
+  assert.strictEqual(hits.length, 1);
+  assert.strictEqual(hits[0].recipeId, "r-copy");
+  assert.strictEqual(hits[0].inventor, "Heston");
+  assert.strictEqual(hits[0].originalId, "r-orig");
+  assert.strictEqual(hits[0].originalInventor, "Gordon");
+});
+
+check("scanRecipeTheft ignores same-inventor re-listings", () => {
+  makeRecipe("r-1", "Gordon", 6, Date.now() - 10000);
+  fakeCookOffs.recipes.get("r-1").name = "Fire Stew";
+  makeRecipe("r-2", "Gordon", 7, Date.now());
+  fakeCookOffs.recipes.get("r-2").name = "Fire Stew";
+  assert.strictEqual(Guilds.scanRecipeTheft().length, 0, "same inventor is not theft");
 });
 
 check("joinGuild requires a real chef", () => {

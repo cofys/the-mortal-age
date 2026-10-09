@@ -95,8 +95,10 @@ function announce(director, kingdomId, text, nowMs) {  try {
     const roster = onlineRoster(director);
     const near = roster.find((r) => {
       try {
-        const S = sitesApi();
-        return S && typeof S.kingdomIdOf === "function" && S.kingdomIdOf(r) === kingdomId;
+        // Roster records are plain objects carrying record.kingdomId
+        // (kingdomIdOf() needs a player entity's getAttribute — on a plain
+        // record it silently yields the first kingdom).
+        return (r?.kingdomId ?? null) === kingdomId;
       } catch { return false; }
     });
     const bot = near ? botFor(director, near) : null;
@@ -115,15 +117,14 @@ function tickCookGuildLife(director, nowMs = Date.now()) {
 
       // --- dues from online members (real coins; offline skipped, never penalized)
       for (const record of roster) {
-        let rkid = null;
-        try {
-          const S = sitesApi();
-          rkid = S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(record) : null;
-        } catch { rkid = null; }
+        // Roster records are plain objects carrying record.kingdomId —
+        // kingdomIdOf() needs a player entity's getAttribute and silently
+        // yields the first kingdom for plain records.
+        const rkid = record?.kingdomId ?? null;
         if (rkid !== kid) continue;
         const name = usernameOf(record);
         const m = Guilds.memberOf(name);
-        if (!m || m.suspended) continue;
+        if (!m) continue; // suspended members may still pay to catch up
         if ((m.duesPaidUntilMs || 0) > nowMs) continue;
         const bot = botFor(director, record);
         if (bot && hasItem(bot, Guilds.COINS_ID, Guilds.DUES_WEEKLY) &&
@@ -139,8 +140,9 @@ function tickCookGuildLife(director, nowMs = Date.now()) {
       // --- certification settlement (first-in, first-out)
       try {
         const g = Guilds.guildOf(kid);
-        // Retry owed bounties as funds refill.
+        // Retry owed bounties and ladle prizes as funds refill.
         Guilds.retryOwedBounties(kid);
+        Guilds.retryOwedLadle(kid);
         // Settle one queued certification per tick to keep the tick cheap.
         const s = Guilds.serialize();
         const first = (s.queue || []).find((q) => q.kingdomId === kid);

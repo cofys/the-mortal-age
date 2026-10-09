@@ -388,6 +388,15 @@ function recipesByChef(chefName) {
 }
 
 /**
+ * All recipes in the ledger (defensive copies) — read-only enumerator for
+ * guild systems (theft scans, certification audits). Never mutate the
+ * returned records; the ledger owns them.
+ */
+function allRecipes() {
+  return ensure().recipes.map((r) => ({ ...r }));
+}
+
+/**
  * List a recipe for sale at an asking price. Returns true on success.
  */
 function listRecipe(recipeId, price) {
@@ -492,6 +501,7 @@ module.exports = {
   discoverRecipe,
   recipeById,
   recipesByChef,
+  allRecipes,
   isHunterDeeded,
   markHunterDeeded,
   listRecipe,

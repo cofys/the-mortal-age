@@ -15,9 +15,18 @@ const os = require("os");
 // --- stubs ---
 
 const sitesPath = path.resolve(__dirname, "../brain/CitizenSites.js");
+// Mirror the REAL contract: roster records are plain objects carrying
+// record.kingdomId (kingdomIdOf() needs a player entity's getAttribute and
+// silently yields the first kingdom for plain records).
 require.cache[sitesPath] = {
   id: sitesPath, filename: sitesPath, loaded: true,
-  exports: { KINGDOM_IDS: ["varrock"], kingdomIdOf: () => "varrock" },
+  exports: {
+    KINGDOM_IDS: ["varrock", "falador"],
+    kingdomIdOf: (player) => {
+      const id = player?.getAttribute?.("citizens:kingdom-id");
+      return (typeof id === "string" && ["varrock", "falador"].includes(id)) ? id : "varrock";
+    },
+  },
 };
 
 const fakeCareers = { careers: new Map() };
@@ -52,6 +61,8 @@ require.cache[cookoffsPath] = {
       const n = String(u || "").toLowerCase();
       return [...fakeCookOffs.recipes.values()].filter((r) => r.inventor.toLowerCase() === n);
     },
+    // mirrors the real read-only ledger enumerator
+    allRecipes: () => [...fakeCookOffs.recipes.values()].map((r) => ({ ...r })),
   },
 };
 
@@ -77,23 +88,26 @@ const Life = require("./CitizenCookGuildLife.js");
 const fakeInv = new Map(); // username -> coins
 function botFor(name) {
   const key = String(name).toLowerCase();
-  return {
-    username: name,
-    inventory: {
-      getAmount: (id) => (id === Guilds.COINS_ID ? (fakeInv.get(key) ?? 0) : 0),
-      count: (id) => (id === Guilds.COINS_ID ? (fakeInv.get(key) ?? 0) : 0),
-      remove: (id, n) => {
-        if (id !== Guilds.COINS_ID) return false;
-        const have = fakeInv.get(key) ?? 0;
-        fakeInv.set(key, Math.max(0, have - n));
-        return true;
-      },
+  // mirrors the REAL inventory contract: getInventory() -> ItemContainer with
+  // getAmount(id) and delete(id, amount). There is no .remove and no .count.
+  const inv = {
+    getAmount: (id) => (id === Guilds.COINS_ID ? (fakeInv.get(key) ?? 0) : 0),
+    delete: (id, n) => {
+      if (id !== Guilds.COINS_ID) return false;
+      const have = fakeInv.get(key) ?? 0;
+      fakeInv.set(key, Math.max(0, have - n));
+      return true;
     },
   };
+  return { username: name, getInventory: () => inv };
 }
+// players: "Name" (defaults to varrock) or { name, kingdomId } — real roster
+// records are plain objects carrying kingdomId.
 function fakeDirector(players) {
+  const records = players.map((p) =>
+    typeof p === "string" ? { username: p, kingdomId: "varrock" } : p);
   return {
-    roster: { values: () => players.map((p) => ({ username: p })) },
+    roster: { values: () => records },
     isOnline: () => true,
     getBot: (r) => botFor(r?.username ?? ""),
     sayPublic: () => {},
@@ -141,6 +155,38 @@ check("tick collects dues from online members with real coins", () => {
   assert.strictEqual(fakeInv.get("gordon"), 75);
   assert.strictEqual(Guilds.guildTreasuryFor("varrock"), 20);
   assert.strictEqual(Guilds.guildOf("varrock").hygieneFund, 5);
+});
+
+check("tick routes dues per kingdom via the roster record's kingdomId", () => {
+  // Regression: kingdomIdOf(plain roster record) silently yielded the first
+  // kingdom, so non-first-kingdom members were skipped (or paid into the
+  // wrong kingdom's treasury).
+  makeChef("Gordon");
+  makeChef("Heston");
+  Guilds.joinGuild("Gordon", "varrock");
+  Guilds.joinGuild("Heston", "falador");
+  Guilds.memberOf("Gordon").duesPaidUntilMs = Date.now() - 1000;
+  Guilds.memberOf("Heston").duesPaidUntilMs = Date.now() - 1000;
+  fakeInv.set("gordon", 100);
+  fakeInv.set("heston", 100);
+  Life.tickCookGuildLife(
+    fakeDirector([{ username: "Gordon", kingdomId: "varrock" }, { username: "Heston", kingdomId: "falador" }]),
+    Date.now());
+  assert.strictEqual(Guilds.guildTreasuryFor("varrock"), 20, "varrock keeps its own dues");
+  assert.strictEqual(Guilds.guildTreasuryFor("falador"), 20, "falador collects its own dues");
+});
+
+check("tick lets suspended members catch up and restores good standing", () => {
+  makeChef("Gordon");
+  Guilds.joinGuild("Gordon", "varrock");
+  Guilds.recordMissedDues("Gordon", Date.now());
+  Guilds.recordMissedDues("Gordon", Date.now());
+  assert.strictEqual(Guilds.memberOf("Gordon").suspended, true);
+  Guilds.memberOf("Gordon").duesPaidUntilMs = Date.now() - 1000;
+  fakeInv.set("gordon", 100);
+  Life.tickCookGuildLife(fakeDirector(["Gordon"]), Date.now());
+  assert.strictEqual(fakeInv.get("gordon"), 75, "dues taken from the suspended member");
+  assert.strictEqual(Guilds.memberOf("Gordon").suspended, false, "catch-up unsuspends");
 });
 
 check("tick never penalizes offline members", () => {
@@ -215,6 +261,20 @@ check("tick grants the golden ladle and awards the guildchef deed", () => {
   Life.tickCookGuildLife(fakeDirector(["Gordon"]), Date.now());
   assert.ok(fakeRep.awarded.some(([u, d]) => u === "Gordon" && d === "guildchef"),
     "guildchef deed awarded with the ladle");
+});
+
+check("tick retries an owed ladle prize when the treasury refills", () => {
+  // Regression: ladleOwed was written but never retried anywhere.
+  makeChef("Gordon");
+  Guilds.joinGuild("Gordon", "varrock");
+  fakeCookOffs.recipes.set("r-1", { id: "r-1", name: "One", inventor: "Gordon", ingredients: ["a"], quality: 9, source: "invented", createdAt: Date.now() });
+  Guilds.submitRecipe("Gordon", "varrock", "r-1", Date.now());
+  Guilds.settleCertification("varrock", "r-1", Date.now());
+  Life.tickCookGuildLife(fakeDirector(["Gordon"]), Date.now()); // broke: ladle owed
+  assert.ok((Guilds.serialize().ladleOwed.varrock || 0) > 0, "ladle prize owed while broke");
+  Guilds.guildOf("varrock").treasury = 1000;
+  Life.tickCookGuildLife(fakeDirector(["Gordon"]), Date.now() + 31 * 60 * 1000);
+  assert.strictEqual(Guilds.serialize().ladleOwed.varrock || 0, 0, "owed ladle paid on retry");
 });
 
 check("tick promotes eligible apprentices", () => {

@@ -157,13 +157,17 @@ function createCitizenCookGuildAction(spec, world) {
           // masters inspect kitchens and teach; mentored apprentices study.
           // Real economics (dues, fees, bounties) run on the life tick.
           try {
-            if (state.roundsDone === SESSION_ROUNDS && state.rank === Guilds.RANK_CHEFDECUISINE) {
+            // Mentorship is recorded on the APPRENTICE's member record
+            // (m.mentor = the master's name, cleared after the first
+            // certification), so the final-round journal entry is written
+            // from the apprentice's perspective.
+            if (state.roundsDone === SESSION_ROUNDS && state.rank === Guilds.RANK_APPRENTICE) {
               const mem = Guilds.memberOf(username);
               if (mem && mem.mentor) {
                 const { getJournal } = require("../../lib/CitizenJournal");
-                getJournal().log?.("cookguild-mentoring", {
-                  master: username, apprentice: mem.mentor, kingdomId: state.kingdomId,
-                });
+                getJournal().log?.(username, "cookguild",
+                  `${username} studied under ${mem.mentor} at the ${state.kingdomId} Chefs' Guild hall.`,
+                  { master: mem.mentor, apprentice: username, kingdomId: state.kingdomId });
               }
             }
           } catch { /* journaling is optional */ }

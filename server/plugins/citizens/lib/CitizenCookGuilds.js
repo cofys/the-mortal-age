@@ -152,7 +152,12 @@ function hallTileFor(kingdomId) {
   let tile = null;
   try {
     const S = require("../brain/CitizenSites");
-    tile = S && typeof S.siteTile === "function" ? S.siteTile({ kingdomId: kid }, "market") : null;
+    // siteTileByKingdom: the plain-object form. siteTile({ kingdomId }, "market")
+    // would read kingdomIdOf() off getAttribute (missing on a plain object) and
+    // silently resolve to the FIRST kingdom's market for every kingdom.
+    tile = S && typeof S.siteTileByKingdom === "function"
+      ? S.siteTileByKingdom(kid, "market")
+      : null;
   } catch { tile = null; }
   if (!tile) return { x: 3200, y: 3200, z: 0 };
   return { x: (tile.x ?? 3200) + HALL_TILE_DX, y: (tile.y ?? 3200) + HALL_TILE_DY, z: tile.z ?? 0 };
@@ -272,13 +277,14 @@ function leaveGuild(username) {
 function recordDuesPayment(username, nowMs) {
   const s = ensure();
   const m = s.members[norm(username)];
-  if (!m || m.suspended) return { ok: false };
+  if (!m) return { ok: false };
   const g = ensureGuild(m.kingdomId);
   g.treasury += (DUES_WEEKLY - DUES_HYGIENE_SHARE);
   g.hygieneFund += DUES_HYGIENE_SHARE;
   m.duesPaidUntilMs = Math.max(m.duesPaidUntilMs || 0, nowMs) + DUES_PERIOD_MS;
+  // Paying up restores good standing: suspended members rejoin by catching up.
   m.missedDues = 0;
-  if (m.suspended && m.missedDues === 0) m.suspended = false;
+  m.suspended = false;
   markDirty();
   return { ok: true };
 }
@@ -391,6 +397,11 @@ function retryOwedBounties(kingdomId) {
   const g = ensureGuild(kingdomId);
   let paid = 0;
   for (const okey of Object.keys(s.bountiesOwed)) {
+    // Keys are "owner:kingdomId:recipeId"; the last two segments are the
+    // ledger address (recipe ids carry no colons). Never spend one kingdom's
+    // treasury on another kingdom's debts.
+    const ledgerKid = okey.split(":").slice(-2)[0];
+    if (ledgerKid !== kingdomId) continue;
     const amt = s.bountiesOwed[okey];
     if (!amt) continue;
     const fromTreasury = Math.min(g.treasury, amt);
@@ -404,6 +415,21 @@ function retryOwedBounties(kingdomId) {
   }
   if (paid) markDirty();
   return { paid };
+}
+
+/** Retry a kingdom's owed golden-ladle prize from its own treasury. */
+function retryOwedLadle(kingdomId) {
+  const s = ensure();
+  const g = ensureGuild(kingdomId);
+  const owed = s.ladleOwed[kingdomId] || 0;
+  if (!owed) return { paid: 0 };
+  const fromTreasury = Math.min(g.treasury, owed);
+  g.treasury -= fromTreasury;
+  const remaining = owed - fromTreasury;
+  if (remaining <= 0) delete s.ladleOwed[kingdomId];
+  else s.ladleOwed[kingdomId] = remaining;
+  if (fromTreasury) markDirty();
+  return { paid: fromTreasury };
 }
 
 // --- kitchen inspections ----------------------------------------------------
@@ -451,23 +477,19 @@ function scanRecipeTheft() {
   const out = [];
   try {
     const O = require("./CitizenCookOffs");
-    if (!O || typeof O.cookoffs === "function") {
-      // Access the recipe list defensively through the public readers.
+    // allRecipes() is the read-only ledger enumerator; without it the scan
+    // has nothing to scan and silently returns [].
+    if (O && typeof O.allRecipes === "function") {
       const seen = new Map(); // normalized name -> { id, inventor, createdAt }
-      // recipesByChef requires a chef name; instead scan via each guild's
-      // sealed records plus the public recipeById path is per-id. Use the
-      // module's recipe list if exposed, else fall back gracefully.
-      if (typeof O.allRecipes === "function") {
-        for (const r of O.allRecipes() || []) {
-          const key = normalizedName(r.name);
-          if (!key) continue;
-          const prior = seen.get(key);
-          if (prior && norm(prior.inventor) !== norm(r.inventor) &&
-              (r.createdAt || 0) > (prior.createdAt || 0)) {
-            out.push({ recipeId: r.id, inventor: r.inventor, originalId: prior.id, originalInventor: prior.inventor });
-          } else if (!prior) {
-            seen.set(key, { id: r.id, inventor: r.inventor, createdAt: r.createdAt || 0 });
-          }
+      for (const r of O.allRecipes() || []) {
+        const key = normalizedName(r.name);
+        if (!key) continue;
+        const prior = seen.get(key);
+        if (prior && norm(prior.inventor) !== norm(r.inventor) &&
+            (r.createdAt || 0) > (prior.createdAt || 0)) {
+          out.push({ recipeId: r.id, inventor: r.inventor, originalId: prior.id, originalInventor: prior.inventor });
+        } else if (!prior) {
+          seen.set(key, { id: r.id, inventor: r.inventor, createdAt: r.createdAt || 0 });
         }
       }
     }
@@ -730,6 +752,7 @@ module.exports = {
   submitRecipe,
   settleCertification,
   retryOwedBounties,
+  retryOwedLadle,
   inspectKitchens,
   scanRecipeTheft,
   reportTheft,

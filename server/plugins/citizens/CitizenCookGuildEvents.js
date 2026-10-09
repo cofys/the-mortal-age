@@ -15,7 +15,7 @@ const Guilds = require("./lib/CitizenCookGuilds");
 const COINS_ID = 995;
 
 const COOKGUILD_USAGE =
-  "::cookguild [status|join|leave|dues|code|certify <recipeId>|seals|report|inspect|cases|vote <caseId> <guilty|innocent>|ladle|contribute <coins>|school|apprentice <name>]";
+  "::cookguild [status|join|leave|dues|code|certify <recipeId>|seals|report <name>|inspect|cases|vote <caseId> <guilty|innocent>|ladle|contribute <coins>|school|apprentice <name>]";
 
 function usernameOf(player) {
   try {
@@ -141,9 +141,13 @@ function onCookGuildCommand(player, args) {
       return;
     }
     case "report": {
-      // Report suspected recipe theft: the guild scans the real ledger.
-      const res = Guilds.reportTheft(kingdomId, username, username);
-      say(player, res.ok ? `Theft case opened (case ${res.id}). The tribunal will review the ledgers.`
+      // Report suspected recipe theft: name the accused chef. The guild scans
+      // the real ledger and chefdecuisine members vote; the reporter is
+      // recorded as the reporter, never as the accused.
+      const accused = rest.join(" ");
+      if (!accused) { say(player, "Usage: ::cookguild report <name>"); return; }
+      const res = Guilds.reportTheft(kingdomId, accused, username);
+      say(player, res.ok ? `Theft case opened against ${accused} (case ${res.id}). The tribunal will review the ledgers.`
         : `Could not report: ${res.reason}.`);
       return;
     }

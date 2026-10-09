@@ -57,16 +57,18 @@ require.cache[humanizerPath] = {
   },
 };
 
+const journalCalls = [];
 const journalPath = path.resolve(__dirname, "../../lib/CitizenJournal.js");
 require.cache[journalPath] = {
   id: journalPath, filename: journalPath, loaded: true,
-  exports: { getJournal: () => ({ log: () => true }) },
+  exports: { getJournal: () => ({ log: (...args) => { journalCalls.push(args); return true; } }) },
 };
 
 // Controllable guild membership.
 const members = new Set();
 const suspended = new Set();
 const ranks = new Map();
+const mentors = new Map();
 const guildsPath = path.resolve(__dirname, "../../lib/CitizenCookGuilds.js");
 require.cache[guildsPath] = {
   id: guildsPath, filename: guildsPath, loaded: true,
@@ -78,7 +80,9 @@ require.cache[guildsPath] = {
     guildRankOf: (u) => ranks.get(String(u || "").toLowerCase()) || null,
     memberOf: (u) => {
       const n = String(u || "").toLowerCase();
-      return members.has(n) ? { suspended: suspended.has(n), mentor: null } : null;
+      return members.has(n)
+        ? { suspended: suspended.has(n), mentor: mentors.get(n) || null }
+        : null;
     },
     ensureGuild: () => ({ hallTile: { x: 3208, y: 3194, z: 0 } }),
   },
@@ -117,6 +121,8 @@ function test(name, fn) {
   members.clear();
   suspended.clear();
   ranks.clear();
+  mentors.clear();
+  journalCalls.length = 0;
   try {
     fn();
     passed++;
@@ -191,6 +197,36 @@ test("gives up after ten minutes and heads home", () => {
 test("update never throws without a player", () => {
   const a = createCitizenCookGuildAction({}, {});
   assert.strictEqual(a.update({ player: null, nowMs: 1000000 }), "success");
+});
+
+test("mentored apprentice's final round writes a canonical mentoring journal entry", () => {
+  // Regression: the old block fired only for chefdecuisine rank while reading
+  // mem.mentor (which lives on the APPRENTICE's record) — a dead branch —
+  // and called the dead 2-arg log(name, {...}) shape with no text.
+  addMember("Gwen", "apprentice");
+  mentors.set("gwen", "Auguste");
+  const a = createCitizenCookGuildAction({}, {});
+  const p = stubPlayer("Gwen", { x: 0, y: 0, z: 0 });
+  a.update({ player: p, nowMs: 1000000 }); // outbound
+  p.getPosition = () => ({ ...HALL_TILE });
+  runTicks(a, p, 100, 9000, 1001000); // 3 session rounds
+  assert.strictEqual(journalCalls.length, 1, "exactly one mentoring entry");
+  const [name, kind, text, data] = journalCalls[0];
+  assert.strictEqual(name, "Gwen", "canonical log(name, kind, text, {data})");
+  assert.strictEqual(kind, "cookguild");
+  assert.ok(typeof text === "string" && text.includes("Auguste"), "text names the master");
+  assert.strictEqual(data.master, "Auguste");
+  assert.strictEqual(data.apprentice, "Gwen");
+});
+
+test("unmentored apprentice writes no mentoring entry", () => {
+  addMember("Gwen", "apprentice");
+  const a = createCitizenCookGuildAction({}, {});
+  const p = stubPlayer("Gwen", { x: 0, y: 0, z: 0 });
+  a.update({ player: p, nowMs: 1000000 });
+  p.getPosition = () => ({ ...HALL_TILE });
+  runTicks(a, p, 100, 9000, 1001000);
+  assert.strictEqual(journalCalls.length, 0, "no mentor, no entry");
 });
 
 console.log(`\nCitizenCookGuild (action): ${passed} passed`);

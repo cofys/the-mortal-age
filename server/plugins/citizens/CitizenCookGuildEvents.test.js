@@ -57,7 +57,10 @@ require.cache[guildsPath] = {
     CULINARY_CODE: ["code line one", "code line two"],
     submitRecipe: () => ({ ok: false, reason: "no-such-recipe" }),
     sealsFor: () => [],
-    reportTheft: () => ({ ok: true, id: "case-1" }),
+    reportTheft: (kid, accused, reporter) => {
+      guildCalls.push(["reportTheft", kid, accused, reporter]);
+      return { ok: true, id: "case-1" };
+    },
     inspectKitchens: () => ({ ok: true, hygiene: 90, inspected: 0, fails: [] }),
     openCases: () => [],
     voteCase: () => ({ ok: false, reason: "not-chefdecuisine" }),
@@ -138,6 +141,23 @@ test("unknown subcommand shows usage", () => {
   const p = stubPlayer("Jon");
   onCookGuildCommand(p, "frobnicate");
   assert.ok(p.messages.some((m) => m.includes("::cookguild")));
+});
+
+test("report accuses the named chef, not the reporter", () => {
+  // Regression: reportTheft(kingdomId, username, username) opened the theft
+  // case against the REPORTER — a self-accusation.
+  const p = stubPlayer("Jon");
+  onCookGuildCommand(p, "report Heston");
+  assert.deepStrictEqual(guildCalls[0], ["reportTheft", "varrock", "Heston", "Jon"],
+    "the named chef is accused, the reporter is the reporter");
+  assert.ok(p.messages.some((m) => /Heston/.test(m)), "confirmation names the accused");
+});
+
+test("report without a name shows usage and opens no case", () => {
+  const p = stubPlayer("Jon");
+  onCookGuildCommand(p, "report");
+  assert.ok(!guildCalls.some(([c]) => c === "reportTheft"), "no self-accusation without a target");
+  assert.ok(p.messages.some((m) => /report <name>/.test(m)), "usage names the target argument");
 });
 
 console.log(`\nCitizenCookGuildEvents: ${passed} passed`);
