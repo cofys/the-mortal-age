@@ -363,6 +363,13 @@ function bondAfterActivity(director, party, label) {
     const players = playerMembers(director, party);
     if (!players.length) return;
     const mem = getMemory();
+    let SocialBonds = null;
+    try {
+      SocialBonds = require("./CitizenSocialBonds");
+    } catch {
+      SocialBonds = null;
+    }
+    const activityKind = String(label ?? "").toLowerCase().includes("boss") ? "bossed" : "partied";
     for (const m of party?.members ?? []) {
       if (players.some((p) => normalizeName(p) === normalizeName(m))) continue;
       const rec = director?.roster?.get?.(normalizeName(m));
@@ -371,6 +378,13 @@ function bondAfterActivity(director, party, label) {
         try {
           mem.recordMeeting(m, pn);
           mem.recordTone(m, pn, 2);
+        } catch {
+          // Non-fatal.
+        }
+        // Shared danger (or a good skilling session) is the fastest
+        // friendship there is — the bond score remembers it.
+        try {
+          SocialBonds?.recordInteraction?.(m, pn, activityKind);
         } catch {
           // Non-fatal.
         }

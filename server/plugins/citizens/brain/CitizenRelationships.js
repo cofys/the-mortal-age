@@ -132,6 +132,17 @@ function noteInteraction(aName, bName, kind, pA = null, pB = null) {
   }
   value = clampRapport(Math.round(value * 10) / 10);
   rapport.set(key, { rapport: value, updatedAt: Date.now() });
+  // Write through to the persistent bond memory (quiet: the brain tick owns
+  // promotion + journals; this just makes the score survive restarts and
+  // visible to the LLM mouth via bondSummary).
+  try {
+    require("../lib/CitizenSocialBonds").recordInteraction(na, nb, kind, {
+      mutual: true,
+      quiet: true,
+    });
+  } catch {
+    // Persistence must never break formation.
+  }
   return value;
 }
 

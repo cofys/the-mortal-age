@@ -231,6 +231,44 @@ store constraints, chemistry scoring, the full wedding machine
 (announced → gather → vows → cheers → married), quiet marriages, feud
 arguments with cooldown, bond pruning, and same-kingdom formation.
 
+## Citizen social bonds (2026-10-09)
+
+The persistent relationship *memory* underneath the bond graph
+(`lib/CitizenSocialBonds.js`, `data/saves/citizen-social-bonds.json`).
+Every citizen keeps a directed −100…+100 score toward specific citizens
+*and* players, built from real events only — conversations, help, gifts,
+trades, parties and boss runs warm it; insults, theft, attacks, betrayal
+and PK kills burn it. Favors and grudges are stored with their story
+("lent you 5k for the rune scim", "killed you at the Giant Mole") so the
+LLM mouth recalls true history instead of inventing it.
+
+- **Thresholds** — ≥40 friend, ≥70 close friend, ≤−40 rival, ≤−70 nemesis.
+  Crossings promote into the `CitizenBonds` friends/enemies graph with
+  journal lines, so invite targeting, boss-run companion picks and clan
+  growth all feel the relationship with no new wiring.
+- **Reactions** — `chat/CitizenHeardReactions.js` is relationship-aware:
+  friends get greeted **by name** ("hey Cofys!"), rivals get the cold
+  shoulder (shun lines) or pointed silence — a citizen never says "gz" to
+  their nemesis. Warm exchanges nudge the score; the brain layer's
+  citizen↔citizen rapport writes through here quietly so relationships
+  survive restarts.
+- **Grudges** — PK kills (player *or* citizen killers; NPC kills are not
+  personal) record a −60 kill grudge and warn the victim's friends.
+  Enemy declarations, gifts, accepted friend requests and shared
+  activities all feed the score at their real event sites.
+- **LLM context** — `chat/CitizenContext.js` appends a one-line
+  `bondSummary(owner, speaker)`: how the citizen feels about *this*
+  speaker and why, with the freshest favor/grudge as the reason.
+- **Decay** — scores drift toward indifference on the director slow tick;
+  favors fade after ~14 days, grudges after ~30.
+
+Data tier, zero LLM. Unit checks: `node lib/CitizenSocialBonds.test.js`
+(score updates, clamps, decay, friend/rival promotion, favors/grudges,
+kill attribution, persistence round-trip, brain write-through),
+`node chat/CitizenHeardReactions.test.js` (greet-by-name, rival shuns,
+pointed silence), `node lib/CitizenInviteFlows.test.js` (boss-run and
+clan invite flows end to end).
+
 ## The streets notice (2026-10-07)
 
 Citizens react to the player's visible moments the way real players do

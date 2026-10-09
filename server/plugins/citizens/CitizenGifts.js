@@ -282,6 +282,17 @@ function onGiftGiven(event, deps = {}, nowMs = Date.now()) {
   } catch {
     // Memory must never break the gift.
   }
+  // And the bond score: a real gift is one of the fastest friendships.
+  try {
+    require("./lib/CitizenSocialBonds").recordFavor(
+      citizenName,
+      playerName,
+      `Gave me ${itemName}.`,
+      nowMs
+    );
+  } catch {
+    // Bonds must never break the gift.
+  }
   try {
     getJournal().log(citizenName, "social", `Accepted ${itemName} as a gift from ${playerName}.`, {
       with: playerName,

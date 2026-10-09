@@ -231,6 +231,7 @@ const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
 const CitizenBonds = require("../lib/CitizenBonds");
+const CitizenSocialBonds = require("../lib/CitizenSocialBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
 const CitizenWeddings = require("../lib/CitizenWeddings");
 const { normalizeName } = require("../lib/CitizenBonds");
@@ -2802,6 +2803,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("bond formation failed", { error: String(error?.message ?? error) });
     }
+    // Citizen social bonds: persistent relationship scores drift toward
+    // indifference; old favors and grudges are forgotten. Data tier.
+    try {
+      CitizenSocialBonds.tickDecay(nowMs);
+    } catch (error) {
+      this.log("social bonds failed", { error: String(error?.message ?? error) });
+    }
     // Citizen secret societies: hidden orders (Gilded Ledger, Shadow Circle,
     // Old Guard) hold night meetings, advance agendas, and quietly recruit
     // trusted players. Data tier, zero LLM.
@@ -3013,6 +3021,15 @@ class CitizenDirector {
       CitizenBonds.save();
     } catch (error) {
       this.log("citizen bonds save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenSocialBonds.save()) {
+        this.log("citizen social bonds saved");
+      }
+    } catch (error) {
+      this.log("citizen social bonds save failed", {
         error: String(error?.message ?? error),
       });
     }
