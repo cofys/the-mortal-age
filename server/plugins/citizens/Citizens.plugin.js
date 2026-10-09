@@ -33,6 +33,7 @@ const { onRunwayCommand, RUNWAY_USAGE } = require("./CitizenRunwayEvents");
 const { onAthleticsCommand, ATHLETICS_USAGE } = require("./CitizenAthleticsEvents");
 const { onCookOffCommand, COOKOFF_USAGE } = require("./CitizenCookOffEvents");
 const { onFestivalCommand, FESTIVAL_USAGE } = require("./CitizenMusicFestivalEvents");
+const { onMapGuildCommand, MAPGUILD_USAGE } = require("./CitizenMapGuildEvents");
 const { onGalleryCommand, GALLERY_USAGE } = require("./CitizenGalleryEvents");
 const { onLibraryCommand, LIBRARY_USAGE } = require("./CitizenLibraryEvents");
 const { onObservatoryCommand, OBSERVATORY_USAGE } = require("./CitizenObservatoryEvents");
@@ -763,6 +764,12 @@ module.exports = {
       onObservatoryCommand,
       PlayerRights.NONE,
       OBSERVATORY_USAGE
+    );
+    api.registerCommand(
+      "mapguild",
+      onMapGuildCommand,
+      PlayerRights.NONE,
+      MAPGUILD_USAGE
     );
   },
 };

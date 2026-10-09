@@ -267,6 +267,8 @@ const { tickAstronomy } = require("../lib/CitizenAstronomyLife");
 const CitizenAstronomy = require("../lib/CitizenAstronomy");
 const { tickMapLife } = require("../lib/CitizenMapLife");
 const CitizenMaps = require("../lib/CitizenMaps");
+const { tickMapGuildLife } = require("../lib/CitizenMapGuildLife");
+const CitizenMapGuilds = require("../lib/CitizenMapGuilds");
 const { tickPress } = require("../lib/CitizenPressLife");
 const CitizenPress = require("../lib/CitizenPress");
 const { tickBankingLife } = require("../lib/CitizenBankingLife");
@@ -3220,6 +3222,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("maps failed", { error: String(error?.message ?? error) });
     }
+    // Cartographers' guild: membership, dues, map certification, survey
+    // bounties, mentorship, archive. Data tier, zero LLM. (CitizenMaps owns
+    // maps/shops; this owns the profession's guild layer only.)
+    try {
+      tickMapGuildLife(this, nowMs);
+    } catch (error) {
+      this.log("map guild failed", { error: String(error?.message ?? error) });
+    }
     // Citizen journalism: reporters, investigative stories, printing presses,
     // special editions, subscriptions. Data tier, zero LLM. (CitizenNewspaper
     // owns the weekly compiled paper and town-crier shouts.)
@@ -3588,6 +3598,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen maps save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenMapGuilds.save()) {
+        this.log("citizen map guild saved");
+      }
+    } catch (error) {
+      this.log("citizen map guild save failed", {
         error: String(error?.message ?? error),
       });
     }

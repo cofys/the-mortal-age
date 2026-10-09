@@ -123,6 +123,7 @@ const ACT_SCIENCE = "citizen_research";
 const ACT_ENGINEER = "citizen_engineerwork";
 const ACT_OBSERVE = "citizen_observe";
 const ACT_CHART = "citizen_chart";
+const ACT_MAPGUILD = "citizen_mapguild";
 const ACT_REPORT = "citizen_report";
 const ACT_BANKERWORK = "citizen_bankerwork";
 const ACT_INSURERWORK = "citizen_insurerwork";
@@ -169,7 +170,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1356,6 +1357,36 @@ function mapInfo(player) {
 }
 
 /**
+ * Guild readiness: is this citizen a guild member in good standing, and
+ * does their kingdom have a hall? Defensive: a missing/broken guild module
+ * scores as unable to attend.
+ */
+function guildInfo(player) {
+  try {
+    const Guilds = require("../lib/CitizenMapGuilds");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isMember = Guilds.isGuildMember(username);
+    const rank = Guilds.guildRankOf(username);
+    const mem = Guilds.memberOf(username);
+    let hallExists = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      hallExists = !!(kid && Guilds.guildOf(kid));
+    } catch { /* no sites */ }
+    return {
+      isMember,
+      rank,
+      suspended: !!(mem && mem.suspended),
+      isMaster: rank === Guilds.RANK_MASTER,
+      hallExists,
+    };
+  } catch {
+    return { isMember: false, rank: null, suspended: false, isMaster: false, hallExists: false };
+  }
+}
+
+/**
  * Press info: is this citizen a journalist, how reportery are they, and
  * do they hold real papyrus for writing? Defensive — missing modules
  * degrade to the honest unable-to-report shape.
@@ -2144,6 +2175,7 @@ compete: competeInfo(player),
     science: scienceInfo(player),
     astro: astroInfo(player),
     maps: mapInfo(player),
+    mapguild: guildInfo(player),
     press: pressInfo(player),
     bank: bankInfo(player),
     ins: insurerInfo(player),
@@ -2177,7 +2209,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, bank, ins, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -3006,6 +3038,23 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_MAPGUILD: {
+      // Guild hall sessions: members in good standing attend. Masters run
+      // the reviews; apprentices and journeymen learn. Suspended members
+      // and non-members stay away — the hall is members-only.
+      const g = mapguild ?? { isMember: false, suspended: false, isMaster: false, hallExists: false };
+      if (!g.isMember || g.suspended) return 4; // not a member in good standing
+      if (!g.hallExists) return 4; // honest — no hall, no session
+      let s = 22;
+      if (g.isMaster) s += 12; // masters run the reviews
+      if (g.rank === "apprentice") s += 6; // apprentices learn the most
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_REPORT: {
       // Journalism: reporters file real stories from real events at the
       // printing press, 1 real papyrus per story. A human reporter works
@@ -3566,7 +3615,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

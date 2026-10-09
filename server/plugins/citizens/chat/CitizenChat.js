@@ -1372,6 +1372,33 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "map guild" / "certify my map" / "guild hall" — cartographers' guild.
+  if (/\b(map guild|cartographers'? guild|guild hall|certify|certification|guild seal|surveyor|guildmaster)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenMapGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "guild_status", {
+        username: citizenUsername,
+        exists: desc.exists ?? false,
+        memberCount: desc.memberCount ?? 0,
+        masters: desc.masters ?? 0,
+        certified: desc.certified ?? 0,
+        bounties: desc.bounties ?? 0,
+        prestige: desc.prestige ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a map shop" / "do you have a map" / "treasure map" — cartography.
   if (/\b(map shop|any maps?|buy a map|world map|city map|dungeon map|treasure map|any treasure|cartographer|mapmaker)\b/.test(said)) {
     try {

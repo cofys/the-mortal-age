@@ -1245,6 +1245,22 @@
       ]
     },
     {
+      "id": "citizen_guildsurvey",
+      "mode": "citizen_guildsurvey",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "citizen_teamplay",
       "mode": "citizen_teamplay",
       "repeat": false,

@@ -85,6 +85,8 @@ const DEEDS = Object.freeze({
   engineer: Object.freeze({ points: 8, label: "completed a public work" }),
   stargazer: Object.freeze({ points: 6, label: "charted the heavens" }),
   master_cartographer: Object.freeze({ points: 6, label: "drew a masterwork map" }),
+  guildmaster: Object.freeze({ points: 8, label: "rose to guildmaster of the cartographers" }),
+  masterofcharts: Object.freeze({ points: 6, label: "earned ten guild map certifications" }),
   inkslinger: Object.freeze({ points: 8, label: "published five stories" }),
   muckraker: Object.freeze({ points: 6, label: "exposed three crimes" }),
   financier: Object.freeze({ points: 8, label: "built a banking fortune" }),
