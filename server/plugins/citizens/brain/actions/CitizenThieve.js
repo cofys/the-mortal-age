@@ -422,6 +422,20 @@ function createCitizenThieveAction(spec, world) {
         } catch {
           // best effort
         }
+        // The watch has a witness: record the theft so the town court can
+        // try the case. Defensive — the run ends the same either way.
+        try {
+          const Crime = require("../../lib/CitizenCrime");
+          const username = player?.username ?? player?.getUsername?.() ?? null;
+          if (username && typeof Crime.reportOffense === "function") {
+            Crime.reportOffense(username, "theft", {
+              witnessed: true,
+              kingdomId: state.kingdomId ?? null,
+            });
+          }
+        } catch {
+          // best effort
+        }
         fleeFrom(player, tile);
         stopBanking(state, ctx);
         return "success"; // caught — the run is over

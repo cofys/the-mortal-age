@@ -866,6 +866,48 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "are you a criminal" — player asks about the citizen's record.
+  if (/\b(are you a criminal|have you committed crimes|are you wanted|do you have a record|are you a thief)\b/.test(said)) {
+    try {
+      const Crime = require("../lib/CitizenCrime");
+      const s = Crime.criminalSummary(citizenUsername);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "crime_status", {
+        offenses: s?.offenses ?? 0,
+        convictions: s?.convictions ?? 0,
+        notoriety: s?.notoriety ?? 0,
+        jailed: s?.jailed ?? false,
+        exiled: s?.exiled ?? false,
+        lastCrime: s?.lastCrime ?? null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "where is the prison" — player asks about the gaol.
+  if (/\b(where is the prison|is there a jail|where is the gaol|who is in jail|is there a prison)\b/.test(said)) {
+    try {
+      const Crime = require("../lib/CitizenCrime");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? null;
+      const prison = kingdomId ? Crime.prisonOfKingdom(kingdomId) : null;
+      const inmates = kingdomId ? Crime.inmatesOfKingdom(kingdomId).length : 0;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "crime_prison", {
+        hasPrison: !!prison,
+        prisonName: prison?.name ?? null,
+        cellsFree: prison ? prison.cells - prison.inmates.length : 0,
+        inmates,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   return false;
 }
 

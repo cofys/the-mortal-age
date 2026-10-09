@@ -493,6 +493,38 @@ function sickPenalty(player) {
 }
 
 /**
+ * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
+ * cannot work at all — 60, same as the plague.
+ * Defensive: a missing/broken crime module scores as free.
+ */
+function jailPenalty(player) {
+  try {
+    const Crime = require("../lib/CitizenCrime");
+    const username = player?.username ?? player?.getUsername?.() ?? null;
+    if (!username || typeof Crime.jailPenaltyFor !== "function") return 0;
+    return Crime.jailPenaltyFor(username);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Criminal notoriety 0..100, read from the crime data tier. Known criminals
+ * find tavern doors heavier — social scores drop with reputation.
+ * Defensive: a missing/broken crime module scores as clean.
+ */
+function notorietyOf(player) {
+  try {
+    const Crime = require("../lib/CitizenCrime");
+    const username = player?.username ?? player?.getUsername?.() ?? null;
+    if (!username || typeof Crime.notorietyFor !== "function") return 0;
+    return Crime.notorietyFor(username);
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Herb materials the citizen could work right now (inventory, else bank).
  * Counts inputs of recipes whose partner item (vial/secondary) is also
  * available in the same place — cleaning needs nothing, mixing needs
@@ -838,6 +870,8 @@ function snapshot(player) {
     buildLevel: constructLevel(player),
     homeFurnishable: homeWantsFurniture(player),
     sick: sickPenalty(player),
+    jailed: jailPenalty(player),
+    notoriety: notorietyOf(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -855,7 +889,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1151,6 +1185,9 @@ function scoreActivity(activityId, snap) {
       if (nearby >= 3) s += 6; // a crowd is already there
       if (hp < 50) s -= 25;
       if (energy < 15) s -= 25;
+      // A criminal reputation empties the tavern around you: notorious
+      // citizens are shunned (notoriety 100 = -30 social).
+      if ((notoriety ?? 0) > 0) s -= Math.min(30, Math.round((notoriety ?? 0) * 0.3));
       return s;
     }
     case "guard_patrol":
@@ -1267,6 +1304,7 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
 
   const snap = snapshot(player);
   const sick = snap.sick ?? 0;
+  const jailed = snap.jailed ?? 0;
   const scored = candidates
     .filter((a) => a && typeof a.id === "string")
     .map((a) => ({
@@ -1275,10 +1313,12 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
       // scores work higher. Capped so intents never override critical needs.
       // Sickness keeps citizens away from work: the sicker they are, the
       // less work appeals (a plague is -60: effectively no work at all).
+      // Jail is the same: a jailed citizen serves time, not shifts.
       score:
         scoreActivity(a.id, snap) +
         intentBonusFor(a.id, player) -
-        (sick > 0 && WORK_ACTIVITIES.has(a.id) ? sick : 0),
+        (sick > 0 && WORK_ACTIVITIES.has(a.id) ? sick : 0) -
+        (jailed > 0 && WORK_ACTIVITIES.has(a.id) ? jailed : 0),
     }))
     .sort((x, y) => y.score - x.score);
   if (scored.length === 0) {

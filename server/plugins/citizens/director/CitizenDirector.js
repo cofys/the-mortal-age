@@ -187,7 +187,9 @@ const {
 } = require("../lib/CitizenFestivalLife");
 const { tickSchools } = require("../lib/CitizenSchoolLife");
 const { tickHealth } = require("../lib/CitizenHealthLife");
+const { tickJustice } = require("../lib/CitizenJusticeLife");
 const CitizenHealth = require("../lib/CitizenHealth");
+const CitizenCrime = require("../lib/CitizenCrime");
 const CitizenSchools = require("../lib/CitizenSchools");
 // Religious feasts join the seasonal calendar so the festival games,
 // celebration chatter, and participation journaling all fire for them.
@@ -2839,6 +2841,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("health failed", { error: String(error?.message ?? error) });
     }
+    // Citizen justice: crime onset, curfew, trials, punishments, jail.
+    // Data tier, zero LLM.
+    try {
+      tickJustice(this, nowMs);
+    } catch (error) {
+      this.log("justice failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -2933,6 +2942,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen health save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenCrime.save()) {
+        this.log("citizen crime saved");
+      }
+    } catch (error) {
+      this.log("citizen crime save failed", {
         error: String(error?.message ?? error),
       });
     }
