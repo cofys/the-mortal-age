@@ -172,5 +172,42 @@ test("save returns false when clean, resetForTests clears", () => {
   assert.strictEqual(Maps.describe("misthalin").mapCount, 0);
 });
 
+// --- discovery seam (markMapped / unmappedDiscoveries) ---
+
+test("dungeon draft marks the discovery mapped (no infinite re-charting)", () => {
+  const Disc = require("./CitizenDiscovery");
+  Disc.resetForTests();
+  const d = Disc.recordDiscovery("dungeon_entrance", 3010, 3020, 0, "Alice", "Goblin Cave");
+  assert.ok(d && d.id, "needs a real discovery record");
+  const r = Maps.draftMap("Alice", "misthalin", "dungeon");
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.map.discoveryId, d.id);
+  // The discovery is now charted — a second draft honestly fails instead of
+  // re-charting the same cave forever.
+  const r2 = Maps.draftMap("Alice", "misthalin", "dungeon");
+  assert.strictEqual(r2.ok, false);
+  assert.strictEqual(r2.reason, "no-discovery");
+  Disc.resetForTests();
+});
+
+test("treasure draft spawns a loot cache at the real discovery coordinates", () => {
+  const Disc = require("./CitizenDiscovery");
+  Disc.resetForTests();
+  Disc.recordDiscovery("ancient_ruin", 3111, 3222, 0, "Zara", "Sunken Shrine");
+  const r = Maps.draftMap("Zara", "asgarnia", "treasure");
+  assert.strictEqual(r.ok, true);
+  assert.ok(r.map.cacheId, "treasure map should reference a cache");
+  const caches = Maps.unclaimedCaches();
+  assert.strictEqual(caches.length, 1);
+  assert.strictEqual(caches[0].x, 3111);
+  assert.strictEqual(caches[0].y, 3222);
+  assert.ok(caches[0].coins > 0, "cache pays real coins");
+  const claim = Maps.claimCache(caches[0].id, "LuckyLou");
+  assert.strictEqual(claim.ok, true);
+  assert.strictEqual(claim.coins, caches[0].coins);
+  assert.strictEqual(Maps.claimCache(caches[0].id, "SlowSam").ok, false); // already claimed
+  Disc.resetForTests();
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

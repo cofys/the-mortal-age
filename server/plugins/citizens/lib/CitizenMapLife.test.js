@@ -102,5 +102,32 @@ test("tickMapLife survives missing travel module", () => {
   tickMapLife(director, Date.now());
 });
 
+test("masterwork announcement journals the deed in the canonical shape", () => {
+  const Disc = require("./CitizenDiscovery");
+  const { getJournal } = require("./CitizenJournal");
+  Disc.resetForTests();
+  getJournal().resetForTests();
+  // Real quality 10: 4 real discoveries (+4) + 9 drafted charts (+2) +
+  // 1 travel log (+1) on the base 3 — a masterwork.
+  for (let i = 0; i < 4; i++) {
+    Disc.recordDiscovery("dungeon_entrance", 3000 + i, 3000, 0, "MasterMia", `Cave ${i}`);
+  }
+  Maps.registerCartographer("MasterMia", "misthalin");
+  Maps.recordLog("MasterMia", "misthalin", "asgarnia", "caravan");
+  for (let i = 0; i < 9; i++) {
+    assert.strictEqual(Maps.draftMap("MasterMia", "misthalin", "city").ok, true);
+  }
+  const director = fakeDirector([
+    { username: "MasterMia", kingdomId: "misthalin", personality: { curiosity: 0.9 }, papyrus: true },
+  ]);
+  tickMapLife(director, 1000000); // ambient draft -> masterwork -> announce
+  const events = getJournal().recent("MasterMia");
+  const master = events.find((e) => e.kind === "masterwork");
+  assert.ok(master, `expected a masterwork journal entry, got ${JSON.stringify(events)}`);
+  assert.ok(master.text.includes("masterwork"), "entry text names the deed");
+  Disc.resetForTests();
+  getJournal().resetForTests();
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

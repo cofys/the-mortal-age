@@ -174,7 +174,15 @@ function announceMasterwork(director, Maps, kingdomId, map, nowMs) {
     }
     try {
       const { getJournal } = require("./CitizenJournal");
-      getJournal().log?.("masterwork-map", { creator: map.creator, type: map.type, kingdomId });
+      // Canonical shape: log(citizenName, kind, text, opts). The old call
+      // passed the data object as `kind` with no `text`, so log() returned
+      // null silently and masterworks were never journaled.
+      getJournal().log?.(
+        map.creator,
+        "masterwork",
+        `${map.creator} completed a masterwork ${label} — on sale at the map shop!`,
+        { data: { mapId: map.id, type: map.type, kingdomId } }
+      );
     } catch { /* journal optional */ }
   } catch { /* announcements never break the tick */ }
 }

@@ -205,8 +205,12 @@ function noteChart(username) {
  */
 function shopTileFor(kingdomId) {
   try {
-    const { siteTile } = require("../brain/CitizenSites");
-    const market = siteTile(kingdomId, "market");
+    // Director-side anchor: siteTile() takes a PLAYER entity; a kingdomId
+    // string silently fell back to the first kingdom's market, putting every
+    // kingdom's shop on the wrong tile. siteTileByKingdom is the canonical
+    // director-side lookup.
+    const { siteTileByKingdom } = require("../brain/CitizenSites");
+    const market = siteTileByKingdom(kingdomId, "market");
     if (!market) return null;
     return { x: (market.x || 0) - 25, y: (market.y || 0) + 12, z: market.z || 0 };
   } catch { return null; }
@@ -298,6 +302,15 @@ function draftMap(username, kingdomId, type) {
   };
   st.maps[id] = map;
 
+  // Mark the discovery as charted: without this, the same dungeon/treasure
+  // discovery would be drafted into unlimited maps forever. markMapped is
+  // the canonical seam in CitizenDiscovery (best-effort, never throws).
+  if (discovery) {
+    try {
+      require("./CitizenDiscovery").markMapped?.(discovery.id, username);
+    } catch { /* mapping bookkeeping is best-effort */ }
+  }
+
   // Treasure maps spawn a real loot cache at the discovery's real
   // coordinates. The cache pays real coins, first-come.
   if (type === MAP_TREASURE && discovery) {
@@ -325,6 +338,10 @@ function draftMap(username, kingdomId, type) {
 
 /**
  * Find a real discovery suitable for a dungeon or treasure map.
+ * Canonical seam: CitizenDiscovery.unmappedDiscoveries() ("cartographers
+ * have work to do"). The old `!d.claimed` predicate was a dead field — the
+ * real record carries `claimedBy` — so claimed discoveries were never
+ * filtered. Prefer unclaimed, fall back to any unmapped; null when none.
  * Defensive: returns null when CitizenDiscovery is unavailable.
  */
 function findUnmappedDiscovery(type) {
@@ -333,13 +350,10 @@ function findUnmappedDiscovery(type) {
     const kinds = type === MAP_TREASURE
       ? ["dungeon_entrance", "ancient_ruin", "monster_lair"]
       : ["dungeon_entrance", "ancient_ruin"];
-    for (const k of kinds) {
-      const list = Disc.discoveriesOfType?.(k) ?? [];
-      const open = list.find((d) => d && !d.claimed);
-      if (open) return open;
-    }
-    const all = Disc.allDiscoveries?.() ?? [];
-    return all.find((d) => d && kinds.includes(d.type)) || null;
+    const pool = (Disc.unmappedDiscoveries?.() ?? []).filter(
+      (d) => d && kinds.includes(d.type)
+    );
+    return pool.find((d) => !d.claimedBy) || pool[0] || null;
   } catch { return null; }
 }
 

@@ -39,7 +39,9 @@ require.cache[sitesPath] = {
   exports: {
     siteTile: () => ({ x: 3200, y: 3200, z: 0 }),
     kingdomIdOf: () => "varrock",
-    siteTileByKingdom: () => ({ x: 3240, y: 3160, z: 0 }),
+    // Director-side lookup: the data tier calls this (not siteTile) with a
+    // kingdomId. Returns the market tile so SHOP_TILE = market -25/+12 holds.
+    siteTileByKingdom: (kingdomId, kind) => ({ x: 3200, y: 3200, z: 0 }),
   },
 };
 
