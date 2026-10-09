@@ -37,6 +37,7 @@ const { onMapGuildCommand, MAPGUILD_USAGE } = require("./CitizenMapGuildEvents")
 const { onPressGuildCommand, PRESSGUILD_USAGE } = require("./CitizenPressGuildEvents");
 const { onBankGuildCommand, BANKGUILD_USAGE } = require("./CitizenBankGuildEvents");
 const { onInsureGuildCommand, INSUREGUILD_USAGE } = require("./CitizenInsureGuildEvents");
+const { onLawGuildCommand, LAWGUILD_USAGE } = require("./CitizenLawGuildEvents");
 const { onGalleryCommand, GALLERY_USAGE } = require("./CitizenGalleryEvents");
 const { onLibraryCommand, LIBRARY_USAGE } = require("./CitizenLibraryEvents");
 const { onObservatoryCommand, OBSERVATORY_USAGE } = require("./CitizenObservatoryEvents");
@@ -791,6 +792,12 @@ module.exports = {
       onInsureGuildCommand,
       PlayerRights.NONE,
       INSUREGUILD_USAGE
+    );
+    api.registerCommand(
+      "lawguild",
+      onLawGuildCommand,
+      PlayerRights.NONE,
+      LAWGUILD_USAGE
     );
   },
 };

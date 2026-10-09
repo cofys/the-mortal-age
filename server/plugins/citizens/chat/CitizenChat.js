@@ -928,6 +928,35 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "bar association" / "law guild" / "pro bono" — the bar association
+  // (guild layer). Placed before the civil-law block; keywords are distinct
+  // from it ("any contracts?", "i want to sue", ...).
+  if (/\b(bar association|law guild|lawyers'? guild|pro bono|legal aid|code of (legal )?practice|disciplinary board|disbarred)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenLawGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "lawguild_status", {
+        username: citizenUsername,
+        members: desc?.members ?? 0,
+        counselors: desc?.counselors ?? 0,
+        treasury: desc?.treasury ?? 0,
+        probonoFund: desc?.probonoFund ?? 0,
+        backlogged: desc?.backlogged ?? false,
+        openClaims: desc?.openClaims ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "court" / "sue" / "contract" / "will" / "dispute" — civil law.
   if (/\b(any contracts?|make a (will|contract)|i want to sue|file a dispute|my (will|contracts?|disputes?)|any lawyers?|civil court|courthouse)\b/.test(said)) {
     try {

@@ -130,6 +130,7 @@ const ACT_BANKGUILD = "citizen_bankguild";
 const ACT_BANKERWORK = "citizen_bankerwork";
 const ACT_INSURERWORK = "citizen_insurerwork";
 const ACT_INSUREGUILD = "citizen_insureguild";
+const ACT_LAWGUILD = "citizen_lawguild";
 const ACT_SPY = "citizen_spymaster";
 const ACT_DIG = "citizen_excavate";
 const ACT_STAGE = "citizen_rehearse";
@@ -173,7 +174,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1518,6 +1519,36 @@ function insureGuildInfo(player) {
 }
 
 /**
+ * lawGuildInfo — snapshot of the citizen's bar-association standing for
+ * the decision scorer. Members in good standing attend hall sessions;
+ * counselors run the reviews and the school; clerks learn the trade.
+ */
+function lawGuildInfo(player) {
+  try {
+    const Guilds = require("../lib/CitizenLawGuilds");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isMember = Guilds.isGuildMember(username);
+    const rank = Guilds.guildRankOf(username);
+    const mem = Guilds.memberOf(username);
+    let hallExists = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      hallExists = !!(kid && Guilds.guildOf(kid));
+    } catch { /* no sites */ }
+    return {
+      isMember,
+      rank,
+      suspended: !!(mem && mem.suspended),
+      isCounselor: rank === Guilds.RANK_COUNSELOR,
+      hallExists,
+    };
+  } catch {
+    return { isMember: false, rank: null, suspended: false, isCounselor: false, hallExists: false };
+  }
+}
+
+/**
  * Banking readiness: is this citizen a banker, and does the branch exist?
  * Defensive: a missing/broken banking module scores as unable to bank.
  */
@@ -2276,6 +2307,7 @@ compete: competeInfo(player),
     bank: bankInfo(player),
     ins: insurerInfo(player),
     insureguild: insureGuildInfo(player),
+    lawguild: lawGuildInfo(player),
     dig: digInfo(player),
     stage: stageInfo(player),
     runway: runwayInfo(player),
@@ -2306,7 +2338,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -3225,6 +3257,23 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_LAWGUILD: {
+      // Bar-association hall sessions: members in good standing attend.
+      // Counselors run the case reviews and teach; clerks learn the trade.
+      // Suspended members and non-members stay away — the hall is members-only.
+      const lg = lawguild ?? { isMember: false, suspended: false, isCounselor: false, hallExists: false };
+      if (!lg.isMember || lg.suspended) return 4; // not a member in good standing
+      if (!lg.hallExists) return 4; // honest — no hall, no session
+      let s = 20;
+      if (lg.isCounselor) s += 12; // counselors run the reviews and the school
+      if (lg.rank === "clerk") s += 6; // clerks learn the most
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_BANKERWORK: {
       // Banking: bankers serve real customers at the branch — processing
       // real deposits, withdrawals, and loans. A human banker works when
@@ -3766,7 +3815,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,
