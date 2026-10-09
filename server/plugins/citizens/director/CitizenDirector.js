@@ -221,6 +221,8 @@ const { tickDiscoveryLife } = require("../lib/CitizenDiscoveryLife");
 const CitizenDiscovery = require("../lib/CitizenDiscovery");
 const { tickInventionLife } = require("../lib/CitizenInventionLife");
 const CitizenInventions = require("../lib/CitizenInventions");
+const { tickConstruction } = require("../lib/CitizenConstructionLife");
+const CitizenConstruction = require("../lib/CitizenConstruction");
 const { tickPhilosophy } = require("../lib/CitizenPhilosophyLife");
 const CitizenPhilosophy = require("../lib/CitizenPhilosophy");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -2982,6 +2984,13 @@ class CitizenDirector {
       tickPhilosophy(this, nowMs);
     } catch (error) {
       this.log("philosophy failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen construction: real projects, material stockpiles, built effects.
+    // Data tier, zero LLM. (CitizenArchitects owns flavor, CitizenBuilders owns crews.)
+    try {
+      tickConstruction(this, nowMs);
+    } catch (error) {
+      this.log("construction failed", { error: String(error?.message ?? error) });
     }    try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3211,6 +3220,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen inventions save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenConstruction.save()) {
+        this.log("citizen construction saved");
+      }
+    } catch (error) {
+      this.log("citizen construction save failed", {
         error: String(error?.message ?? error),
       });
     }

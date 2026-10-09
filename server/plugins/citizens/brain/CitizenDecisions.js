@@ -112,7 +112,8 @@ const ACT_EXPLORE = "citizen_explore";
 const ACT_LAWYER = "citizen_lawyer";
 const ACT_INVENT = "citizen_invent";
 const ACT_PHILOSOPHIZE = "citizen_philosophize";
-const ACT_SURGEON = "citizen_surgeon";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
+const ACT_SURGEON = "citizen_surgeon";
+const ACT_CONSTRUCT = "citizen_construct";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
@@ -140,7 +141,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -922,6 +923,50 @@ function inventInfo(player) {
 }
 
 /**
+ * Construction readiness: is there an active project in the citizen's
+ * kingdom, do they carry donatable materials, what's their Construction
+ * level? Defensive: missing module scores as unable.
+ */
+function constructInfo(player) {
+  try {
+    let constructionLevel = 1;
+    try {
+      constructionLevel = player?.getSkills?.()?.getLevel?.("construction")
+        ?? player?.skills?.construction ?? 1;
+    } catch { /* construction unreadable */ }
+
+    let hasProject = false;
+    let donatableCount = 0;
+    try {
+      const Construction = require("../lib/CitizenConstruction");
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kingdomId = kingdomIdOf(player);
+      const proj = kingdomId ? Construction.activeProjectFor(kingdomId) : null;
+      hasProject = !!proj;
+      if (proj) {
+        const inv = player?.getInventory?.();
+        if (inv) {
+          for (const [itemId, need] of Object.entries(proj.materialsNeeded ?? {})) {
+            const donated = proj.materialsDonated?.[itemId] ?? 0;
+            if (donated >= need) continue;
+            let have = 0;
+            try {
+              if (typeof inv.getAmount === "function") have = inv.getAmount(Number(itemId)) ?? 0;
+              else if (typeof inv.count === "function") have = inv.count(Number(itemId)) ?? 0;
+            } catch { /* best-effort */ }
+            if (have > 0) donatableCount++;
+          }
+        }
+      }
+    } catch { /* construction unreadable */ }
+
+    return { constructionLevel, hasProject, donatableCount };
+  } catch {
+    return { constructionLevel: 1, hasProject: false, donatableCount: 0 };
+  }
+}
+
+/**
  * Philosophy readiness: is this citizen a philosopher, can they contemplate,
  * are they thoughtful? Defensive: missing module scores as unable.
  */
@@ -1358,6 +1403,7 @@ compete: competeInfo(player),
     diplomat: diplomatInfo(player),
     explore: exploreInfo(player),
     invent: inventInfo(player),
+    construct: constructInfo(player),
     philosophy: philosophyInfo(player),
     legal: legalInfo(player),
     surgery: surgeryInfo(player),
@@ -1381,7 +1427,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1829,6 +1875,24 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 40; // nobody operates drunk
+      return s;
+    }
+    case ACT_CONSTRUCT: {
+      // Construction: builders raise the kingdom's real buildings. A human
+      // builder shows up when there's an active project — and especially
+      // when they're carrying materials the project needs. No project, no
+      // work. The hurt and weary stay home.
+      const c = construct ?? { constructionLevel: 1, hasProject: false, donatableCount: 0 };
+      if (!c.hasProject) return 4; // nothing being built
+      let s = 22;
+      if ((c.donatableCount ?? 0) > 0) s += 14; // carrying needed materials
+      s += Math.min((c.constructionLevel ?? 1) * 0.3, 10); // skill matters
+      if (goalType === GOAL_MASTER_TRADE) s += 6; // construction pays
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
       return s;
     }
     case ACT_RC: {
@@ -2317,7 +2381,7 @@ module.exports = {
   ACT_CREATEART,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

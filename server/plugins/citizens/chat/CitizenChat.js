@@ -1047,6 +1047,34 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "what's being built" / "is there a landmark" — player asks about construction.
+  if (/\b(what'?s being built|any construction|under construction|is there a landmark|any landmarks|what districts|the building site|new buildings)\b/.test(said)) {
+    try {
+      const Con = require("../lib/CitizenConstruction");
+      // Aggregate across kingdoms — the citizen reports what they know.
+      const allActive = [];
+      const allLandmarks = [];
+      // Active projects: scan via the data tier's project list.
+      const st = Con.load();
+      for (const p of Object.values(st.projects ?? {})) {
+        if (p.status !== "complete") {
+          allActive.push({ type: p.type, kingdomId: p.kingdomId, status: p.status });
+        }
+      }
+      for (const b of Object.values(st.built ?? {})) {
+        if (b.isLandmark) allLandmarks.push({ type: b.type, kingdomId: b.kingdomId });
+      }
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "construction_status", {
+        username: citizenUsername,
+        active: allActive.slice(0, 5),
+        landmarks: allLandmarks.slice(0, 5),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a philosopher" / "what is your philosophy" — player asks about philosophy.
   if (/\b(is there a philosopher|any philosophers|what is your philosophy|what do you believe|philosophy|the academy|schools of thought|are you a philosopher)\b/.test(said)) {
     try {

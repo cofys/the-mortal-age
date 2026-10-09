@@ -865,6 +865,27 @@
           "type": "citizenSurgeon"
         }
       ]
+    },
+    {
+      "id": "citizen_construct",
+      "mode": "citizen_construct",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenConstruct"
+        }
+      ]
     }
   ]
 }

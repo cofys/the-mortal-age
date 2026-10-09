@@ -106,6 +106,7 @@ const CAREERS = Object.freeze({
   philosopher: Object.freeze({ label: "philosopher", skill: null, wage: 150, service: true }),
   lawyer: Object.freeze({ label: "lawyer", skill: null, wage: 170, service: true }),
   surgeon: Object.freeze({ label: "surgeon", skill: "herblore", wage: 200, service: true }),
+  architect: Object.freeze({ label: "architect", skill: "construction", wage: 180, service: true }),
 });
 
 const CAREER_KEYS = Object.freeze(Object.keys(CAREERS));
