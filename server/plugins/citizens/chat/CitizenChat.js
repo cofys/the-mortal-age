@@ -1819,6 +1819,37 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "library" / "librarian" / "borrow book" / "research room" — player asks
+  // about library operations. (CitizenLibrarians owns hash-derived librarian
+  // flavor; CitizenScholars owns the researcher profession; this owns the
+  // library operations layer: books, lending, research rooms, archives.)
+  if (/\b(library|librarian|borrow (a )?book|return (a )?book|research room|kingdom archives|write (a )?book)\b/.test(said)) {
+    try {
+      const Lib = require("../lib/CitizenLibraries");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? ctx?.kingdomId ?? "unknown";
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "library_ops", {
+        username: citizenUsername,
+        knowledge: Lib.knowledgeFor(kingdomId),
+        availableBooks: Lib.availableBooks(kingdomId).slice(0, 3).map((b) => ({
+          title: b.title,
+          subject: b.subject,
+          quality: b.quality,
+        })),
+        archives: Lib.archivesIn(kingdomId).slice(-3).map((a) => ({
+          subject: a.subject,
+          event: a.event,
+        })),
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "what's in fashion" — player asks about trends, shops, competitions.
   if (/\b(what.s in fashion|fashion trend|what.s trendy|is there a tailor|clothing shop|buy clothes|style competition|best dressed|what.s the style)\b/.test(said)) {
     try {

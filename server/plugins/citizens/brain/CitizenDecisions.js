@@ -134,6 +134,7 @@ const ACT_TRAIN = "citizen_train";
 const ACT_COOKOFF = "citizen_cookoff";
 const ACT_FESTIVAL = "citizen_promote";
 const ACT_CURATE = "citizen_curate";
+const ACT_LIBRARIAN = "citizen_librarian";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -167,7 +168,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1653,6 +1654,37 @@ function galleryInfo(player) {
 }
 
 /**
+ * Library info: is this citizen a librarian, and is there library work in
+ * their kingdom? Defensive — missing modules degrade to the honest
+ * unable-to-work shape.
+ */
+function libraryInfo(player) {
+  try {
+    const L = require("../lib/CitizenLibraries");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isLibrarian = L.isLibrarian(username);
+    let scholarly = 0;
+    try {
+      const personality = player?.getAttribute?.("citizens:personality") ?? {};
+      scholarly = personality.scholarly ?? personality.intelligence ?? personality.wisdom ?? 0;
+    } catch { /* personality unreadable */ }
+    let bookCount = 0, overdueCount = 0, hasLibrary = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      if (kid) {
+        hasLibrary = !!L.libraryTile(kid);
+        bookCount = L.booksIn(kid).length;
+        overdueCount = L.overdueLoans().length;
+      }
+    } catch { /* sites unreadable */ }
+    return { isLibrarian, scholarly, bookCount, overdueCount, hasLibrary };
+  } catch {
+    return { isLibrarian: false, scholarly: 0, bookCount: 0, overdueCount: 0, hasLibrary: false };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -2084,6 +2116,7 @@ compete: competeInfo(player),
     cookoff: cookoffInfo(player),
     festival: festivalInfo(player),
     gallery: galleryInfo(player),
+    library: libraryInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -2105,7 +2138,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, runway, train, cookoff, festival, gallery, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, stage, runway, train, cookoff, festival, gallery, library, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2204,6 +2237,26 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if ((g.openAuctions ?? 0) > 0) s += 8; // auctions need running
       if ((g.openCommissions ?? 0) > 0) s += 6; // commissions to broker
       if ((g.cultured ?? 0) >= 0.7) s += 4;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_LIBRARIAN: {
+      // Libraries: librarians tend the library when there is work — books
+      // to shelve, loans to process, archives to write. The scholarly are
+      // drawn to the library. No library, no librarian work. The hurt and
+      // weary stay home.
+      const l = library ?? { isLibrarian: false, scholarly: 0, bookCount: 0, overdueCount: 0, hasLibrary: false };
+      if (!l.hasLibrary) return 4; // honest — no library, no working
+      if (!l.isLibrarian && (l.scholarly ?? 0) < 0.5) return 4;
+      let s = 14;
+      if (l.isLibrarian) s += 10; // the library calls its librarian
+      if ((l.overdueCount ?? 0) > 0) s += 8; // overdue loans need chasing
+      if ((l.bookCount ?? 0) > 0) s += 4; // collection to tend
+      if ((l.scholarly ?? 0) >= 0.7) s += 4;
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -3452,7 +3505,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

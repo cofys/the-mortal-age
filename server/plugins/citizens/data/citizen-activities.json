@@ -1014,6 +1014,27 @@
       ]
     },
     {
+      "id": "citizen_librarian",
+      "mode": "citizen_librarian",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenLibrarian"
+        }
+      ]
+    },
+    {
       "id": "citizen_explore",
       "mode": "citizen_explore",
       "repeat": false,
