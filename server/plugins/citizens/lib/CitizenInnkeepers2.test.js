@@ -33,24 +33,35 @@ function mockLocation(x, y, z = 0) {
   return { getX: () => x, getY: () => y, getZ: () => z };
 }
 function mockPlayer(name, x, y, isBot = false) {
-  return {
+  const p = {
     getUsername: () => name,
     getHostAddress: () => (isBot ? "bot" : "127.0.0.1"),
     isPlayerBot: () => isBot,
     getLocation: () => mockLocation(x, y),
   };
+  if (isBot) {
+    // Real proximity source: the bot's own getLocalPlayers (engine Player API).
+    p.getLocalPlayers = () => [];
+    p.forceChat = (m) => (p._said = (p._said || []).concat(m));
+  }
+  return p;
 }
-function mockDirector(records, players) {
-  const bots = new Map();
+function mockDirector(records, botsByName, localPlayersByName) {
+  // Real-API shape: isOnline/getBot on the director, proximity on the bot.
+  const roster = new Map(records.map((r) => [r.username, r]));
+  const bots = new Map(Object.entries(botsByName || {}));
+  for (const [uname, players] of Object.entries(localPlayersByName || {})) {
+    let bot = bots.get(uname);
+    if (!bot) {
+      bot = mockPlayer(uname, 3200, 3200, true);
+      bots.set(uname, bot);
+    }
+    bot.getLocalPlayers = () => players;
+  }
   return {
-    roster: new Map(records.map((r) => [r.username, r])),
-    playerFor: (record) => {
-      const bot = mockPlayer(record.username, 3200, 3200, true);
-      bot.forceChat = (m) => (bot._said = (bot._said || []).concat(m));
-      bots.set(record.username, bot);
-      return bot;
-    },
-    onlinePlayers: () => players,
+    roster,
+    isOnline: (record) => bots.has(record.username),
+    getBot: (record) => bots.get(record.username) || null,
     _bots: bots,
   };
 }
@@ -238,9 +249,9 @@ check("tick fires near real player", () => {
   }
   assert.ok(hname, "found hostfolk name");
   const noon = new Date(2026, 9, 8, 12, 0).getTime();
-  const director = mockDirector([{ username: hname, role: "commoner", kingdomId: "misthalin" }], [
-    mockPlayer("Jon", 3202, 3202, false),
-  ]);
+  const director = mockDirector([{ username: hname, role: "commoner", kingdomId: "misthalin" }], {}, {
+    [hname]: [mockPlayer("Jon", 3202, 3202, false)],
+  });
   withFixedRandom(0.05, () => Host.tickHostfolk(director, noon));
   const bot = director._bots.get(hname);
   assert.ok(bot && (bot._said || []).length === 1, "hostfolk spoke once");
@@ -257,9 +268,9 @@ check("tick silent near bots only", () => {
     }
   }
   const noon = new Date(2026, 9, 8, 12, 0).getTime();
-  const director = mockDirector([{ username: hname, role: "commoner", kingdomId: "misthalin" }], [
-    mockPlayer("BotBob", 3202, 3202, true),
-  ]);
+  const director = mockDirector([{ username: hname, role: "commoner", kingdomId: "misthalin" }], {}, {
+    [hname]: [mockPlayer("BotBob", 3202, 3202, true)],
+  });
   withFixedRandom(0.05, () => Host.tickHostfolk(director, noon));
   const bot = director._bots.get(hname);
   assert.ok(!bot || (bot._said || []).length === 0, "silent near bots only");
@@ -276,9 +287,9 @@ check("tick silent outside hours", () => {
     }
   }
   const night = new Date(2026, 9, 8, 3, 0).getTime();
-  const director = mockDirector([{ username: hname, role: "commoner", kingdomId: "misthalin" }], [
-    mockPlayer("Jon", 3202, 3202, false),
-  ]);
+  const director = mockDirector([{ username: hname, role: "commoner", kingdomId: "misthalin" }], {}, {
+    [hname]: [mockPlayer("Jon", 3202, 3202, false)],
+  });
   withFixedRandom(0.05, () => Host.tickHostfolk(director, night));
   const bot = director._bots.get(hname);
   assert.ok(!bot || (bot._said || []).length === 0, "silent outside hours");
@@ -296,11 +307,13 @@ check("pro innkeeper skipped before materialization", () => {
     }
   }
   const noon = new Date(2026, 9, 8, 12, 0).getTime();
-  const director = mockDirector([{ username: proName, role: "commoner", kingdomId: "misthalin" }], [
-    mockPlayer("Jon", 3202, 3202, false),
-  ]);
+  // Provide a bot AND a real player: the type gate must still exclude the pro.
+  const bot = mockPlayer(proName, 3200, 3200, true);
+  const director = mockDirector([{ username: proName, role: "commoner", kingdomId: "misthalin" }], { [proName]: bot }, {
+    [proName]: [mockPlayer("Jon", 3202, 3202, false)],
+  });
   withFixedRandom(0.05, () => Host.tickHostfolk(director, noon));
-  assert.ok(!director._bots.has(proName), "no bot materialized for pro innkeeper");
+  assert.ok((bot._said || []).length === 0, "pro innkeeper skipped at the type gate");
 });
 
 // --- 19. never throws on hostile input ---

@@ -24,13 +24,15 @@ function withFixedRandom(value, fn) {
 function loc(x, y, z = 0) {
   return { getX: () => x, getY: () => y, getZ: () => z };
 }
-function mockBot(name, x = 3000, y = 3000) {
+/** Citizen bot mock — real-API shape: proximity comes from the bot, not the director. */
+function mockBot(name, x = 3000, y = 3000, players = []) {
   const chats = [];
   return {
     getUsername: () => name,
     isPlayerBot: () => true,
     getHostAddress: () => "bot",
     getLocation: () => loc(x, y),
+    getLocalPlayers: () => players,
     forceChat: (m) => chats.push(m),
     _chats: chats,
   };
@@ -43,6 +45,7 @@ function mockPlayer(name, x = 3005, y = 3005) {
     getLocation: () => loc(x, y),
   };
 }
+/** Director mock — real-API shape: isOnline/getBot (playerFor/onlinePlayers are dead). */
 function mockDirector(entries, players) {
   const bots = new Map();
   const roster = new Map(entries.map((r) => [r.username, r]));
@@ -53,9 +56,9 @@ function mockDirector(entries, players) {
     bots.set(name, p);
   }
   return {
-    roster,
-    isOnline: () => true,
-    getBot: (rec) => bots.get(rec.username) || null,
+    roster: new Map(entries.map((r) => [r.username, r])),
+    isOnline: (record) => bots.has(record.username),
+    getBot: (record) => bots.get(record.username) || null,
     _bots: bots,
   };
 }
@@ -234,7 +237,8 @@ function fresh() {
   fresh();
   const rec = findCookfolk("tickcf");
   const director = mockDirector([rec], [mockPlayer("Human3")]);
-  director._bots.set(rec.username, mockBot(rec.username));
+  // Proximity is wired through the bot (real-API shape): the human is near.
+  director._bots.set(rec.username, mockBot(rec.username, 3000, 3000, [mockPlayer("Human3")]));
   withFixedRandom(0.05, () => CF.tickCookfolk(director, T0));
   const chats = director._bots.get(rec.username)._chats;
   assert.ok(chats.length >= 1, "citizen says something near a real player");
@@ -246,7 +250,8 @@ function fresh() {
   fresh();
   const rec = findCookfolk("silentcf");
   const director = mockDirector([rec], [mockBot("BotWatcher")]);
-  director._bots.set(rec.username, mockBot(rec.username));
+  // A citizen bot is near, but no real player — must stay silent.
+  director._bots.set(rec.username, mockBot(rec.username, 3000, 3000, [mockBot("BotWatcher", 3005, 3005)]));
   withFixedRandom(0.05, () => CF.tickCookfolk(director, T0));
   const chats = director._bots.get(rec.username)._chats;
   assert.equal(chats.length, 0, "silent when only bots are near");
@@ -258,7 +263,7 @@ function fresh() {
   fresh();
   const rec = findCookfolk("nightcf");
   const director = mockDirector([rec], [mockPlayer("Human4")]);
-  director._bots.set(rec.username, mockBot(rec.username));
+  director._bots.set(rec.username, mockBot(rec.username, 3000, 3000, [mockPlayer("Human4")]));
   withFixedRandom(0.05, () => CF.tickCookfolk(director, NIGHT));
   const chats = director._bots.get(rec.username)._chats;
   assert.equal(chats.length, 0, "silent at 03:00");
@@ -282,7 +287,7 @@ function fresh() {
   fresh();
   const rec = findCookfolk("chancecf");
   const director = mockDirector([rec], [mockPlayer("Human6")]);
-  director._bots.set(rec.username, mockBot(rec.username));
+  director._bots.set(rec.username, mockBot(rec.username, 3000, 3000, [mockPlayer("Human6")]));
   withFixedRandom(0.5, () => CF.tickCookfolk(director, T0));
   const chats = director._bots.get(rec.username)._chats;
   assert.equal(chats.length, 0, "0.5 random fails the 0.15 chance gate");

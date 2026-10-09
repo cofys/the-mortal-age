@@ -271,6 +271,19 @@ function isCitizenBot(player) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Canonical replacement for the dead director.playerFor: only materialize
+ * when the director says the citizen is online.
+ */
+function materializedBot(director, record) {
+  try {
+    return director?.isOnline?.(record) ? director.getBot?.(record) ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cheap Chebyshev distance check (same plane). */
 function withinTiles(a, b, radius) {
   try {
@@ -451,7 +464,7 @@ function tickGemfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Workshop hours only
@@ -479,8 +492,9 @@ function tickGemfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director; // director.playerFor/onlinePlayers are dead; proximity comes from the bot.
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -502,7 +516,7 @@ function doGemfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `worked at ${workshop.name}`);
+    journalize(record.username, `worked at ${workshop.name}`);
   } else if (roll < 0.7) {
     // (projectsFor branch removed 2026-10-08: hash-derived "finished piece" was fabrication.)
     if (type === GEMFOLK_APPRAISER) {
@@ -512,11 +526,11 @@ function doGemfolkWork(director, record, citizen, type, nowMs) {
       const line = pickOne(Math.random, COMMISSION_LINES);
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     }
-    journalize(citizen, `offered services at ${workshop.name}`);
+    journalize(name, `offered services at ${workshop.name}`);
   } else {
     const line = pickOne(Math.random, LESSON_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `offered cutting lessons at ${workshop.name}`);
+    journalize(record.username, `offered cutting lessons at ${workshop.name}`);
   }
 }
 

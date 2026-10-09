@@ -176,7 +176,14 @@ check("withinTiles uses Chebyshev distance on the same plane", () => {
   assert.ok(!A.withinTiles(mk(0, 0, 0), mk(1, 1, 1), 14), "different plane");
 });
 
-check("tickAlchemists fires visible work near a real player", () => {
+check("canonical journal API is live (no journalFor — the old call was a dead no-op)", () => {
+  const J = require("./CitizenJournal");
+  assert.equal(typeof J.getJournal, "function");
+  assert.equal(J.journalFor, undefined, "journalFor does not exist on CitizenJournal");
+  assert.equal(typeof J.getJournal().log, "function");
+});
+
+check("tickAlchemists fires visible work near a real player (isOnline+getBot, bot-local players)", () => {
   A._resetState();
   // Find a stable alchemist username.
   let name = null;
@@ -185,19 +192,22 @@ check("tickAlchemists fires visible work near a real player", () => {
   }
   assert.ok(name, "found alchemist for tick test");
   const chats = [];
-  const bot = {
-    forceChat: (l) => chats.push(l),
-    performAnimation: () => {},
-  };
   const realPlayer = {
     getUsername: () => "RealHuman",
     getLocation: () => ({ getX: () => 5, getY: () => 5, getZ: () => 0 }),
   };
-  const record = { username: name, role: "commoner", kingdom: "misthalin" };
+  const bot = {
+    forceChat: (l) => chats.push(l),
+    performAnimation: () => {},
+    getLocation: () => ({ getX: () => 0, getY: () => 0, getZ: () => 0 }),
+    // Canonical proximity source: engine Player API on the bot.
+    getLocalPlayers: () => [realPlayer],
+  };
+  const record = { username: name, role: "commoner", kingdomId: "misthalin" };
   const director = {
     roster: new Map([[name, record]]),
-    playerFor: () => ({ ...bot, getLocation: () => ({ getX: () => 0, getY: () => 0, getZ: () => 0 }) }),
-    onlinePlayers: () => [realPlayer],
+    isOnline: (rec) => rec.username === name,
+    getBot: () => bot,
     api: { core: { Animation: class { constructor(id) { this.id = id; } } } },
   };
   // Force the chance gate open.
@@ -209,9 +219,20 @@ check("tickAlchemists fires visible work near a real player", () => {
     Math.random = origRandom;
   }
   assert.ok(chats.length > 0, "a visible work line fired");
+  // The visible loop journaled a work event into the real journal module.
+  const J = require("./CitizenJournal");
+  const recent = J.getJournal().recent(name, 3);
+  assert.ok(recent.length > 0 && recent[0].kind === "work", "journal got a work event for " + name);
+  // kingdomId flow (the fixed record.kingdomId field): the journaled lab
+  // must be a misthalin lab, not a fallback from an undefined kingdom.
+  const misthalinLabs = A.LABS.filter((l) => l.kingdom === "misthalin").map((l) => l.name);
+  assert.ok(
+    misthalinLabs.some((lab) => recent[0].text.includes(lab)),
+    "journaled lab is kingdom-preferred: " + recent[0].text
+  );
 });
 
-check("tickAlchemists stays silent when no real player is near", () => {
+check("tickAlchemists stays silent when no real player is near (bots-only bot-local players)", () => {
   A._resetState();
   let name = null;
   for (let i = 0; i < 500 && !name; i++) {
@@ -225,11 +246,17 @@ check("tickAlchemists stays silent when no real player is near", () => {
     getUsername: () => name + "_bot",
     getLocation: () => ({ getX: () => 1, getY: () => 1, getZ: () => 0 }),
   };
-  const record = { username: name, role: "commoner", kingdom: "misthalin" };
+  const bot = {
+    forceChat: (l) => chats.push(l),
+    performAnimation: () => {},
+    getLocation: () => ({ getX: () => 0, getY: () => 0, getZ: () => 0 }),
+    getLocalPlayers: () => [botOnly],
+  };
+  const record = { username: name, role: "commoner", kingdomId: "misthalin" };
   const director = {
     roster: new Map([[name, record]]),
-    playerFor: () => ({ ...botOnly, forceChat: (l) => chats.push(l), performAnimation: () => {} }),
-    onlinePlayers: () => [botOnly],
+    isOnline: (rec) => rec.username === name,
+    getBot: () => bot,
     api: { core: { Animation: class { constructor(id) { this.id = id; } } } },
   };
   const origRandom = Math.random;
@@ -240,6 +267,28 @@ check("tickAlchemists stays silent when no real player is near", () => {
     Math.random = origRandom;
   }
   assert.equal(chats.length, 0, "no output near bots only");
+});
+
+check("tickAlchemists stays silent when the citizen is offline (isOnline false)", () => {
+  A._resetState();
+  let name = null;
+  for (let i = 0; i < 500 && !name; i++) {
+    if (A.alchemistTypeFor("offl" + i)) name = "offl" + i;
+  }
+  assert.ok(name, "found alchemist for offline test");
+  const record = { username: name, role: "commoner", kingdomId: "misthalin" };
+  const director = {
+    roster: new Map([[name, record]]),
+    isOnline: () => false,
+    getBot: () => { throw new Error("getBot must not be called when offline"); },
+  };
+  const origRandom = Math.random;
+  Math.random = () => 0.01;
+  try {
+    A.tickAlchemists(director, 30 * 3600 * 1000);
+  } finally {
+    Math.random = origRandom;
+  }
 });
 
 check("tickAlchemists never throws on hostile input", () => {

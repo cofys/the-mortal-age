@@ -20,6 +20,8 @@ function mockCitizen(name, x = 3000, y = 3000) {
     getHostAddress: () => "bot",
     getLocation: () => mockLocation(x, y),
     forceChat: (m) => chats.push(m),
+    // Real proximity source: the bot's own getLocalPlayers (engine Player API).
+    getLocalPlayers: () => [],
     _chats: chats,
   };
 }
@@ -34,17 +36,17 @@ function mockPlayer(name, x = 3005, y = 3005) {
 function mockRecord(username, kingdomId = "misthalin", role = "commoner") {
   return { username, kingdomId, role };
 }
-function mockDirector(records, citizens, players) {
+function mockDirector(records, citizens, localPlayersByCitizen) {
+  // Real-API shape: isOnline/getBot on the director, proximity on the bot.
   const roster = new Map(records.map((r) => [r.username, r]));
   const cits = new Map(Object.entries(citizens || {}));
-  for (const p of players || []) {
-    const name = p.getUsername();
-    if (!roster.has(name)) roster.set(name, { username: name, role: "player" });
-    if (!cits.has(name)) cits.set(name, p);
+  for (const [uname, players] of Object.entries(localPlayersByCitizen || {})) {
+    const c = cits.get(uname);
+    if (c) c.getLocalPlayers = () => players;
   }
   return {
     roster,
-    isOnline: () => true,
+    isOnline: (record) => cits.has(record.username),
     getBot: (record) => cits.get(record.username) || null,
   };
 }
@@ -243,7 +245,7 @@ function fresh() {
   const rec = mockRecord(uname);
   const citizen = mockCitizen(uname, 3000, 3000);
   const real = mockPlayer("Jon", 3005, 3005);
-  const director = mockDirector([rec], { [uname]: citizen }, [real]);
+  const director = mockDirector([rec], { [uname]: citizen }, { [uname]: [real] });
   const origRandom = Math.random;
   Math.random = fixedRng(0.05); // below DOCKFOLK_CHANCE 0.15
   try {
@@ -256,7 +258,7 @@ function fresh() {
   // Silent near bots only.
   fresh();
   const citizen2 = mockCitizen(uname, 3000, 3000);
-  const botOnly = mockDirector([rec], { [uname]: citizen2 }, [mockCitizen("Bot2", 3005, 3005)]);
+  const botOnly = mockDirector([rec], { [uname]: citizen2 }, { [uname]: [mockCitizen("Bot2", 3005, 3005)] });
   Math.random = fixedRng(0.05);
   try {
     D.tickDockfolk(botOnly, T0);
@@ -268,7 +270,7 @@ function fresh() {
   // Silent outside dock hours.
   fresh();
   const citizen3 = mockCitizen(uname, 3000, 3000);
-  const night = mockDirector([rec], { [uname]: citizen3 }, [real]);
+  const night = mockDirector([rec], { [uname]: citizen3 }, { [uname]: [real] });
   Math.random = fixedRng(0.05);
   try {
     D.tickDockfolk(night, NIGHT);
@@ -284,7 +286,7 @@ function fresh() {
     if (!D.dockfolkTypeOf(mockRecord("PlainDock" + i))) plain = "PlainDock" + i;
   }
   const recP = mockRecord(plain);
-  const directorP = mockDirector([recP], {}, [real]);
+  const directorP = mockDirector([recP], {}, { [recP.username]: [real] });
   D.tickDockfolk(directorP, T0);
   console.log("tick behavior: PASS");
 }

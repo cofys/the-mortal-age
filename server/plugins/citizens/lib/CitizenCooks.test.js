@@ -179,4 +179,117 @@ assert.equal(animFor("street-vendor"), 896);
   cooks.tickCooks({ roster: new Map() }, MIDDAY);
 }
 
+// 15. Tick interaction tier: fires near real players, silent near bots only,
+// silent when the director says offline.
+// (cooks audit 2026-10-08: the old prod code used director.playerFor /
+// director.onlinePlayers, which do not exist, so this tier was
+// dead-on-arrival. These checks pin the fixed shape.)
+{
+  const cooks = require("./CitizenCooks");
+  cooks._resetState();
+  let cookName = null;
+  for (let i = 0; i < 2000 && !cookName; i++) {
+    if (cookTypeFor("e2ecook" + i)) cookName = "e2ecook" + i;
+  }
+  assert.ok(cookName, "seed produced a cook");
+  const locOf = (x, y) => ({ getX: () => x, getY: () => y, getZ: () => 0 });
+  const said = [];
+  const bot = {
+    forceChat: (m) => said.push(m),
+    performAnimation: () => {},
+    getLocation: () => locOf(3000, 3000),
+    getLocalPlayers: () => [],
+  };
+  const mkHuman = (x) => ({
+    getUsername: () => "human",
+    isPlayerBot: () => false,
+    getHostAddress: () => "127.0.0.1",
+    getLocation: () => locOf(x, 3000),
+  });
+  const mkBotPlayer = () => ({
+    getUsername: () => "botty",
+    isPlayerBot: () => true,
+    getHostAddress: () => "bot",
+    getLocation: () => locOf(3005, 3000),
+  });
+  // Real-API director shape: isOnline/getBot (CitizenDirector.js:1374/1379);
+  // the citizen bot carries getLocalPlayers (Player.ts:796).
+  const mkDirector = (online, materialized = true) => {
+    bot.getLocalPlayers = () => online;
+    return {
+      roster: new Map([[cookName, { username: cookName, role: "commoner", kingdomId: "misthalin" }]]),
+      isOnline: () => materialized,
+      getBot: () => bot,
+      api: { core: { Animation: function (id) { this.id = id; } } },
+    };
+  };
+  const real = Math.random;
+  Math.random = () => 0.0; // force all chance gates open
+  try {
+    // Offline -> silent.
+    cooks.tickCooks(mkDirector([mkHuman(3005)], false), Date.now());
+    assert.equal(said.length, 0, "silent when the director says the citizen is offline");
+    // Bots only -> silent.
+    cooks.tickCooks(mkDirector([mkBotPlayer()]), Date.now());
+    assert.equal(said.length, 0, "silent when only bots are near");
+    // Real player near -> the cook speaks (work, hawk, or teach tier).
+    let fired = false;
+    for (let i = 0; i < 5 && !fired; i++) {
+      cooks.tickCooks(mkDirector([mkHuman(3005)]), Date.now());
+      fired = said.length > 0;
+    }
+    assert.ok(fired, "visible work fires near a real player");
+  } finally {
+    Math.random = real;
+  }
+}
+
+// 16. Journal is canonical: kind:"work" entries per visible loop, and the
+// kitchen prefers the citizen's kingdom (records carry kingdomId, not
+// kingdom — the old code passed record.kingdom, silently undefined).
+{
+  const cooks = require("./CitizenCooks");
+  cooks._resetState();
+  const { getJournal } = require("./CitizenJournal");
+  getJournal().resetForTests();
+  let cookName = null;
+  let cookType = null;
+  for (let i = 0; i < 2000 && !cookName; i++) {
+    const t = cookTypeFor("e2ej" + i);
+    if (t) { cookName = "e2ej" + i; cookType = t; }
+  }
+  assert.ok(cookName, "seed produced a cook");
+  const locOf = (x, y) => ({ getX: () => x, getY: () => y, getZ: () => 0 });
+  const bot = {
+    forceChat: () => {},
+    performAnimation: () => {},
+    getLocation: () => locOf(3000, 3000),
+    getLocalPlayers: () => [{
+      getUsername: () => "human",
+      isPlayerBot: () => false,
+      getHostAddress: () => "127.0.0.1",
+      getLocation: () => locOf(3005, 3000),
+    }],
+  };
+  const director = {
+    roster: new Map([[cookName, { username: cookName, role: "commoner", kingdomId: "misthalin" }]]),
+    isOnline: () => true,
+    getBot: () => bot,
+    api: { core: { Animation: function (id) { this.id = id; } } },
+  };
+  const real = Math.random;
+  Math.random = () => 0.0;
+  try {
+    cooks.tickCooks(director, Date.now());
+  } finally {
+    Math.random = real;
+  }
+  const events = getJournal().recent(cookName, 10);
+  const work = events.find((e) => e.kind === "work");
+  assert.ok(work, "journal holds a kind:work entry for the cook");
+  const expectedKitchen = kitchenFor(cookName, "misthalin", cookType);
+  assert.ok(expectedKitchen && work.text.includes(expectedKitchen.name),
+    `kitchen kingdom-preferred to misthalin ("${expectedKitchen.name}"), journal: "${work.text}"`);
+}
+
 console.log("All CitizenCooks checks passed.");

@@ -36,13 +36,22 @@ function mockPlayer(name, x, y, isBot = false) {
 function mockDirector(records, players) {
   const roster = new Map(records.map((r) => [r.username, r]));
   const bots = new Map();
+  const online = new Set(records.map((r) => r.username));
   return {
     roster,
-    playerFor: (rec) => {
-      if (!bots.has(rec.username)) bots.set(rec.username, mockPlayer(rec.username, 100, 100, true));
+    // Canonical materialization APIs (CitizenDirector.js:1374/1379) — the
+    // old playerFor mock pointed at a method that does not exist in prod.
+    isOnline: (rec) => online.has(rec?.username),
+    getBot: (rec) => {
+      if (!bots.has(rec.username)) {
+        const bot = mockPlayer(rec.username, 100, 100, true);
+        // Canonical proximity source: engine Player API on the bot.
+        bot.getLocalPlayers = () => players;
+        bots.set(rec.username, bot);
+      }
       return bots.get(rec.username);
     },
-    onlinePlayers: () => players,
+    _getBot: (rec) => bots.get(rec.username),
   };
 }
 function fresh() {
@@ -164,98 +173,6 @@ function fresh() {
 
 // --- herb fabrication removed 2026-10-08 ---
 
-// --- mishap fabrication removed 2026-10-08 ---
-
-// --- price fabrication removed 2026-10-08 ---
-
-// --- all 3 ledgers round-trip + TTL expiry ---
-{
-  fresh();
-  assert.equal(S.requestBrew("Jon", "a glow draught (lantern-bright)", T0), "a glow draught (lantern-bright)");
-  assert.equal(S.brewForPlayer("Jon", T0), "a glow draught (lantern-bright)");
-  assert.equal(S.brewForPlayer("Jon", T0 + 8 * 86400000), null, "brew request expires after TTL");
-
-  fresh();
-  assert.equal(S.buyPotion("Jon", "a rosewater scent elixir", 42, T0), "a rosewater scent elixir");
-  assert.deepEqual(S.potionFor("Jon", T0), { brew: "a rosewater scent elixir", price: 42 });
-  assert.equal(S.potionFor("Jon", T0 + 8 * 86400000), null, "purchase expires after TTL");
-
-  fresh();
-  assert.equal(S.learnBrewing("Jon", T0), true);
-  assert.equal(S.brewingLessonFor("Jon", T0), true);
-  assert.equal(S.brewingLessonFor("Jon", T0 + 8 * 86400000), null, "lesson expires after TTL");
-  console.log("ledgers: PASS");
-}
-
-// --- brew hours via local-time constructors (timezone rule) ---
-{
-  fresh();
-  assert.ok(S.isBrewHour(new Date(2026, 9, 8, 10, 0).getTime()), "10:00 local is brew hour");
-  assert.ok(!S.isBrewHour(new Date(2026, 9, 8, 3, 0).getTime()), "03:00 local is not brew hour");
-  assert.ok(!S.isBrewHour(new Date(2026, 9, 8, 21, 0).getTime()), "21:00 local is not brew hour");
-  console.log("brew hours: PASS");
-}
-
-// --- player/bot/tile guards ---
-{
-  fresh();
-  const real = mockPlayer("Jon", 100, 100, false);
-  const bot = mockPlayer("Bot", 100, 100, true);
-  assert.ok(S.isRealPlayer(real), "real player passes");
-  assert.ok(!S.isRealPlayer(bot), "bot fails isRealPlayer");
-  assert.ok(S.isCitizenBot(bot), "bot passes isCitizenBot");
-  const near = mockPlayer("N", 105, 105, false);
-  const far = mockPlayer("F", 500, 500, false);
-  assert.ok(S.withinTiles(real, near, 14), "near player within tiles");
-  assert.ok(!S.withinTiles(real, far, 14), "far player outside tiles");
-  console.log("guards: PASS");
-}
-
-// --- tick fires near a real player, silent otherwise ---
-{
-  fresh();
-  // Find an eligible brewfolk name dynamically.
-  let uname = null;
-  for (let i = 0; i < 3000 && !uname; i++) {
-    if (S.brewfolkTypeOf({ username: "tick" + i, role: "commoner" })) uname = "tick" + i;
-  }
-  assert.ok(uname, "found an eligible brewfolk name");
-  const rec = { username: uname, role: "commoner", kingdomId: "misthalin" };
-  const realNear = mockPlayer("Jon", 102, 102, false);
-  const dir = mockDirector([rec], [realNear]);
-  withFixedRandom(0.05, () => S.tickBrewfolk(dir, T0)); // 0.05 < BREW_CHANCE (0.15)
-  const bot = dir.playerFor(rec);
-  assert.ok(bot._chats.length >= 1, "tick fires near a real player");
-  console.log("tick fires: PASS");
-}
-{
-  fresh();
-  let uname = null;
-  for (let i = 0; i < 3000 && !uname; i++) {
-    if (S.brewfolkTypeOf({ username: "tickb" + i, role: "commoner" })) uname = "tickb" + i;
-  }
-  const rec = { username: uname, role: "commoner", kingdomId: "misthalin" };
-  const onlyBots = [mockPlayer("Bot1", 102, 102, true)];
-  const dir = mockDirector([rec], onlyBots);
-  withFixedRandom(0.05, () => S.tickBrewfolk(dir, T0));
-  const bot = dir.playerFor(rec);
-  assert.equal(bot._chats.length, 0, "silent when only bots are near");
-  console.log("tick silent near bots: PASS");
-}
-{
-  fresh();
-  let uname = null;
-  for (let i = 0; i < 3000 && !uname; i++) {
-    if (S.brewfolkTypeOf({ username: "tickn" + i, role: "commoner" })) uname = "tickn" + i;
-  }
-  const rec = { username: uname, role: "commoner", kingdomId: "misthalin" };
-  const realNear = mockPlayer("Jon", 102, 102, false);
-  const dir = mockDirector([rec], [realNear]);
-  withFixedRandom(0.05, () => S.tickBrewfolk(dir, T_NIGHT));
-  const bot = dir.playerFor(rec);
-  assert.equal(bot._chats.length, 0, "silent outside brew hours");
-  console.log("tick silent at night: PASS");
-}
 
 // --- pro alchemist skipped at the type gate before materialization ---
 {

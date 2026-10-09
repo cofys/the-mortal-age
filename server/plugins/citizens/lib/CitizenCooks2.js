@@ -267,6 +267,19 @@ function isCitizenBot(player) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Canonical replacement for the dead director.playerFor: only materialize
+ * when the director says the citizen is online.
+ */
+function materializedBot(director, record) {
+  try {
+    return director?.isOnline?.(record) ? director.getBot?.(record) ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cheap Chebyshev distance check (same plane). */
 function withinTiles(a, b, radius) {
   try {
@@ -458,7 +471,7 @@ function tickCookfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Cooking hours only (dawn to late, server-local)
@@ -486,8 +499,9 @@ function tickCookfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director; // director.playerFor/onlinePlayers are dead; proximity comes from the bot.
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -511,15 +525,15 @@ function doCookfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `cooked at ${kitchen.name}`);
+    journalize(record.username, `cooked at ${kitchen.name}`);
   } else if (roll < 0.75) {
     const line = pickOne(Math.random, TEACH_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `shared cooking wisdom at ${kitchen.name}`);
+    journalize(record.username, `shared cooking wisdom at ${kitchen.name}`);
   } else {
     const line = pickOne(Math.random, HELP_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `asked for help at ${kitchen.name}`);
+    journalize(record.username, `asked for help at ${kitchen.name}`);
   }
 }
 

@@ -217,6 +217,16 @@ function isHospitalityHour(nowMs) {
   return h >= HOSPITALITY_START_HOUR && h < HOSPITALITY_END_HOUR;
 }
 
+/** Materialized citizen bot for a roster record, or null when offline. */
+function materializedBot(director, record) {
+  try {
+    if (!director?.isOnline?.(record)) return null;
+    return director.getBot?.(record) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** True only for real human players (not bots, not logged-out). */
 function isRealPlayer(player) {
   if (!player) return false;
@@ -460,7 +470,7 @@ function tickHostfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Hospitality hours only
@@ -488,8 +498,9 @@ function tickHostfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    const players = citizen?.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -516,16 +527,16 @@ function doHostfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `worked the ${venue.name}`);
+    journalize(record.username, `worked the ${venue.name}`);
   } else if (roll < 0.75) {
     // (Hawking branch removed 2026-10-08: brewForToday was hash-derived fabrication.)
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `kept working at ${venue.name}`);
+    journalize(record.username, `kept working at ${venue.name}`);
   } else {
     const line = pickOne(Math.random, ROOM_OFFER_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `offered the spare room near ${venue.name}`);
+    journalize(record.username, `offered the spare room near ${venue.name}`);
   }
 }
 

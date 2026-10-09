@@ -82,6 +82,16 @@ function pickOne(rng, arr) {
   return arr[Math.floor(rng() * arr.length)];
 }
 
+/** Materialized citizen bot for a roster record, or null when offline. */
+function materializedBot(director, record) {
+  try {
+    if (!director?.isOnline?.(record)) return null;
+    return director.getBot?.(record) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** True only for real human players (not bots, not logged-out). */
 function isRealPlayer(player) {
   if (!player) return false;
@@ -248,9 +258,13 @@ function rumors() {
 /** Seed an "heard at the inn" rumor. Best-effort, never throws. */
 function seedInnRumor(rng, innName, text) {
   try {
+    // Canonical seedRumor shape: (rng, { kind, who, what, where }).
+    // Without `what` the seed is silently dropped (CitizenRumors.js:102).
     rumors().seedRumor?.(rng, {
-      text: `Heard at ${innName}: ${text}`,
       kind: "inn-talk",
+      who: innName,
+      what: text,
+      where: innName,
     });
   } catch {
     // Rumors are garnish.
@@ -363,8 +377,9 @@ function forceSay(bot, line) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    const players = citizen?.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -377,8 +392,9 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 /** Nearest real player within radius, or null. */
 function nearestRealPlayer(director, citizen, radius) {
+  void director;
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    const players = citizen?.getLocalPlayers?.() ?? [];
     let best = null;
     let bestD = Infinity;
     for (const p of players) {
@@ -453,7 +469,7 @@ function tickInnkeepers(director, nowMs, desync) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. A real player must be within earshot

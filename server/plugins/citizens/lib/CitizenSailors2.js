@@ -235,6 +235,16 @@ function dockfolkTypeFromRoll(roll) {
   return DOCKFOLK_DOCKHAND;
 }
 
+/** Materialized citizen bot for a roster record, or null when offline. */
+function materializedBot(director, record) {
+  try {
+    if (!director?.isOnline?.(record)) return null;
+    return director.getBot?.(record) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** True only for real human players (not bots, not logged-out). */
 function isRealPlayer(player) {
   if (!player) return false;
@@ -501,7 +511,7 @@ function tickDockfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Dock hours only
@@ -529,8 +539,9 @@ function tickDockfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director;
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    const players = citizen?.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -554,18 +565,18 @@ function doDockfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.4) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `worked at ${dock.name}`);
+    journalize(name, `worked at ${dock.name}`);
   } else if (roll < 0.6) {
     // (catchFor/jobsFor branches removed 2026-10-08: hash-derived fabrication.
     // yarnFor kept: spinning a sea-yarn is storytelling, not a false claim.)
     if (type === DOCKFOLK_SALT) {
       const line = yarnFor(name, nowMs);
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [`"${line}"`] })); }
-      journalize(citizen, `spun a yarn at ${dock.name}`);
+      journalize(name, `spun a yarn at ${dock.name}`);
     } else {
       const line = pickOne(Math.random, WORK_LINES[type]);
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `kept working at ${dock.name}`);
+      journalize(name, `kept working at ${dock.name}`);
     }
   } else if (roll < 0.8) {
     if (type === DOCKFOLK_DOCKHAND) {
@@ -581,11 +592,11 @@ function doDockfolkWork(director, record, citizen, type, nowMs) {
       const line = `*baits the hook* — the sea's in a ${weatherFor(nowMs)} mood today.`;
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     }
-    journalize(citizen, `offered services at ${dock.name}`);
+    journalize(name, `offered services at ${dock.name}`);
   } else {
     const line = `*looks out past the breakwater* — ${weatherFor(nowMs)} seas and a fair tide.`;
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `read the weather at ${dock.name}`);
+    journalize(name, `read the weather at ${dock.name}`);
   }
 }
 

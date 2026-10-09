@@ -41,7 +41,7 @@ function at(x, y, z) {
   return { getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => z }) };
 }
 
-function makeBot(username) {
+function makeBot(username, localPlayers) {
   const chats = [];
   return {
     username,
@@ -54,7 +54,23 @@ function makeBot(username) {
     getHostAddress: () => "bot",
     getUsername: () => username,
     getLocation: () => ({ getX: () => 3200, getY: () => 3200, getZ: () => 0 }),
+    // Real proximity source: the bot's own getLocalPlayers (engine Player API).
+    getLocalPlayers: () => localPlayers ?? [],
   };
+}
+
+function makeDirector(records, bots) {
+  // Real-API shape: isOnline/getBot on the director, proximity on the bot.
+  return {
+    roster: new Map(records.map((r) => [r.username, r])),
+    isOnline: (record) => !!bots[record.username],
+    getBot: (record) => bots[record.username] || null,
+  };
+}
+
+function makeRecord(username, role = "commoner", kingdomId = "kandarin") {
+  // Records carry kingdomId only (CitizenDirector.addCitizen shape).
+  return { username, role, kingdomId };
 }
 
 function makeRealPlayer(username) {
@@ -233,12 +249,8 @@ function makeRealPlayer(username) {
   for (let i = 0; i < 400 && !sailorUser; i++) {
     if (sailorTypeFor("tick-" + i)) sailorUser = "tick-" + i;
   }
-  const bot = makeBot(sailorUser);
-  const director = {
-    roster: new Map([[sailorUser, { username: sailorUser, role: "commoner", kingdom: "kandarin" }]]),
-    playerFor: () => bot,
-    onlinePlayers: () => [makeRealPlayer("RealPlayer")],
-  };
+  const bot = makeBot(sailorUser, [makeRealPlayer("RealPlayer")]);
+  const director = makeDirector([makeRecord(sailorUser)], { [sailorUser]: bot });
   // Force the chance gate by running many ticks worth of simulated time.
   const origRandom = Math.random;
   Math.random = () => 0.0;
@@ -249,17 +261,45 @@ function makeRealPlayer(username) {
   }
   assert.ok(bot.chats.length >= 1, `sailor worked, chats=${bot.chats.length}`);
   assert.ok(typeof bot.chats[0] === "string" && bot.chats[0].length > 0, "chat line non-empty");
+  // The visible work is journaled with the citizen's kingdom-preferred port.
+  const { getJournal } = require("./CitizenJournal");
+  const entries = getJournal().recent(sailorUser, 5);
+  const work = entries.find((e) => e.kind === "work");
+  assert.ok(work, "work journaled");
+  const port = portFor(sailorUser, "kandarin");
+  assert.ok(work.text.includes(port.name), `journal names kingdom-preferred port: ${work.text}`);
+}
+
+// --- offline citizens stay silent (isOnline gate) ---
+{
+  _resetState();
+  let sailorUser = null;
+  for (let i = 0; i < 400 && !sailorUser; i++) {
+    if (sailorTypeFor("off-" + i)) sailorUser = "off-" + i;
+  }
+  const bot = makeBot(sailorUser, [makeRealPlayer("RealPlayer")]);
+  const director = {
+    roster: new Map([[sailorUser, makeRecord(sailorUser)]]),
+    isOnline: () => false,
+    getBot: () => null,
+  };
+  const origRandom = Math.random;
+  Math.random = () => 0.0;
+  try {
+    tickSailors(director, Date.now());
+  } finally {
+    Math.random = origRandom;
+  }
+  assert.equal(bot.chats.length, 0, "offline citizen silent");
 }
 
 // --- tick stays silent for non-sailors and bots-only crowds ---
 {
   _resetState();
-  const bot = makeBot("definitely-not-a-sailor-zzz");
-  const director = {
-    roster: new Map([["definitely-not-a-sailor-zzz", { username: "definitely-not-a-sailor-zzz", role: "commoner", kingdom: "kandarin" }]]),
-    playerFor: () => bot,
-    onlinePlayers: () => [makeRealPlayer("RealPlayer")],
-  };
+  const bot = makeBot("definitely-not-a-sailor-zzz", [makeRealPlayer("RealPlayer")]);
+  const director = makeDirector([makeRecord("definitely-not-a-sailor-zzz")], {
+    "definitely-not-a-sailor-zzz": bot,
+  });
   const origRandom = Math.random;
   Math.random = () => 0.0;
   try {
@@ -275,13 +315,9 @@ function makeRealPlayer(username) {
   for (let i = 0; i < 400 && !sailorUser2; i++) {
     if (sailorTypeFor("botcrowd-" + i)) sailorUser2 = "botcrowd-" + i;
   }
-  const bot2 = makeBot(sailorUser2);
   const botCrowd = makeBot("otherbot");
-  const director2 = {
-    roster: new Map([[sailorUser2, { username: sailorUser2, role: "commoner", kingdom: "kandarin" }]]),
-    playerFor: () => bot2,
-    onlinePlayers: () => [botCrowd],
-  };
+  const bot2 = makeBot(sailorUser2, [botCrowd]);
+  const director2 = makeDirector([makeRecord(sailorUser2)], { [sailorUser2]: bot2 });
   Math.random = () => 0.0;
   try {
     tickSailors(director2, Date.now());
@@ -293,27 +329,17 @@ function makeRealPlayer(username) {
 
 // --- guards never sail ---
 {
-  let guardSails = false;
-  for (let i = 0; i < 400; i++) {
-    // sailorTypeFor only looks at username; the tick gates on role.
-    void i;
-  }
-  const bot = makeBot("tick-guard");
-  const director = {
-    roster: new Map([["tick-guard", { username: "tick-guard", role: "guard", kingdom: "kandarin" }]]),
-    playerFor: () => bot,
-    onlinePlayers: () => [makeRealPlayer("RealPlayer")],
-  };
+  _resetState();
+  const bot = makeBot("tick-guard", [makeRealPlayer("RealPlayer")]);
+  const director = makeDirector([makeRecord("tick-guard", "guard")], { "tick-guard": bot });
   const origRandom = Math.random;
   Math.random = () => 0.0;
-  _resetState();
   try {
     tickSailors(director, Date.now());
   } finally {
     Math.random = origRandom;
   }
   assert.equal(bot.chats.length, 0, "guards never sail");
-  assert.equal(guardSails, false);
 }
 
 console.log("CitizenSailors: all checks passed");

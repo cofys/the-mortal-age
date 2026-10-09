@@ -255,6 +255,19 @@ function isCitizenBot(player) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Canonical replacement for the dead director.playerFor: only materialize
+ * when the director says the citizen is online.
+ */
+function materializedBot(director, record) {
+  try {
+    return director?.isOnline?.(record) ? director.getBot?.(record) ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cheap Chebyshev distance check (same plane). */
 function withinTiles(a, b, radius) {
   try {
@@ -431,7 +444,7 @@ function tickHuntfolk(director, nowMs, desync = 0) {
         if (!type) continue;
 
         // 3. Citizen must be materialized (near a player already)
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. Hunt hours only (dawn to dusk, server-local)
@@ -459,8 +472,9 @@ function tickHuntfolk(director, nowMs, desync = 0) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director; // director.playerFor/onlinePlayers are dead; proximity comes from the bot.
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
@@ -483,15 +497,15 @@ function doHuntfolkWork(director, record, citizen, type, nowMs) {
   if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `hunted at ${ground.name}`);
+    journalize(record.username, `hunted at ${ground.name}`);
   } else if (roll < 0.75) {
     const line = pickOne(Math.random, SHARE_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `shared the bag at ${ground.name}`);
+    journalize(record.username, `shared the bag at ${ground.name}`);
   } else {
     const line = pickOne(Math.random, JOIN_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `invited a player to the hunt at ${ground.name}`);
+    journalize(record.username, `invited a player to the hunt at ${ground.name}`);
   }
 }
 

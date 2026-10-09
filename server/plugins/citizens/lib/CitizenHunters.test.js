@@ -197,6 +197,8 @@ check("huntLootFor supply hook", () => {
 });
 
 // 15. tickHunters fires near real players only, never throws on hostile input.
+// (hunters audit 2026-10-08: old mocks used the dead director.playerFor /
+// director.onlinePlayers — replaced with isOnline/getBot + bot getLocalPlayers.)
 check("tickHunters gates and never throws", () => {
   H._resetState();
   const real = fakePlayer(0, 0, 0);
@@ -213,15 +215,18 @@ check("tickHunters gates and never throws", () => {
     forceChat(msg) { seen.push(msg); },
     getLocation() { return { getX: () => 0, getY: () => 0, getZ: () => 0 }; },
     performAnimation() {},
+    getLocalPlayers() { return [real, botNear]; },
   };
   const director = {
-    roster: new Map([[hunterName, { username: hunterName, role: "commoner", kingdom: "kandarin" }]]),
-    playerFor: () => citizen,
-    onlinePlayers: () => [real, botNear],
+    roster: new Map([[hunterName, { username: hunterName, role: "commoner", kingdomId: "kandarin" }]]),
+    isOnline: () => true,
+    getBot: () => citizen,
     api: {},
   };
   // With the hunter at the same tile as the real player, a work loop
   // should eventually fire (chance 0.4, no cooldown after reset).
+  const { getJournal } = require("./CitizenJournal");
+  getJournal().resetForTests();
   let fired = false;
   for (let i = 0; i < 25 && !fired; i++) {
     H._resetState();
@@ -230,8 +235,31 @@ check("tickHunters gates and never throws", () => {
     if (seen.length > 0) fired = true;
   }
   assert.ok(fired, "work loop must fire near a real player within 25 ticks");
-  // Silence near bots only: non-materialized citizen, no crash.
-  const empty = { roster: new Map(), playerFor: () => null, onlinePlayers: () => [botNear] };
+  // Journal is canonical: one kind:"work" entry per visible loop, ground
+  // kingdom-preferred (records carry kingdomId, not kingdom).
+  const events = getJournal().recent(hunterName, 10);
+  const work = events.find((e) => e.kind === "work");
+  assert.ok(work, "journal holds a kind:work entry for the hunter");
+  const ground = H.groundFor(hunterName, "kandarin", H.hunterTypeFor(hunterName));
+  assert.ok(ground && work.text.includes(ground.name), "work loop journals the kingdom-preferred ground");
+  // Silence near bots only: citizen bot present but no real player nearby.
+  const botLines = [];
+  const citizenBotsOnly = {
+    forceChat(msg) { botLines.push(msg); },
+    getLocation() { return { getX: () => 0, getY: () => 0, getZ: () => 0 }; },
+    performAnimation() {},
+    getLocalPlayers() { return [botNear]; },
+  };
+  H._resetState();
+  H.tickHunters({
+    roster: new Map([[hunterName, { username: hunterName, role: "commoner", kingdomId: "kandarin" }]]),
+    isOnline: () => true,
+    getBot: () => citizenBotsOnly,
+    api: {},
+  }, Date.now());
+  assert.equal(botLines.length, 0, "tick stays silent when only bots are near");
+  // Silence when offline: non-materialized citizen never works.
+  const empty = { roster: new Map(), isOnline: () => false, getBot: () => null };
   H.tickHunters(empty, Date.now());
   // Hostile input never throws.
   H.tickHunters(null, Date.now());
@@ -239,17 +267,23 @@ check("tickHunters gates and never throws", () => {
 });
 
 // 16. Guards never hunt; non-commoners are skipped.
+// (hunters audit 2026-10-08: the old prod code used director.playerFor /
+// director.onlinePlayers, which do not exist, so this tier was
+// dead-on-arrival. These mocks pin the real-API shape: isOnline/getBot on
+// the director (CitizenDirector.js:1374/1379), getLocalPlayers on the bot
+// (Player.ts:796). Records carry kingdomId, not kingdom.)
 check("guards never hunt", () => {
   H._resetState();
   const real = fakePlayer(0, 0, 0);
   const citizen = {
     forceChat() { throw new Error("guard must not fire"); },
     getLocation() { return { getX: () => 0, getY: () => 0, getZ: () => 0 }; },
+    getLocalPlayers() { return [real]; },
   };
   const director = {
-    roster: new Map([["guard1", { username: "guard1", role: "guard", kingdom: "kandarin" }]]),
-    playerFor: () => citizen,
-    onlinePlayers: () => [real],
+    roster: new Map([["guard1", { username: "guard1", role: "guard", kingdomId: "kandarin" }]]),
+    isOnline: () => true,
+    getBot: () => citizen,
     api: {},
   };
   for (let i = 0; i < 5; i++) H.tickHunters(director, Date.now() + i * 1000);

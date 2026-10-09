@@ -142,6 +142,19 @@ function isRealPlayer(player) {
   }
 }
 
+/**
+ * The materialized bot for a roster record, or null.
+ * Canonical replacement for the dead director.playerFor: only materialize
+ * when the director says the citizen is online.
+ */
+function materializedBot(director, record) {
+  try {
+    return director?.isOnline?.(record) ? director.getBot?.(record) ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cheap Chebyshev distance check (same plane). */
 function withinTiles(a, b, radius) {
   try {
@@ -365,7 +378,7 @@ function tickHunters(director, nowMs, desync) {
         if (nowMs - last < WORK_COOLDOWN_MS) continue;
 
         // 3. Citizen must be materialized (near a player already).
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
 
         // 4. A real player must be within sight of the wilds.
@@ -389,7 +402,7 @@ function tickHunters(director, nowMs, desync) {
         if (!type) continue;
         const last = lastHawkByCitizen.get(record.username) || 0;
         if (nowMs - last < HAWK_COOLDOWN_MS) continue;
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= HAWK_CHANCE) continue;
@@ -408,11 +421,11 @@ function tickHunters(director, nowMs, desync) {
         if (!record || record.role !== "commoner") continue;
         const type = hunterTypeFor(record.username);
         if (type !== HUNTER_TRACKER && type !== HUNTER_BEASTMASTER) continue;
-        const ground = groundFor(record.username, record.kingdom, type);
+        const ground = groundFor(record.username, record.kingdomId ?? record.kingdom, type);
         if (!ground || ground.danger !== "high") continue;
         const last = lastWarnByCitizen.get(record.username) || 0;
         if (nowMs - last < WARN_COOLDOWN_MS) continue;
-        const citizen = (director.isOnline(record) ? director.getBot(record) : null);
+        const citizen = materializedBot(director, record);
         if (!citizen) continue;
         if (!anyRealPlayerNear(director, citizen, HAWK_RADIUS)) continue;
         if (Math.random() >= WARN_CHANCE) continue;
@@ -432,7 +445,7 @@ function tickHunters(director, nowMs, desync) {
 function doHuntWork(director, record, citizen, type, nowMs) {
   const line = workLineFor(Math.random, type);
   if (!line) return;
-  const ground = groundFor(record.username, record.kingdom, type);
+  const ground = groundFor(record.username, record.kingdomId ?? record.kingdom, type);
   // Trophy loops are the crowd moment.
   if (Math.random() < TROPHY_CHANCE) {
     const trophy = trophyFor(record.username, ground, nowMs);
@@ -476,7 +489,7 @@ function doHuntWork(director, record, citizen, type, nowMs) {
 /** Meat/hide hawking: advertise the day's hunt to nearby players. */
 function doHuntHawk(director, citizen, record, nowMs) {
   void director;
-  const ground = groundFor(record.username, record.kingdom, hunterTypeFor(record.username));
+  const ground = groundFor(record.username, record.kingdomId ?? record.kingdom, hunterTypeFor(record.username));
   const prey = preyFor(record.username, ground, nowMs);
   const line = hawkLineFor(Math.random, prey, ground);
   try {
@@ -512,8 +525,9 @@ function huntLootFor(username, kingdom, dateMs) {
 
 /** True if any real (non-bot) player is within radius tiles of the citizen. */
 function anyRealPlayerNear(director, citizen, radius) {
+  void director; // director.playerFor/onlinePlayers are dead; proximity comes from the bot.
   try {
-    const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
+    const players = citizen.getLocalPlayers?.() ?? [];
     for (const p of players) {
       if (!isRealPlayer(p)) continue;
       if (withinTiles(citizen, p, radius)) return true;
