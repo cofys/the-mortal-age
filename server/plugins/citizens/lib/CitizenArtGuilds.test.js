@@ -7,6 +7,7 @@ const os = require("os");
 const path = require("path");
 
 const Guilds = require("./CitizenArtGuilds");
+const Banking = require("./CitizenBanking"); // REAL banking (in-memory in tests)
 
 function freshSave() {
   const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "ag-")), "save.json");
@@ -37,11 +38,23 @@ function installStubs(opts = {}) {
     "./CitizenReputation": {
       awardDeed: (u, deed) => { (opts.deeds = opts.deeds || []).push([u, deed]); },
     },
-    "./CitizenBanking": {
-      creditAccount: (u, amt) => { (opts.credits = opts.credits || []).push([u, amt]); return true; },
-    },
     "./CitizenBonds": { normalizeName: (s) => String(s || "").toLowerCase().trim() },
   };
+  // Real-banking tests (opts.realBanking) let "./CitizenBanking" resolve to
+  // the real in-memory module instead of the contract stub.
+  if (!opts.realBanking) {
+    stubs["./CitizenBanking"] = {
+      // Real contract: accountFor(username) -> live account record,
+      // markDirty() -> persist. creditAccount does NOT exist.
+      accountFor: (u) => {
+        const key = String(u || "").toLowerCase().trim();
+        (opts.bankAccounts = opts.bankAccounts || {})[key] =
+          (opts.bankAccounts || {})[key] || { balance: 0 };
+        return opts.bankAccounts[key];
+      },
+      markDirty: () => { opts.bankDirty = true; },
+    };
+  }
   Module.prototype.require = function (id) {
     if (Object.prototype.hasOwnProperty.call(stubs, id)) return stubs[id];
     return origRequire.apply(this, arguments);
@@ -63,6 +76,26 @@ function test(name, fn) {
     process.exitCode = 1;
   } finally {
     restore();
+  }
+}
+
+// Same as test(), but "./CitizenBanking" resolves to the REAL in-memory
+// module (no contract stub) — proving the coins actually land in the bank.
+function testRealBanking(name, opts, fn) {
+  freshSave();
+  Banking.resetForTests();
+  const restore = installStubs(Object.assign({}, opts, { realBanking: true }));
+  try {
+    fn();
+    passed++;
+    console.log(`ok - ${name}`);
+  } catch (e) {
+    console.error(`FAIL - ${name}: ${e.message}`);
+    console.error(e.stack);
+    process.exitCode = 1;
+  } finally {
+    restore();
+    Banking.resetForTests();
   }
 }
 
@@ -310,25 +343,14 @@ test("inspectionFor scores real artwork output", () => {
 
 test("grantGoldenPalette awards quarterly to the most-certified member", () => {
   const opts = {};
-  const restore = installStubs({
+  const restore = installStubs(Object.assign(opts, {
     careers: { "painty pete": "artist" },
     artworks: {
       a1: { id: "a1", title: "One", artist: "painty pete", quality: 90, medium: "painting" },
       a2: { id: "a2", title: "Two", artist: "painty pete", quality: 70, medium: "sculpture" },
     },
     artistWorks: { "painty pete": ["a1", "a2"] },
-  });
-  Module.prototype.require = (function (prev) {
-    return function (id) {
-      if (id === "./CitizenReputation") {
-        return { awardDeed: (u, deed) => { opts.deeds = opts.deeds || []; opts.deeds.push([u, deed]); } };
-      }
-      if (id === "./CitizenBanking") {
-        return { creditAccount: (u, amt) => { opts.credits = opts.credits || []; opts.credits.push([u, amt]); return true; } };
-      }
-      return prev.apply(this, arguments);
-    };
-  })(Module.prototype.require);
+  }));
   try {
     Guilds.joinGuild("Painty Pete", "varrock");
     Guilds.creditTreasury("varrock", 1000);
@@ -339,7 +361,10 @@ test("grantGoldenPalette awards quarterly to the most-certified member", () => {
     assert.strictEqual(r.winner, "Painty Pete");
     assert.strictEqual(r.artworks, 2);
     assert.strictEqual(r.prizePaid, Guilds.PALETTE_PRIZE);
-    assert.ok((opts.deeds || []).some((d) => d[1] === "goldenpalette"));
+    // The prize lands in the winner's real bank account (cert bounties 120 +
+    // 60, palette prize 200).
+    assert.strictEqual((opts.bankAccounts || {})["painty pete"].balance,
+      Guilds.CERT_BOUNTY.A + Guilds.CERT_BOUNTY.B + Guilds.PALETTE_PRIZE);
     const treas = Guilds.guildTreasuryFor("varrock");
     // a1 is grade A (120), a2 is grade B (60); palette prize is 200.
     assert.strictEqual(treas.treasury, 1000 - Guilds.CERT_BOUNTY.A - Guilds.CERT_BOUNTY.B - Guilds.PALETTE_PRIZE);
@@ -350,21 +375,13 @@ test("grantGoldenPalette awards quarterly to the most-certified member", () => {
 
 test("patronage: post, claim with a real cert, pay from treasury", () => {
   const opts = {};
-  const restore = installStubs({
+  const restore = installStubs(Object.assign(opts, {
     careers: { "painty pete": "artist", "rich rita": "artist" },
     artworks: {
       a1: { id: "a1", title: "Sunset", artist: "painty pete", quality: 90, medium: "painting" },
     },
     artistWorks: { "painty pete": ["a1"] },
-  });
-  Module.prototype.require = (function (prev) {
-    return function (id) {
-      if (id === "./CitizenBanking") {
-        return { creditAccount: (u, amt) => { opts.credits = opts.credits || []; opts.credits.push([u, amt]); return true; } };
-      }
-      return prev.apply(this, arguments);
-    };
-  })(Module.prototype.require);
+  }));
   try {
     Guilds.joinGuild("Painty Pete", "varrock");
     Guilds.joinGuild("Rich Rita", "varrock");
@@ -379,7 +396,11 @@ test("patronage: post, claim with a real cert, pay from treasury", () => {
     const pay = Guilds.payBounty(post.bountyId);
     assert.strictEqual(pay.ok, true);
     assert.strictEqual(pay.amount, 200);
-    assert.ok((opts.credits || []).some((c) => c[0] === "painty pete" && c[1] === 200));
+    // The bounty lands in the claimant's real bank account (accountFor /
+    // markDirty contract — creditAccount does not exist on CitizenBanking).
+    // Grade-A certification bounty (120) + patronage bounty (200).
+    assert.strictEqual((opts.bankAccounts || {})["painty pete"].balance, Guilds.CERT_BOUNTY.A + 200);
+    assert.strictEqual(opts.bankDirty, true);
   } finally { restore(); }
 });
 
@@ -487,5 +508,69 @@ test("persistence round-trips through the save file", () => {
     assert.ok(Guilds.isGuildMember("painty pete"));
   } finally { restore(); }
 });
+
+
+// --- Bounty delivery (real CitizenBanking): coins must land, not vanish ---
+
+testRealBanking("certifyArtwork bounty lands in the artist's real bank account", {
+  careers: { "painty pete": "artist" },
+  artworks: {
+    a1: { id: "a1", title: "Sunset Over Varrock", artist: "painty pete", quality: 90, medium: "painting" },
+  },
+  artistWorks: { "painty pete": ["a1"] },
+}, () => {
+  Guilds.joinGuild("Painty Pete", "varrock");
+  Guilds.creditTreasury("varrock", 1000);
+  const r = Guilds.certifyArtwork("varrock", "painty pete", "a1");
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.bountyPaid, Guilds.CERT_BOUNTY.A);
+  assert.strictEqual(Guilds.guildTreasuryFor("varrock").treasury, 1000 - Guilds.CERT_BOUNTY.A);
+  // The treasury draw must arrive in the artist's real bank account.
+  assert.strictEqual(Banking.balanceOf("painty pete"), Guilds.CERT_BOUNTY.A);
+});
+
+testRealBanking("retryOwedBounties pays the owed bounty into the real bank", {
+  careers: { "painty pete": "artist" },
+  artworks: {
+    a1: { id: "a1", title: "Sunset Over Varrock", artist: "painty pete", quality: 90, medium: "painting" },
+  },
+  artistWorks: { "painty pete": ["a1"] },
+}, () => {
+  Guilds.joinGuild("Painty Pete", "varrock");
+  const r = Guilds.certifyArtwork("varrock", "painty pete", "a1");
+  assert.strictEqual(r.bountyPaid, 0);
+  assert.strictEqual(r.bountyOwed, Guilds.CERT_BOUNTY.A);
+  assert.strictEqual(Banking.balanceOf("painty pete"), 0);
+  Guilds.creditTreasury("varrock", 1000);
+  const retry = Guilds.retryOwedBounties("varrock");
+  assert.strictEqual(retry.paid, Guilds.CERT_BOUNTY.A);
+  assert.strictEqual(Banking.balanceOf("painty pete"), Guilds.CERT_BOUNTY.A);
+  assert.strictEqual(Guilds.sealFor(r.certId).bountyOwed, 0);
+});
+
+testRealBanking("patronage payBounty lands in the claimant's real bank account", {
+  careers: { "painty pete": "artist", "rich rita": "artist" },
+  artworks: {
+    a1: { id: "a1", title: "Sunset", artist: "painty pete", quality: 90, medium: "painting" },
+  },
+  artistWorks: { "painty pete": ["a1"] },
+}, () => {
+  Guilds.joinGuild("Painty Pete", "varrock");
+  Guilds.joinGuild("Rich Rita", "varrock");
+  const post = Guilds.postBounty("varrock", "rich rita", "painting", 200);
+  assert.strictEqual(post.ok, true);
+  Guilds.creditTreasury("varrock", 200); // sponsor's coins (taken by the command layer)
+  Guilds.creditTreasury("varrock", 1000);
+  const cert = Guilds.certifyArtwork("varrock", "painty pete", "a1");
+  assert.strictEqual(cert.ok, true);
+  const claim = Guilds.claimBounty(post.bountyId, "painty pete", cert.certId);
+  assert.strictEqual(claim.ok, true);
+  const pay = Guilds.payBounty(post.bountyId);
+  assert.strictEqual(pay.ok, true);
+  assert.strictEqual(pay.amount, 200);
+  // Grade-A certification bounty (120) + patronage bounty (200).
+  assert.strictEqual(Banking.balanceOf("painty pete"), Guilds.CERT_BOUNTY.A + 200);
+});
+
 
 console.log(`\n${passed} tests passed`);

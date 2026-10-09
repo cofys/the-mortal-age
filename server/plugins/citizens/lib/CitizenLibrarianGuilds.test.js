@@ -7,6 +7,7 @@ const os = require("os");
 const path = require("path");
 
 const Guilds = require("./CitizenLibrarianGuilds");
+const Banking = require("./CitizenBanking"); // REAL banking (in-memory in tests)
 
 function freshSave() {
   const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lg-")), "save.json");
@@ -40,7 +41,12 @@ function installStubs(opts = {}) {
     "./CitizenReputation": {
       awardDeed: (u, deed) => { (opts.deeds = opts.deeds || []).push([u, deed]); },
     },
-    "./CitizenBanking": {
+    "./CitizenBonds": { normalizeName: (s) => String(s || "").toLowerCase().trim() },
+  };
+  // Real-banking tests (opts.realBanking) let "./CitizenBanking" resolve to
+  // the real in-memory module instead of the contract stub.
+  if (!opts.realBanking) {
+    stubs["./CitizenBanking"] = {
       // Real contract: accountFor(username) -> live account record,
       // markDirty() -> persist. creditAccount does NOT exist.
       accountFor: (u) => {
@@ -50,9 +56,8 @@ function installStubs(opts = {}) {
         return opts.bankAccounts[key];
       },
       markDirty: () => { opts.bankDirty = true; },
-    },
-    "./CitizenBonds": { normalizeName: (s) => String(s || "").toLowerCase().trim() },
-  };
+    };
+  }
   Module.prototype.require = function (id) {
     if (Object.prototype.hasOwnProperty.call(stubs, id)) return stubs[id];
     return origRequire.apply(this, arguments);
@@ -81,6 +86,25 @@ function withStubs(opts, fn) {
     const restore = installStubs(opts);
     try { fn(); } finally { restore(); }
   };
+}
+
+// Same as test(), but "./CitizenBanking" resolves to the REAL in-memory
+// module (no contract stub) — proving the coins actually land in the bank.
+function testRealBanking(name, opts, fn) {
+  freshSave();
+  Banking.resetForTests();
+  const restore = installStubs(Object.assign({}, opts, { realBanking: true }));
+  try {
+    fn();
+    passed++;
+    console.log(`ok - ${name}`);
+  } catch (e) {
+    console.error(`FAIL - ${name}: ${e.message}`);
+    process.exitCode = 1;
+  } finally {
+    restore();
+    Banking.resetForTests();
+  }
 }
 
 // --- Membership ---
@@ -461,5 +485,58 @@ test("describe summarizes the guild", () => {
     assert.ok(d.hallTile);
   } finally { restore(); }
 });
+
+
+// --- Bounty delivery (real CitizenBanking): coins must land, not vanish ---
+
+testRealBanking("certifyBook bounty lands in the author's real bank account", {
+  careers: { alice: "librarian" },
+  books: { "book-1": { id: "book-1", title: "Great Work", subject: "lore", author: "alice", kingdomId: "misthalin", quality: 9 } },
+}, () => {
+  Guilds.joinGuild("Alice", "misthalin");
+  Guilds.creditTreasury("misthalin", 1000);
+  const r = Guilds.certifyBook("misthalin", "Alice", "book-1");
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.bountyPaid, Guilds.CERT_BOUNTY.A);
+  assert.strictEqual(Guilds.guildOf("misthalin").treasury, 1000 - Guilds.CERT_BOUNTY.A);
+  // The treasury draw must arrive in the author's real bank account.
+  assert.strictEqual(Banking.balanceOf("Alice"), Guilds.CERT_BOUNTY.A);
+});
+
+testRealBanking("retryOwedBounties pays the owed bounty into the real bank", {
+  careers: { alice: "librarian" },
+  books: { "book-1": { id: "book-1", title: "Great Work", subject: "lore", author: "alice", kingdomId: "misthalin", quality: 9 } },
+}, () => {
+  Guilds.joinGuild("Alice", "misthalin");
+  const r = Guilds.certifyBook("misthalin", "Alice", "book-1");
+  assert.strictEqual(r.bountyPaid, 0);
+  assert.strictEqual(r.bountyOwed, Guilds.CERT_BOUNTY.A);
+  assert.strictEqual(Banking.balanceOf("Alice"), 0);
+  Guilds.creditTreasury("misthalin", 1000);
+  const retry = Guilds.retryOwedBounties("misthalin");
+  assert.strictEqual(retry.paid, Guilds.CERT_BOUNTY.A);
+  assert.strictEqual(Banking.balanceOf("Alice"), Guilds.CERT_BOUNTY.A);
+  assert.strictEqual(Guilds.sealFor(r.certId).bountyOwed, 0);
+});
+
+testRealBanking("golden quill prize lands in the winner's real bank account", {
+  careers: { alice: "librarian", bob: "librarian" },
+  books: {},
+}, () => {
+  Guilds.joinGuild("Alice", "misthalin");
+  Guilds.joinGuild("Bob", "misthalin");
+  const st = Guilds.load();
+  st.certifications["cert-1"] = { id: "cert-1", kingdomId: "misthalin", author: "Alice", title: "A", subject: "lore", quality: 8, grade: "A", certifiedMs: 1 };
+  st.certifications["cert-2"] = { id: "cert-2", kingdomId: "misthalin", author: "Alice", title: "B", subject: "lore", quality: 6, grade: "B", certifiedMs: 2 };
+  st.certifications["cert-3"] = { id: "cert-3", kingdomId: "misthalin", author: "Bob", title: "C", subject: "lore", quality: 9, grade: "A", certifiedMs: 3 };
+  Guilds.touch();
+  Guilds.creditTreasury("misthalin", 1000);
+  const r = Guilds.grantGoldenQuill("misthalin", Date.now());
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.winner, "Alice");
+  assert.strictEqual(r.prizePaid, Guilds.QUILL_PRIZE);
+  assert.strictEqual(Banking.balanceOf("Alice"), Guilds.QUILL_PRIZE);
+});
+
 
 console.log(`\n${passed} tests passed`);

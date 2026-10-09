@@ -207,6 +207,24 @@ function bankingApi() {
   try { return require("./CitizenBanking"); } catch { return null; }
 }
 
+// Credit bounty/prize coins into the member's REAL bank account (honest
+// offline delivery). CitizenBanking exposes accountFor, not creditAccount —
+// credit the live account record directly, same pattern as CitizenCivilLaw.
+// Best-effort: returns false when banking is unavailable; callers must then
+// keep the amount owed honestly instead of recording a payment that never
+// happened.
+function deliverCoins(username, amount) {
+  if (!(amount > 0)) return false;
+  try {
+    const B = bankingApi();
+    const acct = B && typeof B.accountFor === "function" ? B.accountFor(username) : null;
+    if (!acct) return false;
+    acct.balance = (Number(acct.balance) || 0) + amount;
+    if (typeof B.markDirty === "function") B.markDirty();
+    return true;
+  } catch { return false; }
+}
+
 // === Guild management ===
 
 function ensureGuild(kingdomId) {
@@ -407,26 +425,29 @@ function certifyBook(kingdomId, username, bookId) {
     certifiedMs: now,
   };
 
-  // Pay the bounty from the treasury; the scriptorium fund backs it; when
-  // both are broke the bounty is owed honestly, never invented.
+  // Pay the bounty into the author's REAL bank account (honest offline
+  // delivery); the scriptorium fund backs the treasury; when both are broke
+  // — or banking is down — the bounty is owed honestly, never invented,
+  // never silently lost.
   const bounty = CERT_BOUNTY[grade];
   let paid = 0;
   let owed = 0;
-  if (g.treasury >= bounty) {
-    g.treasury -= bounty;
-    paid = bounty;
-  } else if (g.treasury + g.scriptoriumFund >= bounty) {
-    const fromTreasury = g.treasury;
-    const fromFund = bounty - fromTreasury;
-    g.treasury = 0;
+  const fromTreasury = Math.min(g.treasury, bounty);
+  const fromFund = Math.min(g.scriptoriumFund, bounty - fromTreasury);
+  const drawn = fromTreasury + fromFund;
+  if (drawn > 0) {
+    g.treasury -= fromTreasury;
     g.scriptoriumFund -= fromFund;
-    paid = bounty;
-  } else {
-    paid = g.treasury + g.scriptoriumFund;
-    owed = bounty - paid;
-    g.treasury = 0;
-    g.scriptoriumFund = 0;
+    if (deliverCoins(username, drawn)) {
+      paid = drawn;
+    } else {
+      // Banking down: refund the draw so the guild keeps its coins and the
+      // author stays owed honestly.
+      g.treasury += fromTreasury;
+      g.scriptoriumFund += fromFund;
+    }
   }
+  owed = bounty - paid;
   st.certifications[certId].bountyPaid = paid;
   st.certifications[certId].bountyOwed = owed;
 
@@ -472,11 +493,18 @@ function retryOwedBounties(kingdomId) {
     const pay = Math.min(cert.bountyOwed, available);
     // Drain treasury first, then the fund.
     const fromTreasury = Math.min(pay, g.treasury);
+    const fromFund = pay - fromTreasury;
     g.treasury -= fromTreasury;
-    g.scriptoriumFund -= (pay - fromTreasury);
-    cert.bountyOwed -= pay;
-    cert.bountyPaid += pay;
-    paid += pay;
+    g.scriptoriumFund -= fromFund;
+    if (deliverCoins(cert.author, pay)) {
+      cert.bountyOwed -= pay;
+      cert.bountyPaid += pay;
+      paid += pay;
+    } else {
+      // Banking down: refund the draw, leave the debt owed honestly.
+      g.treasury += fromTreasury;
+      g.scriptoriumFund += fromFund;
+    }
     touch();
   }
   return { ok: true, paid };
@@ -743,17 +771,21 @@ function grantGoldenQuill(kingdomId, nowMs) {
   const [winnerKey, count] = entries[0];
   const winner = st.members[winnerKey].username;
 
-  // 200-coin real prize; owed honestly when the treasury is broke.
+  // 200-coin real prize, paid into the winner's REAL bank account; owed
+  // honestly when the treasury is broke or banking is down.
   let paid = 0;
   let owed = 0;
-  if (g.treasury >= QUILL_PRIZE) {
-    g.treasury -= QUILL_PRIZE;
-    paid = QUILL_PRIZE;
-  } else {
-    paid = g.treasury;
-    owed = QUILL_PRIZE - paid;
-    g.treasury = 0;
+  const drawn = Math.min(g.treasury, QUILL_PRIZE);
+  if (drawn > 0) {
+    g.treasury -= drawn;
+    if (deliverCoins(winner, drawn)) {
+      paid = drawn;
+    } else {
+      // Banking down: refund the draw, owe the whole prize honestly.
+      g.treasury += drawn;
+    }
   }
+  owed = QUILL_PRIZE - paid;
   g.lastQuillMs = nowMs;
   try {
     const R = reputationApi();

@@ -194,6 +194,24 @@ function bankingApi() {
   try { return require("./CitizenBanking"); } catch { return null; }
 }
 
+// Credit bounty/prize coins into the member's REAL bank account (honest
+// offline delivery). CitizenBanking exposes accountFor, not creditAccount —
+// credit the live account record directly, same pattern as CitizenCivilLaw.
+// Best-effort: returns false when banking is unavailable; callers must then
+// keep the amount owed honestly instead of recording a payment that never
+// happened.
+function deliverCoins(username, amount) {
+  if (!(amount > 0)) return false;
+  try {
+    const B = bankingApi();
+    const acct = B && typeof B.accountFor === "function" ? B.accountFor(username) : null;
+    if (!acct) return false;
+    acct.balance = (Number(acct.balance) || 0) + amount;
+    if (typeof B.markDirty === "function") B.markDirty();
+    return true;
+  } catch { return false; }
+}
+
 // === Guild management ===
 
 function ensureGuild(kingdomId) {
@@ -394,26 +412,29 @@ function certifyArtwork(kingdomId, username, artworkId) {
     certifiedMs: now,
   };
 
-  // Pay the bounty from the treasury; the patron fund backs it; when
-  // both are broke the bounty is owed honestly, never invented.
+  // Pay the bounty into the artist's REAL bank account (honest offline
+  // delivery); the patron fund backs the treasury; when both are broke —
+  // or banking is down — the bounty is owed honestly, never invented,
+  // never silently lost.
   const bounty = CERT_BOUNTY[grade];
   let paid = 0;
   let owed = 0;
-  if (g.treasury >= bounty) {
-    g.treasury -= bounty;
-    paid = bounty;
-  } else if (g.treasury + g.patronFund >= bounty) {
-    const fromTreasury = g.treasury;
-    const fromFund = bounty - fromTreasury;
-    g.treasury = 0;
+  const fromTreasury = Math.min(g.treasury, bounty);
+  const fromFund = Math.min(g.patronFund, bounty - fromTreasury);
+  const drawn = fromTreasury + fromFund;
+  if (drawn > 0) {
+    g.treasury -= fromTreasury;
     g.patronFund -= fromFund;
-    paid = bounty;
-  } else {
-    paid = g.treasury + g.patronFund;
-    owed = bounty - paid;
-    g.treasury = 0;
-    g.patronFund = 0;
+    if (deliverCoins(username, drawn)) {
+      paid = drawn;
+    } else {
+      // Banking down: refund the draw so the guild keeps its coins and the
+      // artist stays owed honestly.
+      g.treasury += fromTreasury;
+      g.patronFund += fromFund;
+    }
   }
+  owed = bounty - paid;
   st.certifications[certId].bountyPaid = paid;
   st.certifications[certId].bountyOwed = owed;
 
@@ -459,11 +480,18 @@ function retryOwedBounties(kingdomId) {
     const pay = Math.min(cert.bountyOwed, available);
     // Drain treasury first, then the fund.
     const fromTreasury = Math.min(pay, g.treasury);
+    const fromFund = pay - fromTreasury;
     g.treasury -= fromTreasury;
-    g.patronFund -= (pay - fromTreasury);
-    cert.bountyOwed -= pay;
-    cert.bountyPaid += pay;
-    paid += pay;
+    g.patronFund -= fromFund;
+    if (deliverCoins(cert.artist, pay)) {
+      cert.bountyOwed -= pay;
+      cert.bountyPaid += pay;
+      paid += pay;
+    } else {
+      // Banking down: refund the draw, leave the debt owed honestly.
+      g.treasury += fromTreasury;
+      g.patronFund += fromFund;
+    }
     touch();
   }
   return { ok: true, paid };
@@ -608,17 +636,21 @@ function grantGoldenPalette(kingdomId, nowMs) {
   const [winnerKey, count] = entries[0];
   const winner = st.members[winnerKey].username;
 
-  // 200-coin real prize; owed honestly when the treasury is broke.
+  // 200-coin real prize, paid into the winner's REAL bank account; owed
+  // honestly when the treasury is broke or banking is down.
   let paid = 0;
   let owed = 0;
-  if (g.treasury >= PALETTE_PRIZE) {
-    g.treasury -= PALETTE_PRIZE;
-    paid = PALETTE_PRIZE;
-  } else {
-    paid = g.treasury;
-    owed = PALETTE_PRIZE - paid;
-    g.treasury = 0;
+  const drawn = Math.min(g.treasury, PALETTE_PRIZE);
+  if (drawn > 0) {
+    g.treasury -= drawn;
+    if (deliverCoins(winner, drawn)) {
+      paid = drawn;
+    } else {
+      // Banking down: refund the draw, owe the whole prize honestly.
+      g.treasury += drawn;
+    }
   }
+  owed = PALETTE_PRIZE - paid;
   g.lastPaletteMs = nowMs;
   try {
     const R = reputationApi();
@@ -694,8 +726,12 @@ function payBounty(bountyId) {
   if (pay > 0) {
     try {
       const B = bankingApi();
-      if (B && B.creditAccount) {
-        B.creditAccount(b.claimedBy, pay);
+      // CitizenBanking exposes accountFor, not creditAccount — credit the
+      // live account record directly (same pattern as CitizenCivilLaw).
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(b.claimedBy) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + pay;
+        if (typeof B.markDirty === "function") B.markDirty();
       }
     } catch { /* banking is best-effort */ }
   }
