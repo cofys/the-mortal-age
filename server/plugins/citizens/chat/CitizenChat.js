@@ -2281,6 +2281,35 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "librarians' guild" / "book certification" / "golden quill" /
+  // "restricted index" / "archive seal" / "plagiarist" / "master archivist" —
+  // player asks about the librarians' association. (CitizenLibraries owns
+  // books/lending/research rooms/archives; CitizenScholars owns the
+  // researcher profession; this owns the guild layer only.) Placed before
+  // the library blocks so the more specific guild phrasing wins.
+  if (/\b(librarians'? guild|book certification|certify (a|my) book|certified book|golden quill|restricted index|archive seal|master archivist|plagiarist|scriptorium school)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenLibrarianGuilds");
+      let kingdomId = null;
+      try {
+        kingdomId = Guilds.memberOf(citizenUsername)?.kingdomId || null;
+      } catch { /* no guild */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "libguild_status", {
+        username: citizenUsername,
+        exists: desc.exists ?? false,
+        memberCount: desc.memberCount ?? 0,
+        certified: desc.certified ?? 0,
+        treasury: desc.treasury ?? 0,
+        prestige: desc.prestige ?? 0,
+        sealed: desc.sealed ?? false,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "library" / "librarian" / "borrow book" / "research room" — player asks
   // about library operations. (CitizenLibrarians owns hash-derived librarian
   // flavor; CitizenScholars owns the researcher profession; this owns the

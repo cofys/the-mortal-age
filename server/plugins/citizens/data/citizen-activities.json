@@ -1555,6 +1555,27 @@
       ]
     },
     {
+      "id": "citizen_libguild",
+      "mode": "citizen_libguild",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenLibrarianGuild"
+        }
+      ]
+    },
+    {
       "id": "citizen_teamplay",
       "mode": "citizen_teamplay",
       "repeat": false,

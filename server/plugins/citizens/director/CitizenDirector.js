@@ -303,6 +303,8 @@ const { tickMusicGuildLife } = require("../lib/CitizenMusicGuildLife");
 const CitizenMusicGuilds = require("../lib/CitizenMusicGuilds");
 const { tickArtGuildLife } = require("../lib/CitizenArtGuildLife");
 const CitizenArtGuilds = require("../lib/CitizenArtGuilds");
+const { tickLibrarianGuildLife } = require("../lib/CitizenLibrarianGuildLife");
+const CitizenLibrarianGuilds = require("../lib/CitizenLibrarianGuilds");
 const { tickCivilLife } = require("../lib/CitizenCivilLife");
 const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -3392,6 +3394,17 @@ class CitizenDirector {
     } catch (error) {
       this.log("art guild failed", { error: String(error?.message ?? error) });
     }
+    // Librarians' Guild: dues, book certification, plagiarism tribunal,
+    // scriptorium inspections, archive seals, restricted index, golden
+    // quill, scriptorium bounties, scriptorium school. Data tier, zero LLM.
+    // (CitizenLibraries owns books/lending/research rooms/archives;
+    // CitizenScholars owns the researcher profession; this owns the
+    // profession's guild layer only.)
+    try {
+      tickLibrarianGuildLife(this, nowMs);
+    } catch (error) {
+      this.log("librarian guild failed", { error: String(error?.message ?? error) });
+    }
     // Bar association: dues, case reviews, pro bono, disciplinary board,
     // legal school. Data tier, zero LLM. (CitizenCivilLaw owns contracts/
     // disputes/judgments; this owns the profession's guild layer only.)
@@ -3894,6 +3907,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen art guild save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenLibrarianGuilds.save()) {
+        this.log("citizen librarian guild saved");
+      }
+    } catch (error) {
+      this.log("citizen librarian guild save failed", {
         error: String(error?.message ?? error),
       });
     }

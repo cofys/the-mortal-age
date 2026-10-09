@@ -141,6 +141,7 @@ const ACT_COOKGUILD = "citizen_cookguild";
 const ACT_WEAVERGUILD = "citizen_weaverguild";
 const ACT_MUSICGUILD = "citizen_musicguild";
 const ACT_ARTGUILD = "citizen_artguild";
+const ACT_LIBGUILD = "citizen_libguild";
 const ACT_SPY = "citizen_spymaster";
 const ACT_DIG = "citizen_excavate";
 const ACT_STAGE = "citizen_rehearse";
@@ -184,7 +185,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_STAGEGUILD, ACT_SPORTSGUILD, ACT_COOKGUILD, ACT_WEAVERGUILD, ACT_MUSICGUILD, ACT_ARTGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_STAGEGUILD, ACT_SPORTSGUILD, ACT_COOKGUILD, ACT_WEAVERGUILD, ACT_MUSICGUILD, ACT_ARTGUILD, ACT_LIBGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1794,6 +1795,31 @@ function artGuildInfo(player) {
   }
 }
 
+function libguildInfo(player) {
+  try {
+    const Guilds = require("../lib/CitizenLibrarianGuilds");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isMember = Guilds.isGuildMember(username);
+    const rank = Guilds.guildRankOf(username);
+    const mem = Guilds.memberOf(username);
+    let hallExists = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      hallExists = !!(kid && Guilds.guildOf(kid));
+    } catch { /* no sites */ }
+    return {
+      isMember,
+      rank,
+      suspended: !!(mem && mem.suspended),
+      isArchivist: rank === Guilds.RANK_ARCHIVIST,
+      hallExists,
+    };
+  } catch {
+    return { isMember: false, rank: null, suspended: false, isArchivist: false, hallExists: false };
+  }
+}
+
 function spyGuildInfo(player) {
   try {
     const Guilds = require("../lib/CitizenSpyGuilds");
@@ -2589,6 +2615,7 @@ compete: competeInfo(player),
     weaverguild: weaverGuildInfo(player),
     musicguild: musicGuildInfo(player),
     artguild: artGuildInfo(player),
+    libguild: libguildInfo(player),
     dig: digInfo(player),
     stage: stageInfo(player),
     runway: runwayInfo(player),
@@ -2619,7 +2646,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -3718,6 +3745,24 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_LIBGUILD: {
+      // Librarians' Guild hall sessions: members in good standing attend.
+      // Archivists run the catalog reviews and teach the scriptorium
+      // school; pages learn the craft. Suspended members and non-members
+      // stay away — the hall is members-only.
+      const lg = libguild ?? { isMember: false, suspended: false, isArchivist: false, hallExists: false };
+      if (!lg.isMember || lg.suspended) return 4; // not a member in good standing
+      if (!lg.hallExists) return 4; // honest — no hall, no session
+      let s = 20;
+      if (lg.isArchivist) s += 12; // archivists run catalog reviews and the school
+      if (lg.rank === "page") s += 6; // pages learn the most
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_SPYGUILD: {
       // Shadow-guild hall sessions: members in good standing attend.
       // Spymasters run the tradecraft reviews and teach the school;
@@ -4277,7 +4322,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_STAGEGUILD, ACT_SPORTSGUILD, ACT_COOKGUILD, ACT_WEAVERGUILD, ACT_MUSICGUILD, ACT_ARTGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_STAGEGUILD, ACT_SPORTSGUILD, ACT_COOKGUILD, ACT_WEAVERGUILD, ACT_MUSICGUILD, ACT_ARTGUILD, ACT_LIBGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,
