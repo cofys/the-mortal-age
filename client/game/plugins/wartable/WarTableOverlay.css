@@ -402,6 +402,26 @@
     margin-top: 6px;
 }
 
+/* Realm tab: fealty tree + battle-line badges */
+.tma-wartable-vassal-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12px;
+    color: #e8ded0;
+    padding: 3px 0 3px 4px;
+}
+
+.tma-wartable-vassal-indent {
+    color: #c9a227;
+    font-weight: bold;
+}
+
+.tma-wartable-badges {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+}
+
 /* Strength pips */
 .tma-wartable-pips {
     display: inline-flex;

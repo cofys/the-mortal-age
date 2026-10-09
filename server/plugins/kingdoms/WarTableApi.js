@@ -86,6 +86,27 @@ function kingdomPayload(k, homeId) {
   } else if (homeId) {
     payload.relation = Relations.RELATION_SELF;
   }
+
+  // Realm-map status: vassalage and live conflict indicators, so the war
+  // table can draw the realm's fealty and battle lines at a glance.
+  const state = Store.load();
+  const vassals = state.vassals ?? {};
+  const sieges = Object.values(state.sieges ?? {});
+  const myVassalRecord = vassals[k.id];
+  payload.vassalOf = myVassalRecord?.overlordId ?? null;
+  payload.vassalOfName = payload.vassalOf ? kingdomName(payload.vassalOf) : null;
+  payload.vassalCount = Object.values(vassals).filter(
+    (r) => r && r.overlordId === k.id
+  ).length;
+  payload.underSiege = sieges.some(
+    (s) => s && s.status === "active" && s.defenderKingdomId === k.id
+  );
+  payload.besiegingCount = sieges.filter(
+    (s) => s && s.status === "active" && s.attackerKingdomId === k.id
+  ).length;
+  payload.atWar = Store.getActiveWars().some(
+    (w) => w.attackerId === k.id || w.defenderId === k.id
+  );
   return payload;
 }
 
@@ -173,6 +194,18 @@ function statusPayload(player) {
     .filter((s) => s && s.status === "active")
     .map(siegePayload);
 
+  // Realm-wide vassalage: every oath, so the war table can draw the
+  // fealty tree (overlord -> vassals) on the realm tab.
+  const vassalage = Object.entries(state.vassals ?? {})
+    .filter(([, r]) => r && r.overlordId)
+    .map(([vassalId, r]) => ({
+      vassalId,
+      vassalName: kingdomName(vassalId),
+      overlordId: r.overlordId,
+      overlordName: kingdomName(r.overlordId),
+      since: r.since ?? null,
+    }));
+
   // Home-kingdom war room: castle, vassalage, pending peace offers, wars.
   let homeDetail = null;
   if (homeId) {
@@ -214,6 +247,7 @@ function statusPayload(player) {
     alliances,
     relations,
     sieges,
+    vassalage,
     homeDetail,
   };
 }

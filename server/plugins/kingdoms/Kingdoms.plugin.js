@@ -96,6 +96,7 @@ module.exports = {
     loadContentModule("./WarTable.Kingdoms")(api);
     loadContentModule("./WarTableApi")(api);
     loadContentModule("./Siege.Kingdoms")(api);
+    loadContentModule("./AiWarfare.Kingdoms")(api);
     loadContentModule("./OfficeTools.Kingdoms")(api);
   },
 };
