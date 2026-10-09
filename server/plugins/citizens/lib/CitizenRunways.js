@@ -121,9 +121,10 @@ function blankState() {
     collections: {}, // id -> { id, name, designer, houseName, kingdomId, season, theme, pieces: [...], quality, createdAt }
     shows: {}, // id -> { id, kingdomId, houseName, collectionId, startsAt, endsAt, ticketPrice, ticketsSold, revenue, castModels: [], settled }
     ateliers: {}, // usernameLower -> { owner, kingdomId, tile, inventory: [pieceRef], foundedAt }
-    venues: {}, // kingdomId -> { kingdomId, name, tile, capacity, condition, owner, upkeepDueAt, showsHosted, foundedAt }
+    venues: {}, // kingdomId -> { kingdomId, name, tile, capacity, condition, owner, upkeepDueAt, showsHosted, foundedAt, crownRevenue }
     models: {}, // usernameLower -> { username, kingdomId, showsWalked, registeredAt }
     reviews: [], // { stars, houseName, collectionName, kingdomId, verdict, at }
+    purseOwed: {}, // usernameLower -> coins honestly owed when model-purse delivery failed
   };
 }
 
@@ -599,6 +600,10 @@ function settleShow(showId, coinSink) {
     const vOwner = venue.owner === "crown" ? null : st.houses[norm(venue.owner)];
     if (vOwner) vOwner.treasury = (vOwner.treasury || 0) + venueShare;
     else if (typeof coinSink === "function") coinSink(venueShare, "crown");
+    // Crown-owned venue with no sink: accrue the share honestly on the venue
+    // record (kingdom purse seam, same pattern as CitizenTheater) instead of
+    // dropping real ticket revenue — the vanishing-coins bug.
+    else if (venueShare > 0) venue.crownRevenue = (venue.crownRevenue || 0) + venueShare;
     venue.showsHosted = (venue.showsHosted || 0) + 1;
   }
   // model purse: real coins to each cast model's inventory via their record
@@ -813,6 +818,66 @@ function giveMaterial(player, itemId, amount) {
   }
 }
 
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
+/**
+ * Pay a cast model's purse share: real inventory when the bot is reachable,
+ * else their REAL bank account. Returns true only when the coins were
+ * actually delivered. Ignoring this return (the old life-tick shape)
+ * silently loses the share after the show was already marked settled —
+ * the vanishing-coins bug.
+ */
+function payModelPurse(username, bot, amount) {
+  amount = Math.floor(amount);
+  if (!(amount > 0)) return true;
+  try {
+    if (bot && giveCoins(bot, amount)) return true;
+  } catch { /* fall through to the bank */ }
+  try {
+    const B = bankingApi();
+    const acct = B && typeof B.accountFor === "function" ? B.accountFor(username) : null;
+    if (acct) {
+      acct.balance = (Number(acct.balance) || 0) + amount;
+      if (typeof B.markDirty === "function") B.markDirty();
+      return true;
+    }
+  } catch { /* banking is best-effort */ }
+  return false;
+}
+
+/** Record a model-purse share as honestly owed when delivery failed. */
+function oweModelPurse(username, amount) {
+  const st = load();
+  const key = String(username ?? "").toLowerCase();
+  amount = Math.floor(amount);
+  if (!key || !(amount > 0)) return 0;
+  if (!st.purseOwed || typeof st.purseOwed !== "object") st.purseOwed = {};
+  st.purseOwed[key] = (st.purseOwed[key] || 0) + amount;
+  markDirty();
+  return st.purseOwed[key];
+}
+
+/** Snapshot of honestly-owed model purses: [{ username, amount }]. */
+function purseOwedList() {
+  const st = load();
+  const owed = st.purseOwed && typeof st.purseOwed === "object" ? st.purseOwed : {};
+  return Object.keys(owed).map((k) => ({ username: k, amount: owed[k] }));
+}
+
+/** Clear an owed model purse after successful delivery. */
+function clearPurseOwed(username) {
+  const st = load();
+  const key = String(username ?? "").toLowerCase();
+  if (st.purseOwed && key in st.purseOwed) {
+    delete st.purseOwed[key];
+    markDirty();
+    return true;
+  }
+  return false;
+}
+
 // --- describe ------------------------------------------------------------------------
 
 function describe() {
@@ -898,6 +963,11 @@ module.exports = {
   takeCoins,
   giveCoins,
   takeMaterial,
+  // model-purse payouts (verified delivery, honestly owed on failure)
+  payModelPurse,
+  oweModelPurse,
+  purseOwedList,
+  clearPurseOwed,
   giveMaterial,
   // persistence
   load,

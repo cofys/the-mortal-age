@@ -139,20 +139,32 @@ function coinsOf(player) {
 }
 
 function takeCoins(player, amount) {
+  // Canonical: deleteNumber(id, amount) with balance verification.
+  // ItemContainer has no inv.remove(id, amount) — the old call was a silent
+  // no-op that still returned true, so deposit() credited bank accounts
+  // without ever debiting the inventory (counterfeiting class).
   try {
     const inv = player?.getInventory?.();
-    if (!inv || coinsOf(player) < amount) return false;
-    inv.remove?.(COINS_ID, amount);
-    return true;
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(COINS_ID, amount);
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before - amount;
   } catch {
     return false;
   }
 }
 
 function giveCoins(player, amount) {
+  // Canonical: adds(id, amount) with balance verification. inv.add takes an
+  // Item instance, not (id, amount) — the old call threw on the real engine,
+  // so withdraw() could never pay out ("give-failed" forever).
   try {
-    player?.getInventory?.()?.add?.(COINS_ID, amount);
-    return true;
+    const inv = player?.getInventory?.();
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    inv.adds?.(COINS_ID, amount);
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before + amount;
   } catch {
     return false;
   }

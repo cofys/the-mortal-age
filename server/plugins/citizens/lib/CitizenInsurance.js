@@ -208,20 +208,33 @@ function coinsOf(player) {
 }
 
 function takeCoins(player, amount) {
+  // Canonical: deleteNumber(id, amount) with balance verification.
+  // ItemContainer has no inv.remove(id, amount) — the old call was a
+  // silent no-op on the real engine (a stale mock's remove(id, n) shape
+  // masked it), so premium payments could never actually debit anyone.
   try {
     const inv = player?.getInventory?.();
-    if (!inv || coinsOf(player) < amount) return false;
-    inv.remove?.(COINS_ID, amount);
-    return true;
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    if (before < amount) return false;
+    inv.deleteNumber?.(COINS_ID, amount);
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before - amount;
   } catch {
     return false;
   }
 }
 
 function giveCoins(player, amount) {
+  // Canonical: adds(id, amount) with balance verification. inv.add takes an
+  // Item instance, not (id, amount) — the old call threw on the real engine
+  // and a stale mock's add(id, n) shape masked it, so player-present claim
+  // payouts never credited anyone.
   try {
-    player?.getInventory?.()?.add?.(COINS_ID, amount);
-    return true;
+    const inv = player?.getInventory?.();
+    if (!inv || amount <= 0) return false;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    inv.adds?.(COINS_ID, amount);
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before + amount;
   } catch {
     return false;
   }
@@ -230,21 +243,24 @@ function giveCoins(player, amount) {
 /**
  * Credit a payout to a real bank account (the persistent, honest home for
  * claim money when the holder is not holding an inventory right now).
- * Falls back to payoutsOwed when banking is unavailable.
+ * Returns the coins actually credited; 0 when banking is unavailable — the
+ * caller owes honestly in payoutsOwed, so this never double-books.
+ * NOTE: CitizenBanking only persists when its dirty flag is set, so the
+ * markDirty() call is load-bearing: without it the credit silently
+ * vanishes on the next save cycle (the vanishing-coins class).
  */
 function creditBank(username, amount) {
   amount = Math.floor(amount);
   if (amount <= 0) return 0;
   try {
     const B = Banking();
-    if (!B) throw new Error("no-banking");
+    if (!B || typeof B.accountFor !== "function") return 0;
     const acct = B.accountFor(username);
-    acct.balance += amount;
+    if (!acct) return 0;
+    acct.balance = (Number(acct.balance) || 0) + amount;
+    if (typeof B.markDirty === "function") B.markDirty();
     return amount;
   } catch {
-    const key = norm(username);
-    data().payoutsOwed[key] = (data().payoutsOwed[key] ?? 0) + amount;
-    dirty = true;
     return 0;
   }
 }
@@ -514,23 +530,27 @@ function routePayout(username, amount, player) {
   amount = Math.floor(amount);
   if (amount <= 0) return { paid: 0, owed: 0 };
   const st = data();
-  let payable = Math.min(amount, st.pool);
+  // Deliver FIRST, debit the pool only for coins that actually moved.
+  // Debiting first (the old shape) is the vanishing-coins bug: the pool
+  // shrinks while failed giveCoins / unreachable banking deliver nothing,
+  // and totalClaims counted coins that were never paid.
+  const payable = Math.min(amount, st.pool);
   let paid = 0;
-  let owed = amount - payable;
   if (payable > 0) {
-    st.pool -= payable;
-    st.totalClaims += payable;
+    let delivered = 0;
     if (player) {
-      giveCoins(player, payable);
-      paid = payable;
+      delivered = giveCoins(player, payable) ? payable : 0;
     } else {
-      paid = creditBank(username, payable);
-      // creditBank routes to payoutsOwed internally when banking is missing,
-      // so the remainder is always amount - payable (never amount - paid —
-      // that double-counts the internal fallback).
-      owed = amount - payable;
+      delivered = creditBank(username, payable);
+    }
+    if (delivered > 0) {
+      st.pool -= delivered;
+      st.totalClaims += delivered;
+      paid = delivered;
     }
   }
+  // Whatever wasn't delivered is honestly owed — never invented, never lost.
+  const owed = amount - paid;
   if (owed > 0) {
     const key = norm(username);
     st.payoutsOwed[key] = (st.payoutsOwed[key] ?? 0) + owed;
@@ -601,21 +621,29 @@ function settleTravelDanger(username, journey, danger, player) {
 function flushOwedPayouts() {
   const st = data();
   let flushed = 0;
+  let changed = false;
   for (const key of Object.keys(st.payoutsOwed)) {
     const owed = st.payoutsOwed[key];
-    if (!owed || owed <= 0) continue;
+    if (!owed || owed <= 0) { delete st.payoutsOwed[key]; changed = true; continue; }
     const payable = Math.min(owed, st.pool);
     if (payable <= 0) continue;
-    st.pool -= payable;
-    st.totalClaims += payable;
-    flushed += payable;
+    // Deliver first: the old deduct-then-credit drained the pool on every
+    // retry even when banking was missing and nothing moved (the
+    // vanishing-coins class — totalClaims grew while coins went nowhere).
     const credited = creditBank(key, payable);
-    // creditBank may re-owe when banking is missing — avoid double count.
-    const stillOwed = Math.max(0, owed - credited - (payable - credited));
-    if (stillOwed <= 0) delete st.payoutsOwed[key];
-    else st.payoutsOwed[key] = stillOwed;
-    dirty = true;
+    if (credited > 0) {
+      st.pool -= credited;
+      st.totalClaims += credited;
+      flushed += credited;
+      const stillOwed = owed - credited;
+      if (stillOwed <= 0) delete st.payoutsOwed[key];
+      else st.payoutsOwed[key] = stillOwed;
+      changed = true;
+    }
+    // else: banking unavailable — leave the pool AND the owed ledger
+    // untouched so the next tick retries honestly.
   }
+  if (changed) dirty = true;
   return flushed;
 }
 

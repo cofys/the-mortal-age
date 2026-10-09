@@ -252,16 +252,30 @@ function tickRunwayLife(director, nowMs) {
         } catch { /* per-house safety */ }
       }
 
+      // retry honestly-owed model purses from earlier failed deliveries
+      for (const { username, amount } of Runways.purseOwedList()) {
+        try {
+          const rec = list.find((c) => String(usernameOf(c.record)).toLowerCase() === username)?.record;
+          if (rec && Runways.payModelPurse(username, rec, amount)) Runways.clearPurseOwed(username);
+        } catch { /* per-model safety */ }
+      }
+
       // settle finished shows
       for (const show of Runways.finishedUnsettledShows(kingdomId)) {
         try {
           const res = Runways.settleShow(show.id);
           if (!res.ok) continue;
-          // model-purse coins to the cast models' REAL inventories
+          // model-purse coins to the cast models' REAL inventories; delivery
+          // is VERIFIED — failures fall back to the bank account, else are
+          // owed honestly. The old unchecked giveCoins silently lost the
+          // share after the show was already marked settled (vanishing
+          // coins).
           for (const u of res.review.pursePaid) {
             try {
               const rec = list.find((c) => usernameOf(c.record) === u)?.record;
-              if (rec && res.splits.purseEach > 0) Runways.giveCoins(rec, res.splits.purseEach);
+              if (rec && res.splits.purseEach > 0 && !Runways.payModelPurse(u, rec, res.splits.purseEach)) {
+                Runways.oweModelPurse(u, res.splits.purseEach);
+              }
             } catch { /* per-model safety */ }
           }
           if (res.review.stars >= 4 && !cooled(lastAnnounce, kingdomId, ANNOUNCE_COOLDOWN_MS, now)) {

@@ -23,12 +23,16 @@ function test(name, fn) {
 }
 
 // --- Mock player with real inventory semantics ---
+// Canonical engine ItemContainer shape: getAmount(id), adds(id, n),
+// deleteNumber(id, n). The old add(id, n)/remove(id, n) shapes do not exist
+// on the real container (add takes an Item instance) and masked dead
+// payout/debit paths.
 function mockPlayer(coins, username) {
   const inv = {
     coins,
     getAmount(id) { return id === 995 ? this.coins : 0; },
-    add(id, n) { if (id === 995) this.coins += n; },
-    remove(id, n) { if (id === 995 && this.coins >= n) { this.coins -= n; return true; } return false; },
+    adds(id, n) { if (id === 995) this.coins += n; },
+    deleteNumber(id, n) { if (id === 995 && this.coins >= n) { this.coins -= n; return true; } return false; },
   };
   return { username: username ?? "TestCitizen", getInventory: () => inv, _inv: inv };
 }
@@ -307,6 +311,94 @@ test("policies persist across a cache clear", () => {
   const got = Insurance.policyFor("Quinn", "life");
   assert(got && got.status === "active" && got.faceValue === 6000, "policy reloaded");
   assert(Insurance.poolBalance() > 0, "pool reloaded");
+});
+
+// --- vanishing-coins: credit-before-debit, honest owing, persistent bank credits ---
+
+test("claim with unreachable inventory: pool untouched, full face honestly owed", () => {
+  seedPool();
+  const p = mockPlayer(10000, "NoInv");
+  assert.strictEqual(Insurance.buyPolicy(p, "NoInv", "life", 8000, { kingdomId: "misthalin" }).ok, true);
+  const poolBefore = Insurance._data().pool;
+  const broken = { username: "NoInv", getInventory: () => { throw new Error("no inventory"); } };
+  const r = Insurance.fileClaim("NoInv", "life", "death", { player: broken });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(r.paid, 0, "nothing delivered");
+  assert.strictEqual(r.owed, 8000, "full face honestly owed");
+  assert.strictEqual(Insurance._data().pool, poolBefore, "pool not debited for undelivered coins");
+});
+
+test("claim pays a present player's real inventory and debits the pool", () => {
+  seedPool();
+  const p = mockPlayer(10000, "Present");
+  assert.strictEqual(Insurance.buyPolicy(p, "Present", "life", 8000, { kingdomId: "misthalin" }).ok, true);
+  const poolBefore = Insurance._data().pool;
+  const coinsBefore = p._inv.coins;
+  const r = Insurance.fileClaim("Present", "life", "death", { player: p });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(r.paid, 8000, "paid in full");
+  assert.strictEqual(r.owed, 0, "nothing owed");
+  assert.strictEqual(p._inv.coins, coinsBefore + 8000, "real inventory credited via canonical adds");
+  assert.strictEqual(Insurance._data().pool, poolBefore - 8000, "pool debited only for delivered coins");
+});
+
+test("absent-holder claim credits the real bank account (not just the journal)", () => {
+  seedPool();
+  const Banking = require("./CitizenBanking");
+  Banking.resetForTests();
+  const p = mockPlayer(10000, "Estate");
+  assert.strictEqual(Insurance.buyPolicy(p, "Estate", "life", 8000, { kingdomId: "misthalin" }).ok, true);
+  const r = Insurance.fileClaim("Estate", "life", "death");
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(r.paid, 8000, "paid in full to the bank");
+  assert.strictEqual(Banking.accountFor("Estate").balance, 8000, "real bank account credited");
+  Banking.resetForTests();
+});
+
+test("bank credits mark the banking module dirty so they persist", () => {
+  seedPool();
+  const Module = require("module");
+  const origRequire = Module.prototype.require;
+  let bankDirty = false;
+  const accounts = {};
+  Module.prototype.require = function (id) {
+    if (id === "./CitizenBanking") {
+      return {
+        accountFor: (u) => {
+          const key = String(u || "").toLowerCase();
+          accounts[key] = accounts[key] || { balance: 0 };
+          return accounts[key];
+        },
+        markDirty: () => { bankDirty = true; },
+      };
+    }
+    return origRequire.apply(this, arguments);
+  };
+  try {
+    const st = Insurance._data();
+    st.payoutsOwed["dirtycheck"] = 300;
+    const flushed = Insurance.flushOwedPayouts();
+    assert.strictEqual(flushed, 300, "flushed");
+    assert.strictEqual(accounts["dirtycheck"].balance, 300, "bank credited");
+    assert.strictEqual(bankDirty, true, "banking marked dirty so the credit persists");
+  } finally {
+    Module.prototype.require = origRequire;
+  }
+});
+
+test("flushOwedPayouts delivers owed claims to the bank and debits the pool", () => {
+  seedPool();
+  const Banking = require("./CitizenBanking");
+  Banking.resetForTests();
+  const st = Insurance._data();
+  st.payoutsOwed["flushme"] = 500;
+  const poolBefore = st.pool;
+  const flushed = Insurance.flushOwedPayouts();
+  assert.strictEqual(flushed, 500, "flushed the owed amount");
+  assert.strictEqual(st.pool, poolBefore - 500, "pool debited for delivered coins");
+  assert(!("flushme" in st.payoutsOwed), "owed entry cleared");
+  assert.strictEqual(Banking.accountFor("flushme").balance, 500, "bank account credited");
+  Banking.resetForTests();
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

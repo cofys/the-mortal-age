@@ -554,9 +554,30 @@ function tipBusker(event, deps = {}, nowMs = Date.now()) {
       } catch { /* cosmetic */ }
       return;
     }
+    // Verified debit, verified credit, rollback on failure: the old
+    // targetInv.add(id, n) threw on the real engine (add takes an Item
+    // instance, not (id, amount)), so the player's tip coins were debited
+    // and then vanished. The tip either moves whole or not at all.
+    const beforeFrom = playerInv.getAmount?.(COINS_ID) ?? 0;
     playerInv.deleteNumber(COINS_ID, amount);
     try { playerInv.refreshItems?.(); } catch { /* cosmetic */ }
-    targetInv.add?.(COINS_ID, amount);
+    const debited = (playerInv.getAmount?.(COINS_ID) ?? 0) === beforeFrom - amount;
+    // Nested try: a throwing credit must still reach the verification and
+    // rollback below, not escape to the outer bail.
+    let credited = false;
+    try {
+      const beforeTo = targetInv.getAmount?.(COINS_ID) ?? 0;
+      targetInv.adds?.(COINS_ID, amount);
+      credited = (targetInv.getAmount?.(COINS_ID) ?? 0) === beforeTo + amount;
+    } catch { credited = false; }
+    if (!(debited && credited)) {
+      try {
+        if (credited) targetInv.deleteNumber?.(COINS_ID, amount);
+        if (debited) playerInv.adds?.(COINS_ID, amount);
+      } catch { /* rollback is best-effort */ }
+      try { playerInv.refreshItems?.(); } catch { /* cosmetic */ }
+      return; // moved stays false — the tip was not delivered
+    }
     try { targetInv.refreshItems?.(); } catch { /* cosmetic */ }
     moved = true;
   } catch { /* bail silently */ }

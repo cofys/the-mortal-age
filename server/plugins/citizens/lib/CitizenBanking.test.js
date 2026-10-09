@@ -22,13 +22,16 @@ function test(name, fn) {
   }
 }
 
-// --- Mock player with real inventory semantics ---
+// --- Mock player with real inventory semantics (canonical engine API:
+// getAmount(id), deleteNumber(id, amount), adds(id, amount). There is no
+// inv.remove(id, n) and add(id, n) takes an Item instance — stale mocks
+// using those shapes mask the vanishing/counterfeiting bugs.) ---
 function mockPlayer(coins) {
   const inv = {
     coins,
     getAmount(id) { return id === 995 ? this.coins : 0; },
-    add(id, n) { if (id === 995) this.coins += n; },
-    remove(id, n) { if (id === 995 && this.coins >= n) { this.coins -= n; return true; } return false; },
+    adds(id, n) { if (id === 995 && n > 0) this.coins += n; },
+    deleteNumber(id, n) { if (id === 995 && n > 0) this.coins = Math.max(0, this.coins - n); },
   };
   return { username: "TestCitizen", getInventory: () => inv, _inv: inv };
 }

@@ -172,6 +172,76 @@ check("tickActors survives null director and hostile records", () => {
   A.tickActors({ roster: { values: () => { throw new Error("boom"); } } }, Date.now());
 });
 
+// --- tipActor moves real coins with verified credit (vanishing-coins guard) ---
+check("tipActor pays the actor with verified inventory credit", () => {
+  // Canonical engine inventory: getAmount / deleteNumber / adds. The old
+  // targetInv.add(id, n) threw on the real engine and the tip vanished
+  // after the player was debited.
+  const mockInv = (coins) => ({
+    coins,
+    getAmount(id) { return id === 995 ? this.coins : 0; },
+    deleteNumber(id, n) { if (id === 995 && n > 0) this.coins = Math.max(0, this.coins - n); },
+    adds(id, n) { if (id === 995 && n > 0) this.coins += n; },
+    refreshItems() {},
+  });
+  let actorName = null;
+  for (let i = 0; i < 200 && !actorName; i++) {
+    const rec = { username: "TipStar" + i, role: "commoner" };
+    if (A.actorTypeOf(rec)) actorName = rec.username;
+  }
+  assert.ok(actorName, "found an actor");
+  const playerInv = mockInv(1000);
+  const actorInv = mockInv(0);
+  const human = { getUsername: () => "Jon", isPlayerBot: () => false, getHostAddress: () => "1.2.3.4", getInventory: () => playerInv };
+  const actor = { getUsername: () => actorName, isPlayerBot: () => true, getHostAddress: () => "bot", getInventory: () => actorInv, getAttribute: () => ({}) };
+  const director = {
+    roster: new Map([[actorName.toLowerCase(), { username: actorName, role: "commoner" }]]),
+    isOnline: () => true,
+    getBot: () => actor,
+  };
+  const event = { player: human, target: actor, item: { getId: () => 995, getAmount: () => 100 } };
+  const got = A.tipActor(event, { director }, Date.now());
+  assert.equal(got, 100, "returns the moved amount");
+  assert.equal(event.handled, true);
+  assert.equal(playerInv.coins, 900, "player debited");
+  assert.equal(actorInv.coins, 100, "actor credited");
+});
+
+// --- tipActor rolls the debit back when the actor credit fails ---
+check("tipActor never loses coins when the credit fails", () => {
+  const mockInv = (coins, brokenCredit = false) => ({
+    coins,
+    getAmount(id) { return id === 995 ? this.coins : 0; },
+    deleteNumber(id, n) { if (id === 995 && n > 0) this.coins = Math.max(0, this.coins - n); },
+    adds(id, n) {
+      if (brokenCredit) throw new Error("engine: add takes an Item instance");
+      if (id === 995 && n > 0) this.coins += n;
+    },
+    refreshItems() {},
+  });
+  let actorName = null;
+  for (let i = 0; i < 200 && !actorName; i++) {
+    const rec = { username: "TipBroke" + i, role: "commoner" };
+    if (A.actorTypeOf(rec)) actorName = rec.username;
+  }
+  assert.ok(actorName, "found an actor");
+  const playerInv = mockInv(1000);
+  const actorInv = mockInv(0, true);
+  const human = { getUsername: () => "Jon", isPlayerBot: () => false, getHostAddress: () => "1.2.3.4", getInventory: () => playerInv };
+  const actor = { getUsername: () => actorName, isPlayerBot: () => true, getHostAddress: () => "bot", getInventory: () => actorInv, getAttribute: () => ({}) };
+  const director = {
+    roster: new Map([[actorName.toLowerCase(), { username: actorName, role: "commoner" }]]),
+    isOnline: () => true,
+    getBot: () => actor,
+  };
+  const event = { player: human, target: actor, item: { getId: () => 995, getAmount: () => 100 } };
+  const got = A.tipActor(event, { director }, Date.now());
+  assert.equal(got, undefined, "nothing reported as moved");
+  assert.equal(event.handled, undefined, "event not claimed");
+  assert.equal(playerInv.coins, 1000, "player debit rolled back");
+  assert.equal(actorInv.coins, 0, "actor got nothing");
+});
+
 // --- tickActors fires near a real player during show hours, silent otherwise ---
 check("tickActors fires near a real player in show hours", () => {
   const mk = (x, y) => ({ getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }) });
