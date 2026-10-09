@@ -318,42 +318,9 @@ function beatFor(record) {
   return pool[hashStr("watchbeat:" + name) % pool.length];
 }
 
-/**
- * Today's patrol rota for a watchman (1-2 beats). Derived from date +
- * hash; zero storage.
- */
-function rotaFor(username, kingdomId, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const kid = kingdomId;
-  const local = BEATS.filter((b) => b.kingdom === kid);
-  const pool = local.length ? local : BEATS;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("watchrota:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * MAX_BEATS_PER_DAY); // 1-2
-  const out = [];
-  const used = new Set();
-  for (let i = 0; i < count && used.size < pool.length; i++) {
-    const b = pool[Math.floor(rng() * pool.length)];
-    if (used.has(b.name)) continue;
-    used.add(b.name);
-    out.push(b.name);
-  }
-  return out;
-}
+// (rotaFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Tonight's fire-scare at a beat (~5%/kingdom/night), or null.
- * The crowd moment: a lookout spots smoke and raises the alarm.
- */
-function fireScareFor(kingdomId, dateMs) {
-  const day = dayNumber(dateMs);
-  const key = kingdomId ?? "all";
-  const rng = seededRng(hashStr("firescare:" + key + ":" + day));
-  if (rng() >= FIRE_SCARE_CHANCE) return null;
-  const local = BEATS.filter((b) => b.kingdom === key);
-  const pool = local.length ? local : BEATS;
-  return pool[Math.floor(rng() * pool.length)].name;
-}
+// (fireScareFor removed 2026-10-08: hash-derived fabrication.)
 
 /**
  * The official guard shift name right now, read from the real
@@ -513,34 +480,22 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doWatchWork(director, record, citizen, type, nowMs) {
   const beat = beatFor(record);
-  const day = dayNumber(nowMs);
   const shift = officialShiftFor(nowMs);
 
   // Fire-alarm fanfare: once per kingdom per night, the crowd moment.
   if (type === WATCH_FIRE) {
-    const scare = fireScareFor(record.kingdomId, nowMs);
-    if (scare) {
-      const key = "firealarm:" + (record.kingdomId ?? "all") + ":" + day;
-      if (!lastFiredByCitizen.has(key)) {
-        lastFiredByCitizen.set(key, nowMs);
-        const line = fill(pickOne(Math.random, FIRE_ALARM_LINES), { beat: scare });
-        { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-        journalize(citizen, `raised the fire alarm over ${scare}`);
-        seedRumor(`Smoke spotted over ${scare} — the watch raises the alarm!`);
-        return;
-      }
-    }
+    // (Crowd-moment fabrication block removed 2026-10-08: fireScareFor was hash-derived.)
   }
 
-  // Routine: patrol callout on today's rota.
-  const rota = rotaFor(record.username, record.kingdomId, nowMs);
-  const onBeat = rota.length ? rota[0] : beat.name;
+  // Routine: honest patrol callout on the assigned beat.
+  // (rotaFor removed 2026-10-08: hash-derived "today's rota" was fabrication.
+  // The beat from beatFor(record) is the honest stable assignment.)
   const line = fill(pickOne(Math.random, PATROL_LINES[type]), {
-    beat: onBeat,
+    beat: beat.name,
     shift,
   });
   { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-  journalize(citizen, `walked the watch on ${onBeat}`);
+  journalize(citizen, `walked the watch on ${beat.name}`);
 }
 
 module.exports = {
@@ -551,11 +506,9 @@ module.exports = {
   watcherFor,
   hireWarden,
   wardenFor,
-  fireScareFor,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   watchmanTypeOf,
   beatFor,
-  rotaFor,
   officialShiftFor,
   isWatchHour,
   // Pure helpers for tests:

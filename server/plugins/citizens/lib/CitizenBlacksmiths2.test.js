@@ -142,20 +142,7 @@ function fresh() {
   console.log("smithy assignment: PASS");
 }
 
-// --- jobs determinism + day variance ---
-{
-  fresh();
-  const a = S.jobsFor("jobuser", S.SMITHFOLK_FARRIER, T0);
-  const b = S.jobsFor("jobuser", S.SMITHFOLK_FARRIER, T0);
-  assert.deepEqual(a, b, "jobs deterministic same day");
-  assert.ok(a.length >= 1 && a.length <= 3, "1-3 jobs");
-  const seenDays = new Set();
-  for (let d = 0; d < 10; d++) {
-    seenDays.add(S.jobsFor("jobuser", S.SMITHFOLK_FARRIER, T0 + d * 86400000).join("|"));
-  }
-  assert.ok(seenDays.size > 1, "jobs vary across days");
-  console.log("jobs determinism: PASS");
-}
+// --- jobs removed 2026-10-08: jobsFor was hash-derived fabrication. ---
 
 // --- metal pool correctness ---
 {
@@ -165,29 +152,12 @@ function fresh() {
   console.log("metal pool: PASS");
 }
 
-// --- masterwork determinism + rarity ---
-{
-  fresh();
-  const smithy = S.COMMUNITY_SMITHIES[0];
-  const a = S.masterworkFor(smithy, T0);
-  const b = S.masterworkFor(smithy, T0);
-  assert.deepEqual(a, b, "masterwork deterministic same day");
-  let hits = 0;
-  for (let d = 0; d < 400; d++) {
-    if (S.masterworkFor(smithy, T0 + d * 86400000)) hits++;
-  }
-  const rate = hits / 400;
-  assert.ok(rate > 0.02 && rate < 0.2, `masterwork rate ${rate.toFixed(3)} sane`);
-  console.log(`masterwork: PASS (rate ${(rate * 100).toFixed(1)}%)`);
-}
+// --- masterwork removed 2026-10-08: masterworkFor was hash-derived fabrication. ---
 
 // --- goods + pricing ---
 {
   fresh();
-  const smithy = S.COMMUNITY_SMITHIES[0];
-  const g = S.goodForToday(smithy, T0);
-  assert.ok(g && g.length > 0, "good for today");
-  assert.equal(S.goodForToday(smithy, T0), g, "good deterministic");
+  const g = "a bundle of nails";
   const p = S.priceFor(g, T0);
   assert.ok(p >= 5 && p <= 40, `price ${p} in band`);
   console.log("goods/pricing: PASS");

@@ -37,10 +37,15 @@ function mockRecord(username, kingdomId = "misthalin", role = "commoner") {
 function mockDirector(records, citizens, players) {
   const roster = new Map(records.map((r) => [r.username, r]));
   const cits = new Map(Object.entries(citizens || {}));
+  for (const p of players || []) {
+    const name = p.getUsername();
+    if (!roster.has(name)) roster.set(name, { username: name, role: "player" });
+    if (!cits.has(name)) cits.set(name, p);
+  }
   return {
     roster,
-    playerFor: (record) => cits.get(record.username) || null,
-    onlinePlayers: () => players || [],
+    isOnline: () => true,
+    getBot: (record) => cits.get(record.username) || null,
   };
 }
 // Deterministic stub rng.

@@ -126,11 +126,7 @@ const LESSON_LINES = {
   ],
 };
 
-const PUPIL_LINES = [
-  "Yes, {teacher}!",
-  "But why, {teacher}?",
-  "I did it! Look, {teacher} — I did it!",
-];
+// (PUPIL_LINES removed 2026-10-08 with fabrication branches.)
 
 const OFFER_LINES = {
   [EDUCATOR_TUTOR]: [
@@ -369,74 +365,13 @@ function curriculumSubjects() {
   return FALLBACK_SUBJECTS.slice();
 }
 
-/**
- * The day's lesson schedule for an educator (1-3 lessons of their type).
- * Derived from date + hash; zero storage.
- */
-function lessonsFor(username, kingdomId, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const subjects = curriculumSubjects();
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("tutorlessons:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * 3); // 1-3
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    out.push({
-      subject: subjects[Math.floor(rng() * subjects.length)],
-      period: 1 + Math.floor(rng() * 3), // morning/afternoon slots
-    });
-  }
-  return out;
-}
+// (lessonsFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's pupils for an educator (1-4 pupils). Deterministic from
- * date + hash; zero storage.
- */
-function pupilsFor(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("tutorpupils:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * 4); // 1-4
-  const out = [];
-  const used = new Set();
-  for (let i = 0; i < count && used.size < PUPIL_NAMES.length; i++) {
-    const pupil = PUPIL_NAMES[Math.floor(rng() * PUPIL_NAMES.length)];
-    if (used.has(pupil)) continue;
-    used.add(pupil);
-    out.push(pupil);
-  }
-  return out;
-}
+// (pupilsFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's study material for tutors — read from the real CitizenLibrarians
- * catalog via lazy require (with a static fallback), so tutors teach from
- * manuscripts the libraries actually hold.
- */
-function studyMaterialFor(dateMs) {
-  try {
-    const librarians = require("./CitizenLibrarians");
-    if (typeof librarians.catalogFor === "function") {
-      const cat = librarians.catalogFor("tutor-study", null, dateMs);
-      if (Array.isArray(cat) && cat.length) return cat[0];
-    }
-  } catch {
-    /* module absent */
-  }
-  return "a well-thumbed primer";
-}
+// (studyMaterialFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's graduation at a venue (~10%/day), or null.
- * The crowd moment: a pupil graduates, the village celebrates.
- */
-function graduationFor(venue, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("tutorgraduation:" + venue.name + ":" + day));
-  if (rng() >= GRADUATION_CHANCE) return null;
-  return PUPIL_NAMES[Math.floor(rng() * PUPIL_NAMES.length)];
-}
+// (graduationFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM).
@@ -588,43 +523,20 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doEducatorWork(director, record, citizen, type, nowMs) {
   const venue = venueFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
   // Graduation: once per venue per graduation day, the crowd moment.
-  const graduate = graduationFor(venue, nowMs);
-  if (graduate) {
-    const key = "graduation:" + venue.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, GRADUATION_LINES), {
-        pupil: graduate,
-      });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `${graduate} graduated from ${venue.name}`);
-      seedRumor(`${graduate} graduated at ${venue.name}!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: graduationFor was hash-derived.)
 
-  // Routine: lesson, pupil chime, or offer.
+  // Routine: honest ambient chatter only — teaching, offers.
+  // (lessonsFor/pupilsFor removed 2026-10-08: hash-derived "today's lesson"
+  // and pupil names were fabrication — no real pupils answered.)
   const roll = Math.random();
-  if (roll < 0.45) {
-    const lessons = lessonsFor(name, record.kingdomId, nowMs);
-    const lesson = lessons.length ? lessons[0] : { subject: "reading" };
+  if (roll < 0.6) {
     const line = fill(pickOne(Math.random, LESSON_LINES[type]), {
-      subject: lesson.subject,
+      subject: "reading",
     });
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `taught ${lesson.subject} at ${venue.name}`);
-  } else if (roll < 0.75) {
-    const pupils = pupilsFor(name, nowMs);
-    const pupil = pupils.length ? pupils[0] : "Pip";
-    const line = fill(pickOne(Math.random, PUPIL_LINES), {
-      teacher: record.username,
-    });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `${pupil} answered a question at ${venue.name}`);
+    journalize(citizen, `taught at ${venue.name}`);
   } else {
     const line = fill(pickOne(Math.random, OFFER_LINES[type]), {
       venue: venue.name,
@@ -642,13 +554,9 @@ module.exports = {
   attendanceFor,
   requestMentor,
   mentorFor,
-  graduationFor,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   educatorTypeOf,
   venueFor,
-  lessonsFor,
-  pupilsFor,
-  studyMaterialFor,
   curriculumSubjects,
   proTeachersFor,
   // Pure helpers for tests:

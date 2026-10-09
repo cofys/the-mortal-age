@@ -148,22 +148,7 @@ function fresh() {
   console.log("stillrooms: PASS");
 }
 
-// --- brews determinism + day variance ---
-{
-  fresh();
-  const a = S.brewsFor("brewuser", T0);
-  const b = S.brewsFor("brewuser", T0);
-  assert.deepEqual(a, b, "brews deterministic same day");
-  assert.ok(a.length >= 1 && a.length <= 3, "1-3 brews per day");
-  let differs = false;
-  for (let d = 1; d <= 10; d++) {
-    const c = S.brewsFor("brewuser", T0 + d * 86400000);
-    if (JSON.stringify(c) !== JSON.stringify(a)) { differs = true; break; }
-  }
-  assert.ok(differs, "brews vary across days");
-  for (const brew of a) assert.ok(S.COMMUNITY_BREWS.includes(brew), `brew "${brew}" in the pool`);
-  console.log("brews: PASS");
-}
+// --- brews fabrication removed 2026-10-08 ---
 
 // --- brews are non-medical (no health cures) ---
 {
@@ -177,40 +162,11 @@ function fresh() {
   console.log("non-medical brews: PASS");
 }
 
-// --- herb tie-in (unwraps {name, rarity} objects) ---
-{
-  fresh();
-  const herb = S.herbForToday("herbuser", "misthalin", T0);
-  assert.ok(typeof herb === "string" && herb.length > 0, "herb is a non-empty string");
-  assert.ok(!herb.includes("[object Object]"), "herb object unwrapped correctly");
-  console.log(`herb tie-in: PASS (${herb})`);
-}
+// --- herb fabrication removed 2026-10-08 ---
 
-// --- mishap determinism + rarity ---
-{
-  fresh();
-  const room = { name: "Widow Pimm's stillroom" };
-  const m1 = S.mishapFor(room, T0);
-  const m2 = S.mishapFor(room, T0);
-  assert.equal(m1, m2, "mishap deterministic same day");
-  let hits = 0;
-  for (let d = 0; d < 200; d++) {
-    if (S.mishapFor(room, T0 + d * 86400000)) hits++;
-  }
-  const rate = hits / 200;
-  assert.ok(rate > 0.02 && rate < 0.2, `mishap rarity ~8% (got ${(rate * 100).toFixed(1)}%)`);
-  console.log(`mishap: PASS (${(rate * 100).toFixed(1)}%)`);
-}
+// --- mishap fabrication removed 2026-10-08 ---
 
-// --- price sanity ---
-{
-  fresh();
-  for (let i = 0; i < 20; i++) {
-    const p = S.priceFor(S.COMMUNITY_BREWS[i % S.COMMUNITY_BREWS.length]);
-    assert.ok(p >= 15 && p <= 74, `price ${p} in 15-74 band`);
-  }
-  console.log("prices: PASS");
-}
+// --- price fabrication removed 2026-10-08 ---
 
 // --- all 3 ledgers round-trip + TTL expiry ---
 {
@@ -320,8 +276,6 @@ function fresh() {
   assert.doesNotThrow(() => S.tickBrewfolk(null, T0), "null director");
   assert.doesNotThrow(() => S.tickBrewfolk({}, T0), "empty director");
   assert.doesNotThrow(() => S.brewfolkTypeOf(undefined), "undefined record");
-  assert.doesNotThrow(() => S.brewsFor(null, T0), "null username");
-  assert.doesNotThrow(() => S.mishapFor(null, T0), "null stillroom");
   console.log("never throws: PASS");
 }
 

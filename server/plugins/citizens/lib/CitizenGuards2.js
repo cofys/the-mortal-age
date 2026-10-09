@@ -307,28 +307,7 @@ function groundFor(record) {
   return pool[hashStr(name + "|militia-ground") % pool.length];
 }
 
-/**
- * Today's drill for a guardfolk citizen (1-2 drills).
- * Derived from date + hash; zero storage.
- */
-function drillsFor(username, kingdomId, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const type = guardfolkTypeOf({ username: name, kingdomId });
-  const kinds = type ? [type] : GUARDFOLK_TYPES;
-  const pool = DRILL_LINES_BY_TYPE(kinds);
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|guardfolk-drills:" + day));
-  const count = 1 + Math.floor(rng() * 2); // 1-2
-  const out = [];
-  const used = new Set();
-  for (let i = 0; i < count && used.size < pool.length; i++) {
-    const line = pool[Math.floor(rng() * pool.length)];
-    if (used.has(line)) continue;
-    used.add(line);
-    out.push(line);
-  }
-  return out;
-}
+// (drillsFor removed 2026-10-08: hash-derived fabrication.)
 
 function DRILL_LINES_BY_TYPE(kinds) {
   const out = [];
@@ -339,16 +318,7 @@ function DRILL_LINES_BY_TYPE(kinds) {
   return out;
 }
 
-/**
- * Today's honor-guard ceremony at a muster ground (~8%/day), or null.
- */
-function ceremonyFor(ground, dateMs) {
-  if (!ground?.name) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(ground.name + "|honor-guard:" + day));
-  if (rng() >= CEREMONY_CHANCE) return null;
-  return pickOne(rng, CEREMONY_LINES);
-}
+// (ceremonyFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM).
@@ -496,26 +466,7 @@ function doGuardfolkWork(director, record, citizen, type, nowMs) {
   const day = dayNumber(nowMs);
 
   // Honor-guard ceremony: once per ground per ceremony day, the crowd moment.
-  const ceremony = ceremonyFor(ground, nowMs);
-  if (ceremony) {
-    const key = "ceremony:" + ground.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(ceremony, { ground: ground.name });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      const journalEvent = journalize(record.username, "patrol", `stood the honor guard at ${ground.name}`);
-      const rumor = seedRumor(Math.random, {
-        kind: "ceremony",
-        who: record.username,
-        whoDisplay: record.username,
-        what: `Honor guard ceremony at ${ground.name}`,
-        where: ground.name,
-        whereDisplay: ground.name,
-      });
-      logGuardfolk(director, record, type, "ceremony", ground, journalEvent, rumor);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: ceremonyFor was hash-derived.)
 
   // Routine: drill emote, muster callout, militia offer.
   const roll = Math.random();
@@ -548,8 +499,6 @@ module.exports = {
   drillFor,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   groundFor,
-  drillsFor,
-  ceremonyFor,
   // Pure helpers for tests:
   hashStr,
   pickOne,

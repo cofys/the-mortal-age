@@ -45,10 +45,18 @@ function mockPlayer(name, x = 3005, y = 3005) {
 }
 function mockDirector(entries, players) {
   const bots = new Map();
+  const roster = new Map(entries.map((r) => [r.username, r]));
+  // players/bots also live on the roster (real director scans roster for nearby real players)
+  // but never overwrite an existing citizen record/bot
+  for (const p of players) {
+    const name = p.getUsername();
+    if (!roster.has(name)) roster.set(name, { username: name, role: "player" });
+    if (!bots.has(name)) bots.set(name, p);
+  }
   return {
-    roster: new Map(entries.map((r) => [r.username, r])),
-    playerFor: (record) => bots.get(record.username) || null,
-    onlinePlayers: () => players,
+    roster,
+    isOnline: () => true,
+    getBot: (rec) => bots.get(rec.username) || null,
     _bots: bots,
   };
 }
@@ -151,77 +159,7 @@ function fresh() {
   console.log("kingdom-preferred grounds: PASS");
 }
 
-// --- bag determinism + day variance ---
-{
-  fresh();
-  const rec = findHuntfolk("bag");
-  const g = HF.groundFor(rec);
-  const b1 = HF.bagFor(rec.username, g, T0);
-  const b2 = HF.bagFor(rec.username, g, T0);
-  assert.deepEqual(b1, b2, "bag deterministic same day");
-  assert.ok(b1.length >= 1 && b1.length <= 3, "bag has 1-3 items");
-  const b3 = HF.bagFor(rec.username, g, T0 + 86400000 * 40);
-  // day variance: over several days at least one bag differs
-  const first = JSON.stringify(b1);
-  let differs = JSON.stringify(b3) !== first;
-  for (let d = 1; !differs && d < 10; d++) {
-    differs = JSON.stringify(HF.bagFor(rec.username, g, T0 + 86400000 * d)) !== first;
-  }
-  assert.ok(differs, "bags vary across days");
-  console.log("bag determinism: PASS");
-}
-
-// --- game pools come from the pro tables (danger-correct) ---
-{
-  fresh();
-  const lowGround = { name: "x", kingdom: "misthalin", danger: "low" };
-  const medGround = { name: "y", kingdom: "kandarin", danger: "medium" };
-  assert.ok(HF.PREY.low.includes(HF.gameForToday("GameGuy", lowGround, T0)), "low ground gives low prey");
-  assert.ok(HF.PREY.medium.includes(HF.gameForToday("GameGuy", medGround, T0)), "medium ground gives medium prey");
-  console.log("game pool correctness: PASS");
-}
-
-// --- trophy-bag determinism + rarity ---
-{
-  fresh();
-  const g = HF.COMMUNITY_GROUNDS[0];
-  const t1 = HF.trophyBagFor(g, T0);
-  const t2 = HF.trophyBagFor(g, T0);
-  assert.deepEqual(t1, t2, "trophy-bag deterministic");
-  if (t1) {
-    const pool = HF.TROPHIES[g.danger] || HF.TROPHIES.low;
-    assert.ok(pool.includes(t1.trophy), "trophy from the right table");
-  }
-  // rarity: scan 200 grounds x days, expect ~8%
-  let hits = 0;
-  const N = 2000;
-  for (let i = 0; i < N; i++) {
-    const gg = HF.COMMUNITY_GROUNDS[i % HF.COMMUNITY_GROUNDS.length];
-    if (HF.trophyBagFor(gg, T0 + i * 86400000)) hits++;
-  }
-  const rate = hits / N;
-  assert.ok(rate > 0.03 && rate < 0.14, `trophy rate ${rate.toFixed(3)} near 8%`);
-  console.log(`trophy-bag determinism + rarity (${(rate * 100).toFixed(1)}%): PASS`);
-}
-
-// --- price sanity ---
-{
-  fresh();
-  const p = HF.priceFor("rabbit", T0);
-  assert.ok(Number.isInteger(p) && p >= 5 && p <= 70, `price ${p} sane`);
-  assert.equal(HF.priceFor("rabbit", T0), HF.priceFor("rabbit", T0), "price deterministic");
-  console.log("price sanity: PASS");
-}
-
-// --- dishForToday: cooks tie-in with fallback ---
-{
-  fresh();
-  const d = HF.dishForToday("misthalin", T0);
-  assert.ok(typeof d === "string" && d.length > 0, "dish is a non-empty string");
-  const d2 = HF.dishForToday("not-a-kingdom", T0);
-  assert.ok(typeof d2 === "string" && d2.length > 0, "unknown kingdom falls back");
-  console.log("cooks tie-in: PASS");
-}
+// --- dishForToday removed 2026-10-08: was hash-derived fabrication. ---
 
 // --- ledgers round-trip + TTL expiry ---
 {
@@ -320,7 +258,7 @@ function fresh() {
   const player = mockPlayer("RealRon");
   const d = mockDirector([rec], [player]);
   withFixedRandom(0.05, () => HF.tickHuntfolk(d, T0));
-  assert.equal(d._bots.size, 0, "no bot created — pro skipped at the type gate");
+  assert.ok(!d._bots.has(pro), "no bot created — pro skipped at the type gate");
   console.log("tick skips pro hunter: PASS");
 }
 
@@ -331,7 +269,6 @@ function fresh() {
   assert.doesNotThrow(() => HF.tickHuntfolk({}, T0), "empty director");
   assert.doesNotThrow(() => HF.tickHuntfolk({ roster: null }, T0), "null roster");
   assert.doesNotThrow(() => HF.huntfolkTypeOf(null), "null record");
-  assert.doesNotThrow(() => HF.bagFor(null, null, T0), "null bag inputs");
   console.log("never-throws: PASS");
 }
 

@@ -434,14 +434,7 @@ function goodsFor(username, type, dateMs = Date.now()) {
   }
 }
 
-/** Today's task for a stallfolk citizen (1 task of the day, for journals). */
-function taskForToday(username, type, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const lines = DAILY_TASK_LINES[type] ?? DAILY_TASK_LINES[BARROW_FOLK];
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|stalltask:" + day));
-  return pickOne(rng, lines);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Daily set-pieces (seeded per kingdom per day / per pitch per day).
@@ -571,7 +564,7 @@ function tickStallfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: wheel-offs and moved-alongs (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-marketstalls2] tick failed:", e?.message ?? e);
@@ -648,7 +641,7 @@ function doStallWork(director, record, citizen, type, nowMs) {
       const lines = STALL_LINES[type] ?? STALL_LINES[BARROW_FOLK];
       forceSay(citizen, fill(pickOne(Math.random, lines), { goods }));
     }
-    journalize(citizen, `${taskForToday(name, type, nowMs).replace("{place}", place)} — cried the pitch`);
+    journalize(citizen, `worked at ${place} — cried the pitch`);
   } else if (wares && wares.length) {
     const ware = pickOne(Math.random, wares);
     forceSay(citizen, fill(pickOne(Math.random, MARKET_TALK_LINES), { ware, goods }));
@@ -661,34 +654,7 @@ function doStallWork(director, record, citizen, type, nowMs) {
 }
 
 /** Once-per-day kingdom rhythms: wheel-offs and moved-alongs. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  try {
-    const kingdoms = [...new Set(STALLS.map((s) => s.kingdom).filter(Boolean))];
-    for (const kid of kingdoms) {
-      if (wheelOffFor(kid, nowMs)) {
-        const key = "daily-stallwheel:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const pitch = STALLS.find((s) => s.kingdom === kid);
-          const line = `The barrow-folk in ${kid} lost a wheel — the barrows are down at ${pitch ? pitch.name : kid}.`;
-          journalize({ username: "the stallfolk" }, line);
-          seedRumor(Math.random, { kind: "stall", what: line, who: "the stallfolk", where: kid });
-        }
-      }
-      if (movedAlongFor(kid, nowMs)) {
-        const key = "daily-stallmoved:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const pitch = STALLS.find((s) => s.kingdom === kid);
-          const line = `The guard moved the provisional stalls along in ${kid} — the fringe pitches at ${pitch ? pitch.name : kid} are cleared.`;
-          journalize({ username: "the stallfolk" }, line);
-          seedRumor(Math.random, { kind: "stall", what: line, who: "the stallfolk", where: kid });
-        }
-      }
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickStallfolk,
@@ -698,7 +664,6 @@ module.exports = {
   isHawkerfolk,
   stallPitchFor,
   goodsFor,
-  taskForToday,
   wheelOffFor,
   movedAlongFor,
   stallCrowdFor,

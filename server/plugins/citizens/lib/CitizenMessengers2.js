@@ -153,27 +153,17 @@ const RUN_LINES = {
 };
 
 // Lost-satchel set-piece: the notes spill everywhere.
-const SATCHEL_LINES = [
-  "My satchel! The notes — they're everywhere! Help me grab them!",
-  "(pages scatter across the cobbles) Not the notes! Pick them up, quick!",
-  "Lost my satchel — the words are loose in the street! Catch them!",
-];
+
+// (SATCHEL_LINES removed 2026-10-08 with fabrication branches.)
 
 // Misdelivered-note set-piece: the wrong door got the wrong word.
-const MISDELIVERED_LINES = [
-    "(sheepish) I… gave the note to the wrong house. The wrong house!",
-    "Delivered the message to the wrong door — the look on her face!",
-    "(groans) Wrong corner again. The words went to the wrong ears!",
-];
+
+// (MISDELIVERED_LINES removed 2026-10-08 with fabrication branches.)
 
 // Breathless-runner crowd moment: once per corner per day, a crowd gathers
 // to hear the news the runner brought.
-const BREATHLESS_LINES = [
-  "The crowd gathers round {corner} — the runner's got news!",
-  "Hear it! The runner brings word to {corner} — gather round!",
-  "A crowd draws round the breathless runner at {corner}!",
-  "Word from the runner! The folk gather at {corner} to listen!",
-];
+
+// (BREATHLESS_LINES removed 2026-10-08 with fabrication branches.)
 
 // Runner small talk that names the real post offices via the bridge.
 const POST_CORNER_LINES = [
@@ -378,86 +368,23 @@ function liveGossip() {
   }
 }
 
-/** Today's gossip for a gossip-carrier: live rumor talk when the pools are
- * active, else seeded street gossip. Seeded per day so it holds all day. */
-function gossipFor(username, dateMs = Date.now()) {
-  try {
-    const name = normalizeName(username) || "anon";
-    const day = dayNumber(dateMs);
-    const rng = seededRng(hashStr(name + "|messenger2gossip:" + day));
-    const live = liveGossip();
-    const pool = live.length ? live : STREET_GOSSIP;
-    return pickOne(rng, pool);
-  } catch {
-    return null;
-  }
-}
+// (gossipFor removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's spoken word for a word-runner: seeded per day. */
-function wordFor(username, dateMs = Date.now()) {
-  try {
-    const name = normalizeName(username) || "anon";
-    const day = dayNumber(dateMs);
-    const rng = seededRng(hashStr(name + "|messenger2word:" + day));
-    return pickOne(rng, VERBAL_WORDS);
-  } catch {
-    return null;
-  }
-}
+// (wordFor removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's board note for a board-runner: seeded per day. */
-function boardNoteFor(username, dateMs = Date.now()) {
-  try {
-    const name = normalizeName(username) || "anon";
-    const day = dayNumber(dateMs);
-    const rng = seededRng(hashStr(name + "|messenger2board:" + day));
-    return pickOne(rng, BOARD_NOTES);
-  } catch {
-    return null;
-  }
-}
+// (boardNoteFor removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's verbal route: origin corner -> destination corner, seeded per day. */
-function routeFor(username, dateMs = Date.now()) {
-  try {
-    const offices = postOffices();
-    if (!offices) return null;
-    const name = normalizeName(username) || "anon";
-    const day = dayNumber(dateMs);
-    const rng = seededRng(hashStr(name + "|messenger2route:" + day));
-    const origin = pickOne(rng, offices);
-    let dest = pickOne(rng, offices);
-    if (dest === origin && offices.length > 1) dest = pickOne(rng, offices);
-    return { origin, dest };
-  } catch {
-    return null;
-  }
-}
+// (routeFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Daily set-pieces (seeded per kingdom per day / per corner per day).
 // ============================================================================
 
-/** Lost satchel: the kingdom's runnerfolk spill their notes (~6%/kingdom/day). */
-function satchelFor(kingdomId, dateMs) {
-  if (!kingdomId) return false;
-  const day = dayNumber(dateMs);
-  return chance(seededRng(hashStr("messenger2satchel:" + kingdomId + ":" + day)), SATCHEL_CHANCE);
-}
+// (satchelFor removed 2026-10-08: hash-derived fabrication.)
 
-/** Misdelivered note: the word went to the wrong ears (~7%/kingdom/day). */
-function misdeliveredFor(kingdomId, dateMs) {
-  if (!kingdomId) return false;
-  const day = dayNumber(dateMs);
-  return chance(seededRng(hashStr("messenger2mis:" + kingdomId + ":" + day)), MISDELIVERED_CHANCE);
-}
+// (misdeliveredFor removed 2026-10-08: hash-derived fabrication.)
 
-/** Breathless-runner crowd moment: the folk gather for the news (~8%/corner/day). */
-function runnerCrowdFor(corner, dateMs) {
-  if (!corner) return false;
-  const day = dayNumber(dateMs);
-  return chance(seededRng(hashStr("messenger2crowd:" + corner.name + ":" + day)), RUNNER_CROWD_CHANCE);
-}
+// (runnerCrowdFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Cooldown state (monotonic Date.now() timestamps)
@@ -548,7 +475,7 @@ function tickMessengers2(director, nowMs, desync) {
     }
 
     // Daily rhythms: lost satchels and misdelivered notes (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-messengers2] tick failed:", e?.message ?? e);
@@ -570,61 +497,29 @@ function anyRealPlayerNear(director, citizen, radius) {
 }
 
 function doRunnerWork(director, record, citizen, type, nowMs) {
-  const name = normalizeName(record.username);
   const kid = record?.kingdomId ?? record?.kingdom;
-  const day = dayNumber(nowMs);
   const corner = postCornerFor(record, nowMs);
   const cornerName = corner ? corner.name : "the post corner";
-  const route = routeFor(name, nowMs);
-  const destName = route ? route.dest.name : cornerName;
+  // (routeFor removed 2026-10-08: hash-derived route was fabrication.)
+  const destName = cornerName;
 
-  // Lost-satchel set-piece: the notes spill everywhere.
-  if (kid && satchelFor(kid, nowMs)) {
-    forceSay(citizen, fill(pickOne(Math.random, SATCHEL_LINES), {}));
-    journalize(citizen, `spilled their satchel of notes at ${cornerName}`);
-    seedRumor(Math.random, {
-      kind: "runner",
-      what: `a runner spilled their satchel at ${cornerName} — the notes are loose in the street`,
-      who: record.username,
-      where: cornerName,
-    });
-    return;
-  }
+  // (satchelFor/misdeliveredFor branches removed 2026-10-08: hash-derived
+  // "lost satchel" and "misdelivered note" events with rumor seeding were
+  // fabrication — the worst kind, inventing incidents that never happened.)
 
-  // Misdelivered-note set-piece: the word went to the wrong ears.
-  if (kid && misdeliveredFor(kid, nowMs) && Math.random() < 0.5) {
-    forceSay(citizen, fill(pickOne(Math.random, MISDELIVERED_LINES), {}));
-    journalize(citizen, `misdelivered a note at ${cornerName}`);
-    return;
-  }
+  // (runnerCrowdFor branch removed 2026-10-08: hash-derived "breathless crowd"
+  // event with rumor seeding was fabrication.)
 
-  // Breathless-runner crowd moment: once per corner per day, the folk
-  // gather to hear the runner's news.
-  if (corner && runnerCrowdFor(corner, nowMs)) {
-    const key = "messenger2crowd:" + corner.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const gossip = gossipFor(name, nowMs) ?? "fresh word!";
-      forceSay(citizen, fill(pickOne(Math.random, BREATHLESS_LINES), { corner: cornerName }));
-      journalize(citizen, `drew a breathless crowd at ${cornerName} with word of ${gossip}`);
-      seedRumor(Math.random, {
-        kind: "runner",
-        what: `a breathless runner drew a crowd at ${cornerName}`,
-        who: record.username,
-        where: cornerName,
-      });
-      return;
-    }
-  }
-
+  // (gossipFor/wordFor/boardNoteFor removed 2026-10-08: hash-derived gossip
+  // content was fabrication — the runner runs, but specific "news" was invented.)
   const roll = Math.random();
   if (roll < 0.6) {
     const lines = RUN_LINES[type] ?? RUN_LINES[GOSSIP_CARRIER];
     forceSay(citizen, fill(pickOne(Math.random, lines), {
       runner: record.username,
-      gossip: gossipFor(name, nowMs) ?? "fresh word",
-      word: wordFor(name, nowMs) ?? "word",
-      note: boardNoteFor(name, nowMs) ?? "a note",
+      gossip: "fresh word",
+      word: "word",
+      note: "a note",
       dest: destName,
       corner: cornerName,
     }));
@@ -640,35 +535,7 @@ function doRunnerWork(director, record, citizen, type, nowMs) {
 }
 
 /** Once-per-day kingdom rhythms: lost satchels and misdelivered notes. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  try {
-    const offices = postOffices() ?? [];
-    const kingdoms = [...new Set(offices.map((o) => o.kingdom).filter(Boolean))];
-    for (const kid of kingdoms) {
-      if (satchelFor(kid, nowMs)) {
-        const key = "daily-messenger2satchel:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const corner = offices.find((o) => o.kingdom === kid);
-          const line = `The runnerfolk in ${kid} lost a satchel — the notes are loose in the street at ${corner ? corner.name : kid}.`;
-          journalize({ username: "the runnerfolk" }, line);
-          seedRumor(Math.random, { kind: "runner", what: line, who: "the runnerfolk", where: kid });
-        }
-      }
-      if (misdeliveredFor(kid, nowMs)) {
-        const key = "daily-messenger2mis:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const corner = offices.find((o) => o.kingdom === kid);
-          const line = `A runner gave the word to the wrong door in ${kid} — the wrong ears heard it at ${corner ? corner.name : kid}.`;
-          journalize({ username: "the runnerfolk" }, line);
-          seedRumor(Math.random, { kind: "runner", what: line, who: "the runnerfolk", where: kid });
-        }
-      }
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickMessengers2,
@@ -678,13 +545,6 @@ module.exports = {
   postCornerFor,
   postOffices,
   liveGossip,
-  gossipFor,
-  wordFor,
-  boardNoteFor,
-  routeFor,
-  satchelFor,
-  misdeliveredFor,
-  runnerCrowdFor,
   // Pure helpers for tests:
   hashStr,
   pickOne,

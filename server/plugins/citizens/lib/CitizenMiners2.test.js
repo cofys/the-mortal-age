@@ -156,52 +156,13 @@ function fresh() {
   console.log("kingdom-preferred claims: PASS");
 }
 
-// --- finds determinism ---
-{
-  fresh();
-  const rec = findMinerfolk("find");
-  const type = MF.minerfolkTypeOf(rec);
-  const f1 = MF.findsFor(rec.username, type, T0);
-  const f2 = MF.findsFor(rec.username, type, T0);
-  assert.deepEqual(f1, f2, "finds deterministic for day");
-  assert.ok(f1.length >= 1 && f1.length <= 3, "1-3 finds");
-  const f3 = MF.findsFor(rec.username, type, T0 + 86400000 * 3);
-  assert.ok(Array.isArray(f3) && f3.length >= 1, "finds valid on another day");
-  console.log("finds determinism: PASS");
-}
+// --- finds fabrication removed 2026-10-08 ---
+// (findsFor deleted: hash-derived "today's finds" was fabrication.)
 
-// --- gem hunters find gems ---
-{
-  fresh();
-  const gems = [];
-  for (let i = 0; i < 200; i++) {
-    const f = MF.findsFor("gemhunt" + i, MF.MINERFOLK_GEMHUNTER, T0);
-    gems.push(...f);
-  }
-  assert.ok(gems.every((g) => MF.GEMS.includes(g)), "gem-hunter finds are real gem names");
-  const ores = MF.findsFor("diggary" + 1, MF.MINERFOLK_DIGGER, T0);
-  assert.ok(ores.every((o) => MF.ORES.includes(o)), "digger finds are real ore names");
-  console.log("gem/ore pools: PASS");
-}
+// --- gem/ore fabrication removed 2026-10-08 ---
 
-// --- strike determinism + rarity ---
-{
-  fresh();
-  const claim = MF.COMMUNITY_CLAIMS[0];
-  let hits = 0;
-  const DAYS = 200;
-  for (let d = 0; d < DAYS; d++) {
-    const s = MF.strikeFor(claim, T0 + d * 86400000);
-    if (s) {
-      hits++;
-      assert.ok(MF.ORES.includes(s.ore), "strike ore is a real ore");
-    }
-  }
-  const pct = (hits / DAYS) * 100;
-  assert.ok(pct > 2 && pct < 20, `strike rate ${pct.toFixed(1)}% near 8%`);
-  assert.deepEqual(MF.strikeFor(claim, T0), MF.strikeFor(claim, T0), "strike deterministic");
-  console.log(`rich-vein strike: PASS (${pct.toFixed(1)}%)`);
-}
+// --- strike fabrication removed 2026-10-08 ---
+// (strikeFor deleted: hash-derived "rich vein" was fabrication.)
 
 // --- ledgers round-trip + TTL expiry ---
 {
@@ -327,8 +288,7 @@ function fresh() {
   fresh();
   assert.equal(MF.fill("Strike! {ore} at {claim}.", { ore: "iron", claim: "diggings" }), "Strike! iron at diggings.");
   assert.equal(MF.hashStr("x"), MF.hashStr("x"), "hash deterministic");
-  const p = MF.priceFor("adamant", T0);
-  assert.ok(p >= 54 && p <= 70, `adamant price ${p} scales with rarity`);
+  // (priceFor removed 2026-10-08: hash-derived prices were fabrication.)
   console.log("helpers: PASS");
 }
 

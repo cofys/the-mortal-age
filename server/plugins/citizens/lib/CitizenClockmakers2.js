@@ -439,14 +439,7 @@ function spotFor(record, type, dateMs = Date.now()) {
   }
 }
 
-/** Today's task for a timefolk citizen (1 task of the day, for journals). */
-function taskForToday(username, type, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const lines = DAILY_TASK_LINES[type] ?? DAILY_TASK_LINES[HOUR_CALLER];
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|timefolktask:" + day));
-  return pickOne(rng, lines);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Daily set-pieces (seeded per kingdom per day, ~6-8%/kingdom/day).
@@ -624,7 +617,7 @@ function tickTimefolk(director, nowMs, desync) {
 
     // Daily rhythms: peals, rope snaps, hoarse callers and clogged glasses
     // (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-timefolk] tick failed:", e?.message ?? e);
@@ -681,7 +674,7 @@ function doTimefolkWork(director, record, citizen, type, nowMs) {
     const roll = Math.random();
     if (roll < 0.5) {
       forceSay(citizen, fill(pickOne(Math.random, KNOCK_LINES), { round: place }));
-      journalize(citizen, `${taskForToday(name, type, nowMs).replace("{place}", place)} — knocked the rounds`);
+      journalize(citizen, `worked at ${place} — knocked the rounds`);
     } else if (roll < 0.75) {
       forceSay(citizen, pickOne(Math.random, WAKEUP_OFFER_LINES));
       journalize(citizen, `offered wake-up calls on the round at ${place}`);
@@ -704,7 +697,7 @@ function doTimefolkWork(director, record, citizen, type, nowMs) {
     const roll = Math.random();
     if (roll < 0.65) {
       forceSay(citizen, fill(pickOne(Math.random, BELL_LINES), { hour, bell: place }));
-      journalize(citizen, `${taskForToday(name, type, nowMs).replace("{place}", place)}`);
+      journalize(citizen, `worked at ${place}`);
     } else if (proj && proj.work) {
       forceSay(citizen, fill(pickOne(Math.random, PRO_CLOCK_LINES), { workshop: proj.workshop.name, work: proj.work }));
       journalize(citizen, `talked guild news between bells at ${place}`);
@@ -724,7 +717,7 @@ function doTimefolkWork(director, record, citizen, type, nowMs) {
     const roll = Math.random();
     if (roll < 0.65) {
       forceSay(citizen, fill(pickOne(Math.random, HOUR_CALL_LINES), { hour, square: place }));
-      journalize(citizen, `${taskForToday(name, type, nowMs).replace("{place}", place)}`);
+      journalize(citizen, `worked at ${place}`);
     } else if (proj && proj.work) {
       forceSay(citizen, fill(pickOne(Math.random, PRO_CLOCK_LINES), { workshop: proj.workshop.name, work: proj.work }));
       journalize(citizen, `talked guild news while calling hours in ${place}`);
@@ -745,7 +738,7 @@ function doTimefolkWork(director, record, citizen, type, nowMs) {
     const roll = Math.random();
     if (roll < 0.65) {
       forceSay(citizen, fill(pickOne(Math.random, GLASS_LINES), { spot: place }));
-      journalize(citizen, `${taskForToday(name, type, nowMs).replace("{place}", place)}`);
+      journalize(citizen, `worked at ${place}`);
     } else if (proj && proj.work) {
       forceSay(citizen, fill(pickOne(Math.random, PRO_CLOCK_LINES), { workshop: proj.workshop.name, work: proj.work }));
       journalize(citizen, `talked guild news over the glasses at ${place}`);
@@ -772,61 +765,13 @@ function nearbyDueWakeup(director, citizen, timefolkName, nowMs) {
 }
 
 /** Once-per-day kingdom rhythms: peals, rope snaps, hoarse callers, clogs. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-  try {
-    for (const kid of kingdoms) {
-      for (const bell of BELLS.filter((b) => b.kingdom === kid)) {
-        if (pealFor(bell, nowMs)) {
-          const key = "daily-timepeal:" + bell.name + ":" + day;
-          if (!lastFiredByCitizen.has(key)) {
-            lastFiredByCitizen.set(key, nowMs);
-            const line = `A full peal rang out at ${bell.name} — the finest ringing this side of the hills.`;
-            journalize({ username: "the timefolk" }, line);
-            seedRumor(line);
-          }
-        }
-      }
-      if (ropeSnapFor(kid, nowMs)) {
-        const key = "daily-timesnap:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const bell = BELLS.find((b) => b.kingdom === kid);
-          const line = `The bell rope snapped at ${bell ? bell.name : kid} — no hours rung today, the town's running on guesswork.`;
-          journalize({ username: "the timefolk" }, line);
-          seedRumor(line);
-        }
-      }
-      if (hoarseFor(kid, nowMs)) {
-        const key = "daily-timehoarse:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const line = `The hour-caller in ${kid} lost their voice — today's hours come out as a croak.`;
-          journalize({ username: "the timefolk" }, line);
-          seedRumor(line);
-        }
-      }
-      if (cloggedFor(kid, nowMs)) {
-        const key = "daily-timeclog:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const spot = GLASSES.find((g) => g.kingdom === kid);
-          const line = `A sandglass clogged at ${spot ? spot.name : kid} — half the town ate lunch an hour early.`;
-          journalize({ username: "the timefolk" }, line);
-          seedRumor(line);
-        }
-      }
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickTimefolk,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   timefolkTypeOf,
   spotFor,
-  taskForToday,
   ropeSnapFor,
   hoarseFor,
   cloggedFor,

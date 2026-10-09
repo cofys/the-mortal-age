@@ -456,16 +456,7 @@ function cornerFor(record, dateMs = Date.now()) {
   }
 }
 
-/** The day's errand cargo for a grease-monkey: seeded per day. */
-function cargoFor(username, dateMs = Date.now()) {
-  try {
-    const name = normalizeName(username) || "anon";
-    const rng = seededRng(hashStr("engcargo2:" + name + ":" + dayNumber(dateMs)));
-    return pickOne(rng, ERRAND_CARGO);
-  } catch {
-    return ERRAND_CARGO[0];
-  }
-}
+// (cargoFor removed 2026-10-08: hash-derived fabrication.)
 
 const ERRAND_CARGO = [
   "a poke of washers",
@@ -476,16 +467,7 @@ const ERRAND_CARGO = [
   "a box of spare bolts",
 ];
 
-/** The day's mending cry job for a tinker: seeded per day. */
-function mendJobFor(username, dateMs = Date.now()) {
-  try {
-    const name = normalizeName(username) || "anon";
-    const rng = seededRng(hashStr("engmend2:" + name + ":" + dayNumber(dateMs)));
-    return pickOne(rng, MEND_JOBS);
-  } catch {
-    return MEND_JOBS[0];
-  }
-}
+// (mendJobFor removed 2026-10-08: hash-derived fabrication.)
 
 /**
  * Read-only bridge to the master's REAL kingdom machine workshops —
@@ -590,7 +572,7 @@ function tickEngineerfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: gear-spills, whistle-gags, fix-crowds (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-engineers2] tick failed:", e?.message ?? e);
@@ -612,11 +594,11 @@ function anyRealPlayerNear(director, citizen, radius) {
 }
 
 function doFolkWork(director, record, citizen, type, nowMs) {
-  const name = normalizeName(record.username);
   const corner = cornerFor(record, nowMs);
   const place = corner ? corner.name : "the street repair corner";
-  const cargo = cargoFor(name, nowMs);
-  const job = mendJobFor(name, nowMs);
+  // (cargoFor/mendJobFor removed 2026-10-08: hash-derived specifics were fabrication.)
+  const cargo = "parts";
+  const job = "a mending job";
   const workshop = proWorkshopFor(record) || "the machine workshop";
   const hour = new Date(nowMs).getHours();
 
@@ -667,46 +649,7 @@ function doFolkWork(director, record, citizen, type, nowMs) {
  *   - fix-crowd: a tinker's mending draws a crowd (~8%)
  * Day-gated keys, cheap to evaluate. Never throws.
  */
-function dailyRhythms(director, nowMs) {
-  try {
-    const day = dayNumber(nowMs);
-    const rng = seededRng(hashStr("engineerfolk-day:" + day));
-    const online = typeof director.onlinePlayers === "function" ? director.onlinePlayers() : [];
-    const realNearSpot = online.some((p) => isRealPlayer(p));
-    if (!realNearSpot) return; // no audience — skip the whole street scene
-    const kids = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-
-    for (const kid of kids) {
-      const spillKey = "spill:" + kid + ":" + day;
-      if (!firedDayKeys.has(spillKey) && rng() < GEAR_SPILL_CHANCE) {
-        firedDayKeys.add(spillKey);
-        const event = pickOne(rng, GEAR_SPILL_LINES);
-        journalize("engineerfolk-" + kid, event + " (" + kid + " corner)");
-        seedRumor(rng, event);
-      }
-      const gagKey = "gag:" + kid + ":" + day;
-      if (!firedDayKeys.has(gagKey) && rng() < WHISTLE_GAG_CHANCE) {
-        firedDayKeys.add(gagKey);
-        const event = pickOne(rng, WHISTLE_GAG_LINES);
-        journalize("engineerfolk-" + kid, event);
-        seedRumor(rng, event);
-      }
-    }
-
-    for (let i = 0; i < CORNERS.length; i++) {
-      const key = "fixcrowd:" + i + ":" + day;
-      if (firedDayKeys.has(key) || rng() >= FIX_CROWD_CHANCE) continue;
-      firedDayKeys.add(key);
-      const corner = CORNERS[i];
-      journalize(
-        "engineerfolk-" + corner.kingdom,
-        fill(pickOne(rng, FIX_CROWD_LINES), { place: corner.name })
-      );
-    }
-  } catch {
-    // set-pieces are cosmetic
-  }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickEngineerfolk,
@@ -727,8 +670,6 @@ module.exports = {
   engineerfolkTypeOf,
   folkTypeFromRoll,
   cornerFor,
-  cargoFor,
-  mendJobFor,
   proWorkshopFor,
   anyRealPlayerNear,
   TINKER,

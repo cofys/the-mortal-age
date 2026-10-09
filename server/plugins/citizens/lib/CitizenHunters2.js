@@ -125,17 +125,9 @@ const WORK_LINES = {
   ],
 };
 
-const BAG_LINES = [
-  "Fine morning! {game} for the pot!",
-  "The snares gave us {game} today.",
-  "Look — {game}! Supper's sorted.",
-  "Bagged {game} on the community ground.",
-];
+// (BAG_LINES removed 2026-10-08 with fabrication branches.)
 
-const FALCON_LINES = [
-  "She stooped like lightning — {game} never stood a chance!",
-  "My falcon took {game} on the wing. Beautiful, wasn't it?",
-];
+// (FALCON_LINES removed 2026-10-08 with fabrication branches.)
 
 const TROPHY_LINES = [
   "A {trophy}! On the community ground of all places! {ground} is blessed!",
@@ -148,10 +140,7 @@ const SHARE_LINES = [
   "Community hunt, community table. Help yourself.",
 ];
 
-const SELL_LINES = [
-  "Fresh {game} — straight from the ground, fair price.",
-  "Selling the morning's {game}. The cooks buy it quick.",
-];
+// (SELL_LINES removed 2026-10-08 with fabrication branches.)
 
 const JOIN_LINES = [
   "We're hunting the community ground at dawn — join us?",
@@ -326,73 +315,15 @@ function groundFor(record) {
   return pool[hashStr("huntfolkground:" + name) % pool.length];
 }
 
-/** The game a huntfolk citizen bags today, from their ground's table. */
-function gameForToday(username, ground, dateMs) {
-  const name = (normalizeName(username) || "anon").toLowerCase();
-  const day = dayNumber(dateMs);
-  const danger = (ground && ground.danger) || "low";
-  const pool = PREY[danger] || PREY.low;
-  return pool[hashStr("huntfolkgame:" + name + ":" + day) % pool.length];
-}
+// (gameForToday removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's bag for a huntfolk citizen: 1-3 game animals.
- * Derived from date + hash; zero storage.
- */
-function bagFor(username, ground, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("huntfolkbag:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * 3); // 1-3
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    out.push(gameForToday(name + ":" + i, ground, dateMs));
-  }
-  return out;
-}
+// (bagFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's trophy-bag event at a ground (~8%/day), or null.
- * { trophy, hunter } — the crowd moment.
- */
-function trophyBagFor(ground, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("huntfolktrophy:" + ground.name + ":" + day));
-  if (rng() >= TROPHY_BAG_CHANCE) return null;
-  const danger = ground.danger || "low";
-  const pool = TROPHIES[danger] || TROPHIES.low;
-  return { trophy: pool[Math.floor(rng() * pool.length)] };
-}
+// (trophyBagFor removed 2026-10-08: hash-derived fabrication.)
 
-/** A fair price for fresh game (5-50 coins by danger-table rank). */
-function priceFor(game, dateMs) {
-  const rng = seededRng(hashStr("huntfolkprice:" + game + ":" + dayNumber(dateMs)));
-  let idx = -1;
-  for (const table of Object.values(PREY)) {
-    const i = table.indexOf(game);
-    if (i >= 0) { idx = i; break; }
-  }
-  const base = idx >= 0 ? 5 + idx * 8 : 10;
-  return base + Math.floor(rng() * 12);
-}
+// (priceFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A game dish the cooks are serving today — read from the real
- * CitizenCooks regional tables (static fallback), so the hunters' hawking
- * matches what the kitchens actually want.
- */
-function dishForToday(kingdomId, dateMs) {
-  try {
-    const dishes = ProCooks && ProCooks.REGIONAL_DISHES;
-    const pool = (dishes && (dishes[kingdomId] || dishes.misthalin)) || null;
-    if (Array.isArray(pool) && pool.length) {
-      return pool[hashStr("huntfolkdish:" + kingdomId + ":" + dayNumber(dateMs)) % pool.length];
-    }
-  } catch {
-    /* cooks absent */
-  }
-  return "game stew";
-}
+// (dishForToday removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM) — exported for the LLM dialogue tier.
@@ -541,53 +472,21 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doHuntfolkWork(director, record, citizen, type, nowMs) {
   const ground = groundFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
-  // Trophy-bag event: once per ground per day, the crowd moment.
-  const trophy = trophyBagFor(ground, nowMs);
-  if (trophy) {
-    const key = "trophybag:" + ground.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, TROPHY_LINES), {
-        trophy: trophy.trophy,
-        hunter: name,
-        ground: ground.name,
-      });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `bagged a ${trophy.trophy} at ${ground.name}`);
-      seedRumor(`A ${trophy.trophy} bagged at ${ground.name}!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: trophyBagFor was hash-derived.)
 
-  // Routine: work emote, bag callout, falconry callout, share/sell/join offers.
+  // Routine: honest ambient chatter only — hunting, sharing, join offers.
+  // (Bag-callout and sell branches removed 2026-10-08: bagFor/dishForToday
+  // were hash-derived fabrication — the citizen never bagged that game.)
   const roll = Math.random();
-  if (roll < 0.35) {
+  if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `hunted at ${ground.name}`);
-  } else if (roll < 0.55) {
-    const todays = bagFor(name, ground, nowMs);
-    const game = todays.length ? todays[0] : "rabbit";
-    const lines = type === HUNTFOLK_FALCONER ? FALCON_LINES : BAG_LINES;
-    const line = fill(pickOne(Math.random, lines), { game });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `bagged ${todays.join(", ")} at ${ground.name}`);
-  } else if (roll < 0.7) {
+  } else if (roll < 0.75) {
     const line = pickOne(Math.random, SHARE_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `shared the bag at ${ground.name}`);
-  } else if (roll < 0.85) {
-    const todays = bagFor(name, ground, nowMs);
-    const game = todays.length ? todays[0] : "rabbit";
-    const line = fill(pickOne(Math.random, SELL_LINES), {
-      game,
-      dish: dishForToday(record.kingdomId, nowMs),
-    });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `hawked ${game} at ${ground.name}`);
   } else {
     const line = pickOne(Math.random, JOIN_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
@@ -600,11 +499,6 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   huntfolkTypeOf,
   groundFor,
-  gameForToday,
-  bagFor,
-  trophyBagFor,
-  priceFor,
-  dishForToday,
   joinHunt,
   huntFor,
   buyGame,

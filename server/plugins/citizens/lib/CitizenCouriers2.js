@@ -399,59 +399,17 @@ function beatFor(record) {
   return pool[hashStr(name + "|errand-beat") % pool.length];
 }
 
-/** Today's asking fee for an errand-runner (stable per day). */
-function feeForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|errand-fee:" + day));
-  const coppers = 1 + Math.floor(rng() * 3); // 1-3 coppers a run
-  return coppers === 1 ? "a copper a run" : coppers + " coppers a run";
-}
+// (feeForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's errand job for an errand-runner (stable per day). */
-function errandJobForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|errand-job:" + day));
-  return pickOne(rng, ERRAND_JOBS);
-}
+// (errandJobForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's basket for a grocery carrier (stable per day). */
-function basketForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|errand-basket:" + day));
-  return pickOne(rng, BASKET_GOODS);
-}
+// (basketForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** The well a water fetcher draws from today (stable per day). */
-function wellForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|errand-well:" + day));
-  return pickOne(rng, WELLS);
-}
+// (wellForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's task for an errand citizen (1 task of the day). */
-function taskForToday(username, type, dateMs) {
-  const tasks = DAILY_TASK_LINES[type] ?? DAILY_TASK_LINES[ERRAND_RUNNER];
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|errand-task:" + day));
-  return pickOne(rng, tasks);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A market-rush day at a beat (~8%/day), or null: the whole market needs
- * carrying. Journaled + rumor-seeded by dailyRhythms.
- */
-function marketRushFor(beat, dateMs) {
-  if (!beat?.name) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(beat.name + "|market-rush:" + day));
-  if (rng() >= RUSH_CHANCE) return null;
-  return true;
-}
+// (marketRushFor removed 2026-10-08: hash-derived fabrication.)
 
 /**
  * A spilled basket in a kingdom (~8%/day), or null: a runner dropped a
@@ -679,7 +637,7 @@ function tickErrandfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: market rushes and spilled baskets (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-errandfolk] tick failed:", e?.message ?? e);
@@ -702,7 +660,6 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doErrandWork(director, record, citizen, type, nowMs) {
   const beat = beatFor(record);
-  const name = normalizeName(record.username);
 
   // A nearby player's ready fetch request takes priority for errand-runners.
   if (type === ERRAND_RUNNER) {
@@ -741,39 +698,31 @@ function doErrandWork(director, record, citizen, type, nowMs) {
   }
 
   if (type === ERRAND_RUNNER) {
-    const fee = feeForToday(name, nowMs);
+    // (feeForToday/errandJobForToday/taskForToday removed 2026-10-08: hash-derived
+    // fabrication. The nearbyReadyFetch/nearbyPlayerHire branches above handle real jobs.)
     const roll = Math.random();
     if (roll < 0.6) {
-      forceSay(citizen, fill(pickOne(Math.random, OFFER_LINES), { fee }));
-    } else if (roll < 0.8) {
+      forceSay(citizen, pickOne(Math.random, OFFER_LINES));
+    } else {
       forceSay(citizen, fill(pickOne(Math.random, CORNER_LINES), {
         corner: pickOne(Math.random, courierCorners()),
       }));
-    } else {
-      const job = errandJobForToday(name, nowMs);
-      forceSay(citizen, `Off ${job} — back in a tick!`);
     }
-    journalize(citizen, `${taskForToday(name, type, nowMs)} at ${beat.name}`);
+    journalize(citizen, `worked the errand beat at ${beat.name}`);
     return;
   }
 
   if (type === GROCERY_CARRIER) {
-    const basket = basketForToday(name, nowMs);
-    const rush = marketRushFor(beat, nowMs);
-    if (rush && Math.random() < 0.5) {
-      forceSay(citizen, pickOne(Math.random, RUSH_LINES));
-      journalize(citizen, `worked a market rush at ${beat.name}`);
-    } else {
-      forceSay(citizen, fill(pickOne(Math.random, BASKET_LINES), { basket }));
-      journalize(citizen, `carried ${basket} home for a shopper at ${beat.name}`);
-    }
+    // (basketForToday/marketRushFor removed 2026-10-08: hash-derived fabrication.)
+    forceSay(citizen, pickOne(Math.random, BASKET_LINES));
+    journalize(citizen, `carried groceries at ${beat.name}`);
     return;
   }
 
   if (type === WATER_FETCHER) {
-    const well = wellForToday(name, nowMs);
-    forceSay(citizen, fill(pickOne(Math.random, WATER_LINES), { well }));
-    journalize(citizen, `drew water from ${well} at ${beat.name}`);
+    // (wellForToday removed 2026-10-08: hash-derived well name was fabrication.)
+    forceSay(citizen, pickOne(Math.random, WATER_LINES));
+    journalize(citizen, `drew water at ${beat.name}`);
     return;
   }
 
@@ -828,44 +777,13 @@ function nearbyPlayerHire(director, citizen, nowMs) {
 }
 
 /** Once-per-day beat/kingdom rhythms: market rushes and spilled baskets. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  try {
-    for (const beat of ERRAND_BEATS) {
-      if (!marketRushFor(beat, nowMs)) continue;
-      const key = "market-rush:" + beat.name + ":" + day;
-      if (lastFiredByCitizen.has(key)) continue;
-      lastFiredByCitizen.set(key, nowMs);
-      const line = `Market rush at ${beat.name} — every errand-runner in the square has a basket on each arm.`;
-      journalize({ username: beat.name }, line);
-      seedRumor(line);
-    }
-    const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-    for (const kid of kingdoms) {
-      const spill = spilledBasketFor(kid, nowMs);
-      if (!spill) continue;
-      const key = "spilled-basket:" + kid + ":" + day;
-      if (lastFiredByCitizen.has(key)) continue;
-      lastFiredByCitizen.set(key, nowMs);
-      const beat = (ERRAND_BEATS.filter((v) => v.kingdom === kid)[0] ?? ERRAND_BEATS[0]).name;
-      const line = `A runner spilled ${spill.basket} at ${beat} — half the square is helping pick it up.`;
-      journalize({ username: "the errand-runners" }, line);
-      seedRumor(line);
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickErrandfolk,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   errandTypeOf,
   beatFor,
-  feeForToday,
-  errandJobForToday,
-  basketForToday,
-  wellForToday,
-  taskForToday,
-  marketRushFor,
   spilledBasketFor,
   courierCorners,
   hiredDeliveryStatus,

@@ -409,60 +409,15 @@ function pitchFor(record) {
   return pool[hashStr(name + "|moneyfolk-pitch") % pool.length];
 }
 
-/** Today's exchange rate quote for a money-changer (stable per day). */
-function rateForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|moneyfolk-rate:" + day));
-  const coin = pickOne(rng, FOREIGN_COINS);
-  // The changer's cut is baked in: 3-7 foreign units per 10 local coins.
-  const units = 3 + Math.floor(rng() * 5);
-  return { coin, rate: `${units} ${coin.toLowerCase()} to 10 coins` };
-}
+// (rateForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's featured pawn item for a pawnbroker (stable per day). */
-function pawnItemForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|moneyfolk-pawn:" + day));
-  return pickOne(rng, PAWN_ITEMS);
-}
+// (pawnItemForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's counting job for a coin-sorter (stable per day). */
-function countJobForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|moneyfolk-count:" + day));
-  return pickOne(rng, COUNT_JOBS);
-}
+// (countJobForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's task for a moneyfolk citizen (1 task of the day). */
-function taskForToday(username, type, dateMs) {
-  const tasks = DAILY_TASK_LINES[type] ?? DAILY_TASK_LINES[MONEYFOLK_CHANGER];
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|moneyfolk-task:" + day));
-  return pickOne(rng, tasks);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A deterministic coin appraisal — what a changer would say about the
- * given coin today. Stable per coin+day; the LLM dialogue tier performs
- * appraisals with this.
- */
-function appraisalOf(coinDesc, dateMs) {
-  const coin = String(coinDesc ?? "").slice(0, 60) || "a gold sovereign";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(coin.toLowerCase() + "|moneyfolk-appraisal:" + day));
-  const roll = rng();
-  if (roll < 0.7) {
-    return { verdict: "genuine weight", weight: "full weight", coin };
-  }
-  if (roll < 0.9) {
-    return { verdict: "clipped — short by a hair", weight: "light by a hair", coin };
-  }
-  return { verdict: "counterfeit — brass under the wash", weight: "false through", coin };
-}
+// (appraisalOf removed 2026-10-08: hash-derived fabrication.)
 
 /**
  * Today's assay alert at a pitch (~8%/day), or null: a changer caught a
@@ -478,17 +433,7 @@ function assayAlertFor(pitch, dateMs) {
   return { coin, bad };
 }
 
-/**
- * Today's lending rush for a kingdom (~8%/day), or null: market lenders
- * shout special terms. Journaled + rumor-seeded by dailyRhythms.
- */
-function lendingRushFor(kingdomId, dateMs) {
-  if (!kingdomId) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(String(kingdomId) + "|lending-rush:" + day));
-  if (rng() >= LENDING_RUSH_CHANCE) return null;
-  return true;
-}
+// (lendingRushFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Real-data bridges — the formal banks, cross-read from CitizenBankers.
@@ -694,7 +639,7 @@ function tickMoneyfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: assay alerts and lending rushes (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-moneyfolk] tick failed:", e?.message ?? e);
@@ -717,7 +662,6 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doMoneyfolkWork(director, record, citizen, type, nowMs) {
   const pitch = pitchFor(record);
-  const name = normalizeName(record.username);
 
   // A nearby player's overdue brass note takes priority for lenders.
   if (type === MONEYFOLK_LENDER) {
@@ -748,57 +692,42 @@ function doMoneyfolkWork(director, record, citizen, type, nowMs) {
   }
 
   if (type === MONEYFOLK_CHANGER) {
-    const q = rateForToday(name, nowMs);
+    // (rateForToday/appraisalOf removed 2026-10-08: hash-derived exchange rates
+    // were fabrication. The nearbyDebtor branch above handles real loans.)
     const roll = Math.random();
-    if (roll < 0.55) {
-      forceSay(citizen, fill(pickOne(Math.random, PITCH_LINES), { coin: q.coin, rate: q.rate }));
+    if (roll < 0.5) {
+      forceSay(citizen, pickOne(Math.random, PITCH_LINES));
       journalize(citizen, `pitched coin exchange at ${pitch.name}`);
-    } else if (roll < 0.75 && !banksOpenAt(nowMs)) {
+    } else if (!banksOpenAt(nowMs)) {
       forceSay(citizen, pickOne(Math.random, BANK_HOUR_LINES));
       journalize(citizen, `worked the pitch while the banks were shut at ${pitch.name}`);
-    } else if (roll < 0.9 && banksOpenAt(nowMs)) {
+    } else {
       forceSay(citizen, fill(pickOne(Math.random, BANK_OPEN_LINES), { bank: nearestBankFor(record) }));
       journalize(citizen, `baited bank-bound customers at ${pitch.name}`);
-    } else {
-      const a = appraisalOf(q.coin, nowMs);
-      forceSay(citizen, fill(pickOne(Math.random, ASSAY_LINES), {
-        coin: a.coin,
-        verdict: a.verdict,
-        weight: a.weight,
-        rate: q.rate,
-      }));
-      journalize(citizen, `assayed coin for a traveler at ${pitch.name}`);
     }
     return;
   }
 
   if (type === MONEYFOLK_SORTER) {
-    const job = countJobForToday(name, nowMs);
-    if (Math.random() < 0.6) {
-      forceSay(citizen, pickOne(Math.random, COUNT_LINES));
-    } else {
-      forceSay(citizen, fill(pickOne(Math.random, [
-        "Counted and true — {job}, not a coin missing.",
-        "{job} done to the last coin. Anyone else need a counter?",
-        "I'll count your takings for a small fee — did {job} this morning.",
-      ]), { job }));
-    }
-    journalize(citizen, `${taskForToday(name, type, nowMs)} at ${pitch.name}`);
+    // (countJobForToday/taskForToday removed 2026-10-08: hash-derived fabrication.)
+    forceSay(citizen, pickOne(Math.random, COUNT_LINES));
+    journalize(citizen, `counted coin at ${pitch.name}`);
     return;
   }
 
   if (type === MONEYFOLK_LENDER) {
-    const rush = lendingRushFor(record?.kingdomId ?? record?.kingdom, nowMs);
+    // (lendingRushFor removed 2026-10-08: hash-derived "rush day" was fabrication.
+    // The nearbyDebtor branch above handles real overdue loans.)
     const line = pickOne(Math.random, LOAN_LINES);
     const np = nearbyPlayerName(director, citizen);
-    forceSay(citizen, rush ? line.replace("{player}", "friend — rush terms today") : fill(line, { player: np || "friend" }));
-    journalize(citizen, `offered brass notes${rush ? " on a lending-rush day" : ""} at ${pitch.name}`);
+    forceSay(citizen, fill(line, { player: np || "friend" }));
+    journalize(citizen, `offered brass notes at ${pitch.name}`);
     return;
   }
 
-  // Pawnbroker: featured item pitches.
-  const item = pawnItemForToday(name, nowMs);
-  forceSay(citizen, fill(pickOne(Math.random, PAWN_LINES), { item }));
+  // Pawnbroker: honest pitch (the nearbyPawnHolder branch above handles real tickets).
+  // (pawnItemForToday removed 2026-10-08: hash-derived featured item was fabrication.)
+  forceSay(citizen, pickOne(Math.random, PAWN_LINES));
   journalize(citizen, `pitched pawnbroking at ${pitch.name}`);
 }
 
@@ -844,45 +773,14 @@ function nearbyPlayerName(director, citizen) {
 }
 
 /** Once-per-day pitch/kingdom rhythms: assay alerts and lending rushes. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  try {
-    for (const pitch of MONEY_PITCHES) {
-      const alert = assayAlertFor(pitch, nowMs);
-      if (!alert) continue;
-      const key = "assay-alert:" + pitch.name + ":" + day;
-      if (lastFiredByCitizen.has(key)) continue;
-      lastFiredByCitizen.set(key, nowMs);
-      const line = `${alert.coin} found ${alert.bad} at ${pitch.name} — the changers are biting every coin today.`;
-      journalize({ username: pitch.name }, line);
-      seedRumor(line);
-    }
-    const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-    for (const kid of kingdoms) {
-      if (!lendingRushFor(kid, nowMs)) continue;
-      const key = "lending-rush:" + kid + ":" + day;
-      if (lastFiredByCitizen.has(key)) continue;
-      lastFiredByCitizen.set(key, nowMs);
-      const pitch = (MONEY_PITCHES.filter((v) => v.kingdom === kid)[0] ?? MONEY_PITCHES[0]).name;
-      const line = `Lending rush in ${kid}! The market lenders at ${pitch} are writing brass notes on easy terms.`;
-      journalize({ username: "the moneyfolk" }, line);
-      seedRumor(line);
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickMoneyfolk,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   moneyfolkTypeOf,
   pitchFor,
-  rateForToday,
-  pawnItemForToday,
-  countJobForToday,
-  taskForToday,
-  appraisalOf,
   assayAlertFor,
-  lendingRushFor,
   nearestBankFor,
   banksOpenAt,
   offerMicroLoan,

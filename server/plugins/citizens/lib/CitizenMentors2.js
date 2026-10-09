@@ -626,7 +626,7 @@ function tickMentorfolk(director, nowMs, desync) {
 
     // Daily rhythms: oath ceremonies, taskmaster scenes, soapbox crowds,
     // signing hauls (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-mentors2] tick failed:", e?.message ?? e);
@@ -705,48 +705,7 @@ function doFolkWork(director, record, citizen, type, nowMs) {
  *   - signing-haul: three lads signed in a day (~6%)
  * Day-gated keys, cheap to evaluate. Never throws.
  */
-function dailyRhythms(director, nowMs) {
-  try {
-    const day = dayNumber(nowMs);
-    const rng = seededRng(hashStr("mentorfolk-day:" + day));
-    const online = typeof director.onlinePlayers === "function" ? director.onlinePlayers() : [];
-    const realNearSpot = online.some((p) => isRealPlayer(p));
-    if (!realNearSpot) return; // no audience — skip the whole street scene
-    const kids = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-    const trade = pickOne(rng, RECRUIT_TRADES);
-
-    for (const kid of kids) {
-      const oathKey = "oath:" + kid + ":" + day;
-      if (!firedDayKeys.has(oathKey) && rng() < OATH_CEREMONY_CHANCE) {
-        firedDayKeys.add(oathKey);
-        const event = fill(pickOne(rng, OATH_CEREMONY_LINES), { place: "the market cross", trade });
-        journalize("mentorfolk-" + kid, event + " (" + kid + " pitch)");
-        seedRumor(rng, event);
-      }
-      const sceneKey = "scene:" + kid + ":" + day;
-      if (!firedDayKeys.has(sceneKey) && rng() < TASKMASTER_SCENE_CHANCE) {
-        firedDayKeys.add(sceneKey);
-        const event = fill(pickOne(rng, TASKMASTER_SCENE_LINES), { place: "the guild yard" });
-        journalize("mentorfolk-" + kid, event);
-      }
-      const crowdKey = "crowd:" + kid + ":" + day;
-      if (!firedDayKeys.has(crowdKey) && rng() < SOAPBOX_CROWD_CHANCE) {
-        firedDayKeys.add(crowdKey);
-        const event = fill(pickOne(rng, SOAPBOX_CROWD_LINES), { place: "the soapbox corner" });
-        journalize("mentorfolk-" + kid, event);
-        seedRumor(rng, event);
-      }
-      const haulKey = "haul:" + kid + ":" + day;
-      if (!firedDayKeys.has(haulKey) && rng() < SIGNING_HAUL_CHANCE) {
-        firedDayKeys.add(haulKey);
-        const event = fill(pickOne(rng, SIGNING_HAUL_LINES), { place: "the hiring pitch", trade });
-        journalize("mentorfolk-" + kid, event);
-      }
-    }
-  } catch {
-    // set-pieces are cosmetic
-  }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickMentorfolk,

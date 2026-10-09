@@ -196,12 +196,8 @@ const DAILY_TASKS = {
 };
 
 // === Scripted lines ===
-const PITCH_LINES = [
-  "Fresh {produce} from {yard} — picked this morning!",
-  "{produce}! Best of the {yard} allotments!",
-  "The {kitchen} buys our {produce} — but there's plenty left for you!",
-  "Taste the season: {produce}, straight off the {yard} plots!",
-];
+
+// (PITCH_LINES removed 2026-10-08 with fabrication branches.)
 
 const HARVEST_CALL_LINES = [
   "All hands to the sheaves! The weather's turning!",
@@ -415,14 +411,7 @@ function farmyardFor(record) {
   return pool[hashStr(name + "|farmfolk-yard") % pool.length];
 }
 
-/** Today's task for a farmfolk citizen (1 task of the day). */
-function taskForToday(username, type, dateMs) {
-  const tasks = DAILY_TASKS[type] ?? DAILY_TASKS[FARMFOLK_FARMHAND];
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|farmfolk-task:" + day));
-  return pickOne(rng, tasks);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
 /**
  * The real season — read from the actual CitizenFarmers season table
@@ -470,41 +459,11 @@ function produceListFor(dateMs) {
   return [...new Set(out)];
 }
 
-/** The produce a market-garden seller is hawking today (stable per day). */
-function produceForToday(username, dateMs) {
-  const list = produceListFor(dateMs);
-  if (!list.length) return "seasonal veg";
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|farmfolk-produce:" + day));
-  return pickOne(rng, list);
-}
+// (produceForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** A community kitchen the sellers supply (from the real Cooks2 table). */
-function kitchenNameFor(username, dateMs) {
-  const pool = ProCookfolk?.COMMUNITY_KITCHENS;
-  const names = Array.isArray(pool) && pool.length
-    ? pool.map((k) => k?.name ?? k).filter(Boolean)
-    : ["the village hearth"];
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|farmfolk-kitchen:" + day));
-  return pickOne(rng, names);
-}
+// (kitchenNameFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's harvest day at a farmyard (~12%/day, harvest seasons only),
- * or null. Harvest crews muster; the whole yard works the harvest.
- */
-function harvestDayFor(yard, dateMs) {
-  if (!yard?.name) return null;
-  const hs = harvestSeasonFor(dateMs);
-  if (!hs) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(yard.name + "|harvest-day:" + day));
-  if (rng() >= HARVEST_DAY_CHANCE) return null;
-  return hs;
-}
+// (harvestDayFor removed 2026-10-08: hash-derived fabrication.)
 
 /**
  * Today's harvest feast for a kingdom (~5%/day, autumn only), or null.
@@ -679,7 +638,7 @@ function tickFarmfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: harvest days, feasts and picking days (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-farmfolk] tick failed:", e?.message ?? e);
@@ -702,7 +661,6 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doFarmfolkWork(director, record, citizen, type, nowMs) {
   const yard = farmyardFor(record);
-  const name = normalizeName(record.username);
 
   // A nearby player's pending basket request takes priority for sellers.
   if (type === FARMFOLK_SELLER) {
@@ -718,8 +676,7 @@ function doFarmfolkWork(director, record, citizen, type, nowMs) {
   // hedge-laying and barn work otherwise.
   if (type === FARMFOLK_HARVEST) {
     const hs = harvestSeasonFor(nowMs);
-    const day = harvestDayFor(yard, nowMs);
-    if (hs || day) {
+    if (hs) {
       const roll = Math.random();
       if (roll < 0.55) {
         forceSay(citizen, pickOne(Math.random, WORK_LINES[FARMFOLK_HARVEST]));
@@ -735,10 +692,10 @@ function doFarmfolkWork(director, record, citizen, type, nowMs) {
   }
 
   if (type === FARMFOLK_SELLER) {
-    const produce = produceForToday(name, nowMs);
-    const kitchen = kitchenNameFor(name, nowMs);
-    forceSay(citizen, fill(pickOne(Math.random, PITCH_LINES), { produce, yard: yard.name, kitchen }));
-    journalize(citizen, `pitched ${produce} from the barrow at ${yard.name}`);
+    // (produceForToday/kitchenNameFor removed 2026-10-08: hash-derived produce
+    // pitch was fabrication. The nearbyBasket branch above handles real sales.)
+    forceSay(citizen, pickOne(Math.random, WORK_LINES[type]));
+    journalize(citizen, `tended the barrow at ${yard.name}`);
     return;
   }
 
@@ -751,7 +708,7 @@ function doFarmfolkWork(director, record, citizen, type, nowMs) {
     return;
   }
   forceSay(citizen, pickOne(Math.random, WORK_LINES[type] ?? WORK_LINES[FARMFOLK_FARMHAND]));
-  journalize(citizen, `${taskForToday(name, type, nowMs)} at ${yard.name}`);
+  journalize(citizen, `worked at ${yard.name}`);
 }
 
 /** A nearby real player with a pending basket request, if any. */
@@ -781,64 +738,16 @@ function nearbyHelperSignup(director, citizen, nowMs) {
 }
 
 /** Once-per-day farmyard/kingdom rhythms: harvest days, feasts, picking days. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  try {
-    for (const yard of FARMYARDS) {
-      const hs = harvestDayFor(yard, nowMs);
-      if (hs) {
-        const key = "harvest-day:" + yard.name + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const line = fill(pickOne(seededRng(hashStr(yard.name + "|harvest-day-line:" + day)), HARVEST_DAY_LINES), {
-            yard: yard.name,
-            crew: "harvest crews",
-          });
-          journalize({ username: yard.name }, line);
-          seedRumor(line);
-        }
-      }
-      if (pickingDayFor(yard, nowMs)) {
-        const key = "picking-day:" + yard.name + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const line = fill(pickOne(seededRng(hashStr(yard.name + "|picking-day-line:" + day)), PICKING_DAY_LINES), {
-            yard: yard.name,
-          });
-          journalize({ username: yard.name }, line);
-          seedRumor(line);
-        }
-      }
-    }
-    const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-    for (const kid of kingdoms) {
-      if (!festivalFor(kid, nowMs)) continue;
-      const key = "feast:" + kid + ":" + day;
-      if (lastFiredByCitizen.has(key)) continue;
-      lastFiredByCitizen.set(key, nowMs);
-      const yard = (FARMYARDS.filter((v) => v.kingdom === kid)[0] ?? FARMYARDS[0]).name;
-      const line = fill(pickOne(seededRng(hashStr(kid + "|feast-line:" + day)), FESTIVAL_LINES), {
-        kingdom: kid,
-        yard,
-      });
-      journalize({ username: "the farmfolk" }, line);
-      seedRumor(line);
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickFarmfolk,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   farmfolkTypeOf,
   farmyardFor,
-  taskForToday,
   seasonNameFor,
   harvestSeasonFor,
   produceListFor,
-  produceForToday,
-  kitchenNameFor,
-  harvestDayFor,
   festivalFor,
   pickingDayFor,
   requestHelp,

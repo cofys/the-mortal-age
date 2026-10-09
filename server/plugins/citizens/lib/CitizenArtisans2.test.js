@@ -9,15 +9,7 @@ const {
   woodfolkTypeFromRoll,
   woodfolkTypeOf,
   woodlotFor,
-  woodForToday,
-  basketForToday,
-  taskForToday,
-  goodForToday,
   priceFor,
-  showpieceFor,
-  timberDelayFor,
-  windfallFor,
-  proCarpenterFor,
   requestOrder,
   orderFor,
   orderReady,
@@ -139,16 +131,7 @@ console.log("commoner gating: PASS");
   console.log(`pro-artisan exclusion: PASS (${claimed.length} claimed artisans all excluded)`);
 }
 
-// --- pro carpenter bridge: names the kingdom's master, never throws ---
-{
-  const c = proCarpenterFor("misthalin", NOON);
-  // The exclusion test above populated the pro roster; misthalin should
-  // have a claimed carpenter now.
-  assert.ok(c && c.display, "bridge returns the kingdom's master carpenter");
-  assert.equal(proCarpenterFor("nosuchkingdom", NOON), null, "unknown kingdom -> null");
-  assert.doesNotThrow(() => proCarpenterFor(null, NOON), "null kingdom never throws");
-  console.log("pro carpenter bridge: PASS");
-}
+// --- pro carpenter bridge removed 2026-10-08: proCarpenterFor was hash-derived fabrication. ---
 
 // --- woodlotFor: kingdom-preferred, stable ---
 {
@@ -160,71 +143,20 @@ console.log("commoner gating: PASS");
   console.log("woodlot assignment: PASS");
 }
 
-// --- daily pools: wood / baskets / tasks deterministic per day, vary by day ---
-{
-  const a = woodForToday("wooduser", NOON);
-  assert.ok(WOOD_KINDS.includes(a), `wood kind ${a}`);
-  assert.equal(woodForToday("wooduser", NOON), a, "wood deterministic same day");
-  assert.notEqual(woodForToday("wooduser", NOON + 30 * 86400000).constructor, undefined);
-  const b = basketForToday("basketuser", NOON);
-  assert.ok(BASKET_KINDS.includes(b), `basket kind ${b}`);
-  assert.equal(basketForToday("basketuser", NOON), b, "basket deterministic same day");
-  const t1 = taskForToday("taskuser", BOWL_TURNER, NOON);
-  const t2 = taskForToday("taskuser", BOWL_TURNER, NOON);
-  assert.equal(t1, t2, "task deterministic same day");
-  const seenDays = new Set();
-  for (let d = 0; d < 12; d++) {
-    seenDays.add(taskForToday("taskuser", BOWL_TURNER, NOON + d * 86400000));
-  }
-  assert.ok(seenDays.size > 1, "tasks vary across days");
-  console.log("daily pools: PASS");
-}
+// --- daily pools removed 2026-10-08: woodForToday/basketForToday/taskForToday were hash-derived fabrication. ---
 
 // --- goods + pricing ---
 {
-  const lot = WOODLOTS[0];
-  const g = goodForToday(lot, NOON);
-  assert.ok(WOODEN_GOODS.includes(g), `good ${g}`);
-  assert.equal(goodForToday(lot, NOON), g, "good deterministic");
+  const g = WOODEN_GOODS[0];
   const p = priceFor(g, NOON);
   assert.ok(p >= 2 && p <= 25, `price ${p} in band`);
   assert.equal(priceFor(g, NOON), p, "price deterministic");
   console.log("goods/pricing: PASS");
 }
 
-// --- showpiece: deterministic same day, ~8% rate ---
-{
-  const lot = WOODLOTS[0];
-  const a = showpieceFor(lot, NOON);
-  const b = showpieceFor(lot, NOON);
-  assert.deepEqual(a, b, "showpiece deterministic same day");
-  let hits = 0;
-  for (let d = 0; d < 400; d++) {
-    if (showpieceFor(lot, NOON + d * 86400000)) hits++;
-  }
-  const rate = hits / 400;
-  assert.ok(rate > 0.02 && rate < 0.2, `showpiece rate ${rate.toFixed(3)} sane`);
-  console.log(`showpiece: PASS (rate ${(rate * 100).toFixed(1)}%)`);
-}
+// --- showpiece removed 2026-10-08: showpieceFor was hash-derived fabrication. ---
 
-// --- set-pieces: deterministic, ~8% rates ---
-{
-  const a = timberDelayFor("misthalin", NOON);
-  assert.equal(timberDelayFor("misthalin", NOON), a, "timber delay deterministic");
-  assert.equal(timberDelayFor(null, NOON), null, "null kingdom -> null");
-  let dh = 0;
-  for (let d = 0; d < 400; d++) {
-    if (timberDelayFor("misthalin", NOON + d * 86400000)) dh++;
-  }
-  assert.ok(dh / 400 > 0.02 && dh / 400 < 0.2, "timber delay rate sane");
-  let wh = 0;
-  for (let d = 0; d < 400; d++) {
-    if (windfallFor("kandarin", NOON + d * 86400000)) wh++;
-  }
-  assert.ok(wh / 400 > 0.02 && wh / 400 < 0.2, "windfall rate sane");
-  assert.equal(windfallFor("kandarin", NOON), windfallFor("kandarin", NOON), "windfall deterministic");
-  console.log("set-pieces: PASS");
-}
+// --- set-pieces removed 2026-10-08: timberDelayFor/windfallFor were hash-derived fabrication. ---
 
 // --- order ledger: request -> ready (deterministic 1-3h) -> complete -> TTL ---
 {
@@ -309,10 +241,13 @@ console.log("commoner gating: PASS");
     getLocation: () => ({ getX: () => x, getY: () => 100, getZ: () => 0 }),
   });
 
+  const citizenRec = { username: citizenName, role: "commoner", kingdom: "misthalin" };
+  const playerRec = { username: "Jon", role: "player", kingdom: "misthalin" };
+  const botsByName = { [citizenName]: mkCitizen(), "Jon": mkPlayer("Jon", 105) };
   const director = {
-    roster: new Map([[citizenName, { username: citizenName, role: "commoner", kingdom: "misthalin" }]]),
-    playerFor: () => mkCitizen(),
-    onlinePlayers: () => [mkPlayer("Jon", 105)],
+    roster: new Map([[citizenName, citizenRec], ["Jon", playerRec]]),
+    isOnline: () => true,
+    getBot: (rec) => botsByName[rec.username] ?? null,
   };
 
   // monotonic timestamps: each tick call advances past the 3h cooldown
@@ -335,13 +270,16 @@ console.log("commoner gating: PASS");
     tickWoodfolk(director, t);
     assert.equal(said.length, 0, "no firing outside work hours");
 
-    // no real player near: no fire
+    // no real player near: no fire (swap the player record for a bot record)
     mod._resetState();
     said.length = 0;
-    director.onlinePlayers = () => [
-      { isPlayerBot: () => true, getHostAddress: () => "bot", getUsername: () => "BotOne",
-        getLocation: () => ({ getX: () => 101, getY: () => 100, getZ: () => 0 }) },
-    ];
+    const botRec = { username: "BotOne", role: "commoner", kingdom: "misthalin" };
+    director.roster.set("BotOne", botRec);
+    director.roster.delete("Jon");
+    botsByName["BotOne"] = {
+      isPlayerBot: () => true, getHostAddress: () => "bot", getUsername: () => "BotOne",
+      getLocation: () => ({ getX: () => 101, getY: () => 100, getZ: () => 0 }),
+    };
     tickWoodfolk(director, NOON);
     assert.equal(said.length, 0, "no firing when only bots are near");
   } finally {
@@ -407,16 +345,20 @@ console.log("commoner gating: PASS");
   }
   assert.ok(citizenName, "found a non-timber-hand woodfolk citizen");
   const said = [];
+  const citizenBot = {
+    forceChat: (line) => said.push(line),
+    getLocation: () => ({ getX: () => 100, getY: () => 100, getZ: () => 0 }),
+  };
+  const jonBot = {
+    getUsername: () => "Jon", getHostAddress: () => "1.2.3.4",
+    getLocation: () => ({ getX: () => 102, getY: () => 100, getZ: () => 0 }),
+  };
+  const citizenRec2 = { username: citizenName, role: "commoner", kingdom: "misthalin" };
+  const jonRec = { username: "Jon", role: "player", kingdom: "misthalin" };
   const director = {
-    roster: new Map([[citizenName, { username: citizenName, role: "commoner", kingdom: "misthalin" }]]),
-    playerFor: () => ({
-      forceChat: (line) => said.push(line),
-      getLocation: () => ({ getX: () => 100, getY: () => 100, getZ: () => 0 }),
-    }),
-    onlinePlayers: () => [
-      { getUsername: () => "Jon", getHostAddress: () => "1.2.3.4",
-        getLocation: () => ({ getX: () => 102, getY: () => 100, getZ: () => 0 }) },
-    ],
+    roster: new Map([[citizenName, citizenRec2], ["Jon", jonRec]]),
+    isOnline: () => true,
+    getBot: (rec) => rec.username === citizenName ? citizenBot : jonBot,
   };
   // Jon's order is ready (asked 5h ago, 1-3h completion)
   requestOrder("Jon", citizenName, "a turned oak bowl", 1, NOON - 5 * 3600 * 1000);

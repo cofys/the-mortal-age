@@ -418,83 +418,23 @@ function tavernFor(record) {
   return pool[hashStr(name + "|bottle-tavern") % pool.length];
 }
 
-/** Today's bottle haul for a collector (stable per day). */
-function bottlesForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|glass-bottles:" + day));
-  return pickOne(rng, EMPTY_BOTTLES);
-}
+// (bottlesForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's cullet color for a sorter (stable per day). */
-function culletForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|glass-cullet:" + day));
-  return pickOne(rng, CULLET_COLORS);
-}
+// (culletForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's sand kind for a carrier (stable per day). */
-function sandForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|glass-sand:" + day));
-  return pickOne(rng, SAND_KINDS);
-}
+// (sandForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's task for a glassfolk citizen (1 task of the day). */
-function taskForToday(username, type, dateMs) {
-  const tasks = DAILY_TASK_LINES[type] ?? DAILY_TASK_LINES[BOTTLE_COLLECTOR];
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|glass-task:" + day));
-  return pickOne(rng, tasks);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A sand-shipment delay in a kingdom (~8%/day), or null: the barges missed
- * the tide and the glasshouse furnaces are idling. Journaled + rumor-seeded
- * by dailyRhythms.
- */
-function sandDelayFor(kingdomId, dateMs) {
-  if (!kingdomId) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(String(kingdomId) + "|sand-delay:" + day));
-  if (rng() >= SAND_DELAY_CHANCE) return null;
-  return true;
-}
+// (sandDelayFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A tavern drops a shelf of bottles in a kingdom (~8%/day), or null: the
- * cullet bins overflow and the sorters feast. Journaled + rumor-seeded by
- * dailyRhythms.
- */
-function tavernSmashFor(kingdomId, dateMs) {
-  if (!kingdomId) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(String(kingdomId) + "|tavern-smash:" + day));
-  if (rng() >= SMASH_CHANCE) return null;
-  return true;
-}
+// (tavernSmashFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Real-data bridges — the professional glassblowers, cross-read.
 // ============================================================================
 
-/**
- * Read-only bridge: today's headline glassware from the professional
- * trade, so glassfolk small talk stays consistent with what the real
- * glasshouses are actually blowing. Never throws.
- */
-function proHeadlinePiece(username, kingdom, nowMs = Date.now()) {
-  try {
-    if (!ProGlass || typeof ProGlass.glasswareForToday !== "function") return null;
-    const w = ProGlass.glasswareForToday(nowMs);
-    return typeof w === "string" ? w : null;
-  } catch {
-    return null;
-  }
-}
+// (proHeadlinePiece removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM).
@@ -629,7 +569,7 @@ function tickGlassfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: sand delays and tavern smashes (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-glassfolk] tick failed:", e?.message ?? e);
@@ -668,62 +608,48 @@ function doGlassfolkWork(director, record, citizen, type, nowMs) {
     }
     const roll = Math.random();
     if (roll < 0.45) {
-      const bottles = bottlesForToday(name, nowMs);
+      const bottles = "bottles"; // (bottlesForToday removed 2026-10-08: hash-derived specifics were fabrication)
       forceSay(citizen, fill(pickOne(Math.random, COLLECT_LINES), { bottles }));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} near ${workshop.name}`);
+      journalize(citizen, `worked near ${workshop.name}`);
     } else if (roll < 0.7) {
       const piece = proHeadlinePiece(name, record?.kingdom, nowMs);
       if (piece) {
         forceSay(citizen, fill(pickOne(Math.random, PRO_GLASS_LINES), { piece }));
         journalize(citizen, `talked trade with passers-by near ${workshop.name}`);
       } else {
-        const bottles = bottlesForToday(name, nowMs);
+        const bottles = "bottles"; // (bottlesForToday removed 2026-10-08: hash-derived specifics were fabrication)
         forceSay(citizen, fill(pickOne(Math.random, COLLECT_LINES), { bottles }));
-        journalize(citizen, `${taskForToday(name, type, nowMs)} near ${workshop.name}`);
+        journalize(citizen, `worked near ${workshop.name}`);
       }
     } else {
-      const bottles = bottlesForToday(name, nowMs);
+      const bottles = "bottles"; // (bottlesForToday removed 2026-10-08: hash-derived specifics were fabrication)
       forceSay(citizen, `Off on the tavern round — ${bottles} won't collect themselves!`);
-      journalize(citizen, `${taskForToday(name, type, nowMs)} near ${workshop.name}`);
+      journalize(citizen, `worked near ${workshop.name}`);
     }
     return;
   }
 
   if (type === CULLET_SORTER) {
-    // A tavern smash in the kingdom takes priority while it's active.
-    const kid = record?.kingdomId ?? record?.kingdom;
-    if (kid && tavernSmashFor(kid, nowMs) && Math.random() < 0.4) {
-      const tavern = tavernFor(record);
-      forceSay(citizen, fill(pickOne(Math.random, SMASH_LINES), { tavern: tavern.name }));
-      journalize(citizen, `worked a tavern smash at ${tavern.name}`);
-      return;
-    }
-    const cullet = culletForToday(name, nowMs);
+    // (tavernSmashFor branch removed 2026-10-08: hash-derived kingdom event was fabrication.)
+    const cullet = "cullet"; // (culletForToday removed 2026-10-08)
     forceSay(citizen, fill(pickOne(Math.random, SORT_LINES), { cullet }));
-    journalize(citizen, `${taskForToday(name, type, nowMs)} near ${workshop.name}`);
+    journalize(citizen, `worked near ${workshop.name}`);
     return;
   }
 
   if (type === SAND_CARRIER) {
-    // A sand delay in the kingdom takes priority while it's active.
-    const kid = record?.kingdomId ?? record?.kingdom;
-    if (kid && sandDelayFor(kid, nowMs) && Math.random() < 0.4) {
-      const source = sandSourceFor(record);
-      forceSay(citizen, fill(pickOne(Math.random, SAND_DELAY_LINES), { source: source.name }));
-      journalize(citizen, `sat idle on a sand delay at ${workshop.name}`);
-      return;
-    }
-    const sand = sandForToday(name, nowMs);
+    // (sandDelayFor branch removed 2026-10-08: hash-derived kingdom event was fabrication.)
+    const sand = "sand"; // (sandForToday removed 2026-10-08)
     const source = sandSourceFor(record);
     forceSay(citizen, fill(pickOne(Math.random, CARRY_LINES), { sand, source: source.name }));
-    journalize(citizen, `${taskForToday(name, type, nowMs)} near ${workshop.name}`);
+    journalize(citizen, `worked near ${workshop.name}`);
     return;
   }
 
   // Bottle-washer: the tavern rounds.
   const tavern = tavernFor(record);
   forceSay(citizen, fill(pickOne(Math.random, WASH_LINES), { tavern: tavern.name }));
-  journalize(citizen, `${taskForToday(name, type, nowMs)} at ${tavern.name}`);
+  journalize(citizen, `worked at ${tavern.name}`);
 }
 
 /** A nearby real player whose bottle pickup is ready, if any. */
@@ -742,34 +668,7 @@ function nearbyReadyPickup(director, citizen, nowMs) {
 }
 
 /** Once-per-day kingdom rhythms: sand delays and tavern smashes. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-  try {
-    for (const kid of kingdoms) {
-      if (sandDelayFor(kid, nowMs)) {
-        const key = "sand-delay:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const line = `Sand barges missed the tide in ${kid} — the glasshouse furnaces are idling and the carriers are sitting on their sacks.`;
-          journalize({ username: "the glassfolk" }, line);
-          seedRumor(line);
-        }
-      }
-      if (tavernSmashFor(kid, nowMs)) {
-        const key = "tavern-smash:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const pool = TAVERNS.filter((v) => v.kingdom === kid);
-          const tavern = (pool.length ? pool[0] : TAVERNS[0]).name;
-          const line = `A tavern in ${kid} dropped a whole shelf of bottles at ${tavern} — the cullet bins are overflowing.`;
-          journalize({ username: "the glassfolk" }, line);
-          seedRumor(line);
-        }
-      }
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickGlassfolk,
@@ -778,13 +677,6 @@ module.exports = {
   workshopFor,
   sandSourceFor,
   tavernFor,
-  bottlesForToday,
-  culletForToday,
-  sandForToday,
-  taskForToday,
-  sandDelayFor,
-  tavernSmashFor,
-  proHeadlinePiece,
   requestPickup,
   pickupFor,
   pickupReady,

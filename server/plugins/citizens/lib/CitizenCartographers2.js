@@ -600,7 +600,7 @@ function tickMapfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: ink-spills, wrong-ways, copy disputes (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-cartographers2] tick failed:", e?.message ?? e);
@@ -672,48 +672,7 @@ function doMapWork(director, record, citizen, type, nowMs) {
  *   - copy dispute: two buyers argue over a smudged copy at a kiosk (~8%)
  * Day-gated keys, cheap to evaluate. Never throws.
  */
-function dailyRhythms(director, nowMs) {
-  try {
-    const day = dayNumber(nowMs);
-    const rng = seededRng(hashStr("mapfolk-day:" + day));
-    const online = typeof director.onlinePlayers === "function" ? director.onlinePlayers() : [];
-    const realNearKiosk = online.some((p) => isRealPlayer(p));
-    if (!realNearKiosk) return; // no audience — skip the whole street scene
-    const kids = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-
-    for (const kid of kids) {
-      const spillKey = "inkspill:" + kid + ":" + day;
-      if (!firedDayKeys.has(spillKey) && rng() < INK_SPILL_CHANCE) {
-        firedDayKeys.add(spillKey);
-        const event = pickOne(rng, INK_SPILL_LINES);
-        journalize("mapfolk-" + kid, event + " (" + kid + " kiosk)");
-        seedRumor(rng, event);
-      }
-      const wrongKey = "wrongway:" + kid + ":" + day;
-      if (!firedDayKeys.has(wrongKey) && rng() < WRONG_WAY_CHANCE) {
-        firedDayKeys.add(wrongKey);
-        const region = pickOne(rng, MAPFOLK_REGIONS);
-        const event = fill(pickOne(rng, WRONG_WAY_LINES), { region: region.name });
-        journalize("mapfolk-" + kid, event);
-        seedRumor(rng, event);
-      }
-    }
-
-    for (let i = 0; i < KIOSKS.length; i++) {
-      const key = "dispute:" + i + ":" + day;
-      if (firedDayKeys.has(key) || rng() >= COPY_DISPUTE_CHANCE) continue;
-      firedDayKeys.add(key);
-      const kiosk = KIOSKS[i];
-      const region = pickOne(rng, MAPFOLK_REGIONS);
-      journalize(
-        "mapfolk-" + kiosk.kingdom,
-        fill(pickOne(rng, DISPUTE_LINES), { place: kiosk.name, region: region.name })
-      );
-    }
-  } catch {
-    // set-pieces are cosmetic
-  }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickMapfolk,

@@ -43,6 +43,13 @@ const {
 } = require("../../lib/humanizer");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
+const {
+  INTENT_EARN_COINS,
+  INTENT_GAIN_XP,
+  INTENT_SOCIALIZE,
+  INTENT_EXPLORE,
+  activeIntents,
+} = require("../CitizenIntents");
 
 const KIND_HOME = "home";
 const KIND_WORK = "work";
@@ -63,6 +70,17 @@ const SELL_GIVE_UP_MS = 3 * 60 * 1000;
 const CATCH_PRICE = 4;
 const COINS_ID = 995;
 const BREAD_ID = 2309;
+
+// Goal-threading (review finding #2): the day plan is a reasonable default,
+// but active session intents bend it instead of the clock winning blindly.
+// A citizen grinding "earn 2000 coins" skips the midday market browse and
+// works late; near-done grinds push to finish. Capped so the plan stays
+// recognizable — goals bend, they don't replace the day with chaos.
+const NEAR_DONE_RATIO = 0.7; // intent >=70%: extend the shift to finish it
+const FRESH_GRIND_RATIO = 0.5; // intent <50%: work through low-value legs
+const WORK_EXTEND_MIN = 45; // near-done: finish the grind
+const WORK_GRIND_LATE_MIN = 60; // fresh grind: work into the evening
+const MAX_BENDS_PER_DAY = 2;
 
 const FISHING_LINES = Object.freeze({
   plain: Object.freeze([
@@ -145,6 +163,118 @@ function phaseFor(plan, minute) {
     }
   }
   return plan[plan.length - 1];
+}
+
+/**
+ * Active, unfinished work intents (earn coins / gain XP). The routine's legs
+ * bend around these — everything else (socialize, explore, restock) is
+ * already served by the plan's market/tavern/meal legs.
+ */
+function workIntentsFor(player) {
+  try {
+    return activeIntents(player).filter(
+      (i) => i.type === INTENT_EARN_COINS || i.type === INTENT_GAIN_XP
+    );
+  } catch (error) {
+    return [];
+  }
+}
+
+/** True when a social/explore intent wants the citizen out among people. */
+function hasSocialPull(player) {
+  try {
+    return activeIntents(player).some(
+      (i) => i.type === INTENT_SOCIALIZE || i.type === INTENT_EXPLORE
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
+function intentRatio(intent) {
+  const target = Number(intent?.target) || 0;
+  if (target <= 0) {
+    return 1;
+  }
+  return Math.max(0, Math.min(1, (Number(intent.progress) || 0) / target));
+}
+
+/**
+ * Stretch the work leg that precedes `upcomingPhase` by extendMin minutes.
+ * The overlap naturally shortens the following leg (a shorter browse, a
+ * later tavern) — the day keeps its shape, it just bends. Clamped so one
+ * bend can't swallow the whole next leg.
+ */
+function extendWorkShift(plan, upcomingPhase, extendMin) {
+  const idx = plan.indexOf(upcomingPhase);
+  if (idx <= 0) {
+    return false;
+  }
+  const workPhase = plan[idx - 1];
+  if (!workPhase || workPhase.kind !== KIND_WORK) {
+    return false;
+  }
+  const maxEnd = upcomingPhase.end; // never absorb the entire next leg
+  workPhase.end = Math.min(workPhase.end + extendMin, maxEnd);
+  return workPhase.end > upcomingPhase.start;
+}
+
+/**
+ * Bend today's plan at a phase boundary using the citizen's active intents.
+ * Returns the leg kind to enter. Mutates state.plan (skip/extend), so the
+ * bend is idempotent — re-entering the routine re-reads the bent plan
+ * instead of bending twice.
+ *
+ * - KIND_MARKET with an active work intent (and no social pull): the midday
+ *   browse becomes work. A grinding player skips the stalls.
+ * - Leaving KIND_WORK for KIND_SOCIAL with an unfinished work intent:
+ *   near-done (>=70%) grinds 45 more minutes to finish; fresh grinds (<50%)
+ *   work an hour late. The evening just starts later.
+ * - KIND_MEAL is never bent: eating stays HP-driven, lunch stays lunch.
+ * - Day-off plans have no work legs, so there's nothing to bend.
+ */
+function bendLeg(player, state, phase) {
+  const fallback = phase.kind;
+  try {
+    if (!state.plan || state.bendsToday >= MAX_BENDS_PER_DAY) {
+      return fallback;
+    }
+    const intents = workIntentsFor(player);
+    if (intents.length === 0) {
+      return fallback;
+    }
+    // Day-off plans have no work legs — bending market->work would break
+    // the day off. Goals bend, they don't cancel rest days.
+    const hasWorkToday = state.plan.some((p) => p.kind === KIND_WORK);
+    if (!hasWorkToday) {
+      return fallback;
+    }
+    // Skip the midday market browse: pure downtime for a grinder.
+    if (phase.kind === KIND_MARKET && !hasSocialPull(player)) {
+      phase.kind = KIND_WORK;
+      state.bendsToday += 1;
+      return KIND_WORK;
+    }
+    // Stretch the afternoon shift into the evening.
+    if (state.phaseKind === KIND_WORK && phase.kind === KIND_SOCIAL) {
+      const ratios = intents.map(intentRatio);
+      const best = Math.max(...ratios);
+      const worst = Math.min(...ratios);
+      const extendMin =
+        best >= NEAR_DONE_RATIO
+          ? WORK_EXTEND_MIN
+          : worst < FRESH_GRIND_RATIO
+            ? WORK_GRIND_LATE_MIN
+            : 0;
+      if (extendMin > 0 && extendWorkShift(state.plan, phase, extendMin)) {
+        state.bendsToday += 1;
+        return KIND_WORK;
+      }
+    }
+    return fallback;
+  } catch (error) {
+    return fallback; // intent reads never break the routine
+  }
 }
 
 function atTile(player, tile, radius = 3) {
@@ -277,6 +407,7 @@ function createCitizenRoutineAction(spec, world) {
         workKind: null, // resolved lazily: 'fishing' | 'tree' | 'rock'
         nextCastAt: 0,
         casts: 0,
+        bendsToday: 0, // goal-threading: how many times intents bent today's plan
       };
     });
   }
@@ -368,6 +499,7 @@ function createCitizenRoutineAction(spec, world) {
       state.day = today;
       state.plan = buildDayPlan(state.rng);
       state.phaseKind = null; // force phase re-entry
+      state.bendsToday = 0; // fresh day, fresh bends
     }
   }
 
@@ -498,7 +630,13 @@ function createCitizenRoutineAction(spec, world) {
       ensurePlan(state);
       const phase = phaseFor(state.plan, minutesNow());
       if (phase.kind !== state.phaseKind) {
-        enterPhase(ctx, state, phase.kind);
+        // Goal-threading: intents bend the leg before the clock commits to
+        // it. bendLeg may mutate today's plan (skip/extend); when it bends
+        // back into the current leg there's no re-entry to do.
+        const bentKind = bendLeg(player, state, phase);
+        if (bentKind !== state.phaseKind) {
+          enterPhase(ctx, state, bentKind);
+        }
       }
 
       if (player.getForceMovement?.() != null) {
@@ -613,4 +751,14 @@ function createCitizenRoutineAction(spec, world) {
 
 module.exports = {
   createCitizenRoutineAction,
+  buildDayPlan,
+  // Test seams (not part of the public contract):
+  _bendLeg: bendLeg,
+  _extendWorkShift: extendWorkShift,
+  _phaseFor: phaseFor,
+  _KIND_WORK: KIND_WORK,
+  _KIND_MARKET: KIND_MARKET,
+  _KIND_MEAL: KIND_MEAL,
+  _KIND_SOCIAL: KIND_SOCIAL,
+  _KIND_HOME: KIND_HOME,
 };

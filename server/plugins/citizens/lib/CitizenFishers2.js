@@ -66,7 +66,7 @@ const FISHERFOLK_CHANCE = 0.15; // per eligible citizen per tick
 const FISHERFOLK_SHARE = 45;
 const DAWN_HOUR = 5; // 05:00 local
 const DUSK_HOUR = 20; // 20:00 local
-const BIG_CATCH_CHANCE = 0.08; // per spot per day
+// (BIG_CATCH_CHANCE removed 2026-10-08 with the big-catch fabrication.)
 const LEDGER_TTL_MS = 7 * 24 * 3600 * 1000;
 
 // === Fisherfolk types ===
@@ -119,18 +119,8 @@ const CAST_LINES = {
   ],
 };
 
-const CATCH_LINES = [
-  "Got one! A fine {fish}!",
-  "Ha! {fish} for supper tonight!",
-  "Look at the size of this {fish}!",
-  "Another {fish} for the basket.",
-];
-
-const BIG_CATCH_LINES = [
-  "By the tides! A {weight}kg {fish}! Somebody fetch the scales!",
-  "Would you look at THAT — {weight}kg of pure {fish}!",
-  "Biggest {fish} I've seen in years — {weight}kg if it's an ounce!",
-];
+// (CATCH_LINES, BIG_CATCH_LINES, STALL_LINES, SHARE_LINES removed 2026-10-08
+// with the catch/big-catch/stall/share fabrication branches.)
 
 const TEACH_LINES = [
   "Fishing's about patience, friend. Watch the water, not the float.",
@@ -139,16 +129,7 @@ const TEACH_LINES = [
   "Crabs like the rocks at low tide. Mind your fingers.",
 ];
 
-const STALL_LINES = [
-  "Fresh {fish} here! Caught this morning off {spot}!",
-  "{fish}, {fish} — the neighbors brought in a fine haul!",
-  "No charge for the stories, friend — the {fish} is {price} coins.",
-];
-
-const SHARE_LINES = [
-  "Take a {fish} for your pot, neighbor — the sea provides.",
-  "Plenty to go round today. Help yourself to a {fish}.",
-];
+// (STALL_LINES, SHARE_LINES removed 2026-10-08 with the fabrication branches.)
 
 // === Cooldown state ===
 const lastFiredByCitizen = new Map(); // username -> timestamp
@@ -326,42 +307,11 @@ function catchPoolFor(type, kind) {
   return CATCHES.river || [];
 }
 
-/**
- * Today's catch for a fisherfolk citizen: 1-3 fish.
- * Derived from date + hash; zero storage.
- */
-function catchFor(username, type, spot, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("fisherfolkcatch:" + name + ":" + day));
-  const pool = catchPoolFor(type, spot?.kind);
-  const count = 1 + Math.floor(rng() * 3); // 1-3
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    out.push(pool[Math.floor(rng() * pool.length)]);
-  }
-  return out;
-}
-
-/**
- * Today's big catch at a spot (~8%/day), or null.
- * { fish, weightKg } — the crowd moment.
- */
-function bigCatchFor(spot, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("fisherfolkbig:" + spot.name + ":" + day));
-  if (rng() >= BIG_CATCH_CHANCE) return null;
-  const pool = catchPoolFor(FISHERFOLK_LINE, spot.kind);
-  const fish = pool[Math.floor(rng() * pool.length)];
-  const weightKg = 4 + Math.floor(rng() * 12); // 4-15kg
-  return { fish, weightKg };
-}
-
-/** A fair dockside price for a fish (5-40 coins). */
-function priceFor(fish, dateMs) {
-  const rng = seededRng(hashStr("fisherfolkprice:" + fish + ":" + dayNumber(dateMs)));
-  return 5 + Math.floor(rng() * 36);
-}
+// (Hash-derived "today's catch", big-catch fanfare, and dockside prices
+// removed 2026-10-08: the citizen never actually caught those fish, so
+// deriving them from date+hash and speaking/journalizing them was
+// fabrication. catchPoolFor remains as honest data: which fish CAN be
+// caught at a spot type.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM) — exported for the LLM dialogue tier.
@@ -449,20 +399,7 @@ function journalize(citizenName, text) {
   }
 }
 
-// Canonical rumor seed: seedRumor(rng, event) with
-// event: { kind, who, whoDisplay, what, where, whereDisplay, amount }.
-// Calling it with a bare string silently no-ops (returns null) — fishers
-// rung audit 2026-10-08.
-function seedBigCatchRumor(who, text, where) {
-  try {
-    const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") {
-      rumors.seedRumor(Math.random, { kind: "big-catch", who, what: text, where });
-    }
-  } catch {
-    /* rumors absent */
-  }
-}
+// (seedBigCatchRumor removed 2026-10-08 with the big-catch fabrication.)
 
 // ============================================================================
 // The tick function — called from the director tick.
@@ -559,58 +496,23 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doFisherfolkWork(director, record, citizen, type, nowMs) {
   const spot = spotFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
-  // Big-catch fanfare: once per spot per day, the crowd moment.
-  const big = bigCatchFor(spot, nowMs);
-  if (big) {
-    const key = "bigcatch:" + spot.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, BIG_CATCH_LINES), {
-        fish: big.fish,
-        weight: big.weightKg,
-      });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(record.username, `landed a ${big.weightKg}kg ${big.fish} at ${spot.name}`);
-      seedBigCatchRumor(record.username, `A ${big.weightKg}kg ${big.fish} landed at ${spot.name}!`, spot.name);
-      return;
-    }
-  }
-
-  // Routine: work emote, catch callout, teaching, stall hawking, sharing.
+  // Routine: honest ambient chatter only — casting, teaching, mending.
+  // (Hash-derived "today's catch" / big-catch fanfare removed: the citizen
+  // never actually caught those fish, so speaking them was fabrication.)
   const roll = Math.random();
-  if (roll < 0.35) {
+  if (roll < 0.5) {
     const line = pickOne(Math.random, CAST_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `fished at ${spot.name}`);
-  } else if (roll < 0.55) {
-    const todays = catchFor(name, type, spot, nowMs);
-    const fish = todays.length ? todays[0] : "fish";
-    const line = fill(pickOne(Math.random, CATCH_LINES), { fish });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(record.username, `caught ${todays.join(", ")} at ${spot.name}`);
-  } else if (roll < 0.7) {
+  } else if (roll < 0.75) {
     const line = pickOne(Math.random, TEACH_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `shared fishing wisdom at ${spot.name}`);
-  } else if (type === FISHERFOLK_STALL) {
-    const todays = catchFor(name, type, spot, nowMs);
-    const fish = todays.length ? todays[0] : "fish";
-    const line = fill(pickOne(Math.random, STALL_LINES), {
-      fish,
-      spot: spot.name,
-      price: priceFor(fish, nowMs),
-    });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(record.username, `sold fresh ${fish} at the community stall`);
   } else {
-    const todays = catchFor(name, type, spot, nowMs);
-    const fish = todays.length ? todays[0] : "fish";
-    const line = fill(pickOne(Math.random, SHARE_LINES), { fish });
+    const line = pickOne(Math.random, CAST_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(record.username, `shared ${fish} with neighbors at ${spot.name}`);
+    journalize(record.username, `kept fishing at ${spot.name}`);
   }
 }
 
@@ -619,9 +521,7 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   fisherfolkTypeOf,
   spotFor,
-  catchFor,
-  bigCatchFor,
-  priceFor,
+  // (catchFor, bigCatchFor, priceFor removed 2026-10-08: hash-fiction.)
   catchPoolFor,
   fishAlongside,
   fishAlongFor,

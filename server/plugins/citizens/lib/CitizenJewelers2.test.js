@@ -36,13 +36,20 @@ function mockPlayer(name, x, y, isBot = false) {
 function mockDirector(records, players) {
   const roster = new Map(records.map((r) => [r.username, r]));
   const bots = new Map();
+  for (const p of players) {
+    const name = p.getUsername();
+    if (!roster.has(name)) roster.set(name, { username: name, role: "player" });
+    if (!bots.has(name)) bots.set(name, p);
+  }
   return {
     roster,
-    playerFor: (rec) => {
+    isOnline: () => true,
+    getBot: (rec) => {
       if (!bots.has(rec.username)) bots.set(rec.username, mockPlayer(rec.username, 100, 100, true));
       return bots.get(rec.username);
     },
-    onlinePlayers: () => players,
+    // legacy alias for tests
+    playerFor: function (rec) { return this.getBot(rec); },
   };
 }
 function fresh() {
@@ -145,49 +152,6 @@ function fresh() {
   const w3 = S.workshopFor({ username: "nowhere", kingdomId: "nope" });
   assert.ok(w3 && w3.name, "unknown kingdom falls back to a workshop");
   console.log("kingdom-preferred workshops: PASS");
-}
-
-// --- project determinism + day variance ---
-{
-  fresh();
-  const a = S.projectsFor("projuser", "misthalin", T0);
-  const b = S.projectsFor("projuser", "misthalin", T0);
-  assert.deepEqual(a, b, "projects deterministic for same day");
-  assert.ok(a.length >= 1 && a.length <= 3, "1-3 projects");
-  const c = S.projectsFor("projuser", "misthalin", T0 + 10 * 86400000);
-  let differs = false;
-  for (let d = 1; d <= 10 && !differs; d++) {
-    const dd = S.projectsFor("projuser", "misthalin", T0 + d * 86400000);
-    if (JSON.stringify(dd) !== JSON.stringify(a)) differs = true;
-  }
-  assert.ok(differs, "projects vary across days");
-  console.log("project determinism/variance: PASS");
-}
-
-// --- gem pool uses real GEMS names ---
-{
-  fresh();
-  const gem = S.gemForToday("gemuser", T0);
-  assert.ok(typeof gem === "string" && gem.length > 0, "gem is a non-empty string (not [object Object])");
-  const known = JewelersPro.GEMS.map((g) => (g && typeof g === "object" ? g.name : String(g)));
-  assert.ok(known.includes(gem), `gem "${gem}" comes from the real GEMS table`);
-  console.log("gem pool correctness: PASS");
-}
-
-// --- masterpiece determinism + rarity ---
-{
-  fresh();
-  const ws = S.COMMUNITY_WORKSHOPS[0];
-  const mp = S.masterpieceFor(ws, T0);
-  assert.equal(S.masterpieceFor(ws, T0), mp, "masterpiece deterministic for same day");
-  assert.equal(S.masterpieceFor(null, T0), null, "null workshop -> null");
-  // Rarity: roughly 8% over a long sweep.
-  let hits = 0;
-  for (let d = 0; d < 500; d++) {
-    if (S.masterpieceFor(ws, T0 + d * 86400000)) hits++;
-  }
-  assert.ok(hits >= 15 && hits <= 70, `masterpiece rarity in band, got ${hits}/500`);
-  console.log(`masterpiece determinism/rarity (${hits}/500): PASS`);
 }
 
 // --- price sanity ---

@@ -117,11 +117,7 @@ const WORK_LINES = {
   ],
 };
 
-const HAWK_LINES = [
-  "Spare room going — warm bed, hot breakfast, fair price!",
-  "{brew} — brewed right here, not an inn in sight!",
-  "Feast night at {venue}! Long table, long tales!",
-];
+// (HAWK_LINES removed 2026-10-08 with fabrication branches.)
 
 const FEAST_LINES = [
   "Feast night! {venue} — long table, long tales, come one and all!",
@@ -316,24 +312,9 @@ function venueFor(record) {
   return pool[hashStr(name + "|hostfolk-venue") % pool.length];
 }
 
-/** Today's home brew for a brewer (1 brew of the day). */
-function brewForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|hostfolk-brew:" + day));
-  return pickOne(rng, BREWS);
-}
+// (brewForToday removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's feast-night at a venue (~8%/day), or null.
- */
-function feastFor(venue, dateMs) {
-  if (!venue?.name) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(venue.name + "|feast-night:" + day));
-  if (rng() >= FEAST_CHANCE) return null;
-  return pickOne(rng, FEAST_LINES);
-}
+// (feastFor removed 2026-10-08: hash-derived fabrication.)
 
 /**
  * The dish the real cookfolk are serving today — read from the actual
@@ -515,49 +496,26 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doHostfolkWork(director, record, citizen, type, nowMs) {
   const venue = venueFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
   // Feast night: once per venue per feast day, the crowd moment.
-  const feast = feastFor(venue, nowMs);
-  if (feast) {
-    const key = "feast:" + venue.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(feast, { venue: venue.name });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      const dish = dishForFeast(name, record.kingdomId, nowMs);
-      journalize(citizen, `hosted feast night at ${venue.name} (serving ${dish})`);
-      seedRumor(`Feast night at ${venue.name}! Long table, long tales!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: feastFor was hash-derived.)
 
   // Tavern regular: trade gossip for a drink.
   if (type === HOSTFOLK_REGULAR) {
-    const rumor = gossipFor(citizen);
-    if (rumor) {
-      const line = fill(pickOne(Math.random, GOSSIP_LINES), { rumor: rumor.slice(0, 120) });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, "traded gossip at the common room");
-      return;
-    }
+    // (Crowd-moment fabrication block removed 2026-10-08: gossipFor was hash-derived.)
   }
 
   // Routine: work emote, hawking, room offer.
   const roll = Math.random();
-  if (roll < 0.45) {
+  if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked the ${venue.name}`);
   } else if (roll < 0.75) {
-    const brew = brewForToday(name, nowMs);
-    const line = fill(pickOne(Math.random, HAWK_LINES), {
-      brew,
-      venue: venue.name,
-    });
+    // (Hawking branch removed 2026-10-08: brewForToday was hash-derived fabrication.)
+    const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `called out ${brew} at ${venue.name}`);
+    journalize(citizen, `kept working at ${venue.name}`);
   } else {
     const line = pickOne(Math.random, ROOM_OFFER_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
@@ -576,8 +534,6 @@ module.exports = {
   feastForPlayer,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   venueFor,
-  brewForToday,
-  feastFor,
   dishForFeast,
   gossipFor,
   // Pure helpers for tests:

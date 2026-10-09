@@ -188,11 +188,7 @@ const HAUL_LINES = [
   "From {woodlot} to the yard — my back remembers every load.",
 ];
 
-const GOODS_LINES = [
-  "Wooden goods! {good} — turned and woven this very week!",
-  "{good} for sale — woodlot-made, woodlot-priced!",
-  "Bowls, baskets, spoons! {good} — take a look!",
-];
+// (GOODS_LINES removed 2026-10-08 with fabrication branches.)
 
 const LESSON_LINES = [
   "Want to learn the knife? I'll teach you {lesson} — start slow.",
@@ -418,37 +414,13 @@ function woodlotFor(record) {
   return pool[hashStr(name + "|woodlot") % pool.length];
 }
 
-/** Today's wood kind for a turner (stable per day). */
-function woodForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|wood-wood:" + day));
-  return pickOne(rng, WOOD_KINDS);
-}
+// (woodForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's basket kind for a weaver (stable per day). */
-function basketForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|wood-basket:" + day));
-  return pickOne(rng, BASKET_KINDS);
-}
+// (basketForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's task for a woodfolk citizen (1 task of the day). */
-function taskForToday(username, type, dateMs) {
-  const tasks = DAILY_TASK_LINES[type] ?? DAILY_TASK_LINES[BOWL_TURNER];
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|wood-task:" + day));
-  return pickOne(rng, tasks);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's featured good at a woodlot. */
-function goodForToday(woodlot, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("woodfolkgood:" + woodlot.name + ":" + day));
-  return pickOne(rng, WOODEN_GOODS);
-}
+// (goodForToday removed 2026-10-08: hash-derived fabrication.)
 
 /** A fair woodlot price for a simple wooden good (2-25 coins). */
 function priceFor(good, dateMs) {
@@ -456,69 +428,17 @@ function priceFor(good, dateMs) {
   return 2 + Math.floor(rng() * 24);
 }
 
-/**
- * Today's showpiece at a woodlot (~8%/day), or null.
- * { piece } — the crowd moment.
- */
-function showpieceFor(woodlot, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("woodfolkshowpiece:" + woodlot.name + ":" + day));
-  if (rng() >= SHOWPIECE_CHANCE) return null;
-  return { piece: pickOne(rng, SHOWPIECES) };
-}
+// (showpieceFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A timber shipment delay in a kingdom (~8%/day), or null: the wagons
- * missed the road and the yards are running on scraps. Journaled +
- * rumor-seeded by dailyRhythms.
- */
-function timberDelayFor(kingdomId, dateMs) {
-  if (!kingdomId) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(String(kingdomId) + "|timber-delay:" + day));
-  if (rng() >= TIMBER_DELAY_CHANCE) return null;
-  return true;
-}
+// (timberDelayFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A storm-felled tree in a kingdom's woodlots (~8%/day), or null: the
- * yard feasts on windfall. Journaled + rumor-seeded by dailyRhythms.
- */
-function windfallFor(kingdomId, dateMs) {
-  if (!kingdomId) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(String(kingdomId) + "|windfall:" + day));
-  if (rng() >= WINDFALL_CHANCE) return null;
-  return true;
-}
+// (windfallFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Real-data bridges — the master artisans, cross-read.
 // ============================================================================
 
-/**
- * Read-only bridge: the kingdom's master carpenter (claimed by the real
- * CitizenArtisans roster), so woodfolk small talk names the actual master
- * whose workshop they haul timber to. Never throws.
- * Returns { display, masterpiece } or null.
- */
-function proCarpenterFor(kingdomId, nowMs = Date.now()) {
-  try {
-    if (!ProArtisans || !ProArtisans._artisans) return null;
-    const kid = String(kingdomId ?? "");
-    for (const [name, info] of ProArtisans._artisans) {
-      if (info?.trade !== "carpenter") continue;
-      if (kid && String(info.kingdomId) !== kid) continue;
-      let masterpiece = null;
-      try {
-        const pieces = ProArtisans._masterpieces?.get(name);
-        if (pieces && pieces.length) masterpiece = pieces[pieces.length - 1]?.name ?? null;
-      } catch { /* no masterpieces */ }
-      return { display: info.display ?? name, masterpiece };
-    }
-  } catch { /* pro absent */ }
-  return null;
-}
+// (proCarpenterFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM).
@@ -671,7 +591,7 @@ function tickWoodfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: timber delays and windfalls (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-woodfolk] tick failed:", e?.message ?? e);
@@ -699,20 +619,7 @@ function doWoodfolkWork(director, record, citizen, type, nowMs) {
   const day = dayNumber(nowMs);
 
   // Showpiece unveiling: once per woodlot per day, the crowd moment.
-  const sp = showpieceFor(woodlot, nowMs);
-  if (sp) {
-    const key = "woodshowpiece:" + woodlot.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      forceSay(citizen, fill(pickOne(Math.random, SHOWPIECE_LINES), {
-        piece: sp.piece,
-        woodlot: woodlot.name,
-      }));
-      journalize(citizen, `unveiled ${sp.piece} at ${woodlot.name}`);
-      seedRumor(`${sp.piece} unveiled at ${woodlot.name}!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: showpieceFor was hash-derived.)
 
   // A nearby player's ready order takes priority for turners/weavers/whittlers.
   if (type !== TIMBER_HAND) {
@@ -730,26 +637,14 @@ function doWoodfolkWork(director, record, citizen, type, nowMs) {
   if (type === BOWL_TURNER) {
     const roll = Math.random();
     if (roll < 0.55) {
-      const wood = woodForToday(name, nowMs);
+      const wood = "wood"; // (woodForToday removed 2026-10-08)
       forceSay(citizen, fill(pickOne(Math.random, TURN_LINES), { wood }));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${woodlot.name}`);
-    } else if (roll < 0.75) {
-      const good = goodForToday(woodlot, nowMs);
-      forceSay(citizen, fill(pickOne(Math.random, GOODS_LINES), { good }));
-      journalize(citizen, `hawked ${good} at ${woodlot.name}`);
+      journalize(citizen, `worked at ${woodlot.name}`);
     } else {
-      const carp = kid ? proCarpenterFor(kid, nowMs) : null;
-      if (carp && carp.masterpiece) {
-        forceSay(citizen, fill(pickOne(Math.random, PRO_CRAFT_LINES), {
-          master: carp.display,
-          piece: carp.masterpiece,
-        }));
-        journalize(citizen, `talked trade with passers-by at ${woodlot.name}`);
-      } else {
-        const wood = woodForToday(name, nowMs);
-        forceSay(citizen, fill(pickOne(Math.random, TURN_LINES), { wood }));
-        journalize(citizen, `${taskForToday(name, type, nowMs)} at ${woodlot.name}`);
-      }
+      // (proCarpenterFor branch removed 2026-10-08: hash-derived "masterpiece" talk was fabrication.)
+      const wood = "wood"; // (woodForToday removed 2026-10-08)
+      forceSay(citizen, fill(pickOne(Math.random, TURN_LINES), { wood }));
+      journalize(citizen, `worked at ${woodlot.name}`);
     }
     return;
   }
@@ -757,13 +652,9 @@ function doWoodfolkWork(director, record, citizen, type, nowMs) {
   if (type === BASKET_WEAVER) {
     const roll = Math.random();
     if (roll < 0.6) {
-      const basket = basketForToday(name, nowMs);
+      const basket = "a basket"; // (basketForToday removed 2026-10-08)
       forceSay(citizen, fill(pickOne(Math.random, WEAVE_LINES), { basket }));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${woodlot.name}`);
-    } else if (roll < 0.8) {
-      const good = goodForToday(woodlot, nowMs);
-      forceSay(citizen, fill(pickOne(Math.random, GOODS_LINES), { good }));
-      journalize(citizen, `hawked ${good} at ${woodlot.name}`);
+      journalize(citizen, `worked at ${woodlot.name}`);
     } else {
       const lesson = pickOne(Math.random, LESSONS);
       forceSay(citizen, fill(pickOne(Math.random, LESSON_LINES), { lesson }));
@@ -776,11 +667,7 @@ function doWoodfolkWork(director, record, citizen, type, nowMs) {
     const roll = Math.random();
     if (roll < 0.6) {
       forceSay(citizen, pickOne(Math.random, WHITTLE_LINES));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${woodlot.name}`);
-    } else if (roll < 0.8) {
-      const good = goodForToday(woodlot, nowMs);
-      forceSay(citizen, fill(pickOne(Math.random, GOODS_LINES), { good }));
-      journalize(citizen, `hawked ${good} at ${woodlot.name}`);
+      journalize(citizen, `worked at ${woodlot.name}`);
     } else {
       const lesson = pickOne(Math.random, LESSONS);
       forceSay(citizen, fill(pickOne(Math.random, LESSON_LINES), { lesson }));
@@ -790,18 +677,9 @@ function doWoodfolkWork(director, record, citizen, type, nowMs) {
   }
 
   // Timber-hand: the yard work.
-  if (kid && timberDelayFor(kid, nowMs) && Math.random() < 0.4) {
-    forceSay(citizen, fill(pickOne(Math.random, TIMBER_DELAY_LINES), { woodlot: woodlot.name }));
-    journalize(citizen, `sat idle on a timber delay at ${woodlot.name}`);
-    return;
-  }
-  if (kid && windfallFor(kid, nowMs) && Math.random() < 0.4) {
-    forceSay(citizen, fill(pickOne(Math.random, WINDFALL_LINES), { woodlot: woodlot.name }));
-    journalize(citizen, `worked storm windfall at ${woodlot.name}`);
-    return;
-  }
+  // (timberDelayFor/windfallFor removed 2026-10-08: hash-derived kingdom events were fabrication.)
   forceSay(citizen, fill(pickOne(Math.random, HAUL_LINES), { woodlot: woodlot.name }));
-  journalize(citizen, `${taskForToday(name, type, nowMs)} at ${woodlot.name}`);
+  journalize(citizen, `worked at ${woodlot.name}`);
 }
 
 /** A nearby real player whose goods order is ready, if any. */
@@ -820,49 +698,14 @@ function nearbyReadyOrder(director, citizen, nowMs) {
 }
 
 /** Once-per-day kingdom rhythms: timber delays and windfalls. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-  try {
-    for (const kid of kingdoms) {
-      if (timberDelayFor(kid, nowMs)) {
-        const key = "timber-delay:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const line = `Timber wagons missed the road in ${kid} — the woodlots are running on scraps and the hands are splitting firewood.`;
-          journalize({ username: "the woodfolk" }, line);
-          seedRumor(line);
-        }
-      }
-      if (windfallFor(kid, nowMs)) {
-        const key = "windfall:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const pool = WOODLOTS.filter((v) => v.kingdom === kid);
-          const woodlot = (pool.length ? pool[0] : WOODLOTS[0]).name;
-          const line = `A storm dropped a whole tree at ${woodlot} in ${kid} — the woodfolk are feasting on windfall.`;
-          journalize({ username: "the woodfolk" }, line);
-          seedRumor(line);
-        }
-      }
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickWoodfolk,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   woodfolkTypeOf,
   woodlotFor,
-  woodForToday,
-  basketForToday,
-  taskForToday,
-  goodForToday,
   priceFor,
-  showpieceFor,
-  timberDelayFor,
-  windfallFor,
-  proCarpenterFor,
   requestOrder,
   orderFor,
   orderReady,

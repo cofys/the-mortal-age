@@ -388,21 +388,9 @@ function siteFor(record) {
   return pool[hashStr(name + "|laborsite") % pool.length];
 }
 
-/** Today's task for a laborfolk citizen (1 task of the day). */
-function taskForToday(username, type, dateMs) {
-  const tasks = DAILY_TASK_LINES[type] ?? DAILY_TASK_LINES[HOD_CARRIER];
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|labor-task:" + day));
-  return pickOne(rng, tasks);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's material on the site (stable per day). */
-function materialForToday(site, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("laborfolkmat:" + site.name + ":" + day));
-  return pickOne(rng, MATERIALS);
-}
+// (materialForToday removed 2026-10-08: hash-derived fabrication.)
 
 /**
  * A topping-out celebration at a site (~8%/day), or null: the crew's
@@ -427,48 +415,13 @@ function scaffoldSlipFor(site, dateMs) {
   return true;
 }
 
-/**
- * A supply delay in a kingdom (~8%/day), or null: the stone wagons are
- * late and the crews ration the mortar. Journaled + rumor-seeded.
- */
-function supplyDelayFor(kingdomId, dateMs) {
-  if (!kingdomId) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(String(kingdomId) + "|supply-delay:" + day));
-  if (rng() >= SUPPLY_DELAY_CHANCE) return null;
-  return true;
-}
+// (supplyDelayFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Real-data bridges — the master builders, cross-read.
 // ============================================================================
 
-/**
- * Read-only bridge: the kingdom's master-builder project of the day,
- * drawn from the real CitizenBuilders project name pools and phases, so
- * laborer small talk stays consistent with the trade's project names.
- * Returns { type, name, phase } or null. Never throws.
- */
-function proProjectFor(kingdomId, nowMs = Date.now()) {
-  try {
-    if (!ProBuilders || !ProBuilders.PROJECT_TYPES || !ProBuilders.PROJECT_PHASES) return null;
-    const kid = String(kingdomId ?? "");
-    if (!kid) return null;
-    const day = dayNumber(nowMs);
-    const rng = seededRng(hashStr(kid + "|laborproj:" + day));
-    const typeKeys = Object.keys(ProBuilders.PROJECT_TYPES);
-    if (!typeKeys.length) return null;
-    const type = pickOne(rng, typeKeys);
-    const def = ProBuilders.PROJECT_TYPES[type] ?? {};
-    const names = def.names ?? [];
-    const name = names.length ? pickOne(rng, names) : type;
-    const phases = (ProBuilders.PROJECT_PHASES ?? []).filter((p) => p !== "complete");
-    const phase = phases.length ? pickOne(rng, phases) : "structure";
-    return { type, name, phase };
-  } catch {
-    return null;
-  }
-}
+// (proProjectFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Day-labor hire ledger (data tier, zero LLM).
@@ -590,7 +543,7 @@ function tickLaborfolk(director, nowMs, desync) {
 
     // Daily rhythms: topping-outs, scaffold slips and supply delays
     // (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-laborfolk] tick failed:", e?.message ?? e);
@@ -618,17 +571,7 @@ function doLaborfolkWork(director, record, citizen, type, nowMs) {
   const day = dayNumber(nowMs);
 
   // Topping-out celebration: once per site per day, the crowd moment.
-  const top = toppingOutFor(site, nowMs);
-  if (top) {
-    const key = "labortopout:" + site.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      forceSay(citizen, fill(pickOne(Math.random, TOPPING_OUT_LINES), { project: top.project }));
-      journalize(citizen, `topped out ${top.project} at ${site.name}`);
-      seedRumor(`${top.project} topped out at ${site.name}!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: toppingOutFor was hash-derived.)
 
   // A scaffold slip on the site: the lashing moment.
   if (scaffoldSlipFor(site, nowMs) && type === SCAFFOLD_MATE && Math.random() < 0.5) {
@@ -646,38 +589,37 @@ function doLaborfolkWork(director, record, citizen, type, nowMs) {
     return;
   }
 
-  const material = materialForToday(site, nowMs);
-  const proj = kid ? proProjectFor(kid, nowMs) : null;
+  // (materialForToday/proProjectFor removed 2026-10-08: hash-derived fabrication.)
+  const material = "stone";
+  const proj = null;
 
   if (type === HOD_CARRIER) {
     const roll = Math.random();
     if (roll < 0.6) {
       forceSay(citizen, fill(pickOne(Math.random, HOD_LINES), { material, site: site.name }));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${site.name}`);
+      journalize(citizen, `worked at ${site.name}`);
     } else if (proj) {
       forceSay(citizen, fill(pickOne(Math.random, PRO_BUILD_LINES), { phase: proj.phase, project: proj.name }));
       journalize(citizen, `talked trade with passers-by at ${site.name}`);
     } else {
       forceSay(citizen, fill(pickOne(Math.random, HOD_LINES), { material, site: site.name }));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${site.name}`);
+      journalize(citizen, `worked at ${site.name}`);
     }
     return;
   }
 
   if (type === MORTAR_MIXER) {
+    // (supplyDelayFor removed 2026-10-08: hash-derived delay event was fabrication.)
     const roll = Math.random();
-    if (kid && supplyDelayFor(kid, nowMs) && roll < 0.4) {
-      forceSay(citizen, fill(pickOne(Math.random, SUPPLY_DELAY_LINES), { material }));
-      journalize(citizen, `rationed mortar on a supply delay at ${site.name}`);
-    } else if (roll < 0.6) {
+    if (roll < 0.6) {
       forceSay(citizen, pickOne(Math.random, MORTAR_LINES));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${site.name}`);
+      journalize(citizen, `worked at ${site.name}`);
     } else if (proj) {
       forceSay(citizen, fill(pickOne(Math.random, PRO_BUILD_LINES), { phase: proj.phase, project: proj.name }));
       journalize(citizen, `talked trade with passers-by at ${site.name}`);
     } else {
       forceSay(citizen, pickOne(Math.random, MORTAR_LINES));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${site.name}`);
+      journalize(citizen, `worked at ${site.name}`);
     }
     return;
   }
@@ -686,13 +628,13 @@ function doLaborfolkWork(director, record, citizen, type, nowMs) {
     const roll = Math.random();
     if (roll < 0.6) {
       forceSay(citizen, pickOne(Math.random, SCAFFOLD_LINES));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${site.name}`);
+      journalize(citizen, `worked at ${site.name}`);
     } else if (proj) {
       forceSay(citizen, fill(pickOne(Math.random, PRO_BUILD_LINES), { phase: proj.phase, project: proj.name }));
       journalize(citizen, `talked trade with passers-by at ${site.name}`);
     } else {
       forceSay(citizen, pickOne(Math.random, SCAFFOLD_LINES));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${site.name}`);
+      journalize(citizen, `worked at ${site.name}`);
     }
     return;
   }
@@ -704,13 +646,13 @@ function doLaborfolkWork(director, record, citizen, type, nowMs) {
       journalize(citizen, `offered day labor at ${site.name}`);
     } else if (roll < 0.75) {
       forceSay(citizen, pickOne(Math.random, ODDJOB_LINES));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${site.name}`);
+      journalize(citizen, `worked at ${site.name}`);
     } else if (proj) {
       forceSay(citizen, fill(pickOne(Math.random, PRO_BUILD_LINES), { phase: proj.phase, project: proj.name }));
       journalize(citizen, `talked trade with passers-by at ${site.name}`);
     } else {
       forceSay(citizen, pickOne(Math.random, ODDJOB_LINES));
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${site.name}`);
+      journalize(citizen, `worked at ${site.name}`);
     }
     return;
   }
@@ -722,7 +664,7 @@ function doLaborfolkWork(director, record, citizen, type, nowMs) {
     return;
   }
   forceSay(citizen, fill(pickOne(Math.random, RUBBLE_LINES), { site: site.name }));
-  journalize(citizen, `${taskForToday(name, type, nowMs)} at ${site.name}`);
+  journalize(citizen, `worked at ${site.name}`);
 }
 
 /** A nearby real player whose active hire names this laborer, if any. */
@@ -741,57 +683,15 @@ function nearbyActiveHire(director, citizen, laborerName, nowMs) {
 }
 
 /** Once-per-day kingdom rhythms: topping-outs, slips and supply delays. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-  try {
-    for (const kid of kingdoms) {
-      const sites = SITES.filter((s) => s.kingdom === kid);
-      for (const site of sites) {
-        if (toppingOutFor(site, nowMs)) {
-          const key = "daily-labortopout:" + site.name + ":" + day;
-          if (!lastFiredByCitizen.has(key)) {
-            lastFiredByCitizen.set(key, nowMs);
-            const proj = proProjectFor(kid, nowMs);
-            const line = `${proj ? proj.name : "the works"} topped out at ${site.name} — the hoddies cheered.`;
-            journalize({ username: "the laborers" }, line);
-            seedRumor(line);
-          }
-        }
-        if (scaffoldSlipFor(site, nowMs)) {
-          const key = "daily-laborslip:" + site.name + ":" + day;
-          if (!lastFiredByCitizen.has(key)) {
-            lastFiredByCitizen.set(key, nowMs);
-            const line = `A plank slipped on the scaffold at ${site.name} — nobody hurt, every lashing checked twice.`;
-            journalize({ username: "the laborers" }, line);
-            seedRumor(line);
-          }
-        }
-      }
-      if (supplyDelayFor(kid, nowMs)) {
-        const key = "daily-labordelay:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const line = `Stone wagons missed the road in ${kid} — the laborers are rationing mortar and stacking rubble.`;
-          journalize({ username: "the laborers" }, line);
-          seedRumor(line);
-        }
-      }
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickLaborfolk,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   laborfolkTypeOf,
   siteFor,
-  taskForToday,
-  materialForToday,
   toppingOutFor,
   scaffoldSlipFor,
-  supplyDelayFor,
-  proProjectFor,
   hireLaborer,
   hireFor,
   releaseLaborer,

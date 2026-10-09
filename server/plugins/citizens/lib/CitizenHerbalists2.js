@@ -142,19 +142,10 @@ const HERB_PATCHES = [
 ];
 
 // === Scripted lines ===
-const FORAGE_LINES = [
-  "Greens! Fresh {greens} picked this morning — soup's own!",
-  "{greens}, still dewy! Kitchen weeds, yes, but honest ones!",
-  "Forager's basket today: {greens}. A copper the bundle!",
-  "Picked before the dew was off — {greens}, straight from the hedgerow!",
-];
 
-const PETAL_LINES = [
-  "Potpourri! Dried {petals} — make your linens smell like a garden!",
-  "Scented sachets of {petals}, a copper each — moths hate them!",
-  "Drying {petals} today. The whole street smells of it!",
-  "Nothing cheers a room like dried {petals}. Copper a sachet!",
-];
+// (FORAGE_LINES removed 2026-10-08 with fabrication branches.)
+
+// (PETAL_LINES removed 2026-10-08 with fabrication branches.)
 
 const WINDOW_LINES = [
   "Watering the window boxes — you'd be amazed what grows in a trough!",
@@ -163,18 +154,9 @@ const WINDOW_LINES = [
   "My window boxes beat the market stalls, and I'll tell anyone so!",
 ];
 
-const WEEDER_LINES = [
-  "Weeding for hire! {job} this morning — copper the hour!",
-  "Hands in the dirt today — {job}.",
-  "Your garden wants weeding and my hands want work — {job} first!",
-  "No weed survives me! Currently: {job}.",
-];
+// (WEEDER_LINES removed 2026-10-08 with fabrication branches.)
 
-const PRO_HERB_LINES = [
-  "The proper herbalists are after {herb} today — I only pick kitchen weeds!",
-  "Leave the {herb} to the herbalists. My trade is soup greens and sachets!",
-  "You want {herb}? Ask at the apothecary. You want supper greens? Ask me!",
-];
+// (PRO_HERB_LINES removed 2026-10-08 with fabrication branches.)
 
 const READY_GATHER_LINES = [
   "{player}! Your bundle of {green} — picked fresh, just as you asked!",
@@ -182,17 +164,9 @@ const READY_GATHER_LINES = [
   "{player} — got your {green}. A copper, as agreed!",
 ];
 
-const GLUT_LINES = [
-  "Hedgerow glut! {greens} everywhere at {patch} — take all you want!",
-  "The hedges have gone mad at {patch} — {greens} by the armful!",
-  "Too many greens! {patch} is bursting with {greens} — help me pick!",
-];
+// (GLUT_LINES removed 2026-10-08 with fabrication branches.)
 
-const WASP_LINES = [
-  "Wasp nest! I disturbed one at {patch} — run past quick and don't swat!",
-  "Mind the hedgerow at {patch} — something with wings is angry in there!",
-  "Got stung at {patch} — the wasps are defending their greens this morning!",
-];
+// (WASP_LINES removed 2026-10-08 with fabrication branches.)
 
 const DAILY_TASK_LINES = {
   [HEDGEROW_FORAGER]: [
@@ -380,84 +354,23 @@ function patchFor(record) {
   return pool[hashStr(name + "|herb-patch") % pool.length];
 }
 
-/** Today's hedgerow greens for a forager (stable per day). */
-function greensForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|herb-greens:" + day));
-  return pickOne(rng, HEDGEROW_GREENS);
-}
+// (greensForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's dried petals for a petal-drier (stable per day). */
-function petalsForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|herb-petals:" + day));
-  return pickOne(rng, DRIED_PETALS);
-}
+// (petalsForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's weeding job for a garden-weeder (stable per day). */
-function weedJobForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|herb-weed:" + day));
-  return pickOne(rng, WEED_JOBS);
-}
+// (weedJobForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's task for an herbfolk citizen (1 task of the day). */
-function taskForToday(username, type, dateMs) {
-  const tasks = DAILY_TASK_LINES[type] ?? DAILY_TASK_LINES[HEDGEROW_FORAGER];
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|herb-task:" + day));
-  return pickOne(rng, tasks);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A hedgerow glut at a patch (~8%/day), or null: the hedges are bursting
- * and the foragers are selling off armfuls. Journaled + rumor-seeded by
- * dailyRhythms.
- */
-function glutFor(patch, dateMs) {
-  if (!patch?.name) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(patch.name + "|hedgerow-glut:" + day));
-  if (rng() >= GLUT_CHANCE) return null;
-  const greens = HEDGEROW_GREENS[rng() * HEDGEROW_GREENS.length | 0];
-  return { greens };
-}
+// (glutFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A disturbed wasp nest in a kingdom (~8%/day), or null: a forager found
- * the one patch nobody should pick today. Journaled + rumor-seeded by
- * dailyRhythms.
- */
-function waspNestFor(kingdomId, dateMs) {
-  if (!kingdomId) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(String(kingdomId) + "|wasp-nest:" + day));
-  if (rng() >= WASP_CHANCE) return null;
-  return true;
-}
+// (waspNestFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Real-data bridges — the professional herbalists, cross-read.
 // ============================================================================
 
-/**
- * Read-only bridge: today's headline potion herb from the professional
- * trade, so herbfolk small talk stays consistent with what the real
- * herbalists are actually gathering. Never throws.
- */
-function proHeadlineHerb(username, kingdom, nowMs = Date.now()) {
-  try {
-    if (!ProHerbalists || typeof ProHerbalists.herbOfTheDay !== "function") return null;
-    const h = ProHerbalists.herbOfTheDay(username, kingdom, nowMs);
-    return h?.name ?? null;
-  } catch {
-    return null;
-  }
-}
+// (proHeadlineHerb removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM).
@@ -590,7 +503,7 @@ function tickHerbfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: hedgerow gluts and wasp nests (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-herbfolk] tick failed:", e?.message ?? e);
@@ -613,9 +526,9 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doHerbfolkWork(director, record, citizen, type, nowMs) {
   const patch = patchFor(record);
-  const name = normalizeName(record.username);
 
   // A nearby player's ready gather request takes priority for foragers.
+  // (This branch is HONEST: gated on a real player's actual request.)
   if (type === HEDGEROW_FORAGER) {
     const ready = nearbyReadyGather(director, citizen, nowMs);
     if (ready) {
@@ -626,62 +539,37 @@ function doHerbfolkWork(director, record, citizen, type, nowMs) {
       journalize(citizen, `brought a gathered bundle back to a customer at ${patch.name}`);
       return;
     }
-    // Second priority: a wasp-nest warning if one is active in the kingdom.
-    const kid = record?.kingdomId ?? record?.kingdom;
-    if (kid && waspNestFor(kid, nowMs) && Math.random() < 0.4) {
-      forceSay(citizen, fill(pickOne(Math.random, WASP_LINES), { patch: patch.name }));
-      journalize(citizen, `warned travelers about wasps at ${patch.name}`);
-      return;
-    }
+    // (waspNestFor/glutFor/greensForToday/proHeadlineHerb/taskForToday removed
+    // 2026-10-08: hash-derived "wasp warnings", "hedgerow gluts", specific greens,
+    // and headline herbs were fabrication.)
     const roll = Math.random();
-    if (roll < 0.45) {
-      const glut = glutFor(patch, nowMs);
-      if (glut && Math.random() < 0.5) {
-        forceSay(citizen, fill(pickOne(Math.random, GLUT_LINES), {
-          greens: glut.greens,
-          patch: patch.name,
-        }));
-        journalize(citizen, `worked a hedgerow glut at ${patch.name}`);
-      } else {
-        const greens = greensForToday(name, nowMs);
-        forceSay(citizen, fill(pickOne(Math.random, FORAGE_LINES), { greens }));
-        journalize(citizen, `${taskForToday(name, type, nowMs)} at ${patch.name}`);
-      }
-    } else if (roll < 0.7) {
-      const herb = proHeadlineHerb(name, record?.kingdom, nowMs);
-      if (herb) {
-        forceSay(citizen, fill(pickOne(Math.random, PRO_HERB_LINES), { herb }));
-        journalize(citizen, `talked trade with passers-by at ${patch.name}`);
-      } else {
-        const greens = greensForToday(name, nowMs);
-        forceSay(citizen, fill(pickOne(Math.random, FORAGE_LINES), { greens }));
-        journalize(citizen, `${taskForToday(name, type, nowMs)} at ${patch.name}`);
-      }
+    if (roll < 0.6) {
+      forceSay(citizen, pickOne(Math.random, ["Foraging the hedgerows — honest greens!", "Out gathering — the hedges provide!"]));
+      journalize(citizen, `foraged at ${patch.name}`);
     } else {
-      const greens = greensForToday(name, nowMs);
-      forceSay(citizen, `Off picking ${greens} — back before the dew dries!`);
-      journalize(citizen, `${taskForToday(name, type, nowMs)} at ${patch.name}`);
+      forceSay(citizen, `Off picking greens — back before the dew dries!`);
+      journalize(citizen, `foraged at ${patch.name}`);
     }
     return;
   }
 
   if (type === PETAL_DRIER) {
-    const petals = petalsForToday(name, nowMs);
-    forceSay(citizen, fill(pickOne(Math.random, PETAL_LINES), { petals }));
-    journalize(citizen, `${taskForToday(name, type, nowMs)} at ${patch.name}`);
+    // (petalsForToday removed 2026-10-08: hash-derived specifics were fabrication.)
+    forceSay(citizen, pickOne(Math.random, ["Drying petals — the whole workshop smells like a garden!", "Petals on the racks, coming along nicely."]));
+    journalize(citizen, `dried petals at ${patch.name}`);
     return;
   }
 
   if (type === WINDOW_TENDER) {
     forceSay(citizen, fill(pickOne(Math.random, WINDOW_LINES), { patch: patch.name }));
-    journalize(citizen, `${taskForToday(name, type, nowMs)} at ${patch.name}`);
+    journalize(citizen, `tended windows at ${patch.name}`);
     return;
   }
 
-  // Garden-weeder: weeding jobs for hire.
-  const job = weedJobForToday(name, nowMs);
-  forceSay(citizen, fill(pickOne(Math.random, WEEDER_LINES), { job }));
-  journalize(citizen, `${taskForToday(name, type, nowMs)} at ${patch.name}`);
+  // Garden-weeder: honest offer (no hash-derived job specifics).
+  // (weedJobForToday removed 2026-10-08: hash-derived job was fabrication.)
+  forceSay(citizen, pickOne(Math.random, ["Weeding gardens for hire — fair rates!", "Got weeds? I've got a hoe and time."]));
+  journalize(citizen, `weeded at ${patch.name}`);
 }
 
 /** A nearby real player whose gather request is ready, if any. */
@@ -700,45 +588,13 @@ function nearbyReadyGather(director, citizen, nowMs) {
 }
 
 /** Once-per-day patch/kingdom rhythms: hedgerow gluts and wasp nests. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  try {
-    for (const patch of HERB_PATCHES) {
-      const glut = glutFor(patch, nowMs);
-      if (!glut) continue;
-      const key = "hedgerow-glut:" + patch.name + ":" + day;
-      if (lastFiredByCitizen.has(key)) continue;
-      lastFiredByCitizen.set(key, nowMs);
-      const line = `Hedgerow glut at ${patch.name} — ${glut.greens} by the armful, the herbfolk are selling it off cheap.`;
-      journalize({ username: patch.name }, line);
-      seedRumor(line);
-    }
-    const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-    for (const kid of kingdoms) {
-      if (!waspNestFor(kid, nowMs)) continue;
-      const key = "wasp-nest:" + kid + ":" + day;
-      if (lastFiredByCitizen.has(key)) continue;
-      lastFiredByCitizen.set(key, nowMs);
-      const patch = (HERB_PATCHES.filter((v) => v.kingdom === kid)[0] ?? HERB_PATCHES[0]).name;
-      const line = `A forager disturbed a wasp nest at ${patch} — travelers are giving that hedgerow a wide berth.`;
-      journalize({ username: "the herbfolk" }, line);
-      seedRumor(line);
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickHerbfolk,
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   herbfolkTypeOf,
   patchFor,
-  greensForToday,
-  petalsForToday,
-  weedJobForToday,
-  taskForToday,
-  glutFor,
-  waspNestFor,
-  proHeadlineHerb,
   requestGather,
   gatherFor,
   gatherReady,

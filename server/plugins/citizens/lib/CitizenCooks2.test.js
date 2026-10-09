@@ -45,10 +45,17 @@ function mockPlayer(name, x = 3005, y = 3005) {
 }
 function mockDirector(entries, players) {
   const bots = new Map();
+  const roster = new Map(entries.map((r) => [r.username, r]));
+  // players/bots also live on the roster (real director scans roster for nearby real players)
+  for (const p of players) {
+    const name = p.getUsername();
+    roster.set(name, { username: name, role: "player" });
+    bots.set(name, p);
+  }
   return {
-    roster: new Map(entries.map((r) => [r.username, r])),
-    playerFor: (record) => bots.get(record.username) || null,
-    onlinePlayers: () => players,
+    roster,
+    isOnline: () => true,
+    getBot: (rec) => bots.get(rec.username) || null,
     _bots: bots,
   };
 }
@@ -152,81 +159,23 @@ function fresh() {
   console.log("kitchen preference: PASS");
 }
 
-// --- menu determinism + day variance ---
-{
-  fresh();
-  const k = CF.kitchenFor({ username: "menucook", role: "commoner", kingdomId: "misthalin" });
-  const a = CF.menuFor("menucook", k, T0);
-  const b = CF.menuFor("menucook", k, T0);
-  assert.deepEqual(a, b, "menu is deterministic for the same day");
-  assert.ok(a.length >= 1 && a.length <= 3, "menu has 1-3 dishes");
-  const seen = new Set();
-  for (let d = 0; d < 10; d++) seen.add(JSON.stringify(CF.menuFor("menucook", k, T0 + d * 86400000)));
-  assert.ok(seen.size > 1, "menu varies across days");
-  console.log("menu determinism: PASS");
-}
+// --- menu removed 2026-10-08: menuFor was hash-derived fabrication. ---
 
-// --- dish pools: vendor dishes come from the real street-food table ---
-{
-  fresh();
-  const vendor = findCookfolkOf(CF.COOKFOLK_VENDOR, "vck");
-  const k = CF.kitchenFor(vendor);
-  const street = ProCooks.STREET_FOOD;
-  for (let d = 0; d < 10; d++) {
-    const dish = CF.dishForToday(vendor.username, k, T0 + d * 86400000);
-    assert.ok(street.includes(dish), "vendor dish is real street food: " + dish);
-  }
-  const home = findCookfolkOf(CF.COOKFOLK_HOME, "hck");
-  const hk = CF.kitchenFor(home);
-  const dish = CF.dishForToday(home.username, hk, T0);
-  assert.ok(typeof dish === "string" && dish.length > 0, "home dish is a non-empty string");
-  console.log("dish pools: PASS");
-}
+// --- dish pools removed 2026-10-08: dishForToday was hash-derived fabrication. ---
 
-// --- feast determinism + rarity ---
-{
-  fresh();
-  let fires = 0;
-  const trials = 2000;
-  const k = CF.COMMUNITY_KITCHENS[0];
-  for (let d = 0; d < trials; d++) {
-    if (CF.feastFor(k, d * 86400000)) fires++;
-  }
-  const rate = (fires / trials) * 100;
-  assert.ok(rate > 4 && rate < 13, "feast rarity ~8%, got " + rate.toFixed(1) + "%");
-  const feastDay = (() => {
-    for (let d = 0; d < 200; d++) if (CF.feastFor(k, d * 86400000)) return d;
-    return null;
-  })();
-  if (feastDay !== null) {
-    const a = CF.feastFor(k, feastDay * 86400000);
-    const b = CF.feastFor(k, feastDay * 86400000);
-    assert.deepEqual(a, b, "feast is deterministic");
-  }
-  console.log("feast rarity (" + rate.toFixed(1) + "%): PASS");
-}
+// --- feast removed 2026-10-08: feastFor was hash-derived fabrication. ---
 
-// --- price sanity ---
-{
-  fresh();
-  assert.equal(CF.priceFor(CF.COOKFOLK_SOUP), 0, "soup kitchen is always free");
-  const vp = CF.priceFor(CF.COOKFOLK_VENDOR);
-  assert.ok(vp >= 5 && vp <= 20, "vendor price sane: " + vp);
-  const hp = CF.priceFor(CF.COOKFOLK_HOME);
-  assert.ok(hp >= 3 && hp <= 13, "home price sane: " + hp);
-  console.log("price sanity: PASS");
-}
+// --- price sanity removed 2026-10-08: priceFor was hash-derived fabrication. ---
 
-// --- seasonal tie-in: real farmers' tables ---
+// --- seasonal names: real calendar months ---
 {
   fresh();
   const summerMs = new Date(2026, 6, 15, 10, 0).getTime(); // July — summer
   const winterMs = new Date(2026, 0, 15, 10, 0).getTime(); // January — winter
   assert.equal(CF.seasonNameFor(summerMs), "summer", "July is summer");
   assert.equal(CF.seasonNameFor(winterMs), "winter", "January is winter");
-  const produce = CF.produceForToday(summerMs);
-  assert.ok(typeof produce === "string" && produce.length > 0, "produce is a non-empty string: " + produce);
-  console.log("seasonal tie-in: PASS");
+  // (produceForToday removed 2026-10-08: hash-derived fabrication.)
+  console.log("seasonal names: PASS");
 }
 
 // --- all 3 ledgers: round-trip + TTL expiry ---
@@ -347,8 +296,6 @@ function fresh() {
   CF.tickCookfolk({}, T0);
   CF.tickCookfolk({ roster: null }, T0);
   assert.equal(CF.cookfolkTypeOf({ username: null }), null);
-  const anyDish = CF.dishForToday(null, null, T0);
-  assert.ok(typeof anyDish === "string" && anyDish.length > 0, "dishForToday never throws on hostile input");
   console.log("never-throws: PASS");
 }
 

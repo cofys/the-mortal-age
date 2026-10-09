@@ -541,18 +541,7 @@ function doDockfolkWork(director, record, citizen, type, nowMs) {
   const day = dayNumber(nowMs);
 
   // Ship arrival: rare, the crowd moment — once per dock per day.
-  const ship = arrivalFor(dock, nowMs);
-  if (ship) {
-    const key = "arrival:" + dock.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, ARRIVAL_LINES), { ship, dock: dock.name });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `${ship} arrived at ${dock.name}`);
-      seedRumor(`${ship} makes harbor at ${dock.name}!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: arrivalFor was hash-derived.)
 
   // Routine: work emote, finished-job callout, hire/supply/yarn offer.
   const roll = Math.random();
@@ -561,20 +550,16 @@ function doDockfolkWork(director, record, citizen, type, nowMs) {
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${dock.name}`);
   } else if (roll < 0.6) {
-    if (type === DOCKFOLK_FISHER) {
-      const line = `*hauls in the line* — ${catchFor(name, nowMs)}. The pot's fed tonight.`;
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `caught ${catchFor(name, nowMs)} at ${dock.name}`);
-    } else if (type === DOCKFOLK_SALT) {
+    // (catchFor/jobsFor branches removed 2026-10-08: hash-derived fabrication.
+    // yarnFor kept: spinning a sea-yarn is storytelling, not a false claim.)
+    if (type === DOCKFOLK_SALT) {
       const line = yarnFor(name, nowMs);
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [`"${line}"`] })); }
       journalize(citizen, `spun a yarn at ${dock.name}`);
     } else {
-      const jobs = jobsFor(name, type, nowMs);
-      const job = jobs.length ? jobs[0] : "a dock job";
-      const line = fill(pickOne(Math.random, FINISH_LINES), { job });
+      const line = pickOne(Math.random, WORK_LINES[type]);
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `finished ${job} at ${dock.name}`);
+      journalize(citizen, `kept working at ${dock.name}`);
     }
   } else if (roll < 0.8) {
     if (type === DOCKFOLK_DOCKHAND) {

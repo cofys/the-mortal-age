@@ -149,11 +149,7 @@ const WORK_LINES = {
   ],
 };
 
-const HAWK_LINES = [
-  "{tune} — and I'll take requests if you've got coppers!",
-  "Playing {tune} all evening! Requests welcome!",
-  "{tune}, fresh off the strings! Tips keep the lute tuned!",
-];
+// (HAWK_LINES removed 2026-10-08 with fabrication branches.)
 
 const REQUEST_LINES = [
   "'{tune}'? Aye, I know that one! *plays*",
@@ -161,11 +157,7 @@ const REQUEST_LINES = [
   "'{tune}' it is! Sing the chorus with me!",
 ];
 
-const SWAP_LINES = [
-  "I learned '{ballad}' off a tinker last market day — want the chorus?",
-  "You know '{ballad}'? I'll trade you the verse nobody remembers.",
-  "New from the road: '{ballad}'. The words are still settling, mind.",
-];
+// (SWAP_LINES removed 2026-10-08 with fabrication branches.)
 
 const LESSON_LINES = [
   "Want to learn '{tune}'? Three chords and a chorus — I'll show you.",
@@ -387,13 +379,7 @@ function venueFor(record) {
   return pool[hashStr(name + "|songfolk-venue") % pool.length];
 }
 
-/** Today's featured tune for a songfolk (1 tune of the day). */
-function tuneForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|songfolk-tune:" + day));
-  return pickOne(rng, AMATEUR_SONGS);
-}
+// (tuneForToday removed 2026-10-08: hash-derived fabrication.)
 
 /**
  * The REAL named ballads circulating the world — read from the actual
@@ -415,15 +401,7 @@ function knownBallads() {
   return FALLBACK_BALLADS.slice();
 }
 
-/** The ballad a swapper picked up most recently (stable per day). */
-function swappedBalladFor(username, dateMs) {
-  const ballads = knownBallads();
-  if (!ballads.length) return null;
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|songfolk-swap:" + day));
-  return pickOne(rng, ballads);
-}
+// (swappedBalladFor removed 2026-10-08: hash-derived fabrication.)
 
 /** A short traveler epithet for contest challengers (stable per venue+day). */
 const CONTEST_CHALLENGERS = [
@@ -657,7 +635,7 @@ function tickSongfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: rival contests and recovered legends (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-songfolk] tick failed:", e?.message ?? e);
@@ -680,8 +658,7 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doSongfolkWork(director, record, citizen, type, nowMs) {
   const venue = venueFor(record);
-  const name = normalizeName(record.username);
-  const tune = tuneForToday(name, nowMs);
+  // (tuneForToday removed 2026-10-08: hash-derived "today's tune" was fabrication.)
 
   // A nearby player's pending tune request takes priority.
   const req = nearbyRequest(director, citizen, nowMs);
@@ -691,40 +668,22 @@ function doSongfolkWork(director, record, citizen, type, nowMs) {
     return;
   }
 
-  const roll = Math.random();
+  // Routine: honest ambient performance chatter only.
+  // (tuneForToday/swappedBalladFor removed 2026-10-08: hash-derived tune titles
+  // were fabrication — the bard performs, but specific titles were invented.)
   if (type === SONFOLK_BUSKER) {
-    if (roll < 0.45) {
-      forceSay(citizen, pickOne(Math.random, WORK_LINES[SONFOLK_BUSKER]));
-    } else {
-      forceSay(citizen, fill(pickOne(Math.random, HAWK_LINES), { tune }));
-    }
+    forceSay(citizen, pickOne(Math.random, WORK_LINES[SONFOLK_BUSKER]));
     journalize(citizen, `busked at ${venue.name}`);
   } else if (type === SONFOLK_TALESPINNER) {
-    if (roll < 0.5) {
-      forceSay(citizen, pickOne(Math.random, WORK_LINES[SONFOLK_TALESPINNER]));
-    } else {
-      forceSay(citizen, fill(pickOne(Math.random, HAWK_LINES), { tune }));
-    }
+    forceSay(citizen, pickOne(Math.random, WORK_LINES[SONFOLK_TALESPINNER]));
     journalize(citizen, `spun a verse at ${venue.name}`);
   } else if (type === SONFOLK_MINSTREL) {
-    if (roll < 0.6) {
-      forceSay(citizen, pickOne(Math.random, WORK_LINES[SONFOLK_MINSTREL]));
-    } else {
-      forceSay(
-        citizen,
-        fill(pickOne(Math.random, LESSON_LINES), { tune })
-      );
-    }
-    journalize(citizen, `played ${tune} for the circle at ${venue.name}`);
+    forceSay(citizen, pickOne(Math.random, WORK_LINES[SONFOLK_MINSTREL]));
+    journalize(citizen, `played for the circle at ${venue.name}`);
   } else {
     // ballad-swapper
-    const ballad = swappedBalladFor(name, nowMs) || "The King's Road";
-    if (roll < 0.5) {
-      forceSay(citizen, pickOne(Math.random, WORK_LINES[SONFOLK_SWAPPER]));
-    } else {
-      forceSay(citizen, fill(pickOne(Math.random, SWAP_LINES), { ballad }));
-    }
-    journalize(citizen, `swapped ballad verses ('${ballad}') at ${venue.name}`);
+    forceSay(citizen, pickOne(Math.random, WORK_LINES[SONFOLK_SWAPPER]));
+    journalize(citizen, `swapped verses at ${venue.name}`);
   }
 }
 
@@ -742,47 +701,7 @@ function nearbyRequest(director, citizen, nowMs) {
 }
 
 /** Once-per-day venue/kingdom rhythms: contests and recovered legends. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  try {
-    for (const venue of VENUES) {
-      const contest = contestFor(venue, nowMs);
-      if (!contest) continue;
-      const key = "contest:" + venue.name + ":" + day;
-      if (lastFiredByCitizen.has(key)) continue;
-      lastFiredByCitizen.set(key, nowMs);
-      const winner = seededRng(hashStr(venue.name + "|contest-winner:" + day))() < 0.5 ? contest.a : contest.b;
-      const line = fill(pickOne(seededRng(hashStr(venue.name + "|contest-line:" + day)), CONTEST_LINES), {
-        venue: venue.name,
-        a: contest.a,
-        b: contest.b,
-      });
-      journalize({ username: venue.name }, line);
-      seedRumor(line);
-      const result = fill(pickOne(seededRng(hashStr(venue.name + "|contest-result:" + day)), CONTEST_RESULT_LINES), {
-        winner,
-        venue: venue.name,
-      });
-      journalize({ username: venue.name }, result);
-      seedRumor(result);
-    }
-    const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-    for (const kid of kingdoms) {
-      const legend = legendFor(kid, nowMs);
-      if (!legend) continue;
-      const key = "legend:" + kid + ":" + day;
-      if (lastFiredByCitizen.has(key)) continue;
-      lastFiredByCitizen.set(key, nowMs);
-      const venue = (VENUES.filter((v) => v.kingdom === kid)[0] ?? VENUES[0]).name;
-      const line = fill(pickOne(seededRng(hashStr(kid + "|legend-line:" + day)), LEGEND_LINES), {
-        ballad: legend,
-        venue,
-      });
-      journalize({ username: "the songfolk" }, line);
-      seedRumor(line);
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickSongfolk,
@@ -790,9 +709,7 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   songfolkTypeOf,
   venueFor,
-  tuneForToday,
   knownBallads,
-  swappedBalladFor,
   contestFor,
   legendFor,
   requestTune,

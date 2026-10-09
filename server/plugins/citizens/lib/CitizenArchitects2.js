@@ -593,7 +593,7 @@ function tickDraftfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: board-collapses, bad-measures, copy disputes (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-architects2] tick failed:", e?.message ?? e);
@@ -663,50 +663,7 @@ function doDraftWork(director, record, citizen, type, nowMs) {
  *   - copy dispute: two buyers argue over a smudged copy at a board (~8%)
  * Day-gated keys, cheap to evaluate. Never throws.
  */
-function dailyRhythms(director, nowMs) {
-  try {
-    const day = dayNumber(nowMs);
-    const rng = seededRng(hashStr("draftfolk-day:" + day));
-    const online = typeof director.onlinePlayers === "function" ? director.onlinePlayers() : [];
-    const realNearBoard = online.some((p) => isRealPlayer(p));
-    if (!realNearBoard) return; // no audience — skip the whole street scene
-    const kids = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-
-    for (const kid of kids) {
-      const collapseKey = "collapse:" + kid + ":" + day;
-      if (!firedDayKeys.has(collapseKey) && rng() < BOARD_COLLAPSE_CHANCE) {
-        firedDayKeys.add(collapseKey);
-        const event = pickOne(rng, BOARD_COLLAPSE_LINES);
-        journalize("draftfolk-" + kid, event + " (" + kid + " board)");
-        seedRumor(rng, event);
-      }
-      const measureKey = "measure:" + kid + ":" + day;
-      if (!firedDayKeys.has(measureKey) && rng() < BAD_MEASURE_CHANCE) {
-        firedDayKeys.add(measureKey);
-        const subjects = DRAFTFOLK_SUBJECTS.filter((s) => s.kingdom === kid);
-        const subject = subjects.length ? pickOne(rng, subjects).name : "a rough plan";
-        const event = fill(pickOne(rng, BAD_MEASURE_LINES), { subject });
-        journalize("draftfolk-" + kid, event);
-        seedRumor(rng, event);
-      }
-    }
-
-    for (let i = 0; i < DRAFT_BOARDS.length; i++) {
-      const key = "dispute:" + i + ":" + day;
-      if (firedDayKeys.has(key) || rng() >= COPY_DISPUTE_CHANCE) continue;
-      firedDayKeys.add(key);
-      const board = DRAFT_BOARDS[i];
-      const subjects = DRAFTFOLK_SUBJECTS.filter((s) => s.kingdom === board.kingdom);
-      const subject = subjects.length ? pickOne(rng, subjects).name : "a rough plan";
-      journalize(
-        "draftfolk-" + board.kingdom,
-        fill(pickOne(rng, DISPUTE_LINES), { place: board.name, subject })
-      );
-    }
-  } catch {
-    // set-pieces are cosmetic
-  }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickDraftfolk,

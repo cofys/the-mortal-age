@@ -162,21 +162,8 @@ function fresh() {
   console.log("kingdom-preferred spots: PASS");
 }
 
-// --- catch determinism + day variance ---
-{
-  fresh();
-  const rec = findFisherfolk("catch");
-  const spot = FF.spotFor(rec);
-  const type = FF.fisherfolkTypeOf(rec);
-  const c1 = FF.catchFor(rec.username, type, spot, T0);
-  const c2 = FF.catchFor(rec.username, type, spot, T0);
-  assert.deepEqual(c1, c2, "catch deterministic for day");
-  assert.ok(c1.length >= 1 && c1.length <= 3, "1-3 fish");
-  const c3 = FF.catchFor(rec.username, type, spot, T0 + 86400000 * 3);
-  // day variance is probabilistic; just assert shape, not difference
-  assert.ok(Array.isArray(c3) && c3.length >= 1, "catch valid on another day");
-  console.log("catch determinism: PASS");
-}
+// --- catch fabrication removed 2026-10-08 ---
+// (catchFor deleted: hash-derived "today's catch" was fabrication.)
 
 // --- crabbers catch crabs ---
 {
@@ -187,25 +174,8 @@ function fresh() {
   console.log("crabber pools: PASS");
 }
 
-// --- big catch determinism + rarity ---
-{
-  fresh();
-  const spot = FF.COMMUNITY_SPOTS[0];
-  let hits = 0;
-  const DAYS = 200;
-  for (let d = 0; d < DAYS; d++) {
-    const b = FF.bigCatchFor(spot, T0 + d * 86400000);
-    if (b) {
-      hits++;
-      assert.ok(b.weightKg >= 4 && b.weightKg <= 15, "weight in band");
-      assert.ok(typeof b.fish === "string" && b.fish.length > 0, "fish named");
-    }
-  }
-  const pct = (hits / DAYS) * 100;
-  assert.ok(pct > 2 && pct < 20, `big-catch rate ${pct.toFixed(1)}% near 8%`);
-  assert.deepEqual(FF.bigCatchFor(spot, T0), FF.bigCatchFor(spot, T0), "big catch deterministic");
-  console.log(`big catch: PASS (${pct.toFixed(1)}%)`);
-}
+// --- big-catch fabrication removed 2026-10-08 ---
+// (bigCatchFor deleted: hash-derived "14kg salmon" was fabrication.)
 
 // --- ledgers round-trip + TTL expiry ---
 {
@@ -331,7 +301,7 @@ function fresh() {
   fresh();
   assert.equal(FF.fill("Hello {name}, nice {fish}.", { name: "Jon", fish: "bass" }), "Hello Jon, nice bass.");
   assert.equal(FF.hashStr("x"), FF.hashStr("x"), "hash deterministic");
-  assert.ok(FF.priceFor("bass", T0) >= 5 && FF.priceFor("bass", T0) <= 40, "price in band");
+  // (priceFor removed 2026-10-08: hash-derived prices were fabrication.)
   console.log("helpers: PASS");
 }
 

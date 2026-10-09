@@ -137,22 +137,11 @@ const WORK_LINES = {
   ],
 };
 
-const DISH_LINES = [
-  "Today's pot: {dish}! Come and get it warm.",
-  "Cooked up {dish} this morning — tastes like home.",
-  "Fresh from the hearth: {dish}.",
-];
+// (DISH_LINES removed 2026-10-08 with fabrication branches.)
 
-const SELL_LINES = [
-  "{dish} for sale — still steaming!",
-  "Hot {dish}! Coin for the pot fund.",
-  "Selling {dish} — the vendors can't keep up.",
-];
+// (SELL_LINES removed 2026-10-08 with fabrication branches.)
 
-const SHARE_LINES = [
-  "Plenty in the pot — take a bowl, friend.",
-  "Community table, community stew. Help yourself.",
-];
+// (SHARE_LINES removed 2026-10-08 with fabrication branches.)
 
 const TEACH_LINES = [
   "Want to learn the trick of a good {dish}? Watch close.",
@@ -353,80 +342,15 @@ function seasonNameFor(dateMs) {
   return "summer";
 }
 
-/** Fresh produce available today (from the real farmers' tables). */
-function produceForToday(dateMs) {
-  const season = seasonNameFor(dateMs);
-  try {
-    if (Farmers && typeof Farmers.produceFor === "function" && Farmers.FARMER_CROP) {
-      const crops = Farmers.produceFor(Farmers.FARMER_CROP, season);
-      if (Array.isArray(crops) && crops.length) {
-        return crops[hashStr("cookfolkproduce:" + dayNumber(dateMs)) % crops.length];
-      }
-    }
-  } catch {
-    /* farmers absent */
-  }
-  const pool = FALLBACK_PRODUCE[season] || FALLBACK_PRODUCE.summer;
-  return pool[hashStr("cookfolkproduce:" + dayNumber(dateMs)) % pool.length];
-}
+// (produceForToday removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's dish for a cooking-folk citizen at a community kitchen.
- * Street vendors hawk street food; others serve the regional dish,
- * dressed with the seasonal special when it suits.
- */
-function dishForToday(username, kitchen, dateMs) {
-  const name = (normalizeName(username) || "anon").toLowerCase();
-  const day = dayNumber(dateMs);
-  const type = cookfolkTypeOf({ username: name, role: "commoner" });
-  if (type === COOKFOLK_VENDOR) {
-    return STREET_FOOD[hashStr("cookfolkstreet:" + name + ":" + day) % STREET_FOOD.length];
-  }
-  const kid = (kitchen && kitchen.kingdom) || "misthalin";
-  const regional = REGIONAL_DISHES[kid] || REGIONAL_DISHES.misthalin;
-  const dish = regional[hashStr("cookfolkdish:" + name + ":" + day) % regional.length];
-  const specials = SEASONAL_SPECIALS[seasonNameFor(dateMs)] || SEASONAL_SPECIALS.summer;
-  // Dress the regional dish with the seasonal special ~40% of the time.
-  const rng = seededRng(hashStr("cookfolkdress:" + name + ":" + day));
-  if (rng() < 0.4 && specials.length) {
-    return `${dish} with ${specials[hashStr("cookfolkspecial:" + name + ":" + day) % specials.length]}`;
-  }
-  return dish;
-}
+// (dishForToday removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's menu for a cooking-folk citizen: 1-3 dishes.
- * Derived from date + hash; zero storage.
- */
-function menuFor(username, kitchen, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("cookfolkmenu:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * 3); // 1-3
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    out.push(dishForToday(name + ":" + i, kitchen, dateMs));
-  }
-  return out;
-}
+// (menuFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's grand-feast event at a kitchen (~8%/day), or null.
- * { dish } — the crowd moment.
- */
-function feastFor(kitchen, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("cookfolkfeast:" + kitchen.name + ":" + day));
-  if (rng() >= FEAST_CHANCE) return null;
-  return { dish: dishForToday(kitchen.name, kitchen, dateMs) };
-}
+// (feastFor removed 2026-10-08: hash-derived fabrication.)
 
-/** A fair price for a community meal (3-25 coins by type). */
-function priceFor(type) {
-  if (type === COOKFOLK_SOUP) return 0; // charity — always free
-  if (type === COOKFOLK_VENDOR) return 5 + (hashStr("cookfolkprice:" + type) % 15);
-  return 3 + (hashStr("cookfolkprice:" + type) % 10);
-}
+// (priceFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM) — exported for the LLM dialogue tier.
@@ -575,51 +499,22 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doCookfolkWork(director, record, citizen, type, nowMs) {
   const kitchen = kitchenFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
   // Grand feast: once per kitchen per day, the crowd moment.
-  const feast = feastFor(kitchen, nowMs);
-  if (feast) {
-    const key = "feast:" + kitchen.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, FEAST_LINES), {
-        kitchen: kitchen.name,
-        dish: feast.dish,
-      });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `served a grand feast at ${kitchen.name}: ${feast.dish}`);
-      seedRumor(`Grand feast at ${kitchen.name} — ${feast.dish} for all!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: feastFor was hash-derived.)
 
-  // Routine: work emote, dish callout, sell/share/teach/help offers.
-  const todays = menuFor(name, kitchen, nowMs);
-  const dish = todays.length ? todays[0] : "stew";
+  // Routine: honest ambient chatter only — cooking, teaching, help.
+  // (Dish/serve/sell/share branches removed 2026-10-08: menuFor/dishForToday/
+  // priceFor were hash-derived fabrication — the citizen never cooked those dishes.)
   const roll = Math.random();
-  if (roll < 0.35) {
+  if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `cooked at ${kitchen.name}`);
-  } else if (roll < 0.55) {
-    const line = fill(pickOne(Math.random, DISH_LINES), { dish });
+  } else if (roll < 0.75) {
+    const line = pickOne(Math.random, TEACH_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `served ${todays.join(", ")} at ${kitchen.name}`);
-  } else if (roll < 0.7) {
-    const price = priceFor(type);
-    const line = fill(pickOne(Math.random, SELL_LINES), { dish });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [price > 0 ? `${line} (${price} coins)` : line] })); }
-    journalize(citizen, `hawked ${dish} at ${kitchen.name}`);
-  } else if (roll < 0.82) {
-    const line = pickOne(Math.random, type === COOKFOLK_SOUP ? SHARE_LINES : TEACH_LINES);
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [fill(line, { dish })] })); }
-    journalize(citizen, `shared ${dish} at ${kitchen.name}`);
-  } else if (roll < 0.93) {
-    const line = fill(pickOne(Math.random, TEACH_LINES), { dish });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `taught ${dish} at ${kitchen.name}`);
+    journalize(citizen, `shared cooking wisdom at ${kitchen.name}`);
   } else {
     const line = pickOne(Math.random, HELP_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
@@ -632,12 +527,7 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   cookfolkTypeOf,
   kitchenFor,
-  dishForToday,
-  menuFor,
-  feastFor,
-  priceFor,
   seasonNameFor,
-  produceForToday,
   buyMeal,
   mealFor,
   learnRecipe,

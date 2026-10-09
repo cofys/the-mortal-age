@@ -125,17 +125,9 @@ const WORK_LINES = {
   ],
 };
 
-const DONE_LINES = [
-  "Done! {job} — good as new, better'n most.",
-  "{job} finished. That'll hold through harvest.",
-  "There — {job}. Pay what you think it's worth.",
-];
+// (DONE_LINES removed 2026-10-08 with fabrication branches.)
 
-const GOODS_LINES = [
-  "Nails, horseshoes, hinges — forged this very week!",
-  "Fresh iron goods! {good} — strong and true!",
-  "{good} for sale — village-forged, village-priced!",
-];
+// (GOODS_LINES removed 2026-10-08 with fabrication branches.)
 
 const MASTERWORK_LINES = [
   "Behold! {piece} — the finest work to leave {smithy}!",
@@ -363,22 +355,7 @@ const JOB_POOLS = {
   [SMITHFOLK_APPRENTICE]: APPRENTICE_JOBS,
 };
 
-/**
- * Today's jobs for a smithfolk citizen: 1-3 jobs of their type.
- * Derived from date + hash; zero storage.
- */
-function jobsFor(username, type, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const pool = JOB_POOLS[type] || FARRIER_JOBS;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("smithfolkjobs:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * 3); // 1-3
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    out.push(pool[Math.floor(rng() * pool.length)]);
-  }
-  return out;
-}
+// (jobsFor removed 2026-10-08: hash-derived fabrication.)
 
 // === Simple iron goods for sale ===
 const IRON_GOODS = [
@@ -390,12 +367,7 @@ const IRON_GOODS = [
   "a horseshoe, lucky",
 ];
 
-/** Today's featured good at a smithy. */
-function goodForToday(smithy, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("smithfolkgood:" + smithy.name + ":" + day));
-  return IRON_GOODS[Math.floor(rng() * IRON_GOODS.length)];
-}
+// (goodForToday removed 2026-10-08: hash-derived fabrication.)
 
 /** A fair village price for a simple iron good (5-40 coins). */
 function priceFor(good, dateMs) {
@@ -411,16 +383,7 @@ const MASTERWORK_PIECES = [
   "a gate latch forged like ivy",
 ];
 
-/**
- * Today's masterwork at a smithy (~8%/day), or null.
- * { piece } — the crowd moment.
- */
-function masterworkFor(smithy, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("smithfolkmasterwork:" + smithy.name + ":" + day));
-  if (rng() >= MASTERWORK_CHANCE) return null;
-  return { piece: pickOne(rng, MASTERWORK_PIECES) };
-}
+// (masterworkFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM) — exported for the LLM dialogue tier.
@@ -602,49 +565,19 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doSmithfolkWork(director, record, citizen, type, nowMs) {
   const smithy = smithyFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
   // Masterwork unveiling: once per smithy per day, the crowd moment.
-  const mw = masterworkFor(smithy, nowMs);
-  if (mw) {
-    const key = "smithmasterwork:" + smithy.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, MASTERWORK_LINES), {
-        piece: mw.piece,
-        smithy: smithy.name,
-      });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(record.username, `unveiled ${mw.piece} at ${smithy.name}`);
-      seedRumor({
-        kind: "masterwork",
-        who: record.username,
-        what: `${mw.piece} unveiled at ${smithy.name}`,
-        where: smithy.name,
-      });
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: masterworkFor was hash-derived.)
 
-  // Routine: work emote, finished-job callout, goods hawking, repair/lesson offers.
+  // Routine: honest ambient chatter only — work, repairs, lessons.
+  // (jobsFor/goodForToday branches removed 2026-10-08: hash-derived "finished
+  // job" and hawked goods were fabrication.)
   const roll = Math.random();
-  if (roll < 0.4) {
+  if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `worked at ${smithy.name}`);
-  } else if (roll < 0.6) {
-    const jobs = jobsFor(name, type, nowMs);
-    const job = jobs.length ? jobs[0] : "a day's work";
-    const line = fill(pickOne(Math.random, DONE_LINES), { job });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(record.username, `finished ${job} at ${smithy.name}`);
   } else if (roll < 0.75) {
-    const good = goodForToday(smithy, nowMs);
-    const line = fill(pickOne(Math.random, GOODS_LINES), { good });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(record.username, `hawked ${good} at ${smithy.name}`);
-  } else if (roll < 0.88) {
     const line = pickOne(Math.random, REPAIR_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `offered repairs at ${smithy.name}`);
@@ -661,10 +594,7 @@ module.exports = {
   smithfolkTypeOf,
   smithyFor,
   metalForToday,
-  jobsFor,
-  goodForToday,
   priceFor,
-  masterworkFor,
   requestRepair,
   repairFor,
   buyGoods,

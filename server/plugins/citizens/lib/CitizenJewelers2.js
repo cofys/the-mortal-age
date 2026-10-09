@@ -153,11 +153,7 @@ const WORK_LINES = {
   ],
 };
 
-const FINISH_LINES = [
-  "Done! {piece} — come and have a look!",
-  "{piece}, finished this morning. Not bad for a kitchen-table bench, eh?",
-  "Just set the last stone — {piece} is ready for its owner!",
-];
+// (FINISH_LINES removed 2026-10-08 with fabrication branches.)
 
 const COMMISSION_LINES = [
   "I cut and set for neighbors, friend — nothing fancy, but honest work.",
@@ -341,45 +337,11 @@ function workshopFor(record) {
   return pool[hashStr("gemfolkworkshop:" + name) % pool.length];
 }
 
-/**
- * Today's projects for a gemfolk citizen (1-3 pieces).
- * Derived from date + hash; zero storage.
- */
-function projectsFor(username, kingdomId, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("gemfolkprojects:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * 3); // 1-3
-  const out = [];
-  const used = new Set();
-  for (let i = 0; i < count && used.size < COMMUNITY_PROJECTS.length; i++) {
-    const p = COMMUNITY_PROJECTS[Math.floor(rng() * COMMUNITY_PROJECTS.length)];
-    if (used.has(p)) continue;
-    used.add(p);
-    out.push(p);
-  }
-  return out;
-}
+// (projectsFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * The gem a cutter is working today — read from the real pro GEMS table
- * (static fallback when absent). Community cutters work the same stones,
- * at neighbor grade.
- */
-function gemForToday(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  return GEMS[hashStr("gemfolkgem:" + name + ":" + day) % GEMS.length];
-}
+// (gemForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's masterpiece at a workshop (~8%/day), or null. */
-function masterpieceFor(workshop, dateMs) {
-  if (!workshop) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("gemfolkmasterpiece:" + workshop.name + ":" + day));
-  if (rng() >= MASTERPIECE_CHANCE) return null;
-  return pickOne(rng, MASTERPIECES);
-}
+// (masterpieceFor removed 2026-10-08: hash-derived fabrication.)
 
 /** Coin price for a commissioned community piece (soup-kitchen precedent: fair, capped). */
 function priceFor(piece) {
@@ -529,36 +491,18 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doGemfolkWork(director, record, citizen, type, nowMs) {
   const workshop = workshopFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
   // Masterpiece unveiling: rare, the crowd moment.
-  const mp = masterpieceFor(workshop, nowMs);
-  if (mp) {
-    const key = "masterpiece:" + workshop.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, UNVEIL_LINES), { piece: mp });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `unveiled a masterpiece at ${workshop.name}: ${mp}`);
-      seedRumor(`A masterpiece ${mp} unveiled at ${workshop.name}!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: masterpieceFor was hash-derived.)
 
   // Routine: work emote, finished-piece callout, commission/appraisal/lesson offer.
   const roll = Math.random();
-  if (roll < 0.4) {
+  if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `worked at ${workshop.name}`);
-  } else if (roll < 0.65) {
-    const projects = projectsFor(name, record.kingdomId, nowMs);
-    const piece = projects.length ? projects[0] : "a polished stone";
-    const line = fill(pickOne(Math.random, FINISH_LINES), { piece });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `finished ${piece} at ${workshop.name}`);
-  } else if (roll < 0.8) {
+  } else if (roll < 0.7) {
+    // (projectsFor branch removed 2026-10-08: hash-derived "finished piece" was fabrication.)
     if (type === GEMFOLK_APPRAISER) {
       const line = pickOne(Math.random, APPRAISE_LINES);
       { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
@@ -579,9 +523,6 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   gemfolkTypeOf,
   workshopFor,
-  projectsFor,
-  gemForToday,
-  masterpieceFor,
   priceFor,
   commissionPiece,
   pieceFor,

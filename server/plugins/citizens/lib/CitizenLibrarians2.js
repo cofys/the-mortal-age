@@ -607,7 +607,7 @@ function tickBookfolk(director, nowMs, desync) {
     }
 
     // Daily rhythms: rain-soaks, bad-swaps, tale-crowds (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-librarians2] tick failed:", e?.message ?? e);
@@ -697,46 +697,7 @@ function proSubjectsFor(kingdomId, nowMs) {
  *   - tale-crowd: a tale-circle draws a crowd (~8%)
  * Day-gated keys, cheap to evaluate. Never throws.
  */
-function dailyRhythms(director, nowMs) {
-  try {
-    const day = dayNumber(nowMs);
-    const rng = seededRng(hashStr("bookfolk-day:" + day));
-    const online = typeof director.onlinePlayers === "function" ? director.onlinePlayers() : [];
-    const realNearSpot = online.some((p) => isRealPlayer(p));
-    if (!realNearSpot) return; // no audience — skip the whole street scene
-    const kids = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-
-    for (const kid of kids) {
-      const soakKey = "soak:" + kid + ":" + day;
-      if (!firedDayKeys.has(soakKey) && rng() < RAIN_SOAK_CHANCE) {
-        firedDayKeys.add(soakKey);
-        const event = pickOne(rng, RAIN_SOAK_LINES);
-        journalize("bookfolk-" + kid, event + " (" + kid + " spot)");
-        seedRumor(rng, event);
-      }
-      const swapKey = "badswap:" + kid + ":" + day;
-      if (!firedDayKeys.has(swapKey) && rng() < BAD_SWAP_CHANCE) {
-        firedDayKeys.add(swapKey);
-        const event = fill(pickOne(rng, BAD_SWAP_LINES), { book: pickOne(rng, SWAP_BOOKS) });
-        journalize("bookfolk-" + kid, event);
-        seedRumor(rng, event);
-      }
-    }
-
-    for (let i = 0; i < READING_SPOTS.length; i++) {
-      const key = "talecrowd:" + i + ":" + day;
-      if (firedDayKeys.has(key) || rng() >= TALE_CROWD_CHANCE) continue;
-      firedDayKeys.add(key);
-      const spot = READING_SPOTS[i];
-      journalize(
-        "bookfolk-" + spot.kingdom,
-        fill(pickOne(rng, TALE_CROWD_LINES), { place: spot.name })
-      );
-    }
-  } catch {
-    // set-pieces are cosmetic
-  }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickBookfolk,

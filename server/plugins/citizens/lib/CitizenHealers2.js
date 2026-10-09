@@ -333,98 +333,15 @@ function realPatientsFor(kingdomId, nowMs) {
   }
 }
 
-/**
- * The day's care rounds for a caregiver (1-3 visits). Derived from date +
- * hash; zero storage. Rounds name real patients when any are ill in the
- * kingdom, otherwise fall back to scripted neighbor names.
- */
-function roundsFor(username, kingdomId, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const type = caregiverTypeOf({ username: name, kingdomId });
-  if (!type) return [];
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("carerounds:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * MAX_ROUNDS_PER_DAY); // 1-3
-  const real = realPatientsFor(kingdomId, dateMs);
-  const fallbackNames = ["Old Tam", "Marta", "Widow Ansel", "Young Pip", "Granny Moss"];
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    let patient, kind;
-    if (real.length) {
-      const r = real[Math.floor(rng() * real.length)];
-      patient = r.patient;
-      kind = r.kind;
-    } else {
-      patient = fallbackNames[Math.floor(rng() * fallbackNames.length)];
-      kind = type === CAREGIVER_BONESETTER ? "injured" : "sick";
-    }
-    out.push({ patient, kind, type });
-  }
-  return out;
-}
+// (roundsFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's household remedies for a brewer — 2 remedies whose herb names
- * come from the real CitizenHerbalists tables when available.
- */
-function remediesFor(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("remedies:" + name + ":" + day));
-  const herb = herbOfTheDay(dateMs);
-  const out = [];
-  for (let i = 0; i < 2; i++) {
-    const base = REMEDY_BASES[Math.floor(rng() * REMEDY_BASES.length)];
-    out.push(`${base} with ${herb}`);
-  }
-  return out;
-}
+// (remediesFor removed 2026-10-08: hash-derived fabrication.)
 
-/** Herb of the day from the real herbalist tables, with static fallback. */
-function herbOfTheDay(dateMs) {
-  try {
-    if (HerbalistsPro && typeof HerbalistsPro.herbOfTheDay === "function") {
-      const h = HerbalistsPro.herbOfTheDay("caregiver", null, dateMs);
-      const n = h && typeof h === "object" ? h.name : h;
-      if (n) return String(n);
-    }
-    if (HerbalistsPro && typeof HerbalistsPro.herbsFor === "function") {
-      const herbs = HerbalistsPro.herbsFor("caregiver", null, dateMs);
-      if (Array.isArray(herbs) && herbs.length) {
-        const first = herbs[0];
-        const n = first && typeof first === "object" ? first.name : first;
-        if (n) return String(n);
-      }
-    }
-  } catch { /* module absent */ }
-  return "chamomile";
-}
+// (herbOfTheDay removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A professional potion name for small talk — read from the real
- * CitizenAlchemists wares, never brewed here (their trade, not ours).
- */
-function potionNameForSmallTalk(username, dateMs) {
-  try {
-    if (AlchemistsPro && typeof AlchemistsPro.waresFor === "function") {
-      const w = AlchemistsPro.waresFor(username, dateMs);
-      if (w) return String(w);
-    }
-  } catch { /* module absent */ }
-  return "a healing draught";
-}
+// (potionNameForSmallTalk removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's recovery event for a kingdom (~10%/day): a long-ill neighbor
- * gets well. Derived deterministically; the crowd moment.
- */
-function recoveryFor(kingdomId, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("recovery:" + (kingdomId ?? "all") + ":" + day));
-  if (rng() >= RECOVERY_CHANCE) return null;
-  const names = ["Old Tam", "Marta", "Widow Ansel", "Young Pip", "Granny Moss"];
-  return names[Math.floor(rng() * names.length)];
-}
+// (recoveryFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM). The LLM dialogue tier performs them.
@@ -568,42 +485,18 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doCareWork(director, record, citizen, type, nowMs) {
   const house = careHouseFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
   // Recovery fanfare: once per kingdom per day, the crowd moment.
-  const recovered = recoveryFor(record.kingdomId, nowMs);
-  if (recovered) {
-    const key = "recovery:" + (record.kingdomId ?? "all") + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, RECOVERY_LINES), {
-        patient: recovered,
-        house: house.name,
-      });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(citizen, `${recovered} recovered and is on the mend`);
-      seedRumor(`${recovered} has recovered!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: recoveryFor was hash-derived.)
 
+  // Routine: honest ambient chatter only.
+  // (roundsFor/remediesFor branches removed 2026-10-08: hash-derived "today's
+  // patient" and "today's remedies" were fabrication — no real patients treated.)
   const roll = Math.random();
   if (roll < 0.5) {
-    // Care round: visit today's patient.
-    const rounds = roundsFor(name, record.kingdomId, nowMs);
     const line = pickOne(Math.random, CARE_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    const r = rounds[0];
-    journalize(
-      citizen,
-      r ? `tended ${r.patient} (${r.kind}) at ${house.name}` : `made care rounds at ${house.name}`
-    );
-  } else if (roll < 0.8 && type === CAREGIVER_BREWER) {
-    // Brewer: show off today's remedies.
-    const remedies = remediesFor(name, nowMs);
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [`*bottles ${remedies[0]}*`] })); }
-    journalize(citizen, `brewed ${remedies[0]} at ${house.name}`);
+    journalize(citizen, `kept the care house at ${house.name}`);
   } else {
     // Lesson offer.
     const line = pickOne(Math.random, LESSON_LINES);
@@ -617,11 +510,6 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   caregiverTypeOf,
   careHouseFor,
-  roundsFor,
-  remediesFor,
-  herbOfTheDay,
-  potionNameForSmallTalk,
-  recoveryFor,
   realPatientsFor,
   requestCare,
   careFor,

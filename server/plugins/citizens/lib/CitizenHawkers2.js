@@ -407,14 +407,7 @@ function goodsFor(username, type, dateMs = Date.now()) {
   }
 }
 
-/** Today's task for a hawker citizen (1 task of the day, for journals). */
-function taskForToday(username, type, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const lines = DAILY_TASK_LINES[type] ?? DAILY_TASK_LINES[PRODUCE_HAWKER];
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr(name + "|hawkertask:" + day));
-  return pickOne(rng, lines);
-}
+// (taskForToday removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Daily set-pieces (seeded per kingdom per day / per pitch per day).
@@ -542,7 +535,7 @@ function tickHawker(director, nowMs, desync) {
     }
 
     // Daily rhythms: hoarse criers and heckled pitches (cheap, day-gated).
-    dailyRhythms(director, nowMs);
+    // (dailyRhythms removed 2026-10-08: hash-derived fake events.)
   } catch (e) {
     // Never let a citizen feature crash the director tick.
     console.warn("[citizen-hawker] tick failed:", e?.message ?? e);
@@ -603,7 +596,7 @@ function doHawkerWork(director, record, citizen, type, nowMs) {
   const roll = Math.random();
   if (roll < 0.6) {
     forceSay(citizen, fill(pickOne(Math.random, lines), { goods, pitch: place }));
-    journalize(citizen, `${taskForToday(name, type, nowMs).replace("{place}", place).replace("{goods}", goods)} — cried the basket`);
+    journalize(citizen, `hawked ${goods} at ${place} — cried the basket`);
   } else if (wares && wares.length) {
     const ware = pickOne(Math.random, wares);
     forceSay(citizen, fill(pickOne(Math.random, MARKET_LINES), { ware, goods }));
@@ -615,34 +608,7 @@ function doHawkerWork(director, record, citizen, type, nowMs) {
 }
 
 /** Once-per-day kingdom rhythms: hoarse criers and heckled pitches. */
-function dailyRhythms(director, nowMs) {
-  const day = dayNumber(nowMs);
-  const kingdoms = ["misthalin", "asgarnia", "kandarin", "keldagrim", "morytania", "kharidian"];
-  try {
-    for (const kid of kingdoms) {
-      if (hoarseFor(kid, nowMs)) {
-        const key = "daily-hawkerhoarse:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const pitch = PITCHES.find((p) => p.kingdom === kid);
-          const line = `The hawker crier in ${kid} lost their voice — today's cries at ${pitch ? pitch.name : kid} come out as a croak.`;
-          journalize({ username: "the hawkerfolk" }, line);
-          seedRumor(line);
-        }
-      }
-      if (heckledFor(kid, nowMs)) {
-        const key = "daily-hawkerheckled:" + kid + ":" + day;
-        if (!lastFiredByCitizen.has(key)) {
-          lastFiredByCitizen.set(key, nowMs);
-          const pitch = PITCHES.find((p) => p.kingdom === kid);
-          const line = `A hawker was heckled at ${pitch ? pitch.name : kid} — the crowd laughed the pitch off.`;
-          journalize({ username: "the hawkerfolk" }, line);
-          seedRumor(line);
-        }
-      }
-    }
-  } catch { /* daily rhythms are best-effort */ }
-}
+// (function dailyRhythms removed 2026-10-08: hash-derived fake events.)
 
 module.exports = {
   tickHawker,
@@ -650,7 +616,6 @@ module.exports = {
   hawkerTypeOf,
   pitchFor,
   goodsFor,
-  taskForToday,
   hoarseFor,
   heckledFor,
   crowdFor,

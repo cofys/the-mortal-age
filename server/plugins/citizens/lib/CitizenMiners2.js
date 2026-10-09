@@ -81,7 +81,7 @@ const MINERFOLK_CHANCE = 0.15; // per eligible citizen per tick
 const MINERFOLK_SHARE = 40;
 const DAWN_HOUR = 6; // 06:00 local
 const DUSK_HOUR = 20; // 20:00 local
-const STRIKE_CHANCE = 0.08; // rich-vein strike, per claim per day
+// (STRIKE_CHANCE removed 2026-10-08 with the strike fabrication.)
 const LEDGER_TTL_MS = 7 * 24 * 3600 * 1000;
 
 // === Mining-folk types ===
@@ -132,24 +132,8 @@ const WORK_LINES = {
   ],
 };
 
-const FIND_LINES = [
-  "Ha! A fine chunk of {ore}!",
-  "This one's rich — look at the {ore} in it!",
-  "Another sack of {ore} for the pile.",
-  "{ore}! The claim's paying today!",
-];
-
-const GEM_FIND_LINES = [
-  "Would you look at that — a raw {gem}!",
-  "{gem}, rough as it comes. The jewelers will want this.",
-  "Held it to the light — {gem}, no question!",
-];
-
-const STRIKE_LINES = [
-  "STRIKE! {ore} — a vein thick as my arm at {claim}!",
-  "We've hit it! Pure {ore}, lads — {claim} is paying out!",
-  "Get the barrows! {ore} coming out of {claim} like water!",
-];
+// (FIND_LINES, GEM_FIND_LINES, STRIKE_LINES removed 2026-10-08 with the
+// find/strike fabrication branches.)
 
 const HIRE_LINES = [
   "Need a strong back at the diggings? My pick's for hire.",
@@ -329,59 +313,11 @@ function claimFor(record) {
   return pool[hashStr("minerfolkclaim:" + name) % pool.length];
 }
 
-/** The ore a minerfolk citizen is working today. */
-function oreForToday(username, dateMs) {
-  const name = (normalizeName(username) || "anon").toLowerCase();
-  const day = dayNumber(dateMs);
-  return ORES[hashStr("minerfolkore:" + name + ":" + day) % ORES.length];
-}
-
-/** The gem a gem hunter might find today (raw stone, never cut here). */
-function gemForToday(username, dateMs) {
-  const name = (normalizeName(username) || "anon").toLowerCase();
-  const day = dayNumber(dateMs);
-  return GEMS[hashStr("minerfolkgem:" + name + ":" + day) % GEMS.length];
-}
-
-/**
- * Today's finds for a minerfolk citizen: 1-3 ore chunks (or raw gems for
- * gem hunters). Derived from date + hash; zero storage.
- */
-function findsFor(username, type, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("minerfolkfinds:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * 3); // 1-3
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    if (type === MINERFOLK_GEMHUNTER) {
-      out.push(gemForToday(name + ":" + i, dateMs));
-    } else {
-      out.push(oreForToday(name + ":" + i, dateMs));
-    }
-  }
-  return out;
-}
-
-/**
- * Today's rich-vein strike at a claim (~8%/day), or null.
- * { ore } — the crowd moment.
- */
-function strikeFor(claim, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("minerfolkstrike:" + claim.name + ":" + day));
-  if (rng() >= STRIKE_CHANCE) return null;
-  const ore = ORES[Math.floor(rng() * ORES.length)];
-  return { ore };
-}
-
-/** A fair dockside price for a chunk of ore (5-60 coins by rarity). */
-function priceFor(ore, dateMs) {
-  const rng = seededRng(hashStr("minerfolkprice:" + ore + ":" + dayNumber(dateMs)));
-  const idx = ORES.indexOf(ore);
-  const base = idx >= 0 ? 5 + idx * 7 : 10;
-  return base + Math.floor(rng() * 15);
-}
+// (Hash-derived "today's ore", "today's gem", "today's finds", rich-vein
+// strikes, and ore prices removed 2026-10-08: the citizen never actually
+// found those ores, so deriving them from date+hash and speaking/
+// journalizing them was fabrication. claimFor remains: stable claim
+// assignment is honest infrastructure, not a fabricated event.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM) — exported for the LLM dialogue tier.
@@ -469,20 +405,7 @@ function journalize(citizenName, text) {
   }
 }
 
-// Canonical rumor seed: seedRumor(rng, event) with
-// event: { kind, who, whoDisplay, what, where, whereDisplay, amount }.
-// Calling it with a bare string silently no-ops (returns null) — miners
-// rung audit 2026-10-08.
-function seedStrikeRumor(who, text, where) {
-  try {
-    const rumors = require("./CitizenRumors");
-    if (typeof rumors.seedRumor === "function") {
-      rumors.seedRumor(Math.random, { kind: "strike", who, what: text, where });
-    }
-  } catch {
-    /* rumors absent */
-  }
-}
+// (seedStrikeRumor removed 2026-10-08 with the strike fabrication.)
 
 // ============================================================================
 // The tick function — called from the director tick.
@@ -564,41 +487,16 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doMinerfolkWork(director, record, citizen, type, nowMs) {
   const claim = claimFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
-  // Rich-vein strike: once per claim per day, the crowd moment.
-  const strike = strikeFor(claim, nowMs);
-  if (strike) {
-    const key = "veinstrike:" + claim.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, STRIKE_LINES), {
-        ore: strike.ore,
-        claim: claim.name,
-      });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(record.username, `struck a rich ${strike.ore} vein at ${claim.name}`);
-      seedStrikeRumor(record.username, `A rich ${strike.ore} vein struck at ${claim.name}!`, claim.name);
-      return;
-    }
-  }
-
-  // Routine: work emote, find callout, gem find, hire/claim offers.
+  // Routine: honest ambient chatter only — working, hire offers, claim invites.
+  // (Hash-derived "rich vein strikes" and "today's finds" removed 2026-10-08:
+  // the citizen never actually struck or found those ores, so speaking and
+  // journalizing them was fabrication.)
   const roll = Math.random();
-  if (roll < 0.4) {
+  if (roll < 0.5) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `worked at ${claim.name}`);
-  } else if (roll < 0.6) {
-    const todays = findsFor(name, type, nowMs);
-    const find = todays.length ? todays[0] : "ore";
-    const line =
-      type === MINERFOLK_GEMHUNTER
-        ? fill(pickOne(Math.random, GEM_FIND_LINES), { gem: find })
-        : fill(pickOne(Math.random, FIND_LINES), { ore: find });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(record.username, `found ${todays.join(", ")} at ${claim.name}`);
   } else if (roll < 0.75) {
     const line = pickOne(Math.random, HIRE_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
@@ -615,11 +513,7 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   minerfolkTypeOf,
   claimFor,
-  oreForToday,
-  gemForToday,
-  findsFor,
-  strikeFor,
-  priceFor,
+  // (oreForToday, gemForToday, findsFor, strikeFor, priceFor removed 2026-10-08: hash-fiction.)
   stakeClaim,
   claimForPlayer,
   hireMiner,

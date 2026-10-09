@@ -145,11 +145,7 @@ const BREW_LINES = {
   ],
 };
 
-const HAWK_LINES = [
-  "{brew} — brewed this morning, {price} coins!",
-  "Fresh from the stillroom! {brew}, only {price} coins!",
-  "{brew} — the festival batch. {price} coins, worth every one!",
-];
+// (HAWK_LINES removed 2026-10-08 with the hawking fabrication branch.)
 
 const MISHAP_LINES = [
   "Whoa! Purple smoke everywhere! Stand back!",
@@ -329,64 +325,13 @@ function stillroomFor(record) {
   return pool[hashStr("alchfolkstill:" + name) % pool.length];
 }
 
-/**
- * The day's brews for a brewfolk (1-3 from the community brew pool).
- * Derived from date + hash; zero storage.
- */
-function brewsFor(username, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("alchfolkbrews:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * 3); // 1-3
-  const out = [];
-  const used = new Set();
-  for (let i = 0; i < count && used.size < COMMUNITY_BREWS.length; i++) {
-    const b = COMMUNITY_BREWS[Math.floor(rng() * COMMUNITY_BREWS.length)];
-    if (used.has(b)) continue;
-    used.add(b);
-    out.push(b);
-  }
-  return out;
-}
+// (brewsFor removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * A garden herb for today's batch — prefers the real CitizenHerbalists
- * tables (unwrapping the {name, rarity} objects), falls back to the static
- * garden list. Never gathers or hawks.
- */
-function herbForToday(username, kingdomId, dateMs) {
-  try {
-    if (HerbalistsPro && typeof HerbalistsPro.herbOfTheDay === "function") {
-      const herb = HerbalistsPro.herbOfTheDay(username, kingdomId, dateMs);
-      if (herb) {
-        const nm = typeof herb === "object" ? herb.name : String(herb);
-        if (nm && nm !== "[object Object]") return nm;
-      }
-    }
-  } catch { /* module absent */ }
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  return GARDEN_HERBS[hashStr("alchfolkherb:" + name + ":" + day) % GARDEN_HERBS.length];
-}
+// (herbForToday removed 2026-10-08: hash-derived fabrication.)
 
-/**
- * Today's comic mishap at a stillroom (~8%/day), or null.
- * Purely cosmetic — nobody is hurt.
- */
-function mishapFor(stillroom, dateMs) {
-  const sname = stillroom?.name;
-  if (!sname) return null;
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("alchfolkmishap:" + sname + ":" + day));
-  if (rng() >= MISHAP_CHANCE) return null;
-  return pickOne(rng, MISHAP_LINES);
-}
+// (mishapFor removed 2026-10-08: hash-derived fabrication.)
 
-/** Sane coin price for a community brew (hedge-witch wares stay cheap). */
-function priceFor(brew) {
-  const h = hashStr("alchfolkprice:" + brew);
-  return 15 + (h % 60); // 15-74 coins
-}
+// (priceFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM) — exported for the LLM dialogue tier.
@@ -531,37 +476,17 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doBrewfolkWork(director, record, citizen, type, nowMs) {
   const stillroom = stillroomFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
-  // Comic mishap: once per stillroom per mishap day, the crowd moment.
-  const mishap = mishapFor(stillroom, nowMs);
-  if (mishap) {
-    const key = "mishap:" + stillroom.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [mishap] })); }
-      journalize(citizen, `had a stillroom mishap at ${stillroom.name} (nobody hurt)`);
-      seedRumor(`A stillroom mishap at ${stillroom.name} — green smoke everywhere!`);
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: mishapFor was hash-derived.)
 
-  // Routine: brew emote, hawking, lesson offer.
+  // Routine: honest ambient chatter only — brewing, lesson offers.
+  // (Hawking branch removed 2026-10-08: brewsFor/priceFor were hash-derived
+  // fabrication — the citizen never brewed those brews.)
   const roll = Math.random();
-  if (roll < 0.45) {
+  if (roll < 0.6) {
     const line = pickOne(Math.random, BREW_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(citizen, `brewed at ${stillroom.name}`);
-  } else if (roll < 0.75) {
-    const brews = brewsFor(name, nowMs);
-    const brew = brews.length ? brews[0] : "a small vial of something fizzy";
-    const line = fill(pickOne(Math.random, HAWK_LINES), {
-      brew,
-      price: priceFor(brew),
-    });
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-    journalize(citizen, `hawked ${brew} at ${stillroom.name}`);
   } else {
     const line = pickOne(Math.random, LESSON_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
@@ -574,10 +499,6 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   brewfolkTypeOf,
   stillroomFor,
-  brewsFor,
-  herbForToday,
-  mishapFor,
-  priceFor,
   requestBrew,
   brewForPlayer,
   buyPotion,

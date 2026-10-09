@@ -308,26 +308,7 @@ function circleFor(record) {
   return pool[hashStr("sewfolkcircle:" + name) % pool.length];
 }
 
-/**
- * The day's projects for a sewing-folk citizen (1-3 items from date + hash).
- * Garment names come from the real tailors module when available.
- */
-function projectsFor(username, kingdomId, dateMs) {
-  const name = normalizeName(username) || "anon";
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("sewfolkprojects:" + name + ":" + day));
-  const count = 1 + Math.floor(rng() * 3); // 1-3
-  const garments = garmentPool();
-  const out = [];
-  const used = new Set();
-  for (let i = 0; i < count && used.size < garments.length; i++) {
-    const g = garments[Math.floor(rng() * garments.length)];
-    if (used.has(g)) continue;
-    used.add(g);
-    out.push(g);
-  }
-  return out;
-}
+// (projectsFor removed 2026-10-08: hash-derived fabrication.)
 
 /** Garment names — prefer the real tailors module, static fallback. */
 function garmentPool() {
@@ -343,42 +324,9 @@ function garmentPool() {
   return FALLBACK_GARMENTS.slice();
 }
 
-/**
- * Today's dye color for a dyer — read from the real herbalists tables when
- * available (plant dyes come from garden herbs), static fallback.
- */
-function dyeForToday(username, kingdomId, dateMs) {
-  try {
-    if (Herbalists && typeof Herbalists.herbOfTheDay === "function") {
-      const herb = Herbalists.herbOfTheDay(username, kingdomId, dateMs);
-      const herbName = herb && typeof herb === "object" ? herb.name : herb;
-      if (typeof herbName === "string" && herbName.length) {
-        const h = hashStr("sewfolkdye:" + herbName + ":" + dayNumber(dateMs));
-        const color = FALLBACK_DYES[h % FALLBACK_DYES.length];
-        return { name: color.name, plant: herbName };
-      }
-    }
-  } catch {
-    /* fall through to static */
-  }
-  const h = hashStr("sewfolkdye:" + String(username) + ":" + dayNumber(dateMs));
-  return FALLBACK_DYES[h % FALLBACK_DYES.length];
-}
+// (dyeForToday removed 2026-10-08: hash-derived fabrication.)
 
-/** Today's grand-quilt at a circle (~8%/day), or null. */
-function quiltFor(circle, dateMs) {
-  const day = dayNumber(dateMs);
-  const rng = seededRng(hashStr("sewfolkquilt:" + circle.name + ":" + day));
-  if (rng() >= QUILT_CHANCE) return null;
-  const quilts = [
-    "wedding quilt",
-    "harvest quilt",
-    "new-baby quilt",
-    "winter star quilt",
-  ];
-  const days = 6 + Math.floor(rng() * 6); // 6-11 evenings
-  return { quilt: pickOne(rng, quilts), days };
-}
+// (quiltFor removed 2026-10-08: hash-derived fabrication.)
 
 // ============================================================================
 // Player ledgers (data tier, zero LLM).
@@ -563,44 +511,18 @@ function anyRealPlayerNear(director, citizen, radius) {
 
 function doSewfolkWork(director, record, citizen, type, nowMs) {
   const circle = circleFor(record);
-  const name = normalizeName(record.username);
-  const day = dayNumber(nowMs);
 
   // Grand-quilt unveiling: once per circle per day, the crowd moment.
-  const q = quiltFor(circle, nowMs);
-  if (q) {
-    const key = "quilt:" + circle.name + ":" + day;
-    if (!lastFiredByCitizen.has(key)) {
-      lastFiredByCitizen.set(key, nowMs);
-      const line = fill(pickOne(Math.random, QUILT_LINES), {
-        quilt: q.quilt,
-        days: q.days,
-      });
-      { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
-      journalize(record.username, `unveiled the ${q.quilt} at ${circle.name}`);
-      seedRumor({
-        kind: "grand-quilt",
-        who: record.username,
-        what: `the finished ${q.quilt} at ${circle.name}`,
-        where: circle.name,
-      });
-      return;
-    }
-  }
+  // (Crowd-moment fabrication block removed 2026-10-08: quiltFor was hash-derived.)
 
   // Routine: work emote, garment callout, pattern share, dye note.
   const roll = Math.random();
-  if (roll < 0.5) {
+  if (roll < 0.6) {
     const line = pickOne(Math.random, WORK_LINES[type]);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `sewed at ${circle.name}`);
-  } else if (roll < 0.75) {
-    const projects = projectsFor(name, record.kingdomId, nowMs);
-    const garment = projects.length ? projects[0] : "a fine garment";
-    const line2 = `Nearly done — ${garment} for little ${name}.`;
-    { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line2] })); }
-    journalize(record.username, `finished ${garment} at ${circle.name}`);
   } else {
+    // (projectsFor branch removed 2026-10-08: hash-derived "finished garment" was fabrication.)
     const line = pickOne(Math.random, SHARE_LINES);
     { const _cvp = citizen.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(citizen, voiceLine(voiceFor(_cvp), { plain: [line] })); }
     journalize(record.username, `shared patterns at ${circle.name}`);
@@ -618,9 +540,6 @@ module.exports = {
   // Public API (data tier, zero LLM) for the LLM dialogue tier:
   sewfolkTypeOf,
   circleFor,
-  projectsFor,
-  quiltFor,
-  dyeForToday,
   garmentPool,
   // Pure helpers for tests:
   hashStr,
