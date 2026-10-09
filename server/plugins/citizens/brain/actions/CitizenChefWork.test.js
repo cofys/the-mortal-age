@@ -38,7 +38,10 @@ require.cache[navPath + ".js"] = {
   filename: navPath + ".js",
   loaded: true,
   exports: {
-    requestMovement: (player, tile) => { movements.push({ player: player.getUsername(), tile }); },
+    // Canonical engine API: requestMovement(player, targetX, targetY, options).
+    requestMovement: (player, targetX, targetY, options = {}) => {
+      movements.push({ player: player.getUsername(), tile: { x: targetX, y: targetY, z: options.z ?? 0 } });
+    },
     clearMovementRequest: (player) => { movements.push({ player: player.getUsername(), clear: true }); },
   },
 };

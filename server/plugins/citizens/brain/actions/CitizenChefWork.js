@@ -258,7 +258,7 @@ function createCitizenChefWorkAction(spec, world) {
             st.phase = "cooking";
             break;
           }
-          requestMovement(player, st.workTile);
+          requestMovement(player, st.workTile.x, st.workTile.y, { z: st.workTile.z ?? 0 });
           return "running";
         }
         case "cooking": {
@@ -301,7 +301,7 @@ function createCitizenChefWorkAction(spec, world) {
             clearMovementRequest(player);
             return "success";
           }
-          requestMovement(player, st.homeTile);
+          requestMovement(player, st.homeTile.x, st.homeTile.y, { z: st.homeTile.z ?? 0 });
           return "running";
         }
         default:

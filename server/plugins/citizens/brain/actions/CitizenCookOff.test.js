@@ -29,8 +29,13 @@ const navPath = path.resolve(__dirname, "../../../bots/behaviours/navigation/Bot
 require.cache[navPath] = {
   id: navPath, filename: navPath, loaded: true,
   exports: {
-    // teleport on request: simulates the walk completing between ticks
-    requestMovement: (player, tile) => { player.__movedTo = tile; player.position = { ...tile }; },
+    // teleport on request: simulates the walk completing between ticks.
+    // Canonical engine API: requestMovement(player, targetX, targetY, options).
+    requestMovement: (player, targetX, targetY, options = {}) => {
+      const tile = { x: targetX, y: targetY, z: options.z ?? 0 };
+      player.__movedTo = tile;
+      player.position = { ...tile };
+    },
     clearMovementRequest: () => {},
   },
 };

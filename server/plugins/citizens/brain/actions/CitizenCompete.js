@@ -185,7 +185,8 @@ function createCitizenCompeteAction(spec, world) {
       if (!arrived && here && dist(here, venue) > VENUE_ARRIVE_RADIUS) {
         try {
           const spot = personalSpot(player, venue, 3);
-          requestMovement(player, spot ?? venue);
+          const tgt = spot ?? venue;
+          requestMovement(player, tgt.x, tgt.y, { z: tgt.z ?? 0 });
         } catch {
           // movement is best-effort
         }

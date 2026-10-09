@@ -108,7 +108,8 @@ function createCitizenEntertainAction(spec, world) {
         try {
           // Add a personal spot offset so citizens don't stack.
           const spot = personalSpot(player, tavern, 3);
-          requestMovement(player, spot ?? tavern);
+          const tgt = spot ?? tavern;
+          requestMovement(player, tgt.x, tgt.y, { z: tgt.z ?? 0 });
         } catch {
           // movement is best-effort
         }

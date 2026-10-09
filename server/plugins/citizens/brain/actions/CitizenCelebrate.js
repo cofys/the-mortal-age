@@ -149,7 +149,7 @@ function createCitizenCelebrateAction(spec, world) {
               st.phase = "celebrating";
               return "running";
             }
-            requestMovement(player, st.workTile);
+            requestMovement(player, st.workTile.x, st.workTile.y, { z: st.workTile.z ?? 0 });
             return "running";
           }
           case "celebrating": {
@@ -170,7 +170,7 @@ function createCitizenCelebrateAction(spec, world) {
               clearMovementRequest(player);
               return "success";
             }
-            requestMovement(player, st.homeTile);
+            requestMovement(player, st.homeTile.x, st.homeTile.y, { z: st.homeTile.z ?? 0 });
             return "running";
           }
           default:
