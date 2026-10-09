@@ -168,6 +168,66 @@
     padding-right: 2px;
 }
 
+.tma-wartable-section {
+    margin-bottom: 8px;
+}
+
+.tma-wartable-result {
+    margin: 8px 0 0;
+    padding: 8px 12px;
+    font-size: 13px;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    background: #241c13;
+    color: #d9c9a8;
+}
+.tma-wartable-result.ok {
+    border-color: #5b7a3a;
+    color: #a8c686;
+}
+.tma-wartable-result.fail {
+    border-color: #8b3a2a;
+    color: #d68b7a;
+}
+
+.tma-wartable-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tma-wartable-btn {
+    font-family: inherit;
+    font-size: 12px;
+    color: #e8d9b5;
+    background: #3a2f22;
+    border: 1px solid #c9a227;
+    border-radius: 2px;
+    padding: 6px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.tma-wartable-btn:hover:not(:disabled) {
+    background: #4a3d2c;
+}
+.tma-wartable-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.tma-wartable-vassal-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12px;
+    color: #d9c9a8;
+    padding: 3px 0;
+}
+.tma-wartable-vassal-indent {
+    color: #c9a227;
+    font-weight: 700;
+}
+
 .tma-wartable-section-title {
     margin: 18px 0 10px;
     font-size: 13px;

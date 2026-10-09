@@ -31,6 +31,65 @@ interface CoalitionRef {
     name: string;
 }
 
+interface CastleInfo {
+    fortTier: number;
+    fortName: string;
+    defense: number;
+    troops: number;
+    warChest: number;
+    buildings: number;
+}
+
+interface SiegeInfo {
+    attackerId: string;
+    defenderId: string;
+    attackerName: string;
+    defenderName: string;
+    progress: number;
+    ticksElapsed: number;
+    investment: number;
+    warGoal: string | null;
+    declaredAt: number | null;
+}
+
+interface VassalageInfo {
+    vassalId: string;
+    vassalName: string;
+    overlordId: string;
+    overlordName: string;
+    since: number | null;
+}
+
+interface PeaceOfferInfo {
+    otherId: string;
+    otherName: string;
+    offeredBy: string;
+    offeredByName: string;
+    terms: string;
+    offeredAt: number | null;
+}
+
+interface WarGoalInfo {
+    id: string;
+    label: string;
+}
+
+interface HomeDetail {
+    castle: CastleInfo | null;
+    vassalOf: string | null;
+    vassalOfName: string | null;
+    vassals: VassalageInfo[];
+    peaceOffers: PeaceOfferInfo[];
+    wars: WarInfo[];
+    warGoals: WarGoalInfo[];
+}
+
+interface ActionResult {
+    ok: boolean;
+    message: string;
+    reason?: string;
+}
+
 interface CoalitionMember {
     id: string;
     name: string;
@@ -151,10 +210,11 @@ interface WarTableStatus {
     actionResult?: ActionResult;
 }
 
-type TabId = "overview" | "diplomacy" | "military" | "treasury" | "wars";
+type TabId = "overview" | "realm" | "diplomacy" | "military" | "treasury" | "wars";
 
 const TABS: { id: TabId; label: string }[] = [
     { id: "overview", label: "Overview" },
+    { id: "realm", label: "Realm" },
     { id: "diplomacy", label: "Diplomacy" },
     { id: "military", label: "Military" },
     { id: "treasury", label: "Treasury" },
@@ -275,7 +335,7 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
     }, [poll]);
 
     const close = useCallback(async () => {
-        if (busy) return;
+        if (busy || !username) return;
         setBusy(true);
         try {
             await fetchContent(
@@ -291,6 +351,33 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
             setBusy(false);
         }, 600);
     }, [busy, username, poll]);
+
+    const runAction = useCallback(
+        async (params: string) => {
+            if (!username || busy) return;
+            setBusy(true);
+            try {
+                const data = (await fetchContent(
+                    `/api/wartable-status?player=${encodeURIComponent(username)}&${params}`
+                )) as WarTableStatus;
+                setStatus(data);
+                window.setTimeout(poll, 400);
+            } catch {
+                // Next poll refreshes.
+            } finally {
+                setBusy(false);
+            }
+        },
+        [username, busy, poll]
+    );
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") void close();
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [close]);
 
     if (!status?.open) return null;
 
@@ -328,6 +415,12 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                     The realm at a glance, writ on the campaign map.
                 </p>
                 <div className="tma-wartable-rule" />
+
+                {status.actionResult && (
+                    <p className={`tma-wartable-result ${status.actionResult.ok ? "ok" : "fail"}`}>
+                        {status.actionResult.message}
+                    </p>
+                )}
 
                 <div className="tma-wartable-tabs" role="tablist">
                     {TABS.map((t) => (

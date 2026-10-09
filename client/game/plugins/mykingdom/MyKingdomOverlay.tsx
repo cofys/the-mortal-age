@@ -114,6 +114,7 @@ export function MyKingdomOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
 
     const handleClose = useCallback(async () => {
         setStatus(null);
+        if (!username) return;
         try {
             await fetchContent(
                 `/api/mykingdom-status?player=${encodeURIComponent(username)}&action=close`

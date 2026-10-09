@@ -671,6 +671,7 @@ export function OfficeOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
 
     const handleClose = useCallback(async () => {
         setStatus(null);
+        if (!username) return;
         try {
             await fetchContent(
                 `/api/office-status?player=${encodeURIComponent(username)}&action=close`
@@ -680,6 +681,14 @@ export function OfficeOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
         }
         window.setTimeout(poll, 500);
     }, [username, poll]);
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") void handleClose();
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [handleClose]);
 
     if (!status?.open) return null;
 

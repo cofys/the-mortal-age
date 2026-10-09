@@ -175,6 +175,14 @@ export function ShopOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.Ele
         window.setTimeout(poll, 500);
     }, [username, poll]);
 
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") void handleClose();
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [handleClose]);
+
     const qtyFor = (key: string): number => {
         const raw = (qty[key] ?? "1").trim();
         const n = Math.floor(Number(raw));
