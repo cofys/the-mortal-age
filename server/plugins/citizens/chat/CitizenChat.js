@@ -970,6 +970,67 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "any marriages" / "marriage alliance" — player asks about dynastic diplomacy.
+  if (/\b(any marriages|marriage alliance|royal marriage|dynastic marriage|are we allied by marriage)\b/.test(said)) {
+    try {
+      const Dip = require("../lib/CitizenDiplomacy");
+      const { getDirector } = require("../director/CitizenDirector");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? null;
+      const nowMs = Date.now();
+      const summary = kingdomId ? Dip.summaryFor(kingdomId, nowMs) : { marriages: [], pending: [] };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "diplomacy_marriages", {
+        username: citizenUsername,
+        kingdomId,
+        marriages: summary.marriages,
+        pending: summary.pending,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "what news from <kingdom>" — player asks for spy intelligence.
+  if (/\b(what news from|news from|how is|what's happening in|any word from)\b/.test(said)) {
+    try {
+      const Dip = require("../lib/CitizenDiplomacy");
+      let target = null;
+      for (const k of Dip.kingdoms()) {
+        if (new RegExp(`\\b${k}\\b`, "i").test(said)) {
+          target = k;
+          break;
+        }
+      }
+      if (!target) return false;
+      const intel = Dip.describeIntel(target);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "diplomacy_intel", {
+        username: citizenUsername,
+        kingdomId: target,
+        report: intel, // null when no spy has reported — honest
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "who is the spymaster" — player asks about the covert layer.
+  // (Stationed ambassadors belong to CitizenDiplomats' overt layer.)
+  if (/\b(who is the spymaster|spies|our spies|the spies)\b/.test(said)) {
+    try {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "diplomacy_spies", {
+        username: citizenUsername,
+        answer: "We don't speak of such things in the open. But word travels.",
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a guild" / "what guild am i in" — player asks about trade guilds.
   if (/\b(is there a guild|what guilds are there|are there guilds|tell me about guilds|what guild am i in|am i in a guild|what is my guild)\b/.test(said)) {
     try {

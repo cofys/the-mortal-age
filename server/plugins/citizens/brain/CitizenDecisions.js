@@ -105,7 +105,9 @@ const ACT_ENTERTAIN = "citizen_entertain";
 const ACT_GUILD = "citizen_guild";
 const ACT_PETCARE = "citizen_petcare";
 const ACT_CREATEART = "citizen_createart";
-// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
+
+const ACT_COMPETE = "citizen_compete";
+const ACT_DIPLOMAT = "citizen_diplomat";// Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
@@ -131,7 +133,9 @@ const WORK_ACTIVITIES = new Set([
   ACT_GUILD,
   ACT_PETCARE,
   ACT_CREATEART,
-  ACT_MINE,
+
+ACT_COMPETE,
+  ACT_DIPLOMAT,  ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -707,6 +711,58 @@ function isDrunk(player) {
 }
 
 /**
+ * Diplomatic readiness: does this citizen have covert or dynastic work?
+ * Spies (sneaky + real Thieving 20+) watch hot borders; charismatic,
+ * famous citizens broker royal marriages on calm ones. Defensive: a
+ * missing/broken diplomacy module scores as nothing.
+ */
+function diplomatInfo(player) {
+  try {
+    const Dip = require("../lib/CitizenDiplomacy");
+    const { kingdomIdOf } = require("./CitizenSites");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const home = kingdomIdOf(player);
+    const mission = Dip.spyMissionFor(username);
+    // Hottest foreign border — where spies are needed.
+    let hottest = null;
+    let hottestT = 0;
+    // Calmest foreign border — where marriages bloom.
+    let calmest = null;
+    let calmestT = 101;
+    try {
+      const Tension = require("../../kingdoms/Tension.Kingdoms");
+      for (const k of Dip.kingdoms()) {
+        if (k === home) continue;
+        const t = Tension.getTension?.(home, k) ?? 0;
+        if (t > hottestT) {
+          hottestT = t;
+          hottest = k;
+        }
+        if (t < calmestT) {
+          calmestT = t;
+          calmest = k;
+        }
+      }
+    } catch { /* tension unreadable */ }
+    let fame = 0;
+    try {
+      const Rep = require("./CitizenReputation");
+      fame = Rep.reputationFor?.(username) ?? 0;
+    } catch { /* reputation unreadable */ }
+    return {
+      hasMission: !!mission,
+      hottestBorder: hottest,
+      hottestTension: hottestT,
+      calmestBorder: calmest,
+      calmestTension: calmestT,
+      fame,
+    };
+  } catch {
+    return { hasMission: false, hottestBorder: null, hottestTension: 0, calmestBorder: null, calmestTension: 101, fame: 0 };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1111,7 +1167,9 @@ function snapshot(player) {
     guild: guildInfo(player),
     pets: petInfo(player),
     art: artInfo(player),
-    drunk: isDrunk(player),
+
+compete: competeInfo(player),
+    diplomat: diplomatInfo(player),    drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
     hour: new Date().getHours(), // server-local, per the timezone rule
@@ -1131,8 +1189,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, drunk, climate, night, hour } = snap;
-  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, diplomat, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1439,7 +1496,50 @@ function scoreActivity(activityId, snap) {
       else if (weary) s -= 25;
       return s;
     }
-    case ACT_RC: {
+
+case ACT_COMPETE: {
+      // Tournaments: citizens compete for glory, prizes, and fame. A human
+      // athlete enters when there's an open bracket they can afford;
+      // the competitive live for this, the timid watch from the stands.
+      const ci = compete ?? { openCount: 0 };
+      if (!ci.openCount) return 4; // no open tournament, nothing to enter
+      if (ci.entered) return 10; // already entered — training can wait
+      if (!ci.canAfford) return 4; // entry fee is real — broke can't enter
+      let s = 16;
+      const competitive = personality?.competitive ?? personality?.driven ?? 0;
+      if (competitive > 0.7) s += 14; // true competitors seek it out
+      else if (competitive > 0.5) s += 6;
+      if ((ci.bestRating ?? 0) > 150) s += 8; // a real contender smells gold
+      if (goalType === GOAL_MASTER_TRADE) s -= 6; // entry fee spends, not saves
+      if (goalType === GOAL_SAVE_GOLD) s -= 8;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // nobody fights drunk well
+      return s;
+    }
+    case ACT_DIPLOMAT: {
+      // Covert and dynastic diplomacy: spies watch hot borders, famous
+      // brokers arrange royal marriages on calm ones. A human spy moves
+      // when it matters; a broker moves when the families might say yes.
+      const d = diplomat ?? { hasMission: false, hottestTension: 0, calmestTension: 101, fame: 0 };
+      const sneaky = personality?.sneaky ?? personality?.mischievous ?? 0;
+      const charisma = personality?.charisma ?? personality?.charming ?? 0;
+      const canSpy = sneaky > 0.6 && (thievingLevel ?? 1) >= 20;
+      const canBroker = charisma > 0.6 && (d.fame ?? 0) >= 40;
+      if (!d.hasMission && !canSpy && !canBroker) return 4; // nothing to do
+      if (d.hasMission) return 24; // the mission is active — see it through
+      let s = 12;
+      if (canSpy && (d.hottestTension ?? 0) >= 50) s += 10; // hot border needs eyes
+      else if (canSpy) s += 2; // nothing hot — spies wait
+      if (canBroker && (d.calmestTension ?? 101) <= 40) s += 10; // calm border may marry
+      else if (canBroker) s += 2;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // nobody spies drunk well
+      return s;
+    }    case ACT_RC: {
       // Runecrafting: craft essence into runes for XP and coin. No essence
       // anywhere, no altar trip. Runecrafting is station work — the citizen
       // must travel to the altar — so it's picked up when there's a real
@@ -1923,7 +2023,9 @@ module.exports = {
   ACT_GUILD,
   ACT_PETCARE,
   ACT_CREATEART,
-  ACT_MEAL,
+
+ACT_COMPETE,
+  ACT_DIPLOMAT,  ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

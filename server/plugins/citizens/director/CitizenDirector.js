@@ -209,7 +209,11 @@ const { tickPets } = require("../lib/CitizenPetLife");
 const CitizenPets = require("../lib/CitizenPets");
 const { tickArt } = require("../lib/CitizenArtLife");
 const CitizenArt = require("../lib/CitizenArt");
-const { tickShoppers } = require("../shop/CitizenShoppers");
+
+const { tickTournaments } = require("../lib/CitizenTournamentLife");
+const CitizenTournaments = require("../lib/CitizenTournaments");
+const { tickCovertDiplomacy } = require("../lib/CitizenDiplomacyLife");
+const CitizenDiplomacy = require("../lib/CitizenDiplomacy");const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
 const CitizenBonds = require("../lib/CitizenBonds");
@@ -2919,7 +2923,21 @@ class CitizenDirector {
     } catch (error) {
       this.log("art failed", { error: String(error?.message ?? error) });
     }
+
+// Citizen tournaments: seasonal brackets, entries, payouts, betting.
+    // Data tier, zero LLM.
     try {
+      tickTournaments(this, nowMs);
+    } catch (error) {
+      this.log("tournaments failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen covert diplomacy: marriage alliances, espionage.
+    // Data tier, zero LLM. (CitizenDiplomats owns the overt layer.)
+    try {
+      tickCovertDiplomacy(this, nowMs);
+    } catch (error) {
+      this.log("diplomacy failed", { error: String(error?.message ?? error) });
+    }    try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
       }
@@ -3096,7 +3114,25 @@ class CitizenDirector {
       });
     }
     try {
-      if (saveFuneralsIfDirty()) {
+
+if (CitizenTournaments.save()) {
+        this.log("citizen tournaments saved");
+      }
+    } catch (error) {
+      this.log("citizen tournaments save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenDiplomacy.save()) {
+        this.log("citizen diplomacy saved");
+      }
+    } catch (error) {
+      this.log("citizen diplomacy save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {      if (saveFuneralsIfDirty()) {
         this.log("citizen funerals saved");
       }
     } catch (error) {

@@ -718,6 +718,48 @@
           "type": "citizenCreateArt"
         }
       ]
+    },
+    {
+      "id": "citizen_compete",
+      "mode": "citizen_compete",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenCompete"
+        }
+      ]
+    },
+    {
+      "id": "citizen_diplomat",
+      "mode": "citizen_diplomat",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenDiplomat"
+        }
+      ]
     }
   ]
 }

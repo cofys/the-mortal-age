@@ -65,6 +65,9 @@ const DEEDS = Object.freeze({
   heroism: Object.freeze({ points: 8, label: "heroism" }),
   skill_mastery: Object.freeze({ points: 5, label: "skill mastery" }),
   quest_hero: Object.freeze({ points: 10, label: "quest heroism" }),
+  champion: Object.freeze({ points: 8, label: "tournament champion" }),
+  finalist: Object.freeze({ points: 3, label: "tournament finalist" }),
+  peacemaker: Object.freeze({ points: 8, label: "marriage alliance broker" }),
   betrayal: Object.freeze({ points: -6, label: "betrayal" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),
 });
