@@ -657,6 +657,62 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "any news" / "what's the news" / "is there a paper" — journalism.
+  if (/\b(any news|what'?s the news|latest news|is there a paper|buy a paper|any papers|subscribe|any journalists?|any reporters?)\b/.test(said)) {
+    try {
+      const Press = require("../lib/CitizenPress");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Press.describe(kingdomId) : null;
+      const ed = kingdomId ? Press.latestEdition(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "press_status", {
+        username: citizenUsername,
+        hasPress: desc?.hasPress ?? false,
+        journalistCount: desc?.journalistCount ?? 0,
+        subscriberCount: desc?.subscriberCount ?? 0,
+        latestEdition: ed ? { beat: ed.beat, storyCount: ed.storyIds.length, price: ed.price } : null,
+        isJournalist: citizenUsername ? Press.isJournalist(citizenUsername) : false,
+        subscriptionPrice: Press.SUBSCRIPTION_PRICE,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  // "publish: <headline>" — a real player files a story.
+  if (/^publish:\s*/.test(said)) {
+    try {
+      const Press = require("../lib/CitizenPress");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(speakerUsername) ?? kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const headline = said.replace(/^publish:\s*/, "");
+      // Beat guess from keywords, default culture.
+      let beat = Press.BEAT_CULTURE;
+      if (/\b(war|siege|battle|army)\b/.test(headline)) beat = Press.BEAT_WAR;
+      else if (/\b(crime|theft|murder|trial|court|jail)\b/.test(headline)) beat = Press.BEAT_CRIME;
+      else if (/\b(council|election|law|vote|king|queen|mayor)\b/.test(headline)) beat = Press.BEAT_POLITICS;
+      else if (/\b(discover|found|ruin|dungeon|expedition)\b/.test(headline)) beat = Press.BEAT_DISCOVERY;
+      const res = Press.submitPlayerStory(speakerUsername, kingdomId, beat, headline);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "player_story", {
+        username: citizenUsername,
+        ok: res.ok,
+        reason: res.ok ? null : res.reason,
+        storyId: res.ok ? res.id : null,
+        beat,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "when is the election" — player asks about the next election.
   if (/\b(when is the election|next election|when do we vote)\b/.test(said)) {
     try {

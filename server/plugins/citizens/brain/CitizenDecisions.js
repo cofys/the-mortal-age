@@ -123,6 +123,7 @@ const ACT_SCIENCE = "citizen_research";
 const ACT_ENGINEER = "citizen_engineerwork";
 const ACT_OBSERVE = "citizen_observe";
 const ACT_CHART = "citizen_chart";
+const ACT_REPORT = "citizen_report";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -156,7 +157,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART,  ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1302,6 +1303,43 @@ function mapInfo(player) {
 }
 
 /**
+ * Press info: is this citizen a journalist, how reportery are they, and
+ * do they hold real papyrus for writing? Defensive — missing modules
+ * degrade to the honest unable-to-report shape.
+ */
+function pressInfo(player) {
+  try {
+    const Press = require("../lib/CitizenPress");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isJournalist = Press.isJournalist(username);
+    let curiosity = 0, sociability = 0;
+    try {
+      const personality = player?.getAttribute?.("citizens:personality") ?? {};
+      curiosity = personality.curiosity ?? personality.curious ?? 0;
+      sociability = personality.sociability ?? personality.social ?? 0;
+    } catch { /* personality unreadable */ }
+    let hasPapyrus = false;
+    try {
+      const inv = player?.inventory ?? player?.getInventory?.();
+      if (inv && typeof inv.count === "function") {
+        hasPapyrus = inv.count(Press.MAT_PAPYRUS) >= 1;
+      }
+    } catch { /* inventory unreadable */ }
+    let openStories = 0;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      if (kid) {
+        for (const beat of Press.BEATS) openStories += Press.unclaimedEvents(beat, kid).length;
+      }
+    } catch { /* sites unreadable */ }
+    return { isJournalist, curiosity, sociability, hasPapyrus, openStories };
+  } catch {
+    return { isJournalist: false, curiosity: 0, sociability: 0, hasPapyrus: false, openStories: 0 };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1723,6 +1761,7 @@ compete: competeInfo(player),
     science: scienceInfo(player),
     astro: astroInfo(player),
     maps: mapInfo(player),
+    press: pressInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1744,7 +1783,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2373,6 +2412,25 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_REPORT: {
+      // Journalism: reporters file real stories from real events at the
+      // printing press, 1 real papyrus per story. A human reporter works
+      // when there's news to cover — no events, no papyrus, no story.
+      // Curious citizens may wander in and register.
+      const pr = press ?? { isJournalist: false, curiosity: 0, sociability: 0, hasPapyrus: false, openStories: 0 };
+      if (!pr.isJournalist && (pr.curiosity ?? 0) < 0.6 && (pr.sociability ?? 0) < 0.6) return 4; // not a reporter
+      if (!pr.hasPapyrus) return 4; // honest — no materials, no stories
+      if ((pr.openStories ?? 0) < 1) return 4; // no news, no story
+      let s = 20;
+      if (pr.isJournalist) s += 16; // the trade calls
+      if ((pr.openStories ?? 0) >= 3) s += 8; // big news day
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_SCIENCE: {
       // Science: scientists run real experiments in the kingdom lab. A human
       // researcher works when they have a running experiment — and starts a
@@ -2882,7 +2940,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART,  ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

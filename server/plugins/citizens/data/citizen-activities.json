@@ -1075,6 +1075,27 @@
           "type": "citizenResearch"
         }
       ]
+    },
+    {
+      "id": "citizen_report",
+      "mode": "citizen_report",
+      "repeat": false,
+      "capacity": 8,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenReport"
+        }
+      ]
     }
   ]
 }
