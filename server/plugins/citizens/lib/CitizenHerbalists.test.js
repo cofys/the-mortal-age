@@ -162,7 +162,10 @@ check("tick fires near real player", () => {
   }
   assert.ok(uname, "found herbalist username");
   const chats = [];
-  const journals = [];
+  // Canonical journal check: the module writes via the real CitizenJournal
+  // singleton (getJournal().log), not director.journal.addEntry (dead API).
+  const { getJournal } = require("./CitizenJournal");
+  getJournal().resetForTests();
   const citizen = {
     getLocation: () => mkLoc(3000, 3000, 0),
     forceChat: (line) => chats.push(line),
@@ -179,7 +182,6 @@ check("tick fires near real player", () => {
     getBot: () => citizen,
     playerFor: () => citizen,
     world: { getPlayers: () => [citizen, human] },
-    journal: { addEntry: (u, t) => journals.push([u, t]) },
   };
   // Chance gate is hash-based; sweep candidate times until one fires.
   let fired = false;
@@ -188,7 +190,8 @@ check("tick fires near real player", () => {
     if (chats.length > 0) fired = true;
   }
   assert.ok(fired, "citizen chatted near a real player");
-  assert.ok(journals.length > 0, "work was journaled");
+  const entries = getJournal().recent(uname, 10);
+  assert.ok(entries.some((e) => e.kind === "work"), "work was journaled");
 });
 
 console.log(`\n${n}/18 checks passed`);

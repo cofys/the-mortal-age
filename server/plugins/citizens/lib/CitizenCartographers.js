@@ -340,7 +340,7 @@ let _journalEvent = null;
 function journalEvent() {
   if (_journalEvent === null) {
     try {
-      _journalEvent = require("./CitizenJournal").journalEvent || false;
+      _journalEvent = require("./CitizenJournal").getJournal() || false;
     } catch {
       _journalEvent = false;
     }
@@ -348,10 +348,13 @@ function journalEvent() {
   return _journalEvent;
 }
 
+// Canonical: getJournal().log(name, kind, text). The journalEvent export
+// probe is dead — CitizenJournal only exports getJournal(); calling the
+// journal object as a function never worked (caught by the try/catch).
 function journal(username, text, kind) {
   try {
     const j = journalEvent();
-    if (j) j(username, text, kind || "cartography");
+    if (j) j.log?.(username, kind || "cartography", text);
   } catch {
     // best-effort
   }
@@ -373,7 +376,9 @@ function seedRumor() {
 function seedDiscoveryRumor(discovery, studio) {
   try {
     const s = seedRumor();
-    if (s) s(`The cartographers at ${studio} have charted ${discovery}.`);
+    // Canonical: seedRumor(rng, event) — the bare-string call is dead
+    // (returns null); pass an event object.
+    if (s) s(Math.random, { kind: "work", what: `The cartographers at ${studio} have charted ${discovery}.` });
   } catch {
     // best-effort
   }
