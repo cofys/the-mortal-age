@@ -175,6 +175,10 @@ function load() {
 
 function markDirty() { dirty = true; }
 
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
 function save() {
   if (!dirty) return false;
   try {
@@ -453,17 +457,29 @@ function settleCertification(playId, nowMs = Date.now()) {
   let paid = 0;
   let owed = 0;
   if (g && bounty > 0) {
+    // The bounty is credited to the playwright's REAL bank account before
+    // the reserves are touched — never mark paid what was never delivered.
     const fromTreasury = Math.min(g.treasury || 0, bounty);
-    g.treasury = (g.treasury || 0) - fromTreasury;
-    paid += fromTreasury;
-    const rest = bounty - fromTreasury;
-    if (rest > 0) {
-      // relief fund backs the bounty before we owe honestly
-      const fromRelief = Math.min(g.reliefFund || 0, rest);
-      g.reliefFund = (g.reliefFund || 0) - fromRelief;
-      paid += fromRelief;
-      owed = rest - fromRelief;
+    const fromRelief = Math.min(g.reliefFund || 0, bounty - fromTreasury);
+    const toPay = fromTreasury + fromRelief;
+    if (toPay > 0) {
+      let credited = false;
+      try {
+        const B = bankingApi();
+        const acct = B && typeof B.accountFor === "function" ? B.accountFor(q.owner) : null;
+        if (acct) {
+          acct.balance = (Number(acct.balance) || 0) + toPay;
+          if (typeof B.markDirty === "function") B.markDirty();
+          credited = true;
+        }
+      } catch { /* banking is best-effort */ }
+      if (credited) {
+        g.treasury = (g.treasury || 0) - fromTreasury;
+        g.reliefFund = (g.reliefFund || 0) - fromRelief;
+        paid = toPay;
+      }
     }
+    owed = bounty - paid;
     if (owed > 0) {
       const okey = `${norm(q.owner)}:${pid}`;
       st.bountiesOwed[okey] = (st.bountiesOwed[okey] || 0) + owed;
@@ -515,6 +531,20 @@ function retryOwedBounties(kingdomId) {
     const fromRelief = Math.min(g.reliefFund || 0, owed - fromTreasury);
     const total = fromTreasury + fromRelief;
     if (total <= 0) continue;
+    // Credit the playwright's bank account before deducting — the okey
+    // starts with the owner's normalized name.
+    const owner = String(okey).split(":")[0];
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(owner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + total;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (!credited) continue;
     g.treasury = (g.treasury || 0) - fromTreasury;
     g.reliefFund = (g.reliefFund || 0) - fromRelief;
     st.bountiesOwed[okey] = owed - total;

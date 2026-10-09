@@ -228,10 +228,14 @@ function celebrateRound(player, st, now) {
       const booths = C.boothsFor(active.id);
       if (booths.length > 0) {
         const booth = booths[Math.floor(Math.random() * booths.length)];
-        // The Life module handles real coin movement; here we just
-        // record the attempt for visible feedback.
         const result = C.playBooth(active.id, booth.type);
         if (result.won) {
+          // Credit the prize to the winner's REAL inventory — the booth's
+          // prize pool was already debited by playBooth (vanishing-coins fix).
+          try {
+            const inv = player?.getInventory?.();
+            if (inv && typeof inv.adds === "function") inv.adds(995, result.prize);
+          } catch { /* prize credit is best-effort */ }
           try {
             const { sayPublic } = require("../../chat/CitizenSayPublic");
             sayPublic(player, `I won ${result.prize} coins at ${C.BOOTH_NAMES[booth.type]}!`);

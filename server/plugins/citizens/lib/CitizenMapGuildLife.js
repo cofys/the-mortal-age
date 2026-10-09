@@ -249,26 +249,36 @@ function settleCertifications(director, nowMs) {
 
 function payOwedBounties(director) {
   // Certification bounties the treasury couldn't afford are paid when funds arrive.
+  // Credits go to the creator's REAL bank account (works for offline citizens too).
   let paid = 0;
   try {
+    const B = (() => { try { return require("./CitizenBanking"); } catch { return null; } })();
     for (const record of onlineRoster(director)) {
       const username = usernameOf(record);
       if (!username) continue;
       for (const cert of Guilds.certsByCreator(username)) {
         if (!(cert.bountyOwed > 0)) continue;
-        if (!Guilds.debitTreasury(cert.kingdomId, cert.bountyOwed)) continue;
-        const bot = director.getBot ? director.getBot(record) : null;
-        let paidOut = false;
-        if (bot) {
+        // Credit the bank account BEFORE debiting the treasury — never mark
+        // paid what was never delivered.
+        let credited = false;
+        try {
+          const acct = B && typeof B.accountFor === "function" ? B.accountFor(username) : null;
+          if (acct) {
+            acct.balance = (Number(acct.balance) || 0) + cert.bountyOwed;
+            if (typeof B.markDirty === "function") B.markDirty();
+            credited = true;
+          }
+        } catch { /* banking is best-effort */ }
+        if (!credited) continue; // banking down — stays owed
+        if (!Guilds.debitTreasury(cert.kingdomId, cert.bountyOwed)) {
+          // Treasury broke after all — roll back the bank credit.
           try {
-            const inv = bot.inventory ?? bot.getInventory?.();
-            if (inv && typeof inv.add === "function") {
-              inv.add(Guilds.COINS_ID, cert.bountyOwed);
-              paidOut = true;
-            }
-          } catch { /* inventory write failed — stays owed */ }
+            const acct = B.accountFor(username);
+            acct.balance = (Number(acct.balance) || 0) - cert.bountyOwed;
+            if (typeof B.markDirty === "function") B.markDirty();
+          } catch { /* rollback is best-effort */ }
+          continue;
         }
-        if (!paidOut) continue; // offline or no inventory — stays owed
         journal(username, "guild-bounty-paid",
           `The guild paid ${username} ${cert.bountyOwed} owed coins for chart ${cert.mapId}.`,
           { username, mapId: cert.mapId, amount: cert.bountyOwed });

@@ -343,6 +343,25 @@ test("restricted index: propose, vote, restrict bars certification", () => {
 
 // --- Golden quill ---
 
+test("golden quill: funded treasury credits the winner's bank account", () => {
+  const opts = { careers: { alice: "librarian" }, books: {} };
+  const restore = installStubs(opts);
+  try {
+    Guilds.joinGuild("Alice", "misthalin");
+    const st = Guilds.load();
+    st.certifications["cert-1"] = { id: "cert-1", kingdomId: "misthalin", author: "Alice", title: "A", subject: "lore", quality: 8, grade: "A", certifiedMs: 1 };
+    Guilds.touch();
+    Guilds.creditTreasury("misthalin", 1000);
+    const r = Guilds.grantGoldenQuill("misthalin", Date.now());
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.winner, "Alice");
+    assert.strictEqual(r.prizePaid, Guilds.QUILL_PRIZE);
+    assert.strictEqual(r.prizeOwed, 0);
+    // Vanishing-coins regression: the bank balance actually moved.
+    assert.strictEqual((opts.bankAccounts || {})["alice"]?.balance, Guilds.QUILL_PRIZE);
+  } finally { restore(); }
+});
+
 test("golden quill goes to the most-certified member", () => {
   const opts = { careers: { alice: "librarian", bob: "librarian" }, books: {} };
   const restore = installStubs(opts);

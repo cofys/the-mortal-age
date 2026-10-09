@@ -135,6 +135,10 @@ function ensure() {
 
 function markDirty() { dirty = true; }
 
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
 function norm(name) {
   return String(name || "").toLowerCase().trim();
 }
@@ -334,11 +338,28 @@ function settleCertification(kingdomId, sport, nowMs) {
   const g = ensureGuild(kingdomId);
   let owed = 0;
   // Pay from treasury, then medical fund, then owe honestly.
+  // The bounty is credited to the owner's REAL bank account before the
+  // reserves are touched — never mark paid what was never delivered.
   let remaining = bounty;
   const fromTreasury = Math.min(g.treasury, remaining);
-  g.treasury -= fromTreasury; remaining -= fromTreasury;
-  const fromMedical = Math.min(g.medicalFund, remaining);
-  g.medicalFund -= fromMedical; remaining -= fromMedical;
+  const fromMedical = Math.min(g.medicalFund, remaining - fromTreasury);
+  const toPay = fromTreasury + fromMedical;
+  if (toPay > 0) {
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(q.owner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + toPay;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (credited) {
+      g.treasury -= fromTreasury; remaining -= fromTreasury;
+      g.medicalFund -= fromMedical; remaining -= fromMedical;
+    }
+  }
   if (remaining > 0) {
     const okey = `${q.owner}:${key}`;
     s.bountiesOwed[okey] = (s.bountiesOwed[okey] || 0) + remaining;
@@ -366,10 +387,24 @@ function retryOwedBounties(kingdomId) {
   for (const okey of Object.keys(s.bountiesOwed)) {
     const amt = s.bountiesOwed[okey];
     if (!amt) continue;
+    const owner = String(okey).split(":")[0];
     const fromTreasury = Math.min(g.treasury, amt);
+    const fromMedical = Math.min(g.medicalFund, amt - fromTreasury);
+    const toPay = fromTreasury + fromMedical;
+    if (toPay <= 0) continue;
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(owner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + toPay;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (!credited) continue;
     g.treasury -= fromTreasury;
     let remaining = amt - fromTreasury;
-    const fromMedical = Math.min(g.medicalFund, remaining);
     g.medicalFund -= fromMedical;
     remaining -= fromMedical;
     if (remaining <= 0) { delete s.bountiesOwed[okey]; paid += amt; }

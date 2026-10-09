@@ -133,6 +133,10 @@ function ensure() {
 
 function markDirty() { dirty = true; }
 
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
 function norm(name) {
   return String(name || "").toLowerCase().trim();
 }
@@ -367,11 +371,28 @@ function settleCertification(kingdomId, recipeId, nowMs) {
   const g = ensureGuild(kingdomId);
   let owed = 0;
   // Pay from treasury, then hygiene fund, then owe honestly.
+  // The bounty is credited to the owner's REAL bank account before the
+  // reserves are touched — never mark paid what was never delivered.
   let remaining = bounty;
   const fromTreasury = Math.min(g.treasury, remaining);
-  g.treasury -= fromTreasury; remaining -= fromTreasury;
-  const fromHygiene = Math.min(g.hygieneFund, remaining);
-  g.hygieneFund -= fromHygiene; remaining -= fromHygiene;
+  const fromHygiene = Math.min(g.hygieneFund, remaining - fromTreasury);
+  const toPay = fromTreasury + fromHygiene;
+  if (toPay > 0) {
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(q.owner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + toPay;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (credited) {
+      g.treasury -= fromTreasury; remaining -= fromTreasury;
+      g.hygieneFund -= fromHygiene; remaining -= fromHygiene;
+    }
+  }
   if (remaining > 0) {
     const okey = `${q.owner}:${key}`;
     s.bountiesOwed[okey] = (s.bountiesOwed[okey] || 0) + remaining;
@@ -404,10 +425,24 @@ function retryOwedBounties(kingdomId) {
     if (ledgerKid !== kingdomId) continue;
     const amt = s.bountiesOwed[okey];
     if (!amt) continue;
+    const owner = String(okey).split(":")[0];
     const fromTreasury = Math.min(g.treasury, amt);
+    const fromHygiene = Math.min(g.hygieneFund, amt - fromTreasury);
+    const toPay = fromTreasury + fromHygiene;
+    if (toPay <= 0) continue;
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(owner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + toPay;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (!credited) continue;
     g.treasury -= fromTreasury;
     let remaining = amt - fromTreasury;
-    const fromHygiene = Math.min(g.hygieneFund, remaining);
     g.hygieneFund -= fromHygiene;
     remaining -= fromHygiene;
     if (remaining <= 0) { delete s.bountiesOwed[okey]; paid += amt; }
@@ -423,13 +458,26 @@ function retryOwedLadle(kingdomId) {
   const g = ensureGuild(kingdomId);
   const owed = s.ladleOwed[kingdomId] || 0;
   if (!owed) return { paid: 0 };
-  const fromTreasury = Math.min(g.treasury, owed);
-  g.treasury -= fromTreasury;
-  const remaining = owed - fromTreasury;
+  const prize = Math.min(g.treasury, owed);
+  if (prize <= 0) return { paid: 0 };
+  const winner = g.lastLadleWinner;
+  let credited = false;
+  try {
+    const B = bankingApi();
+    const acct = B && winner && typeof B.accountFor === "function" ? B.accountFor(winner) : null;
+    if (acct) {
+      acct.balance = (Number(acct.balance) || 0) + prize;
+      if (typeof B.markDirty === "function") B.markDirty();
+      credited = true;
+    }
+  } catch { /* banking is best-effort */ }
+  if (!credited) return { paid: 0 };
+  g.treasury -= prize;
+  const remaining = owed - prize;
   if (remaining <= 0) delete s.ladleOwed[kingdomId];
   else s.ladleOwed[kingdomId] = remaining;
-  if (fromTreasury) markDirty();
-  return { paid: fromTreasury };
+  markDirty();
+  return { paid: prize };
 }
 
 // --- kitchen inspections ----------------------------------------------------
@@ -571,16 +619,34 @@ function grantLadle(kingdomId, nowMs) {
   }
   if (!best) return { ok: false, reason: "no-candidates" };
   g.lastLadleAt = nowMs || Date.now();
+  g.lastLadleWinner = best;
+  // The prize is credited to the winner's REAL bank account before the
+  // treasury is touched — never mark paid what was never delivered.
   let owed = 0;
-  const fromTreasury = Math.min(g.treasury, LADLE_PRIZE);
-  g.treasury -= fromTreasury;
-  const remaining = LADLE_PRIZE - fromTreasury;
-  if (remaining > 0) {
-    s.ladleOwed[kingdomId] = (s.ladleOwed[kingdomId] || 0) + remaining;
-    owed = remaining;
+  let paid = 0;
+  const prize = Math.min(g.treasury, LADLE_PRIZE);
+  if (prize > 0) {
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(best) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + prize;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (credited) {
+      g.treasury -= prize;
+      paid = prize;
+    }
+  }
+  owed = LADLE_PRIZE - paid;
+  if (owed > 0) {
+    s.ladleOwed[kingdomId] = (s.ladleOwed[kingdomId] || 0) + owed;
   }
   markDirty();
-  return { ok: true, winner: best, recipes: bestCount, paid: LADLE_PRIZE - owed, owed };
+  return { ok: true, winner: best, recipes: bestCount, paid, owed };
 }
 
 // --- culinary school & mentorship ----------------------------------------------

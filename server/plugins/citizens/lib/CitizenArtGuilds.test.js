@@ -397,7 +397,16 @@ test("grantGoldenPalette awards quarterly to the most-certified member", () => {
         return { awardDeed: (u, deed) => { opts.deeds = opts.deeds || []; opts.deeds.push([u, deed]); } };
       }
       if (id === "./CitizenBanking") {
-        return { creditAccount: (u, amt) => { opts.credits = opts.credits || []; opts.credits.push([u, amt]); return true; } };
+        // Real contract: accountFor -> live record, markDirty -> persist.
+        return {
+          accountFor: (u) => {
+            const key = String(u || "").toLowerCase().trim();
+            (opts.bankAccounts = opts.bankAccounts || {})[key] =
+              opts.bankAccounts[key] || { balance: 0 };
+            return opts.bankAccounts[key];
+          },
+          markDirty: () => {},
+        };
       }
       return prev.apply(this, arguments);
     };
@@ -416,6 +425,11 @@ test("grantGoldenPalette awards quarterly to the most-certified member", () => {
     const treas = Guilds.guildTreasuryFor("varrock");
     // a1 is grade A (120), a2 is grade B (60); palette prize is 200.
     assert.strictEqual(treas.treasury, 1000 - Guilds.CERT_BOUNTY.A - Guilds.CERT_BOUNTY.B - Guilds.PALETTE_PRIZE);
+    // Vanishing-coins regression: the winner's REAL bank balance moved.
+    assert.strictEqual(
+      (opts.bankAccounts || {})["painty pete"]?.balance,
+      Guilds.CERT_BOUNTY.A + Guilds.CERT_BOUNTY.B + Guilds.PALETTE_PRIZE
+    );
     // Same quarter: no double award.
     assert.strictEqual(Guilds.grantGoldenPalette("varrock", Date.now()).ok, false);
   } finally { restore(); }

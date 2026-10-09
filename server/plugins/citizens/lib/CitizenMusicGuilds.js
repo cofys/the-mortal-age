@@ -680,15 +680,31 @@ function grantGoldenLyre(kingdomId, nowMs) {
   const winner = st.members[winnerKey].username;
 
   // 200-coin real prize; owed honestly when the treasury is broke.
+  // The prize is credited to the winner's REAL bank account — deducting
+  // from the treasury without delivering is the vanishing-coins bug.
   let paid = 0;
   let owed = 0;
-  if (g.treasury >= LYRE_PRIZE) {
-    g.treasury -= LYRE_PRIZE;
-    paid = LYRE_PRIZE;
-  } else {
-    paid = g.treasury;
-    owed = LYRE_PRIZE - paid;
-    g.treasury = 0;
+  const prize = Math.min(g.treasury, LYRE_PRIZE);
+  if (prize > 0) {
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(winner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + prize;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (credited) {
+      g.treasury -= prize;
+      paid = prize;
+    }
+  }
+  owed = LYRE_PRIZE - paid;
+  if (owed > 0) {
+    st.lyreOwed = st.lyreOwed || {};
+    st.lyreOwed[kingdomId] = (st.lyreOwed[kingdomId] || 0) + owed;
   }
   g.lastLyreMs = nowMs;
   try {

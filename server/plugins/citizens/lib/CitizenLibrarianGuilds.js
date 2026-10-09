@@ -800,15 +800,31 @@ function grantGoldenQuill(kingdomId, nowMs) {
   const winner = st.members[winnerKey].username;
 
   // 200-coin real prize; owed honestly when the treasury is broke.
+  // The prize is credited to the winner's REAL bank account — deducting
+  // from the treasury without delivering is the vanishing-coins bug.
   let paid = 0;
   let owed = 0;
-  if (g.treasury >= QUILL_PRIZE) {
-    g.treasury -= QUILL_PRIZE;
-    paid = QUILL_PRIZE;
-  } else {
-    paid = g.treasury;
-    owed = QUILL_PRIZE - paid;
-    g.treasury = 0;
+  const prize = Math.min(g.treasury, QUILL_PRIZE);
+  if (prize > 0) {
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(winner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + prize;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (credited) {
+      g.treasury -= prize;
+      paid = prize;
+    }
+  }
+  owed = QUILL_PRIZE - paid;
+  if (owed > 0) {
+    st.quillOwed = st.quillOwed || {};
+    st.quillOwed[kingdomId] = (st.quillOwed[kingdomId] || 0) + owed;
   }
   g.lastQuillMs = nowMs;
   try {

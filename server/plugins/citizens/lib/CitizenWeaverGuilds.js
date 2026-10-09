@@ -132,6 +132,10 @@ function ensure() {
 
 function markDirty() { dirty = true; }
 
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
 function norm(name) {
   return String(name || "").toLowerCase().trim();
 }
@@ -379,9 +383,26 @@ function settleCertification(kingdomId, collectionId, nowMs) {
   // Pay from treasury, then atelier fund, then owe honestly.
   let remaining = bounty;
   const fromTreasury = Math.min(g.treasury, remaining);
-  g.treasury -= fromTreasury; remaining -= fromTreasury;
-  const fromFund = Math.min(g.atelierFund, remaining);
-  g.atelierFund -= fromFund; remaining -= fromFund;
+  const fromFund = Math.min(g.atelierFund, remaining - fromTreasury);
+  const toPay = fromTreasury + fromFund;
+  // Credit the owner's REAL bank account before deducting — never mark
+  // paid what was never delivered (vanishing-coins fix).
+  if (toPay > 0) {
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(q.owner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + toPay;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (credited) {
+      g.treasury -= fromTreasury; remaining -= fromTreasury;
+      g.atelierFund -= fromFund; remaining -= fromFund;
+    }
+  }
   if (remaining > 0) {
     const okey = `${q.owner}:${key}`;
     s.bountiesOwed[okey] = (s.bountiesOwed[okey] || 0) + remaining;
@@ -427,10 +448,26 @@ function retryOwedBounties(kingdomId) {
     if (parts.length < 3 || parts[1] !== String(kingdomId)) continue;
     const amt = s.bountiesOwed[okey];
     if (!amt) continue;
+    const owner = parts[0];
     const fromTreasury = Math.min(g.treasury, amt);
+    const fromFund = Math.min(g.atelierFund, amt - fromTreasury);
+    const toPay = fromTreasury + fromFund;
+    if (toPay <= 0) continue;
+    // Credit the owner's bank account before deducting — never mark paid
+    // what was never delivered.
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(owner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + toPay;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (!credited) continue; // banking down — stays owed for a later tick
     g.treasury -= fromTreasury;
     let remaining = amt - fromTreasury;
-    const fromFund = Math.min(g.atelierFund, remaining);
     g.atelierFund -= fromFund;
     remaining -= fromFund;
     if (remaining <= 0) {
@@ -635,16 +672,30 @@ function grantGoldenNeedle(kingdomId, nowMs) {
   }
   g.lastNeedleAt = nowMs;
   if (!winner || best === 0) { markDirty(); return { ok: false, reason: "no-candidates" }; }
+  // The prize is credited to the winner's REAL bank account — deducting
+  // from the treasury without delivering is the vanishing-coins bug.
   let owed = 0;
-  let paid = NEEDLE_PRIZE;
-  if (g.treasury >= NEEDLE_PRIZE) {
-    g.treasury -= NEEDLE_PRIZE;
-  } else {
-    paid = g.treasury;
-    owed = NEEDLE_PRIZE - paid;
-    g.treasury = 0;
-    s.needleOwed[kingdomId] = (s.needleOwed[kingdomId] || 0) + owed;
+  let paid = 0;
+  const prize = Math.min(g.treasury, NEEDLE_PRIZE);
+  if (prize > 0) {
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(winner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + prize;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (credited) {
+      g.treasury -= prize;
+      paid = prize;
+    }
   }
+  owed = NEEDLE_PRIZE - paid;
+  if (owed > 0) s.needleOwed[kingdomId] = (s.needleOwed[kingdomId] || 0) + owed;
+  g.lastNeedleWinner = winner;
   markDirty();
   return { ok: true, winner, sealed: best, paid, owed };
 }
@@ -655,10 +706,25 @@ function retryNeedleOwed(kingdomId) {
   const owed = s.needleOwed[kingdomId] || 0;
   if (!owed) return { ok: true, paid: 0 };
   const paid = Math.min(g.treasury, owed);
+  if (paid <= 0) return { ok: true, paid: 0 };
+  // Credit the recorded winner's bank account before deducting — never
+  // mark paid what was never delivered.
+  const winner = g.lastNeedleWinner;
+  let credited = false;
+  try {
+    const B = bankingApi();
+    const acct = B && winner && typeof B.accountFor === "function" ? B.accountFor(winner) : null;
+    if (acct) {
+      acct.balance = (Number(acct.balance) || 0) + paid;
+      if (typeof B.markDirty === "function") B.markDirty();
+      credited = true;
+    }
+  } catch { /* banking is best-effort */ }
+  if (!credited) return { ok: true, paid: 0 };
   g.treasury -= paid;
   if (paid >= owed) delete s.needleOwed[kingdomId];
   else s.needleOwed[kingdomId] = owed - paid;
-  if (paid > 0) markDirty();
+  markDirty();
   return { ok: true, paid };
 }
 

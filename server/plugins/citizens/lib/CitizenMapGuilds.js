@@ -135,6 +135,10 @@ function markDirty() {
   dirty = true;
 }
 
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
 function save() {
   if (!dirty) return false;
   try {
@@ -407,10 +411,22 @@ function processCertifications(nowMs) {
     };
     const bounty = CERT_BOUNTY[grade] || 0;
     if (bounty > 0) {
-      if (debitTreasury(q.kingdomId, bounty)) {
+      // Credit the creator's REAL bank account before debiting — never mark
+      // paid what was never delivered (vanishing-coins fix).
+      let credited = false;
+      try {
+        const B = bankingApi();
+        const acct = B && typeof B.accountFor === "function" ? B.accountFor(q.creator) : null;
+        if (acct) {
+          acct.balance = (Number(acct.balance) || 0) + bounty;
+          if (typeof B.markDirty === "function") B.markDirty();
+          credited = true;
+        }
+      } catch { /* banking is best-effort */ }
+      if (credited && debitTreasury(q.kingdomId, bounty)) {
         cert.bountyPaid = bounty;
       } else {
-        // Treasury broke: the guild owes the bounty honestly, never invents coins.
+        // Treasury broke or banking down: the guild owes the bounty honestly.
         cert.bountyOwed = bounty;
       }
     }

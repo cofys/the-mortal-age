@@ -665,15 +665,32 @@ function grantGoldenPalette(kingdomId, nowMs) {
   const winner = st.members[winnerKey].username;
 
   // 200-coin real prize; owed honestly when the treasury is broke.
+  // The prize is credited to the winner's REAL bank account — deducting
+  // from the treasury without delivering is the vanishing-coins bug.
   let paid = 0;
   let owed = 0;
-  if (g.treasury >= PALETTE_PRIZE) {
-    g.treasury -= PALETTE_PRIZE;
-    paid = PALETTE_PRIZE;
-  } else {
-    paid = g.treasury;
-    owed = PALETTE_PRIZE - paid;
-    g.treasury = 0;
+  const prize = Math.min(g.treasury, PALETTE_PRIZE);
+  if (prize > 0) {
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(winner) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + prize;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (credited) {
+      g.treasury -= prize;
+      paid = prize;
+    }
+  }
+  owed = PALETTE_PRIZE - paid;
+  // Honest owing: record the shortfall so a later tick retries delivery.
+  if (owed > 0) {
+    st.paletteOwed = st.paletteOwed || {};
+    st.paletteOwed[kingdomId] = (st.paletteOwed[kingdomId] || 0) + owed;
   }
   g.lastPaletteMs = nowMs;
   try {

@@ -374,6 +374,30 @@ test("grantGoldenLyre picks the most-certified member", () => {
     assert.strictEqual(r.ok, true);
     assert.strictEqual(r.winner, "Lute Larry");
     assert.strictEqual(r.performances, 2);
+    // Vanishing-coins regression: treasury was broke here (no creditTreasury),
+    // so the prize is honestly owed, not silently vanished.
+    assert.strictEqual(r.prizePaid, 0);
+    assert.strictEqual(r.prizeOwed, Guilds.LYRE_PRIZE);
+  } finally { restore(); }
+});
+
+test("grantGoldenLyre: funded treasury credits the winner's bank account", () => {
+  const concerts = {
+    "c1": { performers: ["Lute Larry"], quality: 8, title: "A" },
+  };
+  const opts = { professionals: ["lute larry"], concerts };
+  const restore = installStubs(opts);
+  try {
+    Guilds.joinGuild("Lute Larry", "varrock");
+    Guilds.certifyPerformance("varrock", "Lute Larry", "c1", "A");
+    // Fund the treasury via dues (25 - instrument share each).
+    for (let i = 0; i < 10; i++) Guilds.recordDuesPayment("Lute Larry", Date.now());
+    const before = ((opts.bankAccounts || {})["lute larry"] || {}).balance || 0;
+    const r = Guilds.grantGoldenLyre("varrock", Date.now());
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.prizePaid, Guilds.LYRE_PRIZE);
+    assert.strictEqual(r.prizeOwed, 0);
+    assert.strictEqual(((opts.bankAccounts || {})["lute larry"] || {}).balance, before + Guilds.LYRE_PRIZE);
   } finally { restore(); }
 });
 
