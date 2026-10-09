@@ -53,6 +53,10 @@ function fakeBot(username, coins) {
     coins,
     getAmount: (id) => (id === 995 ? inv.coins : 0),
     delete: (id, n) => { if (id === 995 && inv.coins >= n) { inv.coins -= n; return true; } return false; },
+    // Real engine ItemContainer has both delete(id, amount) and
+    // deleteNumber(id, amount) (identical behavior). Production uses the
+    // canonical deleteNumber; the mock must mirror the real contract.
+    deleteNumber: (id, n) => { if (id === 995 && inv.coins >= n) { inv.coins -= n; return true; } return false; },
   };
   return {
     getUsername: () => username,
