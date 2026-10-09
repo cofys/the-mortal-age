@@ -87,6 +87,7 @@ const ACT_ROUTINE = "citizen_routine";
 const ACT_MEAL = "citizen_meal";
 const ACT_REST = "citizen_rest";
 const ACT_BANK = "citizen_bank";
+const ACT_LIGHT_FIRE = "citizen_light_fire";
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -219,6 +220,27 @@ function nearbyCount(player) {
   }
 }
 
+/** Count of burnable logs in the inventory (firemaking fuel). */
+function logCount(player) {
+  try {
+    const Firemaking = require("../../skills/Firemaking.plugin");
+    if (typeof Firemaking?.isWoodcuttingLog !== "function") return 0;
+    let n = 0;
+    for (const item of player?.getInventory?.()?.getItems?.() ?? []) {
+      let id = 0;
+      try {
+        id = item?.getId?.() ?? 0;
+      } catch {
+        continue;
+      }
+      if (id > 0 && Firemaking.isWoodcuttingLog(id)) n++;
+    }
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Cheap read-only snapshot of everything the scorer needs. needsFor is a Map
  * lookup against the director-ticked CitizenNeeds registry — never created
@@ -244,6 +266,7 @@ function snapshot(player) {
     food: foodCount(player),
     freeSlots: freeSlots(player),
     nearby: nearbyCount(player),
+    logs: logCount(player),
     hour: new Date().getHours(), // server-local, per the timezone rule
   };
 }
@@ -261,7 +284,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -310,6 +333,23 @@ function scoreActivity(activityId, snap) {
       else if (freeSlots <= 6) s = 40;
       if (goalType === GOAL_MASTER_TRADE || goalType === GOAL_SAVE_GOLD) s += 10;
       if (criticalHp || exhausted) s -= 40;
+      return s;
+    }
+    case ACT_LIGHT_FIRE: {
+      // Firemaking: burn logs for XP. No logs, no fire. Industrious citizens
+      // burn in the evening by the bank; nobody lights fires while hurt or
+      // exhausted. Fires are social — a small bonus when others are near.
+      if ((logs ?? 0) <= 0) return 4;
+      let s = 34 + industrious * 12;
+      if (hour >= 17 || hour <= 2) s += 8; // evening fire time
+      if (goalType === GOAL_MASTER_TRADE) s += 10; // skilling goal
+      if (goalType === GOAL_SAVE_GOLD) s += 4;
+      if (nearby >= 2) s += 6;
+      if (logs >= 10) s += 8; // a real stockpile to work through
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
       return s;
     }
     case ACT_SOCIAL: {

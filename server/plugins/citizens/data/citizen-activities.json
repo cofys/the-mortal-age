@@ -302,6 +302,30 @@
           "type": "citizenBank"
         }
       ]
+    },
+    {
+      "id": "citizen_light_fire",
+      "mode": "citizen_routine",
+      "repeat": false,
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner",
+              "merchant",
+              "guard",
+              "courtier"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenLightFire"
+        }
+      ]
     }
   ]
 }

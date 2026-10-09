@@ -21,6 +21,7 @@ const { createCitizenRoutineAction } = require("./actions/CitizenRoutine");
 const { createCitizenMealAction } = require("./actions/CitizenMeal");
 const { createCitizenRestAction } = require("./actions/CitizenRest");
 const { createCitizenBankAction } = require("./actions/CitizenBank");
+const { createCitizenLightFireAction } = require("./actions/CitizenLightFire");
 const { createIdleSocialAction } = require("./actions/IdleSocial");
 const { createRefugeeFlightAction } = require("./actions/RefugeeFlight");
 const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE } = require("../constants");
@@ -84,6 +85,7 @@ function registerCitizenActionTypes() {
   registerBotActionType("citizenMeal", createCitizenMealAction);
   registerBotActionType("citizenRest", createCitizenRestAction);
   registerBotActionType("citizenBank", createCitizenBankAction);
+  registerBotActionType("citizenLightFire", createCitizenLightFireAction);
   registerBotActionType("idleSocial", createIdleSocialAction);
   registerBotActionType("refugeeFlight", createRefugeeFlightAction);
   registerBotConditionKind("citizen", createCitizenCondition);
