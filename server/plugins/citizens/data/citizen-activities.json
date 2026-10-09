@@ -867,6 +867,27 @@
       ]
     },
     {
+      "id": "citizen_excavate",
+      "mode": "citizen_excavate",
+      "repeat": false,
+      "capacity": 6,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenExcavate"
+        }
+      ]
+    },
+    {
       "id": "citizen_explore",
       "mode": "citizen_explore",
       "repeat": false,

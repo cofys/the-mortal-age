@@ -1490,6 +1490,26 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "dig site" / "excavation" / "artifact" / "archaeologist" — player asks
+  // about archaeology. (The art gallery block below owns bare "museum".)
+  if (/\b(dig site|dig sites|excavation|excavations|artifact|artifacts|archaeologist|archaeologists|archaeology)\b/.test(said)) {
+    try {
+      const Arch = require("../lib/CitizenArchaeology");
+      const kingdomId = ctx?.kingdomId ?? "unknown";
+      const sites = Arch.activeSites(kingdomId);
+      const museum = Arch.museumStatus(kingdomId);
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "archaeology_status", {
+        openSites: sites.length,
+        sites: sites.slice(0, 3).map((s) => ({ name: s.name, richness: s.richness })),
+        museumPrestige: museum.prestige,
+        displayed: museum.displayed,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a gallery" / "where is the gallery" — player asks about art.
   if (/\b(is there a gallery|where is the gallery|art gallery|museum)\b/.test(said)) {
     try {

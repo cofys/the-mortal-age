@@ -47,6 +47,7 @@ const { createCitizenCelebrateAction } = require("./actions/CitizenCelebrate");
 const { createCitizenCompeteAction } = require("./actions/CitizenCompete");
 const { createCitizenDiplomatAction } = require("./actions/CitizenDiplomat");
 const { createCitizenSpyMasterAction } = require("./actions/CitizenSpyMaster");
+const { createCitizenExcavateAction } = require("./actions/CitizenExcavate");
 const { createCitizenExploreAction } = require("./actions/CitizenExplore");
 const { createCitizenInventAction } = require("./actions/CitizenInvent");
 const { createCitizenPhilosophizeAction } = require("./actions/CitizenPhilosophize");
@@ -150,6 +151,7 @@ function registerCitizenActionTypes() {
 registerBotActionType("citizenCompete", createCitizenCompeteAction);
   registerBotActionType("citizenDiplomat", createCitizenDiplomatAction);
   registerBotActionType("citizenSpyMaster", createCitizenSpyMasterAction);
+  registerBotActionType("citizenExcavate", createCitizenExcavateAction);
   registerBotActionType("citizenExplore", createCitizenExploreAction);
   registerBotActionType("citizenInvent", createCitizenInventAction);
   registerBotActionType("citizenPhilosophize", createCitizenPhilosophizeAction);

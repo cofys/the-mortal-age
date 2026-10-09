@@ -127,6 +127,7 @@ const ACT_REPORT = "citizen_report";
 const ACT_BANKERWORK = "citizen_bankerwork";
 const ACT_INSURERWORK = "citizen_insurerwork";
 const ACT_SPY = "citizen_spymaster";
+const ACT_DIG = "citizen_excavate";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -160,7 +161,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1426,6 +1427,35 @@ function insurerInfo(player) {
 }
 
 /**
+ * Dig info: is this citizen an archaeologist, and is there an open dig
+ * site in their kingdom? Defensive — missing modules degrade to the
+ * honest unable-to-dig shape.
+ */
+function digInfo(player) {
+  try {
+    const Arch = require("../lib/CitizenArchaeology");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isArchaeologist = Arch.isArchaeologist(username);
+    let curious = 0, scholarly = 0;
+    try {
+      const personality = player?.getAttribute?.("citizens:personality") ?? {};
+      curious = personality.curiosity ?? personality.curious ?? 0;
+      scholarly = personality.scholarliness ?? personality.wisdom ?? 0;
+    } catch { /* personality unreadable */ }
+    let openSites = 0, richest = 0;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const sites = Arch.activeSites(kingdomIdOf(player));
+      openSites = sites.length;
+      richest = sites.length ? Math.max(...sites.map((s) => s.richness ?? 0)) : 0;
+    } catch { /* sites unreadable */ }
+    return { isArchaeologist, curious, scholarly, openSites, richest };
+  } catch {
+    return { isArchaeologist: false, curious: 0, scholarly: 0, openSites: 0, richest: 0 };
+  }
+}
+
+/**
  * Jail work penalty 0..60, read from the crime data tier. A jailed citizen
  * cannot work at all — 60, same as the plague.
  * Defensive: a missing/broken crime module scores as free.
@@ -1851,6 +1881,7 @@ compete: competeInfo(player),
     press: pressInfo(player),
     bank: bankInfo(player),
     ins: insurerInfo(player),
+    dig: digInfo(player),
     surgery: surgeryInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
@@ -1872,7 +1903,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, press, bank, ins, dig, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2333,6 +2364,24 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody runs ops drunk well
+      return s;
+    }
+    case ACT_DIG: {
+      // Archaeology: archaeologists dig where the finds are. A human digger
+      // goes out when sites are open and rich — curiosity and scholarship
+      // pull the unregistered in. The hurt and weary stay home.
+      const d = dig ?? { isArchaeologist: false, curious: 0, scholarly: 0, openSites: 0, richest: 0 };
+      if (!d.isArchaeologist && (d.curious ?? 0) < 0.5 && (d.scholarly ?? 0) < 0.5) return 4;
+      if (!(d.openSites > 0)) return 4; // honest — no open dig, no digging
+      let s = 18;
+      if (d.isArchaeologist) s += 10; // the trade calls
+      if ((d.richest ?? 0) >= 8) s += 8; // rich ground pulls diggers
+      else if ((d.richest ?? 0) >= 5) s += 4;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
       return s;
     }
     case ACT_EXPLORE: {
@@ -3091,7 +3140,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,
