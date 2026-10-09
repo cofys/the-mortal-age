@@ -73,7 +73,7 @@ function hunterPlugin() {
 
 function bankApi() {
   try {
-    return require("../../../src/main/typescript/elvarg/game/model/container/impl/Bank")
+    return require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank")
       .Bank;
   } catch {
     return null;

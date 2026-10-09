@@ -64,7 +64,7 @@ function runecraftingPlugin() {
 
 function bankApi() {
   try {
-    return require("../../../src/main/typescript/elvarg/game/model/container/impl/Bank")
+    return require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank")
       .Bank;
   } catch {
     return null;
@@ -74,7 +74,7 @@ function bankApi() {
 /** Runecrafting level, 1 when unreadable (air runes only — safe fallback). */
 function runecraftingLevel(player) {
   try {
-    const Skill = require("../../../src/main/typescript/elvarg/game/model/Skill")
+    const Skill = require("../../../../src/main/typescript/elvarg/game/model/Skill")
       .Skill;
     const mgr = player.getSkillManager?.();
     if (!mgr || !Skill || typeof mgr.getCurrentLevel !== "function") return 1;

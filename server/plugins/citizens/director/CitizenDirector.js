@@ -20,8 +20,8 @@
  * replies (that's the llm-gateway), or kingdom politics (the kingdoms plugin).
  */
 
-const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
-const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
+const { Task } = require("../../../../src/main/typescript/elvarg/game/task/Task");
+const { Location } = require("../../../../src/main/typescript/elvarg/game/model/Location");
 const { voiceFor, voiceLine } = require("../lib/citizenVoice");
 const { sayPublic } = require("../chat/CitizenSayPublic");
 

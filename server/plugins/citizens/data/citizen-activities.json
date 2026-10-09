@@ -338,6 +338,27 @@
       ]
     },
     {
+      "id": "citizen_wild_gather",
+      "mode": "citizen_wild_gather",
+      "repeat": true,
+      "capacity": 8,
+      "failureCooldownSeconds": 60,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenWildGather"
+        }
+      ]
+    },
+    {
       "id": "citizen_light_fire",
       "mode": "citizen_routine",
       "repeat": false,
@@ -527,6 +548,28 @@
       "actions": [
         {
           "type": "citizenSlayer"
+        }
+      ]
+    },
+    {
+      "id": "citizen_pker",
+      "mode": "citizen_pker",
+      "repeat": false,
+      "capacity": 4,
+      "failureCooldownSeconds": 300,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "guard",
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenPker"
         }
       ]
     },

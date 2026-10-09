@@ -67,7 +67,7 @@ function slayerPlugin() {
 /** Slayer level, 1 when unreadable (safe fallback). */
 function slayerLevel(player) {
   try {
-    const Skill = require("../../../src/main/typescript/elvarg/game/model/Skill")
+    const Skill = require("../../../../src/main/typescript/elvarg/game/model/Skill")
       .Skill;
     const mgr = player.getSkillManager?.();
     if (!mgr || !Skill || typeof mgr.getCurrentLevel !== "function") return 1;
@@ -302,7 +302,7 @@ function createCitizenSlayerAction(spec, world) {
         if (bt && mt && chebyshev(bt.x, bt.y, mt.x, mt.y) > 3) {
           // Walk to the master.
           try {
-            approachObject(ctx, bot, world, master, { reason: "citizen_slayer" });
+            approachObject(bot, master, { reason: "citizen_slayer" });
           } catch {
             // approach failed — re-decide
           }
@@ -343,7 +343,7 @@ function createCitizenSlayerAction(spec, world) {
       if (bt && tt && chebyshev(bt.x, bt.y, tt.x, tt.y) > MAX_DIRECT_ATTACK_TILES) {
         // Too far: approach first.
         try {
-          approachObject(ctx, bot, world, target, { reason: "citizen_slayer" });
+          approachObject(bot, target, { reason: "citizen_slayer" });
         } catch {
           // approach failed — re-decide
         }

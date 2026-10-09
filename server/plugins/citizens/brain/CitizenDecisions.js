@@ -96,6 +96,7 @@ const ACT_FLETCH = "citizen_fletch";
 const ACT_RC = "citizen_rc";
 const ACT_AGILITY = "citizen_agility";
 const ACT_SLAYER = "citizen_slayer";
+const ACT_PKER = "citizen_pker";
 const ACT_HUNT = "citizen_hunt";
 const ACT_FARM = "citizen_farm";
 const ACT_THIEVE = "citizen_thieve";
@@ -158,6 +159,7 @@ const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
 const ACT_CHOP = "citizen_chop";
+const ACT_WILD_GATHER = "citizen_wild_gather";
 // Work activities — the ones sickness keeps citizens away from. Meal,
 // rest, bank, and social are NOT work: a sick citizen still eats, rests,
 // banks, and complains to friends about feeling awful.
@@ -172,6 +174,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_RC,
   ACT_AGILITY,
   ACT_SLAYER,
+  ACT_PKER,
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,
@@ -188,6 +191,7 @@ const WORK_ACTIVITIES = new Set([
 ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_STAGEGUILD, ACT_SPORTSGUILD, ACT_COOKGUILD, ACT_WEAVERGUILD, ACT_MUSICGUILD, ACT_ARTGUILD, ACT_LIBGUILD, ACT_OBSGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
   ACT_CHOP,
+  ACT_WILD_GATHER,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
 // re-decision. Short activities (meal/rest/bank) complete on their own.
@@ -2907,6 +2911,29 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_PKER: {
+      // PKing: hunt real players in the Wilderness for loot and glory.
+      // The action fail-fasts for ineligible citizens (temperament,
+      // combat level < 40, no food, over-risked inventory), so scoring
+      // only needs to keep it rare and temperament-shaped: aggressive
+      // citizens lean in hard, everyone else barely considers it.
+      // The hurt, exhausted, and weary never go — the wild is no place
+      // to be weak.
+      const pkerTraits = traitSet(personality);
+      let s = 8; // rare by default — most citizens never PK
+      if (pkerTraits.has("aggressive") || pkerTraits.has("brave")) s += 34;
+      if (pkerTraits.has("greedy")) s += 6; // loot motive
+      if (pkerTraits.has("honest") || pkerTraits.has("dutiful") || pkerTraits.has("devout")) s -= 8;
+      if (goalType === GOAL_BOSS_SLAYER) s += 10; // combat goal
+      else if (goalType === GOAL_RANK_UP) s += 6;
+      else if (goalType === GOAL_SAVE_GOLD) s += 6; // loot
+      if ((food ?? 0) < 3) return 4; // no supplies — action would refuse
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_HUNT: {
       // Hunter: lay bird snares and trap birds for Hunter XP and loot.
       // No snares anywhere, no hunting trip. Hunter is field work — the
@@ -4047,6 +4074,31 @@ case ACT_COMPETE: {
       if (freeSlots <= 2) s += 8; // full: bank hinge handles it
       return s;
     }
+    case ACT_WILD_GATHER: {
+      // Wilderness gathering: rich rocks and timber for the brave — the
+      // wild pays +25% XP and the brave take the PK risk for it. Cautious,
+      // nervous, and timid citizens never consider it; everyone else needs
+      // a brave-family trait or a bold/brash demeanor.
+      const traits = traitSet(personality);
+      if (traits.has("cautious") || traits.has("nervous") || traits.has("timid")) return 4;
+      const demeanor = String(personality?.demeanor ?? "");
+      const brave =
+        traits.has("brave") || traits.has("adventurous") ||
+        traits.has("reckless") || traits.has("daring") ||
+        demeanor.includes("bold") || demeanor.includes("brash");
+      if (!brave) return 4;
+      let s = 30;
+      if (goalType === GOAL_SAVE_GOLD) s += 16;
+      else if (goalType === GOAL_MASTER_TRADE) s += 10;
+      if (coins < 60) s += 14;
+      else if (coins < 250) s += 6;
+      if (freeSlots >= 20) s += 8; // empty-ish pack, room for a haul
+      if (ore < 5 && logs < 5) s += 6; // low on raw materials
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      return s;
+    }
     default:
       return 30; // unknown future activity: neutral, never breaks
   }
@@ -4343,6 +4395,7 @@ module.exports = {
   ACT_ROUTINE,
   ACT_MINE,
   ACT_CHOP,
+  ACT_WILD_GATHER,
   ACT_LIGHT_FIRE,
   ACT_SMELT,
   ACT_CRAFT,
@@ -4352,6 +4405,7 @@ module.exports = {
   ACT_RC,
   ACT_AGILITY,
   ACT_SLAYER,
+  ACT_PKER,
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,

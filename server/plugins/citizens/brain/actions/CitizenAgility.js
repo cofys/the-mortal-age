@@ -62,7 +62,7 @@ function agilityPlugin() {
 /** Agility level, 1 when unreadable (Gnome Stronghold only — safe fallback). */
 function agilityLevel(player) {
   try {
-    const Skill = require("../../../src/main/typescript/elvarg/game/model/Skill")
+    const Skill = require("../../../../src/main/typescript/elvarg/game/model/Skill")
       .Skill;
     const mgr = player.getSkillManager?.();
     if (!mgr || !Skill || typeof mgr.getCurrentLevel !== "function") return 1;

@@ -61,7 +61,7 @@ function craftingPlugin() {
 
 function bankApi() {
   try {
-    return require("../../../src/main/typescript/elvarg/game/model/container/impl/Bank")
+    return require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank")
       .Bank;
   } catch {
     return null;
@@ -71,7 +71,7 @@ function bankApi() {
 /** Crafting level, 1 when unreadable (opal-only — safe fallback). */
 function craftingLevel(player) {
   try {
-    const Skill = require("../../../src/main/typescript/elvarg/game/model/Skill")
+    const Skill = require("../../../../src/main/typescript/elvarg/game/model/Skill")
       .Skill;
     const mgr = player.getSkillManager?.();
     if (!mgr || !Skill || typeof mgr.getCurrentLevel !== "function") return 1;
