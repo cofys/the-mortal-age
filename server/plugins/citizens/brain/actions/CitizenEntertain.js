@@ -107,7 +107,7 @@ function createCitizenEntertainAction(spec, world) {
       if (!arrived && here && dist(here, tavern) > TAVERN_ARRIVE_RADIUS) {
         try {
           // Add a personal spot offset so citizens don't stack.
-          const spot = personalSpot(player, tavern, 3);
+          const spot = personalSpot(spec?.citizen?.username ?? "tavern", tavern.x, tavern.y, 3, 10);
           const tgt = spot ?? tavern;
           requestMovement(player, tgt.x, tgt.y, { z: tgt.z ?? 0 });
         } catch {

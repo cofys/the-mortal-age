@@ -197,7 +197,7 @@ function createCitizenResearchAction(player, director) {
         if (state.phase === "outbound") {
           state.target = labTileFor(player, Science);
           if (!state.target) return failSafe();
-          requestMovement(player, state.target);
+          requestMovement(player, state.target.x, state.target.y, { z: state.target.z ?? 0 });
           state.phase = "working";
           return "running";
         }

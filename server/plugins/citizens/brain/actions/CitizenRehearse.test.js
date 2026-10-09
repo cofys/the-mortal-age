@@ -30,7 +30,7 @@ require.cache[navPath] = {
   id: navPath, filename: navPath, loaded: true,
   exports: {
     // teleport on request: simulates the walk completing between ticks
-    requestMovement: (player, tile) => { player.__movedTo = tile; player.position = { ...tile }; },
+    requestMovement: (player, targetX, targetY, options = {}) => { const t = { x: targetX, y: targetY, z: options?.z ?? 0 }; player.__movedTo = t; player.position = { ...t }; },
     clearMovementRequest: () => {},
   },
 };

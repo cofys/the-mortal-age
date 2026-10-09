@@ -28,7 +28,7 @@ stubModule("../../../bots/brain/ActionState", {
   playerState: () => ({ personality: { competitive: 0.9 } }),
 });
 stubModule("../../../bots/behaviours/navigation/BotNavigation", {
-  requestMovement: (player, tile) => movementCalls.push({ player, tile }),
+  requestMovement: (player, targetX, targetY, options) => movementCalls.push({ player, x: targetX, y: targetY, options }),
   clearMovementRequest: () => {},
 });
 stubModule("../../lib/humanizer", {

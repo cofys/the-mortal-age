@@ -58,7 +58,7 @@ function atTile(player, tile, radius = ARRIVE_RADIUS) {
 
 function walkTo(player, tile) {
   try {
-    requestMovement(player, { x: tile.x, y: tile.y, z: tile.z ?? 0 });
+    requestMovement(player, tile.x, tile.y, { z: tile.z ?? 0 });
   } catch {}
 }
 

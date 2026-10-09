@@ -192,8 +192,9 @@ function createCitizenTeamPlayAction(spec, world) {
       const here = playerTile(player);
       if (!arrived && here && dist(here, venue) > VENUE_ARRIVE_RADIUS) {
         try {
-          const spot = personalSpot(player, venue, 3);
-          requestMovement(player, spot ?? venue);
+          const spot = personalSpot(name, venue.x, venue.y, 3, 10);
+          const tgt = spot ?? venue;
+          requestMovement(player, tgt.x, tgt.y, { z: tgt.z ?? 0 });
         } catch { /* movement is best-effort */ }
         return "running";
       }

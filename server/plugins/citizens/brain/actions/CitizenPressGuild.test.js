@@ -28,7 +28,7 @@ const navPath = path.resolve(__dirname, "../../../bots/behaviours/navigation/Bot
 require.cache[navPath] = {
   id: navPath, filename: navPath, loaded: true,
   exports: {
-    requestMovement: (player, tile) => { player.__movedTo = tile; },
+    requestMovement: (player, targetX, targetY, options = {}) => { player.__movedTo = { x: targetX, y: targetY, z: options?.z ?? 0 }; },
     clearMovementRequest: () => {},
   },
 };

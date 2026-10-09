@@ -98,7 +98,7 @@ function wildernessTile(player, rng) {
   try {
     const home = siteTile(player, "market") ?? { x: 3200, y: 3200, z: 0 };
     const off = WILDERNESS_OFFSETS[Math.floor(rng() * WILDERNESS_OFFSETS.length)];
-    return personalSpot(player, home.x + off.dx, home.y + off.dy, home.z ?? 0);
+    return personalSpot(player.getUsername?.() ?? "unknown", home.x + off.dx, home.y + off.dy, 2, 8);
   } catch {
     return { x: 3240, y: 3230, z: 0 };
   }

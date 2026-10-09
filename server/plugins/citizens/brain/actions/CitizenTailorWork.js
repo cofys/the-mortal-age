@@ -119,7 +119,9 @@ function createCitizenTailorWorkAction(spec, world) {
           if (!st.workTile) return done(player, st, "success"); // no workshop — honest
           if (!st.homeTile) {
             try {
-              st.homeTile = personalSpot(player, st.rng);
+            st.homeTile = st.workTile
+              ? personalSpot(player.getUsername?.() ?? "unknown", st.workTile.x, st.workTile.y, 2, 8)
+              : null;
             } catch {
               st.homeTile = null;
             }
@@ -128,7 +130,7 @@ function createCitizenTailorWorkAction(spec, world) {
             st.phase = "sewing";
             break;
           }
-          requestMovement(player, st.workTile);
+          requestMovement(player, st.workTile.x, st.workTile.y, { z: st.workTile.z ?? 0 });
           return "running";
         }
         case "sewing": {
@@ -173,7 +175,7 @@ function createCitizenTailorWorkAction(spec, world) {
         }
         case "returning": {
           if (st.homeTile && !atTile(player, st.homeTile, ARRIVE_RADIUS)) {
-            requestMovement(player, st.homeTile);
+            requestMovement(player, st.homeTile.x, st.homeTile.y, { z: st.homeTile.z ?? 0 });
             return "running";
           }
           return done(player, st, "success");

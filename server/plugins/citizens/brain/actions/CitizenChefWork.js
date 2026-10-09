@@ -251,7 +251,14 @@ function createCitizenChefWorkAction(spec, world) {
         case "outbound": {
           if (!st.workTile) {
             st.workTile = workTileFor(player);
-            st.homeTile = personalSpot(player);
+            try {
+              // Personal loiter spot near the venue (market) so citizens don't stack.
+              st.homeTile = st.workTile
+                ? personalSpot(player.getUsername?.() ?? "unknown", st.workTile.x, st.workTile.y, 2, 8)
+                : null;
+            } catch {
+              st.homeTile = null;
+            }
           }
           if (!st.workTile) return "failed";
           if (isNear(player, st.workTile, ARRIVE_RADIUS)) {

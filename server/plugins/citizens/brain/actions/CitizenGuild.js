@@ -140,8 +140,9 @@ function createCitizenGuildAction(spec, world) {
       const here = playerTile(player);
       if (!arrived && here && dist(here, hall) > HALL_ARRIVE_RADIUS) {
         try {
-          const spot = personalSpot(player, hall, 3);
-          requestMovement(player, spot ?? hall);
+          const spot = personalSpot(name, hall.x, hall.y, 3, 10);
+          const tgt = spot ?? hall;
+          requestMovement(player, tgt.x, tgt.y, { z: tgt.z ?? 0 });
         } catch {
           // movement is best-effort
         }

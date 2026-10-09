@@ -138,7 +138,10 @@ function createCitizenCelebrateAction(spec, world) {
         if (!st.workTile) st.workTile = workTileFor(player);
         if (!st.homeTile) {
           try {
-            st.homeTile = personalSpot(player);
+            // Personal loiter spot near the venue (market) so citizens don't stack.
+            st.homeTile = st.workTile
+              ? personalSpot(player.getUsername?.() ?? "unknown", st.workTile.x, st.workTile.y, 2, 8)
+              : null;
           } catch { st.homeTile = null; }
         }
 

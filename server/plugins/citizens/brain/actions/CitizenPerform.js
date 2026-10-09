@@ -94,11 +94,14 @@ function createCitizenPerformAction(spec, world) {
       if (!state.giveUpAt) {
         state.giveUpAt = nowMs + GIVE_UP_MS;
         try {
-          state.homeTile = personalSpot(player) ?? null;
+          state.hallTile = hallTileFor(MD, player) ?? siteTile(player, "market");
+          // Personal loiter spot near the venue so performers don't stack.
+          state.homeTile = state.hallTile
+            ? personalSpot(username, state.hallTile.x, state.hallTile.y, 2, 8)
+            : null;
         } catch {
           state.homeTile = null;
         }
-        state.hallTile = hallTileFor(MD, player) ?? siteTile(player, "market");
       }
       if (nowMs > state.giveUpAt || state.roundsDone >= WORK_ROUNDS) {
         state.phase = "returning";
@@ -115,7 +118,7 @@ function createCitizenPerformAction(spec, world) {
               state.phase = "performing";
               break;
             }
-            requestMovement(player, state.hallTile);
+            requestMovement(player, state.hallTile.x, state.hallTile.y, { z: state.hallTile.z ?? 0 });
           } catch {
             state.phase = "performing";
           }
@@ -138,7 +141,7 @@ function createCitizenPerformAction(spec, world) {
               const dx = Math.abs((pos?.x ?? 0) - state.homeTile.x);
               const dy = Math.abs((pos?.y ?? 0) - state.homeTile.y);
               if (dx > ARRIVE_RADIUS || dy > ARRIVE_RADIUS) {
-                requestMovement(player, state.homeTile);
+                requestMovement(player, state.homeTile.x, state.homeTile.y, { z: state.homeTile.z ?? 0 });
                 return "running";
               }
             }
