@@ -326,6 +326,27 @@
           "type": "citizenLightFire"
         }
       ]
+    },
+    {
+      "id": "citizen_smelt",
+      "mode": "citizen_smelt",
+      "repeat": false,
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenSmelt"
+        }
+      ]
     }
   ]
 }
