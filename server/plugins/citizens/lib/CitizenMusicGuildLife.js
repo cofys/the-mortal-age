@@ -65,18 +65,19 @@ function usernameOf(record) {
 
 /**
  * Roster records are plain objects with a real kingdomId field — they are
- * NOT player entities, so CitizenSites.kingdomIdOf(record) would silently
- * return KINGDOM_IDS[0] (it reads player.getAttribute). Prefer the real
- * record field; only fall back to the sites seam for actual player entities.
+ * NOT player entities, so CitizenSites.kingdomIdOf(record) silently returns
+ * KINGDOM_IDS[0] for them (it reads player.getAttribute, which plain records
+ * don't have; live entities whose attribute is unset hit the same trap).
+ * Read the record's real field FIRST; the sites seam is only the
+ * live-entity fallback (verified observatory pattern).
  */
 function kingdomIdOf(record) {
-  if (record && typeof record.getAttribute === "function") {
-    try {
-      const S = sitesApi();
-      return (S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(record) : null) || record.kingdomId || null;
-    } catch { return record.kingdomId || null; }
+  try {
+    const S = sitesApi();
+    return record?.kingdomId || (S && typeof S.kingdomIdOf === "function" ? S.kingdomIdOf(record) : null) || null;
+  } catch {
+    return record?.kingdomId || null;
   }
-  return record?.kingdomId || null;
 }
 
 function hasItem(bot, itemId, amount) {
