@@ -19,6 +19,7 @@ import { OriginOverlay } from "./plugins/origins/OriginOverlay";
 import { QuestOverlay } from "./plugins/quests/QuestOverlay";
 import { WarTableOverlay } from "./plugins/wartable/WarTableOverlay";
 import { MyKingdomOverlay } from "./plugins/mykingdom/MyKingdomOverlay";
+import { OfficeOverlay } from "./plugins/office/OfficeOverlay";
 import { ExamineOverlay } from "./plugins/examine/ExamineOverlay";
 import { ShopOverlay } from "./plugins/shop/ShopOverlay";
 import { NewspaperOverlay } from "./plugins/newspaper/NewspaperOverlay";
@@ -392,6 +393,7 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                         <WarTableOverlay osrsClient={osrsClient} />
 
                         <MyKingdomOverlay osrsClient={osrsClient} />
+                        <OfficeOverlay osrsClient={osrsClient} />
 
                         <ExamineOverlay osrsClient={osrsClient} />
 

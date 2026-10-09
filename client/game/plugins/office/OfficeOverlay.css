@@ -1,0 +1,300 @@
+/* The Mortal Age — office-holder dashboard overlay.
+ * Heraldic template: tall panel, ornate gold frame, inset panels.
+ * One tab per held office; buttons for every seal of office. */
+
+.tma-office-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(11, 8, 5, 0.72), rgba(11, 8, 5, 0.9));
+    animation: tma-office-fadein 0.35s ease-out;
+}
+
+@keyframes tma-office-fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tma-office-panel {
+    position: relative;
+    width: min(560px, 94vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+    border: 1px solid #6b5a3a;
+    outline: 3px solid #14100b;
+    box-shadow:
+        0 0 0 4px #6b5a3a,
+        0 0 40px rgba(201, 162, 39, 0.15),
+        0 20px 60px rgba(0, 0, 0, 0.8);
+    padding: 30px 24px 14px;
+    animation: tma-office-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes tma-office-rise {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Corner brackets — L-shaped bright gold */
+.tma-office-panel::before,
+.tma-office-panel::after {
+    content: "";
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid #c9a227;
+    pointer-events: none;
+}
+.tma-office-panel::before {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+}
+.tma-office-panel::after {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+}
+
+.tma-office-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    background: #241c13;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    color: #9a8f7d;
+    font-size: 15px;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.tma-office-close:hover {
+    color: #d9b45b;
+    border-color: #6b5a3a;
+}
+
+.tma-office-kicker {
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: #9a8f7d;
+    text-align: center;
+    margin: 0 0 6px;
+}
+
+.tma-office-name {
+    font-size: 24px;
+    font-weight: 700;
+    color: #d9b45b;
+    text-align: center;
+    margin: 0 0 10px;
+}
+
+.tma-office-header-rule {
+    height: 1px;
+    margin: 0 40px 14px;
+    background: linear-gradient(90deg, transparent, #c9a227 50%, transparent);
+}
+
+.tma-office-result {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    border-radius: 2px;
+    text-align: center;
+}
+.tma-office-result.ok {
+    background: rgba(120, 160, 90, 0.12);
+    border: 1px solid rgba(120, 160, 90, 0.4);
+    color: #b8d49a;
+}
+.tma-office-result.fail {
+    background: rgba(180, 90, 70, 0.12);
+    border: 1px solid rgba(180, 90, 70, 0.4);
+    color: #d49a8a;
+}
+
+.tma-office-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.tma-office-tab {
+    background: #241c13;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    color: #9a8f7d;
+    font-size: 13px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.tma-office-tab:hover {
+    color: #d9b45b;
+    border-color: #6b5a3a;
+}
+.tma-office-tab.active {
+    background: #2e2417;
+    border-color: #c9a227;
+    color: #d9b45b;
+}
+
+.tma-office-scroll {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: 4px;
+}
+.tma-office-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+.tma-office-scroll::-webkit-scrollbar-track {
+    background: #14100b;
+}
+.tma-office-scroll::-webkit-scrollbar-thumb {
+    background: #3a2f22;
+    border-radius: 4px;
+}
+.tma-office-scroll::-webkit-scrollbar-thumb:hover {
+    background: #6b5a3a;
+}
+
+.tma-office-section {
+    margin-bottom: 14px;
+}
+
+.tma-office-section-title {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #d9b45b;
+    margin: 0 0 8px;
+}
+
+.tma-office-inset {
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 2px;
+    padding: 10px 12px;
+    color: #e8ded0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.tma-office-inset p {
+    margin: 0 0 6px;
+}
+.tma-office-inset p:last-child {
+    margin-bottom: 0;
+}
+
+.tma-office-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(58, 47, 34, 0.5);
+}
+.tma-office-row:last-child {
+    border-bottom: none;
+}
+
+.tma-office-row-label {
+    color: #9a8f7d;
+    font-size: 12px;
+}
+
+.tma-office-row-value {
+    color: #e8ded0;
+    font-size: 13px;
+    text-align: right;
+}
+.tma-office-row-value.gold {
+    color: #d9b45b;
+}
+
+.tma-office-btn {
+    display: block;
+    width: 100%;
+    margin: 6px 0;
+    background: #241c13;
+    border: 1px solid #6b5a3a;
+    border-radius: 2px;
+    color: #d9b45b;
+    font-size: 13px;
+    padding: 9px 12px;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.tma-office-btn:hover:not(:disabled) {
+    background: #2e2417;
+    border-color: #c9a227;
+}
+.tma-office-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+.tma-office-btn.danger {
+    color: #d49a8a;
+    border-color: #5a3a30;
+}
+.tma-office-btn.danger:hover:not(:disabled) {
+    border-color: #a06050;
+    background: #2a1d17;
+}
+
+.tma-office-btn-row {
+    display: flex;
+    gap: 6px;
+}
+.tma-office-btn-row .tma-office-btn {
+    flex: 1;
+}
+
+.tma-office-petition {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(58, 47, 34, 0.5);
+}
+.tma-office-petition:last-child {
+    border-bottom: none;
+}
+.tma-office-petition-text {
+    color: #e8ded0;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+.tma-office-petition-terms {
+    color: #9a8f7d;
+    font-size: 12px;
+}
+
+.tma-office-empty {
+    text-align: center;
+    color: #9a8f7d;
+    font-size: 13px;
+    padding: 24px 12px;
+    line-height: 1.6;
+}
+
+.tma-office-footnote {
+    font-size: 12px;
+    font-style: italic;
+    color: #9a8f7d;
+    text-align: center;
+    margin: 12px 0 0;
+}

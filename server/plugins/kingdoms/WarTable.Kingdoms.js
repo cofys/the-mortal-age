@@ -271,6 +271,11 @@ function openTable(player) {
     // The React war table overlay renders from this flag (see WarTableApi).
     // The engine widget stays registered but no longer opens.
     player.setAttribute("wartable:open", "1");
+    // Office holders also get the dashboard overlay (see OfficeDashboardApi):
+    // buttons for every seal, instead of chatbox prompts.
+    if (OfficeTools.officesHeldBy(player).length > 0) {
+      player.setAttribute("office:open", "1");
+    }
     // The seals: a holder studies the table and may take up their office.
     // No seals, no prompt — the table is only a map to other eyes.
     OfficeTools.offerConsoles(player);
