@@ -5,7 +5,9 @@
  * Plain node, no jest. Run: node server/plugins/citizens/lib/CitizenGalleriesLife.test.js
  *
  * The Life tick's engine reads (roster, CitizenSites, CitizenSayPublic) are
- * stubbed in the require cache. CitizenArt is real (temp save path).
+ * stubbed in the require cache. The global citizen journal is stubbed with a
+ * fresh in-memory instance (never touches data/saves). CitizenArt is real
+ * (temp save path).
  */
 
 const assert = require("assert");
@@ -40,6 +42,24 @@ require.cache[perceptionPath] = {
   exports: { getLocalPlayers: () => [] },
 };
 
+// The gallery tick journals to the GLOBAL citizen journal (canonical path:
+// getJournal().log(name, "galleries", text, { data })), not to the director.
+// Stub it with a fresh in-memory instance — never touches data/saves.
+const journalPath = path.resolve(__dirname, "./CitizenJournal.js");
+const RealJournalModule = require(journalPath); // real class, loaded pre-stub
+const stubJournal = new RealJournalModule.CitizenJournal();
+stubJournal.resetForTests(); // in-memory only, _savePath = null
+const journalStubExports = {
+  CitizenJournal: RealJournalModule.CitizenJournal,
+  getJournal: () => stubJournal,
+  initCitizenJournal: () => stubJournal,
+  MAX_EVENTS_PER_CITIZEN: RealJournalModule.MAX_EVENTS_PER_CITIZEN,
+};
+require.cache[journalPath] = {
+  id: journalPath, filename: journalPath, loaded: true,
+  exports: journalStubExports,
+};
+
 const Art = require("./CitizenArt");
 const Galleries = require("./CitizenGalleries");
 const Life = require("./CitizenGalleriesLife");
@@ -60,6 +80,7 @@ function test(name, fn) {
     Galleries.resetForTests();
     Art.resetForTests();
     Life.resetForTests();
+    stubJournal.resetForTests();
     saidPublic.length = 0;
     fn();
     passed++;
@@ -151,7 +172,10 @@ test("closes ripe auctions and journals the result", () => {
   Life.tickGalleriesLife(director, t0 + 4 * 24 * 3600 * 1000);
   const closed = Galleries.openAuctions("misthalin");
   assert.strictEqual(closed.length, 0);
-  assert.ok(director.journalCalls.some(([t]) => t === "galleries"));
+  // The tick journals to the global citizen journal (canonical path), not the
+  // director — the director mock's journalCalls can never see it.
+  const sellerEvents = journalStubExports.getJournal().recent("Seller");
+  assert.ok(sellerEvents.some((e) => e.kind === "galleries"));
 });
 
 test("accrues stipends into gallery budgets", () => {
