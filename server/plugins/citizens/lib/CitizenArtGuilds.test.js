@@ -39,6 +39,16 @@ function installStubs(opts = {}) {
     },
     "./CitizenBanking": {
       creditAccount: (u, amt) => { (opts.credits = opts.credits || []).push([u, amt]); return true; },
+      // Real contract (0645 audit): accountFor(username) -> live account
+      // record; markDirty() -> persist. The owed-bounty retry credits
+      // through this, never through the dead creditAccount above.
+      accountFor: (u) => {
+        const key = String(u || "").toLowerCase().trim();
+        (opts.bankAccounts = opts.bankAccounts || {})[key] =
+          opts.bankAccounts[key] || { balance: 0 };
+        return opts.bankAccounts[key];
+      },
+      markDirty: () => { opts.bankDirty = true; },
     },
     "./CitizenBonds": { normalizeName: (s) => String(s || "").toLowerCase().trim() },
   };
@@ -219,6 +229,71 @@ test("certifyArtwork owes honestly when the treasury is broke", () => {
     const retry = Guilds.retryOwedBounties("varrock");
     assert.ok(retry.paid >= Guilds.CERT_BOUNTY.A);
   } finally { restore(); }
+});
+
+test("retryOwedBounties credits the owed bounty to the author's real bank account", () => {
+  // FAIL-before: the retry deducted the treasury and marked the bounty paid,
+  // but the coins never reached the author.
+  const opts = {
+    careers: { "painty pete": "artist" },
+    artworks: {
+      a1: { id: "a1", title: "Sunset Over Varrock", artist: "painty pete", quality: 90, medium: "painting" },
+    },
+    artistWorks: { "painty pete": ["a1"] },
+  };
+  const restore = installStubs(opts);
+  try {
+    Guilds.joinGuild("Painty Pete", "varrock");
+    const r = Guilds.certifyArtwork("varrock", "painty pete", "a1");
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.bountyPaid, 0);
+    assert.strictEqual(r.bountyOwed, Guilds.CERT_BOUNTY.A);
+    Guilds.creditTreasury("varrock", 1000);
+    const before = ((opts.bankAccounts || {})["painty pete"] || {}).balance || 0;
+    const retry = Guilds.retryOwedBounties("varrock");
+    assert.ok(retry.paid >= Guilds.CERT_BOUNTY.A, `retry.paid=${retry.paid}`);
+    const after = ((opts.bankAccounts || {})["painty pete"] || {}).balance || 0;
+    assert.strictEqual(after, before + Guilds.CERT_BOUNTY.A,
+      "the owed bounty must actually reach the author's bank account");
+    assert.strictEqual(Guilds.sealFor(r.certId).bountyOwed, 0);
+  } finally { restore(); }
+});
+
+test("retryOwedBounties keeps the bounty owed when banking is unreachable", () => {
+  // Banking down: the retry must NOT deduct the treasury and mark paid —
+  // the bounty stays owed so a later tick can deliver it.
+  const opts = {
+    careers: { "painty pete": "artist" },
+    artworks: {
+      a1: { id: "a1", title: "Sunset Over Varrock", artist: "painty pete", quality: 90, medium: "painting" },
+    },
+    artistWorks: { "painty pete": ["a1"] },
+    noBanking: true,
+  };
+  const inner = installStubs(opts);
+  // Simulate banking being unavailable: accountFor throws.
+  const Module2 = require("module");
+  const prev = Module2.prototype.require;
+  Module2.prototype.require = function (id) {
+    if (id === "./CitizenBanking") throw new Error("banking down");
+    return prev.apply(this, arguments);
+  };
+  try {
+    Guilds.joinGuild("Painty Pete", "varrock");
+    const r = Guilds.certifyArtwork("varrock", "painty pete", "a1");
+    Guilds.creditTreasury("varrock", 1000);
+    const treasBefore = Guilds.guildTreasuryFor("varrock").treasury;
+    const retry = Guilds.retryOwedBounties("varrock");
+    assert.strictEqual(retry.paid, 0, "nothing paid when banking is down");
+    const cert = Guilds.sealFor(r.certId);
+    assert.strictEqual(cert.bountyOwed, Guilds.CERT_BOUNTY.A, "bounty stays owed");
+    assert.strictEqual(cert.bountyPaid, 0);
+    assert.strictEqual(Guilds.guildTreasuryFor("varrock").treasury, treasBefore,
+      "treasury untouched — no coins invented or destroyed");
+  } finally {
+    Module2.prototype.require = prev;
+    inner();
+  }
 });
 
 // === Forgery tribunal ===

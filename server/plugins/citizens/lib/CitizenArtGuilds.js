@@ -36,7 +36,10 @@
  *     >=85=A (masterpiece-grade), >=60=B, else C. The guild pays a REAL
  *     bounty from its treasury (C:30 / B:60 / A:120); the patron fund backs
  *     bounties when the treasury runs dry; when both are broke the bounty
- *     is owed honestly, never invented.
+ *     is owed honestly, never invented. The bounty is DELIVERED: to the
+ *     author's inventory on the player path, to their bank account by the
+ *     life-tick retry when owed. A failed delivery is re-recorded as owed,
+ *     never claimed as paid.
  *   - Forgery tribunal: the one verifiable art crime — a forged artwork:
  *     a certified artwork whose normalized title duplicates an EARLIER
  *     certified artwork (by certifiedMs) by a DIFFERENT artist.
@@ -396,7 +399,13 @@ function certifyArtwork(kingdomId, username, artworkId) {
 
   // Pay the bounty from the treasury; the patron fund backs it; when
   // both are broke the bounty is owed honestly, never invented.
+  // NOTE: this only deducts the bounty from the guild's reserves — the
+  // actual delivery happens in the Events layer (player inventory) or the
+  // life-tick retry (author's bank account). The per-pool split is returned
+  // so a failed delivery can be parked back exactly, never invented.
   const bounty = CERT_BOUNTY[grade];
+  const beforeTreasury = g.treasury;
+  const beforeFund = g.patronFund;
   let paid = 0;
   let owed = 0;
   if (g.treasury >= bounty) {
@@ -429,7 +438,34 @@ function certifyArtwork(kingdomId, username, artworkId) {
   // Update prestige from real counts.
   updatePrestige(kingdomId);
   touch();
-  return { ok: true, certId, grade, fee, bountyPaid: paid, bountyOwed: owed };
+  return {
+    ok: true, certId, grade, fee, bountyPaid: paid, bountyOwed: owed,
+    bountyPaidFromTreasury: beforeTreasury - g.treasury,
+    bountyPaidFromFund: beforeFund - g.patronFund,
+  };
+}
+
+function refundCertBounty(certId, amount, fromTreasury, fromFund) {
+  // Park a deducted-but-never-delivered bounty back in the guild's
+  // reserves and re-record it as owed. Used when the player-facing coin
+  // credit failed: the treasury was already deducted, so without this the
+  // coins would vanish while the record claims they were paid. Restores
+  // the exact per-pool split; never invents or destroys coins.
+  const st = load();
+  const cert = st.certifications[certId];
+  if (!cert) return { ok: false, reason: "no-such-certification" };
+  amount = Math.floor(Number(amount) || 0);
+  if (!(amount > 0) || cert.bountyPaid < amount) return { ok: false, reason: "bad-amount" };
+  const g = ensureGuild(cert.kingdomId);
+  let t = Math.max(0, Math.floor(Number(fromTreasury) || 0));
+  let f = Math.max(0, Math.floor(Number(fromFund) || 0));
+  if (t + f > amount) { t = amount; f = 0; } // clamp: never restore more than deducted
+  g.treasury += t + Math.max(0, amount - t - f); // any un-split remainder back to treasury
+  g.patronFund += f;
+  cert.bountyPaid -= amount;
+  cert.bountyOwed += amount;
+  touch();
+  return { ok: true, refunded: amount, bountyPaid: cert.bountyPaid, bountyOwed: cert.bountyOwed };
 }
 
 function sealFor(certId) {
@@ -459,8 +495,28 @@ function retryOwedBounties(kingdomId) {
     const pay = Math.min(cert.bountyOwed, available);
     // Drain treasury first, then the fund.
     const fromTreasury = Math.min(pay, g.treasury);
+    const fromFund = pay - fromTreasury;
     g.treasury -= fromTreasury;
-    g.patronFund -= (pay - fromTreasury);
+    g.patronFund -= fromFund;
+    // Credit the author's REAL bank account (honest offline delivery —
+    // same pattern as the librarian payBounty fix). If banking is
+    // unreachable, restore the reserves and keep the bounty owed: never
+    // mark paid what was never delivered, never invent coins.
+    let credited = false;
+    try {
+      const B = bankingApi();
+      const acct = B && typeof B.accountFor === "function" ? B.accountFor(cert.artist) : null;
+      if (acct) {
+        acct.balance = (Number(acct.balance) || 0) + pay;
+        if (typeof B.markDirty === "function") B.markDirty();
+        credited = true;
+      }
+    } catch { /* banking is best-effort */ }
+    if (!credited) {
+      g.treasury += fromTreasury;
+      g.patronFund += fromFund;
+      break; // banking is down globally; a later tick retries
+    }
     cert.bountyOwed -= pay;
     cert.bountyPaid += pay;
     paid += pay;
@@ -861,6 +917,7 @@ module.exports = {
   // certification
   normalizeTitle,
   certifyArtwork,
+  refundCertBounty,
   sealFor,
   gradeFor,
   retryOwedBounties,

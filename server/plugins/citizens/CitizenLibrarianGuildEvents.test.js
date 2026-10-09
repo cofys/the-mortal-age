@@ -165,8 +165,61 @@ test("certify grades a real book and pays the bounty", () => {
   onLibrarianGuildCommand(player, "certify b1");
   assert.ok(player._messages[1].includes("Grade A"), `got: ${player._messages[1]}`);
   assert.ok(player._messages[1].includes("Bounty paid"));
-  // Fee was taken.
-  assert.strictEqual(coinsRef.coins, 1000 - Guilds.CERT_FEE);
+  // Fee was taken and the bounty actually landed in the player's inventory.
+  assert.strictEqual(coinsRef.coins, 1000 - Guilds.CERT_FEE + Guilds.CERT_BOUNTY.A);
+});
+
+test("certify delivers the bounty into the player's inventory", () => {
+  // FAIL-before: the guild deducted the bounty from its treasury and the
+  // message said "Bounty paid", but the player never received the coins.
+  careers = { "bookish berta": "librarian" };
+  books = {
+    b1: { id: "b1", title: "Histories", author: "bookish berta", subject: "history", kingdomId: "varrock", quality: 9 },
+  };
+  const player = makePlayer("Bookish Berta");
+  onLibrarianGuildCommand(player, "join");
+  Guilds.creditTreasury("varrock", 1000);
+  onLibrarianGuildCommand(player, "certify b1");
+  const msg = player._messages[1];
+  assert.ok(msg.includes("Bounty paid: 120 coins."), `got: ${msg}`);
+  assert.strictEqual(coinsRef.coins, 1000 - Guilds.CERT_FEE + Guilds.CERT_BOUNTY.A,
+    "the bounty must actually land in the player's inventory");
+});
+
+test("certify records the bounty as owed when the coin credit fails", () => {
+  // A player whose inventory credit silently fails: the command must not
+  // claim payment, and the bounty must be re-recorded as owed — never
+  // invented, never destroyed.
+  careers = { "bookish berta": "librarian" };
+  books = {
+    b1: { id: "b1", title: "Histories", author: "bookish berta", subject: "history", kingdomId: "varrock", quality: 9 },
+  };
+  const messages = [];
+  const broken = {
+    username: "Bookish Berta",
+    getUsername: () => "Bookish Berta",
+    isRealPlayer: () => true,
+    getInventory: () => ({
+      getAmount: (id) => (id === 995 ? coinsRef.coins : 0),
+      adds: (id, amt) => { /* broken credit: the coins never arrive */ },
+      deleteNumber: (id, amt) => { if (id === 995) coinsRef.coins -= amt; },
+    }),
+    sendMessage: (t) => messages.push(t),
+  };
+  onLibrarianGuildCommand(broken, "join");
+  Guilds.creditTreasury("varrock", 1000);
+  onLibrarianGuildCommand(broken, "certify b1");
+  assert.ok(messages.some((m) => m.includes("could not be delivered")),
+    `expected honest failure message, got: ${messages.join(" | ")}`);
+  assert.ok(!messages.some((m) => m.includes("Bounty paid:")),
+    "must not claim the bounty was paid");
+  const certs = Object.values(Guilds.load().certifications);
+  assert.strictEqual(certs.length, 1);
+  assert.strictEqual(certs[0].bountyPaid, 0, "no bounty claimed as paid");
+  assert.strictEqual(certs[0].bountyOwed, Guilds.CERT_BOUNTY.A, "bounty re-recorded as owed");
+  const treas = Guilds.guildTreasuryFor("varrock");
+  assert.strictEqual(treas.treasury, 1000, "treasury restored — no coins invented or destroyed");
+  assert.strictEqual(treas.scriptoriumFund, 0);
 });
 
 test("certify refunds the fee on failure", () => {

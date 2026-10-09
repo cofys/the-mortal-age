@@ -177,6 +177,31 @@ test("bounty is owed honestly when the treasury is broke", () => {
   } finally { restore(); }
 });
 
+test("retryOwedBounties credits the owed bounty to the author's real bank account", () => {
+  // FAIL-before: the retry deducted the treasury and marked the bounty paid,
+  // but the coins never reached the author's bank account.
+  const opts = {
+    careers: { alice: "librarian" },
+    books: { "book-1": { id: "book-1", title: "Great Work", subject: "lore", author: "alice", kingdomId: "misthalin", quality: 9 } },
+  };
+  const restore = installStubs(opts);
+  try {
+    Guilds.joinGuild("Alice", "misthalin");
+    const r = Guilds.certifyBook("misthalin", "Alice", "book-1");
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.bountyPaid, 0);
+    assert.strictEqual(r.bountyOwed, Guilds.CERT_BOUNTY.A);
+    Guilds.creditTreasury("misthalin", 120);
+    const before = ((opts.bankAccounts || {}).alice || {}).balance || 0;
+    const retry = Guilds.retryOwedBounties("misthalin");
+    assert.strictEqual(retry.paid, 120);
+    const after = ((opts.bankAccounts || {}).alice || {}).balance || 0;
+    assert.strictEqual(after, before + Guilds.CERT_BOUNTY.A,
+      "the owed bounty must actually reach the author's bank account");
+    assert.strictEqual(Guilds.sealFor(r.certId).bountyOwed, 0);
+  } finally { restore(); }
+});
+
 // --- Plagiarism tribunal ---
 
 test("plagiarism scan finds normalized-title duplicates by a different author", () => {

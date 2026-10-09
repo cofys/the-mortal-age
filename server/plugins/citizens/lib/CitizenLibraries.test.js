@@ -179,7 +179,7 @@ test("returnBook charges late fee when overdue", () => {
   const author = fakePlayer("Nora", { papyrus: 2 });
   const book = Lib.writeBook(author, "astronomy", "morytania", 7000).book;
   const borrower = fakePlayer("Owen", { coins: 500 });
-  const loan = Lib.borrowBook(borrower, book.id, 7001);
+  const loan = Lib.borrowBook(borrower, book.id, 7001).loan;
   const tenDaysLater = 7001 + 10 * 24 * 3600 * 1000;
   const res = Lib.returnBook(borrower, loan.id, tenDaysLater);
   assert.ok(res.ok);

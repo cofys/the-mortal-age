@@ -37,6 +37,18 @@ function installStubs(opts = {}) {
     "./CitizenReputation": {
       awardDeed: () => {},
     },
+    "./CitizenBanking": {
+      // Real contract (0645 audit): accountFor(username) -> live account
+      // record; markDirty() -> persist. The owed-bounty retry credits
+      // through this.
+      accountFor: (u) => {
+        const key = String(u || "").toLowerCase().trim();
+        (opts.bankAccounts = opts.bankAccounts || {})[key] =
+          opts.bankAccounts[key] || { balance: 0 };
+        return opts.bankAccounts[key];
+      },
+      markDirty: () => { opts.bankDirty = true; },
+    },
     "./CitizenBonds": { normalizeName: (s) => String(s || "").toLowerCase().trim() },
   };
   Module.prototype.require = function (id) {
@@ -210,6 +222,31 @@ test("retryOwedBounties pays when the treasury refills", () => {
     Guilds.contributeToFund("varrock", 200);
     const retry = Guilds.retryOwedBounties("varrock");
     assert.ok(retry.paid >= 120);
+  } finally { restore(); }
+});
+
+test("retryOwedBounties credits the owed bounty to the musician's real bank account", () => {
+  // FAIL-before: the retry deducted the treasury and marked the bounty paid,
+  // but the coins never reached the musician's bank account.
+  const concerts = {
+    "c1": { performers: ["Lute Larry"], quality: 9, title: "Tune" },
+  };
+  const opts = { professionals: ["lute larry"], concerts };
+  const restore = installStubs(opts);
+  try {
+    Guilds.joinGuild("Lute Larry", "varrock");
+    const r = Guilds.certifyPerformance("varrock", "Lute Larry", "c1", "Tune");
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.bountyPaid, 0);
+    assert.strictEqual(r.bountyOwed, 120);
+    Guilds.contributeToFund("varrock", 200);
+    const before = ((opts.bankAccounts || {})["lute larry"] || {}).balance || 0;
+    const retry = Guilds.retryOwedBounties("varrock");
+    assert.ok(retry.paid >= 120, `retry.paid=${retry.paid}`);
+    const after = ((opts.bankAccounts || {})["lute larry"] || {}).balance || 0;
+    assert.strictEqual(after, before + 120,
+      "the owed bounty must actually reach the musician's bank account");
+    assert.strictEqual(Guilds.sealFor(r.certId).bountyOwed, 0);
   } finally { restore(); }
 });
 

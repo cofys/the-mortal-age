@@ -174,9 +174,30 @@ function onArtGuildCommand(player, args) {
         say(player, `Certification failed: ${res.reason}.`);
         return;
       }
-      say(player, `Artwork certified! Grade ${res.grade}. ` +
-        (res.bountyPaid > 0 ? `Bounty paid: ${res.bountyPaid} coins.` : "") +
-        (res.bountyOwed > 0 ? ` Bounty owed: ${res.bountyOwed} coins (the guild will pay when funds allow).` : ""));
+      // The guild already deducted the bounty from its reserves — actually
+      // deliver it to the author. Only say "Bounty paid" when the coins
+      // really landed in their inventory.
+      let bountyLine = "";
+      let owedLine = "";
+      if (res.bountyPaid > 0 && giveCoins(player, res.bountyPaid)) {
+        bountyLine = `Bounty paid: ${res.bountyPaid} coins.`;
+        if (res.bountyOwed > 0) {
+          owedLine = ` Bounty owed: ${res.bountyOwed} coins (the guild will pay when funds allow).`;
+        }
+      } else if (res.bountyPaid > 0) {
+        // The credit failed: park the deducted coins back in the guild's
+        // reserves and re-record the bounty as owed — never claim a payment
+        // that never happened, never invent coins. The life tick retries
+        // delivery to the author's bank account.
+        const refund = Guilds.refundCertBounty(res.certId, res.bountyPaid,
+          res.bountyPaidFromTreasury, res.bountyPaidFromFund);
+        const owedTotal = refund.ok ? refund.bountyOwed : res.bountyOwed + res.bountyPaid;
+        bountyLine = `Bounty of ${res.bountyPaid} coins could not be delivered to you — recorded as owed.`;
+        owedLine = ` Total bounty owed: ${owedTotal} coins (the guild will pay it to your bank account).`;
+      } else if (res.bountyOwed > 0) {
+        owedLine = ` Bounty owed: ${res.bountyOwed} coins (the guild will pay when funds allow).`;
+      }
+      say(player, `Artwork certified! Grade ${res.grade}. ` + bountyLine + owedLine);
       return;
     }
     case "seals": {

@@ -73,6 +73,23 @@ function takeCoins(player, amount) {
   }
 }
 
+function giveCoins(player, amount) {
+  try {
+    const inv = player?.getInventory?.();
+    if (!inv || amount <= 0) return false;
+    // Canonical id/amount form is adds(id, amount): add(item, refresh) takes
+    // an Item object, not (id, amount). The wrong signature would throw (or
+    // corrupt) and silently break honest refunds.
+    if (typeof inv.adds !== "function") return false;
+    const before = inv.getAmount?.(COINS_ID) ?? 0;
+    inv.adds(COINS_ID, amount);
+    // Honest: the balance must actually have moved, or the prize wasn't paid.
+    return (inv.getAmount?.(COINS_ID) ?? 0) === before + amount;
+  } catch {
+    return false;
+  }
+}
+
 function onMusicGuildCommand(player, args) {
   if (!isRealPlayer(player)) {
     say(player, "Citizens work the guild through their own sessions, not this command.");
@@ -162,9 +179,30 @@ function onMusicGuildCommand(player, args) {
         say(player, `Certification failed: ${res.reason}.`);
         return;
       }
-      say(player, `Performance certified! Grade ${res.grade}. ` +
-        (res.bountyPaid > 0 ? `Bounty paid: ${res.bountyPaid} coins.` : "") +
-        (res.bountyOwed > 0 ? ` Bounty owed: ${res.bountyOwed} coins (the guild will pay when funds allow).` : ""));
+      // The guild already deducted the bounty from its reserves — actually
+      // deliver it to the musician. Only say "Bounty paid" when the coins
+      // really landed in their inventory.
+      let bountyLine = "";
+      let owedLine = "";
+      if (res.bountyPaid > 0 && giveCoins(player, res.bountyPaid)) {
+        bountyLine = `Bounty paid: ${res.bountyPaid} coins.`;
+        if (res.bountyOwed > 0) {
+          owedLine = ` Bounty owed: ${res.bountyOwed} coins (the guild will pay when funds allow).`;
+        }
+      } else if (res.bountyPaid > 0) {
+        // The credit failed: park the deducted coins back in the guild's
+        // reserves and re-record the bounty as owed — never claim a payment
+        // that never happened, never invent coins. The life tick retries
+        // delivery to the musician's bank account.
+        const refund = Guilds.refundCertBounty(res.certId, res.bountyPaid,
+          res.bountyPaidFromTreasury, res.bountyPaidFromFund);
+        const owedTotal = refund.ok ? refund.bountyOwed : res.bountyOwed + res.bountyPaid;
+        bountyLine = `Bounty of ${res.bountyPaid} coins could not be delivered to you — recorded as owed.`;
+        owedLine = ` Total bounty owed: ${owedTotal} coins (the guild will pay it to your bank account).`;
+      } else if (res.bountyOwed > 0) {
+        owedLine = ` Bounty owed: ${res.bountyOwed} coins (the guild will pay when funds allow).`;
+      }
+      say(player, `Performance certified! Grade ${res.grade}. ` + bountyLine + owedLine);
       return;
     }
     case "seals": {
@@ -225,4 +263,4 @@ function onMusicGuildCommand(player, args) {
   }
 }
 
-module.exports = { onMusicGuildCommand, MUSICGUILD_USAGE , takeCoins };
+module.exports = { onMusicGuildCommand, MUSICGUILD_USAGE , giveCoins, takeCoins };
