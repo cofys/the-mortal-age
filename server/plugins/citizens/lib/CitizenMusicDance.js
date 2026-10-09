@@ -200,7 +200,9 @@ function playerHasInstrument(player, instrumentId) {
     if (!inst) return false;
     const inv = player?.inventory ?? player?.inv ?? null;
     if (!inv) return false;
-    if (typeof inv.count === "function") return inv.count(inst.itemId) > 0;
+    // Canonical engine API: ItemContainer.getAmount(id). inv.count does not
+    // exist on the engine container — the old check silently read 0.
+    if (typeof inv.getAmount === "function") return inv.getAmount(inst.itemId) > 0;
     if (typeof inv.has === "function") return !!inv.has(inst.itemId);
     if (Array.isArray(inv)) return inv.some((s) => s && (s.id === inst.itemId || s.itemId === inst.itemId));
     return false;
@@ -384,9 +386,12 @@ function hallTile(kingdomId) {
   const key = String(kingdomId).toLowerCase();
   if (st.halls[key]) return st.halls[key];
   try {
-    const Sites = require("./CitizenSites");
-    const market = Sites.marketTileForKingdom?.(kingdomId) ?? Sites.marketTile?.(kingdomId);
-    if (!market || typeof market.x !== "number") return null;
+    // The sites module lives in brain/, not lib/. The old require pointed
+    // at lib/CitizenSites which does not exist, so hallTile always returned
+    // null and no dance hall ever had a real world tile.
+    const Sites = require("../brain/CitizenSites");
+    const market = Sites.siteTileByKingdom?.(kingdomId, "market") ?? null;
+    if (!market || !Number.isFinite(market.x)) return null;
     const tile = { x: market.x + HALL_OFFSET.dx, y: market.y + HALL_OFFSET.dy, z: market.z ?? 0 };
     st.halls[key] = tile;
     markDirty();
@@ -447,7 +452,10 @@ function coinCount(player) {
   try {
     const inv = player?.inventory ?? player?.inv ?? null;
     if (!inv) return 0;
-    if (typeof inv.count === "function") return inv.count(COINS_ID) | 0;
+    // Canonical engine API: ItemContainer.getAmount(id). inv.count does not
+    // exist on the engine container — the old check silently read 0, so the
+    // broke-check in takeCoins compared against phantom coins.
+    if (typeof inv.getAmount === "function") return inv.getAmount(COINS_ID) | 0;
     if (Array.isArray(inv)) {
       return inv.reduce((n, s) => n + (s && (s.id === COINS_ID || s.itemId === COINS_ID) ? (s.amount ?? s.qty ?? 1) : 0), 0);
     }
@@ -460,10 +468,18 @@ function coinCount(player) {
 function takeCoins(player, amount) {
   try {
     const inv = player?.inventory ?? player?.inv ?? null;
-    if (!inv || typeof inv.remove !== "function") return false;
-    if (coinCount(player) < amount) return false;
-    inv.remove(COINS_ID, amount);
-    return true;
+    if (!inv) return false;
+    const before = coinCount(player);
+    if (before < amount) return false;
+    // Canonical engine API: ItemContainer.deleteNumber(id, amount). There is
+    // no inv.remove(id, amount) — the old call was a silent no-op that still
+    // returned true, so concert tickets and lessons were free and revenue
+    // was recorded for coins that never moved.
+    if (typeof inv.deleteNumber === "function") inv.deleteNumber(COINS_ID, amount);
+    else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
+    else return false;
+    // Honest: the balance must actually have moved, or the fee wasn't taken.
+    return coinCount(player) === before - amount;
   } catch {
     return false;
   }
@@ -472,9 +488,14 @@ function takeCoins(player, amount) {
 function giveCoins(player, amount) {
   try {
     const inv = player?.inventory ?? player?.inv ?? null;
-    if (!inv || typeof inv.add !== "function") return false;
-    inv.add(COINS_ID, amount);
-    return true;
+    if (!inv) return false;
+    const before = coinCount(player);
+    // Canonical engine API: ItemContainer.adds(id, amount). inv.add(id, amt)
+    // hits the wrong overload (add takes an Item object) and throws, so the
+    // old payout path never credited anyone.
+    if (typeof inv.adds === "function") inv.adds(COINS_ID, amount);
+    else return false;
+    return coinCount(player) === before + amount;
   } catch {
     return false;
   }

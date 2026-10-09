@@ -88,6 +88,7 @@ const RESTAURANT_NAMES = Object.freeze([
 let cache = null; // { chefs: {...}, dishes: [...], restaurants: {...}, reviews: [...], competitions: [...], lastCompetition: {...} }
 let dirty = false;
 let _ingredientCache = null;
+let _itemTable = null; // lazy cache of the flat engine item table
 
 function blankState() {
   return {
@@ -167,7 +168,9 @@ function ingredientIds() {
     ids.fish = resolveItemId(["COOKED_FISH", "TROUT", "cooked trout", "SALMON", "cooked salmon"]);
     ids.potato = resolveItemId(["POTATO", "potato"]);
     ids.vegetable = resolveItemId(["CABBAGE", "cabbage", "ONION", "onion"]);
-    ids.herb = resolveItemId(["CLEAN_HERB", "GRIMY_HERB", "herb"]);
+    // Herbs are real "Grimy <name> leaf" items in the engine table — the old
+    // CLEAN_HERB/GRIMY_HERB candidates matched nothing.
+    ids.herb = resolveItemId(["grimy guam leaf", "grimy marrentill", "grimy tarromin", "grimy harralander", "clean guam"]);
     _ingredientCache = ids;
     return ids;
   } catch {
@@ -176,21 +179,26 @@ function ingredientIds() {
 }
 
 function resolveItemId(candidates) {
-  // Try the engine item tables defensively.
+  // Canonical engine table: server/data/definitions/item-gameplay.json is a
+  // FLAT ARRAY of { id, name }. The old code required keyed { items } maps
+  // at table paths that do not exist, so every ingredient silently resolved
+  // to null and dishes claimed ingredients that were never real. Returns
+  // the lowest matching id, or null — the caller refuses honestly rather
+  // than inventing an id.
   try {
-    const tables = [
-      safeRequire("../../../data/item-gameplay.json"),
-      safeRequire("../../data/item-gameplay.json"),
-    ];
-    for (const table of tables) {
-      if (!table) continue;
-      const items = table.items ?? table;
-      for (const key of candidates) {
-        const upper = String(key).toUpperCase().replace(/ /g, "_");
-        if (items[upper]?.id != null) return items[upper].id;
-        if (items[key]?.id != null) return items[key].id;
-      }
+    if (!_itemTable) {
+      const rows = safeRequire("../../../data/definitions/item-gameplay.json");
+      _itemTable = Array.isArray(rows) ? rows : [];
     }
+    const keys = (candidates ?? [])
+      .map((c) => String(c || "").toLowerCase().trim().replace(/_/g, " "))
+      .filter(Boolean);
+    let best = null;
+    for (const row of _itemTable) {
+      if (!keys.includes(String(row?.name || "").toLowerCase().replace(/_/g, " "))) continue;
+      if (best == null || row.id < best) best = row.id;
+    }
+    return best;
   } catch { /* fall through */ }
   return null;
 }

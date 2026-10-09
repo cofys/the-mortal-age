@@ -15,11 +15,14 @@ function fresh() {
 }
 
 function fakePlayer(coins) {
+  // Mocks the REAL engine ItemContainer API (getAmount/deleteNumber/adds).
+  // The old mock used count/remove/add, which do not exist on the engine
+  // container — the fake API masked the no-op ticket/lesson bugs in tests.
   const inv = {
     coins,
-    count(id) { return id === 995 ? this.coins : 0; },
-    remove(id, n) { if (id === 995 && this.coins >= n) { this.coins -= n; return true; } return false; },
-    add(id, n) { if (id === 995) this.coins += n; return true; },
+    getAmount(id) { return id === 995 ? this.coins : 0; },
+    deleteNumber(id, n) { if (id === 995 && this.coins >= n) { this.coins -= n; return true; } return false; },
+    adds(id, n) { if (id === 995) this.coins += n; return true; },
   };
   return { inventory: inv, username: "testplayer" };
 }
@@ -36,7 +39,7 @@ fresh();
   assert.strictEqual(MD.instrumentOf("Muso").id, "lyre", "instrumentOf");
   assert.ok(!MD.setInstrument("Muso", "kazoo"), "bad instrument rejected");
   const p = fakePlayer(0);
-  p.inventory.count = (id) => (id === 3689 ? 1 : 0);
+  p.inventory.getAmount = (id) => (id === 3689 ? 1 : 0);
   assert.ok(MD.playerHasInstrument(p, "lyre"), "real lyre detected in inventory");
   assert.ok(!MD.playerHasInstrument(p, "horn"), "no horn in inventory");
   console.log("ok: instruments");
@@ -167,6 +170,39 @@ fresh();
   MD.resetForTests();
   assert.strictEqual(MD.musicOf("Saver"), 77, "proficiency survives reload");
   console.log("ok: persistence");
+}
+
+// --- hall tile regression (dead require path) ---
+fresh();
+{
+  // The old hallTile required lib/CitizenSites, which does not exist, so it
+  // always returned null and dance halls never had a real world tile.
+  const tile = MD.hallTile("misthalin");
+  assert.ok(tile && Number.isFinite(tile.x) && Number.isFinite(tile.y),
+    "hallTile resolves a real world tile near the market");
+  assert.ok(MD.hallTile("nosuchkingdom") === null, "unknown kingdom still null");
+  console.log("ok: hall tile");
+}
+
+// --- honest coin movement regression ---
+fresh();
+{
+  // The old takeCoins called inv.remove, a silent no-op on the engine
+  // container that still returned true — tickets and lessons were free.
+  const rich = fakePlayer(100);
+  assert.ok(MD.takeCoins(rich, 25), "takeCoins succeeds when funded");
+  assert.strictEqual(rich.inventory.coins, 75, "takeCoins moved 25 coins");
+  const poor = fakePlayer(5);
+  assert.ok(!MD.takeCoins(poor, 25), "takeCoins refuses when broke");
+  assert.strictEqual(poor.inventory.coins, 5, "broke balance untouched");
+  // An inventory missing the canonical API must not pretend success.
+  const fakeApi = { inventory: { coins: 100 } };
+  assert.ok(!MD.takeCoins(fakeApi, 25), "no canonical deleteNumber -> honest failure");
+  assert.ok(!MD.giveCoins(fakeApi, 25), "no canonical adds -> honest failure");
+  const earner = fakePlayer(0);
+  assert.ok(MD.giveCoins(earner, 40), "giveCoins succeeds");
+  assert.strictEqual(earner.inventory.coins, 40, "giveCoins moved 40 coins");
+  console.log("ok: honest coins");
 }
 
 console.log("ALL CitizenMusicDance TESTS PASSED");

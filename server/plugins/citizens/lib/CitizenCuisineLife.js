@@ -141,10 +141,16 @@ function payPrize(director, username, amount) {
     if (!bot) return false; // offline — honestly skip, never invent
     const player = bot.player ?? bot;
     const inv = player?.inventory ?? player?.getInventory?.();
-    if (!inv?.add) return false;
-    // Coins item id 995 — the standard.
-    inv.add(995, amount);
-    return true;
+    if (!inv) return false;
+    const before = typeof inv.getAmount === "function" ? inv.getAmount(995) | 0 : null;
+    // Canonical engine API: ItemContainer.adds(id, amount). inv.add(id, amt)
+    // hits the wrong overload (add takes an Item object) and throws — the
+    // old code announced winners whose prizes never landed.
+    if (typeof inv.adds === "function") inv.adds(995, amount);
+    else return false;
+    // Honest: the balance must actually have moved, or the prize wasn't paid.
+    if (before == null) return true;
+    return (typeof inv.getAmount === "function" ? inv.getAmount(995) | 0 : before) === before + amount;
   } catch {
     return false;
   }

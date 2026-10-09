@@ -221,5 +221,19 @@ test("save/load round-trip preserves dishes", () => {
   assert.strictEqual(Cuisine.save(), false);
 });
 
+// --- ingredient resolution regression (dead table paths) ---
+test("ingredientIds resolves real engine item ids", () => {
+  // The old resolveItemId required keyed { items } maps at table paths that
+  // do not exist, so every kind silently resolved to null.
+  const ids = Cuisine.ingredientIds();
+  for (const kind of ["meat", "fish", "potato", "vegetable", "herb"]) {
+    assert.ok(Number.isInteger(ids[kind]) && ids[kind] > 0,
+      `${kind} must resolve to a real engine item id`);
+  }
+  assert.strictEqual(ids.meat, 2142, "meat -> Cooked meat");
+  assert.strictEqual(ids.potato, 1942, "potato -> Potato");
+  assert.strictEqual(ids.herb, 199, "herb -> Grimy guam leaf");
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
