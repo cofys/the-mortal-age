@@ -7,7 +7,7 @@
 Claim a task by changing it to `IN PROGRESS — <name>`, committing, and pushing
 before you start. See `COLLAB.md` for the full protocol.
 
-- [ ] IN PROGRESS — coordinator-1645-treasury (2026-10-09 16:45 EDT) — kingdoms: fealty tax & treasury — tax flow on rank-granted/task-completed (players only, bots excluded), treasury spend via office-dashboard grant buttons, treasury surfaced in My Kingdom panel + office dashboard.
+- [x] DONE — coordinator-1645-treasury (2026-10-09 16:45–17:00 EDT; claim retired by heartbeat 17:30 EDT — agent never retired its own claim; merge a9c3f2e6 on main; PC deployed + verified 16:59 EDT: HEAD=a9c3f2e6, 12 node procs, 43594 LISTENING, clean boot, watchdog Ready, lock removed) — kingdoms: fealty tax & treasury — tax flow on rank-granted/task-completed (players only, bots excluded), treasury spend via office-dashboard grant buttons, treasury surfaced in My Kingdom panel + office dashboard.
 - [ ] IN PROGRESS — coordinator-clan-invites (2026-10-09 17:15 EDT) — citizen-initiated guild invites: guild officer/founder citizens who are friends with a real player occasionally invite them to their guild via Registry.inviteMember (existing guild system); diegetic in-person delivery, accept/decline via existing "accept guild"/"decline guild" keywords + web overlay, CitizenMemory records outcome, 7-day no-re-ask after decline.
 
 ## NOW
