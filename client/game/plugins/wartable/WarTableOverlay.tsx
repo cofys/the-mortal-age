@@ -13,6 +13,85 @@ interface KingdomInfo {
     rulerTitle: string | null;
     treasury: number;
     situation: string | null;
+<<<<<<< HEAD
+=======
+    castle: CastleInfo | null;
+    relation: string | null;
+    vassalOf: string | null;
+    vassalOfName: string | null;
+    vassalCount: number;
+    underSiege: boolean;
+    besiegingCount: number;
+    atWar: boolean;
+    coalition: CoalitionRef | null;
+}
+
+interface CoalitionRef {
+    key: string;
+    name: string;
+}
+
+interface CoalitionMember {
+    id: string;
+    name: string;
+}
+
+interface CoalitionInfo {
+    key: string;
+    name: string;
+    members: CoalitionMember[];
+    pactCount: number;
+    totalStrength: number;
+    formedAt: number | null;
+}
+
+interface SuccessionClaimantInfo {
+    id: string;
+    name: string;
+    title: string | null;
+    claim: string | null;
+    claimLabel: string | null;
+    strength: number;
+    backers: number;
+}
+
+interface SuccessionCrisisInfo {
+    id: string;
+    kingdomId: string;
+    kingdomName: string;
+    lateRuler: string | null;
+    ticksLeft: number | null;
+    claimants: SuccessionClaimantInfo[];
+}
+
+interface CivilWarSideInfo {
+    name: string;
+    title: string | null;
+    strength: number;
+}
+
+interface CivilWarInfo {
+    id: string;
+    kingdomId: string;
+    kingdomName: string;
+    sides: CivilWarSideInfo[];
+    ticksLeft: number | null;
+    drained: number;
+}
+
+interface DefenseCallEntry {
+    allyId: string;
+    allyName: string;
+    status: "deliberating" | "joined" | "absent" | "refused";
+}
+
+interface DefenseCallInfo {
+    attackerId: string;
+    defenderId: string;
+    attackerName: string;
+    defenderName: string;
+    calls: DefenseCallEntry[];
+>>>>>>> 8f4c8d6a
 }
 
 interface WarInfo {
@@ -62,6 +141,17 @@ interface WarTableStatus {
     endedWars: EndedWarInfo[];
     alliances: AllianceInfo[];
     relations: RelationInfo[];
+<<<<<<< HEAD
+=======
+    sieges: SiegeInfo[];
+    vassalage: VassalageInfo[];
+    coalitions: CoalitionInfo[];
+    defenseCalls: DefenseCallInfo[];
+    successionCrises: SuccessionCrisisInfo[];
+    civilWars: CivilWarInfo[];
+    homeDetail: HomeDetail | null;
+    actionResult?: ActionResult;
+>>>>>>> 8f4c8d6a
 }
 
 type TabId = "overview" | "diplomacy" | "military" | "treasury" | "wars";
@@ -335,6 +425,209 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                         </div>
                     )}
 
+<<<<<<< HEAD
+=======
+                    {tab === "realm" && (
+                        <div className="tma-wartable-section">
+                            <h2 className="tma-wartable-section-title">Fealty of the Realm</h2>
+                            {(status.vassalage ?? []).length === 0 ? (
+                                <p className="tma-wartable-empty">
+                                    No oaths sworn — every crown answers to none.
+                                </p>
+                            ) : (
+                                <div className="tma-wartable-cards">
+                                    {status.kingdoms
+                                        .filter((k) => (k.vassalCount ?? 0) > 0)
+                                        .map((k) => (
+                                            <div key={k.id} className="tma-wartable-card">
+                                                <div className="tma-wartable-card-title">
+                                                    👑 {k.name}
+                                                    <span className="tma-wartable-muted">
+                                                        {" "}· overlord of {(k.vassalCount ?? 0)}
+                                                    </span>
+                                                </div>
+                                                {(status.vassalage ?? [])
+                                                    .filter((v) => v.overlordId === k.id)
+                                                    .map((v) => (
+                                                        <div key={v.vassalId} className="tma-wartable-vassal-row">
+                                                            <span className="tma-wartable-vassal-indent">↳</span>
+                                                            <span>{v.vassalName}</span>
+                                                            <span className="tma-wartable-muted">
+                                                                {" "}· sworn{v.since ? ` ${fmtDate(v.since)}` : ""}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                            <h2 className="tma-wartable-section-title">Coalitions of the Realm</h2>
+                            {(status.coalitions ?? []).length === 0 ? (
+                                <p className="tma-wartable-empty">
+                                    No leagues formed — pacts stand alone, for now.
+                                </p>
+                            ) : (
+                                <div className="tma-wartable-cards">
+                                    {(status.coalitions ?? []).map((c) => (
+                                        <div key={c.key} className="tma-wartable-card">
+                                            <div className="tma-wartable-card-title">
+                                                🤝 {c.name}
+                                            </div>
+                                            <div className="tma-wartable-card-sub">
+                                                {c.members.map((m) => m.name).join(" · ")}
+                                            </div>
+                                            <div className="tma-wartable-card-row">
+                                                <span className="tma-wartable-muted">
+                                                    {c.pactCount} pact{c.pactCount === 1 ? "" : "s"}
+                                                </span>
+                                                <StrengthPips strength={Math.min(5, Math.max(1, Math.round(c.totalStrength / Math.max(1, c.pactCount))))} />
+                                            </div>
+                                            {c.formedAt && (
+                                                <div className="tma-wartable-card-sub">
+                                                    Rose {fmtDate(c.formedAt)}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <h2 className="tma-wartable-section-title">Thrones in Dispute</h2>
+                            {(status.successionCrises ?? []).length === 0 &&
+                            (status.civilWars ?? []).length === 0 ? (
+                                <p className="tma-wartable-empty">
+                                    Every crown sits secure — for now.
+                                </p>
+                            ) : (
+                                <div className="tma-wartable-cards">
+                                    {(status.successionCrises ?? []).map((c) => {
+                                        const total = c.claimants.reduce((s, cl) => s + cl.strength, 0);
+                                        return (
+                                            <div key={c.id} className="tma-wartable-card">
+                                                <div className="tma-wartable-card-title">
+                                                    👑 {c.kingdomName} — succession crisis
+                                                </div>
+                                                <div className="tma-wartable-card-sub">
+                                                    {c.lateRuler ? `After ${c.lateRuler}. ` : ""}
+                                                    The court is split:
+                                                </div>
+                                                {(c.claimants ?? []).map((cl) => (
+                                                    <div key={cl.id} className="tma-wartable-card-row">
+                                                        <span>
+                                                            {cl.name}
+                                                            <span className="tma-wartable-muted">
+                                                                {" "}· {cl.claimLabel ?? cl.claim}
+                                                                {cl.title ? ` · ${cl.title}` : ""}
+                                                            </span>
+                                                        </span>
+                                                        <span className="tma-wartable-muted">
+                                                            {total > 0
+                                                                ? Math.round((cl.strength / total) * 100)
+                                                                : 0}
+                                                            %
+                                                        </span>
+                                                        <button
+                                                            className="tma-wartable-btn"
+                                                            onClick={() =>
+                                                                runAction(
+                                                                    `action=back-claimant&target=${encodeURIComponent(c.kingdomId)}&claimant=${encodeURIComponent(cl.id)}`
+                                                                )
+                                                            }
+                                                        >
+                                                            Back ({cl.backers})
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })}
+                                    {(status.civilWars ?? []).map((w) => (
+                                        <div key={w.id} className="tma-wartable-card">
+                                            <div className="tma-wartable-card-title">
+                                                ⚔️ {w.kingdomName} — civil war
+                                            </div>
+                                            {(w.sides ?? []).map((s, i) => (
+                                                <div key={i} className="tma-wartable-card-row">
+                                                    <span>
+                                                        {s.name}
+                                                        {s.title ? (
+                                                            <span className="tma-wartable-muted">
+                                                                {" "}· {s.title}
+                                                            </span>
+                                                        ) : null}
+                                                    </span>
+                                                    <StrengthPips strength={Math.min(5, Math.max(1, Math.round(s.strength / 20)))} />
+                                                </div>
+                                            ))}
+                                            <div className="tma-wartable-card-sub">
+                                                {fmtCoins(w.drained)} coins burned in the fighting.
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <h2 className="tma-wartable-section-title">Battle Lines</h2>
+                            <div className="tma-wartable-cards">
+                                {status.kingdoms.map((k) => {
+                                    const badges: { text: string; color: string }[] = [];
+                                    if (k.atWar) badges.push({ text: "⚔ AT WAR", color: "#d43a2a" });
+                                    if (k.underSiege) badges.push({ text: "🏰 UNDER SIEGE", color: "#c97b2d" });
+                                    if ((k.besiegingCount ?? 0) > 0)
+                                        badges.push({
+                                            text: `⚒ BESIEGING ${k.besiegingCount}`,
+                                            color: "#c9a227",
+                                        });
+                                    return (
+                                        <div key={k.id} className="tma-wartable-card">
+                                            <div className="tma-wartable-card-title">
+                                                {k.name}
+                                                {home?.id === k.id && (
+                                                    <span className="tma-wartable-home-tag"> · HOME</span>
+                                                )}
+                                            </div>
+                                            {k.coalition && (
+                                                <div className="tma-wartable-card-sub">
+                                                    🤝 {k.coalition.name}
+                                                </div>
+                                            )}
+                                            {k.vassalOfName && (
+                                                <div className="tma-wartable-card-sub">
+                                                    Sworn to {k.vassalOfName}
+                                                </div>
+                                            )}
+                                            {(k.vassalCount ?? 0) > 0 && !k.vassalOfName && (
+                                                <div className="tma-wartable-card-sub">
+                                                    Overlord of {k.vassalCount} vassal{k.vassalCount === 1 ? "" : "s"}
+                                                </div>
+                                            )}
+                                            {badges.length === 0 ? (
+                                                <div className="tma-wartable-card-row">
+                                                    <span className="tma-wartable-muted">At peace</span>
+                                                </div>
+                                            ) : (
+                                                <div className="tma-wartable-card-row tma-wartable-badges">
+                                                    {badges.map((b, i) => (
+                                                        <span
+                                                            key={i}
+                                                            className="tma-wartable-badge"
+                                                            style={{ borderColor: b.color, color: b.color }}
+                                                        >
+                                                            {b.text}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <p className="tma-wartable-note">
+                                Oaths and battle lines, drawn from the realm's own records.
+                                The courts move on their own — watch the map change.
+                            </p>
+                        </div>
+                    )}
+
+>>>>>>> 8f4c8d6a
                     {tab === "diplomacy" && (
                         <div className="tma-wartable-section">
                             <h2 className="tma-wartable-section-title">Pacts & Alliances</h2>

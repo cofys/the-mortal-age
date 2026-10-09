@@ -95,6 +95,13 @@ module.exports = {
     loadContentModule("./ClaimStake.Kingdoms")(api);
     loadContentModule("./WarTable.Kingdoms")(api);
     loadContentModule("./WarTableApi")(api);
+<<<<<<< HEAD
+=======
+    loadContentModule("./Siege.Kingdoms")(api);
+    loadContentModule("./AiWarfare.Kingdoms")(api);
+    loadContentModule("./AiDiplomacy.Kingdoms")(api);
+    loadContentModule("./SuccessionCrisis.Kingdoms")(api);
+>>>>>>> 8f4c8d6a
     loadContentModule("./OfficeTools.Kingdoms")(api);
   },
 };

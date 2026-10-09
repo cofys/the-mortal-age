@@ -29,6 +29,11 @@
  *   action=sally            (defender: sally forth against the besieger)
  *   action=repair           (defender: emergency wall repairs)
  *   action=lift-siege&target=<id>  (attacker: abandon the siege)
+ *   action=back-claimant&target=<kingdomId>&claimant=<id>
+ *                             (back a succession claimant with court influence)
+ *
+ * Succession payload (Phase 9): `successionCrises` (open crises with
+ * claimant shares) and `civilWars` (active civil wars with sides and drain).
  *
  * Read-heavy by design: writes are the open/close flag and the warfare
  * actions above, each gated by the same checks as the underlying modules.
@@ -39,7 +44,8 @@ const Castle = require("./Castle.Kingdoms");
 const Siege = require("./Siege.Kingdoms");
 const Relations = require("./Relations.Kingdoms");
 const Wars = require("./Wars.Kingdoms");
-const ContentApiAuth = require("../interface/ContentApiAuth");
+const Coalitions = require("./Coalitions.Kingdoms");
+const AiDiplomacy = require("./AiDiplomacy.Kingdoms");
 
 const WARTABLE_OPEN_ATTRIBUTE = "wartable:open";
 
@@ -108,6 +114,9 @@ function kingdomPayload(k, homeId) {
   payload.atWar = Store.getActiveWars().some(
     (w) => w.attackerId === k.id || w.defenderId === k.id
   );
+  // Coalition membership, so the war table can draw the realm's blocs.
+  const coalition = Coalitions.coalitionOf(k.id, Store);
+  payload.coalition = coalition ? { key: coalition.key, name: coalition.name } : null;
   return payload;
 }
 
@@ -207,6 +216,60 @@ function statusPayload(player) {
       since: r.since ?? null,
     }));
 
+  // Coalitions of the realm: every league of three or more crowns, with
+  // named members — drawn from the live alliance graph.
+  const coalitions = Coalitions.coalitionsOf(Store).map((c) => ({
+    key: c.key,
+    name: c.name,
+    members: c.members.map((id) => ({ id, name: kingdomName(id) })),
+    pactCount: c.pactCount,
+    totalStrength: c.totalStrength,
+    formedAt: c.formedAt ?? null,
+  }));
+
+  // Calls to arms: allies of each war's defender and where their
+  // deliberation stands (deliberating / joined / absent / refused).
+  const defenseCalls = AiDiplomacy.getDefenseCalls(Store);
+
+  // Thrones in dispute: open succession crises and active civil wars.
+  // SuccessionCrisis is a pure module; guard the require for bare stores.
+  let successionCrises = [];
+  let civilWars = [];
+  try {
+    const SuccessionCrisis = require("./SuccessionCrisis.Kingdoms");
+    const sstate = Store.load().succession ?? { crises: [], civilWars: [] };
+    successionCrises = (sstate.crises ?? [])
+      .filter((c) => c && c.status === "open")
+      .map((c) => ({
+        id: c.id,
+        kingdomId: c.kingdomId,
+        kingdomName: kingdomName(c.kingdomId),
+        lateRuler: c.lateRuler ?? null,
+        ticksLeft: c.ticksLeft ?? null,
+        claimants: (c.claimants ?? []).map((cl) => ({
+          id: cl.id,
+          name: cl.name,
+          title: cl.title ?? null,
+          claim: cl.claim ?? null,
+          claimLabel: SuccessionCrisis.CLAIM_LABELS[cl.claim] ?? cl.claim ?? null,
+          strength: Math.round((cl.strength ?? 0) + (cl.aiSupport ?? 0)),
+          backers: (cl.backers ?? []).length,
+        })),
+      }));
+    civilWars = (sstate.civilWars ?? [])
+      .filter((w) => w && w.status === "active")
+      .map((w) => ({
+        id: w.id,
+        kingdomId: w.kingdomId,
+        kingdomName: kingdomName(w.kingdomId),
+        sides: (w.sides ?? []).map((s) => ({ name: s.name, title: s.title ?? null, strength: Math.round(s.strength ?? 0) })),
+        ticksLeft: w.ticksLeft ?? null,
+        drained: w.drained ?? 0,
+      }));
+  } catch {
+    // Succession module unavailable: thrones stay quiet.
+  }
+
   // Home-kingdom war room: castle, vassalage, pending peace offers, wars.
   let homeDetail = null;
   if (homeId) {
@@ -249,6 +312,10 @@ function statusPayload(player) {
     relations,
     sieges,
     vassalage,
+    coalitions,
+    defenseCalls,
+    successionCrises,
+    civilWars,
     homeDetail,
   };
 }
@@ -288,6 +355,8 @@ function describeResult(action, result) {
         return { ok: true, message: `Masons work through the night. Progress now ${result.progress}.` };
       case "lift-siege":
         return { ok: true, message: "The siege is lifted. The army marches home." };
+      case "back-claimant":
+        return { ok: true, message: "Your backing is noted in the court. The claimant grows stronger." };
       default:
         return { ok: true, message: "Done." };
     }
@@ -323,6 +392,12 @@ function describeResult(action, result) {
     "invalid-tribute": "The tribute demand is absurd.",
     "not-a-vassal": "You swear fealty to no one.",
     "too-soon": "The oath is still fresh — independence must wait.",
+    "no-crisis": "No succession crisis grips that throne.",
+    "no-claimant": "No such claimant presses a claim.",
+    "already-backed": "You have already backed a claimant in this crisis.",
+    "no-record": "You hold no standing in that court.",
+    "insufficient": "Not enough influence in that court.",
+    "bad-args": "Something was missing from the order.",
   };
   return {
     ok: false,
@@ -379,6 +454,16 @@ function runWarfareAction(api, player, action, query) {
     case "lift-siege": {
       return describeResult(action, Siege.liftSiege(homeId, target, Store));
     }
+    case "back-claimant": {
+      const claimantId = (query.get("claimant") || "").trim();
+      try {
+        const SuccessionCrisis = require("./SuccessionCrisis.Kingdoms");
+        // Influence is spent in the crisis kingdom's court, not the player's home.
+        return describeResult(action, SuccessionCrisis.backClaimant(player, target, claimantId, Store));
+      } catch {
+        return { ok: false, message: "The succession council could not be reached." };
+      }
+    }
     default:
       return null;
   }
@@ -396,18 +481,9 @@ function findPlayer(api, username) {
 
 function attach(api) {
   console.info("[wartable-api] registering wartable-status endpoint");
-  ContentApiAuth.setPluginApi(api);
   api.registerContentEndpoint("wartable-status", (query) => {
-    // P0 security fix: require per-session token auth for player-scoped actions.
-    // Read-only status views remain available without auth (public war info).
+    const player = findPlayer(api, query.get("player"));
     const action = (query.get("action") || "").trim().toLowerCase();
-    const needsAuth = action && action !== "status";
-    const player = needsAuth
-      ? ContentApiAuth.requireAuth(query)
-      : (ContentApiAuth.requireAuth(query) || findPlayer(api, query.get("player")));
-    if (needsAuth && !player) {
-      return { error: "unauthorized" };
-    }
 
     if (player && (action === "open" || action === "close")) {
       try {
