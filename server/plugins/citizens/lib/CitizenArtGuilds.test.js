@@ -435,7 +435,18 @@ test("patronage: post, claim with a real cert, pay from treasury", () => {
   Module.prototype.require = (function (prev) {
     return function (id) {
       if (id === "./CitizenBanking") {
-        return { creditAccount: (u, amt) => { opts.credits = opts.credits || []; opts.credits.push([u, amt]); return true; } };
+        // Real contract: accountFor(username) -> live account record,
+        // markDirty() -> persist. creditAccount does not exist on
+        // CitizenBanking (it was a dead API the old test codified).
+        return {
+          accountFor: (u) => {
+            const key = String(u || "").toLowerCase().trim();
+            (opts.bankAccounts = opts.bankAccounts || {})[key] =
+              (opts.bankAccounts || {})[key] || { balance: 0 };
+            return opts.bankAccounts[key];
+          },
+          markDirty: () => { opts.bankDirty = true; },
+        };
       }
       return prev.apply(this, arguments);
     };
@@ -454,7 +465,7 @@ test("patronage: post, claim with a real cert, pay from treasury", () => {
     const pay = Guilds.payBounty(post.bountyId);
     assert.strictEqual(pay.ok, true);
     assert.strictEqual(pay.amount, 200);
-    assert.ok((opts.credits || []).some((c) => c[0] === "painty pete" && c[1] === 200));
+    assert.strictEqual(((opts.bankAccounts || {})["painty pete"] || {}).balance, 200);
   } finally { restore(); }
 });
 
