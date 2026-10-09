@@ -20,6 +20,7 @@ const {
 const {
   createInteractObjectAction,
 } = require("../../../bots/brain/actions/InteractObject");
+const { getReferencePrice } = require("../../../economy/Prices.Economy");
 const { createBankAction } = require("../../../bots/brain/actions/Bank");
 const { createIdleSocialAction } = require("./IdleSocial");
 const { siteTile, workSite, dockSite, kingdomIdOf } = require("../CitizenSites");
@@ -62,14 +63,19 @@ const WORK_FISHING = "fishing";
 const DAY_MINUTES = 24 * 60;
 const RETRY_WORK_MS = 60000;
 const CASTS_PER_HAUL = 4;
-// What the supplier pays per work drop (logs, ore) — small, real coin.
-const WORK_DROP_PRICE = 4;
+// Haul pricing (alignment review finding #5): gatherer drops and fisher
+// catches sell at the living-economy reference price for that item — the
+// same real price table merchant stalls, player shops, and the trade
+// guild's gouging rule price from (GE baseline × live demand pressure).
+// Never a fixed per-item coin; see haulPriceFor below.
 // Don't stall the shift forever waiting on a supplier that never shows.
 const SELL_GIVE_UP_MS = 3 * 60 * 1000;
-// Abstract price for a fisher's haul, sold to the provisioner.
-const CATCH_PRICE = 4;
 const COINS_ID = 995;
 const BREAD_ID = 2309;
+// The small-net catch table (Fishing.plugin.js: small net, animation 621 —
+// the citizen fishing visual): raw shrimps + raw anchovies.
+const RAW_SHRIMPS_ID = 317;
+const RAW_ANCHOVIES_ID = 321;
 
 // Goal-threading (review finding #2): the day plan is a reasonable default,
 // but active session intents bend it instead of the clock winning blindly.
@@ -361,6 +367,142 @@ function isSupplierFor(kingdomId) {
   };
 }
 
+/**
+ * Real haul pricing (alignment review finding #5): the price of a work
+ * drop or catch is the living-economy reference price for that item —
+ * the same real table merchant stalls, player shops, and the trade
+ * guild's gouging rule price from (GE baseline × live demand pressure).
+ * Pure in-memory read, safe on the tick path; the economy module itself
+ * floors at 1, so this never invents a price.
+ */
+function haulPriceFor(itemId) {
+  try {
+    const price = getReferencePrice(itemId, Date.now());
+    if (Number.isFinite(price) && price >= 1) {
+      return Math.floor(price);
+    }
+  } catch {
+    // Economy unavailable — fall through to the floor.
+  }
+  return 1;
+}
+
+/**
+ * Verified credit (vanishing-coins sweep contract): adds() throws on the
+ * real engine, so an unchecked credit can leave a debit with nothing to
+ * show for it. True only when the amount actually landed.
+ */
+function verifiedAdds(inv, id, qty) {
+  try {
+    const before = inv.getAmount?.(id) ?? 0;
+    inv.adds(id, qty);
+    return (inv.getAmount?.(id) ?? 0) === before + qty;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One citizen-to-citizen sale with debit rollback (vanishing-coins sweep
+ * contract): the seller's items and the buyer's coins move only when both
+ * sides verify; any failure rolls the partial trade back so nothing
+ * vanishes mid-deal. Returns the coins paid, or 0 when the trade
+ * couldn't complete.
+ */
+function sellItems(sellerInv, buyerInv, itemId, qty, unitPrice) {
+  const total = qty * unitPrice;
+  if (qty <= 0 || total <= 0) {
+    return 0;
+  }
+  let itemsMoved = false; // the seller's stock reached the buyer
+  let coinsTaken = false; // the buyer's coins left the buyer
+  try {
+    const buyerCoins = buyerInv.getAmount?.(COINS_ID) ?? 0;
+    if (buyerCoins < total) {
+      return 0; // can't cover — the trade doesn't happen
+    }
+    // 1. Seller debits the items (verified).
+    const sellerItemsBefore = sellerInv.getAmount?.(itemId) ?? 0;
+    sellerInv.deleteNumber(itemId, qty);
+    if ((sellerInv.getAmount?.(itemId) ?? 0) !== sellerItemsBefore - qty) {
+      return 0; // the debit didn't land — nothing moved
+    }
+    // 2. Buyer credits the items (verified; nested try so a throwing
+    // credit still reaches the seller-side restore).
+    const buyerItemsBefore = buyerInv.getAmount?.(itemId) ?? 0;
+    let itemsLanded = false;
+    try {
+      buyerInv.adds(itemId, qty);
+      itemsLanded = (buyerInv.getAmount?.(itemId) ?? 0) === buyerItemsBefore + qty;
+    } catch {
+      itemsLanded = false;
+    }
+    if (!itemsLanded) {
+      try {
+        sellerInv.adds(itemId, qty);
+      } catch {
+        // Best-effort restore; the seller keeps whatever comes back.
+      }
+      return 0;
+    }
+    itemsMoved = true;
+    // 3. Buyer debits the coins (verified).
+    const buyerCoinsBefore = buyerInv.getAmount?.(COINS_ID) ?? 0;
+    buyerInv.deleteNumber(COINS_ID, total);
+    if ((buyerInv.getAmount?.(COINS_ID) ?? 0) !== buyerCoinsBefore - total) {
+      throw new Error("coin debit unverified");
+    }
+    coinsTaken = true;
+    // 4. Seller credits the coins (verified; nested try so a throwing
+    // credit still reaches the rollback).
+    const sellerCoinsBefore = sellerInv.getAmount?.(COINS_ID) ?? 0;
+    let coinsLanded = false;
+    try {
+      sellerInv.adds(COINS_ID, total);
+      coinsLanded = (sellerInv.getAmount?.(COINS_ID) ?? 0) === sellerCoinsBefore + total;
+    } catch {
+      coinsLanded = false;
+    }
+    if (coinsLanded) {
+      return total;
+    }
+    throw new Error("coin credit unverified");
+  } catch {
+    // A throw anywhere still reaches this rollback: the buyer keeps its
+    // coins, the seller gets its items back. Nothing vanishes mid-deal.
+    try {
+      if (coinsTaken) {
+        buyerInv.adds(COINS_ID, total);
+      }
+    } catch {
+      // Best-effort: the buyer keeps whatever comes back.
+    }
+    try {
+      if (itemsMoved) {
+        buyerInv.deleteNumber(itemId, qty);
+        sellerInv.adds(itemId, qty);
+      }
+    } catch {
+      // Best-effort: the seller keeps whatever the rollback recovers.
+    }
+    return 0;
+  }
+}
+
+/**
+ * Canonical journal write for sales (the LLM mouth's source of truth).
+ * Flavor, never a trade blocker.
+ */
+function journalWork(player, text) {
+  try {
+    require("../../lib/CitizenJournal")
+      .getJournal()
+      ?.log?.(player.getUsername?.(), "work", text);
+  } catch {
+    // Journaling never blocks a trade.
+  }
+}
+
 function createCitizenRoutineAction(spec, world) {
   // Internal delegates, created once so their per-player state stays keyed.
   const socialDelegate = createIdleSocialAction(
@@ -476,21 +618,83 @@ function createCitizenRoutineAction(spec, world) {
         kingdom: kingdomIdOf(player),
         hauls: bucket.workCyclesBanked,
       });
-      // The catch goes to the provisioner: a few real coins, the same
-      // abstraction level as the merchants' passer-by sales.
+      // The catch goes to the provisioner: real fish items sold dockside at
+      // the real reference price — the human trading loop (catch, check
+      // price, sell), never minted coins. Unsold fish ride in the pack.
       try {
-        player.getInventory?.()?.adds?.(COINS_ID, CATCH_PRICE);
+        sellFisherHaul(player, state);
       } catch (error) {
         // The haul still counted toward the goal.
       }
       addMood(player, 3);
-      world?.log?.("citizen_routine_catch_sale", {
-        citizen: player.getUsername?.(),
-        kingdom: kingdomIdOf(player),
-        earned: CATCH_PRICE,
-      });
     }
     return "running";
+  }
+
+  /**
+   * The fisher's haul is real fish (the small-net catch table), granted as
+   * real inventory items, then sold dockside to a nearby provisioner at
+   * the real reference price per fish — verified credits with debit
+   * rollback (vanishing-coins sweep contract). A provisioner that can't
+   * cover the whole catch buys what it can; unsold fish stay in the pack
+   * for the market trip (the decision layer banks a full pack).
+   */
+  function sellFisherHaul(player, state) {
+    const inventory = player.getInventory?.();
+    if (!inventory) {
+      return;
+    }
+    const fishId = chance(state.rng, 0.6) ? RAW_SHRIMPS_ID : RAW_ANCHOVIES_ID;
+    const qty = 2 + Math.floor((state.rng?.() ?? 0.5) * 3); // 2-4 fish
+    if (!verifiedAdds(inventory, fishId, qty)) {
+      return; // full pack — the haul never left the water
+    }
+    const unitPrice = haulPriceFor(fishId);
+    let sold = 0;
+    let earned = 0;
+    let buyerName = null;
+    for (const provisioner of localProvisioners(player)) {
+      if (sold >= qty) {
+        break;
+      }
+      const provisionerInv = provisioner.getInventory?.();
+      if (!provisionerInv) {
+        continue;
+      }
+      const canAfford = Math.floor(
+        (provisionerInv.getAmount?.(COINS_ID) ?? 0) / unitPrice
+      );
+      const sellQty = Math.min(qty - sold, canAfford);
+      if (sellQty <= 0) {
+        continue;
+      }
+      const paid = sellItems(inventory, provisionerInv, fishId, sellQty, unitPrice);
+      if (paid > 0) {
+        sold += sellQty;
+        earned += paid;
+        buyerName = provisioner.getUsername?.() ?? buyerName;
+      }
+    }
+    const fishName = fishId === RAW_ANCHOVIES_ID ? "raw anchovies" : "raw shrimps";
+    if (sold > 0) {
+      world?.log?.("citizen_routine_catch_sale", {
+        citizen: player.getUsername?.(),
+        provisioner: buyerName,
+        item: fishId,
+        qty: sold,
+        unitPrice,
+        earned,
+      });
+      journalWork(
+        player,
+        `Sold ${sold} ${fishName} to ${buyerName ?? "a provisioner"} for ${earned} coins (${unitPrice} each).`
+      );
+    } else {
+      journalWork(
+        player,
+        `Kept the catch (${qty} ${fishName}) — no provisioner dockside with the coin.`
+      );
+    }
   }
 
   function ensurePlan(state) {
@@ -537,10 +741,11 @@ function createCitizenRoutineAction(spec, world) {
   }
 
   /**
-   * Sell the shift's output to the supplier citizen: real transfers —
-   * drops move to the supplier, the supplier's own coin moves to the
-   * commoner (as much as the supplier can cover). Then the bank trip
-   * banks whatever is left, coins included.
+   * Sell the shift's output to the supplier citizen: real transfers at the
+   * real reference price per item — the supplier's own coins move to the
+   * commoner (as much as the supplier can cover), the drops move to the
+   * supplier. Verified credits with debit rollback (vanishing-coins sweep
+   * contract). Then the bank trip banks whatever is left, coins included.
    */
   function sellTick(ctx, state) {
     const { player, nowMs } = ctx;
@@ -554,20 +759,24 @@ function createCitizenRoutineAction(spec, world) {
       const supplierInv = supplier.getInventory?.();
       const inventory = player.getInventory?.();
       let earned = 0;
+      const sales = [];
       if (supplierInv && inventory) {
         for (const { id, qty } of state.sellMode.items) {
           const held = inventory.getAmount?.(id) ?? 0;
+          // Real price for THIS item — the living-economy reference price
+          // (GE baseline × demand pressure), not a fixed per-drop coin.
+          const unitPrice = haulPriceFor(id);
           const supplierCoins = supplierInv.getAmount?.(COINS_ID) ?? 0;
-          const afford = Math.floor(supplierCoins / WORK_DROP_PRICE);
+          const afford = Math.floor(supplierCoins / unitPrice);
           const sellQty = Math.min(qty, held, afford);
           if (sellQty <= 0) {
             continue;
           }
-          inventory.deleteNumber(id, sellQty);
-          supplierInv.adds(id, sellQty);
-          supplierInv.deleteNumber(COINS_ID, sellQty * WORK_DROP_PRICE);
-          inventory.adds(COINS_ID, sellQty * WORK_DROP_PRICE);
-          earned += sellQty * WORK_DROP_PRICE;
+          const paid = sellItems(inventory, supplierInv, id, sellQty, unitPrice);
+          if (paid > 0) {
+            earned += paid;
+            sales.push({ id, qty: sellQty, unitPrice });
+          }
         }
       }
       if (earned > 0) {
@@ -576,7 +785,14 @@ function createCitizenRoutineAction(spec, world) {
           citizen: player.getUsername?.(),
           supplier: supplier.getUsername?.(),
           earned,
+          sales,
         });
+        journalWork(
+          player,
+          `Sold the shift's haul to ${supplier.getUsername?.() ?? "the supplier"} for ${earned} coins (${sales
+            .map((s) => `${s.qty} @ ${s.unitPrice}`)
+            .join(", ")}).`
+        );
       }
     } else if (nowMs < state.sellGiveUpAt) {
       return "running"; // supplier's out — wait a beat at the market
@@ -754,6 +970,9 @@ module.exports = {
   buildDayPlan,
   // Test seams (not part of the public contract):
   _bendLeg: bendLeg,
+  _haulPriceFor: haulPriceFor,
+  _sellItems: sellItems,
+  _verifiedAdds: verifiedAdds,
   _extendWorkShift: extendWorkShift,
   _phaseFor: phaseFor,
   _KIND_WORK: KIND_WORK,
