@@ -43,6 +43,7 @@ interface CityInfo {
 interface StewardData {
     kind: "steward";
     treasury: number;
+    grantCap: number;
     taxRate: number;
     lastTax: number;
     lastWages: number;
@@ -154,6 +155,9 @@ function StewardPanel({
     busy: boolean;
 }) {
     const data = office.data as StewardData;
+    const [grantTo, setGrantTo] = useState("");
+    const [grantAmount, setGrantAmount] = useState("");
+    const grantReady = grantTo.trim().length > 0 && Math.floor(Number(grantAmount)) > 0;
     return (
         <>
             <div className="tma-office-section">
@@ -200,6 +204,50 @@ function StewardPanel({
                             {TAX_RATE_LABELS[rate]}
                         </button>
                     ))}
+                </div>
+            </div>
+            <div className="tma-office-section">
+                <h3 className="tma-office-section-title">Grant from the treasury</h3>
+                <div className="tma-office-inset">
+                    <div className="tma-office-row">
+                        <span className="tma-office-row-label">Available</span>
+                        <span className="tma-office-row-value gold">{coins(data.treasury)}c</span>
+                    </div>
+                    <p className="tma-office-row-label" style={{ margin: "6px 0" }}>
+                        Single grants are capped at {coins(data.grantCap)}c. The ledgers are watched —
+                        no grants to yourself.
+                    </p>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                        <input
+                            placeholder="Player name"
+                            value={grantTo}
+                            onChange={(e) => setGrantTo(e.target.value)}
+                            disabled={busy}
+                            style={{ flex: "2 1 0", minWidth: 0, padding: "8px", fontSize: "14px" }}
+                        />
+                        <input
+                            placeholder="Coins"
+                            inputMode="numeric"
+                            value={grantAmount}
+                            onChange={(e) => setGrantAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                            disabled={busy}
+                            style={{ flex: "1 1 0", minWidth: 0, padding: "8px", fontSize: "14px" }}
+                        />
+                        <button
+                            className="tma-office-btn"
+                            style={{ width: "auto", margin: 0, padding: "8px 16px", flex: "0 0 auto" }}
+                            disabled={busy || !grantReady}
+                            onClick={() => {
+                                onAction(
+                                    `action=grant-treasury&officeId=${encodeURIComponent(office.officeId)}&to=${encodeURIComponent(grantTo.trim())}&amount=${encodeURIComponent(grantAmount.trim())}`
+                                );
+                                setGrantTo("");
+                                setGrantAmount("");
+                            }}
+                        >
+                            Grant
+                        </button>
+                    </div>
                 </div>
             </div>
             <div className="tma-office-section">

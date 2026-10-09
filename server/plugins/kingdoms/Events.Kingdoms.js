@@ -67,8 +67,19 @@ const Membership = require("./Membership.Kingdoms");
 const Offices = require("./Offices.Kingdoms");
 const Influence = require("./Influence.Kingdoms");
 const Politics = require("./Politics.Kingdoms");
+const Treasury = require("./Treasury.Kingdoms");
 
 let pluginApi = null;
+
+/** Emit through the real bus when attached; the money moves either way. */
+function emitTaxCollected(kingdomId, amount, source) {
+  if (!pluginApi) return;
+  try {
+    pluginApi.emitCustomEvent("kingdom:tax-collected", { kingdomId, amount, source });
+  } catch {
+    // Notification only.
+  }
+}
 
 /** A kingdom announced itself — record it if we do not know it yet. */
 function onKingdomCreated(event) {
@@ -96,6 +107,15 @@ function onRankGranted(event) {
     player.setAttribute(Membership.KINGDOM_TITLES_ATTRIBUTE, titles);
   }
   Influence.onRankGranted(event);
+  // The court's due: fealty and earned promotions carry a small coin tax
+  // into the treasury. Quiet grants (office honorifics) are not taxed, and
+  // donations are never taxed here — the gift itself already moved.
+  if (!event.quiet) {
+    const kind = (event.rank ?? Influence.BASE_RANK) === Influence.BASE_RANK ? "fealty" : "promotion";
+    Treasury.collectTax(event.player, event.kingdomId, kind, (name, payload) =>
+      emitTaxCollected(payload.kingdomId, payload.amount, payload.source)
+    );
+  }
   settleEarnedPromotion(player, event.kingdomId);
 }
 
@@ -217,9 +237,12 @@ function onDonationMade(event) {
   }
 }
 
-/** A kingdom task completed: influence for the service. */
+/** A kingdom task completed: influence for the service, and the court's due. */
 function onTaskCompleted(event) {
   Influence.onTaskCompleted(event);
+  Treasury.collectTax(event?.player, event?.kingdomId, "task", (name, payload) =>
+    emitTaxCollected(payload.kingdomId, payload.amount, payload.source)
+  );
   if (event?.player?.setAttribute && event?.kingdomId) {
     settleEarnedPromotion(event.player, event.kingdomId);
   }

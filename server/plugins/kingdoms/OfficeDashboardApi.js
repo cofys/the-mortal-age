@@ -21,6 +21,8 @@
  *       action=set-tax-rate&officeId=<id>&rate=<0.5|1|1.5|2>
  *       action=approve-petition&officeId=<id>&petitionId=<id>
  *       action=deny-petition&officeId=<id>&petitionId=<id>
+ *       action=grant-treasury&officeId=<id>&to=<username>&amount=<coins>
+ *         (any held office may grant; the steward panel carries the buttons)
  *     Quartermaster:
  *       action=set-target-peace&officeId=<id>&value=<100-1000>
  *       action=set-target-war&officeId=<id>&value=<400-2400>
@@ -45,6 +47,7 @@ const Store = require("./KingdomStore");
 const Offices = require("./Offices.Kingdoms");
 const OfficeTools = require("./OfficeTools.Kingdoms");
 const Tension = require("./Tension.Kingdoms");
+const Treasury = require("./Treasury.Kingdoms");
 
 let Politics = null;
 try {
@@ -107,6 +110,7 @@ function stewardPayload(kingdomId) {
   const kingdom = Store.getKingdom(kingdomId) ?? {};
   return {
     treasury: kingdom.treasury ?? 0,
+    grantCap: Treasury.GRANT_MAX,
     taxRate: OfficeTools.getTaxRate(kingdomId),
     lastTax: flagOf(kingdomId, "sim:last-tax") ?? 0,
     lastWages: flagOf(kingdomId, "sim:last-wages") ?? 0,
@@ -253,6 +257,33 @@ function runOfficeAction(api, player, action, query) {
         return describeAction(action, true, "Denied. The petitioner leaves - the street may talk.");
       }
       return describeAction(action, false, "That petition is already gone.");
+    }
+    case "grant-treasury": {
+      const { ok, office } = checkHolder(player, officeId);
+      if (!ok) return describeAction(action, false, "The seals have passed to another.");
+      const to = (query.get("to") || "").trim();
+      const amount = Math.floor(Number(query.get("amount")) || 0);
+      const target = findPlayer(api, to);
+      const result = Treasury.grantFromTreasury(office.kingdomId, player, target, amount);
+      if (result.ok) {
+        const targetName = target?.getUsername?.() ?? to;
+        try {
+          target.sendMessage(
+            `[Court] The court of ${kingdomName(office.kingdomId)} grants you ${formatCoins(result.granted)}c.`
+          );
+          player.sendMessage(
+            `[Court] ${formatCoins(result.granted)}c leaves the treasury for ${targetName}.`
+          );
+        } catch {
+          // The coins already moved; the messages are courtesy.
+        }
+        return describeAction(
+          action,
+          true,
+          `${formatCoins(result.granted)}c leaves the treasury for ${targetName}.`
+        );
+      }
+      return describeAction(action, false, result.message ?? "The order could not be carried out.");
     }
 
     // --- quartermaster ---
