@@ -66,8 +66,7 @@ function makePlayer(username, opts = {}) {
   return {
     username,
     getUsername: () => username,
-    isBot: !!opts.isBot,
-    isRealPlayer: () => !opts.isBot,
+    isPlayerBot: () => !!opts.isBot,
     // Mirrors the real ItemContainer contract: getAmount(id),
     // deleteNumber(id, amount), adds(id, amount). There is no inv.count(id),
     // no inv.remove(id, amount), and add(id, amount) is the wrong signature

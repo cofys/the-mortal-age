@@ -58,7 +58,7 @@ function stubPlayer(username, coins, isBot = false) {
   const messages = [];
   return {
     messages,
-    isBot,
+    isPlayerBot: () => isBot,
     getUsername: () => username,
     username,
     getInventory: () => ({

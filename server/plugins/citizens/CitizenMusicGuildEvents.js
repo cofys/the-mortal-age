@@ -27,7 +27,12 @@ function usernameOf(player) {
 
 function isRealPlayer(player) {
   try {
-    return player?.isRealPlayer?.() ?? !player?.isBot;
+    // Engine truth: Player#isPlayerBot() (server/src/main/typescript/elvarg/game/entity/impl/player/Player.ts:1084)
+    // returns true for bot entities. The `?? false` fallback is deliberate: gate
+    // call sites always receive a live command entity, so isPlayerBot() is always
+    // callable there; the fallback preserves the legacy pass-through for anything
+    // that isn't a known bot instead of silently blocking a new class of callers.
+    return !(player?.isPlayerBot?.() ?? false);
   } catch {
     return true;
   }

@@ -45,8 +45,7 @@ function makePlayer(username, opts = {}) {
   return {
     username,
     getUsername: () => username,
-    isBot: !!opts.isBot,
-    isRealPlayer: () => !opts.isBot,
+    isPlayerBot: () => !!opts.isBot,
     coins: opts.coins ?? 1000,
     getInventory: () => ({
       // Real ItemContainer contract: getAmount(id), deleteNumber(id, amount).
