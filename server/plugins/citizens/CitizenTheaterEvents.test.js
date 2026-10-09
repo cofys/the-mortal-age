@@ -38,14 +38,14 @@ function stubPlayer(username, opts) {
       if (id === 970) return this.papyrus;
       return 0;
     },
-    add(id, n) {
+    // Real ItemContainer API: getAmount(id), adds(id, amount), deleteNumber(id, amount).
+    adds(id, n) {
       if (id === 995) this.coins += n;
       if (id === 970) this.papyrus += n;
     },
-    remove(id, n) {
-      if (id === 995 && this.coins >= n) { this.coins -= n; return true; }
-      if (id === 970 && this.papyrus >= n) { this.papyrus -= n; return true; }
-      return false;
+    deleteNumber(id, n) {
+      if (id === 995 && this.coins >= n) this.coins -= n;
+      if (id === 970 && this.papyrus >= n) this.papyrus -= n;
     },
   };
   const messages = [];

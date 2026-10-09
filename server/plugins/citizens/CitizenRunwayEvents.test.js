@@ -41,16 +41,16 @@ function mockPlayer(username, opts) {
       if (id === 1759) return this.cloth;
       return 0;
     },
-    add(id, n) {
+    // Real ItemContainer API: getAmount(id), adds(id, amount), deleteNumber(id, amount).
+    adds(id, n) {
       if (id === 995) this.coins += n;
       if (id === 970) this.papyrus += n;
       if (id === 1759) this.cloth += n;
     },
-    remove(id, n) {
-      if (id === 995 && this.coins >= n) { this.coins -= n; return true; }
-      if (id === 970 && this.papyrus >= n) { this.papyrus -= n; return true; }
-      if (id === 1759 && this.cloth >= n) { this.cloth -= n; return true; }
-      return false;
+    deleteNumber(id, n) {
+      if (id === 995 && this.coins >= n) this.coins -= n;
+      if (id === 970 && this.papyrus >= n) this.papyrus -= n;
+      if (id === 1759 && this.cloth >= n) this.cloth -= n;
     },
   };
   return {
