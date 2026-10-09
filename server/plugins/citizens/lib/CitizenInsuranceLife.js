@@ -83,8 +83,9 @@ function careerOf(username) {
 
 function journalEvent(citizenName, text, kind) {
   try {
+    // Canonical journal API: getJournal().log(name, kind, text).
     const { getJournal } = require("./CitizenJournal");
-    getJournal().log(citizenName, text, kind || "insurance");
+    getJournal().log(citizenName, kind || "insurance", text);
   } catch { /* best-effort */ }
 }
 
@@ -96,7 +97,8 @@ function announce(director, text) {
         if (!record || record.role !== "commoner") continue;
         const bot = botFor(director, record);
         if (!bot) continue;
-        const players = director?.getLocalPlayers?.(bot) ?? [];
+        // Canonical engine API: near-player scan lives on the bot, not the director.
+        const players = bot.getLocalPlayers?.() ?? [];
         if (!players.some((p) => !p?.isBot && !p?.isCitizen)) continue;
         sayPublic(bot, text);
         journalEvent("insurance", text, "insurance");
@@ -221,7 +223,8 @@ function sellPolicies(director, nowMs) {
         if (coins < face * 0.05) continue; // cannot honestly afford cover
         const r = Insurance.buyPolicy(bot, uname, type, face, {
           kingdomId: kid,
-          career: careerOf(uname),
+          // careerOf() returns a record { career, ... }; assessRisk wants the name.
+          career: careerOf(uname)?.career ?? null,
           age: Number(record?.personality?.age),
         });
         if (r.ok) {
@@ -249,10 +252,16 @@ function processDeathClaims(director, nowMs) {
     return;
   }
   const st = Insurance._data();
+  // Snapshot the watermark BEFORE the loop: getDeceased() is newest-first,
+  // so advancing it per-record would skip every older unprocessed death.
+  const startWatermark = st.lastDeathWatermark;
+  let maxSeen = startWatermark;
   let paid = 0;
   for (const d of Funerals.getDeceased()) {
-    if (!d || (d.diedAt ?? 0) <= st.lastDeathWatermark) continue;
-    Insurance.setDeathWatermark(d.diedAt ?? 0);
+    if (!d) continue;
+    const diedAt = d.diedAt ?? 0;
+    if (diedAt > maxSeen) maxSeen = diedAt;
+    if (diedAt <= startWatermark) continue;
     const uname = d.username ?? d.name;
     if (!uname) continue;
     const policy = Insurance.policyFor(uname, "life");
@@ -264,6 +273,7 @@ function processDeathClaims(director, nowMs) {
       announce(director, `${uname}'s life policy paid out ${r.paid} coins to their family.`);
     }
   }
+  Insurance.setDeathWatermark(maxSeen);
 }
 
 /**

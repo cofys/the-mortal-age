@@ -45,7 +45,8 @@ function mockBot(coins) {
     add(id, n) { if (id === 995) this.coins += n; },
     remove(id, n) { if (id === 995 && this.coins >= n) { this.coins -= n; return true; } return false; },
   };
-  return { getInventory: () => inv, _inv: inv };
+  // Real bot shape: near-player scans live on the bot (getLocalPlayers).
+  return { getInventory: () => inv, _inv: inv, getLocalPlayers: () => [] };
 }
 
 function mockDirector(records, botsByName) {
@@ -55,9 +56,7 @@ function mockDirector(records, botsByName) {
     roster: new Map(records.map((r) => [r.username, r])),
     isOnline: (rec) => !!bots[String(rec?.username ?? "").toLowerCase()],
     getBot: (rec) => bots[String(rec?.username ?? "").toLowerCase()] ?? null,
-    getLocalPlayers: () => [],
     log: () => {},
-    getJournal: () => ({ log: () => {} }),
   };
 }
 

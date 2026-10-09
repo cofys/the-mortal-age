@@ -115,12 +115,23 @@ test("buying fails honestly when the buyer cannot pay", () => {
   assert.strictEqual(Insurance.policyFor("Bob", "life"), null, "no phantom policy");
 });
 
-test("buying fails when the pool is insolvent", () => {
-  // Fresh reset: pool is 0 — cannot cover 2x exposure of a 10k face policy.
+test("buying fails when a capitalized pool is too thin", () => {
+  // Pool has capital but cannot cover 2x exposure of a 10k face policy.
+  Insurance._data().pool = 1000;
   const p = mockPlayer(5000, "Carol");
   const r = Insurance.buyPolicy(p, "Carol", "life", 10000, { kingdomId: "misthalin" });
   assert.strictEqual(r.ok, false);
   assert.strictEqual(r.reason, "insurer-insolvent");
+});
+
+test("buying bootstraps from an empty pool", () => {
+  // Fresh reset: pool is 0 — the solvency gate is skipped so the first
+  // sales' premiums can capitalize the pool; otherwise no policy could
+  // ever be sold.
+  const p = mockPlayer(5000, "Carol2");
+  const r = Insurance.buyPolicy(p, "Carol2", "life", 10000, { kingdomId: "misthalin" });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert(Insurance.poolBalance() > 0, "first premium capitalized the pool");
 });
 
 test("cannot hold two active policies of the same type", () => {

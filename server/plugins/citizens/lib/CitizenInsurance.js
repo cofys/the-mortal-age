@@ -416,9 +416,12 @@ function buyPolicy(player, username, type, faceValue, opts = {}) {
   if (slot[q.type] && slot[q.type].status === "active") {
     return { ok: false, reason: "already-insured" };
   }
-  // Solvency: the pool must cover twice the new exposure.
+  // Solvency: once the pool is capitalized, it must cover twice the new
+  // exposure. From an empty pool the gate is skipped — the first sales'
+  // premiums are what capitalize the pool (bootstrap); without this the
+  // pool could never become non-zero and no policy could ever be sold.
   const st = data();
-  if (st.pool + q.premium < q.faceValue * POOL_SOLVENCY_MULT) {
+  if (st.pool > 0 && st.pool + q.premium < q.faceValue * POOL_SOLVENCY_MULT) {
     return { ok: false, reason: "insurer-insolvent" };
   }
   if (!player || coinsOf(player) < q.premium) {
@@ -522,7 +525,10 @@ function routePayout(username, amount, player) {
       paid = payable;
     } else {
       paid = creditBank(username, payable);
-      owed = amount - paid;
+      // creditBank routes to payoutsOwed internally when banking is missing,
+      // so the remainder is always amount - payable (never amount - paid —
+      // that double-counts the internal fallback).
+      owed = amount - payable;
     }
   }
   if (owed > 0) {

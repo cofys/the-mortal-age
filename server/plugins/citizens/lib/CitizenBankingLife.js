@@ -10,8 +10,9 @@
  *     assay, pawn tickets).
  *   - THIS module owns the real-economy tick: interest accrual on savings
  *     and treasury deposits, loan interest, overdue reminders, default
- *     processing (reputation hit + guard report), banker appointment from
- *     the real roster, and announcements near real players.
+ *     processing (reputation hit + public announcement), banker appointment
+ *     from the real roster, and announcements near real players.
+ *     (No guard report: the crime catalog has no debt-default kind.)
  *
  * All coin movement is real (inventories, treasury). Never throws.
  * Zero LLM. Dirty-flag persistence via CitizenBanking.save().
@@ -29,9 +30,10 @@ function safeTick(director, fn, label) {
   }
 }
 
-function anyRealPlayerNear(director, bot, radius) {
+function anyRealPlayerNear(bot) {
   try {
-    const players = director?.getLocalPlayers?.(bot) ?? [];
+    // Canonical engine API: near-player scan lives on the bot, not the director.
+    const players = bot?.getLocalPlayers?.() ?? [];
     return players.some((p) => !p?.isBot && !p?.isCitizen);
   } catch {
     return false;
@@ -47,10 +49,12 @@ function announce(director, text) {
         if (!record || record.role !== "commoner") continue;
         const bot = director.isOnline?.(record) ? director.getBot?.(record) : null;
         if (!bot) continue;
-        if (!anyRealPlayerNear(director, bot, 20)) continue;
+        if (!anyRealPlayerNear(bot)) continue;
         sayPublic(bot, text);
         try {
-          director.getJournal?.().log?.("banking", text);
+          // Canonical journal API: getJournal().log(name, kind, text).
+          const { getJournal } = require("./CitizenJournal");
+          getJournal().log(record.username, "banking", text);
         } catch { /* journal optional */ }
         return true;
       } catch { /* next citizen */ }
@@ -91,35 +95,30 @@ function appointBankers(director, nowMs) {
 }
 
 /**
- * Process loan defaults: 60+ days overdue → reputation hit + guard report.
+ * Process loan defaults: 60+ days overdue → reputation hit + announcement.
+ * (No guard report: "debt-default" is not a CitizenCrime catalog kind, and
+ * reportOffense(username, kind, opts) takes positional args, not an object.)
  */
 function processDefaults(director, nowMs) {
   const st = Banking._data();
+  let processed = 0;
   for (const key of Object.keys(st.loans)) {
     const loan = st.loans[key];
     if (!loan || loan.owed <= 0) continue;
     if (!Banking.isDefaulted(key, nowMs)) continue;
     if (loan.defaulted) continue; // already processed
     loan.defaulted = true;
-    // Reputation hit.
+    processed++;
+    // Reputation hit (canonical: addReputation(username, amount, reason, nowMs)).
     try {
       const Rep = require("./CitizenReputation");
-      Rep.addDeed?.(key, "defaulter", -8);
+      Rep.addReputation?.(key, -8, "defaulted on a bank loan", nowMs);
     } catch { /* reputation optional */ }
-    // Report to the watch.
-    try {
-      const Crime = require("./CitizenCrime");
-      Crime.reportOffense?.({
-        citizen: key,
-        kind: "debt-default",
-        severity: 2,
-        kingdom: null,
-        witnessed: false,
-        victim: "bank",
-      }, nowMs);
-    } catch { /* crime optional */ }
     announce(director, `${key} has defaulted on a bank loan of ${loan.owed} coins.`);
   }
+  // Persist the defaulted flags — without this they are lost on restart
+  // and every defaulter is re-processed (reputation hit again).
+  if (processed > 0) Banking.markDirty();
 }
 
 /**
@@ -137,6 +136,7 @@ function remindOverdue(director, nowMs) {
     reminded++;
   }
   if (reminded > 0) {
+    Banking.markDirty(); // persist lastReminder timestamps
     announce(director, `The bank reminds ${reminded} borrower${reminded > 1 ? "s" : ""}: loans are overdue.`);
   }
 }

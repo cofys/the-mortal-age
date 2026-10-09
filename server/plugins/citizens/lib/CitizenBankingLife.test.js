@@ -24,12 +24,13 @@ function test(name, fn) {
 }
 
 function mockDirector() {
+  // Real director shape: isOnline/getBot take the roster RECORD;
+  // near-player scans live on the bot (getLocalPlayers), not the director.
   return {
     roster: new Map(),
     log: () => {},
     isOnline: () => false,
     getBot: () => null,
-    getJournal: () => ({ log: () => {} }),
   };
 }
 

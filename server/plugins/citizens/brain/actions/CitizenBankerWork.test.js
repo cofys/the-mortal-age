@@ -47,9 +47,10 @@ const stubNav = {
 
 const _actionStates = new Map();
 const stubActionState = {
-  playerState(player, id) {
-    const key = `${player.username}:${id}`;
-    if (!_actionStates.has(key)) _actionStates.set(key, {});
+  // Real ActionState shape: playerState(action, player, create).
+  playerState(action, player, create) {
+    const key = `${player.username}:${action?.id ?? "action"}`;
+    if (!_actionStates.has(key)) _actionStates.set(key, create());
     return _actionStates.get(key);
   },
   reset() { _actionStates.clear(); },
@@ -130,7 +131,7 @@ test("give-up returns success", () => {
   const action = createCitizenBankerWorkAction();
   const p = mockPlayer("Frank", 3200, 3200);
   // Force the start time to be old
-  const st = stubActionState.playerState(p, "citizenBankerWork");
+  const st = stubActionState.playerState(action, p, () => ({}));
   st.startedAt = Date.now() - 11 * 60 * 1000;
   const result = action.tick(p, {});
   assert.strictEqual(result, "success", "give-up is honest success");

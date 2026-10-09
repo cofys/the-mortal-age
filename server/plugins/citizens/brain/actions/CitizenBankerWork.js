@@ -59,7 +59,12 @@ function atTile(player, tile, radius = ARRIVE_RADIUS) {
 
 function walkTo(player, tile) {
   try {
-    requestMovement(player, { x: tile.x, y: tile.y, z: tile.z ?? 0 });
+    // Canonical engine API: requestMovement(player, targetX, targetY, options).
+    requestMovement(player, tile.x, tile.y, {
+      z: tile.z ?? 0,
+      reason: "citizenBankerWork",
+      basicPather: true,
+    });
   } catch {}
 }
 
@@ -102,6 +107,16 @@ function isBanker(player) {
 function createCitizenBankerWorkAction() {
   const factoryId = "citizenBankerWork";
 
+  // Canonical ActionState API: playerState(action, player, create).
+  function botState(player) {
+    return playerState(action, player, () => ({
+      startedAt: 0,
+      phase: "outbound",
+      rounds: 0,
+      lastServe: 0,
+    }));
+  }
+
   function canStart(player) {
     try {
       return !!bankingApi() && !!branchTileFor(player);
@@ -111,7 +126,7 @@ function createCitizenBankerWorkAction() {
   }
 
   function tick(player, ctx) {
-    const st = playerState(player, factoryId);
+    const st = botState(player);
     const nowMs = Date.now();
 
     if (!st.startedAt) {
@@ -181,7 +196,8 @@ function createCitizenBankerWorkAction() {
     return "success";
   }
 
-  return { id: factoryId, canStart, tick };
+  const action = { id: factoryId, canStart, tick };
+  return action;
 }
 
 module.exports = { createCitizenBankerWorkAction };
