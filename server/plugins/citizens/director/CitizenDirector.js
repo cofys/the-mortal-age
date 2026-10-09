@@ -293,6 +293,8 @@ const { tickDigGuildLife } = require("../lib/CitizenDigGuildLife");
 const CitizenDigGuilds = require("../lib/CitizenDigGuilds");
 const { tickStageGuildLife } = require("../lib/CitizenStageGuildLife");
 const CitizenStageGuilds = require("../lib/CitizenStageGuilds");
+const { tickSportsGuildLife } = require("../lib/CitizenSportsGuildLife");
+const CitizenSportsGuilds = require("../lib/CitizenSportsGuilds");
 const { tickCivilLife } = require("../lib/CitizenCivilLife");
 const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -3343,6 +3345,15 @@ class CitizenDirector {
     } catch (error) {
       this.log("stage guild failed", { error: String(error?.message ?? error) });
     }
+    // Athletes' Guild: dues, record certification, doping tribunal, training
+    // camps, golden laurel, athletic school. Data tier, zero LLM.
+    // (CitizenAthletics owns athletes/training/records; this owns the
+    // profession's guild layer only.)
+    try {
+      tickSportsGuildLife(this, nowMs);
+    } catch (error) {
+      this.log("sports guild failed", { error: String(error?.message ?? error) });
+    }
     // Bar association: dues, case reviews, pro bono, disciplinary board,
     // legal school. Data tier, zero LLM. (CitizenCivilLaw owns contracts/
     // disputes/judgments; this owns the profession's guild layer only.)
@@ -3804,6 +3815,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen stage guild save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenSportsGuilds.save()) {
+        this.log("citizen sports guild saved");
+      }
+    } catch (error) {
+      this.log("citizen sports guild save failed", {
         error: String(error?.message ?? error),
       });
     }

@@ -43,6 +43,7 @@ const { onSpyGuildCommand, SPYGUILD_USAGE } = require("./CitizenSpyGuildEvents")
 const { onTradeGuildCommand, TRADEGUILD_USAGE } = require("./CitizenTradeGuildEvents");
 const { onDigGuildCommand, DIGGUILD_USAGE } = require("./CitizenDigGuildEvents");
 const { onStageGuildCommand, STAGEGUILD_USAGE } = require("./CitizenStageGuildEvents");
+const { onSportsGuildCommand, SPORTSGUILD_USAGE } = require("./CitizenSportsGuildEvents");
 const { onGalleryCommand, GALLERY_USAGE } = require("./CitizenGalleryEvents");
 const { onLibraryCommand, LIBRARY_USAGE } = require("./CitizenLibraryEvents");
 const { onObservatoryCommand, OBSERVATORY_USAGE } = require("./CitizenObservatoryEvents");
@@ -833,6 +834,12 @@ module.exports = {
       onStageGuildCommand,
       PlayerRights.NONE,
       STAGEGUILD_USAGE
+    );
+    api.registerCommand(
+      "sportsguild",
+      onSportsGuildCommand,
+      PlayerRights.NONE,
+      SPORTSGUILD_USAGE
     );
   },
 };

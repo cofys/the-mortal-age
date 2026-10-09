@@ -114,6 +114,8 @@ const DEEDS = Object.freeze({
   forger: Object.freeze({ points: -8, label: "was expelled from the Excavators' Guild for forgery" }),
   stagemaster: Object.freeze({ points: 8, label: "rose to stagemaster of the Players' Guild" }),
   plagiarist: Object.freeze({ points: -8, label: "was expelled from the Players' Guild for plagiarism" }),
+  gamesmaster: Object.freeze({ points: 8, label: "rose to gamesmaster of the Athletes' Guild" }),
+  cheater: Object.freeze({ points: -8, label: "was expelled from the Athletes' Guild for doping" }),
   counselor: Object.freeze({ points: 6, label: "won a civil case as advocate" }),
   oathbreaker: Object.freeze({ points: -6, label: "broke a sworn contract" }),
   executor: Object.freeze({ points: 4, label: "settled an estate faithfully" }),

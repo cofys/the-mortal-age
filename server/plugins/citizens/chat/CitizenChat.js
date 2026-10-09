@@ -676,6 +676,34 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "athletes' guild" / "sports guild" / "record certification" / "golden
+  // laurel" / "training camp" — player asks about the Athletes' Guild.
+  // (The athletics block below owns "athlete", "stadium", "training".)
+  if (/\b(athletes'? guild|sports guild|guild of athletes|record certification|certify (a|my) record|certified record|golden laurel|training camp|doping|gamesmaster)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenSportsGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "sportsguild_status", {
+        username: citizenUsername,
+        exists: desc.exists ?? false,
+        memberCount: desc.memberCount ?? 0,
+        gamesmasters: desc.gamesmasters ?? 0,
+        sealed: desc.sealed ?? 0,
+        openCamps: desc.openCamps ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "athlete" / "stadium" / "training" — player asks about athletics.
   // (CitizenSports owns the leagues and fixtures; this owns athletes,
   // training, stadiums, and records.)
