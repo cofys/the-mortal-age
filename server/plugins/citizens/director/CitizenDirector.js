@@ -216,6 +216,8 @@ const { tickMusicDance } = require("../lib/CitizenMusicDanceLife");
 const CitizenMusicDance = require("../lib/CitizenMusicDance");
 const { tickFashion } = require("../lib/CitizenFashionLife");
 const CitizenFashion = require("../lib/CitizenFashion");
+const { tickCuisine } = require("../lib/CitizenCuisineLife");
+const CitizenCuisine = require("../lib/CitizenCuisine");
 
 const { tickTournaments } = require("../lib/CitizenTournamentLife");
 const CitizenTournaments = require("../lib/CitizenTournaments");
@@ -2975,6 +2977,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("fashion failed", { error: String(error?.message ?? error) });
     }
+    // Citizen cuisine: competitions, critic reviews, restaurant menus.
+    // Data tier, zero LLM.
+    try {
+      tickCuisine(this, nowMs);
+    } catch (error) {
+      this.log("cuisine failed", { error: String(error?.message ?? error) });
+    }
 
 // Citizen tournaments: seasonal brackets, entries, payouts, betting.
     // Data tier, zero LLM.
@@ -3236,6 +3245,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen fashion save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenCuisine.save()) {
+        this.log("citizen cuisine saved");
+      }
+    } catch (error) {
+      this.log("citizen cuisine save failed", {
         error: String(error?.message ?? error),
       });
     }

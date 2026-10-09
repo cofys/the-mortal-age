@@ -1394,6 +1394,33 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "is there a restaurant" — player asks about restaurants, menus, chefs.
+  if (/\b(is there a restaurant|any restaurants|what.s on the menu|what.s for dinner|who is the chef|master chef|culinary competition|best dish|i.m hungry|order food)\b/.test(said)) {
+    try {
+      const Cuisine = require("../lib/CitizenCuisine");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? "varrock";
+      const rest = Cuisine.restaurantFor(kingdomId);
+      const menu = Cuisine.menuFor(kingdomId);
+      const comp = Cuisine.openCompetition(kingdomId);
+      const chefs = Cuisine.masterChefs();
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "cuisine_status", {
+        restaurantName: rest?.name ?? null,
+        menuCount: menu.length,
+        menu: menu.slice(0, 5).map((d) => ({ name: d.name, price: d.value, heal: d.heal, chef: d.chef })),
+        competitionOpen: !!comp,
+        masterChefCount: chefs.length,
+        dishTypes: Cuisine.DISH_TYPES,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where can I travel" / "take me to X" — player asks about ships/caravans.
   if (/\b(where can i travel|how do i travel|is there a ship|is there a caravan|take me to|i want to travel|can you take me)\b/.test(said)) {
     try {

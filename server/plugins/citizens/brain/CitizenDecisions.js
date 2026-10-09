@@ -107,6 +107,7 @@ const ACT_PETCARE = "citizen_petcare";
 const ACT_CREATEART = "citizen_createart";
 const ACT_PERFORM = "citizen_perform";
 const ACT_FASHION = "citizen_tailorwork";
+const ACT_CUISINE = "citizen_chefwork";
 
 const ACT_COMPETE = "citizen_compete";
 const ACT_DIPLOMAT = "citizen_diplomat";
@@ -143,6 +144,8 @@ const WORK_ACTIVITIES = new Set([
   ACT_CREATEART,
   ACT_PERFORM,
   ACT_FASHION,
+  ACT_CUISINE,
+  ACT_CUISINE,
 
 ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MINE,
@@ -745,6 +748,50 @@ function fashionInfo(player) {
     return { canSew: affordableCount > 0, affordableCount, bestType };
   } catch {
     return { canSew: false, affordableCount: 0, bestType: null };
+  }
+}
+
+/**
+ * Cuisine readiness: can this citizen cook a signature dish?
+ * Checks real Cooking level and whether ingredient item IDs resolve.
+ * Defensive: a missing/broken cuisine module scores as unable to cook.
+ */
+function cuisineInfo(player) {
+  try {
+    const Cuisine = require("../lib/CitizenCuisine");
+    const ids = Cuisine.ingredientIds();
+    if (!ids) return { canCook: false, cookingLevel: 1, affordableCount: 0 };
+    let cookingLevel = 1;
+    try {
+      const skills = player?.skills ?? player?.getSkills?.();
+      if (skills?.getLevel) cookingLevel = skills.getLevel("cooking");
+      else if (typeof skills?.cooking === "number") cookingLevel = skills.cooking;
+      else cookingLevel = player?.getLevel?.("cooking") ?? 1;
+    } catch { /* default 1 */ }
+    // Count affordable dish types by checking real inventory.
+    let affordableCount = 0;
+    try {
+      const inv = player?.inventory ?? player?.getInventory?.();
+      const count = (id) => {
+        if (id == null || !inv) return 0;
+        try {
+          if (typeof inv.count === "function") return inv.count(id) ?? 0;
+          if (typeof inv.getAmount === "function") return inv.getAmount(id) ?? 0;
+        } catch { /* fall through */ }
+        return 0;
+      };
+      for (const type of Cuisine.DISH_TYPES) {
+        const def = Cuisine.DISHES[type];
+        let ok = true;
+        for (const [kind, need] of Object.entries(def.ingredients)) {
+          if (count(ids[kind]) < need) { ok = false; break; }
+        }
+        if (ok) affordableCount++;
+      }
+    } catch { /* affordableCount stays 0 */ }
+    return { canCook: cookingLevel >= 30 && affordableCount > 0, cookingLevel, affordableCount };
+  } catch {
+    return { canCook: false, cookingLevel: 1, affordableCount: 0 };
   }
 }
 
@@ -1446,6 +1493,7 @@ function snapshot(player) {
     art: artInfo(player),
     perform: performInfo(player),
     fashion: fashionInfo(player),
+    cuisine: cuisineInfo(player),
 
 compete: competeInfo(player),
     diplomat: diplomatInfo(player),
@@ -1475,7 +1523,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1822,6 +1870,27 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // drunk tailors prick fingers
+      return s;
+    }
+
+    case ACT_CUISINE: {
+      // Cuisine: master chefs create real signature dishes from real
+      // ingredients. A human chef cooks when they have ingredients and
+      // the skill; the creative plate beautiful dishes, the ambitious
+      // chase the master-chef title. No ingredients or low skill, no cooking.
+      const ci = cuisine ?? { canCook: false, cookingLevel: 1, affordableCount: 0 };
+      if (!ci.canCook) return 4; // can't cook, nothing to do
+      let s = 18;
+      const creativity = personality?.creativity ?? personality?.creative ?? 0;
+      if (creativity > 0.7) s += 10; // cuisine is an art
+      else if (creativity > 0.5) s += 5;
+      if (ci.cookingLevel >= 50) s += 8; // master chefs lead the kitchen
+      if (ci.affordableCount >= 3) s += 6; // well-stocked pantry
+      if (goalType === GOAL_MASTER_TRADE) s += 8; // fine dining sells
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // drunk chefs burn the roast
       return s;
     }
 
@@ -2471,6 +2540,7 @@ module.exports = {
   ACT_CREATEART,
   ACT_PERFORM,
   ACT_FASHION,
+  ACT_CUISINE,
 
 ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MEAL,

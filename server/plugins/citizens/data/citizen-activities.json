@@ -762,6 +762,27 @@
       ]
     },
     {
+      "id": "citizen_chefwork",
+      "mode": "citizen_chefwork",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenChefWork"
+        }
+      ]
+    },
+    {
       "id": "citizen_compete",
       "mode": "citizen_compete",
       "repeat": false,
