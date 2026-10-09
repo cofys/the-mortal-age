@@ -17,8 +17,15 @@ const sitesPath = path.resolve(__dirname, "../brain/CitizenSites.js");
 require.cache[sitesPath] = {
   id: sitesPath, filename: sitesPath, loaded: true,
   exports: {
-    KINGDOM_IDS: ["varrock"],
-    kingdomIdOf: (r) => r?.kingdomId || "varrock",
+    KINGDOM_IDS: ["varrock", "falador"],
+    // Real kingdomIdOf shape: reads the "kingdom:id" attribute off a LIVE
+    // player entity and silently falls back to KINGDOM_IDS[0] for anything
+    // else (plain roster records included). The stub replicates that so the
+    // tests catch code that passes records where an entity is required.
+    kingdomIdOf: (p) => {
+      const id = p?.getAttribute?.("kingdom:id");
+      return typeof id === "string" && id ? id : "varrock";
+    },
     siteTile: () => ({ x: 3200, y: 3200, z: 0 }),
   },
 };
@@ -60,7 +67,10 @@ const journaled = [];
 const journalPath = path.resolve(__dirname, "./CitizenJournal.js");
 require.cache[journalPath] = {
   id: journalPath, filename: journalPath, loaded: true,
-  exports: { getJournal: () => ({ log: (kind, data) => { journaled.push({ kind, data }); } }) },
+  // Real journal shape: log(citizenName, kind, text, opts). Entries without a
+  // text arg are silently dropped by the journal, so the mock records every
+  // arg and the assertions check the text is a real string.
+  exports: { getJournal: () => ({ log: (citizenName, kind, text, opts) => { journaled.push({ citizenName, kind, text, opts }); } }) },
 };
 
 // --- real modules under test ---
@@ -71,16 +81,18 @@ const Life = require("./CitizenPressGuildLife");
 function makeInv(coins) {
   let c = coins;
   return {
-    count: (id) => (id === 995 ? c : 0),
-    remove: (id, n) => { if (id === 995 && c >= n) { c -= n; return true; } return false; },
-    add: (id, n) => { if (id === 995) c += n; },
+    // Real ItemContainer shape: getAmount(id), deleteNumber(id, n), adds(id, n).
+    getAmount: (id) => (id === 995 ? c : 0),
+    deleteNumber: (id, n) => { if (id === 995 && c >= n) { c -= n; return true; } return false; },
+    delete: (id, n) => { if (id === 995 && c >= n) { c -= n; return true; } return false; },
+    adds: (id, n) => { if (id === 995) c += n; },
     __coins: () => c,
   };
 }
 
 function makeBot(username, coins) {
   const inv = makeInv(coins);
-  return { username, inventory: inv, getInventory: () => inv };
+  return { username, getInventory: () => inv, __inv: inv };
 }
 
 function makeDirector(records) {
@@ -94,7 +106,7 @@ function makeDirector(records) {
 
 function makeRecord(username, coins, kingdomId = "varrock") {
   const bot = makeBot(username, coins);
-  return { username, name: username, kingdomId, __bot: bot, bot };
+  return { username, name: username, kingdomId, __bot: bot, __inv: bot.__inv };
 }
 
 function reset() {
@@ -160,7 +172,9 @@ test("dues collected from real online inventories; broke members miss", () => {
   const recNell = makeRecord("Nell", 1000);
   const recBroke = makeRecord("Broke", 0);
   Life.tickPressGuildLife(makeDirector([recNell, recBroke]), Date.now());
-  assert.strictEqual(recNell.bot.inventory.__coins(), 1000 - Guilds.DUES_WEEKLY);
+  // Dues were collected through the REAL inventory API (getAmount/deleteNumber):
+  // 25 coins left the bot's inventory and landed in the guild treasury.
+  assert.strictEqual(recNell.__inv.__coins(), 1000 - Guilds.DUES_WEEKLY);
   assert.strictEqual(Guilds.guildTreasuryFor("varrock"), Guilds.DUES_WEEKLY);
   assert.strictEqual(Guilds.memberOf("Broke").missedDues, 1);
 });
@@ -177,7 +191,7 @@ test("two missed dues suspend the member", () => {
   Life.tickPressGuildLife(d, t0 + 8 * 24 * 3600 * 1000); // past the dues period
   assert.strictEqual(Guilds.memberOf("Broke").missedDues, 2);
   assert.strictEqual(Guilds.memberOf("Broke").suspended, true);
-  assert.ok(journaled.some((j) => j.kind === "pressguild-suspended"));
+  assert.ok(journaled.some((j) => j.kind === "pressguild-suspended" && typeof j.text === "string" && j.text.length > 0 && typeof j.citizenName === "string" && j.citizenName.length > 0), "canonical journal shape (name, kind, text) for pressguild-suspended");
 });
 
 test("plagiarism scan auto-opens an ethics case", () => {
@@ -189,7 +203,7 @@ test("plagiarism scan auto-opens an ethics case", () => {
   const open = Guilds.openCases("varrock");
   assert.strictEqual(open.length, 1);
   assert.strictEqual(open[0].accused, "Zed");
-  assert.ok(journaled.some((j) => j.kind === "pressguild-case-opened"));
+  assert.ok(journaled.some((j) => j.kind === "pressguild-case-opened" && typeof j.text === "string" && j.text.length > 0 && typeof j.citizenName === "string" && j.citizenName.length > 0), "canonical journal shape (name, kind, text) for pressguild-case-opened");
 });
 
 test("tribunal settles old cases; fabrication expels and awards the deed", () => {
@@ -222,7 +236,7 @@ test("Inkwell awarded to the best member story with a real prize and deed", () =
   assert.strictEqual(awards.length, 1);
   assert.strictEqual(awards[0].winner, "Zed");
   assert.ok(deedsAwarded.some((d) => d.username === "Zed" && d.deed === "presslaureate"));
-  assert.ok(journaled.some((j) => j.kind === "pressguild-award"));
+  assert.ok(journaled.some((j) => j.kind === "pressguild-award" && typeof j.text === "string" && j.text.length > 0 && typeof j.citizenName === "string" && j.citizenName.length > 0), "canonical journal shape (name, kind, text) for pressguild-award");
   assert.ok(saidPublic.some((s) => /Inkwell/.test(s.msg)), "award announced");
 });
 
@@ -236,8 +250,8 @@ test("school: editor teaches stringers; promotions journaled", () => {
   Life.tickPressGuildLife(makeDirector([recEd, recNell]), Date.now());
   assert.ok(Guilds.memberOf("Nell").trainingCredits >= 1);
   assert.strictEqual(Guilds.guildRankOf("Nell"), "reporter"); // 5 stories -> promoted
-  assert.ok(journaled.some((j) => j.kind === "pressguild-class"));
-  assert.ok(journaled.some((j) => j.kind === "pressguild-promotion"));
+  assert.ok(journaled.some((j) => j.kind === "pressguild-class" && typeof j.text === "string" && j.text.length > 0 && typeof j.citizenName === "string" && j.citizenName.length > 0), "canonical journal shape (name, kind, text) for pressguild-class");
+  assert.ok(journaled.some((j) => j.kind === "pressguild-promotion" && typeof j.text === "string" && j.text.length > 0 && typeof j.citizenName === "string" && j.citizenName.length > 0), "canonical journal shape (name, kind, text) for pressguild-promotion");
 });
 
 test("passes pruned on the tick", () => {
@@ -246,6 +260,27 @@ test("passes pruned on the tick", () => {
   assert.ok(Guilds.hasPressPass("Nell"));
   Life.tickPressGuildLife(makeDirector([]), Date.now() + 31 * 24 * 3600 * 1000);
   assert.ok(!Guilds.hasPressPass("Nell"));
+});
+
+test("kingdom attribution uses the roster record's kingdomId, not the entity-only API", () => {
+  // REGRESSION: CitizenSites.kingdomIdOf needs a live player entity and
+  // silently returns KINGDOM_IDS[0] for plain roster records. The life tick
+  // must read record.kingdomId directly or non-first-kingdom citizens are
+  // attributed to varrock (school never matches them, announcements go to
+  // the wrong kingdom's bots).
+  fakeJournalists.add("fed");
+  fakeJournalists.add("fnell");
+  Guilds.joinGuild("Fed", "falador");
+  Guilds.joinGuild("FNell", "falador");
+  Guilds.memberOf("Fed").rank = "editor";
+  const recEd = makeRecord("Fed", 500, "falador");
+  const recNell = makeRecord("FNell", 500, "falador");
+  Life.tickPressGuildLife(makeDirector([recEd, recNell]), Date.now());
+  assert.ok(Guilds.memberOf("FNell").trainingCredits >= 1, "falador stringer attended the falador class");
+  assert.ok(
+    journaled.some((j) => j.kind === "pressguild-class" && j.opts && j.opts.kingdomId === "falador"),
+    "class journaled for falador"
+  );
 });
 
 console.log(`\n${passed} tests passed`);

@@ -195,7 +195,10 @@ function hallTileFor(kingdomId) {
   if (!tile) {
     try {
       const S = sitesApi();
-      tile = S && typeof S.siteTile === "function" ? S.siteTile({ kingdomId: kid }, "market") : null;
+      // Entity-less lookup: siteTileByKingdom(kingdomId, kind). The
+      // player-entity siteTile reads getAttribute and would silently fall
+      // back to KINGDOM_IDS[0] for a plain object.
+      tile = S && typeof S.siteTileByKingdom === "function" ? S.siteTileByKingdom(kid, "market") : null;
     } catch { tile = null; }
   }
   if (!tile) return { x: 3200, y: 3200, z: 0 };

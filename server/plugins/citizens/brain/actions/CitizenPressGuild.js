@@ -157,8 +157,9 @@ function createCitizenPressGuildAction(spec, world) {
           try {
             if (state.roundsDone === SESSION_ROUNDS && state.rank === Guilds.RANK_EDITOR) {
               const { getJournal } = require("../../lib/CitizenJournal");
-              getJournal().log?.("pressguild-session", {
-                editor: username, kingdomId: state.kingdomId,
+              // Canonical journal API: log(citizenName, kind, text, opts).
+              getJournal().log?.(username, "pressguild-session", "reviewed the press code of ethics and taught a guild session", {
+                kingdomId: state.kingdomId,
               });
             }
           } catch { /* journaling is optional */ }

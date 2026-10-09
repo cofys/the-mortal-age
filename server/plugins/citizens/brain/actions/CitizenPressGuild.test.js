@@ -73,10 +73,12 @@ require.cache[guildsPath] = {
   },
 };
 
+const journaled = [];
 const journalPath = path.resolve(__dirname, "../../lib/CitizenJournal.js");
 require.cache[journalPath] = {
   id: journalPath, filename: journalPath, loaded: true,
-  exports: { getJournal: () => ({ log: () => {} }) },
+  // Real journal shape: log(citizenName, kind, text, opts).
+  exports: { getJournal: () => ({ log: (...args) => { journaled.push(args); } }) },
 };
 
 // --- real module under test ---
@@ -111,6 +113,7 @@ let passed = 0;
 function test(name, fn) {
   members.clear();
   editors.clear();
+  journaled.length = 0;
   try {
     fn();
     passed++;
@@ -160,6 +163,13 @@ test("editor sessions complete the full round count", () => {
   assert.strictEqual(status, "running"); // at hall -> session phase
   ({ status } = runTicks(a, p, 10, 9000));
   assert.strictEqual(p.__pressGuildState.roundsDone, 3);
+  // REGRESSION: the session journal must use the canonical
+  // log(citizenName, kind, text, opts) shape — the old (kind, data) call was
+  // silently dropped by the journal (text is required).
+  const entry = journaled.find((args) => args[1] === "pressguild-session");
+  assert.ok(entry, "editor session journals a pressguild-session entry");
+  assert.strictEqual(entry[0], "Ed");
+  assert.ok(typeof entry[2] === "string" && entry[2].length > 0, "journal text is a real string");
 });
 
 test("give-up timeout sends a stuck member home", () => {

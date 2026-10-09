@@ -20,6 +20,10 @@ require.cache[sitesPath] = {
     KINGDOM_IDS: ["varrock", "falador"],
     kingdomIdOf: (r) => r?.kingdomId || "varrock",
     siteTile: () => ({ x: 3200, y: 3200, z: 0 }),
+    // Real entity-less lookup: siteTileByKingdom(kingdomId, kind). Distinct
+    // per-kingdom tiles so the fallback path is actually exercised.
+    siteTileByKingdom: (kid, kind) =>
+      kid === "falador" ? { x: 4000, y: 4000, z: 0 } : { x: 3200, y: 3200, z: 0 },
   },
 };
 
@@ -40,7 +44,8 @@ require.cache[pressPath] = {
       return fakeStories.filter((s) => s.kingdomId === kid && s.beat === beat && now - s.publishedAt < windowMs);
     },
     eventFor: (id) => fakeEvents[String(id)] || null,
-    pressTileFor: () => ({ x: 3200, y: 3200, z: 0 }),
+    // No press in falador — exercises the market-tile fallback in hallTileFor.
+    pressTileFor: (kid) => (kid === "falador" ? null : { x: 3200, y: 3200, z: 0 }),
     SUBSCRIPTION_PRICE: 5,
   },
 };
@@ -99,6 +104,17 @@ test("ensureGuild creates a guild with a hall tile and zero treasury", () => {
   assert.ok(g.hallTile);
   assert.strictEqual(g.treasury, 0);
   assert.strictEqual(Guilds.guildTreasuryFor("varrock"), 0);
+});
+
+test("hall fallback uses the kingdom's own market tile, not KINGDOM_IDS[0]'s", () => {
+  // REGRESSION: the old fallback called the player-entity siteTile with a
+  // plain { kingdomId } object, which silently resolved to the FIRST
+  // kingdom's market. The canonical entity-less accessor is
+  // siteTileByKingdom(kingdomId, kind).
+  const g = Guilds.ensureGuild("falador"); // falador has no press -> fallback
+  assert.ok(g.hallTile);
+  assert.strictEqual(g.hallTile.x, 4000 + 4, `hall x=${g.hallTile.x}, expected falador market + 4`);
+  assert.strictEqual(g.hallTile.y, 4000, `hall y=${g.hallTile.y}, expected falador market`);
 });
 
 test("treasury credit/debit is honest (no invented coins)", () => {

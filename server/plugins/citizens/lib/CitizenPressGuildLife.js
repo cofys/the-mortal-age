@@ -64,29 +64,29 @@ function usernameOf(record) {
 }
 
 function kingdomIdOf(record) {
-  try {
-    const { kingdomIdOf } = require("../brain/CitizenSites");
-    return kingdomIdOf(record) || record.kingdomId || null;
-  } catch { return record?.kingdomId || null; }
+  // Roster records carry kingdomId directly. CitizenSites.kingdomIdOf needs
+  // a live player entity (it reads getAttribute) and silently returns
+  // KINGDOM_IDS[0] for plain records — it must never be called here.
+  return record?.kingdomId || null;
 }
 
 function hasItem(bot, itemId, amount) {
   try {
-    const inv = bot.inventory ?? bot.getInventory?.();
+    const inv = bot.getInventory?.();
     if (!inv) return false;
-    if (typeof inv.count === "function") return inv.count(itemId) >= amount;
-    if (Array.isArray(inv.items)) {
-      return inv.items.filter((i) => (i?.id ?? i) === itemId).length >= amount;
-    }
+    // Canonical: ItemContainer.getAmount(id). There is no inv.count(id).
+    if (typeof inv.getAmount === "function") return inv.getAmount(itemId) >= amount;
     return false;
   } catch { return false; }
 }
 
 function removeItem(bot, itemId, amount) {
   try {
-    const inv = bot.inventory ?? bot.getInventory?.();
+    const inv = bot.getInventory?.();
     if (!inv) return false;
-    if (typeof inv.remove === "function") { inv.remove(itemId, amount); return true; }
+    // Canonical: deleteNumber(id, amount) / delete(id, amount). There is no
+    // inv.remove(id, amount) on ItemContainer.
+    if (typeof inv.deleteNumber === "function") { inv.deleteNumber(itemId, amount); return true; }
     if (typeof inv.delete === "function") { inv.delete(itemId, amount); return true; }
     return false;
   } catch { return false; }
@@ -94,9 +94,11 @@ function removeItem(bot, itemId, amount) {
 
 function addCoins(bot, amount) {
   try {
-    const inv = bot.inventory ?? bot.getInventory?.();
-    if (!inv || typeof inv.add !== "function") return false;
-    inv.add(Guilds.COINS_ID, amount);
+    const inv = bot.getInventory?.();
+    if (!inv || typeof inv.adds !== "function") return false;
+    // Canonical: adds(id, amount). inv.add takes an Item instance, not
+    // (id, amount) — the old call threw inside ItemContainer.add.
+    inv.adds(Guilds.COINS_ID, amount);
     return true;
   } catch { return false; }
 }
@@ -108,10 +110,12 @@ function awardDeed(username, deedKind) {
   } catch { /* fame is optional */ }
 }
 
-function journal(kind, data) {
+function journal(citizenName, kind, text, opts = {}) {
   try {
     const { getJournal } = require("./CitizenJournal");
-    getJournal().log?.(kind, data);
+    // Canonical journal API: log(citizenName, kind, text, opts). A missing
+    // text arg silently drops the entry — every call site must pass one.
+    getJournal().log?.(citizenName, kind, text, opts);
   } catch { /* journal optional */ }
 }
 
@@ -146,7 +150,7 @@ function collectDues(director, nowMs) {
         m.duesPaidUntil = nowMs + Guilds.DUES_PERIOD_MS;
         m.missedDues = 0;
         Guilds.creditTreasury(m.kingdomId, Guilds.DUES_WEEKLY);
-        journal("pressguild-dues", { username, kingdomId: m.kingdomId });
+        journal(username, "pressguild-dues", `paid ${Guilds.DUES_WEEKLY} coins in guild dues`, { kingdomId: m.kingdomId });
       } else {
         // Broke or no inventory — a miss, not a crime. Offline members are
         // skipped entirely (no penalty for not being around).
@@ -155,7 +159,7 @@ function collectDues(director, nowMs) {
         if (m.missedDues >= Guilds.SUSPEND_AFTER_MISSED) {
           m.suspended = true;
           m.suspendUntil = 0; // lifted by paying dues via command
-          journal("pressguild-suspended", { username, kingdomId: m.kingdomId, reason: "dues" });
+          journal(username, "pressguild-suspended", "suspended from the press guild for missed dues", { kingdomId: m.kingdomId });
         }
       }
     }
@@ -179,7 +183,7 @@ function scanForPlagiarism(director, nowMs) {
             const check = Guilds.verifyPlagiarism(s.id);
             if (check.ok && check.plagiarized) {
               const r = Guilds.reportViolation("guild", s.author, Guilds.VIOLATION_PLAGIARISM, s.id, nowMs);
-              if (r.ok) journal("pressguild-case-opened", { caseId: r.id, accused: s.author, type: "plagiarism" });
+              if (r.ok) journal(s.author, "pressguild-case-opened", `ethics case ${r.id} opened for plagiarism`, { caseId: r.id });
             }
           } catch { /* one bad story never breaks the scan */ }
         }
@@ -196,7 +200,7 @@ function settleTribunal(director, nowMs) {
         const res = Guilds.settleCase(c.id, nowMs);
         if (!res.ok) continue;
         const kid = Guilds.guildKingdomOf(c.accused);
-        journal("pressguild-verdict", { caseId: c.id, accused: c.accused, verdict: res.verdict, sanction: res.sanction });
+        journal(c.accused, "pressguild-verdict", `press tribunal verdict: ${res.verdict} (${res.sanction})`, { caseId: c.id });
         if (res.verdict === "guilty" && res.sanction === "expulsion") {
           awardDeed(c.accused, "fabricator");
           announce(director, kid, `${c.accused} has been expelled from the press guild for fabrication. The code is the trade.`, nowMs);
@@ -220,7 +224,7 @@ function grantAwards(director, nowMs) {
           const res = Guilds.grantAward(kid, beat, nowMs);
           if (!res.ok) continue;
           const a = res.award;
-          journal("pressguild-award", { awardId: a.id, kingdomId: kid, beat, winner: a.winner });
+          journal(a.winner, "pressguild-award", `won the Inkwell press award for ${beat} reporting`, { awardId: a.id, kingdomId: kid, beat });
           awardDeed(a.winner, "presslaureate");
           payPrize(director, a);
           announce(director, kid, `The Inkwell goes to ${a.winner} for ${beat} reporting! ${a.prize} coins and the guild's highest honor.`, nowMs);
@@ -242,7 +246,8 @@ function payPrize(director, award) {
         Guilds.creditTreasury(award.kingdomId, award.prizeOwed);
         continue;
       }
-      journal("pressguild-prize-paid", { awardId: award.id, winner: award.winner, amount: award.prizeOwed });
+      const amount = award.prizeOwed;
+      journal(award.winner, "pressguild-prize-paid", `received ${amount} coins in Inkwell prize money`, { awardId: award.id });
       award.prizeOwed = 0;
       return;
     }
@@ -275,13 +280,13 @@ function holdSchool(director, nowMs) {
         const res = Guilds.holdClass(master, pupils, kid, nowMs);
         if (!res.ok) continue;
         lastClass.set(kid, nowMs);
-        journal("pressguild-class", { master, pupils: res.pupils, kingdomId: kid });
+        journal(master, "pressguild-class", `held a journalism school class for ${res.pupils.length} stringer(s)`, { pupils: res.pupils, kingdomId: kid });
         // Opportunistic promotions after class.
         for (const u of [master, ...res.pupils]) {
           try {
             const p = Guilds.promote(u, nowMs);
             if (p.ok) {
-              journal("pressguild-promotion", { username: u, rank: p.to });
+              journal(u, "pressguild-promotion", `promoted to ${p.to} of the press guild`, {});
               announce(director, kid, `${u} has been promoted to ${p.to} of the press guild!`, nowMs);
             }
           } catch { /* promotion is optional */ }

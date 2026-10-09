@@ -55,9 +55,11 @@ function takeCoins(player, amount) {
   try {
     const inv = player?.getInventory?.();
     if (!inv) return false;
-    const has = inv.getAmount?.(COINS_ID) ?? inv.count?.(COINS_ID) ?? 0;
+    const has = inv.getAmount?.(COINS_ID) ?? 0;
     if (has < amount) return false;
-    if (typeof inv.remove === "function") inv.remove(COINS_ID, amount);
+    // Canonical: deleteNumber(id, amount) / delete(id, amount). ItemContainer
+    // has no remove(id, amount).
+    if (typeof inv.deleteNumber === "function") inv.deleteNumber(COINS_ID, amount);
     else if (typeof inv.delete === "function") inv.delete(COINS_ID, amount);
     else return false;
     return true;
