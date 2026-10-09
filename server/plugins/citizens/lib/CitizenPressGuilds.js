@@ -173,6 +173,23 @@ function pressApi() {
   try { return require("./CitizenPress"); } catch { return null; }
 }
 
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
+// Credit a real bank account. Returns true only when the coins actually
+// landed — never mark paid what was never delivered.
+function creditBankAccount(username, amount) {
+  try {
+    const B = bankingApi();
+    const acct = B && username && typeof B.accountFor === "function" ? B.accountFor(username) : null;
+    if (!acct) return false;
+    acct.balance = (Number(acct.balance) || 0) + amount;
+    if (typeof B.markDirty === "function") B.markDirty();
+    return true;
+  } catch { return false; }
+}
+
 function sitesApi() {
   try { return require("../brain/CitizenSites"); } catch { return null; }
 }
@@ -585,7 +602,16 @@ function grantAward(kingdomId, beat, nowMs = Date.now()) {
   if (nowMs - lastAwardAt(kid, beat) < AWARD_PERIOD_MS) return { ok: false, reason: "too-soon" };
   const best = bestStoryFor(kid, beat);
   if (!best) return { ok: false, reason: "no-contenders" };
-  const prizePaid = debitTreasury(kid, AWARD_PRIZE);
+  const debited = debitTreasury(kid, AWARD_PRIZE);
+  // Credit the winner's real bank account before recording the award —
+  // never mark paid what was never delivered. Banking unreachable:
+  // restore the treasury and leave the prize honestly owed for the
+  // life-tick retry.
+  let prizePaid = false;
+  if (debited) {
+    prizePaid = creditBankAccount(best.author, AWARD_PRIZE);
+    if (!prizePaid) creditTreasury(kid, AWARD_PRIZE);
+  }
   const id = allocId("award");
   const award = {
     id,

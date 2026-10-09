@@ -256,6 +256,23 @@ function creditFairFund(kingdomId, amount) {
   markDirty();
 }
 
+function bankingApi() {
+  try { return require("./CitizenBanking"); } catch { return null; }
+}
+
+// Credit a real bank account. Returns true only when the coins actually
+// landed — never mark paid what was never delivered.
+function creditBankAccount(username, amount) {
+  try {
+    const B = bankingApi();
+    const acct = B && username && typeof B.accountFor === "function" ? B.accountFor(username) : null;
+    if (!acct) return false;
+    acct.balance = (Number(acct.balance) || 0) + amount;
+    if (typeof B.markDirty === "function") B.markDirty();
+    return true;
+  } catch { return false; }
+}
+
 function debitFairFund(kingdomId, amount) {
   const g = ensureGuild(kingdomId);
   const have = g.fairFund || 0;
@@ -514,10 +531,44 @@ function resolveFair(kingdomId, stallReaders, nowMs = Date.now()) {
   }
   const paid = debitFairFund(kingdomId, FAIR_PRIZE);
   fair.winner = best.name;
-  fair.prizePaid = paid;
-  fair.prizeOwed = Math.max(0, FAIR_PRIZE - paid);
+  // Credit the winner's real bank account before recording the prize —
+  // never mark paid what was never delivered. Banking unreachable:
+  // restore the fair fund and leave the prize honestly owed for retry.
+  let credited = 0;
+  if (paid > 0) {
+    if (creditBankAccount(best.name, paid)) {
+      credited = paid;
+    } else {
+      creditFairFund(kingdomId, paid);
+    }
+  }
+  fair.prizePaid = credited;
+  fair.prizeOwed = Math.max(0, FAIR_PRIZE - credited);
   markDirty();
-  return { ok: true, winner: best.name, prizePaid: paid, prizeOwed: fair.prizeOwed };
+  return { ok: true, winner: best.name, prizePaid: credited, prizeOwed: fair.prizeOwed };
+}
+
+// Retry honestly-owed fair prizes: credit the recorded winner's bank
+// account from the fair fund. Called from the life tick.
+function retryFairOwed(kingdomId) {
+  const g = ensureGuild(kingdomId);
+  let paid = 0;
+  for (const fair of g.fairs) {
+    const owed = fair.prizeOwed || 0;
+    if (!(owed > 0) || !fair.winner) continue;
+    const take = Math.min(g.fairFund || 0, owed);
+    if (take <= 0) continue;
+    g.fairFund -= take;
+    if (creditBankAccount(fair.winner, take)) {
+      paid += take;
+      fair.prizePaid = (fair.prizePaid || 0) + take;
+      fair.prizeOwed = owed - take;
+    } else {
+      g.fairFund += take; // banking unreachable — restore, stay owed
+    }
+  }
+  if (paid > 0) markDirty();
+  return { ok: true, paid };
 }
 
 // === Tribunal ===
@@ -726,6 +777,7 @@ module.exports = {
   fairDue,
   enterFair,
   resolveFair,
+  retryFairOwed,
   // tribunal
   CASE_UNLICENSED,
   CASE_GOUGING,

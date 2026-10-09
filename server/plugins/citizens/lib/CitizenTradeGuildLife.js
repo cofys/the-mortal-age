@@ -255,6 +255,11 @@ function tickTradeGuildLife(director, nowMs = Date.now()) {
           }
         }
       } catch { /* school failure never breaks the tick */ }
+
+      // --- retry honestly-owed fair prizes (banking may have been down)
+      try {
+        Guilds.retryFairOwed(kid);
+      } catch { /* retry failure never breaks the tick */ }
     }
   } catch { /* the whole tick never throws */ }
 }
