@@ -106,6 +106,7 @@ const ACT_GUILD = "citizen_guild";
 const ACT_PETCARE = "citizen_petcare";
 const ACT_CREATEART = "citizen_createart";
 const ACT_PERFORM = "citizen_perform";
+const ACT_FASHION = "citizen_tailorwork";
 
 const ACT_COMPETE = "citizen_compete";
 const ACT_DIPLOMAT = "citizen_diplomat";
@@ -141,6 +142,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_PETCARE,
   ACT_CREATEART,
   ACT_PERFORM,
+  ACT_FASHION,
 
 ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MINE,
@@ -721,6 +723,28 @@ function performInfo(player) {
     return { canPerform, music, dance, inEnsemble, inTroupe };
   } catch {
     return { canPerform: false, music: 0, dance: 0 };
+  }
+}
+
+/**
+ * Fashion readiness: can this citizen sew garments (has materials)?
+ * Defensive: a missing/broken fashion module scores as unable.
+ */
+function fashionInfo(player) {
+  try {
+    const Fashion = require("../lib/CitizenFashion");
+    const types = Fashion.GARMENT_TYPES ?? [];
+    let affordableCount = 0;
+    let bestType = null;
+    for (const type of types) {
+      if (Fashion.canAffordMaterials(player, type).ok) {
+        affordableCount++;
+        if (!bestType) bestType = type;
+      }
+    }
+    return { canSew: affordableCount > 0, affordableCount, bestType };
+  } catch {
+    return { canSew: false, affordableCount: 0, bestType: null };
   }
 }
 
@@ -1421,6 +1445,7 @@ function snapshot(player) {
     pets: petInfo(player),
     art: artInfo(player),
     perform: performInfo(player),
+    fashion: fashionInfo(player),
 
 compete: competeInfo(player),
     diplomat: diplomatInfo(player),
@@ -1450,7 +1475,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, compete, diplomat, explore, invent, construct, philosophy, legal, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -1777,6 +1802,26 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // drunk performers are a liability
+      return s;
+    }
+
+    case ACT_FASHION: {
+      // Fashion: tailors sew real garments from real materials. A human
+      // tailor sews when they have cloth and thread; the vain dress well,
+      // the practical mend what they have. No materials, no sewing.
+      const fi = fashion ?? { canSew: false, affordableCount: 0 };
+      if (!fi.canSew) return 4; // no materials, nothing to sew
+      let s = 16;
+      const creativity = personality?.creativity ?? personality?.creative ?? 0;
+      if (creativity > 0.7) s += 10; // fashion is an art
+      else if (creativity > 0.5) s += 5;
+      if (fi.affordableCount >= 3) s += 6; // well-stocked workshop
+      if (goalType === GOAL_MASTER_TRADE) s += 8; // garments sell
+      else if (goalType === GOAL_SAVE_GOLD) s += 4; // sewing saves buying
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // drunk tailors prick fingers
       return s;
     }
 
@@ -2425,6 +2470,7 @@ module.exports = {
   ACT_PETCARE,
   ACT_CREATEART,
   ACT_PERFORM,
+  ACT_FASHION,
 
 ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT,  ACT_MEAL,

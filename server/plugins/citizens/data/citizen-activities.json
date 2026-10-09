@@ -741,6 +741,27 @@
       ]
     },
     {
+      "id": "citizen_tailorwork",
+      "mode": "citizen_tailorwork",
+      "repeat": false,
+      "capacity": 12,
+      "failureCooldownSeconds": 30,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenTailorWork"
+        }
+      ]
+    },
+    {
       "id": "citizen_compete",
       "mode": "citizen_compete",
       "repeat": false,

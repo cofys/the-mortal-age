@@ -1370,6 +1370,30 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "what's in fashion" — player asks about trends, shops, competitions.
+  if (/\b(what.s in fashion|fashion trend|what.s trendy|is there a tailor|clothing shop|buy clothes|style competition|best dressed|what.s the style)\b/.test(said)) {
+    try {
+      const Fashion = require("../lib/CitizenFashion");
+      const { normalizeName } = require("../lib/CitizenBonds");
+      const { getDirector } = require("../director/CitizenDirector");
+      const director = getDirector();
+      const record = director?.roster?.get?.(normalizeName(citizenUsername));
+      const kingdomId = record?.kingdomId ?? null;
+      const trend = Fashion.currentTrend();
+      const shop = kingdomId ? Fashion.shopFor(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "fashion_status", {
+        trendColor: trend.color,
+        trendStyle: trend.style,
+        trendFormality: trend.formality,
+        shopInventory: shop ? shop.inventory.length : 0,
+        garmentTypes: Fashion.GARMENT_TYPES,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "where can I travel" / "take me to X" — player asks about ships/caravans.
   if (/\b(where can i travel|how do i travel|is there a ship|is there a caravan|take me to|i want to travel|can you take me)\b/.test(said)) {
     try {

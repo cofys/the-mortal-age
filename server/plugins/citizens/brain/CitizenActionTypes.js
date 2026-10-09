@@ -40,6 +40,7 @@ const { createCitizenGuildAction } = require("./actions/CitizenGuild");
 const { createCitizenPetCareAction } = require("./actions/CitizenPetCare");
 const { createCitizenCreateArtAction } = require("./actions/CitizenCreateArt");
 const { createCitizenPerformAction } = require("./actions/CitizenPerform");
+const { createCitizenTailorWorkAction } = require("./actions/CitizenTailorWork");
 
 const { createCitizenCompeteAction } = require("./actions/CitizenCompete");
 const { createCitizenDiplomatAction } = require("./actions/CitizenDiplomat");
@@ -131,6 +132,7 @@ function registerCitizenActionTypes() {
   registerBotActionType("citizenPetCare", createCitizenPetCareAction);
   registerBotActionType("citizenCreateArt", createCitizenCreateArtAction);
   registerBotActionType("citizenPerform", createCitizenPerformAction);
+  registerBotActionType("citizenTailorWork", createCitizenTailorWorkAction);
 
 registerBotActionType("citizenCompete", createCitizenCompeteAction);
   registerBotActionType("citizenDiplomat", createCitizenDiplomatAction);
