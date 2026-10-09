@@ -249,6 +249,8 @@ const { tickBankingLife } = require("../lib/CitizenBankingLife");
 const CitizenBanking = require("../lib/CitizenBanking");
 const { tickInsuranceLife } = require("../lib/CitizenInsuranceLife");
 const CitizenInsurance = require("../lib/CitizenInsurance");
+const { tickCivilLife } = require("../lib/CitizenCivilLife");
+const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -3114,6 +3116,14 @@ class CitizenDirector {
     } catch (error) {
       this.log("insurance failed", { error: String(error?.message ?? error) });
     }
+    // Citizen civil law: contracts, wills, disputes, judgments.
+    // Data tier, zero LLM. (CitizenJusticeLife owns criminal trials;
+    // CitizenLegalLife owns judges/appeals/pardons.)
+    try {
+      tickCivilLife(this, nowMs);
+    } catch (error) {
+      this.log("civil law failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3478,6 +3488,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen insurance save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenCivilLaw.save()) {
+        this.log("citizen civil law saved");
+      }
+    } catch (error) {
+      this.log("citizen civil law save failed", {
         error: String(error?.message ?? error),
       });
     }

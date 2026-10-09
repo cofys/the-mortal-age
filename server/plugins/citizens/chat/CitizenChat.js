@@ -735,6 +735,37 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "court" / "sue" / "contract" / "will" / "dispute" — civil law.
+  if (/\b(any contracts?|make a (will|contract)|i want to sue|file a dispute|my (will|contracts?|disputes?)|any lawyers?|civil court|courthouse)\b/.test(said)) {
+    try {
+      const CivilLaw = require("../lib/CitizenCivilLaw");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? CivilLaw.describe(kingdomId) : null;
+      const mine = citizenUsername ? CivilLaw.disputesOf(citizenUsername) : [];
+      const myContracts = citizenUsername ? CivilLaw.contractsOf(citizenUsername) : [];
+      const myWill = citizenUsername ? CivilLaw.willFor(citizenUsername) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "civillaw_status", {
+        username: citizenUsername,
+        hasCourthouse: !!desc?.courthouse,
+        openDisputes: desc?.openDisputes ?? 0,
+        activeContracts: desc?.activeContracts ?? 0,
+        willsRegistered: desc?.willsRegistered ?? 0,
+        yourDisputes: mine.map((d) => ({ id: d.id, type: d.type, status: d.status, claim: d.claim })),
+        yourContracts: myContracts.filter((c) => c.status === "active").map((c) => ({ id: c.id, type: c.type, amount: c.amount })),
+        hasWill: !!myWill,
+        filingFee: CivilLaw.DISPUTE_FILING_FEE,
+        witnessFee: CivilLaw.CONTRACT_WITNESS_FEE,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "publish: <headline>" — a real player files a story.
   if (/^publish:\s*/.test(said)) {
     try {

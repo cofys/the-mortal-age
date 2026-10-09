@@ -89,6 +89,9 @@ const DEEDS = Object.freeze({
   defaulter: Object.freeze({ points: -8, label: "defaulted on a bank loan" }),
   underwriter: Object.freeze({ points: 8, label: "underwrote a thriving insurance book" }),
   uninsured: Object.freeze({ points: -4, label: "let every policy lapse" }),
+  counselor: Object.freeze({ points: 6, label: "won a civil case as advocate" }),
+  oathbreaker: Object.freeze({ points: -6, label: "broke a sworn contract" }),
+  executor: Object.freeze({ points: 4, label: "settled an estate faithfully" }),
   betrayal: Object.freeze({ points: -6, label: "betrayal" }),
   cowardice: Object.freeze({ points: -4, label: "cowardice" }),
 });

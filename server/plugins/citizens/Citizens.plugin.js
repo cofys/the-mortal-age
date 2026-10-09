@@ -22,6 +22,7 @@
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { onWarDeclared, onWarEnded, onOfficeAssigned, onOfficeVacated } = require("./CitizenEvents");
 const { onInsuranceCommand, onPlayerDeathInsured, USAGE: INSURANCE_USAGE } = require("./CitizenInsuranceEvents");
+const { onContractCommand, onWillCommand, onDisputeCommand, onRepresentCommand, CONTRACT_USAGE, WILL_USAGE, DISPUTE_USAGE, REPRESENT_USAGE } = require("./CitizenCivilEvents");
 const { onKingdomRumor, onPatrolOrdered, onWageDay, onPlayerArrived, onSkirmish, onWarDeclaredFear, onWarEndedRelief } = require("./RealmReactions");
 const { initCitizenChat, onCitizenChatHeard, onSocialPacket } = require("./chat/CitizenChat");
 const { initCitizenSocial, onSocialChatResponse } = require("./chat/CitizenSocial");
@@ -647,6 +648,30 @@ module.exports = {
       onInsuranceCommand,
       PlayerRights.NONE,
       INSURANCE_USAGE
+    );
+    api.registerCommand(
+      "contract",
+      onContractCommand,
+      PlayerRights.NONE,
+      CONTRACT_USAGE
+    );
+    api.registerCommand(
+      "will",
+      onWillCommand,
+      PlayerRights.NONE,
+      WILL_USAGE
+    );
+    api.registerCommand(
+      "dispute",
+      onDisputeCommand,
+      PlayerRights.NONE,
+      DISPUTE_USAGE
+    );
+    api.registerCommand(
+      "represent",
+      onRepresentCommand,
+      PlayerRights.NONE,
+      REPRESENT_USAGE
     );
   },
 };

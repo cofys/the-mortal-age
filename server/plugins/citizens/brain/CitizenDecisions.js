@@ -952,6 +952,7 @@ function legalInfo(player) {
 
     let clientsAvailable = 0;
     let activeCases = 0;
+    let civilClientsAvailable = 0;
     try {
       const LegalCode = require("../lib/CitizenLegalCode");
       const Guards = require("../lib/CitizenGuards");
@@ -964,7 +965,13 @@ function legalInfo(player) {
       clientsAvailable = Math.max(0, wantedCount - activeCases);
     } catch { /* legal/guards unreadable */ }
 
-    return { isLawyer, clientsAvailable, activeCases };
+    try {
+      // Civil clients: open disputes where a party lacks an advocate.
+      const CivilLaw = require("../lib/CitizenCivilLaw");
+      civilClientsAvailable = CivilLaw.disputesNeedingAdvocates?.().length ?? 0;
+    } catch { /* civil law unreadable */ }
+
+    return { isLawyer, clientsAvailable, activeCases, civilClientsAvailable };
   } catch {
     return { isLawyer: false, clientsAvailable: 0, activeCases: 0 };
   }
@@ -2334,12 +2341,15 @@ case ACT_COMPETE: {
     case ACT_LAWYER: {
       // Law: lawyers take cases for accused citizens. A human lawyer seeks
       // clients when the courts are busy — justice is work, and work pays.
+      // Civil disputes fill the practice when the criminal docket is quiet.
       // Non-lawyers have no business at the courthouse.
-      const li = legal ?? { isLawyer: false, clientsAvailable: 0, activeCases: 0 };
+      const li = legal ?? { isLawyer: false, clientsAvailable: 0, activeCases: 0, civilClientsAvailable: 0 };
       if (!li.isLawyer) return 4; // not a lawyer
-      if ((li.clientsAvailable ?? 0) <= 0) return 4; // no clients, no cases
+      const totalClients = (li.clientsAvailable ?? 0) + (li.civilClientsAvailable ?? 0);
+      if (totalClients <= 0) return 4; // no clients, no cases
       let s = 22;
       if ((li.activeCases ?? 0) > 0) s += 8; // a practice with clients grows
+      if ((li.civilClientsAvailable ?? 0) > 0) s += 4; // civil work counts too
       const just = personality?.just ?? personality?.lawful ?? personality?.honest ?? 0;
       if (just > 0.6) s += 10; // the just are drawn to the bar
       if (criticalHp || exhausted) s -= 70;
