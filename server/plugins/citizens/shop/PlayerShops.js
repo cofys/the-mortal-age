@@ -1169,6 +1169,24 @@ function onPlayerLogin(event) {
   }
 }
 
+/**
+ * Diegetic Market board interaction — clicking the board (Bank notice board
+ * spawned by DiegeticObjects at each capital market) opens the shop web
+ * overlay. This is the no-commands entry point: players never need to type
+ * ::shop to trade.
+ */
+function onMarketBoardInteract(event) {
+  const { player, objectId, location } = event ?? {};
+  if (!player || player.isPlayerBot?.() === true) return false;
+  try {
+    const { matchDiegetic } = require("../../world/DiegeticObjects");
+    if (!matchDiegetic(objectId, location, "board")) return false;
+  } catch {
+    return false;
+  }
+  return openShopOverlay(player, "board");
+}
+
 function initPlayerShops(api) {
   pluginApi = api;
   Store.load();
@@ -1178,6 +1196,10 @@ function initPlayerShops(api) {
   api.onPlayerLogout(onPlayerLogoutEvent);
   api.onPlayerDisconnect(onPlayerLogoutEvent);
   api.onPlayerLogin(onPlayerLogin);
+  // Diegetic: the Market board (spawned by DiegeticObjects at each capital)
+  // opens the shop overlay — no ::shop command needed. Board view shows
+  // the player's own stall (with Manage) plus every open stall.
+  api.onObjectInteraction(onMarketBoardInteract);
   api.registerCommand("shop", onShopCommand, api.core.PlayerRights.NONE, SHOP_USAGE);
   startUpkeepTask(api);
   // Web overlay data layer (see server/plugins/interface/ShopApi.js).
@@ -1198,6 +1220,7 @@ module.exports = {
   openStall,
   openShopOverlay,
   closeShopOverlay,
+  onMarketBoardInteract,
   listStalls,
   browseStall,
   promptBrowseStall,
