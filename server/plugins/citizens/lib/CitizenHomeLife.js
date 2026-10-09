@@ -105,9 +105,6 @@ function assignHomes(director, rng) {
       const name = record?.username;
       if (!name) continue;
       if (Homes.homeOf(name)) continue;
-<<<<<<< HEAD
-      const size = Homes.sizeForRole(record.role);
-=======
       let size = Homes.sizeForRole(record.role);
       // Masters of their trade have earned better walls: one size up.
       try {
@@ -120,7 +117,6 @@ function assignHomes(director, rng) {
       } catch {
         // Career lookup is garnish; role sizing is the fallback.
       }
->>>>>>> 1afc71c0
       const home = Homes.createHome(name, record.displayName ?? name, record.kingdomId, size);
       if (!home) continue;
       // Spawn at home: wake-ups and materialization use record.home.

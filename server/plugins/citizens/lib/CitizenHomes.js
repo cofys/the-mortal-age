@@ -357,8 +357,6 @@ function removeHome(homeId, reason) {
   return true;
 }
 
-<<<<<<< HEAD
-=======
 // --- ownership transfer -------------------------------------------------------
 
 /**
@@ -381,7 +379,6 @@ function transferHome(homeId, newOwnerName, newOwnerDisplay) {
   return true;
 }
 
->>>>>>> 1afc71c0
 // --- test seams ---------------------------------------------------------------
 
 function resetForTests() {
@@ -425,10 +422,7 @@ module.exports = {
   recordRentPaid,
   addRentDebt,
   removeHome,
-<<<<<<< HEAD
-=======
   transferHome,
->>>>>>> 1afc71c0
   save,
   resetForTests,
   _setSavePathForTests,
