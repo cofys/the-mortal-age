@@ -203,6 +203,17 @@ function canDeclareWar(attackerId, defenderId, store) {
     return { ok: false, reason: "on-cooldown" };
   }
 
+  // Phase 10: a kingdom torn by civil war cannot project power outward.
+  // (Attacking a kingdom mid-civil-war is allowed — strike while they're weak.)
+  try {
+    const SuccessionCrisis = require("./SuccessionCrisis.Kingdoms");
+    if (SuccessionCrisis.inCivilWar(attackerId, state)) {
+      return { ok: false, reason: "in-civil-war" };
+    }
+  } catch {
+    // Succession module unavailable: no civil-war gate.
+  }
+
   return { ok: true, relation: rel };
 }
 
@@ -216,6 +227,29 @@ function spendOrFail(player, kingdomId, amount) {
     return { ok: false, reason: "insufficient-influence", available, cost: amount };
   }
   return { ok: true };
+}
+
+/**
+ * State-level war declaration core. Both the player path (personal
+ * influence) and the AI council path (war-chest mobilization) land here,
+ * so the war record shape never drifts between them.
+ */
+function applyDeclareWar(attackerKingdomId, defenderKingdomId, goal, declaredBy, state, reasonOverride = null) {
+  const war = {
+    attackerId: attackerKingdomId,
+    defenderId: defenderKingdomId,
+    goal,
+    declaredBy,
+    reason: reasonOverride ?? `War of ${WAR_GOAL_LABELS[goal].toLowerCase()}`,
+    active: true,
+    declaredAt: Date.now(),
+    endedAt: null,
+    outcome: null,
+    resolveAt: null,
+  };
+  warsOf(state).push(war);
+  setTensionState(attackerKingdomId, defenderKingdomId, 100, state);
+  return war;
 }
 
 /**
@@ -243,20 +277,13 @@ function declareWar(player, attackerKingdomId, defenderKingdomId, goal, store) {
   if (!paid.ok) return paid;
 
   const state = store.load();
-  const war = {
-    attackerId: attackerKingdomId,
-    defenderId: defenderKingdomId,
+  const war = applyDeclareWar(
+    attackerKingdomId,
+    defenderKingdomId,
     goal,
-    declaredBy: player.username ?? player.getUsername?.() ?? null,
-    reason: `War of ${WAR_GOAL_LABELS[goal].toLowerCase()}`,
-    active: true,
-    declaredAt: Date.now(),
-    endedAt: null,
-    outcome: null,
-    resolveAt: null,
-  };
-  warsOf(state).push(war);
-  setTensionState(attackerKingdomId, defenderKingdomId, 100, state);
+    player.username ?? player.getUsername?.() ?? null,
+    state
+  );
   store.save();
 
   return {
@@ -265,6 +292,64 @@ function declareWar(player, attackerKingdomId, defenderKingdomId, goal, store) {
     goal,
     goalLabel: WAR_GOAL_LABELS[goal],
     influenceSpent: WAR_DECLARE_INFLUENCE_COST,
+  };
+}
+
+/** War-chest coins an AI kingdom pays to mobilize for a council-declared war. */
+const AI_WAR_MOBILIZATION_COST = 2_000_000;
+
+/**
+ * The AI war council declares war. Same gates as canDeclareWar, but the
+ * price is war-chest mobilization instead of personal influence — courts,
+ * not heroes, move the pieces. The record carries declaredBy "ai-council"
+ * so the tension engine and the annals treat it like any other war.
+ *
+ * @param {string} attackerKingdomId
+ * @param {string} defenderKingdomId
+ * @param {string} goal - one of WAR_GOALS
+ * @param {object} store - KingdomStore
+ * @param {object} opts - { reason } annals line override
+ */
+function declareWarAi(attackerKingdomId, defenderKingdomId, goal, store, opts = {}) {
+  if (!attackerKingdomId || !defenderKingdomId || !store) {
+    return { ok: false, reason: "missing-params" };
+  }
+  if (!WAR_GOALS.includes(goal)) {
+    return { ok: false, reason: "invalid-goal", validGoals: WAR_GOALS };
+  }
+
+  const check = canDeclareWar(attackerKingdomId, defenderKingdomId, store);
+  if (!check.ok) return check;
+
+  const state = store.load();
+  const castle = state.castles?.[attackerKingdomId];
+  const warChest = castle?.warChest ?? 0;
+  if (warChest < AI_WAR_MOBILIZATION_COST) {
+    return {
+      ok: false,
+      reason: "insufficient-funds",
+      available: warChest,
+      cost: AI_WAR_MOBILIZATION_COST,
+    };
+  }
+  if (castle) castle.warChest = warChest - AI_WAR_MOBILIZATION_COST;
+
+  const war = applyDeclareWar(
+    attackerKingdomId,
+    defenderKingdomId,
+    goal,
+    "ai-council",
+    state,
+    opts.reason ?? null
+  );
+  store.save();
+
+  return {
+    ok: true,
+    war,
+    goal,
+    goalLabel: WAR_GOAL_LABELS[goal],
+    mobilizationCost: AI_WAR_MOBILIZATION_COST,
   };
 }
 
@@ -305,6 +390,31 @@ function validateTerms(terms) {
   return { ok: true, terms: { type: terms.type } };
 }
 
+/** Shared gates for putting peace terms on the table (player or council). */
+function checkOfferPeace(kingdomId, targetKingdomId, state) {
+  const war = activeWarBetweenState(kingdomId, targetKingdomId, state);
+  if (!war) return { ok: false, reason: "not-at-war" };
+  if (offerBetweenState(kingdomId, targetKingdomId, state)) {
+    return { ok: false, reason: "offer-pending" };
+  }
+  return { ok: true };
+}
+
+/** Shared push: record the offer once every gate (and price) is settled. */
+function pushOfferPeace(kingdomId, targetKingdomId, terms, offeredByLabel, state) {
+  const [a, b] = [String(kingdomId), String(targetKingdomId)].sort();
+  const offer = {
+    a,
+    b,
+    offeredBy: String(kingdomId),
+    offeredByPlayer: offeredByLabel,
+    terms,
+    offeredAt: Date.now(),
+  };
+  peaceOffersOf(state).push(offer);
+  return offer;
+}
+
 /**
  * Offer peace terms to the other side of an active war. Either belligerent
  * may offer; the other accepts. Costs influence to put terms on the table.
@@ -314,11 +424,8 @@ function offerPeace(player, kingdomId, targetKingdomId, terms, store) {
     return { ok: false, reason: "missing-params" };
   }
   const state = store.load();
-  const war = activeWarBetweenState(kingdomId, targetKingdomId, state);
-  if (!war) return { ok: false, reason: "not-at-war" };
-  if (offerBetweenState(kingdomId, targetKingdomId, state)) {
-    return { ok: false, reason: "offer-pending" };
-  }
+  const gate = checkOfferPeace(kingdomId, targetKingdomId, state);
+  if (!gate.ok) return gate;
 
   const checked = validateTerms(terms);
   if (!checked.ok) return checked;
@@ -326,19 +433,37 @@ function offerPeace(player, kingdomId, targetKingdomId, terms, store) {
   const paid = spendOrFail(player, kingdomId, PEACE_OFFER_INFLUENCE_COST);
   if (!paid.ok) return paid;
 
-  const [a, b] = [String(kingdomId), String(targetKingdomId)].sort();
-  const offer = {
-    a,
-    b,
-    offeredBy: String(kingdomId),
-    offeredByPlayer: player.username ?? player.getUsername?.() ?? null,
-    terms: checked.terms,
-    offeredAt: Date.now(),
-  };
-  peaceOffersOf(state).push(offer);
+  const offer = pushOfferPeace(
+    kingdomId,
+    targetKingdomId,
+    checked.terms,
+    player.username ?? player.getUsername?.() ?? null,
+    state
+  );
   store.save();
 
   return { ok: true, offer, influenceSpent: PEACE_OFFER_INFLUENCE_COST };
+}
+
+/**
+ * The AI war council offers peace terms. Same gates as the player path —
+ * courts pay in concessions, not influence.
+ */
+function offerPeaceAi(kingdomId, targetKingdomId, terms, store) {
+  if (!kingdomId || !targetKingdomId || !store) {
+    return { ok: false, reason: "missing-params" };
+  }
+  const state = store.load();
+  const gate = checkOfferPeace(kingdomId, targetKingdomId, state);
+  if (!gate.ok) return gate;
+
+  const checked = validateTerms(terms);
+  if (!checked.ok) return checked;
+
+  const offer = pushOfferPeace(kingdomId, targetKingdomId, checked.terms, "ai-council", state);
+  store.save();
+
+  return { ok: true, offer };
 }
 
 /** Pending peace offers involving a kingdom. */
@@ -356,22 +481,17 @@ function removeOffer(a, b, state) {
 }
 
 /**
- * Accept a pending peace offer. Ends the war as a treaty, applies the
- * terms, and cools the border to an armistice. Accepting is free — the
- * offerer already paid to put terms on the table.
+ * Shared core: ratify a pending peace offer. Terms name the loser: tribute
+ * and vassalize apply to the side that did NOT offer (the offerer dictates).
+ * White peace touches nothing. The war closes as a treaty and the border
+ * cools to an armistice.
  */
-function acceptPeace(player, kingdomId, targetKingdomId, store) {
-  if (!player || !kingdomId || !targetKingdomId || !store) {
-    return { ok: false, reason: "missing-params" };
-  }
-  const state = store.load();
+function applyAcceptPeace(kingdomId, targetKingdomId, state) {
   const offer = offerBetweenState(kingdomId, targetKingdomId, state);
   if (!offer) return { ok: false, reason: "no-offer" };
   const war = activeWarBetweenState(kingdomId, targetKingdomId, state);
   if (!war) return { ok: false, reason: "not-at-war" };
 
-  // Terms name the loser: tribute/vassalize apply to the side that did NOT
-  // offer (the offerer dictates). White peace touches nothing.
   const loserId = offer.offeredBy === String(kingdomId) ? String(targetKingdomId) : String(kingdomId);
   const winnerId = loserId === String(kingdomId) ? String(targetKingdomId) : String(kingdomId);
   const applied = { type: offer.terms.type };
@@ -400,24 +520,46 @@ function acceptPeace(player, kingdomId, targetKingdomId, store) {
 
   setTensionState(kingdomId, targetKingdomId, PEACE_TENSION, state);
   removeOffer(kingdomId, targetKingdomId, state);
-  store.save();
-
   return { ok: true, outcome: "peace-treaty", applied, war };
+}
+
+/**
+ * Accept a pending peace offer. Ends the war as a treaty, applies the
+ * terms, and cools the border to an armistice. Accepting is free — the
+ * offerer already paid to put terms on the table.
+ */
+function acceptPeace(player, kingdomId, targetKingdomId, store) {
+  if (!player || !kingdomId || !targetKingdomId || !store) {
+    return { ok: false, reason: "missing-params" };
+  }
+  const state = store.load();
+  const res = applyAcceptPeace(kingdomId, targetKingdomId, state);
+  if (!res.ok) return res;
+  store.save();
+  return res;
+}
+
+/**
+ * The AI war council accepts a pending peace offer — same terms, same
+ * treaty, no player at the table.
+ */
+function acceptPeaceAi(kingdomId, targetKingdomId, store) {
+  if (!kingdomId || !targetKingdomId || !store) {
+    return { ok: false, reason: "missing-params" };
+  }
+  const state = store.load();
+  const res = applyAcceptPeace(kingdomId, targetKingdomId, state);
+  if (!res.ok) return res;
+  store.save();
+  return res;
 }
 
 // ---------------------------------------------------------------------------
 // Breaking vassalage
 // ---------------------------------------------------------------------------
 
-/**
- * A vassal declares independence. Only after BREAK_VASSALAGE_MIN_DAYS have
- * passed, and at an influence cost. The overlord's border burns to 80.
- */
-function breakVassalage(player, vassalKingdomId, store) {
-  if (!player || !vassalKingdomId || !store) {
-    return { ok: false, reason: "missing-params" };
-  }
-  const state = store.load();
+/** Shared timing gate for breaking an oath (player or council). */
+function vassalBreakTiming(vassalKingdomId, state) {
   const record = vassalsOf(state)[String(vassalKingdomId)];
   if (!record) return { ok: false, reason: "not-a-vassal" };
 
@@ -430,19 +572,52 @@ function breakVassalage(player, vassalKingdomId, store) {
       daysRequired: BREAK_VASSALAGE_MIN_DAYS,
     };
   }
+  return { ok: true, record };
+}
+
+/** Shared effect: the oath is broken and the overlord's border burns. */
+function applyBreakVassalage(vassalKingdomId, record, state) {
+  clearVassalState(vassalKingdomId, state);
+  setTensionState(vassalKingdomId, record.overlordId, BREAKAWAY_TENSION, state);
+  return { ok: true, formerOverlord: record.overlordId };
+}
+
+/**
+ * A vassal declares independence. Only after BREAK_VASSALAGE_MIN_DAYS have
+ * passed, and at an influence cost. The overlord's border burns to 80.
+ */
+function breakVassalage(player, vassalKingdomId, store) {
+  if (!player || !vassalKingdomId || !store) {
+    return { ok: false, reason: "missing-params" };
+  }
+  const state = store.load();
+  const timing = vassalBreakTiming(vassalKingdomId, state);
+  if (!timing.ok) return timing;
 
   const paid = spendOrFail(player, vassalKingdomId, BREAK_VASSALAGE_INFLUENCE_COST);
   if (!paid.ok) return paid;
 
-  clearVassalState(vassalKingdomId, state);
-  setTensionState(vassalKingdomId, record.overlordId, BREAKAWAY_TENSION, state);
+  const res = applyBreakVassalage(vassalKingdomId, timing.record, state);
   store.save();
 
-  return {
-    ok: true,
-    formerOverlord: record.overlordId,
-    influenceSpent: BREAK_VASSALAGE_INFLUENCE_COST,
-  };
+  return { ...res, influenceSpent: BREAK_VASSALAGE_INFLUENCE_COST };
+}
+
+/**
+ * The AI war council breaks a vassal's oath — same 30-day wait, no
+ * influence price. Resentment, not heroes, ends fealty.
+ */
+function breakVassalageAi(vassalKingdomId, store) {
+  if (!vassalKingdomId || !store) {
+    return { ok: false, reason: "missing-params" };
+  }
+  const state = store.load();
+  const timing = vassalBreakTiming(vassalKingdomId, state);
+  if (!timing.ok) return timing;
+
+  const res = applyBreakVassalage(vassalKingdomId, timing.record, state);
+  store.save();
+  return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -492,6 +667,8 @@ module.exports = {
   // Declaration
   canDeclareWar,
   declareWar,
+  declareWarAi,
+  AI_WAR_MOBILIZATION_COST,
   // State-level readers (siege resolution)
   warGoalBetween,
   activeWarBetween: (a, b, store) => activeWarBetweenState(a, b, store.load()),
@@ -506,9 +683,12 @@ module.exports = {
   getVassalsOf,
   isVassalOf,
   breakVassalage,
+  breakVassalageAi,
   // Peace
   offerPeace,
+  offerPeaceAi,
   acceptPeace,
+  acceptPeaceAi,
   getPeaceOffers,
   // Queries
   getWars,

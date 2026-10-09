@@ -13,8 +13,6 @@ interface KingdomInfo {
     rulerTitle: string | null;
     treasury: number;
     situation: string | null;
-<<<<<<< HEAD
-=======
     castle: CastleInfo | null;
     relation: string | null;
     vassalOf: string | null;
@@ -24,6 +22,8 @@ interface KingdomInfo {
     besiegingCount: number;
     atWar: boolean;
     coalition: CoalitionRef | null;
+    inCivilWar: boolean;
+    inSuccessionCrisis: boolean;
 }
 
 interface CoalitionRef {
@@ -52,6 +52,7 @@ interface SuccessionClaimantInfo {
     claim: string | null;
     claimLabel: string | null;
     strength: number;
+    share: number;
     backers: number;
 }
 
@@ -91,7 +92,6 @@ interface DefenseCallInfo {
     attackerName: string;
     defenderName: string;
     calls: DefenseCallEntry[];
->>>>>>> 8f4c8d6a
 }
 
 interface WarInfo {
@@ -141,8 +141,6 @@ interface WarTableStatus {
     endedWars: EndedWarInfo[];
     alliances: AllianceInfo[];
     relations: RelationInfo[];
-<<<<<<< HEAD
-=======
     sieges: SiegeInfo[];
     vassalage: VassalageInfo[];
     coalitions: CoalitionInfo[];
@@ -151,7 +149,6 @@ interface WarTableStatus {
     civilWars: CivilWarInfo[];
     homeDetail: HomeDetail | null;
     actionResult?: ActionResult;
->>>>>>> 8f4c8d6a
 }
 
 type TabId = "overview" | "diplomacy" | "military" | "treasury" | "wars";
@@ -425,8 +422,6 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                         </div>
                     )}
 
-<<<<<<< HEAD
-=======
                     {tab === "realm" && (
                         <div className="tma-wartable-section">
                             <h2 className="tma-wartable-section-title">Fealty of the Realm</h2>
@@ -500,7 +495,6 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                             ) : (
                                 <div className="tma-wartable-cards">
                                     {(status.successionCrises ?? []).map((c) => {
-                                        const total = c.claimants.reduce((s, cl) => s + cl.strength, 0);
                                         return (
                                             <div key={c.id} className="tma-wartable-card">
                                                 <div className="tma-wartable-card-title">
@@ -520,10 +514,7 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                                                             </span>
                                                         </span>
                                                         <span className="tma-wartable-muted">
-                                                            {total > 0
-                                                                ? Math.round((cl.strength / total) * 100)
-                                                                : 0}
-                                                            %
+                                                            {cl.share ?? 0}%
                                                         </span>
                                                         <button
                                                             className="tma-wartable-btn"
@@ -576,6 +567,10 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                                             text: `⚒ BESIEGING ${k.besiegingCount}`,
                                             color: "#c9a227",
                                         });
+                                    if (k.inCivilWar)
+                                        badges.push({ text: "🔥 CIVIL WAR", color: "#a02020" });
+                                    else if (k.inSuccessionCrisis)
+                                        badges.push({ text: "👑 THRONE DISPUTED", color: "#8b6f2e" });
                                     return (
                                         <div key={k.id} className="tma-wartable-card">
                                             <div className="tma-wartable-card-title">
@@ -627,7 +622,6 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                         </div>
                     )}
 
->>>>>>> 8f4c8d6a
                     {tab === "diplomacy" && (
                         <div className="tma-wartable-section">
                             <h2 className="tma-wartable-section-title">Pacts & Alliances</h2>

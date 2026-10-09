@@ -117,6 +117,16 @@ function kingdomPayload(k, homeId) {
   // Coalition membership, so the war table can draw the realm's blocs.
   const coalition = Coalitions.coalitionOf(k.id, Store);
   payload.coalition = coalition ? { key: coalition.key, name: coalition.name } : null;
+  // Phase 10: succession flags, so the war table can mark thrones in
+  // dispute and kingdoms at war with themselves.
+  try {
+    const SuccessionCrisis = require("./SuccessionCrisis.Kingdoms");
+    payload.inCivilWar = SuccessionCrisis.inCivilWar(k.id, state);
+    payload.inSuccessionCrisis = SuccessionCrisis.inSuccessionCrisis(k.id, state);
+  } catch {
+    payload.inCivilWar = false;
+    payload.inSuccessionCrisis = false;
+  }
   return payload;
 }
 
@@ -240,22 +250,33 @@ function statusPayload(player) {
     const sstate = Store.load().succession ?? { crises: [], civilWars: [] };
     successionCrises = (sstate.crises ?? [])
       .filter((c) => c && c.status === "open")
-      .map((c) => ({
-        id: c.id,
-        kingdomId: c.kingdomId,
-        kingdomName: kingdomName(c.kingdomId),
-        lateRuler: c.lateRuler ?? null,
-        ticksLeft: c.ticksLeft ?? null,
-        claimants: (c.claimants ?? []).map((cl) => ({
-          id: cl.id,
-          name: cl.name,
-          title: cl.title ?? null,
-          claim: cl.claim ?? null,
-          claimLabel: SuccessionCrisis.CLAIM_LABELS[cl.claim] ?? cl.claim ?? null,
-          strength: Math.round((cl.strength ?? 0) + (cl.aiSupport ?? 0)),
-          backers: (cl.backers ?? []).length,
-        })),
-      }));
+      .map((c) => {
+        const ctotal = (c.claimants ?? []).reduce(
+          (n, cl) => n + ((cl.strength ?? 0) + (cl.aiSupport ?? 0)),
+          0
+        );
+        return {
+          id: c.id,
+          kingdomId: c.kingdomId,
+          kingdomName: kingdomName(c.kingdomId),
+          lateRuler: c.lateRuler ?? null,
+          ticksLeft: c.ticksLeft ?? null,
+          claimants: (c.claimants ?? []).map((cl) => {
+            const strength = Math.round((cl.strength ?? 0) + (cl.aiSupport ?? 0));
+            return {
+              id: cl.id,
+              name: cl.name,
+              title: cl.title ?? null,
+              claim: cl.claim ?? null,
+              claimLabel: SuccessionCrisis.CLAIM_LABELS[cl.claim] ?? cl.claim ?? null,
+              strength,
+              // Phase 10: succession odds — each claimant's share of the court.
+              share: ctotal > 0 ? Math.round((strength / ctotal) * 100) : 0,
+              backers: (cl.backers ?? []).length,
+            };
+          }),
+        };
+      });
     civilWars = (sstate.civilWars ?? [])
       .filter((w) => w && w.status === "active")
       .map((w) => ({
@@ -385,6 +406,7 @@ function describeResult(action, result) {
     "sally-on-cooldown": "The garrison needs time to regroup.",
     "repair-on-cooldown": "The masons are still working.",
     "on-cooldown": "Too soon — the realm needs time to forget the last war.",
+    "in-civil-war": "A kingdom at war with itself cannot march on others.",
     "insufficient-influence": `Not enough influence (have ${result.available ?? 0}, need ${result.cost ?? 0}).`,
     "insufficient-funds": "The war chest cannot bear it.",
     "invalid-goal": "Choose a war goal: plunder, territory, or vassalize.",

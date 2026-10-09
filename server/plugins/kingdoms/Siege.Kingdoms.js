@@ -65,6 +65,16 @@ const REPAIR_PROGRESS_HIT = 10;
 const VICTORY_LOOT_PCT = 0.25;
 /** Number of buildings damaged on victory. */
 const VICTORY_BUILDINGS_DAMAGED = 2;
+/**
+ * Phase 10: a court divided by an open succession crisis fights poorly.
+ * Attacker power is scaled down while the throne is disputed.
+ */
+const SUCCESSION_CRISIS_ATTACK_FACTOR = 0.75;
+/**
+ * Phase 10: a defender mid-crisis defends poorly — the garrison answers
+ * to rival claimants instead of one crown.
+ */
+const SUCCESSION_CRISIS_DEFENSE_FACTOR = 0.85;
 
 // ---------------------------------------------------------------------------
 // Siege power
@@ -161,6 +171,16 @@ function canDeclareSiege(attackerKingdomId, defenderKingdomId, store) {
   const rel = Relations.canSiegeRelation(attackerKingdomId, defenderKingdomId, store);
   if (!rel.ok) return rel;
 
+  // Phase 10: a kingdom torn by civil war cannot project power outward.
+  try {
+    const SuccessionCrisis = require("./SuccessionCrisis.Kingdoms");
+    if (SuccessionCrisis.inCivilWar(attackerKingdomId, store.load())) {
+      return { ok: false, reason: "in-civil-war" };
+    }
+  } catch {
+    // Succession module unavailable: no civil-war gate.
+  }
+
   return { ok: true };
 }
 
@@ -189,7 +209,16 @@ function declareSiege(attackerKingdomId, defenderKingdomId, investment, store) {
 
   attackerCastle.warChest -= totalCost;
 
-  const power = siegePower(investment, attackerCastle.fortTier);
+  let power = siegePower(investment, attackerCastle.fortTier);
+  // Phase 10: a court divided by an open succession crisis fights poorly.
+  try {
+    const SuccessionCrisis = require("./SuccessionCrisis.Kingdoms");
+    if (SuccessionCrisis.inSuccessionCrisis(attackerKingdomId, state)) {
+      power = Math.floor(power * SUCCESSION_CRISIS_ATTACK_FACTOR);
+    }
+  } catch {
+    // Succession module unavailable: no crisis penalty.
+  }
 
   const siege = {
     attackerKingdomId,
@@ -242,7 +271,17 @@ function tickSiege(defenderKingdomId, store) {
   }
 
   const atk = siege.attackerPower;
-  const def = Math.max(1, defenderPower(defenderCastle));
+  let def = Math.max(1, defenderPower(defenderCastle));
+  // Phase 10: a defender mid-succession-crisis answers to rival claimants,
+  // not one crown — the walls hold less well.
+  try {
+    const SuccessionCrisis = require("./SuccessionCrisis.Kingdoms");
+    if (SuccessionCrisis.inSuccessionCrisis(defenderKingdomId, state)) {
+      def = Math.max(1, Math.floor(def * SUCCESSION_CRISIS_DEFENSE_FACTOR));
+    }
+  } catch {
+    // Succession module unavailable: no crisis penalty.
+  }
   const ratio = atk / def;
 
   // Progress based on power ratio
@@ -519,6 +558,8 @@ module.exports.SALLY_COOLDOWN_MS = SALLY_COOLDOWN_MS;
 module.exports.SALLY_PROGRESS_HIT = SALLY_PROGRESS_HIT;
 module.exports.REPAIR_COST = REPAIR_COST;
 module.exports.REPAIR_PROGRESS_HIT = REPAIR_PROGRESS_HIT;
+module.exports.SUCCESSION_CRISIS_ATTACK_FACTOR = SUCCESSION_CRISIS_ATTACK_FACTOR;
+module.exports.SUCCESSION_CRISIS_DEFENSE_FACTOR = SUCCESSION_CRISIS_DEFENSE_FACTOR;
 module.exports.VICTORY_LOOT_PCT = VICTORY_LOOT_PCT;
 module.exports.VICTORY_BUILDINGS_DAMAGED = VICTORY_BUILDINGS_DAMAGED;
 module.exports.siegePower = siegePower;
