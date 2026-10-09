@@ -356,6 +356,17 @@ function simTick() {
       const warsHere = atWarWith(kingdom.id, wars);
       const tax = stewardTick(kingdom, warsHere);
       quartermasterTick(kingdom, warsHere, tax);
+      // War logistics: demands follow the wars, armies burn supplies.
+      try {
+        const WarSupply = require("./WarSupply.Kingdoms");
+        WarSupply.ensureDemands(kingdom.id, warsHere, Store);
+        WarSupply.consumeTick(kingdom.id, Store);
+      } catch (error) {
+        pluginApi?.log?.("[kingdoms] war-supply tick failed", {
+          kingdom: kingdom.id,
+          error: String(error?.message ?? error),
+        });
+      }
       marshalTick(kingdom, warsHere);
       spymasterTick(kingdom, warsHere);
       // Payday is separate from collection: the treasury pays the garrison

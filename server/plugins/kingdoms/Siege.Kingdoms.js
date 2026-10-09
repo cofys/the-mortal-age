@@ -36,6 +36,7 @@
 const Castle = require("./Castle.Kingdoms");
 const Relations = require("./Relations.Kingdoms");
 const Wars = require("./Wars.Kingdoms");
+const WarSupply = require("./WarSupply.Kingdoms");
 
 // ---------------------------------------------------------------------------
 // Tuning constants
@@ -270,8 +271,17 @@ function tickSiege(defenderKingdomId, store) {
     return { ok: false, reason: "no-defender-castle" };
   }
 
-  const atk = siege.attackerPower;
-  let def = Math.max(1, defenderPower(defenderCastle));
+  const atkBase = siege.attackerPower;
+  // War supply: undersupplied armies fight worse. Each side's power is
+  // scaled by its supply morale for this war (0.65 starving → 1.15
+  // well-fed; 1 when no supply demand exists).
+  const warKey = WarSupply.warKeyFor(siege.attackerKingdomId, siege.defenderKingdomId);
+  const atkMorale = WarSupply.moraleOf(siege.attackerKingdomId, warKey);
+  const defMorale = WarSupply.moraleOf(siege.defenderKingdomId, warKey);
+  siege.attackerMorale = Math.round(atkMorale * 100) / 100;
+  siege.defenderMorale = Math.round(defMorale * 100) / 100;
+  const atk = Math.max(1, Math.round(atkBase * atkMorale));
+  let def = Math.max(1, Math.round(defenderPower(defenderCastle) * defMorale));
   // Phase 10: a defender mid-succession-crisis answers to rival claimants,
   // not one crown — the walls hold less well.
   try {

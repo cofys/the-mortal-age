@@ -44,6 +44,7 @@ const Castle = require("./Castle.Kingdoms");
 const Siege = require("./Siege.Kingdoms");
 const Relations = require("./Relations.Kingdoms");
 const Wars = require("./Wars.Kingdoms");
+const WarSupply = require("./WarSupply.Kingdoms");
 const Coalitions = require("./Coalitions.Kingdoms");
 const AiDiplomacy = require("./AiDiplomacy.Kingdoms");
 
@@ -114,6 +115,13 @@ function kingdomPayload(k, homeId) {
   payload.atWar = Store.getActiveWars().some(
     (w) => w.attackerId === k.id || w.defenderId === k.id
   );
+  // War supply: live demands per category with morale, so the war table
+  // can show what the armies burn and how well-fed they are.
+  try {
+    payload.supply = WarSupply.supplyStatus(k.id, Store);
+  } catch {
+    payload.supply = [];
+  }
   // Coalition membership, so the war table can draw the realm's blocs.
   const coalition = Coalitions.coalitionOf(k.id, Store);
   payload.coalition = coalition ? { key: coalition.key, name: coalition.name } : null;
@@ -141,6 +149,8 @@ function siegePayload(siege) {
     investment: siege.investment ?? 0,
     warGoal: siege.warGoal ?? null,
     declaredAt: siege.declaredAt ?? null,
+    attackerMorale: siege.attackerMorale ?? null,
+    defenderMorale: siege.defenderMorale ?? null,
   };
 }
 

@@ -29,6 +29,7 @@
 const Politics = require("./Politics.Kingdoms");
 const Store = require("./KingdomStore");
 const OfficeTools = require("./OfficeTools.Kingdoms");
+const WarSupply = require("./WarSupply.Kingdoms");
 
 const CHEST_OBJECT_NAME = "Donation chest";
 
@@ -96,15 +97,21 @@ function promptAmount(player, title, onInput) {
 function showSupplyMenu(player, kingdomId) {
   if (!player) return;
   const order = OfficeTools.getSupplyOrder(kingdomId);
-  if (!order) {
+  const atWar = WarSupply.supplyStatus(kingdomId).length > 0;
+  if (!order && !atWar) {
     player.sendMessage("The quartermaster seeks no supplies just now.");
     return;
   }
   const inventory = player.getInventory?.();
   const pairs = [];
-  for (const [itemId, spec] of Object.entries(OfficeTools.SUPPLY_ITEMS)) {
+  const catalog = { ...OfficeTools.SUPPLY_ITEMS };
+  for (const [id, spec] of Object.entries(WarSupply.WAR_SUPPLY_ITEMS)) {
+    if (!catalog[id]) catalog[id] = spec;
+  }
+  for (const [itemId, spec] of Object.entries(catalog)) {
     const id = Number(itemId);
     const have = inventory?.getAmount?.(id) ?? 0;
+    if (have <= 0) continue;
     pairs.push(`${spec.name} - you carry ${have} (${spec.units} units each).`, () => {
       if (have <= 0) {
         player.sendMessage(`You carry no ${spec.name.toLowerCase()}.`);
@@ -128,9 +135,16 @@ function showSupplyMenu(player, kingdomId) {
   }
   pairs.push("Never mind.", () => openDonationPrompt({ player }));
   try {
+    const demands = WarSupply.supplyStatus(kingdomId);
+    const warNote = demands.length > 0
+      ? ` — WAR DEMAND vs ${demands.map((d) => d.foeName).join(", ")}: ` +
+        demands[0].categories.map((c) => `${c.label} ${c.stock}/${c.quota}`).join(" · ")
+      : "";
     pluginApi.sendMultiChatboxPrompt(
       player,
-      `Deliver provisions - ${formatCoins(order.units)} units wanted at ${order.pricePer}c each`,
+      order
+        ? `Deliver provisions - ${formatCoins(order.units)} units wanted at ${order.pricePer}c each${warNote}`
+        : `Deliver war supplies${warNote} — paid 3c per unit`,
       ...pairs
     );
   } catch (error) {
@@ -162,10 +176,18 @@ function openDonationPrompt({ player }) {
     })
   );
   // The quartermaster's standing supply order: deliver provisions for coin.
+  // In wartime the war demands take deliveries even with no standing order.
   const order = OfficeTools.getSupplyOrder(kingdomId);
+  const warDemands = WarSupply.supplyStatus(kingdomId);
   if (order) {
     options.push(
       `Deliver provisions (${formatCoins(order.units)} units wanted at ${order.pricePer}c each).`,
+      () => showSupplyMenu(player, kingdomId)
+    );
+  } else if (warDemands.length > 0) {
+    const cats = warDemands[0].categories.map((c) => `${c.label} ${c.stock}/${c.quota}`).join(", ");
+    options.push(
+      `Deliver war supplies vs ${warDemands[0].foeName} (${cats}).`,
       () => showSupplyMenu(player, kingdomId)
     );
   }

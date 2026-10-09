@@ -52,6 +52,25 @@ interface StewardData {
     petitions: PetitionInfo[];
 }
 
+interface WarSupplyCategoryInfo {
+    cat: string;
+    label: string;
+    quota: number;
+    stock: number;
+    pct: number;
+}
+
+interface WarSupplyDemandInfo {
+    warKey: string;
+    foe: string;
+    foeName: string;
+    role: string;
+    raid: boolean;
+    morale: number;
+    moraleLabel: string;
+    categories: WarSupplyCategoryInfo[];
+}
+
 interface QuartermasterData {
     kind: "quartermaster";
     stockpile: number;
@@ -59,6 +78,7 @@ interface QuartermasterData {
     targetWar: number;
     wartime: boolean;
     supplyOrder: SupplyOrderInfo | null;
+    warSupply: WarSupplyDemandInfo[];
 }
 
 interface MarshalData {
@@ -344,6 +364,44 @@ function QuartermasterPanel({
                         </div>
                     )}
                 </div>
+            </div>
+            <div className="tma-office-section">
+                <h3 className="tma-office-section-title">War demands</h3>
+                {(data.warSupply ?? []).length === 0 ? (
+                    <div className="tma-office-inset">
+                        <div className="tma-office-row">
+                            <span className="tma-office-row-value">No armies in the field — the wagons rest.</span>
+                        </div>
+                    </div>
+                ) : (
+                    (data.warSupply ?? []).map((d) => (
+                        <div key={d.warKey} className="tma-office-inset" style={{ marginBottom: 8 }}>
+                            <div className="tma-office-row">
+                                <span className="tma-office-row-label">
+                                    vs {d.foeName}
+                                    {d.raid ? " (raid)" : ""} · {d.role}
+                                </span>
+                                <span className="tma-office-row-value gold">
+                                    {d.moraleLabel} ({Math.round(d.morale * 100)}%)
+                                </span>
+                            </div>
+                            {(d.categories ?? []).map((c) => (
+                                <div key={c.cat} className="tma-office-row">
+                                    <span className="tma-office-row-label">{c.label}</span>
+                                    <span className="tma-office-row-value">
+                                        {coins(c.stock)} / {coins(c.quota)} ({c.pct}%)
+                                    </span>
+                                </div>
+                            ))}
+                            <div className="tma-office-row">
+                                <span className="tma-office-row-value" style={{ fontSize: 12, opacity: 0.8 }}>
+                                    Subjects deliver to the donation chest in the capital — the treasury
+                                    pays per unit and the court grants influence.
+                                </span>
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
             <div className="tma-office-section">
                 <h3 className="tma-office-section-title">Stockpile targets</h3>

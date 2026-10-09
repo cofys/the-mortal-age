@@ -50,6 +50,8 @@ const Store = require("./KingdomStore");
 const Offices = require("./Offices.Kingdoms");
 const Membership = require("./Membership.Kingdoms");
 const Tension = require("./Tension.Kingdoms");
+const Influence = require("./Influence.Kingdoms");
+const WarSupply = require("./WarSupply.Kingdoms");
 
 // --- policy keys (kebab-case, namespaced; sim: is the simulation namespace) --
 const TAX_RATE_FLAG = "sim:tax-rate";
@@ -555,13 +557,29 @@ function quartermasterSurvey(player, kingdomId) {
     ? Math.floor(flagOf(kingdomId, STOCKPILE_FLAG)) : 0;
   const target = stockpileTarget(kingdomId, wartime);
   const order = getSupplyOrder(kingdomId);
-  say(player, [
+  const lines = [
     `[Quartermaster] Stores of ${kingdomName(kingdomId)}: ${formatCoins(stockpile)} / ${formatCoins(target)} units` +
       (wartime ? " (wartime target)." : " (peacetime target)."),
     order
       ? `  Standing supply order: ${formatCoins(order.units)} units wanted at ${order.pricePer}c each. Deliver to the donation chest.`
       : "  No standing supply order. The merchants wait.",
-  ]);
+  ];
+  // War demands: what the armies actually burn through.
+  try {
+    const demands = WarSupply.supplyStatus(kingdomId, Store);
+    for (const d of demands) {
+      const cats = d.categories.map((c) => `${c.label} ${c.stock}/${c.quota}`).join(", ");
+      lines.push(
+        `  War demand vs ${d.foeName}${d.raid ? " (raid)" : ""}: ${cats}. Supply morale ${d.moraleLabel} (${Math.round(d.morale * 100)}%).`
+      );
+    }
+    if (wartime && demands.length === 0) {
+      lines.push("  No war demands posted yet — the quartermaster's clerks are still counting.");
+    }
+  } catch {
+    // Survey is cosmetic; the stores already spoke.
+  }
+  say(player, lines);
 }
 
 function quartermasterTargets(player, kingdomId) {
@@ -909,20 +927,29 @@ function sealsLines(player) {
 // --- supply delivery (the donation chest calls this) ---------------------------
 
 /**
- * A player delivers provisions against the quartermaster's standing order.
- * Real transfers: items leave the player's inventory, the treasury pays the
- * posted price per unit, the war stockpile grows, and the order shrinks.
+ * A player delivers supplies: provisions, arrows, runes or materials.
+ * Real transfers: items leave the player's inventory, the treasury pays
+ * the posted price per unit, and the supplier earns a little influence.
  * Only subjects of the kingdom may supply its war effort.
+ *
+ * Routing: when the kingdom is at war and its war demands still want the
+ * item's category, the war effort takes the delivery first (credited
+ * against the demand quota, capped so nothing overfills). Otherwise the
+ * quartermaster's standing supply order takes it, as before.
  */
 function deliverSupplies(player, kingdomId, itemId, qty) {
   const fail = (message) => ({ ok: false, message });
-  const order = getSupplyOrder(kingdomId);
-  if (!order) return fail("The quartermaster seeks no supplies just now.");
-  const spec = SUPPLY_ITEMS[itemId];
-  if (!spec) return fail("The quartermaster buys bread, cooked meat and cooked chicken - nothing else.");
+  const spec = SUPPLY_ITEMS[itemId] ?? WarSupply.WAR_SUPPLY_ITEMS[itemId];
+  if (!spec) return fail("The quartermaster buys provisions, arrows, runes and war materials - nothing else.");
   if ((player.getAttribute?.(Membership.KINGDOM_ID_ATTRIBUTE) ?? null) !== kingdomId) {
     return fail(`You must serve ${kingdomName(kingdomId)} to supply its war effort.`);
   }
+  const route = WarSupply.routeDelivery(kingdomId, spec.cat ?? "food", Store);
+  if (route) {
+    return deliverToWarDemand(player, kingdomId, itemId, spec, qty, route);
+  }
+  const order = getSupplyOrder(kingdomId);
+  if (!order) return fail("The quartermaster seeks no supplies just now.");
   const inventory = player.getInventory?.();
   const have = inventory?.getAmount?.(itemId) ?? 0;
   let count = Math.min(Math.floor(Number(qty)) || 0, have);
@@ -970,6 +997,66 @@ function deliverSupplies(player, kingdomId, itemId, qty) {
 }
 
 // --- wages ledger --------------------------------------------------------------
+
+/** Coins per supply unit when no standing order sets the price (wartime rate). */
+const WAR_PRICE_PER_UNIT = 3;
+/** Influence per 40 supply units delivered to the war effort (1-8 per delivery). */
+const INFLUENCE_PER_40_UNITS = 1;
+const MAX_DELIVERY_INFLUENCE = 8;
+
+function influenceForDelivery(units) {
+  return Math.max(
+    1,
+    Math.min(MAX_DELIVERY_INFLUENCE, Math.floor(units / 40) * INFLUENCE_PER_40_UNITS)
+  );
+}
+
+/**
+ * Deliver against a live war demand: the items become that category's
+ * stock (capped at quota), the treasury pays, the supplier gains
+ * influence, and the army's morale recomputes.
+ */
+function deliverToWarDemand(player, kingdomId, itemId, spec, qty, route) {
+  const fail = (message) => ({ ok: false, message });
+  const inventory = player.getInventory?.();
+  const have = inventory?.getAmount?.(itemId) ?? 0;
+  let count = Math.min(Math.floor(Number(qty)) || 0, have);
+  if (count <= 0) return fail(`You carry no ${spec.name.toLowerCase()}.`);
+  // Never over-deliver past what the demand still wants.
+  count = Math.min(count, Math.floor(route.remaining / spec.units));
+  if (count <= 0) return fail(`The war effort wants no more ${spec.name.toLowerCase()} just now.`);
+  const units = count * spec.units;
+  const order = getSupplyOrder(kingdomId);
+  const pricePer = order?.pricePer ?? WAR_PRICE_PER_UNIT;
+  const payout = units * pricePer;
+  const treasury = Store.getKingdom(kingdomId)?.treasury ?? 0;
+  if (treasury < payout) return fail("The coffers cannot pay for this delivery.");
+  if (!Store.spendTax(kingdomId, payout)) return fail("The coffers cannot pay for this delivery.");
+  inventory.delete(itemId, count);
+  inventory.refreshItems?.();
+  inventory.adds(COINS_ID, payout);
+  const credited = WarSupply.addStock(kingdomId, route.warKey, spec.cat ?? "food", units, Store);
+  const influence = influenceForDelivery(units);
+  try {
+    Influence.addInfluence(player, kingdomId, influence);
+  } catch {
+    // Influence is a courtesy; the coins already moved.
+  }
+  Store.save();
+  emit("kingdom:supply-delivered", {
+    kingdomId, player, itemId, qty: count, units: credited, payout, filled: false, war: true,
+  });
+  const catLabel = WarSupply.CATEGORY_LABELS[spec.cat ?? "food"] ?? "supplies";
+  const status = WarSupply.supplyStatus(kingdomId, Store).find((d) => d.warKey === route.warKey);
+  const moraleNote = status ? ` Army supply: ${status.moraleLabel} (${Math.round(status.morale * 100)}%).` : "";
+  return {
+    ok: true,
+    message:
+      `You deliver ${count} ${spec.name.toLowerCase()} to the war against ${route.foeName} ` +
+      `(${catLabel}, ${formatCoins(credited)} units) for ${formatCoins(payout)}c and ${influence} influence.` +
+      moraleNote,
+  };
+}
 
 function onWagesPaid(event) {
   const kingdomId = event?.kingdomId;

@@ -5,6 +5,25 @@ import { fetchContent } from "../../../network/serverConnection/contentApi";
 import { state as connectionState } from "../../../network/serverConnection/state";
 import "./WarTableOverlay.css";
 
+interface WarSupplyCategory {
+    cat: string;
+    label: string;
+    quota: number;
+    stock: number;
+    pct: number;
+}
+
+interface WarSupplyDemand {
+    warKey: string;
+    foe: string;
+    foeName: string;
+    role: string;
+    raid: boolean;
+    morale: number;
+    moraleLabel: string;
+    categories: WarSupplyCategory[];
+}
+
 interface KingdomInfo {
     id: string;
     name: string;
@@ -24,6 +43,7 @@ interface KingdomInfo {
     coalition: CoalitionRef | null;
     inCivilWar: boolean;
     inSuccessionCrisis: boolean;
+    supply: WarSupplyDemand[];
 }
 
 interface CoalitionRef {
@@ -50,6 +70,8 @@ interface SiegeInfo {
     investment: number;
     warGoal: string | null;
     declaredAt: number | null;
+    attackerMorale: number | null;
+    defenderMorale: number | null;
 }
 
 interface VassalageInfo {
@@ -294,6 +316,27 @@ function TensionBar({ value }: { value: number }): JSX.Element {
             </span>
             <span className="tma-wartable-tension-label" style={{ color: tier.color }}>
                 {tier.label} · {value}
+            </span>
+        </span>
+    );
+}
+
+function supplyColor(pct: number): string {
+    if (pct >= 75) return "#7ba05b";
+    if (pct >= 50) return "#c9a227";
+    if (pct >= 25) return "#c97b2d";
+    return "#d43a2a";
+}
+
+function SupplyBar({ pct }: { pct: number }): JSX.Element {
+    const color = supplyColor(pct);
+    return (
+        <span className="tma-wartable-tension">
+            <span className="tma-wartable-tension-track">
+                <span
+                    className="tma-wartable-tension-fill"
+                    style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }}
+                />
             </span>
         </span>
     );
@@ -806,6 +849,54 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                                     );
                                 })}
                             </div>
+                            <h2 className="tma-wartable-section-title">War Supply</h2>
+                            {status.kingdoms.every((k) => (k.supply ?? []).length === 0) ? (
+                                <p className="tma-wartable-empty">
+                                    No armies in the field — the wagons rest.
+                                </p>
+                            ) : (
+                                <div className="tma-wartable-cards">
+                                    {status.kingdoms
+                                        .filter((k) => (k.supply ?? []).length > 0)
+                                        .map((k) =>
+                                            (k.supply ?? []).map((d) => (
+                                                <div key={`${k.id}-${d.warKey}`} className="tma-wartable-card">
+                                                    <div className="tma-wartable-card-title">
+                                                        {k.name}
+                                                        <span className="tma-wartable-muted">
+                                                            {" "}· {d.role === "attacker" ? "attacking" : "defending"} {d.foeName}
+                                                            {d.raid ? " (raid)" : ""}
+                                                        </span>
+                                                    </div>
+                                                    <div className="tma-wartable-card-row">
+                                                        <span className="tma-wartable-muted">Supply morale</span>
+                                                        <span style={{ color: supplyColor(d.morale >= 1.05 ? 80 : d.morale >= 0.9 ? 60 : d.morale >= 0.78 ? 35 : 10) }}>
+                                                            {d.moraleLabel} · {Math.round(d.morale * 100)}%
+                                                        </span>
+                                                    </div>
+                                                    {(d.categories ?? []).map((c) => (
+                                                        <div key={c.cat} className="tma-wartable-card-row">
+                                                            <span className="tma-wartable-muted">{c.label}</span>
+                                                            <span style={{ flex: 1, margin: "0 8px" }}>
+                                                                <SupplyBar pct={c.pct} />
+                                                            </span>
+                                                            <span className="tma-wartable-muted">
+                                                                {c.stock}/{c.quota}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                    {home?.id === k.id && (
+                                                        <div className="tma-wartable-card-sub">
+                                                            Deliver provisions, arrows, runes and materials
+                                                            to the donation chest in {k.capital ?? "the capital"} —
+                                                            the army pays coin and the court remembers.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))
+                                        )}
+                                </div>
+                            )}
                             <p className="tma-wartable-note">
                                 Troop musters and campaign planning arrive with the campaign system —
                                 for now the table shows what the crown can pay for and who bleeds beside it.

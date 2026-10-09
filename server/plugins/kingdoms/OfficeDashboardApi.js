@@ -48,6 +48,7 @@ const Offices = require("./Offices.Kingdoms");
 const OfficeTools = require("./OfficeTools.Kingdoms");
 const Tension = require("./Tension.Kingdoms");
 const Treasury = require("./Treasury.Kingdoms");
+const WarSupply = require("./WarSupply.Kingdoms");
 
 let Politics = null;
 try {
@@ -153,6 +154,20 @@ function quartermasterPayload(kingdomId) {
     supplyOrder: order
       ? { units: order.units, pricePer: order.pricePer, by: order.by ?? null }
       : null,
+    warSupply: (() => {
+      try {
+        return WarSupply.supplyStatus(kingdomId, Store);
+      } catch {
+        return [];
+      }
+    })(),
+    supplyCatalog: Object.entries(WarSupply.WAR_SUPPLY_ITEMS).map(([id, spec]) => ({
+      id: Number(id),
+      name: spec.name,
+      units: spec.units,
+      cat: spec.cat,
+      catLabel: WarSupply.CATEGORY_LABELS[spec.cat] ?? spec.cat,
+    })),
   };
 }
 
