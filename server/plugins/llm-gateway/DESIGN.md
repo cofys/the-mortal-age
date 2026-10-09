@@ -146,6 +146,8 @@ provider-level vars as fallback.
    `LLM_GATEWAY_MOUTH=0` (disable default mouth if the citizens plugin speaks
    replies itself), `LLM_GATEWAY_DB` (SQLite path when a driver exists),
    `LLM_GATEWAY_MEMORY_FILE` (JSON memory path; empty = in-memory only),
+   `LLM_GATEWAY_MEMORY_FLUSH_MS` (debounced JSON-memory write interval; default
+   5000; writes are dirty-flag + debounced, never on the hot path),
    `LLM_GATEWAY_USAGE_FILE` (usage rollup path; empty = in-memory only),
    `LLM_GATEWAY_PUBLIC_PER_PLAYER_MAX` (default 4) /
    `LLM_GATEWAY_PUBLIC_PER_PLAYER_WINDOW_MS` (default 300000) /
