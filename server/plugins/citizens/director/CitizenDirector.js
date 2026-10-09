@@ -209,6 +209,8 @@ const { tickPets } = require("../lib/CitizenPetLife");
 const CitizenPets = require("../lib/CitizenPets");
 const { tickArt } = require("../lib/CitizenArtLife");
 const CitizenArt = require("../lib/CitizenArt");
+const { tickTournaments } = require("../lib/CitizenTournamentLife");
+const CitizenTournaments = require("../lib/CitizenTournaments");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
@@ -2919,6 +2921,13 @@ class CitizenDirector {
     } catch (error) {
       this.log("art failed", { error: String(error?.message ?? error) });
     }
+    // Citizen tournaments: seasonal brackets, entries, payouts, betting.
+    // Data tier, zero LLM.
+    try {
+      tickTournaments(this, nowMs);
+    } catch (error) {
+      this.log("tournaments failed", { error: String(error?.message ?? error) });
+    }
     try {
       if (getJournal().saveIfDirty()) {
         this.log("citizen journal saved");
@@ -3092,6 +3101,15 @@ class CitizenDirector {
       }
     } catch (error) {
       this.log("citizen art save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenTournaments.save()) {
+        this.log("citizen tournaments saved");
+      }
+    } catch (error) {
+      this.log("citizen tournaments save failed", {
         error: String(error?.message ?? error),
       });
     }

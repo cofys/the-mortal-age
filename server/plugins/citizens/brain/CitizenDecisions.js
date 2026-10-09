@@ -105,6 +105,7 @@ const ACT_ENTERTAIN = "citizen_entertain";
 const ACT_GUILD = "citizen_guild";
 const ACT_PETCARE = "citizen_petcare";
 const ACT_CREATEART = "citizen_createart";
+const ACT_COMPETE = "citizen_compete";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -131,6 +132,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_GUILD,
   ACT_PETCARE,
   ACT_CREATEART,
+  ACT_COMPETE,
   ACT_MINE,
   ACT_CHOP,
 ]);
@@ -693,6 +695,53 @@ function artInfo(player) {
 }
 
 /**
+ * Tournament readiness: is there an open tournament in the citizen's
+ * kingdom they could enter? Defensive: a missing/broken tournaments
+ * module scores as nothing open.
+ */
+function competeInfo(player) {
+  try {
+    const T = require("../lib/CitizenTournaments");
+    const { kingdomIdOf } = require("./CitizenSites");
+    const kingdomId = kingdomIdOf(player);
+    const opens = T.openTournamentsFor(kingdomId) ?? [];
+    if (!opens.length) return { openCount: 0, bestSport: null, canAfford: false, entered: false };
+    // Best sport = highest real rating among open tournaments.
+    let best = null;
+    let bestRating = -1;
+    for (const t of opens) {
+      let rating = null;
+      try {
+        rating = T.athleticRatingFor(player, t.sportId);
+      } catch {
+        rating = null;
+      }
+      const score = rating ?? 50;
+      if (score > bestRating) {
+        bestRating = score;
+        best = t;
+      }
+    }
+    const fee = best ? T.entryFeeFor(best.sportId) : 0;
+    const coins = coinCount(player);
+    const entered = best
+      ? best.entries.some(
+          (e) => String(e.username ?? "").toLowerCase() === String(player?.username ?? player?.getUsername?.() ?? "").toLowerCase()
+        )
+      : false;
+    return {
+      openCount: opens.length,
+      bestSport: best?.sportId ?? null,
+      bestRating,
+      canAfford: coins >= fee,
+      entered,
+    };
+  } catch {
+    return { openCount: 0, bestSport: null, canAfford: false, entered: false };
+  }
+}
+
+/**
  * Drunkenness check: is this citizen currently drunk?
  * Defensive: a missing/broken entertainment module scores as sober.
  */
@@ -1111,6 +1160,7 @@ function snapshot(player) {
     guild: guildInfo(player),
     pets: petInfo(player),
     art: artInfo(player),
+    compete: competeInfo(player),
     drunk: isDrunk(player),
     climate: climateInfo(),
     night: nightInfo(),
@@ -1131,7 +1181,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, drunk, climate, night, hour } = snap;
+  const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, compete, drunk, climate, night, hour } = snap;
   const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
@@ -1437,6 +1487,27 @@ function scoreActivity(activityId, snap) {
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
+      return s;
+    }
+    case ACT_COMPETE: {
+      // Tournaments: citizens compete for glory, prizes, and fame. A human
+      // athlete enters when there's an open bracket they can afford;
+      // the competitive live for this, the timid watch from the stands.
+      const ci = compete ?? { openCount: 0 };
+      if (!ci.openCount) return 4; // no open tournament, nothing to enter
+      if (ci.entered) return 10; // already entered — training can wait
+      if (!ci.canAfford) return 4; // entry fee is real — broke can't enter
+      let s = 16;
+      const competitive = personality?.competitive ?? personality?.driven ?? 0;
+      if (competitive > 0.7) s += 14; // true competitors seek it out
+      else if (competitive > 0.5) s += 6;
+      if ((ci.bestRating ?? 0) > 150) s += 8; // a real contender smells gold
+      if (goalType === GOAL_MASTER_TRADE) s -= 6; // entry fee spends, not saves
+      if (goalType === GOAL_SAVE_GOLD) s -= 8;
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20; // nobody fights drunk well
       return s;
     }
     case ACT_RC: {
@@ -1923,6 +1994,7 @@ module.exports = {
   ACT_GUILD,
   ACT_PETCARE,
   ACT_CREATEART,
+  ACT_COMPETE,
   ACT_MEAL,
   ACT_REST,
   ACT_BANK,
