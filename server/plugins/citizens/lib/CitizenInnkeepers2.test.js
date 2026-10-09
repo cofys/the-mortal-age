@@ -157,33 +157,9 @@ check("kingdom-preferred venues", () => {
   assert.ok(v2 && v2.name, "falls back to any venue");
 });
 
-// --- 9. brew determinism + day variance ---
-check("brew determinism and day variance", () => {
-  const d1 = new Date(2026, 9, 8, 12, 0).getTime();
-  const d2 = new Date(2026, 9, 9, 12, 0).getTime();
-  assert.equal(Host.brewForToday("alice", d1), Host.brewForToday("alice", d1));
-  const seen = new Set();
-  for (let d = 0; d < 10; d++) {
-    seen.add(Host.brewForToday("alice", d1 + d * 86400000));
-  }
-  assert.ok(seen.size > 1, "brew varies across days");
-  assert.ok(Host.BREWS.includes(Host.brewForToday("alice", d2)));
-});
+// --- brewForToday removed 2026-10-08: hash-derived fabrication. ---
 
-// --- 10. feast determinism + rarity ---
-check("feast determinism and rarity", () => {
-  const venue = { name: "the Test Hall", kingdom: "misthalin" };
-  const d1 = new Date(2026, 9, 8, 12, 0).getTime();
-  assert.equal(Host.feastFor(venue, d1), Host.feastFor(venue, d1));
-  assert.equal(Host.feastFor(null, d1), null);
-  let hits = 0;
-  const days = 500;
-  for (let d = 0; d < days; d++) {
-    if (Host.feastFor(venue, d1 + d * 86400000)) hits++;
-  }
-  const rate = hits / days;
-  assert.ok(rate > 0.03 && rate < 0.15, `feast rate ~8%: ${rate}`);
-});
+// --- feastFor removed 2026-10-08: hash-derived fabrication. ---
 
 // --- 11. dishForFeast tie-in never throws ---
 check("dishForFeast tie-in safe", () => {
@@ -324,7 +300,6 @@ check("never throws on hostile input", () => {
   Host.tickHostfolk({ roster: null }, Date.now());
   assert.equal(Host.hostfolkTypeOf(undefined), null);
   assert.ok(Host.venueFor(null)?.name, "venueFor(null) falls back to a venue");
-  assert.equal(Host.feastFor(undefined, Date.now()), null);
   assert.equal(Host.rentRoom("", "x"), null);
   assert.equal(Host.buyMug("x", ""), null);
   assert.equal(Host.joinFeast("x", null), null);
