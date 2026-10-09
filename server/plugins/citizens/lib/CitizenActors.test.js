@@ -253,13 +253,7 @@ check("tickActors fires near a real player in show hours", () => {
   }
   assert.ok(actorName, "found an actor");
   const chats = [];
-  const citizen = { ...mk(0, 0), forceChat: (l) => chats.push(l), getUsername: () => actorName };
   const human = { ...mk(5, 5), getUsername: () => "Jon", isPlayerBot: () => false, getHostAddress: () => "1.2.3.4" };
-  const director = {
-    roster: new Map([[actorName.toLowerCase(), { username: actorName, role: "commoner", kingdomId: "varrock" }]]),
-    playerFor: () => citizen,
-    onlinePlayers: () => [human],
-  };
   // monkey-patch Math.random via chance? Use many actors to beat the chance gate.
   const many = new Map();
   for (let i = 0; i < 60; i++) {
@@ -268,10 +262,13 @@ check("tickActors fires near a real player in show hours", () => {
       many.set(uname.toLowerCase(), { username: uname, role: "commoner", kingdomId: "varrock" });
     }
   }
+  // Canonical director: isOnline/getBot. The human joins the roster (as a
+  // non-actor record) so anyRealPlayerNear can find a real player in earshot.
+  many.set("jon", { username: "Jon", role: "guard" });
   const director2 = {
     roster: many,
-    playerFor: (r) => ({ ...mk(0, 0), forceChat: (l) => chats.push(l), getUsername: () => r.username }),
-    onlinePlayers: () => [human],
+    isOnline: () => true,
+    getBot: (r) => (r.username === "Jon" ? human : ({ ...mk(0, 0), isPlayerBot: () => true, getHostAddress: () => "bot", forceChat: (l) => chats.push(l), getUsername: () => r.username })),
   };
   const showTime = new Date(2026, 9, 8, 19, 0, 0).getTime(); // 19:00 local
   A.tickActors(director2, showTime);
@@ -289,10 +286,13 @@ check("tickActors is silent with no real player nearby", () => {
     }
   }
   const bot = { ...mk(5, 5), getUsername: () => "Bot1", isPlayerBot: () => true, getHostAddress: () => "bot" };
+  // The bot joins the roster as a non-actor record; anyRealPlayerNear must
+  // still find nobody real, so the tick stays silent.
+  many.set("bot1", { username: "Bot1", role: "guard" });
   const director = {
     roster: many,
-    playerFor: (r) => ({ ...mk(0, 0), forceChat: (l) => chats.push(l), getUsername: () => r.username }),
-    onlinePlayers: () => [bot],
+    isOnline: () => true,
+    getBot: (r) => (r.username === "Bot1" ? bot : ({ ...mk(0, 0), isPlayerBot: () => true, getHostAddress: () => "bot", forceChat: (l) => chats.push(l), getUsername: () => r.username })),
   };
   const showTime = new Date(2026, 9, 8, 19, 0, 0).getTime();
   A.tickActors(director, showTime);
@@ -310,10 +310,11 @@ check("tickActors is silent outside show hours", () => {
     }
   }
   const human = { ...mk(5, 5), getUsername: () => "Jon", isPlayerBot: () => false, getHostAddress: () => "1.2.3.4" };
+  many.set("jon", { username: "Jon", role: "guard" });
   const director = {
     roster: many,
-    playerFor: (r) => ({ ...mk(0, 0), forceChat: (l) => chats.push(l), getUsername: () => r.username }),
-    onlinePlayers: () => [human],
+    isOnline: () => true,
+    getBot: (r) => (r.username === "Jon" ? human : ({ ...mk(0, 0), isPlayerBot: () => true, getHostAddress: () => "bot", forceChat: (l) => chats.push(l), getUsername: () => r.username })),
   };
   const morning = new Date(2026, 9, 8, 10, 0, 0).getTime();
   A.tickActors(director, morning);
@@ -322,11 +323,15 @@ check("tickActors is silent outside show hours", () => {
 
 // --- heckleSeen returns a comeback and journals ---
 check("heckleSeen fires a comeback line", () => {
+  const { getJournal } = require("./CitizenJournal");
+  getJournal().resetForTests();
   const chats = [];
   const actor = { forceChat: (l) => chats.push(l), getUsername: () => "Tragedian" };
   const line = A.heckleSeen(actor, "RudeRupert");
   assert.ok(line && line.length > 0 && line.length <= 120);
   assert.equal(chats[0], line);
+  const entries = getJournal().recent("Tragedian", 10);
+  assert.ok(entries.some((e) => e.kind === "work"), "heckle response was journaled");
 });
 
 // --- tipActor ignores non-actors and non-coin items ---
