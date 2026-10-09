@@ -30,6 +30,9 @@ before you start. See `COLLAB.md` for the full protocol.
 - [x] DONE — heartbeat-1325 — Citizen movement diagnosis + fix (Jon playtest: citizens materialize but never move). Temp debug logging removed, BYPASS LOD reverted after inconclusive test. PC deployed clean 14:16. OPEN ITEM: Jon's live playtest only — no more speculative fixes.
   Paths: `server/plugins/citizens/lib/CitizenAlive.js`, `server/plugins/citizens/`
 
+- [ ] IN PROGRESS — frank-rsps — citizens: kill hash-fiction fabrication in *2 modules (review finding #1, CRITICAL) — the 32 frozen *2 modules derive daily events (ore strikes, gem finds, prices) from hashSeed(username+day) and journalize/speak them as real; the LLM mouth echoes them as truth. Delete or gate the fabrication functions (oreForToday, strikeFor, priceFor, findsFor, doMinerfolkWork pattern) on real engine state; keep honest ambient work chatter. No new modules, no new systems — deletion/gating only. Tests + node --check. Branch push only; PC deploy after.
+  Paths: `server/plugins/citizens/lib/*2.js`
+
 ## NEXT
 
 - [ ] _Empty — add tasks here as they come up. Format:_
