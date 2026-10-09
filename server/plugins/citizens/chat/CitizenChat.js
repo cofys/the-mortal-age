@@ -789,6 +789,34 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "press guild" / "press association" / "inkwell" / "press pass" — the
+  // press association (guild layer). Placed after the journalism block;
+  // keywords are distinct from it ("any news", "subscribe", ...).
+  if (/\b(press guild|press association|inkwell|press award|press pass|journalism school|press code)\b/.test(said)) {    try {
+      const Guilds = require("../lib/CitizenPressGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "pressguild_status", {
+        username: citizenUsername,
+        members: desc?.members ?? 0,
+        editors: desc?.editors ?? 0,
+        treasury: desc?.treasury ?? 0,
+        openCases: desc?.openCases ?? 0,
+        awards: desc?.awards ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+        hasPass: citizenUsername ? Guilds.hasPressPass(citizenUsername) : false,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "is there a bank" / "my balance" / "open account" — banking.
   if (/\b(is there a bank|any bankers?|my balance|open an? account|bank balance|any loans?|borrow coins|deposit coins|withdraw coins)\b/.test(said)) {
     try {

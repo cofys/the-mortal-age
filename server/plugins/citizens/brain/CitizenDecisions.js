@@ -125,6 +125,7 @@ const ACT_OBSERVE = "citizen_observe";
 const ACT_CHART = "citizen_chart";
 const ACT_MAPGUILD = "citizen_mapguild";
 const ACT_REPORT = "citizen_report";
+const ACT_PRESSGUILD = "citizen_pressguild";
 const ACT_BANKERWORK = "citizen_bankerwork";
 const ACT_INSURERWORK = "citizen_insurerwork";
 const ACT_SPY = "citizen_spymaster";
@@ -170,7 +171,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1424,6 +1425,37 @@ function pressInfo(player) {
 }
 
 /**
+ * Press-association readiness: is this citizen a guild member in good
+ * standing, and does the hall exist? Defensive: a missing/broken guild
+ * module scores as unable to attend.
+ */
+function pressGuildInfo(player) {
+  try {
+    const Guilds = require("../lib/CitizenPressGuilds");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isMember = Guilds.isGuildMember(username);
+    const rank = Guilds.guildRankOf(username);
+    const mem = Guilds.memberOf(username);
+    let hallExists = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      hallExists = !!(kid && Guilds.guildOf(kid));
+    } catch { /* no sites */ }
+    return {
+      isMember,
+      rank,
+      suspended: !!(mem && mem.suspended),
+      isEditor: rank === Guilds.RANK_EDITOR,
+      hasPass: Guilds.hasPressPass(username),
+      hallExists,
+    };
+  } catch {
+    return { isMember: false, rank: null, suspended: false, isEditor: false, hasPass: false, hallExists: false };
+  }
+}
+
+/**
  * Banking readiness: is this citizen a banker, and does the branch exist?
  * Defensive: a missing/broken banking module scores as unable to bank.
  */
@@ -2177,6 +2209,7 @@ compete: competeInfo(player),
     maps: mapInfo(player),
     mapguild: guildInfo(player),
     press: pressInfo(player),
+    pressguild: pressGuildInfo(player),
     bank: bankInfo(player),
     ins: insurerInfo(player),
     dig: digInfo(player),
@@ -2209,7 +2242,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, bank, ins, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bank, ins, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -3074,6 +3107,25 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_PRESSGUILD: {
+      // Press association hall sessions: members in good standing attend.
+      // Editors run the ethics reviews and teach; stringers learn the
+      // craft. Suspended members and non-members stay away — the hall is
+      // members-only.
+      const pg = pressguild ?? { isMember: false, suspended: false, isEditor: false, hallExists: false };
+      if (!pg.isMember || pg.suspended) return 4; // not a member in good standing
+      if (!pg.hallExists) return 4; // honest — no hall, no session
+      let s = 20;
+      if (pg.isEditor) s += 12; // editors run the reviews and the school
+      if (pg.rank === "stringer") s += 6; // stringers learn the most
+      if (!pg.hasPass) s -= 10; // pass lapsed — less reason to show up
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_BANKERWORK: {
       // Banking: bankers serve real customers at the branch — processing
       // real deposits, withdrawals, and loans. A human banker works when
@@ -3615,7 +3667,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,

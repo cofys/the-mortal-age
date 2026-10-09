@@ -89,6 +89,8 @@ const DEEDS = Object.freeze({
   masterofcharts: Object.freeze({ points: 6, label: "earned ten guild map certifications" }),
   inkslinger: Object.freeze({ points: 8, label: "published five stories" }),
   muckraker: Object.freeze({ points: 6, label: "exposed three crimes" }),
+  presslaureate: Object.freeze({ points: 8, label: "won the Inkwell press award" }),
+  fabricator: Object.freeze({ points: -8, label: "was expelled from the press guild for fabrication" }),
   financier: Object.freeze({ points: 8, label: "built a banking fortune" }),
   defaulter: Object.freeze({ points: -8, label: "defaulted on a bank loan" }),
   underwriter: Object.freeze({ points: 8, label: "underwrote a thriving insurance book" }),

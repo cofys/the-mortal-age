@@ -237,6 +237,14 @@ function majorEventsSince(kingdomId, sinceMs) {
   );
 }
 
+/**
+ * Additive read accessor (press guild ethics tribunal): a single event by
+ * id, so fabrication claims can be verified against real records.
+ */
+function eventFor(id) {
+  return load().events[String(id)] || null;
+}
+
 // --- stories ------------------------------------------------------------------
 
 const HEADLINE_FRAMES = Object.freeze({
@@ -556,7 +564,7 @@ module.exports = {
   // journalists
   registerJournalist, isJournalist, journalistFor, journalistsIn,
   // events
-  recordEvent, unclaimedEvents, majorEventsSince,
+  recordEvent, unclaimedEvents, majorEventsSince, eventFor,
   // stories
   fileStory, submitPlayerStory, storiesFor, storyCountFor, fameDeedsFor, headlineFor,
   // presses

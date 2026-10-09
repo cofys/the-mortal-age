@@ -34,6 +34,7 @@ const { onAthleticsCommand, ATHLETICS_USAGE } = require("./CitizenAthleticsEvent
 const { onCookOffCommand, COOKOFF_USAGE } = require("./CitizenCookOffEvents");
 const { onFestivalCommand, FESTIVAL_USAGE } = require("./CitizenMusicFestivalEvents");
 const { onMapGuildCommand, MAPGUILD_USAGE } = require("./CitizenMapGuildEvents");
+const { onPressGuildCommand, PRESSGUILD_USAGE } = require("./CitizenPressGuildEvents");
 const { onGalleryCommand, GALLERY_USAGE } = require("./CitizenGalleryEvents");
 const { onLibraryCommand, LIBRARY_USAGE } = require("./CitizenLibraryEvents");
 const { onObservatoryCommand, OBSERVATORY_USAGE } = require("./CitizenObservatoryEvents");
@@ -770,6 +771,12 @@ module.exports = {
       onMapGuildCommand,
       PlayerRights.NONE,
       MAPGUILD_USAGE
+    );
+    api.registerCommand(
+      "pressguild",
+      onPressGuildCommand,
+      PlayerRights.NONE,
+      PRESSGUILD_USAGE
     );
   },
 };
