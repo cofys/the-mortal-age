@@ -759,6 +759,15 @@ function doSkillAction(director, key, session, def, memberName) {
   // Visible: play the skilling animation where players can see it.
   playSkillAnim(director, bot, def.anim);
 
+  // Fishing yield is REAL now (brain/actions/CitizenFishing): materialized
+  // citizens in arrived fishing sessions land real catches at real spots
+  // with real items + real Fishing XP on their own cadence. Skip the
+  // data-tier grant here so fishing doesn't double-dip; the visual stays.
+  if (session.skill === "fishing") {
+    session.actions += 1;
+    return;
+  }
+
   // Yield: items + XP, with a level-scaled bonus chance.
   const level = skillStore.getLevel(memberName, session.skill);
   const bonusChance = Math.min(0.35, (level - 1) * 0.012);

@@ -57,6 +57,7 @@ const CitizenWarfare = require("../lib/CitizenWarfare");
 const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
+const CitizenFishing = require("../brain/actions/CitizenFishing");
 const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
@@ -1941,6 +1942,14 @@ class CitizenDirector {
       CitizenSkilling.tickSkilling(this, hour);
     } catch (error) {
       this.log("skilling failed", { error: String(error?.message ?? error) });
+    }
+    // Real fishing catches: materialized citizens in arrived fishing sessions
+    // land real fish (player inventory API) + real Fishing XP (player skills
+    // API) at real fishing spots. Zero LLM.
+    try {
+      CitizenFishing.tickCitizenFishing(this);
+    } catch (error) {
+      this.log("citizen fishing failed", { error: String(error?.message ?? error) });
     }
     // Master-apprentice pairings: masters (level 60+ trade) take on young
     // citizens, who gain real trade XP each slow tick and graduate at 40.
