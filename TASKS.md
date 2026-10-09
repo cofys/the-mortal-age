@@ -7,6 +7,8 @@
 Claim a task by changing it to `IN PROGRESS — <name>`, committing, and pushing
 before you start. See `COLLAB.md` for the full protocol.
 
+- [ ] IN PROGRESS — coordinator-1645-treasury (2026-10-09 16:45 EDT) — kingdoms: fealty tax & treasury — tax flow on rank-granted/task-completed (players only, bots excluded), treasury spend via office-dashboard grant buttons, treasury surfaced in My Kingdom panel + office dashboard.
+
 ## NOW
 
 - [x] DONE — coordinator-kingdom-choice (2026-10-09 16:15–16:45 EDT) — earned kingdom rank promotions: the home-kingdom choice is now a progression path. Influence.Kingdoms settles promotions after any influence lands (fealty/donation/task): 100→Man-at-arms, 300→Knight, 800→Lord, 2000→Regent via kingdom:rank-granted (via:service). Guards: bots excluded, own-kingdom only, no demotion, never Monarch, target must be in the kingdom's hierarchy. Events.Kingdoms wires the settle + announces to the player. Tests: 23/23 new Influence.Kingdoms.test.js (incl. full event-bus chain), adjacent kingdoms suites 236+216 green (OfficeDashboardApi file-level failure pre-existing at base). Merged d32d85ac (drop-check clean, 0 deletions). Deployed to PC: HEAD=d32d85ac verified on disk, node --check + 23/23 + 216/216 green on PC, Invoke-CimMethod start (PID 5036), 43594 LISTENING, clean boot (only benign SQLite ExperimentalWarning), watchdog Ready, lock removed, saves backed up to C:\tma\saves-backup-2026-10-09-1625. Runlog: hidden_files/runlog-2026-10-09-1615-kingdom-choice-promotions.md. In-game verification still needs Jon's confirmation (worldPlayers:0 at boot).
