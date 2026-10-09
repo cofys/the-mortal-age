@@ -287,6 +287,8 @@ const { tickDiplomaticCorpsLife } = require("../lib/CitizenDiplomaticCorpsLife")
 const CitizenDiplomaticCorps = require("../lib/CitizenDiplomaticCorps");
 const { tickSpyGuildLife } = require("../lib/CitizenSpyGuildLife");
 const CitizenSpyGuilds = require("../lib/CitizenSpyGuilds");
+const { tickTradeGuildLife } = require("../lib/CitizenTradeGuildLife");
+const CitizenTradeGuilds = require("../lib/CitizenTradeGuilds");
 const { tickCivilLife } = require("../lib/CitizenCivilLife");
 const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
@@ -3309,6 +3311,16 @@ class CitizenDirector {
     } catch (error) {
       this.log("spy guild failed", { error: String(error?.message ?? error) });
     }
+    // Merchants' association: dues, licenses, inspections, fairs, tribunal,
+    // merchant school. Data tier, zero LLM. (CitizenGuilds owns generic
+    // trade guilds; CitizenTradeCharters owns monopolies; CitizenTradeCaravans
+    // owns caravan ops; CitizenMarketStalls owns stalls — this owns the
+    // profession's guild layer only.)
+    try {
+      tickTradeGuildLife(this, nowMs);
+    } catch (error) {
+      this.log("trade guild failed", { error: String(error?.message ?? error) });
+    }
     // Bar association: dues, case reviews, pro bono, disciplinary board,
     // legal school. Data tier, zero LLM. (CitizenCivilLaw owns contracts/
     // disputes/judgments; this owns the profession's guild layer only.)
@@ -3743,6 +3755,15 @@ if (CitizenTournaments.save()) {
       }
     } catch (error) {
       this.log("citizen spy guild save failed", {
+        error: String(error?.message ?? error),
+      });
+    }
+    try {
+      if (CitizenTradeGuilds.save()) {
+        this.log("citizen trade guild saved");
+      }
+    } catch (error) {
+      this.log("citizen trade guild save failed", {
         error: String(error?.message ?? error),
       });
     }

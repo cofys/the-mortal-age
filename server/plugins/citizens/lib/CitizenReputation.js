@@ -108,6 +108,8 @@ const DEEDS = Object.freeze({
   burned: Object.freeze({ points: -8, label: "was caught spying" }),
   shadowmaster: Object.freeze({ points: 8, label: "rose to spymaster of the shadow guild" }),
   doubleagent: Object.freeze({ points: -8, label: "was expelled from the shadow guild as a double agent" }),
+  fairtrader: Object.freeze({ points: 8, label: "rose to merchantmaster of the merchants' association" }),
+  profiteer: Object.freeze({ points: -8, label: "was expelled from the merchants' association for price gouging" }),
   counselor: Object.freeze({ points: 6, label: "won a civil case as advocate" }),
   oathbreaker: Object.freeze({ points: -6, label: "broke a sworn contract" }),
   executor: Object.freeze({ points: 4, label: "settled an estate faithfully" }),

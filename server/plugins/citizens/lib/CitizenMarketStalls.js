@@ -592,6 +592,7 @@ module.exports = {
   PITCH_LINES,
   // pure/testable
   isMarketOpenHour,
+  referencePrice, // merchants'-association inspections read this defensively
   dateKeyFor,
   dailyWaresFor,
   priceMultiplierFor,

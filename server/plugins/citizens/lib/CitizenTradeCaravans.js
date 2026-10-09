@@ -394,6 +394,13 @@ function settleCaravan(director, caravan, nowMs) {
   } catch {
     bonus = 0;
   }
+  // Guild-certified manifests earn the merchants'-association bonus on top.
+  // Read defensively; certification lives in CitizenTradeGuilds.
+  try {
+    bonus += require("./CitizenTradeGuilds").certifiedBonusFor(caravan, nowMs) ?? 0;
+  } catch {
+    // no association — no bonus
+  }
   const netWithBonus = bonus > 0 ? Math.round(net * (1 + bonus)) : net;
   const shares = splitShares(
     netWithBonus,

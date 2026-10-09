@@ -769,6 +769,35 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // Merchants' association (trade guild layer). Placed before the shadow
+  // guild block; keywords are distinct ("merchant guild" vs "guild of
+  // merchants" stays free). Answers with real hall state, never invented.
+  if (/\b(merchants'? association|merchant guild|merchantmaster|trade fair|market license|price gouging|weights and measures|guild of honest trade)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenTradeGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : null;
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "tradeguild_status", {
+        username: citizenUsername,
+        members: desc?.members ?? 0,
+        masters: desc?.masters ?? 0,
+        treasury: desc?.treasury ?? 0,
+        fairFund: desc?.fairFund ?? 0,
+        licensed: desc?.licensed ?? 0,
+        openCases: desc?.openCases ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // Shadow guild (espionage guild layer). Placed before the espionage block;
   // keywords are distinct from it ("spymaster" alone stays with espionage).
   if (/\b(shadow guild|spymasters'? guild|dead drop|tradecraft|safe house|mole hunt|double agent|guild of shadows)\b/.test(said)) {
