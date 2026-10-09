@@ -1549,11 +1549,6 @@ class CitizenDirector {
       record.merchantKind === "prime"
         ? this.registry.byId.get(ACTIVITY_PRIME_MERCHANT)
         : this.registry.byId.get(ROLE_ACTIVITY[record.role]);
-    // DIAG: log attachBrain status
-    if (!global._attachDiagLogged) {
-      global._attachDiagLogged = true;
-      console.log(`[DIAG-ATTACH] registry=${!!this.registry}, byId=${!!this.registry?.byId}, activity=${!!activity}, role=${record.role}, activityId=${ROLE_ACTIVITY[record.role]}`);
-    }
     if (activity) {
       attachBrain({
         runtime,
@@ -1787,6 +1782,51 @@ class CitizenDirector {
       tickLodBands(this, nowMs);
     } catch (error) {
       this.log("tick-lod failed", { error: String(error?.message ?? error) });
+    }
+    // Movement: citizen brains may not be ticking (attachBrain silent
+    // failure), but the director tick runs. Handle movement here directly
+    // so citizens visibly move even without a brain tick.
+    try {
+      const nav = require("../../bots/behaviours/navigation/BotNavigation");
+      const { peekMovementRequest, dispatchMovementRequest, requestMovement, clearMovementRequest } = nav;
+      for (const record of this.roster.values()) {
+        if (!this.isOnline(record)) continue;
+        const bot = this.getBot(record);
+        if (!bot) continue;
+        // Skip if already moving
+        if (bot.getMovementQueue?.()?.size?.() > 0) continue;
+        // Dispatch any queued request first
+        const req = peekMovementRequest(bot);
+        if (req) {
+          try {
+            const result = dispatchMovementRequest(bot, req);
+            if (result?.hasRoute === true) clearMovementRequest(bot);
+          } catch {}
+          continue;
+        }
+        // No queued movement: wander occasionally (10% per tick) to a nearby tile
+        // This gives visible life even when the brain isn't running.
+        if (Math.random() < 0.10) {
+          try {
+            const loc = bot.getLocation?.();
+            if (!loc) continue;
+            const dx = Math.floor(Math.random() * 11) - 5; // -5 to +5
+            const dy = Math.floor(Math.random() * 11) - 5;
+            if (dx === 0 && dy === 0) continue;
+            const tx = loc.getX() + dx;
+            const ty = loc.getY() + dy;
+            requestMovement(bot, tx, ty, { reason: "director_wander", basicPather: true, z: loc.getZ?.() ?? 0 });
+            // Dispatch immediately
+            const req2 = peekMovementRequest(bot);
+            if (req2) {
+              const result2 = dispatchMovementRequest(bot, req2);
+              if (result2?.hasRoute === true) clearMovementRequest(bot);
+            }
+          } catch {}
+        }
+      }
+    } catch (error) {
+      this.log("director movement failed", { error: String(error?.message ?? error) });
     }
     for (const record of this.roster.values()) {
       const online = this.isOnline(record);
