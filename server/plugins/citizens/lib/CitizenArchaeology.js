@@ -487,6 +487,16 @@ function resetForTests() {
   nextArtifactId = 1;
 }
 
+/**
+ * Additive read accessor (for the Excavators' Guild): real lifetime dig
+ * count for a registered archaeologist. Used to gate guild promotion —
+ * never invented, 0 when unknown.
+ */
+function digCountFor(username) {
+  const rec = load().archaeologists[norm(username)];
+  return rec ? (rec.digs || 0) : 0;
+}
+
 module.exports = {
   SAVE_KEY,
   SITE_KEYWORDS,
@@ -514,6 +524,7 @@ module.exports = {
   siteTileFor,
   museumStatus,
   describe,
+  digCountFor,
   save,
   resetForTests,
 };

@@ -1803,6 +1803,34 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
     return true;
   }
 
+  // "excavators' guild" / "dig guild" / "authenticate" / "forgery" — player
+  // asks about the Excavators' Guild. (The archaeology block below owns
+  // "dig site", "excavation", "artifact", "archaeologist".)
+  if (/\b(excavators'? guild|dig guild|guild of excavators|authenticate|authentication|forgery|conservator|field school|excavation code)\b/.test(said)) {
+    try {
+      const Guilds = require("../lib/CitizenDigGuilds");
+      let kingdomId = null;
+      try {
+        const { kingdomIdOf } = require("../brain/CitizenSites");
+        kingdomId = kingdomIdOf(citizenUsername);
+      } catch { /* no sites */ }
+      const desc = kingdomId ? Guilds.describe(kingdomId) : { exists: false };
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "digguild_status", {
+        username: citizenUsername,
+        exists: desc.exists ?? false,
+        memberCount: desc.memberCount ?? 0,
+        conservators: desc.conservators ?? 0,
+        authenticated: desc.authenticated ?? 0,
+        protected: desc.protected ?? 0,
+        isMember: citizenUsername ? Guilds.isGuildMember(citizenUsername) : false,
+        rank: citizenUsername ? Guilds.guildRankOf(citizenUsername) : null,
+      });
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
   // "dig site" / "excavation" / "artifact" / "archaeologist" — player asks
   // about archaeology. (The art gallery block below owns bare "museum".)
   if (/\b(dig site|dig sites|excavation|excavations|artifact|artifacts|archaeologist|archaeologists|archaeology)\b/.test(said)) {

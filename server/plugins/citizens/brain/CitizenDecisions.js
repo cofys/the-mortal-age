@@ -134,6 +134,7 @@ const ACT_LAWGUILD = "citizen_lawguild";
 const ACT_DIPLOCORPS = "citizen_diplocorps";
 const ACT_SPYGUILD = "citizen_spyguild";
 const ACT_TRADEGUILD = "citizen_tradeguild";
+const ACT_DIGGUILD = "citizen_digguild";
 const ACT_SPY = "citizen_spymaster";
 const ACT_DIG = "citizen_excavate";
 const ACT_STAGE = "citizen_rehearse";
@@ -177,7 +178,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_CUISINE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
   ACT_CHOP,
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
@@ -1602,6 +1603,36 @@ function tradeGuildInfo(player) {
   }
 }
 
+/**
+ * Dig-guild readiness: is this citizen an Excavators' Guild member in good
+ * standing, and does their kingdom have a hall? Defensive: a missing/broken
+ * guild module scores as unable to attend.
+ */
+function digGuildInfo(player) {
+  try {
+    const Guilds = require("../lib/CitizenDigGuilds");
+    const username = player?.getUsername?.() ?? player?.username ?? "";
+    const isMember = Guilds.isGuildMember(username);
+    const rank = Guilds.guildRankOf(username);
+    const mem = Guilds.memberOf(username);
+    let hallExists = false;
+    try {
+      const { kingdomIdOf } = require("./CitizenSites");
+      const kid = kingdomIdOf(player);
+      hallExists = !!(kid && Guilds.guildOf(kid));
+    } catch { /* no sites */ }
+    return {
+      isMember,
+      rank,
+      suspended: !!(mem && mem.suspended),
+      isConservator: rank === Guilds.RANK_CONSERVATOR,
+      hallExists,
+    };
+  } catch {
+    return { isMember: false, rank: null, suspended: false, isConservator: false, hallExists: false };
+  }
+}
+
 function spyGuildInfo(player) {
   try {
     const Guilds = require("../lib/CitizenSpyGuilds");
@@ -2390,6 +2421,7 @@ compete: competeInfo(player),
     diplocorps: diploCorpsInfo(player),
     spyguild: spyGuildInfo(player),
     tradeguild: tradeGuildInfo(player),
+    digguild: digGuildInfo(player),
     dig: digInfo(player),
     stage: stageInfo(player),
     runway: runwayInfo(player),
@@ -3393,6 +3425,24 @@ case ACT_COMPETE: {
       if (mood < 20) s -= 8;
       return s;
     }
+    case ACT_DIGGUILD: {
+      // Excavators' Guild hall sessions: members in good standing attend.
+      // Conservators run the authentication reviews, site inspections, and
+      // the field school; diggers learn the trade. Suspended members and
+      // non-members stay away — the hall is members-only.
+      const dg = digguild ?? { isMember: false, suspended: false, isConservator: false, hallExists: false };
+      if (!dg.isMember || dg.suspended) return 4; // not a member in good standing
+      if (!dg.hallExists) return 4; // honest — no hall, no session
+      let s = 20;
+      if (dg.isConservator) s += 12; // conservators run reviews, inspections, and the school
+      if (dg.rank === "digger") s += 6; // diggers learn the most
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (drunk) s -= 20;
+      if (mood < 20) s -= 8;
+      return s;
+    }
     case ACT_SPYGUILD: {
       // Shadow-guild hall sessions: members in good standing attend.
       // Spymasters run the tradecraft reviews and teach the school;
@@ -3952,7 +4002,7 @@ module.exports = {
   ACT_CELEBRATE,
 
 ACT_COMPETE,
-  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
+  ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
   ACT_SOCIAL,
