@@ -8,8 +8,8 @@
  * heraldic style, fed by this endpoint:
  *
  *   GET /api/wartable-status?player=<username>
- *     -> { open, playerKingdom, kingdoms, wars, endedWars, alliances,
- *          relations, sieges, homeDetail }
+ *     -> { open, playerKingdom, warCosts, warGates, kingdoms, wars,
+ *          endedWars, alliances, relations, sieges, homeDetail }
  *
  *   ...&action=open    — mark the table open for this player
  *   ...&action=close   — mark the table closed for this player
@@ -26,6 +26,9 @@
  *   action=envoy&target=<id>
  *   action=ultimatum&target=<id>
  *   action=declare-siege&target=<id>&investment=<coins>
+ *   action=contribute-supply&cat=<food|arrows|runes|materials>
+ *                             (deliver everything you carry of the category
+ *                              through the donation chest's deliverSupplies)
  *   action=sally            (defender: sally forth against the besieger)
  *   action=repair           (defender: emergency wall repairs)
  *   action=lift-siege&target=<id>  (attacker: abandon the siege)
@@ -47,6 +50,7 @@ const Wars = require("./Wars.Kingdoms");
 const WarSupply = require("./WarSupply.Kingdoms");
 const Coalitions = require("./Coalitions.Kingdoms");
 const AiDiplomacy = require("./AiDiplomacy.Kingdoms");
+const Influence = require("./Influence.Kingdoms");
 
 const WARTABLE_OPEN_ATTRIBUTE = "wartable:open";
 
@@ -166,10 +170,17 @@ function statusPayload(player) {
 
   if (homeId && byId.has(homeId)) {
     const home = byId.get(homeId);
+    let influence = 0;
+    try {
+      influence = Influence.effectiveInfluence(player, homeId) ?? 0;
+    } catch {
+      influence = 0;
+    }
     playerKingdom = {
       id: homeId,
       name: home.name,
       rank: player.getAttribute("kingdom:rank") || null,
+      influence: Math.floor(influence),
     };
   }
 
@@ -336,6 +347,13 @@ function statusPayload(player) {
   return {
     open: player ? player.getAttribute(WARTABLE_OPEN_ATTRIBUTE) === "1" : false,
     playerKingdom,
+    warCosts: {
+      warDeclareInfluence: Wars.WAR_DECLARE_INFLUENCE_COST,
+      siegeDeclareCoins: Siege.SIEGE_DECLARE_COST,
+    },
+    // Per-kingdom declare-war / declare-siege eligibility for the war
+    // council buttons (same checks the actions enforce).
+    warGates: warGatesFor(player, homeId, kingdoms),
     kingdoms,
     wars,
     endedWars,
@@ -357,6 +375,57 @@ function statusPayload(player) {
 
 function playerKingdomId(player) {
   return player ? player.getAttribute("kingdom:id") || null : null;
+}
+
+/**
+ * Machine-reason -> player-facing message, shared by the action results and
+ * the war-council eligibility gates below, so the overlay's disabled reasons
+ * are exactly what the API itself would refuse.
+ */
+const REASON_MESSAGES = {
+  "missing-params": "Something was missing from the order.",
+  "missing-kingdom": "That kingdom does not exist.",
+  "cannot-war-self": "A kingdom cannot declare war on itself.",
+  "cannot-siege-self": "A kingdom cannot besiege itself.",
+  "cannot-target-self": "Choose another kingdom.",
+  "allied-cannot-war": "They are your allies — pacts are not broken this way.",
+  "allied-cannot-siege": "They are your allies. You cannot besiege them.",
+  "allied-cannot-threaten": "Threatening an ally is betrayal, not diplomacy.",
+  "vassal-cannot-declare": "A vassal cannot declare war on its overlord — break the oath first.",
+  "already-at-war": "You are already at war with them.",
+  "already-besieged": "That castle is already under siege.",
+  "already-allied": "You are already allied.",
+  "already-calm": "The border is already calm.",
+  "at-war-no-envoys": "Envoys do not cross battle lines.",
+  "already-at-war-ultimatum": "You are already at war.",
+  "not-hostile": "The border is not hostile — escalate with an ultimatum first, or declare war.",
+  "not-at-war": "You are not at war with them.",
+  "no-offer": "No peace offer awaits.",
+  "offer-pending": "Terms are already on the table.",
+  "no-active-siege": "No siege is underway.",
+  "sally-on-cooldown": "The garrison needs time to regroup.",
+  "repair-on-cooldown": "The masons are still working.",
+  "on-cooldown": "Too soon — the realm needs time to forget the last war.",
+  "in-civil-war": "A kingdom at war with itself cannot march on others.",
+  "insufficient-funds": "The war chest cannot bear it.",
+  "invalid-goal": "Choose a war goal: plunder, territory, or vassalize.",
+  "invalid-terms": "Those terms make no sense.",
+  "invalid-tribute": "The tribute demand is absurd.",
+  "not-a-vassal": "You swear fealty to no one.",
+  "too-soon": "The oath is still fresh — independence must wait.",
+  "no-crisis": "No succession crisis grips that throne.",
+  "no-claimant": "No such claimant presses a claim.",
+  "already-backed": "You have already backed a claimant in this crisis.",
+  "no-record": "You hold no standing in that court.",
+  "insufficient": "Not enough influence in that court.",
+  "bad-args": "Something was missing from the order.",
+};
+
+function reasonMessage(reason, result = {}) {
+  if (reason === "insufficient-influence") {
+    return `Not enough influence (have ${result.available ?? 0}, need ${result.cost ?? 0}).`;
+  }
+  return REASON_MESSAGES[reason] ?? `The order failed (${reason ?? "unknown"}).`;
 }
 
 function describeResult(action, result) {
@@ -388,54 +457,88 @@ function describeResult(action, result) {
         return { ok: true, message: "The siege is lifted. The army marches home." };
       case "back-claimant":
         return { ok: true, message: "Your backing is noted in the court. The claimant grows stronger." };
+      case "contribute-supply":
+        // deliverSupplies already speaks plainly — pass its line through.
+        return { ok: true, message: result.message ?? "Delivered to the war effort." };
       default:
         return { ok: true, message: "Done." };
     }
   }
-  const reasonMessages = {
-    "missing-params": "Something was missing from the order.",
-    "missing-kingdom": "That kingdom does not exist.",
-    "cannot-war-self": "A kingdom cannot declare war on itself.",
-    "cannot-siege-self": "A kingdom cannot besiege itself.",
-    "cannot-target-self": "Choose another kingdom.",
-    "allied-cannot-war": "They are your allies — pacts are not broken this way.",
-    "allied-cannot-siege": "They are your allies. You cannot besiege them.",
-    "allied-cannot-threaten": "Threatening an ally is betrayal, not diplomacy.",
-    "vassal-cannot-declare": "A vassal cannot declare war on its overlord — break the oath first.",
-    "already-at-war": "You are already at war with them.",
-    "already-besieged": "That castle is already under siege.",
-    "already-allied": "You are already allied.",
-    "already-calm": "The border is already calm.",
-    "at-war-no-envoys": "Envoys do not cross battle lines.",
-    "already-at-war-ultimatum": "You are already at war.",
-    "not-hostile": "The border is not hostile — escalate with an ultimatum first, or declare war.",
-    "not-at-war": "You are not at war with them.",
-    "no-offer": "No peace offer awaits.",
-    "offer-pending": "Terms are already on the table.",
-    "no-active-siege": "No siege is underway.",
-    "sally-on-cooldown": "The garrison needs time to regroup.",
-    "repair-on-cooldown": "The masons are still working.",
-    "on-cooldown": "Too soon — the realm needs time to forget the last war.",
-    "in-civil-war": "A kingdom at war with itself cannot march on others.",
-    "insufficient-influence": `Not enough influence (have ${result.available ?? 0}, need ${result.cost ?? 0}).`,
-    "insufficient-funds": "The war chest cannot bear it.",
-    "invalid-goal": "Choose a war goal: plunder, territory, or vassalize.",
-    "invalid-terms": "Those terms make no sense.",
-    "invalid-tribute": "The tribute demand is absurd.",
-    "not-a-vassal": "You swear fealty to no one.",
-    "too-soon": "The oath is still fresh — independence must wait.",
-    "no-crisis": "No succession crisis grips that throne.",
-    "no-claimant": "No such claimant presses a claim.",
-    "already-backed": "You have already backed a claimant in this crisis.",
-    "no-record": "You hold no standing in that court.",
-    "insufficient": "Not enough influence in that court.",
-    "bad-args": "Something was missing from the order.",
-  };
   return {
     ok: false,
-    message: reasonMessages[result.reason] ?? `The order failed (${result.reason ?? "unknown"}).`,
+    // deliverSupplies-style results carry a plain message and no reason code.
+    message: result.message ?? reasonMessage(result.reason, result),
     reason: result.reason,
   };
+}
+
+/**
+ * War-council eligibility gates, computed with the SAME checks the declare
+ * actions themselves run (Wars.canDeclareWar / Siege.canDeclareSiege, plus
+ * the influence spend declareWar charges). The overlay disables the buttons
+ * with the gate's message when ineligible, so a disabled button never
+ * surprises the player — and a lost seal/empty purse is caught server-side
+ * again on the action itself.
+ */
+function gatePayload(check) {
+  if (check && check.ok) return { ok: true, reason: null, message: null };
+  const reason = check?.reason ?? "unknown";
+  return { ok: false, reason, message: reasonMessage(reason, check ?? {}) };
+}
+
+function warGatesFor(player, homeId, kingdoms) {
+  if (!homeId) return null;
+  let influence = 0;
+  try {
+    influence = Influence.effectiveInfluence(player, homeId) ?? 0;
+  } catch {
+    influence = 0;
+  }
+  const warCost = Wars.WAR_DECLARE_INFLUENCE_COST;
+  const gates = {};
+  for (const k of kingdoms) {
+    if (!k || k.id === homeId) continue;
+    let warCheck = Wars.canDeclareWar(homeId, k.id, Store);
+    if (warCheck.ok && influence < warCost) {
+      warCheck = { ok: false, reason: "insufficient-influence", available: Math.floor(influence), cost: warCost };
+    }
+    const siegeCheck = Siege.canDeclareSiege(homeId, k.id, Store);
+    gates[k.id] = {
+      declareWar: gatePayload(warCheck),
+      declareSiege: gatePayload(siegeCheck),
+    };
+  }
+  return gates;
+}
+
+/**
+ * One-click war supply contribution: find the first catalog item of the
+ * requested category the player actually carries, and run it through the
+ * donation chest's deliverSupplies — same war-demand routing, same coin
+ * payout, same influence. One click delivers everything carried of that
+ * category (the chest caps it at what the demand still wants).
+ */
+function contributeSupplyToWar(player, homeId, cat) {
+  if (!homeId) return { ok: false, message: "You swear fealty to no kingdom." };
+  if (!cat) return { ok: false, message: "Choose a supply category." };
+  // Lazy: OfficeTools pulls Tension -> TS core, which only resolves under ts-node.
+  let OfficeTools;
+  try {
+    OfficeTools = require("./OfficeTools.Kingdoms");
+  } catch {
+    return { ok: false, message: "The quartermaster could not be reached." };
+  }
+  const catalog = { ...OfficeTools.SUPPLY_ITEMS, ...WarSupply.WAR_SUPPLY_ITEMS };
+  const inventory = player.getInventory?.();
+  for (const [id, spec] of Object.entries(catalog)) {
+    if ((spec?.cat ?? "food") !== cat) continue;
+    const itemId = Number(id);
+    const have = inventory?.getAmount?.(itemId) ?? 0;
+    if (have > 0) {
+      return OfficeTools.deliverSupplies(player, homeId, itemId, have);
+    }
+  }
+  return { ok: false, message: `You carry no war ${cat} to contribute.` };
 }
 
 function runWarfareAction(api, player, action, query) {
@@ -485,6 +588,10 @@ function runWarfareAction(api, player, action, query) {
     }
     case "lift-siege": {
       return describeResult(action, Siege.liftSiege(homeId, target, Store));
+    }
+    case "contribute-supply": {
+      const cat = (query.get("cat") || "").trim();
+      return describeResult(action, contributeSupplyToWar(player, homeId, cat));
     }
     case "back-claimant": {
       const claimantId = (query.get("claimant") || "").trim();

@@ -214,6 +214,38 @@
     opacity: 0.5;
     cursor: default;
 }
+.tma-wartable-btn.selected {
+    background: #4a3d2c;
+    border-color: #d9b45b;
+    color: #ffd27f;
+}
+
+/* War council: target select, goal picker, eligibility reasons. */
+.tma-wartable-select {
+    font-family: inherit;
+    font-size: 12px;
+    color: #e8d9b5;
+    background: #1e1812;
+    border: 1px solid #6b5a3a;
+    border-radius: 2px;
+    padding: 5px 8px;
+    max-width: 220px;
+}
+.tma-wartable-goals {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.tma-wartable-gate-reason {
+    margin: 8px 0 0;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #c98a6b;
+    background: #241c13;
+    border: 1px solid #3a2f22;
+    border-left: 3px solid #8b3a2a;
+    border-radius: 2px;
+}
 
 .tma-wartable-vassal-row {
     display: flex;

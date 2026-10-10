@@ -212,11 +212,30 @@ interface PlayerKingdom {
     id: string;
     name: string;
     rank: string | null;
+    influence: number;
+}
+
+interface WarGate {
+    ok: boolean;
+    reason: string | null;
+    message: string | null;
+}
+
+interface WarGates {
+    declareWar: WarGate;
+    declareSiege: WarGate;
+}
+
+interface WarCosts {
+    warDeclareInfluence: number;
+    siegeDeclareCoins: number;
 }
 
 interface WarTableStatus {
     open: boolean;
     playerKingdom: PlayerKingdom | null;
+    warCosts: WarCosts | null;
+    warGates: Record<string, WarGates> | null;
     kingdoms: KingdomInfo[];
     wars: WarInfo[];
     endedWars: EndedWarInfo[];
@@ -346,6 +365,8 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
     const [status, setStatus] = useState<WarTableStatus | null>(null);
     const [tab, setTab] = useState<TabId>("overview");
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [warTargetId, setWarTargetId] = useState<string>("");
+    const [warGoal, setWarGoal] = useState<string>("");
     const [busy, setBusy] = useState(false);
     const pollRef = useRef<number | undefined>(undefined);
 
@@ -433,6 +454,15 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
         status.wars.filter((w) => w.attacker === id || w.defender === id);
     const alliancesFor = (id: string) =>
         status.alliances.filter((a) => a.a === id || a.b === id);
+
+    // War council (wars tab): target + goal selection, eligibility from the
+    // server's warGates — the same checks the declare actions enforce.
+    const councilTargets = home ? status.kingdoms.filter((k) => k.id !== home.id) : [];
+    const councilTarget = warTargetId || councilTargets[0]?.id || "";
+    const councilGoals = status.homeDetail?.warGoals ?? [];
+    const councilGoal = warGoal || councilGoals[0]?.id || "";
+    const councilGate = councilTarget ? status.warGates?.[councilTarget] ?? null : null;
+    const councilTargetName = kingdomsById.get(councilTarget)?.name ?? councilTarget;
 
     return (
         <div className="tma-wartable-backdrop">
@@ -883,6 +913,19 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                                                             <span className="tma-wartable-muted">
                                                                 {c.stock}/{c.quota}
                                                             </span>
+                                                            {home?.id === k.id && c.stock < c.quota && (
+                                                                <button
+                                                                    className="tma-wartable-btn"
+                                                                    disabled={busy}
+                                                                    onClick={() =>
+                                                                        runAction(
+                                                                            `action=contribute-supply&cat=${encodeURIComponent(c.cat)}`
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Contribute
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     ))}
                                                     {home?.id === k.id && (
@@ -931,6 +974,87 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
 
                     {tab === "wars" && (
                         <div className="tma-wartable-section">
+                            {home && councilTargets.length > 0 && (
+                                <>
+                                    <h2 className="tma-wartable-section-title">War Council</h2>
+                                    <div className="tma-wartable-card">
+                                        <div className="tma-wartable-card-row">
+                                            <span className="tma-wartable-muted">Target</span>
+                                            <select
+                                                className="tma-wartable-select"
+                                                value={councilTarget}
+                                                onChange={(e) => setWarTargetId(e.target.value)}
+                                                aria-label="War council target"
+                                            >
+                                                {councilTargets.map((k) => (
+                                                    <option key={k.id} value={k.id}>
+                                                        {k.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {councilGoals.length > 0 && (
+                                            <div className="tma-wartable-card-row">
+                                                <span className="tma-wartable-muted">War goal</span>
+                                                <span className="tma-wartable-goals">
+                                                    {councilGoals.map((g) => (
+                                                        <button
+                                                            key={g.id}
+                                                            className={`tma-wartable-btn${councilGoal === g.id ? " selected" : ""}`}
+                                                            onClick={() => setWarGoal(g.id)}
+                                                        >
+                                                            {g.label}
+                                                        </button>
+                                                    ))}
+                                                </span>
+                                            </div>
+                                        )}
+                                        <div className="tma-wartable-card-row">
+                                            <button
+                                                className="tma-wartable-btn"
+                                                disabled={busy || !councilGate?.declareWar.ok}
+                                                onClick={() =>
+                                                    runAction(
+                                                        `action=declare-war&target=${encodeURIComponent(councilTarget)}&goal=${encodeURIComponent(councilGoal)}`
+                                                    )
+                                                }
+                                            >
+                                                Declare War
+                                            </button>
+                                            <button
+                                                className="tma-wartable-btn"
+                                                disabled={busy || !councilGate?.declareSiege.ok}
+                                                onClick={() =>
+                                                    runAction(
+                                                        `action=declare-siege&target=${encodeURIComponent(councilTarget)}&investment=0`
+                                                    )
+                                                }
+                                            >
+                                                Declare Siege
+                                            </button>
+                                            <span className="tma-wartable-muted">
+                                                War costs {status.warCosts?.warDeclareInfluence ?? "?"} influence ·{" "}
+                                                siege costs {fmtCoins(status.warCosts?.siegeDeclareCoins ?? 0)} gp
+                                                from the war chest
+                                            </span>
+                                        </div>
+                                        {councilGate && !councilGate.declareWar.ok && (
+                                            <p className="tma-wartable-gate-reason">
+                                                War on {councilTargetName}: {councilGate.declareWar.message}
+                                            </p>
+                                        )}
+                                        {councilGate && !councilGate.declareSiege.ok && (
+                                            <p className="tma-wartable-gate-reason">
+                                                Siege of {councilTargetName}: {councilGate.declareSiege.message}
+                                            </p>
+                                        )}
+                                        <p className="tma-wartable-note">
+                                            The council's answer binds the crown — declare only what
+                                            {home.name} can finish.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
                             <h2 className="tma-wartable-section-title">Open Wars</h2>
                             {status.wars.length === 0 ? (
                                 <p className="tma-wartable-empty">

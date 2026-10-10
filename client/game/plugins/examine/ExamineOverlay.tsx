@@ -21,6 +21,11 @@ interface SkillInfo {
     level: number;
 }
 
+interface RapportInfo {
+    standing: string;
+    hint: string;
+}
+
 interface CharacterSheet {
     name: string;
     byline: string | null;
@@ -30,6 +35,7 @@ interface CharacterSheet {
     accomplishmentCount: number;
     guild: GuildInfo | null;
     skills: SkillInfo[];
+    rapport?: RapportInfo | null;
 }
 
 interface ExamineStatus {
@@ -145,6 +151,18 @@ export function ExamineOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.
                             )}
                         </div>
                     </section>
+
+                    {sheet.rapport && (
+                        <section className="tma-examine-section">
+                            <h3 className="tma-examine-section-title">Rapport</h3>
+                            <div className="tma-examine-inset">
+                                <div className="tma-examine-rep-row">
+                                    <span className="tma-examine-rep-kingdom">{sheet.rapport.standing}</span>
+                                </div>
+                                <p className="tma-examine-empty">{sheet.rapport.hint}</p>
+                            </div>
+                        </section>
+                    )}
 
                     <section className="tma-examine-section">
                         <h3 className="tma-examine-section-title">Deeds & Honours</h3>

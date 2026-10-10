@@ -20,7 +20,9 @@ const ContentApiAuth = require("./ContentApiAuth");
  *     reputation: [{ kingdom, tier, points }],
  *     accomplishments: [name, ...], accomplishmentCount,
  *     guild: { name, rank } | null,
- *     skills: [{ name, level }] }
+ *     skills: [{ name, level }],
+ *     rapport: { standing, hint } | null  (citizens only — how they feel
+ *       about the viewer, read from CitizenSocialBonds) }
  */
 
 const DISPLAY_NAME_ATTRIBUTE = "character:display-name";
@@ -59,7 +61,35 @@ function safeGet(player, key) {
   }
 }
 
-function sheetFor(api, target) {
+// One-line read of how a citizen feels about the viewer, for the
+// character sheet. Plain text, never HTML.
+const RAPPORT_HINTS = {
+  close: "They count you among their closest friends.",
+  friend: "They seem to trust you.",
+  warm: "They seem glad to see you.",
+  neutral: "They don't know you well yet.",
+  cold: "They seem wary of you.",
+  rival: "They don't trust you.",
+  nemesis: "You would not be welcome here.",
+};
+
+function rapportFor(viewer, target) {
+  try {
+    // Citizens are player bots; real players get no rapport line.
+    if (target?.isPlayerBot?.() !== true) return null;
+    const viewerName = viewer?.getUsername?.() ?? null;
+    const citizenName = target.getUsername?.() ?? null;
+    if (!viewerName || !citizenName) return null;
+    const SocialBonds = require("../citizens/lib/CitizenSocialBonds");
+    const standing = SocialBonds.standingFor(citizenName, viewerName);
+    const label = standing.charAt(0).toUpperCase() + standing.slice(1);
+    return { standing: label, hint: RAPPORT_HINTS[standing] ?? RAPPORT_HINTS.neutral };
+  } catch {
+    return null;
+  }
+}
+
+function sheetFor(api, viewer, target) {
   // Name
   let name = target.getUsername?.() || "Unknown";
   try {
@@ -175,6 +205,7 @@ function sheetFor(api, target) {
     accomplishmentCount: accomplishments.length,
     guild,
     skills,
+    rapport: rapportFor(viewer, target),
   };
 }
 
@@ -232,7 +263,7 @@ function attach(api) {
       return { open: false };
     }
 
-    return { open: true, sheet: sheetFor(api, target) };
+    return { open: true, sheet: sheetFor(api, player, target) };
   });
 }
 
