@@ -277,6 +277,10 @@ function tryFormParty(record, director, hour) {
     journalEvent(c, `Joined ${leaderDisplay}'s ${activityLabel(activityId)}.`, "social");
   }
 
+  // Rapport: forming a party is shared life — the leader and each companion
+  // genuinely spend time together. Observation only — the party is unchanged.
+  notePartyRapport(director, name, companions);
+
   // Kinship consequence, visible: the leader says why a feuding citizen
   // was left out (witness-gated and cooldown-gated inside).
   maybeRefusalLine(director, record, excluded);
@@ -331,6 +335,21 @@ function tickParties(director, hour) {
       // Non-fatal.
     }
   }
+}
+
+// Test seam: the rapport hook observes party formation as shared life.
+// Roster-gated so real players and shuns never accrue.
+function notePartyRapport(director, leaderName, companions) {
+  try {
+    const { noteInteraction } = require("../brain/CitizenRelationships");
+    const roster = director.roster;
+    if (roster?.has(normalizeName(leaderName))) {
+      for (const c of companions) {
+        if (!roster.has(normalizeName(c))) continue;
+        noteInteraction(leaderName, c, "workedAlongside", null, null);
+      }
+    }
+  } catch { /* non-fatal */ }
 }
 
 function maintainParty(director, party, leader, hour) {
@@ -489,4 +508,6 @@ module.exports = {
   ACTIVITIES,
   tickParties,
   tryFormParty,
+  // Test seam: the rapport hook below observes these events.
+  notePartyRapport,
 };

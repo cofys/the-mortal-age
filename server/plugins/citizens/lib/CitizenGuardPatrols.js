@@ -3,6 +3,12 @@ const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { voiceFor, voiceLine } = require("./citizenVoice");
 const { sayPublic } = require("../chat/CitizenSayPublic");
 
+/** Roster keys are normalized names (lowercase). Local copy to avoid a
+ *  CitizenBonds dependency in this visible-story module. */
+function normName(name) {
+  return String(name ?? "").trim().toLowerCase();
+}
+
 
 /**
  * CitizenGuardPatrols — the visible watch: guards walk their beat like they
@@ -460,6 +466,18 @@ function tickVipEscort(director, record, bot, me, nowMs, rng, seen) {
     } catch { /* cosmetic */ }
     walkTo(director, bot, { x: t.x + 1, y: t.y, z: t.z });
     journal(director, record.username, "patrol", `Escorting ${other.username} a ways.`);
+    // Rapport: a guard walking with a fellow citizen is real shared time.
+    // Observation only — the escort above is unchanged.
+    try {
+      const { noteInteraction } = require("../brain/CitizenRelationships");
+      const na = normName(record.username);
+      const nb = normName(other.username);
+      if (director.roster?.has(na) && director.roster?.has(nb)) {
+        noteInteraction(na, nb, "helped",
+          bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? null,
+          otherBot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? null);
+      }
+    } catch { /* rapport must never break patrols */ }
     lastEscortOffer.set(`${record.username}:vip`, nowMs);
     return;
   }
@@ -553,6 +571,8 @@ module.exports = {
   notorietyOf,
   pickCheckInLine,
   escortShouldEnd,
+  // Test seams: the rapport hooks below observe these events.
+  tickVipEscort,
   findPlayerByName,
   // Tuning (tests pin the documented behavior):
   CHECKIN_RADIUS,

@@ -247,7 +247,7 @@ function tickApprenticeships(director, nowMs) {
         });
         if (!youth) continue;
         const ea = eligibleApprentice(youth, masters, apprenticed);
-        pairUp(em.name, ea.name, skill, nowMs);
+        pairUp(em.name, ea.name, skill, nowMs, director);
         masters.add(em.name);
         apprenticed.add(ea.name);
         formed++;
@@ -263,7 +263,7 @@ function tickApprenticeships(director, nowMs) {
   }
 }
 
-function pairUp(masterName, apprenticeName, skill, nowMs) {
+function pairUp(masterName, apprenticeName, skill, nowMs, director = null) {
   pairs.set(apprenticeName, { master: masterName, skill, since: nowMs });
   dirty = true;
   // The apprentice physically follows the master (applied by SocialMechanics).
@@ -274,6 +274,14 @@ function pairUp(masterName, apprenticeName, skill, nowMs) {
   try {
     getJournal().log(masterName, "apprenticeship", `Took on ${apprenticeName} as an apprentice ${title}.`);
     getJournal().log(apprenticeName, "apprenticeship", `Became apprentice to ${masterName}, learning ${skill}.`);
+  } catch { /* non-fatal */ }
+  // Rapport: taking on an apprentice is sustained shared work.
+  // Observation only — pairing is unchanged.
+  try {
+    const { noteInteraction } = require("../brain/CitizenRelationships");
+    if (director?.roster?.has(masterName) && director?.roster?.has(apprenticeName)) {
+      noteInteraction(masterName, apprenticeName, "workedAlongside", null, null);
+    }
   } catch { /* non-fatal */ }
 }
 
@@ -289,6 +297,14 @@ function graduatePair(director, apprenticeName, p, nowMs) {
   try {
     getJournal().log(apprenticeName, "apprenticeship", `Graduated as a ${title} under ${p.master}.`);
     getJournal().log(p.master, "apprenticeship", `${apprenticeName} graduated — a fine ${title} now.`);
+  } catch { /* non-fatal */ }
+  // Rapport: a graduation under a master is a milestone shared moment.
+  // Observation only — graduation is unchanged.
+  try {
+    const { noteInteraction } = require("../brain/CitizenRelationships");
+    if (director?.roster?.has(apprenticeName) && director?.roster?.has(p.master)) {
+      noteInteraction(p.master, apprenticeName, "helped", null, null);
+    }
   } catch { /* non-fatal */ }
 }
 
@@ -394,6 +410,9 @@ module.exports = {
   pickOne,
   isRealPlayer,
   withinTiles,
+  // Test seams: the rapport hooks below observe these events.
+  pairUp,
+  graduatePair,
   _pairs: pairs,
   _loadPairs: loadPairs,
 };
