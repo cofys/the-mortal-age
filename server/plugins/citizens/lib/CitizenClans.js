@@ -416,6 +416,64 @@ function stampMoot(kingdomId, atMs) {
   markDirty();
 }
 
+// --- player invite cooldowns --------------------------------------------------
+// Per-player throttle so clans don't spam clan invites: a minimum gap
+// between invites to the same player, and a no-re-ask window after a
+// declined/ignored invite. Keyed by normalized player name, stored under
+// meta so it rides the existing save/load. Bounded via pruning.
+
+const MAX_INVITE_COOLDOWNS = 2000;
+
+function inviteCooldowns() {
+  const d = data();
+  if (!d.meta.inviteCooldowns || typeof d.meta.inviteCooldowns !== "object") {
+    d.meta.inviteCooldowns = {};
+  }
+  return d.meta.inviteCooldowns;
+}
+
+function pruneInviteCooldowns() {
+  const map = inviteCooldowns();
+  const keys = Object.keys(map);
+  if (keys.length <= MAX_INVITE_COOLDOWNS) return;
+  const byAge = keys
+    .map((k) => ({
+      k,
+      at: Math.max(Number(map[k]?.noAskUntil) || 0, Number(map[k]?.lastInviteAt) || 0),
+    }))
+    .sort((a, b) => a.at - b.at);
+  for (const { k } of byAge.slice(0, keys.length - MAX_INVITE_COOLDOWNS)) delete map[k];
+}
+
+/** Cooldown record for a player: { lastInviteAt, noAskUntil } (0 = none). */
+function inviteCooldownOf(playerName) {
+  const cd = inviteCooldowns()[normalizeName(playerName)] ?? {};
+  return {
+    lastInviteAt: Number(cd.lastInviteAt) || 0,
+    noAskUntil: Number(cd.noAskUntil) || 0,
+  };
+}
+
+/** Stamp that a clan invite went out to a player at atMs. */
+function stampInviteSent(playerName, atMs = Date.now()) {
+  const n = normalizeName(playerName);
+  if (!n) return;
+  const map = inviteCooldowns();
+  map[n] = { ...(map[n] ?? {}), lastInviteAt: atMs };
+  pruneInviteCooldowns();
+  markDirty();
+}
+
+/** Register a no-re-ask window for a player (declined or ignored invite). */
+function stampInviteNoAsk(playerName, noAskUntilMs) {
+  const n = normalizeName(playerName);
+  if (!n) return;
+  const map = inviteCooldowns();
+  map[n] = { ...(map[n] ?? {}), noAskUntil: noAskUntilMs };
+  pruneInviteCooldowns();
+  markDirty();
+}
+
 // --- test seams ---------------------------------------------------------------
 
 function resetForTests() {
@@ -461,6 +519,9 @@ module.exports = {
   recordActivity,
   lastMootAt,
   stampMoot,
+  inviteCooldownOf,
+  stampInviteSent,
+  stampInviteNoAsk,
   save,
   resetForTests,
   _setSavePathForTests,
