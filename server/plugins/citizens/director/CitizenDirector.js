@@ -375,6 +375,11 @@ const DIRECTOR_TICK_TICKS = 100; // ~60s at 600ms/tick
 const CITIZEN_SPAWN_RADIUS = 50; // tiles from home: spawn when a real player is this close
 const CITIZEN_DESPAWN_RADIUS = 75; // tiles from current pos: despawn when no real player within this
 const PROXIMITY_TICK_TICKS = 17; // ~10s at 600ms/tick: fast spawn/despawn for responsiveness
+// Hard cap on concurrent materialized (~3MB) Player objects. Without this,
+// one player walking into a dense area (thousands of citizens) materializes
+// them all and OOMs the box. Spawns are nearest-first, so the citizens a
+// player can actually see always win. 150 x ~3MB ≈ 450MB worst case.
+const CITIZEN_MAX_MATERIALIZED = 150;
 
 // role -> rank granted through the kingdoms plugin's hierarchy.
 const ROLE_RANK = Object.freeze({
@@ -912,6 +917,27 @@ class CitizenDirector {
   }
 
   /**
+   * Nearest real-player Chebyshev distance to (x, y, z), or null when no
+   * real player shares the plane. Used to spawn nearest-first under the
+   * materialization cap.
+   */
+  nearestRealPlayerDist(x, y, z, positions) {
+    let best = null;
+    for (const p of positions) {
+      if ((p.z ?? 0) !== (z ?? 0)) {
+        continue;
+      }
+      const dx = Math.abs((p.x ?? 0) - (x ?? 0));
+      const dy = Math.abs((p.y ?? 0) - (y ?? 0));
+      const d = Math.max(dx, dy);
+      if (best === null || d < best) {
+        best = d;
+      }
+    }
+    return best;
+  }
+
+  /**
    * Fast tick (~10s): reconcile each citizen's materialized Player against
    * real-player proximity. Spawn when a human approaches, despawn when the
    * area is empty. The data tier (journal, needs, kinship, crafting) runs on
@@ -978,6 +1004,12 @@ class CitizenDirector {
     } catch (error) {
       this.log("tick-lod-proximity failed", { error: String(error?.message ?? error) });
     }
+    // Spawn candidates are collected first, then materialized nearest-first
+    // under CITIZEN_MAX_MATERIALIZED. Without the cap, a player entering a
+    // dense area with thousands of citizens would spawn thousands of ~3MB
+    // Player objects and OOM the box.
+    const spawnCandidates = [];
+    let materializedCount = 0;
     for (const record of this.roster.values()) {
       try {
         const phase = desiredPhase(record, hour);
@@ -989,19 +1021,18 @@ class CitizenDirector {
         if (!online) {
           // Spawn check: use home (the citizen has no live position yet).
           const home = record.home ?? { x: 3200, y: 3200, z: 0 };
-          if (
-            this.anyRealPlayerNear(
-              home.x,
-              home.y,
-              home.z ?? 0,
-              CITIZEN_SPAWN_RADIUS,
-              positions
-            )
-          ) {
-            this.spawnCitizen(record);
+          const dist = this.nearestRealPlayerDist(
+            home.x,
+            home.y,
+            home.z ?? 0,
+            positions
+          );
+          if (dist !== null && dist <= CITIZEN_SPAWN_RADIUS) {
+            spawnCandidates.push({ record, dist });
           }
           continue;
         }
+        materializedCount += 1;
         // Despawn check: use the bot's CURRENT position (it may have
         // wandered/patrolled away from home).
         const bot = this.getBot(record);
@@ -1035,6 +1066,31 @@ class CitizenDirector {
         this.log("proximity check failed", {
           citizen: record.username,
           error: String(error?.message ?? error),
+        });
+      }
+    }
+    // Nearest-first materialization under the global cap: the citizens a
+    // player can actually see always win the spawn budget.
+    if (spawnCandidates.length > 0) {
+      spawnCandidates.sort((a, b) => a.dist - b.dist);
+      for (const { record } of spawnCandidates) {
+        if (materializedCount >= CITIZEN_MAX_MATERIALIZED) {
+          break;
+        }
+        try {
+          this.spawnCitizen(record);
+          materializedCount += 1;
+        } catch (error) {
+          this.log("capped spawn failed", {
+            citizen: record.username,
+            error: String(error?.message ?? error),
+          });
+        }
+      }
+      if (materializedCount >= CITIZEN_MAX_MATERIALIZED) {
+        this.log("citizen spawn cap reached", {
+          cap: CITIZEN_MAX_MATERIALIZED,
+          deferred: spawnCandidates.length,
         });
       }
     }
