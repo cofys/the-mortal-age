@@ -21,6 +21,36 @@
 export const SCARCITY_MAX_MARKUP = 3;
 export const OVERSTOCK_PRICE_FLOOR = 0.5;
 
+/**
+ * Kingdom-choice price bias for NPC shops. Home-kingdom players get a small
+ * discount, foreigners pay a small premium, wanderers (no kingdom) pay list.
+ * Pure function — computed on transaction, no per-tick work. Stacks
+ * multiplicatively with the scarcity multiplier: final = base × scarcity × bias.
+ *
+ * Reads the player's RAW kingdom:id (not a fallback helper) so wanderers are
+ * never mispriced. Shops without a kingdomId (outside the great powers, or
+ * missing data) are neutral ground: 1.0 for everyone.
+ */
+export const KINGDOM_HOME_BIAS = 0.95;
+export const KINGDOM_FOREIGN_BIAS = 1.08;
+
+export function kingdomPriceBias(
+    playerKingdomId: unknown,
+    shopKingdomId: unknown
+): number {
+    if (
+        typeof playerKingdomId !== "string" ||
+        playerKingdomId.length === 0 ||
+        typeof shopKingdomId !== "string" ||
+        shopKingdomId.length === 0
+    ) {
+        return 1;
+    }
+    return playerKingdomId === shopKingdomId
+        ? KINGDOM_HOME_BIAS
+        : KINGDOM_FOREIGN_BIAS;
+}
+
 export function scarcityPriceMultiplier(current: number, max: number): number {
     if (!(max > 0)) {
         return 1;

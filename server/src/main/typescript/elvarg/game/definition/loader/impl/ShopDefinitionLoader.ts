@@ -21,6 +21,7 @@ interface RawShopDefinition {
     id?: unknown;
     name?: unknown;
     currency?: unknown;
+    kingdomId?: unknown;
     originalStock?: unknown;
     items?: unknown;
     prices?: unknown;
@@ -179,6 +180,9 @@ export class ShopDefinitionLoader extends DefinitionLoader {
         const currency = raw.requiresPresets === true && !usePresetPrices
             ? "COINS"
             : configuredCurrency;
+        const kingdomId = typeof raw.kingdomId === "string" && raw.kingdomId.trim()
+            ? raw.kingdomId.trim()
+            : null;
         return new ShopDefinition(
             id,
             name,
@@ -187,7 +191,8 @@ export class ShopDefinitionLoader extends DefinitionLoader {
             defaultRestockTicks,
             defaultDestockTicks,
             soldItemDestockTicks,
-            source
+            source,
+            kingdomId
         );
     }
 

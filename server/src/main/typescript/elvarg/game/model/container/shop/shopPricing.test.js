@@ -42,3 +42,44 @@ close(scarcityPriceMultiplier(100, 100), 1, "boundary from below");
 assert.ok(scarcityPriceMultiplier(101, 100) < 1, "just over full discounts slightly");
 
 console.log("shopPricing.test.js: all assertions passed");
+
+// ---- Kingdom price bias (kingdom-choice) ----
+const {
+    kingdomPriceBias,
+    KINGDOM_HOME_BIAS,
+    KINGDOM_FOREIGN_BIAS,
+} = require("./shopPricing");
+
+// Home kingdom -> 0.95x discount.
+close(kingdomPriceBias("misthalin", "misthalin"), KINGDOM_HOME_BIAS, "home bias");
+close(KINGDOM_HOME_BIAS, 0.95, "home is 5% off");
+// Foreign kingdom -> 1.08x premium.
+close(kingdomPriceBias("asgarnia", "misthalin"), KINGDOM_FOREIGN_BIAS, "foreign bias");
+close(KINGDOM_FOREIGN_BIAS, 1.08, "foreign is 8% up");
+// Wanderer (no kingdom:id) -> list price, never mispriced.
+close(kingdomPriceBias(null, "misthalin"), 1, "wanderer pays list");
+close(kingdomPriceBias("", "misthalin"), 1, "empty kingdom pays list");
+close(kingdomPriceBias(undefined, "misthalin"), 1, "undefined kingdom pays list");
+// Shop with no kingdom (outside great powers) -> neutral for everyone.
+close(kingdomPriceBias("misthalin", null), 1, "kingdomless shop neutral");
+close(kingdomPriceBias("asgarnia", null), 1, "kingdomless shop neutral for foreigner");
+close(kingdomPriceBias(null, null), 1, "both null neutral");
+// Ordering: home < wanderer < foreign (same item, same shop).
+const home = kingdomPriceBias("misthalin", "misthalin");
+const wanderer = kingdomPriceBias(null, "misthalin");
+const foreign = kingdomPriceBias("kandarin", "misthalin");
+assert.ok(home < wanderer, "home < wanderer");
+assert.ok(wanderer < foreign, "wanderer < foreign");
+// Stacks multiplicatively with scarcity: final = base x scarcity x bias.
+const base = 100;
+const scarcity = scarcityPriceMultiplier(50, 100); // 2x at half stock
+const homePrice = Math.floor(base * scarcity * home);
+const wandererPrice = Math.floor(base * scarcity * wanderer);
+const foreignPrice = Math.floor(base * scarcity * foreign);
+assert.ok(homePrice < wandererPrice, "stacked: home < wanderer");
+assert.ok(wandererPrice < foreignPrice, "stacked: wanderer < foreign");
+assert.strictEqual(homePrice, 190, "home: 100 x 2 x 0.95 = 190");
+assert.strictEqual(wandererPrice, 200, "wanderer: 100 x 2 x 1.0 = 200");
+assert.strictEqual(foreignPrice, 216, "foreign: 100 x 2 x 1.08 = 216");
+
+console.log("shopPricing.test.js: kingdom bias assertions passed");

@@ -12,7 +12,7 @@ import { Misc } from "../../../../util/Misc";
 import { ShopIdentifiers } from "../../../../util/ShopIdentifiers";
 import { encodeShopClose, encodeShopOpen } from "../../../../net/protocol/ClientProtocol";
 import { PlayerSave } from "../../../entity/impl/player/persistence/PlayerSave";
-import { scarcityPriceMultiplier } from "./shopPricing";
+import { scarcityPriceMultiplier, kingdomPriceBias } from "./shopPricing";
 
 export interface ShopItemContainerAction {
     kind: "value" | "buy_sell" | "x";
@@ -335,7 +335,7 @@ export class ShopManager {
             name: shop.definition.getName(),
             currency: this.currencyName(shop.definition.getCurrency()),
             stock: this.displayEntries(shop).map((entry) => ({
-                ...entry, price: this.itemPrice(shop, ItemDefinition.forId(entry.itemId)),
+                ...entry, price: this.itemPrice(shop, ItemDefinition.forId(entry.itemId), player),
             })),
         };
     }
@@ -449,7 +449,7 @@ export class ShopManager {
 
         const stock = this.displayEntries(shop).map((entry, slot) => {
             const definition = ItemDefinition.forId(entry.itemId);
-            const price = definition ? this.itemPrice(shop, definition) : 0;
+            const price = definition ? this.itemPrice(shop, definition, player) : 0;
             return {
                 slot, itemId: entry.itemId, quantity: entry.amount,
                 defaultQuantity: shop.originalAmounts.get(entry.itemId) ?? 0,
@@ -543,7 +543,7 @@ export class ShopManager {
             return;
         }
         const definition = ItemDefinition.forId(itemId);
-        let price = this.itemPrice(shop, definition);
+        let price = this.itemPrice(shop, definition, player);
         if (!fromShop) {
             if (!item?.isSellable?.()) {
                 player.sendMessage(
@@ -573,7 +573,7 @@ export class ShopManager {
         amount: number
     ): void {
         const definition = ItemDefinition.forId(itemId);
-        const price = this.itemPrice(shop, definition);
+        const price = this.itemPrice(shop, definition, player);
         if (price <= 0) {
             return;
         }
@@ -691,7 +691,7 @@ export class ShopManager {
         if (quantity <= 0) {
             return;
         }
-        let price = this.itemPrice(shop, definition);
+        let price = this.itemPrice(shop, definition, player);
         if (price > 1) {
             price = Math.floor(price * this.SALES_TAX);
         }
@@ -850,12 +850,17 @@ export class ShopManager {
 
     /**
      * Base price from the item definition (or a per-shop override), scaled
-     * by live scarcity: low stock vs the shop's original max marks the price
-     * up (to 3x), overstock discounts it (to a 0.5x floor). Computed on
-     * transaction — no per-tick work. Sell prices derive from this too, so
-     * selling into a scarce shop pays better.
+     * by live scarcity and by kingdom affiliation: low stock vs the shop's
+     * original max marks the price up (to 3x), overstock discounts it (to a
+     * 0.5x floor); home-kingdom players get 0.95x, foreigners pay 1.08x,
+     * wanderers (no kingdom:id) pay list. Computed on transaction — no
+     * per-tick work. Sell prices derive from this too, so selling into a
+     * scarce shop pays better.
+     *
+     * Reads the player's RAW kingdom:id attribute (not a fallback helper)
+     * so wanderers are never mispriced as home customers.
      */
-    private static itemPrice(shop: RuntimeShop, definition: ItemDefinition): number {
+    private static itemPrice(shop: RuntimeShop, definition: ItemDefinition, player?: any): number {
         const override = shop.itemPrices.get(definition.getId());
         let base: number;
         if (override != null && override > 0) {
@@ -869,11 +874,15 @@ export class ShopManager {
         if (!(base > 0)) {
             return base;
         }
-        const multiplier = scarcityPriceMultiplier(
+        const scarcity = scarcityPriceMultiplier(
             shop.stock.get(definition.getId()) ?? 0,
             shop.originalAmounts.get(definition.getId()) ?? 0
         );
-        return Math.max(1, Math.floor(base * multiplier));
+        const bias = kingdomPriceBias(
+            player?.getAttribute?.("kingdom:id") ?? null,
+            shop.definition.getKingdomId()
+        );
+        return Math.max(1, Math.floor(base * scarcity * bias));
     }
 
     private static currencyAmount(player: any, currency: ShopCurrency): number {
