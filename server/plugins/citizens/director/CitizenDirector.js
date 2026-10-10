@@ -64,6 +64,7 @@ const PartyPlay = require("../lib/CitizenPartyPlay");
 const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
+const TickTiming = require("../lib/TickTiming");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenFarmers = require("../lib/CitizenFarmers");
@@ -762,10 +763,17 @@ class CitizenDirector {
     const director = this;
     class DirectorTask extends Task {
       execute() {
+        // Tick-timing instrumentation: wall time per slow cycle. Measure
+        // only; failure of the instrumentation must never break the tick.
+        const t0 = Date.now();
         try {
           director.tick();
         } catch (error) {
           director.log("tick failed", { error: String(error?.message ?? error) });
+        } finally {
+          try {
+            TickTiming.record("director.tick", Date.now() - t0, director.roster?.size ?? 0);
+          } catch {}
         }
       }
     }
@@ -774,12 +782,18 @@ class CitizenDirector {
     // The 60s director tick is too slow for "walk into town, see people".
     class ProximityTask extends Task {
       execute() {
+        // Tick-timing instrumentation for the fast (~10s) proximity cycle.
+        const t0 = Date.now();
         try {
           director.tickProximity();
         } catch (error) {
           director.log("proximity tick failed", {
             error: String(error?.message ?? error),
           });
+        } finally {
+          try {
+            TickTiming.record("director.tickProximity", Date.now() - t0, director.roster?.size ?? 0);
+          } catch {}
         }
       }
     }
