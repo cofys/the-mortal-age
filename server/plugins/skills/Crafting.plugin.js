@@ -73,8 +73,6 @@ const WATER_CONTAINERS = new Map([
 const POTTER_WHEEL_NAMES = new Set(["Potter's Wheel", "Potter's wheel"]);
 const POTTERY_OVEN_NAMES = new Set(["Pottery Oven"]);
 
-let pluginApi;
-
 function cutGem(event) {
   const { player, usedItemId, usedWithItemId } = event;
   const hasChisel =
