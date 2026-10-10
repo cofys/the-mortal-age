@@ -60,6 +60,7 @@ const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenFishing = require("../brain/actions/CitizenFishing");
 const CitizenActivityChatter = require("../chat/CitizenActivityChatter");
+const CitizenWarChatter = require("../chat/CitizenWarChatter");
 const PartyPlay = require("../lib/CitizenPartyPlay");
 const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
@@ -2240,6 +2241,14 @@ class CitizenDirector {
       CitizenActivityChatter.tickActivityChatter(this);
     } catch (error) {
       this.log("citizen chatter failed", { error: String(error?.message ?? error) });
+    }
+    // War chatter: citizens talk about REAL active wars (store-verified,
+    // never invented) and rumor about boiling border tensions. Watched-only,
+    // LOD-gated, throttled. Zero LLM.
+    try {
+      CitizenWarChatter.tickWarChatter(this);
+    } catch (error) {
+      this.log("citizen war chatter failed", { error: String(error?.message ?? error) });
     }
     // Master-apprentice pairings: masters (level 60+ trade) take on young
     // citizens, who gain real trade XP each slow tick and graduate at 40.
