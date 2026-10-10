@@ -51,6 +51,8 @@ const {
   INTENT_EXPLORE,
   activeIntents,
 } = require("../CitizenIntents");
+const { ACT_ROUTINE } = require("../CitizenDecisions");
+const SlotCapacity = require("../CitizenSlotCapacity");
 
 const KIND_HOME = "home";
 const KIND_WORK = "work";
@@ -307,9 +309,29 @@ function walkTo(player, tile) {
   } catch {
     // Fall back to the unstyled target.
   }
+  // Slot claim on top of the personal ring: N citizens walking to the same
+  // anchor land on N distinct slot tiles (structural de-dup). Falls back to
+  // personalSpot when the spot is full — the 2026-10-08 destack stays the
+  // floor, never a regression.
+  let dest = null;
+  try {
+    const claim = SlotCapacity.claimSlot(
+      player,
+      ACT_ROUTINE,
+      target.x,
+      target.y,
+      tile.z ?? 0,
+      agentRng(`slots:${username}`)
+    );
+    if (claim) {
+      dest = { x: claim.x, y: claim.y };
+    }
+  } catch {
+    // fall through to personalSpot
+  }
   // Personal spot, not just noise: ten fishers should spread along the
   // dock, not pile on the same tile with ±3 jitter.
-  const spot = personalSpot(username, target.x, target.y, 2, 8);
+  const spot = dest ?? personalSpot(username, target.x, target.y, 2, 8);
   requestMovement(player, spot.x, spot.y, {
     reason: "citizen_routine",
     basicPather: true,
@@ -958,6 +980,12 @@ function createCitizenRoutineAction(spec, world) {
     stop(ctx) {
       if (ctx?.player) {
         clearMovementRequest(ctx.player);
+        // Slot-capacity lifecycle: ending the routine frees the spot claim.
+        try {
+          SlotCapacity.releaseFor(ctx.player);
+        } catch {
+          // best effort
+        }
       }
     },
   };

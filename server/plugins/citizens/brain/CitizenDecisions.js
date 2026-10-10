@@ -58,6 +58,7 @@ const {
 } = require("../lib/goals");
 const { hashSeed, agentRng } = require("../lib/humanizer");
 const { tickIntents, intentBonusFor } = require("./CitizenIntents");
+const SlotCapacity = require("./CitizenSlotCapacity");
 
 const COINS_ID = 995;
 const INVENTORY_SIZE = 28;
@@ -4138,6 +4139,15 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
   const username = usernameOf(player);
   pruneState(nowMs);
 
+  // Slot-capacity lifecycle: a new pick means the previous activity ended,
+  // so release any spot claim the citizen still held — the freed slot goes
+  // back to the pool and the new activity claims its own spot on arrival.
+  try {
+    SlotCapacity.releaseFor(player);
+  } catch {
+    // Slot release never breaks the pick.
+  }
+
   // The interrupt path may direct the next pick (consumed once).
   if (username) {
     const directedId = directedPick.get(username);
@@ -4288,6 +4298,13 @@ function doInterrupt(player, brain, target, nowMs, critical) {
     frame.action()?.stop?.(ctx);
   } catch {
     // A broken stop never blocks the interrupt.
+  }
+  try {
+    // Slot-capacity lifecycle: the interrupt ends the current activity,
+    // so the citizen's spot claim is released for someone else.
+    SlotCapacity.releaseFor(player);
+  } catch {
+    // Slot release never blocks the interrupt.
   }
   if (username) {
     directedPick.set(username, target.activity.id);

@@ -675,6 +675,12 @@ function onTipSeen(event) {
 /** A player logged out: drop their idle-tracking state. */
 function onIdleLogoutCleared(event) {
   clearIdleOnLogout(event);
+  // Slot-capacity lifecycle: a logged-out citizen frees their spot claim.
+  try {
+    require("./brain/CitizenSlotCapacity").releaseFor(event?.player ?? event);
+  } catch {
+    // Missing them must never break logout.
+  }
 }
 
 /** A friend logged in: citizen friends light up and say they missed them. */

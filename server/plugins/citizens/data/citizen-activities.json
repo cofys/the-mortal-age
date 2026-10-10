@@ -12,6 +12,7 @@
         }
       ],
       "capacity": 64,
+      "slotCapacity": 4,
       "failureCooldownSeconds": 10,
       "id": "guard_patrol",
       "mode": "citizen_guard",
@@ -38,6 +39,7 @@
         }
       ],
       "capacity": 32,
+      "slotCapacity": 3,
       "failureCooldownSeconds": 10,
       "id": "merchant_tend",
       "mode": "citizen_merchant",
@@ -59,6 +61,7 @@
         }
       ],
       "capacity": 64,
+      "slotCapacity": 6,
       "failureCooldownSeconds": 10,
       "id": "citizen_routine",
       "mode": "citizen_routine",
@@ -83,6 +86,7 @@
         }
       ],
       "capacity": 32,
+      "slotCapacity": 6,
       "failureCooldownSeconds": 10,
       "id": "courtier_attend",
       "mode": "citizen_social",
@@ -107,6 +111,7 @@
         }
       ],
       "capacity": 64,
+      "slotCapacity": 8,
       "failureCooldownSeconds": 10,
       "id": "tavern_social",
       "mode": "citizen_social",
@@ -134,6 +139,7 @@
         }
       ],
       "capacity": 32,
+      "slotCapacity": 6,
       "failureCooldownSeconds": 10,
       "id": "leisure_stroll",
       "mode": "citizen_social",
@@ -162,6 +168,7 @@
         }
       ],
       "capacity": 16,
+      "slotCapacity": 3,
       "failureCooldownSeconds": 10,
       "id": "prime_merchant",
       "mode": "citizen_merchant",
@@ -274,6 +281,7 @@
       "mode": "citizen_mine",
       "repeat": true,
       "capacity": 32,
+      "slotCapacity": 4,
       "failureCooldownSeconds": 10,
       "requires": [
         {
@@ -308,6 +316,7 @@
       "mode": "citizen_chop",
       "repeat": true,
       "capacity": 32,
+      "slotCapacity": 4,
       "failureCooldownSeconds": 10,
       "requires": [
         {
@@ -342,6 +351,7 @@
       "mode": "citizen_wild_gather",
       "repeat": true,
       "capacity": 8,
+      "slotCapacity": 3,
       "failureCooldownSeconds": 60,
       "requires": [
         {
@@ -599,6 +609,7 @@
       "mode": "citizen_farm",
       "repeat": true,
       "capacity": 24,
+      "slotCapacity": 3,
       "failureCooldownSeconds": 10,
       "requires": [
         {

@@ -62,6 +62,8 @@ const {
   personalSpot,
   humanizerProfile,
 } = require("../../lib/humanizer");
+const { ACT_FARM } = require("../CitizenDecisions");
+const SlotCapacity = require("../CitizenSlotCapacity");
 
 // A farm run involves real walking between patches; still, a cursed route
 // must never stall the day.
@@ -418,6 +420,20 @@ function walkTo(player, tile, reason, spread) {
   }
 }
 
+/** Walk to an exact slot tile (the slot IS the destack — no personalSpot). */
+function walkToExact(player, tile, reason) {
+  try {
+    requestMovement(player, tile.x, tile.y, {
+      reason,
+      basicPather: true,
+      z: tile.z ?? 0,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function logFarm(world, player, event, extra) {
   try {
     world?.log?.("citizen_farm", {
@@ -534,6 +550,12 @@ function createCitizenFarmAction(spec, world) {
       }
       if (ctx?.player) {
         clearMovementRequest(ctx.player);
+        // Slot-capacity lifecycle: ending the farm run frees the spot claim.
+        try {
+          SlotCapacity.releaseFor(ctx.player);
+        } catch {
+          // best effort
+        }
       }
     },
   };
@@ -572,8 +594,37 @@ function createCitizenFarmAction(spec, world) {
   function workPatch(ctx, state, BF, patch) {
     const { player, nowMs } = ctx;
     const center = patchCenter(patch);
-    if (!atTile(player, center, PATCH_ARRIVE_RADIUS)) {
-      walkTo(player, center, "citizen_farm_patch", 8);
+    // Slot claim on the REAL patch center: the farm crew spreads around the
+    // patch on distinct slot tiles instead of stacking on its center. A full
+    // patch -> next patch (another spot of the same activity), never a fixed
+    // wait. Falls back to the old personalSpot walk if claiming fails.
+    let stand = center;
+    let useExact = false;
+    try {
+      const claim = SlotCapacity.claimSlot(
+        player,
+        ACT_FARM,
+        Math.round(center.x),
+        Math.round(center.y),
+        Math.round(center.z ?? 0),
+        state.rng
+      );
+      if (!claim) {
+        state.patchIdx += 1;
+        logFarm(world, player, "patch-full", { patch: patch.type });
+        return "running";
+      }
+      stand = { x: claim.x, y: claim.y, z: claim.z };
+      useExact = true;
+    } catch {
+      // Claim failure degrades to the old personalSpot walk, never a break.
+    }
+    if (!atTile(player, stand, PATCH_ARRIVE_RADIUS)) {
+      if (useExact) {
+        walkToExact(player, stand, "citizen_farm_patch");
+      } else {
+        walkTo(player, center, "citizen_farm_patch", 8);
+      }
       return "running";
     }
 
