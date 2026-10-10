@@ -43,6 +43,7 @@ const ROCKS = [
   { objectName: "Mithril rocks", objectIds: [7492, 7459], level: 50, xp: 80, oreId: ItemIds.MITHRIL_ORE, petBase: 148320, cycles: 17, respawnTicks: 11 },
   { objectName: "Adamantite rocks", objectIds: [7460], level: 70, xp: 95, oreId: ItemIds.ADAMANTITE_ORE, petBase: 59328, cycles: 18, respawnTicks: 14 },
   { objectName: "Runite rocks", objectIds: [14859, 4860, 2106, 2107, 7461], level: 85, xp: 125, oreId: ItemIds.RUNITE_ORE, petBase: 42377, cycles: 23, respawnTicks: 45 },
+  { objectName: "Amethyst crystals", objectIds: [ObjectIds.AMETHYST_CRYSTALS, ObjectIds.AMETHYST_CRYSTALS_2], level: 92, xp: 240, oreId: ItemIds.AMETHYST, petBase: 42377, cycles: 20, respawnTicks: 60 },
 ];
 
 // The essence mine rocks are infinite and have no level requirement.
