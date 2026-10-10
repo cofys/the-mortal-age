@@ -126,6 +126,7 @@ const CitizenRetirement = require("../lib/CitizenRetirement");
 const { tickElections } = require("../lib/CitizenElection");
 const CitizenRelationships = require("../lib/CitizenRelationships");
 const BrainRelationships = require("../brain/CitizenRelationships");
+const { tickProximityRapport } = require("../brain/CitizenRapportEvents");
 const CitizenHangouts = require("../lib/CitizenHangouts");
 const { tickToasts } = require("../lib/CitizenToasts");
 const { tickTavernGames } = require("../lib/CitizenTavernGames");
@@ -2997,6 +2998,14 @@ class CitizenDirector {
       BrainRelationships.tickRelationships(this, nowMs);
     } catch (error) {
       this.log("bond formation failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen rapport: real proximity observations feed the rapport graph —
+    // co-located roster citizens accrue "workedAlongside" from the engine's
+    // local-player lists. Data tier, zero LLM.
+    try {
+      tickProximityRapport(this, nowMs);
+    } catch (error) {
+      this.log("rapport events failed", { error: String(error?.message ?? error) });
     }
     // Citizen social bonds: persistent relationship scores drift toward
     // indifference; old favors and grudges are forgotten. Data tier.

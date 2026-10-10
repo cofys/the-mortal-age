@@ -290,6 +290,30 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
     } catch {
       // Bonding must never break the reaction.
     }
+    // Citizen↔citizen exchange: a real chat between two roster citizens also
+    // feeds the rapport graph (roster-gated — shuns and real players stay
+    // out; personalities modulate first impressions when available). Lazy
+    // requires: run at runtime after all modules load, so no cycle.
+    try {
+      const { getDirector } = require("../director/CitizenDirector");
+      const { isRosterCitizen } = require("../brain/CitizenRapportEvents");
+      const director = getDirector?.();
+      if (
+        director &&
+        isRosterCitizen(director, citizenUsername) &&
+        isRosterCitizen(director, speakerUsername)
+      ) {
+        require("../brain/CitizenRelationships").noteInteraction(
+          citizenUsername,
+          speakerUsername,
+          key === "greetFriend" ? "greeted" : "chatted",
+          personality ?? null,
+          null
+        );
+      }
+    } catch {
+      // Bonding must never break the reaction.
+    }
   }
   return line;
 }
