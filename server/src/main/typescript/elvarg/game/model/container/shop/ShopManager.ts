@@ -12,6 +12,7 @@ import { Misc } from "../../../../util/Misc";
 import { ShopIdentifiers } from "../../../../util/ShopIdentifiers";
 import { encodeShopClose, encodeShopOpen } from "../../../../net/protocol/ClientProtocol";
 import { PlayerSave } from "../../../entity/impl/player/persistence/PlayerSave";
+import { scarcityPriceMultiplier } from "./shopPricing";
 
 export interface ShopItemContainerAction {
     kind: "value" | "buy_sell" | "x";
@@ -847,14 +848,32 @@ export class ShopManager {
             /general store/i.test(shop.definition.getName());
     }
 
+    /**
+     * Base price from the item definition (or a per-shop override), scaled
+     * by live scarcity: low stock vs the shop's original max marks the price
+     * up (to 3x), overstock discounts it (to a 0.5x floor). Computed on
+     * transaction — no per-tick work. Sell prices derive from this too, so
+     * selling into a scarce shop pays better.
+     */
     private static itemPrice(shop: RuntimeShop, definition: ItemDefinition): number {
         const override = shop.itemPrices.get(definition.getId());
+        let base: number;
         if (override != null && override > 0) {
-            return override;
+            base = override;
+        } else {
+            base =
+                shop.definition.getCurrency() === "BLOOD_MONEY"
+                    ? Number(definition.getBloodMoneyValue?.() ?? 0)
+                    : Number(definition.getValue?.() ?? 0);
         }
-        return shop.definition.getCurrency() === "BLOOD_MONEY"
-            ? Number(definition.getBloodMoneyValue?.() ?? 0)
-            : Number(definition.getValue?.() ?? 0);
+        if (!(base > 0)) {
+            return base;
+        }
+        const multiplier = scarcityPriceMultiplier(
+            shop.stock.get(definition.getId()) ?? 0,
+            shop.originalAmounts.get(definition.getId()) ?? 0
+        );
+        return Math.max(1, Math.floor(base * multiplier));
     }
 
     private static currencyAmount(player: any, currency: ShopCurrency): number {
