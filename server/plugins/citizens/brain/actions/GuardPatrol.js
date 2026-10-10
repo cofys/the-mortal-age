@@ -34,6 +34,9 @@ const SCAN_RADIUS_TILES = 12;
 const STRANGER_CHALLENGE_COOLDOWN_MS = 60000;
 const GLOBAL_CHALLENGE_COOLDOWN_MS = 20000;
 const OFFICE_ACK_COOLDOWN_MS = 5 * 60 * 1000;
+// Kingdom-choice slice phase 1: a home greeting is a rare kindness, never
+// spam — one per player per five minutes, on the guard's own scan rhythm.
+const HOME_GREET_COOLDOWN_MS = 5 * 60 * 1000;
 
 const CHALLENGE_LINES = Object.freeze({
   plain: Object.freeze([
@@ -79,6 +82,21 @@ const WARNED_LINES = Object.freeze({
     "you again, {name}. warned about you. move along.",
     "hold it, {name}. we remember. one wrong move.",
     "{name}. heard things. keep walking.",
+  ]),
+});
+
+// Kingdom-choice slice phase 1: fellow-kingdom players get a rare warm word
+// in their home capital — the choice is welcomed, not just policed.
+// {capital} is filled with the guard's capital at speak time.
+const HOME_GREET_LINES = Object.freeze({
+  plain: Object.freeze([
+    "Hail, and welcome back to {capital}.",
+    "Welcome home, brother.",
+    "Good to see one of our own on the streets.",
+  ]),
+  terse: Object.freeze([
+    "back in {capital}, eh.",
+    "welcome home.",
   ]),
 });
 
@@ -134,6 +152,8 @@ function createGuardPatrolAction(spec, world) {
         challengedAt: new Map(), // username -> timestamp
         nextAcknowledgeAt: 0,
         acknowledgedAt: new Map(), // username -> timestamp
+        nextGreetAt: 0,
+        greetedAt: new Map(), // username -> timestamp (home greetings)
       };
     });
   }
@@ -273,6 +293,97 @@ function createGuardPatrolAction(spec, world) {
     return pool[Math.floor(state.rng() * pool.length)];
   }
 
+  /** Capital display name for {capital} lines; falls back to the kingdom id. */
+  function capitalName(kingdomId) {
+    try {
+      const Store = require("../../../kingdoms/KingdomStore");
+      return Store.getKingdom?.(kingdomId)?.capital ?? kingdomId;
+    } catch {
+      return kingdomId;
+    }
+  }
+
+  function isRealPlayer(other) {
+    if (!other || typeof other.getUsername !== "function") {
+      return false;
+    }
+    return !(typeof other.isPlayerBot === "function" && other.isPlayerBot() === true);
+  }
+
+  function notorietyOf(username, nowMs) {
+    try {
+      return getMemory().notoriety(username, nowMs) ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Kingdom-choice slice phase 1: home-ground welcome. A real player who
+   * shares the guard's kingdom (and isn't notorious) gets an occasional warm
+   * line — the same jittered scan rhythm as challenges, personality-scaled,
+   * 5-minute per-player cooldown, peacetime only (at war the watch has no
+   * kind words). Zero new tick cost: piggybacks the existing scan cadence.
+   */
+  function maybeGreetHome(ctx, state, kingdomId, scanRadius) {
+    const { player, nowMs } = ctx;
+    if (isKingdomAtWar(kingdomId)) {
+      return;
+    }
+    if (nowMs < state.nextGreetAt) {
+      return;
+    }
+    const locals = player.getLocalPlayers?.() ?? [];
+    const selfLoc = player.getLocation();
+    for (const other of locals) {
+      if (!isRealPlayer(other)) {
+        continue;
+      }
+      if (isStranger(player, other)) {
+        continue;
+      }
+      const otherLoc = other.getLocation?.();
+      if (!otherLoc) {
+        continue;
+      }
+      const dist = Math.max(
+        Math.abs(selfLoc.getX() - otherLoc.getX()),
+        Math.abs(selfLoc.getY() - otherLoc.getY())
+      );
+      if (dist > scanRadius) {
+        continue;
+      }
+      const username = other.getUsername();
+      if (nowMs - (state.greetedAt.get(username) ?? 0) < HOME_GREET_COOLDOWN_MS) {
+        continue;
+      }
+      // Notorious "fellows" get the watch's suspicion, not its warmth.
+      if (notorietyOf(username, nowMs) >= 0.5) {
+        continue;
+      }
+      if (!chance(state.rng, state.human.chatRate * 0.3)) {
+        continue;
+      }
+      state.greetedAt.set(username, nowMs);
+      state.nextGreetAt =
+        nowMs + logNormalJitter(state.rng, 45000, state.human.tempoSigma);
+      const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+      const line = voiceLine(voiceFor(personality), HOME_GREET_LINES, state.rng)
+        .replaceAll("{capital}", capitalName(kingdomId));
+      try {
+        sayPublic(player, line);
+      } catch (error) {
+        // Cosmetic; never break the patrol.
+      }
+      world?.log?.("citizen_guard_home_greet", {
+        guard: player.getUsername?.(),
+        greeted: username,
+        kingdom: kingdomId,
+      });
+      return;
+    }
+  }
+
   function advanceWaypoint(ctx, state, circuit) {
     const { player, nowMs } = ctx;
     state.waypointIndex = (state.waypointIndex + 1) % circuit.length;
@@ -309,6 +420,7 @@ function createGuardPatrolAction(spec, world) {
 
       maybeChallenge(ctx, state, kingdomId);
       maybeAcknowledgeOffice(ctx, state, kingdomId, scanRadius);
+      maybeGreetHome(ctx, state, kingdomId, scanRadius);
 
       if (player.getForceMovement?.() != null) {
         return "running";

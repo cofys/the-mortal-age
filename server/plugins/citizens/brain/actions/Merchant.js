@@ -26,7 +26,10 @@ const {
   ATTR_CITIZEN_PERSONALITY,
   ATTR_WARE_ITEM,
   ATTR_WARE_PRICE,
+  ATTR_KINGDOM_ID,
 } = require("../../constants");
+const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
+const { getMemory } = require("../../lib/CitizenMemory");
 const { addMood } = require("../CitizenNeeds");
 const {
   agentRng,
@@ -47,6 +50,37 @@ const PHASE_TO_STALL = "toStall";
 const PHASE_CLOSED = "closed";
 
 const ARRIVE_RADIUS = 2;
+
+// Kingdom-choice slice phase 1: merchants know their own. Fellows get a warm
+// word in their home capital; foreigners get cold-but-neutral curiosity in
+// peacetime — never hostility (guards own hostility). Same 5-minute
+// per-player cooldown as the guard's home greeting. {capital} fills at speak.
+const RECOGNIZE_RADIUS_TILES = 12;
+const RECOGNIZE_COOLDOWN_MS = 5 * 60 * 1000;
+
+const MERCHANT_HOME_LINES = Object.freeze({
+  plain: Object.freeze([
+    "Hail, and welcome back to {capital}.",
+    "One of our own! Good to see you.",
+    "The {capital} market thanks you for your custom.",
+  ]),
+  terse: Object.freeze([
+    "back in {capital}, eh.",
+    "one of ours.",
+  ]),
+});
+
+const MERCHANT_COLD_LINES = Object.freeze({
+  plain: Object.freeze([
+    "We don't see many of your kind here.",
+    "Mind yourself, outlander.",
+    "Trade's trade, friend — but you'll find no warm hearth in {capital}.",
+  ]),
+  terse: Object.freeze([
+    "not many of your kind here.",
+    "outlander. mind yourself.",
+  ]),
+});
 
 // Ad lines live in the pure CitizenHawker module, picked by poolKey + stock tier
 // so merchants never hawk wares they don't have (empty shelves => silence).
@@ -177,6 +211,8 @@ function createMerchantAction(spec, world) {
         nextSaleAt: 0,
         restockPauseUntil: 0,
         announcedClose: false,
+        nextRecognizeAt: 0,
+        recognizedAt: new Map(), // username -> timestamp (recognition lines)
       };
     });
   }
@@ -252,6 +288,90 @@ function createMerchantAction(spec, world) {
     say(player, state, line);
   }
 
+  /** Capital display name for {capital} lines; falls back to the kingdom id. */
+  function capitalName(kingdomId) {
+    try {
+      const Store = require("../../../kingdoms/KingdomStore");
+      return Store.getKingdom?.(kingdomId)?.capital ?? kingdomId;
+    } catch {
+      return kingdomId;
+    }
+  }
+
+  function notorietyOf(username, nowMs) {
+    try {
+      return getMemory().notoriety(username, nowMs) ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Kingdom-choice slice phase 1: the merchant notices passers-by. Real
+   * players only (never bot-to-bot noise); fellow-kingdom players get a warm
+   * word, foreigners a cold-but-neutral one — peacetime only, personality-
+   * scaled, 5-minute per-player cooldown. Notorious players get silence.
+   */
+  function maybeRecognize(player, state, nowMs, kingdomId) {
+    if (isKingdomAtWar(kingdomId)) {
+      return;
+    }
+    if (nowMs < state.nextRecognizeAt) {
+      return;
+    }
+    state.nextRecognizeAt =
+      nowMs + logNormalJitter(state.rng, 30000, state.human.tempoSigma);
+    const locals = player.getLocalPlayers?.() ?? [];
+    const selfLoc = player.getLocation?.();
+    if (!selfLoc) {
+      return;
+    }
+    for (const other of locals) {
+      if (typeof other.isPlayerBot === "function" && other.isPlayerBot() === true) {
+        continue;
+      }
+      const username = other.getUsername?.();
+      if (!username) {
+        continue;
+      }
+      const otherLoc = other.getLocation?.();
+      if (!otherLoc) {
+        continue;
+      }
+      const dist = Math.max(
+        Math.abs(selfLoc.getX() - otherLoc.getX()),
+        Math.abs(selfLoc.getY() - otherLoc.getY())
+      );
+      if (dist > RECOGNIZE_RADIUS_TILES) {
+        continue;
+      }
+      if (nowMs - (state.recognizedAt.get(username) ?? 0) < RECOGNIZE_COOLDOWN_MS) {
+        continue;
+      }
+      if (notorietyOf(username, nowMs) >= 0.5) {
+        continue;
+      }
+      if (!chance(state.rng, state.human.chatRate * 0.3)) {
+        continue;
+      }
+      const fellow =
+        (other.getAttribute?.(ATTR_KINGDOM_ID) ?? null) === kingdomId;
+      const pool = fellow ? MERCHANT_HOME_LINES : MERCHANT_COLD_LINES;
+      const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+      const line = voiceLine(voiceFor(personality), pool, state.rng)
+        .replaceAll("{capital}", capitalName(kingdomId));
+      state.recognizedAt.set(username, nowMs);
+      say(player, state, line);
+      world?.log?.("citizen_merchant_recognize", {
+        merchant: player.getUsername?.(),
+        recognized: username,
+        kingdom: kingdomId,
+        fellow,
+      });
+      return;
+    }
+  }
+
   const action = {
     id: "merchant",
     update(ctx) {
@@ -292,6 +412,7 @@ function createMerchantAction(spec, world) {
           }
           advertise(player, state, nowMs);
           sellTick(player, state, nowMs);
+          maybeRecognize(player, state, nowMs, kingdomId);
           if (stockCount(player, wareId) < restockThreshold) {
             state.phase = PHASE_TO_BANK;
           }
