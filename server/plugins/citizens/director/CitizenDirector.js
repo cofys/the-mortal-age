@@ -61,6 +61,7 @@ const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenFishing = require("../brain/actions/CitizenFishing");
 const CitizenActivityChatter = require("../chat/CitizenActivityChatter");
 const CitizenWarChatter = require("../chat/CitizenWarChatter");
+const CitizenGoalChatter = require("../chat/CitizenGoalChatter");
 const PartyPlay = require("../lib/CitizenPartyPlay");
 const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
@@ -2402,6 +2403,18 @@ class CitizenDirector {
       name: 'citizen war chatter failed',
       run: () => {
         CitizenWarChatter.tickWarChatter(this);
+      },
+    },
+    // Goal chatter: citizens talk about their REAL social goals — boss-run
+    // parties (plan in travel phase, combat calls in fight phase, all
+    // grounded in the live party object) and friend-making (pending clan /
+    // party / friend invites, newly formed friendships, running with a
+    // friend). All real store state, never invented. Watched-only,
+    // LOD-gated, throttled. Zero LLM.
+    {
+      name: 'citizen goal chatter failed',
+      run: () => {
+        CitizenGoalChatter.tickGoalChatter(this);
       },
     },
     // Master-apprentice pairings: masters (level 60+ trade) take on young
