@@ -36,6 +36,7 @@ const {
   ATTR_WARE_ITEM,
   ATTR_WARE_PRICE,
   ATTR_MARKET_WARES,
+  ATTR_KINGDOM_ID,
   ROLE_MERCHANT,
 } = require("../constants");
 const { isKingdomAtWar } = require("../CitizenEvents");
@@ -58,6 +59,11 @@ const OVERLAY_HOST_UID = (161 << 16) | 34;
 const TRADE_OPTION_SLOT = 7; // 1 attack, 2 trade req, 3 follow, 4 duel, 5 recruit, 6 forfeit
 const COINS = 995;
 const SELL_TAX = 0.85; // merchants buy back at 85%, mirroring real shops
+// Kingdom-choice phase 2: merchants favor their own kingdom. Home-kingdom
+// players get a small discount, foreigners pay a small premium, wanderers
+// (no kingdom) pay list. Multiplies with the memory loyalty discount.
+const KINGDOM_HOME_BIAS = 0.95;
+const KINGDOM_FOREIGN_BIAS = 1.08;
 const MAX_ACTION_AMOUNT = 5000;
 const NEARBY_RADIUS = 10;
 
@@ -409,6 +415,24 @@ function seasonalPricing(name) {
   return { mult: 1.0, note: null }; // Jun-Aug: summer plenty
 }
 
+/**
+ * Kingdom-choice phase 2: kingdom-aligned price bias. Reads the player's
+ * raw kingdom:id attribute (NOT kingdomIdOf — that helper falls back to a
+ * default kingdom, which would misprice wanderers as home customers).
+ * Returns { mult, note } matching the seasonalPricing shape.
+ */
+function kingdomPriceBias(player, merchant) {
+  const merchantKingdom = kingdomIdOf(merchant);
+  const playerKingdom = player?.getAttribute?.(ATTR_KINGDOM_ID) ?? null;
+  if (typeof playerKingdom !== "string" || playerKingdom.length === 0) {
+    return { mult: 1.0, note: null }; // wanderer: list price, no bias
+  }
+  if (playerKingdom === merchantKingdom) {
+    return { mult: KINGDOM_HOME_BIAS, note: "home discount" };
+  }
+  return { mult: KINGDOM_FOREIGN_BIAS, note: "foreign price" };
+}
+
 /** Journal a price move, but only when it actually moved (avoids spam). */
 function journalPriceMove(merchant, wareName, newBase) {
   try {
@@ -594,7 +618,7 @@ function renderStall(api, player, session) {
   session.wares.forEach((ware, row) => {
     const stock = merchant.getInventory?.()?.getAmount?.(ware.id) ?? 0;
     const note = ware.priceNote
-      ? ` · <col=${/loyalty discount|haggled|surplus|harvest plenty/.test(ware.priceNote) ? "7fd27f" : "ff7f7f"}>${ware.priceNote}</col>`
+      ? ` · <col=${/loyalty discount|home discount|haggled|surplus|harvest plenty/.test(ware.priceNote) ? "7fd27f" : "ff7f7f"}>${ware.priceNote}</col>`
       : "";
     sender
       .sendItemOnInterface(rowUid(row, 0), ware.id, 0, Math.max(0, stock))
@@ -683,14 +707,17 @@ function openStall(api, player, merchant) {
   const haggleMult = haggledPct > 0 ? 1 - haggledPct / 100 : 1;
   const loyaltyNote =
     multiplier < 1 ? "loyalty discount" : multiplier > 1 ? "cold prices" : null;
+  // Kingdom-choice phase 2: home discount / foreign premium, stacking with
+  // the memory loyalty discount. Computed on transaction, not per-tick.
+  const kingdom = kingdomPriceBias(player, merchant);
   const pricedWares = wares.map((ware) => {
-    const notes = [ware.marketNote, loyaltyNote, haggleNote];
+    const notes = [ware.marketNote, loyaltyNote, kingdom.note, haggleNote];
     if (haggledPct > 0) notes.push(`haggled ${haggledPct}% off`);
     return {
       ...ware,
       price: Math.max(
         1,
-        Math.round(ware.price * multiplier * haggleEdge * haggleMult)
+        Math.round(ware.price * multiplier * kingdom.mult * haggleEdge * haggleMult)
       ),
       priceNote: notes.filter(Boolean).join(" · ") || null,
     };
@@ -712,6 +739,8 @@ function openStall(api, player, merchant) {
     merchant: merchantName,
     wares: pricedWares.map((w) => `${w.name}@${w.price}`),
     priceMultiplier: multiplier,
+    kingdomBias: kingdom.mult,
+    kingdomNote: kingdom.note,
   });
 }
 
@@ -1059,4 +1088,7 @@ module.exports = {
   TRADE_OPTION_SLOT,
   marketStallWares,
   priceWithMarketStack,
+  kingdomPriceBias,
+  KINGDOM_HOME_BIAS,
+  KINGDOM_FOREIGN_BIAS,
 };
