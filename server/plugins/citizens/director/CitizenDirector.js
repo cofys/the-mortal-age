@@ -106,6 +106,11 @@ const CitizenLibrarians = require("../lib/CitizenLibrarians");
 const { tickBookfolk } = require("../lib/CitizenLibrarians2");
 const { tickEngineerfolk } = require("../lib/CitizenEngineers2");
 const { tickMentorfolk } = require("../lib/CitizenMentors2");
+const { tickHistorianfolk } = require("../lib/CitizenHistorians2");
+const { tickJusticefolk } = require("../lib/CitizenJudges2");
+const { tickEnvoyfolk } = require("../lib/CitizenDiplomats2");
+const { tickClerkfolk } = require("../lib/CitizenOffices2");
+const { tickPamphleteers } = require("../lib/CitizenNewspaper2");
 const CitizenPriests = require("../lib/CitizenPriests");
 const CitizenTaxCollectors = require("../lib/CitizenTaxCollectors");
 const CitizenMessengers = require("../lib/CitizenMessengers");
@@ -2531,6 +2536,64 @@ class CitizenDirector {
       tickMentorfolk(this, nowMs, desync);
     } catch (error) {
       this.log("mentorfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen historianfolk (CitizenHistorians2): amateur chroniclers under
+    // the professional historians — chronicle-readers retell REAL journal
+    // entries (silent when the journal is quiet, never invented), day-heralds
+    // call the real day number and the real online roster count,
+    // tale-scribes and telling-runners work street spots off the archive
+    // grounds. Professional gate (the master's own visibility check) excludes
+    // real historians before the share roll inside the module. Data tier,
+    // zero LLM.
+    try {
+      tickHistorianfolk(this, nowMs, desync);
+    } catch (error) {
+      this.log("historianfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen justicefolk (CitizenJudges2): lay mediators, court ushers,
+    // fine-ledger clerks and session gawkers under the professional judges —
+    // clerks read the REAL fine ledger to the crowd (real amounts, real
+    // appeal state), ushers announce real session hours. No invented crimes,
+    // verdicts or sentences. Real judges (the master's real isJudge claim,
+    // courtier role) are excluded before the share roll inside the module.
+    // Data tier, zero LLM.
+    try {
+      tickJusticefolk(this, nowMs, desync);
+    } catch (error) {
+      this.log("justicefolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen envoyfolk (CitizenDiplomats2): well-wishers, rumor-carriers,
+    // bannermen and guest-scribes under the professional diplomats — they
+    // read REAL diplomat missions (diplomatStatus) and court anchors, never
+    // invent treaties, wars or missions. Real diplomats (the master's real
+    // isDiplomat claim, courtier role) are excluded before the share roll
+    // inside the module. Data tier, zero LLM.
+    try {
+      tickEnvoyfolk(this, nowMs, desync);
+    } catch (error) {
+      this.log("envoyfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen clerkfolk (CitizenOffices2): notice-copiers, office-seekers,
+    // petition-carriers and vacancy-gossips under the professional offices —
+    // they name REAL office holders and REAL vacancies from the persisted
+    // office bindings, never invented ones. Real office-holders (the
+    // master's real officeOfCitizen claim) are excluded before the share
+    // roll inside the module. Data tier, zero LLM.
+    try {
+      tickClerkfolk(this, nowMs, desync);
+    } catch (error) {
+      this.log("clerkfolk failed", { error: String(error?.message ?? error) });
+    }
+    // Citizen pamphleteers (CitizenNewspaper2): pamphlet-sellers, news-gossips
+    // and poster-pasters under the professional newspaper — they retell REAL
+    // journal entries verbatim and cry the REAL latest edition; no invented
+    // news or headlines, no set-pieces. Real town criers (the master's real
+    // crierFor claim) are excluded before the share roll inside the module.
+    // Data tier, zero LLM.
+    try {
+      tickPamphleteers(this, nowMs, desync);
+    } catch (error) {
+      this.log("pamphleteers failed", { error: String(error?.message ?? error) });
     }
     // Citizen community caregivers: neighbors who sit vigil with the sick,
     // bonesetters who splint breaks, midwives who tend new mothers, and
