@@ -5,12 +5,13 @@
  * mechanic: per-tick process() for actors inside only, postEnter/postLeave
  * edges, and rule overrides (all stubbed to null in v1 — see DESIGN.md).
  *
- * Boundaries are v1 APPROXIMATIONS: rectangles around each capital region,
- * one Boundary per height level (Boundary.inside requires an exact z match, so
- * z 0-3 covers castles and towers on the surface kingdoms; Keldagrim is a
- * single underground level for now). Refine against the cache map later.
- * Asgarnia's rect stops at the Wilderness ditch (y 3519); the Wilderness area
- * registers first at startup and wins the sliver anyway.
+ * Boundaries are v2 NATURAL borders: multiple rects per kingdom following
+ * rivers (the Salve), mountain ranges (White Wolf), the Wilderness line, and
+ * coastlines instead of ocean-spanning boxes. Rects are still approximations
+ * (Boundary is rect-only), but they hug the political regions now.
+ * Asgarnia's north edge stops at the Wilderness pvp zone (x 2940+, y 3525+);
+ * Burthorpe sits west of that zone, so it gets its own rect. The Wilderness
+ * area registers first at startup and wins any sliver anyway.
  */
 
 const Membership = require("./Membership.Kingdoms");
@@ -21,28 +22,42 @@ const KINGDOM_TERRITORIES = [
     id: "asgarnia",
     name: "Asgarnia",
     blurb: "the kingdom with no king",
-    rects: [[2880, 3040, 3280, 3519]], // Falador, Burthorpe, Taverley
+    rects: [
+      [2820, 3060, 3215, 3519], // Falador, Port Sarim, Rimmington, Taverley, White Wolf Mountain
+      [2790, 2820, 3420, 3470], // Catherby coastal strip
+      [2800, 2940, 3519, 3590], // Burthorpe + Warriors' Guild, west of the Wilderness pvp zone
+    ],
     heights: [0, 1, 2, 3],
   },
   {
     id: "misthalin",
     name: "Misthalin",
     blurb: "the heirless crown",
-    rects: [[3072, 3296, 3168, 3512]], // Varrock, Edgeville, Draynor, Lumbridge
+    rects: [
+      [3060, 3400, 3170, 3519], // Edgeville, Grand Exchange, Varrock, Draynor, Lumbridge; east edge at the Salve
+    ],
     heights: [0, 1, 2, 3],
   },
   {
     id: "kandarin",
     name: "Kandarin",
     blurb: "the lie holds — for now",
-    rects: [[2432, 2656, 3072, 3360]], // East and West Ardougne, Yanille
+    rects: [
+      [2420, 2800, 3360, 3500], // Seers' Village, Camelot, Tree Gnome Stronghold
+      [2300, 2745, 3250, 3360], // Ardougne, Witchaven (east edge at the coast)
+      [2300, 2700, 3150, 3250], // Tower of Life area (east edge at the coast)
+      [2350, 2700, 3000, 3150], // Yanille, Tree Gnome Village, Observatory, Castle Wars, Port Khazard
+    ],
     heights: [0, 1, 2, 3],
   },
   {
     id: "morytania",
     name: "Morytania",
     blurb: "the dark",
-    rects: [[3408, 3776, 3264, 3536]], // Canifis, Port Phasmatys, Burgh de Rott
+    rects: [
+      [3395, 3760, 3260, 3530], // Canifis, Port Phasmatys, Darkmeyer — east of the Salve
+      [3440, 3720, 3130, 3260], // Burgh de Rott, Meiyerditch south
+    ],
     heights: [0, 1, 2, 3],
   },
   {

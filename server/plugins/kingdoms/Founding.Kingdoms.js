@@ -247,16 +247,12 @@ function playerPos(player) {
 
 /** True if the position is outside all great-power territories. */
 function isUnclaimed(pos) {
-  // Great-power rects from Areas.Kingdoms (v1 approximations).
-  const rects = [
-    [2880, 3280, 3040, 3519], // asgarnia
-    [3072, 3168, 3296, 3512], // misthalin
-    [2432, 3072, 2656, 3360], // kandarin
-    [3408, 3776, 3264, 3536], // morytania
-    [2816, 2944, 10112, 10272], // keldagrim
-  ];
-  for (const [x1, x2, y1, y2] of rects) {
-    if (pos.x >= x1 && pos.x <= x2 && pos.y >= y1 && pos.y <= y2) return false;
+  // Great-power rects from Areas.Kingdoms (single source of truth).
+  const { KINGDOM_TERRITORIES } = require("./Areas.Kingdoms");
+  for (const def of KINGDOM_TERRITORIES) {
+    for (const [x1, x2, y1, y2] of def.rects) {
+      if (pos.x >= x1 && pos.x <= x2 && pos.y >= y1 && pos.y <= y2) return false;
+    }
   }
   return true;
 }
