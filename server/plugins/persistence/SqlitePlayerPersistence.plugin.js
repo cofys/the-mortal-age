@@ -21,6 +21,12 @@ const { createWriter } = require("./SqliteSaveWorker");
 /** Writer threads that die before they're ready, in a row, before saves fall back to the game thread. */
 const MAX_WRITER_FAILURES = 3;
 
+/**
+ * How often players.sqlite is snapshotted (VACUUM INTO) by the writer, in ms.
+ * `PLAYER_BACKUP_INTERVAL_MS` overrides it (tests use a short interval).
+ */
+const PLAYER_BACKUP_INTERVAL_MS = Number(process.env.PLAYER_BACKUP_INTERVAL_MS) || 6 * 60 * 60 * 1000;
+
 function legacyJsonImportEnabled() {
   const value = String(process.env.PLAYER_SAVE_IMPORT_LEGACY_JSON ?? "0")
     .trim()
@@ -81,6 +87,7 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     this.writerFailures = 0;
     this.writeHere = null;
     this.startWriter();
+    this.startBackupScheduler();
   }
 
   /**
@@ -95,6 +102,7 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     this.writer = writer;
     writer.on("message", (answer) => {
       if (answer.ready) this.writerFailures = 0;
+      else if (answer.backup) this.onBackupAnswer(answer);
       else this.onWritten(answer);
     });
     writer.on("error", (error) => console.error("[persistence] SQLite save writer failed", error));
@@ -103,7 +111,7 @@ class SqlitePlayerPersistence extends PlayerPersistence {
       this.writerFailures++;
       if (this.writerFailures >= MAX_WRITER_FAILURES) {
         console.error(`[persistence] SQLite save writer keeps failing (exit ${code}); writing saves on the game thread`);
-        this.writeHere = createWriter(this.database, SkillManager.AMOUNT_OF_SKILLS);
+        this.writeHere = createWriter(this.database, SkillManager.AMOUNT_OF_SKILLS, SqlitePlayerPersistence.DATABASE_PATH);
         this.writer = null;
         for (const message of [...this.inFlight.values()]) this.onWritten(this.writeHere(message));
         return;
@@ -143,6 +151,35 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     if (this.inFlight.size === 0) {
       this.writer?.unref();
       for (const resolve of this.idleWaiters.splice(0)) resolve();
+    }
+  }
+
+  /**
+   * Snapshots players.sqlite every PLAYER_BACKUP_INTERVAL_MS. The timer is unref'd so an idle
+   * server can still exit; the backup itself runs on the writer (or on the game thread when the
+   * writer fell back), never on the game tick's critical path.
+   */
+  startBackupScheduler() {
+    this.backupTimer = setInterval(() => this.requestBackup(), PLAYER_BACKUP_INTERVAL_MS);
+    if (typeof this.backupTimer.unref === "function") this.backupTimer.unref();
+  }
+
+  /** Posts a backup message to the writer; skips quietly when there's nowhere to send it. */
+  requestBackup() {
+    if (!this.writer && !this.writeHere) return;
+    const message = { type: "backup", seq: ++this.sequence };
+    if (this.writeHere) {
+      this.onBackupAnswer(this.writeHere(message));
+      return;
+    }
+    this.writer.postMessage(message);
+  }
+
+  onBackupAnswer({ ok, path: backupPath, kept, pruned, error }) {
+    if (ok) {
+      console.log(`[player-backup] wrote ${backupPath} (kept ${kept}, pruned ${pruned})`);
+    } else {
+      console.error(`[player-backup] FAILED: ${error}`);
     }
   }
 

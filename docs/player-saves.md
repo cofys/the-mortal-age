@@ -62,6 +62,21 @@ The SQLite backend (`plugins/persistence/SqlitePlayerPersistence.plugin.js`, the
   - nothing older.
 - **The JSON and browser (IndexedDB) backends** keep no history; the commands say so.
 
+## Database snapshots
+
+Every 6 hours (`PLAYER_BACKUP_INTERVAL_MS` overrides the interval) the persistence
+writer snapshots the whole `players.sqlite` with `VACUUM INTO`, into
+`data/saves/backups/players-<UTC YYYYMMDD-HHMMSS>Z.sqlite`, keeping the newest 12
+and deleting older ones. The snapshot runs as a writer message between save
+messages — on the only connection that writes, with no transaction open — so it
+can never catch a save half-written, and the game tick never touches the disk.
+Watch for `[player-backup] wrote ... (kept N, pruned M)` in the server log.
+
+These snapshots are whole-file copies: they protect against a corrupted or lost
+database, which the in-table save history (`player_save_history`) can't survive.
+To restore from one, stop the server and point `PLAYER_SAVE_DATABASE_PATH` (or
+`--database`) at the snapshot.
+
 ## Rolling a player back
 
 Owner commands (`plugins/commands/SaveHistory.plugin.js`):
