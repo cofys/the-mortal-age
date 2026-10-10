@@ -30570,5 +30570,6 @@
   {"level":2,"name":"Bloodveld","x":2931,"y":5357,"id":3138,"source":"wiki"},
   {"level":2,"name":"Bloodveld","x":2886,"y":5323,"id":3138,"source":"wiki"},
   {"level":2,"name":"Bloodveld","x":2920,"y":5358,"id":3138,"source":"wiki"},
-  {"level":2,"name":"Bloodveld","x":2927,"y":5354,"id":3138,"source":"wiki"}
+  {"level":2,"name":"Bloodveld","x":2927,"y":5354,"id":3138,"source":"wiki"},
+  {"level":0,"name":"Scurrius","x":3237,"y":9858,"id":7221,"wanderRadius":5}
 ]

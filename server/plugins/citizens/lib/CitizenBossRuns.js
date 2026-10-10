@@ -68,6 +68,7 @@ const BOSSES = [
     id: "giant_mole",
     label: "the Giant Mole",
     kingdomId: "asgarnia",
+    npcIds: [5779], // Giant Mole
     roles: ["guard", "commoner"],
     minMembers: 3,
     maxMembers: 5,
@@ -100,6 +101,7 @@ const BOSSES = [
     id: "scurrius",
     label: "Scurrius",
     kingdomId: "misthalin",
+    npcIds: [7221, 7222], // public + solo variants
     roles: ["guard", "commoner"],
     minMembers: 3,
     maxMembers: 5,
@@ -144,6 +146,7 @@ const BOSSES = [
     id: "obor",
     label: "Obor",
     kingdomId: "wanderer",
+    npcIds: [7416], // Obor
     roles: ["guard", "commoner"],
     minMembers: 2,
     maxMembers: 4,
@@ -284,6 +287,71 @@ function shoutIfWatched(director, record, line) {
       try { { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] })); } } catch { /* non-fatal */ }
     }
   } catch { /* non-fatal */ }
+}
+
+// --- real combat -------------------------------------------------------------
+
+function npcId(npc) {
+  try {
+    return npc?.getId?.() ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function npcAlive(npc) {
+  try {
+    if (!npc) return false;
+    if (npc.isDead?.() || npc.isDying?.()) return false;
+    if (npc.isRegistered?.() === false) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find the boss's real NPC near the bot. Returns the NPC or null.
+ * Uses getLocalNpcs (proximity-bounded); matches by the boss's npcIds.
+ */
+function findBossNpc(bot, boss) {
+  let npcs = [];
+  try {
+    npcs = bot.getLocalNpcs?.() ?? [];
+  } catch {
+    return null;
+  }
+  const wanted = new Set(boss.npcIds ?? []);
+  if (wanted.size === 0) return null;
+  for (const npc of npcs) {
+    if (!wanted.has(npcId(npc))) continue;
+    if (!npcAlive(npc)) continue;
+    return npc;
+  }
+  return null;
+}
+
+/** True when the bot already has a combat target (engine handles cooldowns). */
+function botInCombat(bot) {
+  try {
+    const target = bot.getCombat?.()?.getTarget?.();
+    return !!target;
+  } catch {
+    return false;
+  }
+}
+
+/** Online members with a materialized bot entity. */
+function materializedMembers(director, party) {
+  const out = [];
+  for (const m of party.members ?? []) {
+    const rec = director.roster.get(normalizeName(m));
+    if (!rec || !director.isOnline(rec)) continue;
+    const bot = director.getBot(rec);
+    if (!bot) continue;
+    out.push({ name: m, record: rec, bot });
+  }
+  return out;
 }
 
 // --- formation ---------------------------------------------------------------
@@ -518,8 +586,63 @@ function maintainFight(director, party, boss, leader, leaderBot, rng) {
     return;
   }
 
-  // Data-tier combat: the party chips the boss down; the boss occasionally
-  // lands a journaled hit on a random member (no real damage — data tier).
+  const mats = materializedMembers(director, party);
+  if (mats.length === 0) {
+    // LOD fallback: no one materialized, no entities on screen — run the
+    // data-tier simulation (the old fake fight). Real combat needs bodies.
+    maintainFightDataTier(director, party, boss, leader, members, rng);
+    return;
+  }
+
+  // Real combat: find the boss's actual NPC and fight it with the engine.
+  // The leader's local NPCs cover the lair (the party is together).
+  const bossNpc = findBossNpc(leaderBot, boss);
+
+  if (!bossNpc) {
+    if (party.bossSeen) {
+      // Boss was here and now it's gone — it's dead. Kill sequence.
+      // Note: the engine's NPCDeathTask drops loot on the ground for the
+      // killer; the table split below is the party share (tables verified
+      // against npc-drops.json).
+      const killLine = pickOne(rng, boss.killLines);
+      journalEvent(leader.username, killLine, "combat");
+      shoutIfWatched(director, leader, killLine);
+      splitLoot(director, party, boss, members, rng);
+      sendHome(director, party, leader, boss);
+      endRun(director, party, leader, boss, pickOne(rng, boss.endLines));
+      return;
+    }
+    // Boss not in range yet (not spawned, or party still arriving) — wait.
+    return;
+  }
+
+  // Boss found and alive — mark seen, then every materialized member attacks.
+  // The engine handles attack cooldowns; we only issue attack() when the bot
+  // has no target (event, not per-tick spam).
+  party.bossSeen = true;
+  for (const { bot } of mats) {
+    if (botInCombat(bot)) continue;
+    try {
+      bot.getCombat?.()?.attack?.(bossNpc);
+    } catch {
+      // Non-fatal.
+    }
+  }
+
+  // Flavor journaling (the "fight reads" — movement, damage, eating).
+  if (chance(rng, FLAVOR_CHANCE)) {
+    const who = pickOne(rng, members);
+    journalEvent(who, pickOne(rng, boss.fightFlavor) + ".", "combat");
+  }
+}
+
+/**
+ * Data-tier fight simulation — LOD fallback when no party member is
+ * materialized (no entities on screen to fight with). The party chips the
+ * boss down on a timer; the boss occasionally lands a journaled hit.
+ * This is the old fake fight, kept only for the unobserved case.
+ */
+function maintainFightDataTier(director, party, boss, leader, members, rng) {
   // Player members swing too — they're in the fight.
   let playerCount = 0;
   try {
@@ -641,4 +764,10 @@ module.exports = {
   bossForKingdom,
   tickBossRuns,
   tryFormBossRun,
+  // Test seams.
+  _findBossNpc: findBossNpc,
+  _botInCombat: botInCombat,
+  _materializedMembers: materializedMembers,
+  _maintainFight: maintainFight,
+  _maintainFightDataTier: maintainFightDataTier,
 };
