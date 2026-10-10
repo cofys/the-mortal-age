@@ -25,12 +25,10 @@ const CLEANABLE_HERBS = new Map([
   [ItemIds.GRIMY_TARROMIN, { clean: ItemIds.TARROMIN, level: 11, xp: 5 }],
   [ItemIds.GRIMY_HARRALANDER, { clean: ItemIds.HARRALANDER, level: 20, xp: 6 }],
   [ItemIds.GRIMY_RANARR_WEED, { clean: ItemIds.RANARR_WEED, level: 25, xp: 7 }],
-  [ItemIds.GRIMY_TOADFLAX, { clean: ItemIds.TOADFLAX, level: 30, xp: 8 }],
   [ItemIds.GRIMY_IRIT_LEAF, { clean: ItemIds.IRIT_LEAF, level: 40, xp: 10 }],
   [ItemIds.GRIMY_AVANTOE, { clean: ItemIds.AVANTOE, level: 48, xp: 12 }],
   [ItemIds.GRIMY_KWUARM, { clean: ItemIds.KWUARM, level: 54, xp: 13 }],
   [ItemIds.GRIMY_CADANTINE, { clean: ItemIds.CADANTINE, level: 65, xp: 14 }],
-  [ItemIds.GRIMY_LANTADYME, { clean: ItemIds.LANTADYME, level: 67, xp: 13.5 }],
   [ItemIds.GRIMY_DWARF_WEED, { clean: ItemIds.DWARF_WEED, level: 70, xp: 18 }],
   [ItemIds.GRIMY_TORSTOL, { clean: ItemIds.TORSTOL, level: 75, xp: 21 }],
 ]);
@@ -41,12 +39,10 @@ const UNFINISHED_POTIONS = new Map([
   [ItemIds.TARROMIN, { potion: ItemIds.TARROMIN_POTION_UNF_, level: 12 }],
   [ItemIds.HARRALANDER, { potion: ItemIds.HARRALANDER_POTION_UNF_, level: 22 }],
   [ItemIds.RANARR_WEED, { potion: ItemIds.RANARR_POTION_UNF_, level: 30 }],
-  [ItemIds.TOADFLAX, { potion: ItemIds.TOADFLAX_POTION_UNF_, level: 34 }],
   [ItemIds.IRIT_LEAF, { potion: ItemIds.IRIT_POTION_UNF_, level: 45 }],
   [ItemIds.AVANTOE, { potion: ItemIds.AVANTOE_POTION_UNF_, level: 50 }],
   [ItemIds.KWUARM, { potion: ItemIds.KWUARM_POTION_UNF_, level: 55 }],
   [ItemIds.CADANTINE, { potion: ItemIds.CADANTINE_POTION_UNF_, level: 66 }],
-  [ItemIds.LANTADYME, { potion: ItemIds.LANTADYME_POTION_UNF_, level: 73 }],
   [ItemIds.DWARF_WEED, { potion: ItemIds.DWARF_WEED_POTION_UNF_, level: 72 }],
   [ItemIds.TORSTOL, { potion: ItemIds.TORSTOL_POTION_UNF_, level: 78 }],
 ]);
@@ -61,11 +57,6 @@ const FINISHED_POTIONS = new Map([
   [`${ItemIds.KWUARM_POTION_UNF_}:${ItemIds.LIMPWURT_ROOT}`, { potion: ItemIds.SUPER_STRENGTH_3_, level: 55, xp: 125 }],
   [`${ItemIds.CADANTINE_POTION_UNF_}:${ItemIds.WHITE_BERRIES}`, { potion: ItemIds.SUPER_DEFENCE_3_, level: 66, xp: 150 }],
   [`${ItemIds.DWARF_WEED_POTION_UNF_}:${ItemIds.WINE_OF_ZAMORAK}`, { potion: ItemIds.RANGING_POTION_3_, level: 72, xp: 163 }],
-  [`${ItemIds.AVANTOE_POTION_UNF_}:${ItemIds.MORT_MYRE_FUNGUS}`, { potion: ItemIds.SUPER_ENERGY_3_, level: 52, xp: 117.5 }],
-  [`${ItemIds.SUPER_ENERGY_3_}:${ItemIds.AMYLASE_CRYSTAL}`, { potion: ItemIds.STAMINA_POTION_3_, level: 77, xp: 152.5 }],
-  [`${ItemIds.TORSTOL_POTION_UNF_}:${ItemIds.JANGERBERRIES}`, { potion: ItemIds.ZAMORAK_BREW_3_, level: 78, xp: 175 }],
-  [`${ItemIds.TOADFLAX_POTION_UNF_}:${ItemIds.CRUSHED_NEST}`, { potion: ItemIds.SARADOMIN_BREW_3_, level: 81, xp: 180 }],
-  [`${ItemIds.LANTADYME_POTION_UNF_}:${ItemIds.POTATO_CACTUS}`, { potion: ItemIds.MAGIC_POTION_3_, level: 91, xp: 172.5 }],
 ]);
 
 function finishedPotionKey(a, b) {
