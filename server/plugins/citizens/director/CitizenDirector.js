@@ -66,6 +66,12 @@ const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
 const TickTiming = require("../lib/TickTiming");
+const {
+  createBudget,
+  runWithinBudget,
+  rotateStart,
+  advanceCursor,
+} = require("../lib/CitizenTickBudget");
 const CitizenWorkLoops = require("../lib/CitizenWorkLoops");
 const CitizenShopkeeping = require("../lib/CitizenShopkeeping");
 const CitizenFarmers = require("../lib/CitizenFarmers");
@@ -365,6 +371,10 @@ const {
 } = require("../constants");
 
 const DIRECTOR_TICK_TICKS = 100; // ~60s at 600ms/tick
+// Per-cycle wall-time budget for the roster-wide feature ticks inside the
+// slow director tick. Features run round-robin within this budget; the rest
+// defer to the next cycle. Keeps director.tick bounded as the roster grows.
+const FEATURE_TICK_BUDGET_MS = 70;
 
 // --- Proximity-based citizen lifecycle (memory optimization, 2026-10-07) ---
 // Citizens are full Player objects (~3MB each). When no real player is near,
@@ -556,6 +566,10 @@ class CitizenDirector {
     // restarts), so the counter itself doesn't need persisting.
     this.aiTickCount = 0;
     this._desyncSpread = null;
+    // Round-robin cursor for the budgeted feature-tick list in tick().
+    // Persists across slow ticks so deferred features resume where the
+    // previous cycle stopped instead of starving.
+    this._featureTickCursor = 0;
     try {
       SocialMechanics.init(api);
     } catch {
@@ -2138,6 +2152,9 @@ class CitizenDirector {
   }
 
   tick() {
+    // Core-section timing: LOD bands + per-citizen loop + memory below are
+    // always-run; the roster-wide feature ticks after them are budgeted.
+    const t0core = Date.now();
     const hour = hourNow();
     const nowMs = Date.now();
     // Tick-optimization: classify every online citizen into LOD bands
@@ -2237,307 +2254,360 @@ class CitizenDirector {
       }
     }
     this.tickMemory(nowMs);
+    // Core section complete (LOD bands, per-citizen loop, memory).
+    // The ~230 feature ticks below run on a time budget with round-robin
+    // rotation so no feature starves as the roster grows.
+    try {
+      TickTiming.record("director.tick.core", Date.now() - t0core, this.roster?.size ?? 0);
+    } catch {}
+    const t0features = Date.now();
+    // Feature tick registry: each entry runs one roster-wide system.
+    // Built per slow tick (cheap: ~230 small closures every 60s). Bodies are
+    // the original tick() feature blocks, verbatim; per-item failures are
+    // caught by the budgeted runner below and logged under the item name.
+    const featureTicks = [
     // Citizen weddings: anniversaries, love triangles, cold feet, proposals —
     // the romantic layer. Data tier, zero LLM. Runs BEFORE tickKinship so
     // cold feet can call off an announced wedding before the ceremony
     // machine processes it.
-    try {
-      CitizenWeddings.tickWeddings(this, Math.random, nowMs);
-    } catch (error) {
-      this.log("weddings failed", { error: String(error?.message ?? error) });
-    }
     // Citizen kinship: friendships, romances, weddings and feuds between
     // citizens — the social fabric that makes them read as real people.
     // Data tier, zero LLM.
-    try {
-      CitizenKinship.tickKinship(this, hour, nowMs);
-    } catch (error) {
-      this.log("kinship failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: "weddings+kinship",
+      run: () => {
+        // Weddings BEFORE kinship: cold feet can call off an announced
+        // wedding before the ceremony machine processes it.
+        try {
+          CitizenWeddings.tickWeddings(this, Math.random, nowMs);
+        } catch (error) {
+          this.log("weddings failed", { error: String(error?.message ?? error) });
+        }
+        try {
+          CitizenKinship.tickKinship(this, hour, nowMs);
+        } catch (error) {
+          this.log("kinship failed", { error: String(error?.message ?? error) });
+        }
+      },
+    },
     // Citizen scholars: historians, naturalists, inventors and philosophers
     // research topics on the slow tick, publish discoveries to the journal
     // and the kingdom library, and fire a scholars:discovery event for
     // quests/lore plugins. Data tier, zero LLM.
-    try {
-      CitizenScholars.tickResearch(this, Math.random, nowMs);
-    } catch (error) {
-      this.log("scholars research failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'scholars research failed',
+      run: () => {
+        CitizenScholars.tickResearch(this, Math.random, nowMs);
+      },
+    },
     // Foreground social: citizen-to-citizen LLM dialogue, ONLY when a real
     // player is nearby to overhear (Jon's two-tier rule). Otherwise the
     // background journal already recorded that they talked — zero tokens.
-    try {
-      maybeSocialize(this, nowMs);
-    } catch (error) {
-      this.log("socialize failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'socialize failed',
+      run: () => {
+        maybeSocialize(this, nowMs);
+      },
+    },
     // Unprompted greetings: citizens notice real players and sometimes speak
     // first. Same two-tier rule — only when the player is actually there.
-    try {
-      maybeGreetPlayer(this, nowMs);
-    } catch (error) {
-      this.log("greet failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'greet failed',
+      run: () => {
+        maybeGreetPlayer(this, nowMs);
+      },
+    },
     // Autonomous activity parties: citizens form their own groups (fishing
     // trips, market runs, work details, tavern nights), travel together,
     // and split loot. Data tier, zero LLM.
-    try {
-      ActivityParties.tickParties(this, hour);
-    } catch (error) {
-      this.log("activity parties failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'activity parties failed',
+      run: () => {
+        ActivityParties.tickParties(this, hour);
+      },
+    },
     // Autonomous boss runs: guard-led parties take on the Giant Mole in the
     // Falador mole hole, split the loot, and head home. Data tier, zero LLM.
-    try {
-      BossRuns.tickBossRuns(this, hour);
-    } catch (error) {
-      this.log("boss runs failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'boss runs failed',
+      run: () => {
+        BossRuns.tickBossRuns(this, hour);
+      },
+    },
     // Citizens in warfare: militia musters, war news and morale, and war
     // demand on the economy. Data tier, zero LLM.
-    try {
-      CitizenWarfare.tickWarfare(this, hour);
-    } catch (error) {
-      this.log("warfare failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'warfare failed',
+      run: () => {
+        CitizenWarfare.tickWarfare(this, hour);
+      },
+    },
     // Combat militia: volunteers take up real arms and fight real battles.
     // Recruitment, muster, and discharge. Zero LLM, real combat engine.
-    try {
-      Militia.tickMilitia(this, this.api);
-    } catch (error) {
-      this.log("militia failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'militia failed',
+      run: () => {
+        Militia.tickMilitia(this, this.api);
+      },
+    },
     // Expeditionary warfare: citizen armies rally, march to the border,
     // fight journaled battles with real casualties, and march home.
     // Data tier, zero LLM.
-    try {
-      CitizenCampaigns.tickCampaigns(this, hour);
-    } catch (error) {
-      this.log("campaigns failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'campaigns failed',
+      run: () => {
+        CitizenCampaigns.tickCampaigns(this, hour);
+      },
+    },
     // Citizen crafting: suppliers forge swords, provisioners bake bread —
     // the supply chain's root, producing on wall-clock time online or off.
     // Data tier, zero LLM.
-    try {
-      CitizenCrafting.tickCrafting(this, nowMs);
-    } catch (error) {
-      this.log("crafting failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'crafting failed',
+      run: () => {
+        CitizenCrafting.tickCrafting(this, nowMs);
+      },
+    },
     // Visible citizen skilling: persistent XP/levels, skilling sessions and
     // parties with real animations at work sites, docks, quarries, taverns.
     // Data tier, zero LLM.
-    try {
-      CitizenSkilling.tickSkilling(this, hour);
-    } catch (error) {
-      this.log("skilling failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'skilling failed',
+      run: () => {
+        CitizenSkilling.tickSkilling(this, hour);
+      },
+    },
     // Real fishing catches: materialized citizens in arrived fishing sessions
     // land real fish (player inventory API) + real Fishing XP (player skills
     // API) at real fishing spots. Zero LLM.
-    try {
-      CitizenFishing.tickCitizenFishing(this);
-    } catch (error) {
-      this.log("citizen fishing failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'citizen fishing failed',
+      run: () => {
+        CitizenFishing.tickCitizenFishing(this);
+      },
+    },
     // Visible activity chatter: citizens in skilling sessions talk about the
     // grind (milestone-aware, personality-scaled) and announce session goals
     // once per session. Watched-only, throttled. Zero LLM.
-    try {
-      CitizenActivityChatter.tickActivityChatter(this);
-    } catch (error) {
-      this.log("citizen chatter failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'citizen chatter failed',
+      run: () => {
+        CitizenActivityChatter.tickActivityChatter(this);
+      },
+    },
     // War chatter: citizens talk about REAL active wars (store-verified,
     // never invented) and rumor about boiling border tensions. Watched-only,
     // LOD-gated, throttled. Zero LLM.
-    try {
-      CitizenWarChatter.tickWarChatter(this);
-    } catch (error) {
-      this.log("citizen war chatter failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'citizen war chatter failed',
+      run: () => {
+        CitizenWarChatter.tickWarChatter(this);
+      },
+    },
     // Master-apprentice pairings: masters (level 60+ trade) take on young
     // citizens, who gain real trade XP each slow tick and graduate at 40.
     // Data tier, zero LLM.
-    try {
-      CitizenApprentices.tickApprenticeships(this, nowMs);
-    } catch (error) {
-      this.log("apprenticeships failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'apprenticeships failed',
+      run: () => {
+        CitizenApprentices.tickApprenticeships(this, nowMs);
+      },
+    },
     // Party play: citizens in player-led parties assist in combat (real
     // combat engine), eat at low HP, retreat when overwhelmed, share loot.
     // Zero LLM.
-    try {
-      PartyPlay.tickPartyPlay(this);
-    } catch (error) {
-      this.log("party play failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'party play failed',
+      run: () => {
+        PartyPlay.tickPartyPlay(this);
+      },
+    },
     // Citizen artisans: master craftspeople with workshops, masterpieces,
     // commissions, and renown. Deterministic trade assignment, data tier,
     // zero LLM.
-    try {
-      CitizenArtisans.tickArtisans(this, nowMs);
-    } catch (error) {
-      this.log("artisans failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'artisans failed',
+      run: () => {
+        CitizenArtisans.tickArtisans(this, nowMs);
+      },
+    },
     // Citizen builders: construction crews with deterministic trades,
     // per-kingdom projects advancing through phases, completions journaled.
     // Data tier, zero LLM.
-    try {
-      CitizenBuilders.tickBuilders(this, nowMs);
-    } catch (error) {
-      this.log("builders failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'builders failed',
+      run: () => {
+        CitizenBuilders.tickBuilders(this, nowMs);
+      },
+    },
     // Visible daily routines: merchants open stalls, crafters work visible
     // forge shifts, guards patrol — phase transitions journaled and
     // announced, followers acknowledged. Data tier, zero LLM.
-    try {
-      CitizenDailyRoutines.tickRoutines(this, hour);
-    } catch (error) {
-      this.log("daily routines failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'daily routines failed',
+      run: () => {
+        CitizenDailyRoutines.tickRoutines(this, hour);
+      },
+    },
     // Citizen shoppers: citizens browse player-owned market stalls and buy
     // (needs, role wants, bargain-hunting vs the reference feed). Closes the
     // economic loop — players can sell, not just buy. Data tier, zero LLM.
-    try {
-      tickShoppers(this, hour);
-    } catch (error) {
-      this.log("shoppers failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'shoppers failed',
+      run: () => {
+        tickShoppers(this, hour);
+      },
+    },
     // Citizen "alive" layer: stuck detection & recovery, idle life
     // (facing, emotes, observations), citizen-to-citizen social awareness,
     // and player-like imperfections (distractions, changed minds).
     // Data tier, zero LLM. Desynced like the proximity pass so the slow
     // tick doesn't reintroduce a full-population wave every 60s.
-    try {
-      CitizenAlive.tickAlive(this, nowMs, {
-        tick: this.aiTickCount,
-        spread: this.desyncSpread(),
-      });
-    } catch (error) {
-      this.log("alive failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'alive failed',
+      run: () => {
+        CitizenAlive.tickAlive(this, nowMs, {
+          tick: this.aiTickCount,
+          spread: this.desyncSpread(),
+        });
+      },
+    },
     // Player guilds: citizen recruitment (compatible personalities join on
     // their own) and guild outings (muster at the hall, group activities).
     // Data tier, zero LLM.
-    try {
-      const GuildRecruitment = require("../../guilds/GuildRecruitment");
-      GuildRecruitment.tickRecruitment(this);
-    } catch (error) {
-      this.log("guild recruitment failed", { error: String(error?.message ?? error) });
-    }
-    try {
-      const GuildActivities = require("../../guilds/GuildActivities");
-      GuildActivities.tickOutings(this, hour);
-    } catch (error) {
-      this.log("guild outings failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'guild recruitment failed',
+      run: () => {
+        const GuildRecruitment = require("../../guilds/GuildRecruitment");
+        GuildRecruitment.tickRecruitment(this);
+      },
+    },
+    {
+      name: 'guild outings failed',
+      run: () => {
+        const GuildActivities = require("../../guilds/GuildActivities");
+        GuildActivities.tickOutings(this, hour);
+      },
+    },
     // Citizen offices: bind living citizens to AI-held kingdom offices and
     // let the holders perform their duties (musters, supply orders, ledgers,
     // spymaster rumors). Data tier, zero LLM.
-    try {
-      CitizenOffices.tickOffices(this, hour);
-    } catch (error) {
-      this.log("offices failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'offices failed',
+      run: () => {
+        CitizenOffices.tickOffices(this, hour);
+      },
+    },
     // Citizen elections: towns elect mayor, sheriff, guild master on a
     // slow cycle (nominations -> campaigning -> voting -> results -> term).
     // Data tier, zero LLM. Announcements and stumping are player-visible.
-    try {
-      tickElections(this, nowMs);
-    } catch (error) {
-      this.log("elections failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'elections failed',
+      run: () => {
+        tickElections(this, nowMs);
+      },
+    },
     // Citizen hangouts: visible ambient social clusters — 2-5 citizens
     // converge on a tavern/square/market anchor, linger in a circle
     // chatting, then disperse. Data tier, zero LLM.
-    try {
-      CitizenHangouts.tickHangouts(this, hour);
-    } catch (error) {
-      this.log("hangouts failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'hangouts failed',
+      run: () => {
+        CitizenHangouts.tickHangouts(this, hour);
+      },
+    },
     // Citizen toasts: when a real player lingers at a tavern hangout,
     // a citizen may raise a glass - a scripted toast celebrating journal
     // news from someone present. Data tier, zero LLM.
-    try {
-      tickToasts(this, nowMs);
-    } catch (error) {
-      this.log("toasts failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'toasts failed',
+      run: () => {
+        tickToasts(this, nowMs);
+      },
+    },
     // Citizen tavern games: citizens play dice, cards, arm wrestling, and
     // drinking contests at the tavern in the evenings. Data tier, zero LLM -
     // games, wagers, champions, and rivalries are journaled; visible banter
     // is scripted and only fires near a real player.
-    try {
-      tickTavernGames(this, hour, nowMs);
-    } catch (error) {
-      this.log("tavern games failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'tavern games failed',
+      run: () => {
+        tickTavernGames(this, hour, nowMs);
+      },
+    },
     // Citizen weather reactions: when the sky changes (rain starts, storm
     // hits, dusk/night falls, dawn breaks), citizens near a real player
     // react in personality-gated ways - rain-haters hurry home, rain-lovers
     // cheer, the afraid-of-the-dark flee at dusk, early risers greet dawn.
     // Data tier, zero LLM.
-    try {
-      tickWeatherReactions(this, nowMs);
-    } catch (error) {
-      this.log("weather reactions failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'weather reactions failed',
+      run: () => {
+        tickWeatherReactions(this, nowMs);
+      },
+    },
     // Citizen seasons: season transitions (announced + journaled once),
     // rain-boosted crop growth on citizen farms, seasonal reactions near
     // real players, storm shelter. Data tier, zero LLM.
-    try {
-      tickSeasonLife(this, nowMs);
-    } catch (error) {
-      this.log("season life failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'season life failed',
+      run: () => {
+        tickSeasonLife(this, nowMs);
+      },
+    },
     // Citizen festivals: realm-wide seasonal festivals (5 annual, 3-day
     // windows). Citizens journal their participation (shared history) and,
     // when a real player is near, celebrate with personality-gated lines,
     // dancing, and player invites. Data tier, zero LLM.
-    try {
-      tickFestivals(this, nowMs);
-    } catch (error) {
-      this.log("festivals failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'festivals failed',
+      run: () => {
+        tickFestivals(this, nowMs);
+      },
+    },
     // Citizen festival games: wrestling, archery, pie-eating, dance
     // competitions during festivals. Citizens announce games, cheer
     // competitors, and celebrate winners near real players. Data tier,
     // zero LLM.
-    try {
-      tickFestivalGames(this, nowMs);
-    } catch (error) {
-      this.log("festival games failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'festival games failed',
+      run: () => {
+        tickFestivalGames(this, nowMs);
+      },
+    },
     // Citizen sports: year-round league sports — football fixtures with
     // league tables and championships, horse race meets, wrestling and
     // archery league circuits. Match days are Saturdays. Distinct from
     // festival games (festival windows only). Data tier, zero LLM.
-    try {
-      tickSports(this, nowMs);
-    } catch (error) {
-      this.log("sports failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'sports failed',
+      run: () => {
+        tickSports(this, nowMs);
+      },
+    },
     // Citizen hobbyists: leisure-time hobbies — gardening, birdwatching,
     // collecting, board games. Activity system (no professional exclusions):
     // any commoner may have a hobby. Rare finds are the crowd moment;
     // weekly club meetups announced. Distinct from sports (league sports)
     // and festival games (festival windows). Data tier, zero LLM.
-    try {
-      tickHobbyists(this, nowMs);
-    } catch (error) {
-      this.log("hobbyists failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'hobbyists failed',
+      run: () => {
+        tickHobbyists(this, nowMs);
+      },
+    },
     // Citizen pet owners: companion pets — cats, dogs, birds, exotics — with
     // named pets, personalities, daily care routines, and weekly per-kingdom
     // pet shows with derived winners. Activity system (no professional
     // exclusions): any commoner may own a pet. Distinct from hobbyists
     // (leisure pursuits) and stablehands (horse/mount care). Data tier,
     // zero LLM.
-    try {
-      tickPetOwners(this, nowMs);
-    } catch (error) {
-      this.log("pet owners failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'pet owners failed',
+      run: () => {
+        tickPetOwners(this, nowMs);
+      },
+    },
     // Citizen gardeners: caretakers of the public gardens, parks and green
     // spaces — flower tenders, vegetable growers, tree keepers and park
     // keepers with seasonal bloom calendars, rare-bloom unveilings, volunteer
@@ -2545,11 +2615,12 @@ class CitizenDirector {
     // any commoner may tend the public green. Distinct from hobbyists
     // (private allotments) and farmers (commercial food). Data tier,
     // zero LLM.
-    try {
-      tickGardeners(this, nowMs);
-    } catch (error) {
-      this.log("gardeners failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'gardeners failed',
+      run: () => {
+        tickGardeners(this, nowMs);
+      },
+    },
     // Citizen volunteers: street cleaners, helpers, charity workers and
     // event helpers with per-day service shifts, weekly charity drives and
     // player ledgers for sign-ups, donations and organized drives. Activity
@@ -2557,11 +2628,12 @@ class CitizenDirector {
     // Event helpers only work during real festivals. Distinct from
     // gardeners (public gardens) and festivals (festival events). Data tier,
     // zero LLM.
-    try {
-      tickVolunteers(this, nowMs);
-    } catch (error) {
-      this.log("volunteers failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'volunteers failed',
+      run: () => {
+        tickVolunteers(this, nowMs);
+      },
+    },
     // Citizen storytellers: elders, travelers, grandparents and
     // epic-performers keeping oral tales and legends at the gathering
     // places, with tale-request and story-share ledgers. Activity system
@@ -2569,22 +2641,24 @@ class CitizenDirector {
     // Distinct from bards (professional performers) and librarians
     // (written catalogs) — this module owns oral lore. Data tier,
     // zero LLM.
-    try {
-      tickStorytellers(this, nowMs);
-    } catch (error) {
-      this.log("storytellers failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'storytellers failed',
+      run: () => {
+        tickStorytellers(this, nowMs);
+      },
+    },
     // Citizen historians: chroniclers, archivists, genealogists and
     // lorekeepers keeping per-kingdom daily chronicles from real journaled
     // events, with read/contribute/commission ledgers for players. Activity
     // system (no professional exclusions): any commoner may keep history.
     // Distinct from storytellers (oral tales) and librarians (book catalogs)
     // — this module owns the WRITTEN RECORD of events. Data tier, zero LLM.
-    try {
-      tickHistorians(this, nowMs);
-    } catch (error) {
-      this.log("historians failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'historians failed',
+      run: () => {
+        tickHistorians(this, nowMs);
+      },
+    },
     // Citizen menders: seamstresses, tinkers, cobblers and handymen who
     // repair clothes, tools, shoes and household goods. Hash-derived daily
     // repair jobs, 7-day-TTL ledgers for repair requests, pickups and
@@ -2592,11 +2666,12 @@ class CitizenDirector {
     // Activity system (no professional exclusions): any commoner may mend.
     // Distinct from tailors (making) and blacksmiths (forging) — this module
     // owns REPAIR only. Data tier, zero LLM.
-    try {
-      tickMenders(this, nowMs);
-    } catch (error) {
-      this.log("menders failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'menders failed',
+      run: () => {
+        tickMenders(this, nowMs);
+      },
+    },
     // Citizen couriers: the private delivery underworld — pigeon keepers,
     // parcel runners, letter carriers and message runners-for-hire.
     // Hash-derived types and per-day runs, 7-day-TTL ledgers for hired
@@ -2604,11 +2679,12 @@ class CitizenDirector {
     // moment. Activity system (no professional exclusions): any commoner
     // may courier. Distinct from messengers (official post) — this module
     // owns the private side. Data tier, zero LLM.
-    try {
-      tickCouriers(this, nowMs);
-    } catch (error) {
-      this.log("couriers failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'couriers failed',
+      run: () => {
+        tickCouriers(this, nowMs);
+      },
+    },
     // Citizen scribes: freelance writing folk — copyists, letter-writers,
     // record-keepers and calligraphers. Hash-derived types and per-day job
     // queues, 7-day-TTL ledgers for hires, copy requests and record
@@ -2616,11 +2692,12 @@ class CitizenDirector {
     // Activity system (no professional exclusions): any commoner may scribe.
     // Distinct from librarians (professional library staff scribes) — this
     // module owns the freelance writing trade. Data tier, zero LLM.
-    try {
-      tickScribes(this, nowMs);
-    } catch (error) {
-      this.log("scribes failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'scribes failed',
+      run: () => {
+        tickScribes(this, nowMs);
+      },
+    },
     // Citizen informal educators: home tutors, trade mentors, village
     // schoolmasters and public scholars. Hash-derived types and per-day
     // lesson schedules, pupil rosters, 7-day-TTL ledgers for tutor hires,
@@ -2629,11 +2706,12 @@ class CitizenDirector {
     // may teach. Distinct from the professional kingdom schools
     // (CitizenTeachers — assigned teachers are excluded) and from
     // CitizenMentors (reactive level-up lessons). Data tier, zero LLM.
-    try {
-      tickEducators(this, nowMs);
-    } catch (error) {
-      this.log("teachers2 failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'teachers2 failed',
+      run: () => {
+        tickEducators(this, nowMs);
+      },
+    },
     // Mentorfolk: the apprenticeship-and-morals street layer under the
     // professional masters — guild apprentice recruiters hawk indenture
     // contracts, journeyman taskmasters set apprentice day-chores,
@@ -2647,11 +2725,12 @@ class CitizenDirector {
     // apprentices, never grant XP — lessons stay with the educators and
     // the masters. LOD-gated via brainTickDue inside (near-band citizens
     // always due). Data tier, zero LLM.
-    try {
-      tickMentorfolk(this, nowMs, desync);
-    } catch (error) {
-      this.log("mentorfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'mentorfolk failed',
+      run: () => {
+        tickMentorfolk(this, nowMs, desync);
+      },
+    },
     // Citizen historianfolk (CitizenHistorians2): amateur chroniclers under
     // the professional historians — chronicle-readers retell REAL journal
     // entries (silent when the journal is quiet, never invented), day-heralds
@@ -2660,11 +2739,12 @@ class CitizenDirector {
     // grounds. Professional gate (the master's own visibility check) excludes
     // real historians before the share roll inside the module. Data tier,
     // zero LLM.
-    try {
-      tickHistorianfolk(this, nowMs, desync);
-    } catch (error) {
-      this.log("historianfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'historianfolk failed',
+      run: () => {
+        tickHistorianfolk(this, nowMs, desync);
+      },
+    },
     // Citizen justicefolk (CitizenJudges2): lay mediators, court ushers,
     // fine-ledger clerks and session gawkers under the professional judges —
     // clerks read the REAL fine ledger to the crowd (real amounts, real
@@ -2672,44 +2752,48 @@ class CitizenDirector {
     // verdicts or sentences. Real judges (the master's real isJudge claim,
     // courtier role) are excluded before the share roll inside the module.
     // Data tier, zero LLM.
-    try {
-      tickJusticefolk(this, nowMs, desync);
-    } catch (error) {
-      this.log("justicefolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'justicefolk failed',
+      run: () => {
+        tickJusticefolk(this, nowMs, desync);
+      },
+    },
     // Citizen envoyfolk (CitizenDiplomats2): well-wishers, rumor-carriers,
     // bannermen and guest-scribes under the professional diplomats — they
     // read REAL diplomat missions (diplomatStatus) and court anchors, never
     // invent treaties, wars or missions. Real diplomats (the master's real
     // isDiplomat claim, courtier role) are excluded before the share roll
     // inside the module. Data tier, zero LLM.
-    try {
-      tickEnvoyfolk(this, nowMs, desync);
-    } catch (error) {
-      this.log("envoyfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'envoyfolk failed',
+      run: () => {
+        tickEnvoyfolk(this, nowMs, desync);
+      },
+    },
     // Citizen clerkfolk (CitizenOffices2): notice-copiers, office-seekers,
     // petition-carriers and vacancy-gossips under the professional offices —
     // they name REAL office holders and REAL vacancies from the persisted
     // office bindings, never invented ones. Real office-holders (the
     // master's real officeOfCitizen claim) are excluded before the share
     // roll inside the module. Data tier, zero LLM.
-    try {
-      tickClerkfolk(this, nowMs, desync);
-    } catch (error) {
-      this.log("clerkfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'clerkfolk failed',
+      run: () => {
+        tickClerkfolk(this, nowMs, desync);
+      },
+    },
     // Citizen pamphleteers (CitizenNewspaper2): pamphlet-sellers, news-gossips
     // and poster-pasters under the professional newspaper — they retell REAL
     // journal entries verbatim and cry the REAL latest edition; no invented
     // news or headlines, no set-pieces. Real town criers (the master's real
     // crierFor claim) are excluded before the share roll inside the module.
     // Data tier, zero LLM.
-    try {
-      tickPamphleteers(this, nowMs, desync);
-    } catch (error) {
-      this.log("pamphleteers failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'pamphleteers failed',
+      run: () => {
+        tickPamphleteers(this, nowMs, desync);
+      },
+    },
     // Citizen community caregivers: neighbors who sit vigil with the sick,
     // bonesetters who splint breaks, midwives who tend new mothers, and
     // remedy-brewers who simmer household cures. Hash-derived types and
@@ -2723,11 +2807,12 @@ class CitizenDirector {
     // (CitizenHerbalists — the herb trade; excluded). Visibility throttled
     // via chance + cooldown (couriers precedent), no hobby key. Data tier,
     // zero LLM.
-    try {
-      tickCaregivers(this, nowMs);
-    } catch (error) {
-      this.log("healers2 failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'healers2 failed',
+      run: () => {
+        tickCaregivers(this, nowMs);
+      },
+    },
     // Citizen volunteer watch: night watchmen with lanterns, day wardens,
     // gate-minders and fire lookouts. Hash-derived types, per-day patrol
     // rotas, fire-scare crowd moments, 7-day-TTL ledgers for crime reports,
@@ -2735,11 +2820,12 @@ class CitizenDirector {
     // "guard") are excluded — CitizenGuards owns the official watch.
     // Visibility throttled via chance + cooldown (couriers/healers2
     // precedent), no hobby key. Data tier, zero LLM.
-    try {
-      tickWatchmen(this, nowMs);
-    } catch (error) {
-      this.log("watchmen2 failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'watchmen2 failed',
+      run: () => {
+        tickWatchmen(this, nowMs);
+      },
+    },
     // Citizen dockside fishing folk: net casters, line anglers, crabbers
     // and community fishmongers on the piers and shallows. Hash-derived
     // types, per-day spots/catches, big-catch crowd moments, 7-day-TTL
@@ -2748,11 +2834,12 @@ class CitizenDirector {
     // commercial fishing; tournaments own the competition; sailors own
     // boats. Visibility throttled via chance + cooldown (watchmen2
     // precedent), no hobby key. Data tier, zero LLM.
-    try {
-      tickFisherfolk(this, nowMs);
-    } catch (error) {
-      this.log("fisherfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'fisherfolk failed',
+      run: () => {
+        tickFisherfolk(this, nowMs);
+      },
+    },
     // Citizen community mining folk: amateur prospectors, claim diggers,
     // ore carriers and gem hunters working the community claims. Hash-
     // derived types, per-day claims/finds, rich-vein-strike crowd moments,
@@ -2761,11 +2848,12 @@ class CitizenDirector {
     // the commercial mines; jewelers own gem cutting. Visibility throttled
     // via chance + cooldown (fisherfolk precedent), no hobby key.
     // Data tier, zero LLM.
-    try {
-      tickMinerfolk(this, nowMs);
-    } catch (error) {
-      this.log("minerfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'minerfolk failed',
+      run: () => {
+        tickMinerfolk(this, nowMs);
+      },
+    },
     // Citizen community hunting folk: amateur trackers, bowmen, trappers
     // and falconers on the community grounds near the settlements. Hash-
     // derived types, per-day grounds/bags, trophy-bag crowd moments,
@@ -2774,11 +2862,12 @@ class CitizenDirector {
     // trade owns the wilds; cooks own the kitchens. Visibility throttled
     // via chance + cooldown (minerfolk precedent), no hobby key.
     // Data tier, zero LLM.
-    try {
-      tickHuntfolk(this, nowMs);
-    } catch (error) {
-      this.log("huntfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'huntfolk failed',
+      run: () => {
+        tickHuntfolk(this, nowMs);
+      },
+    },
     // Citizen community cooking folk: home cooks, street vendors, feast
     // cooks and soup-kitchen helpers at community hearths, stalls and
     // communal ovens. Hash-derived types, per-day kitchens/menus, grand-
@@ -2787,11 +2876,12 @@ class CitizenDirector {
     // excluded — the trade owns the kitchens; farmers own the ingredients.
     // Visibility throttled via chance + cooldown (huntfolk precedent),
     // no hobby key. Data tier, zero LLM.
-    try {
-      tickCookfolk(this, nowMs);
-    } catch (error) {
-      this.log("cookfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'cookfolk failed',
+      run: () => {
+        tickCookfolk(this, nowMs);
+      },
+    },
     // Citizen community sewing folk: home seamstresses, quilters,
     // pattern-sharers and plant dyers at community sewing circles.
     // Hash-derived types, per-day circles/projects, grand-quilt crowd
@@ -2800,11 +2890,12 @@ class CitizenDirector {
     // excluded — the trade owns the workshops; menders own repair.
     // Visibility throttled via chance + cooldown (cookfolk precedent),
     // no hobby key. Data tier, zero LLM.
-    try {
-      tickSewfolk(this, nowMs);
-    } catch (error) {
-      this.log("sewfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'sewfolk failed',
+      run: () => {
+        tickSewfolk(this, nowMs);
+      },
+    },
     // Citizen village smithfolk: farriers, blade honers, implement
     // tinkerers and forge apprentices at community smithies. Hash-derived
     // types, per-day smithies/jobs, masterwork crowd moments, 7-day-TTL
@@ -2812,11 +2903,12 @@ class CitizenDirector {
     // smiths (CitizenBlacksmiths) are excluded — the trade owns the forges;
     // menders own small-tool and household repair. Visibility throttled via
     // chance + cooldown (sewfolk precedent), no hobby key. Data tier, zero LLM.
-    try {
-      tickSmithfolk(this, nowMs);
-    } catch (error) {
-      this.log("smithfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'smithfolk failed',
+      run: () => {
+        tickSmithfolk(this, nowMs);
+      },
+    },
     // Citizen village brewfolk: hedge-witches, community potion-brewers,
     // elixir-mixers and garden experimenters at community stillrooms.
     // Hash-derived types, per-day stillrooms/brews, comic mishap crowd
@@ -2826,11 +2918,12 @@ class CitizenDirector {
     // potion/herb business; healers2 remedy-brewers own health cures,
     // brewfolk brews are explicitly non-medical. Visibility throttled via
     // chance + cooldown (smithfolk precedent), no hobby key. Data tier, zero LLM.
-    try {
-      tickBrewfolk(this, nowMs);
-    } catch (error) {
-      this.log("brewfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'brewfolk failed',
+      run: () => {
+        tickBrewfolk(this, nowMs);
+      },
+    },
     // Citizen community gemfolk: hobby gem cutters, ring setters, stone
     // polishers and informal appraisers at community workshops. Hash-derived
     // types, per-day projects, masterpiece-unveiling crowd moments,
@@ -2840,11 +2933,12 @@ class CitizenDirector {
     // appraisers give opinions only, never certificates. Visibility
     // throttled via chance + cooldown (brewfolk precedent), no hobby key.
     // Data tier, zero LLM.
-    try {
-      tickGemfolk(this, nowMs);
-    } catch (error) {
-      this.log("gemfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'gemfolk failed',
+      run: () => {
+        tickGemfolk(this, nowMs);
+      },
+    },
     // Citizen dockside folk: cargo dockhands, sail menders, shore fishers
     // and old salts spinning sea yarns at the community docks, piers and
     // quays. Hash-derived types, per-day jobs, ship-arrival crowd moments,
@@ -2854,11 +2948,12 @@ class CitizenDirector {
     // salt's yarns are dockside flavor, not the gathered crowd. Visibility
     // throttled via chance + cooldown (gemfolk precedent), no hobby key.
     // Data tier, zero LLM.
-    try {
-      tickDockfolk(this, nowMs);
-    } catch (error) {
-      this.log("dockfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'dockfolk failed',
+      run: () => {
+        tickDockfolk(this, nowMs);
+      },
+    },
     // Citizen militia (CitizenGuards2): gate wardens, wall walkers, night
     // sentries and militiamen — commoners taking rotational gate/wall duty,
     // drilling at the muster grounds, forming the levy. Professional guards
@@ -2866,22 +2961,24 @@ class CitizenDirector {
     // practice, levy musters, honor-guard ceremonies and civic issue
     // reports. Visibility throttled via chance + cooldown (dockfolk
     // precedent), no hobby key. Data tier, zero LLM.
-    try {
-      tickGuardfolk(this, nowMs);
-    } catch (error) {
-      this.log("guardfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'guardfolk failed',
+      run: () => {
+        tickGuardfolk(this, nowMs);
+      },
+    },
     // Citizen community hospitality (CitizenInnkeepers2): spare-room hosts,
     // home brewers, feast organizers and tavern regulars — hospitality as a
     // way of life, not a trade. Professional innkeepers are excluded; this
     // owns spare rooms, home brew, feast nights and traded gossip. Visibility
     // throttled via chance + cooldown (guardfolk precedent), no hobby key.
     // Data tier, zero LLM.
-    try {
-      tickHostfolk(this, nowMs);
-    } catch (error) {
-      this.log("hostfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'hostfolk failed',
+      run: () => {
+        tickHostfolk(this, nowMs);
+      },
+    },
     // Citizen amateur songfolk (CitizenBards2): street buskers, tale-
     // spinners, amateur minstrels and ballad-swappers — the campfire-
     // circle and community-stage amateur side of the bard's trade.
@@ -2890,11 +2987,12 @@ class CitizenDirector {
     // busker tips, tune lessons, rival ballad contests and recovered
     // legendary ballads. LOD-gated via brainTickDue inside (near-band
     // citizens always due). Data tier, zero LLM.
-    try {
-      tickSongfolk(this, nowMs);
-    } catch (error) {
-      this.log("songfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'songfolk failed',
+      run: () => {
+        tickSongfolk(this, nowMs);
+      },
+    },
     // Citizen farmfolk (CitizenFarmers2): farmhands, tenant farmers,
     // orchard keepers, market-garden sellers and seasonal harvest crews —
     // the amateur allotment-and-harvest side of the farmer's trade.
@@ -2903,11 +3001,12 @@ class CitizenDirector {
     // from the real seasonal tables, basket requests and harvest-help
     // signups. LOD-gated via brainTickDue inside (near-band citizens
     // always due). Data tier, zero LLM.
-    try {
-      tickFarmfolk(this, nowMs);
-    } catch (error) {
-      this.log("farmfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'farmfolk failed',
+      run: () => {
+        tickFarmfolk(this, nowMs);
+      },
+    },
     // Citizen moneyfolk (CitizenBankers2): street money-changers,
     // coin-sorters for hire, market lenders and pawnbrokers — the informal
     // money economy under the bank's nose. Professional bankers
@@ -2915,11 +3014,12 @@ class CitizenDirector {
     // daily rates, coin assaying, brass-note micro-loans, pawn tickets and
     // assay-alert / lending-rush set-pieces. LOD-gated via brainTickDue
     // inside (near-band citizens always due). Data tier, zero LLM.
-    try {
-      tickMoneyfolk(this, nowMs);
-    } catch (error) {
-      this.log("moneyfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'moneyfolk failed',
+      run: () => {
+        tickMoneyfolk(this, nowMs);
+      },
+    },
     // Citizen errand-runners (CitizenCouriers2): street errand boys,
     // grocery carriers, water fetchers and neighborhood note-lads — the
     // amateur fetch-and-carry side of the courier's trade. Professional
@@ -2928,11 +3028,12 @@ class CitizenDirector {
     // courier-corner gossip and market-rush / spilled-basket set-pieces.
     // LOD-gated via brainTickDue inside (near-band citizens always due).
     // Data tier, zero LLM.
-    try {
-      tickErrandfolk(this, nowMs);
-    } catch (error) {
-      this.log("errandfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'errandfolk failed',
+      run: () => {
+        tickErrandfolk(this, nowMs);
+      },
+    },
     // Citizen herbfolk (CitizenHerbalists2): hedgerow foragers picking
     // kitchen weeds, petal-driers selling potpourri, window-box tenders and
     // garden weeders for hire — the amateur greens trade under the nose of
@@ -2940,11 +3041,12 @@ class CitizenDirector {
     // this owns herb patches, gather requests, pro-herb small talk and
     // hedgerow-glut / wasp-nest set-pieces. LOD-gated via brainTickDue
     // inside (near-band citizens always due). Data tier, zero LLM.
-    try {
-      tickHerbfolk(this, nowMs);
-    } catch (error) {
-      this.log("herbfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'herbfolk failed',
+      run: () => {
+        tickHerbfolk(this, nowMs);
+      },
+    },
     // Citizen glassfolk (CitizenGlassblowers2): bottle collectors buying up
     // empties, cullet sorters grading broken glass for remelt, sand carriers
     // hauling silica, and bottle washers for the taverns — the amateur
@@ -2953,11 +3055,12 @@ class CitizenDirector {
     // sources, taverns, bottle-pickup requests, pro-glassware small talk and
     // sand-delay / tavern-smash set-pieces. LOD-gated via brainTickDue
     // inside (near-band citizens always due). Data tier, zero LLM.
-    try {
-      tickGlassfolk(this, nowMs);
-    } catch (error) {
-      this.log("glassfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'glassfolk failed',
+      run: () => {
+        tickGlassfolk(this, nowMs);
+      },
+    },
     // Citizen woodfolk (CitizenArtisans2): bowl turners, basket weavers,
     // whittlers and timber hands — the amateur woodcraft street economy of
     // bowls, baskets and firewood under the nose of the master artisans
@@ -2965,11 +3068,12 @@ class CitizenDirector {
     // requests, woodcraft lessons, pro-carpenter small talk and
     // timber-delay / windfall set-pieces. LOD-gated via brainTickDue
     // inside (near-band citizens always due). Data tier, zero LLM.
-    try {
-      tickWoodfolk(this, nowMs);
-    } catch (error) {
-      this.log("woodfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'woodfolk failed',
+      run: () => {
+        tickWoodfolk(this, nowMs);
+      },
+    },
     // Citizen laborfolk (CitizenBuilders2): hod carriers, mortar mixers,
     // scaffolders' mates, day laborers and rubble clearers — the amateur
     // muscle-and-mortar side of the building trade under the master builders
@@ -2978,11 +3082,12 @@ class CitizenDirector {
     // day-labor hires, boss callouts, and topping-out / scaffold-slip /
     // supply-delay set-pieces. LOD-gated via brainTickDue inside (near-band
     // citizens always due). Data tier, zero LLM.
-    try {
-      tickLaborfolk(this, nowMs);
-    } catch (error) {
-      this.log("laborfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'laborfolk failed',
+      run: () => {
+        tickLaborfolk(this, nowMs);
+      },
+    },
     // Citizen timefolk (CitizenClockmakers2): knocker-uppers, bell-tenders,
     // hour-callers and sandglass-minders — the amateur public-time side of
     // the horology trade under the master clockmakers (CitizenClockmakers),
@@ -2991,22 +3096,24 @@ class CitizenDirector {
     // wake-up calls, player callouts, and the full-peal / rope-snap /
     // hoarse-caller / clogged-glass set-pieces. LOD-gated via brainTickDue
     // inside (near-band citizens always due). Data tier, zero LLM.
-    try {
-      tickTimefolk(this, nowMs);
-    } catch (error) {
-      this.log("timefolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'timefolk failed',
+      run: () => {
+        tickTimefolk(this, nowMs);
+      },
+    },
     // Citizen hawkerfolk (CitizenHawkers2): amateur street hawkers and cryers
     // — the "2" layer under the professional stall merchants (CitizenMarketStalls,
     // who are excluded via the role gate before the share roll); this owns
     // pitches/baskets, the daily market-wares bridge, crowd-gathering moments
     // and the hoarse-crier / heckled-pitch set-pieces. LOD-gated via
     // brainTickDue inside (near-band citizens always due). Data tier, zero LLM.
-    try {
-      tickHawker(this, nowMs);
-    } catch (error) {
-      this.log("hawkerfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'hawkerfolk failed',
+      run: () => {
+        tickHawker(this, nowMs);
+      },
+    },
     // Citizen stallfolk (CitizenMarketStalls2): amateur market-stall
     // keepers — barrow-folk, blanket-folk and crate-folk running rough
     // provisional stalls under the professional merchants (CitizenMarketStalls,
@@ -3016,48 +3123,53 @@ class CitizenDirector {
     // haggle-crowd moment and the wheel-off / moved-along set-pieces.
     // LOD-gated via brainTickDue inside (near-band citizens always due).
     // Data tier, zero LLM.
-    try {
-      tickStallfolk(this, nowMs);
-    } catch (error) {
-      this.log("stallfolk failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'stallfolk failed',
+      run: () => {
+        tickStallfolk(this, nowMs);
+      },
+    },
     // Citizen fishing tournaments: weekly per-kingdom tournaments
     // (announcement -> registration -> competition -> weigh-in -> prizes).
     // Catches simulated data-tier, trash-talk and results player-visible.
     // Players can register/compete via fishing:tournament-* events.
     // Data tier, zero LLM.
-    try {
-      tickFishingTournaments(this, nowMs);
-    } catch (error) {
-      this.log("fishing tournaments failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'fishing tournaments failed',
+      run: () => {
+        tickFishingTournaments(this, nowMs);
+      },
+    },
     // Citizen funerals (mortality): elders die of old age, anyone can die
     // in an accident, guards can fall in battle. Deaths are journaled,
     // the close circle grieves, funerals are scheduled, and the deceased
     // feed the newspaper obituaries. Data tier, zero LLM. Runs before the
     // newspaper so this week's deaths make this week's paper.
-    try {
-      tickMortality(this, nowMs);
-    } catch (error) {
-      this.log("funerals (mortality) failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'funerals (mortality) failed',
+      run: () => {
+        tickMortality(this, nowMs);
+      },
+    },
     // Citizen newspaper: once a week, compile the paper from journals,
     // rumors, festivals, elections, and retirements — headlines, gossip
     // column, announcements, obituaries. Data tier, zero LLM.
-    try {
-      tickNewspaper(this, nowMs);
-    } catch (error) {
-      this.log("newspaper failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'newspaper failed',
+      run: () => {
+        tickNewspaper(this, nowMs);
+      },
+    },
     // Trade caravans: merchant-led expeditions between capitals on a
     // staggered schedule — muster, travel (data-tier), bandit risk on
     // arrival, profit splits, player guard/trader signups. Data tier,
     // zero LLM.
-    try {
-      tickCaravans(this, nowMs);
-    } catch (error) {
-      this.log("trade caravans failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'trade caravans failed',
+      run: () => {
+        tickCaravans(this, nowMs);
+      },
+    },
     // Citizen diplomats: courtier-envoys run trade/culture missions and
     // negotiators work peace treaties and alliance proposals between
     // capitals on a slow per-kingdom cadence — travel abstracted (data
@@ -3065,1276 +3177,1307 @@ class CitizenDirector {
     // effects (treaties ease it, collapsed talks spike it), successful
     // envoys stationed abroad as ambassadors. Everything journaled.
     // Data tier, zero LLM.
-    try {
-      tickDiplomacy(this, nowMs);
-    } catch (error) {
-      this.log("diplomacy failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'diplomacy failed',
+      run: () => {
+        tickDiplomacy(this, nowMs);
+      },
+    },
     // Citizen spies: covert intelligence rings run missions (steal documents,
     // eavesdrop, sabotage, counter-intelligence) on a slow per-kingdom
     // cadence — briefed -> operating -> debrief, detection risk creates real
     // diplomatic incidents, gathered intel can trigger early warnings that
     // ease hot borders. Everything journaled. Data tier, zero LLM.
-    try {
-      tickSpies(this, nowMs);
-    } catch (error) {
-      this.log("spies failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'spies failed',
+      run: () => {
+        tickSpies(this, nowMs);
+      },
+    },
     // Citizen explorers: scouts, treasure hunters, naturalists, and
     // pathfinders form expeditions on a slow per-kingdom cadence — muster,
     // journey (data-tier, abstracted), return with discoveries and dangers.
     // Muster shouts, departure calls, and tavern tales are player-visible
     // only near a real player; everything is journaled. Data tier, zero LLM.
-    try {
-      tickExplorers(this, nowMs);
-    } catch (error) {
-      this.log("explorers failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'explorers failed',
+      run: () => {
+        tickExplorers(this, nowMs);
+      },
+    },
     // Citizen explorers v2 (frontier layer): scout recon trips, pioneer
     // settlements at discovery sites, amateur map sketches for sale,
     // naturalist field notes, and player funding of expeditions. Builds on
     // the CitizenExplorers simulation — data tier, zero LLM.
-    try {
-      tickExplorers2(this, nowMs);
-    } catch (error) {
-      this.log("explorers2 failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'explorers2 failed',
+      run: () => {
+        tickExplorers2(this, nowMs);
+      },
+    },
     // Citizen relationships: friend citizens hail friend players passing
     // nearby, by name. Data tier, zero LLM.
-    try {
-      CitizenRelationships.tickRelationships(this, nowMs);
-    } catch (error) {
-      this.log("relationships failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'relationships failed',
+      run: () => {
+        CitizenRelationships.tickRelationships(this, nowMs);
+      },
+    },
     // Citizen↔citizen bond formation: rapport from real interactions and
     // personality compatibility promotes into friends/rivals. Data tier.
-    try {
-      BrainRelationships.tickRelationships(this, nowMs);
-    } catch (error) {
-      this.log("bond formation failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'bond formation failed',
+      run: () => {
+        BrainRelationships.tickRelationships(this, nowMs);
+      },
+    },
     // Citizen rapport: real proximity observations feed the rapport graph —
     // co-located roster citizens accrue "workedAlongside" from the engine's
     // local-player lists. Data tier, zero LLM.
-    try {
-      tickProximityRapport(this, nowMs);
-    } catch (error) {
-      this.log("rapport events failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'rapport events failed',
+      run: () => {
+        tickProximityRapport(this, nowMs);
+      },
+    },
     // Citizen social bonds: persistent relationship scores drift toward
     // indifference; old favors and grudges are forgotten. Data tier.
-    try {
-      CitizenSocialBonds.tickDecay(nowMs);
-    } catch (error) {
-      this.log("social bonds failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'social bonds failed',
+      run: () => {
+        CitizenSocialBonds.tickDecay(nowMs);
+      },
+    },
     // Citizen secret societies: hidden orders (Gilded Ledger, Shadow Circle,
     // Old Guard) hold night meetings, advance agendas, and quietly recruit
     // trusted players. Data tier, zero LLM.
-    try {
-      tickSocieties(this, nowMs);
-    } catch (error) {
-      this.log("societies failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'societies failed',
+      run: () => {
+        tickSocieties(this, nowMs);
+      },
+    },
     // Citizen clans: formation, growth, player invites, outings,
     // celebrations and skill moots. Data tier, zero LLM.
-    try {
-      tickClans(this, nowMs);
-    } catch (error) {
-      this.log("clans failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'clans failed',
+      run: () => {
+        tickClans(this, nowMs);
+      },
+    },
     // Citizen homes: assignment, rent collection, furnishing, gatherings.
     // Data tier, zero LLM.
-    try {
-      tickHomes(this, nowMs);
-    } catch (error) {
-      this.log("homes failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'homes failed',
+      run: () => {
+        tickHomes(this, nowMs);
+      },
+    },
     // Citizen careers: assignment, promotions, wages, changes, teaching.
     // Data tier, zero LLM.
-    try {
-      tickCareers(this, nowMs);
-    } catch (error) {
-      this.log("careers failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'careers failed',
+      run: () => {
+        tickCareers(this, nowMs);
+      },
+    },
     // Citizen families: formation, births, growing up, coming of age,
     // teaching, inheritance, protection. Data tier, zero LLM.
-    try {
-      tickFamilies(this, nowMs);
-    } catch (error) {
-      this.log("families failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'families failed',
+      run: () => {
+        tickFamilies(this, nowMs);
+      },
+    },
     // Citizen aging: birthdays, life stages, wisdom, career retirement,
     // immigration. Data tier, zero LLM.
-    try {
-      tickAging(this, nowMs);
-    } catch (error) {
-      this.log("aging failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'aging failed',
+      run: () => {
+        tickAging(this, nowMs);
+      },
+    },
     // Citizen government: councils, elections, laws, unrest. Data tier,
     // zero LLM.
-    try {
-      tickGovernments(this, nowMs);
-    } catch (error) {
-      this.log("governments failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'governments failed',
+      run: () => {
+        tickGovernments(this, nowMs);
+      },
+    },
     // Citizen faith: gods, devotion, priests, holy days, holy wars.
     // Data tier, zero LLM.
-    try {
-      tickFaith(this, nowMs);
-    } catch (error) {
-      this.log("faith failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'faith failed',
+      run: () => {
+        tickFaith(this, nowMs);
+      },
+    },
     // Citizen festival life: merged festival calendar (seasonal +
     // religious feasts), council festival weeks, anticipation, unrest
     // relief. Data tier, zero LLM.
-    try {
-      tickFestivalLife(this, nowMs);
-    } catch (error) {
-      this.log("festival life failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'festival life failed',
+      run: () => {
+        tickFestivalLife(this, nowMs);
+      },
+    },
     // Citizen schools: schoolhouses, family-children pupils, tuition,
     // graduation. Data tier, zero LLM.
-    try {
-      tickSchools(this, nowMs);
-    } catch (error) {
-      this.log("schools failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'schools failed',
+      run: () => {
+        tickSchools(this, nowMs);
+      },
+    },
     // Citizen health: illness onset, contagion, recovery, healers,
     // hospitals, epidemics. Data tier, zero LLM.
-    try {
-      tickHealth(this, nowMs);
-    } catch (error) {
-      this.log("health failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'health failed',
+      run: () => {
+        tickHealth(this, nowMs);
+      },
+    },
     // Citizen justice: crime onset, curfew, trials, punishments, jail.
     // Data tier, zero LLM.
-    try {
-      tickJustice(this, nowMs);
-    } catch (error) {
-      this.log("justice failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'justice failed',
+      run: () => {
+        tickJustice(this, nowMs);
+      },
+    },
     // Citizen legal: judges, appeals, pardons, player trials.
     // Data tier, zero LLM.
-    try {
-      tickLegalLife(this, nowMs);
-    } catch (error) {
-      this.log("legal failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'legal failed',
+      run: () => {
+        tickLegalLife(this, nowMs);
+      },
+    },
     // Citizen surgery: surgeons, procedures, research, quarantine.
     // Data tier, zero LLM. Complements CitizenHealth (never duplicates).
-    try {
-      tickSurgery(this, nowMs);
-    } catch (error) {
-      this.log("surgery failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'surgery failed',
+      run: () => {
+        tickSurgery(this, nowMs);
+      },
+    },
     // Citizen travel: ship/caravan journeys, arrivals, danger, cargo.
     // Data tier, zero LLM.
-    try {
-      tickTravel(this, nowMs);
-    } catch (error) {
-      this.log("travel failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'travel failed',
+      run: () => {
+        tickTravel(this, nowMs);
+      },
+    },
     // Citizen entertainment: taverns, bards, theater, arena, sobriety.
     // Data tier, zero LLM.
-    try {
-      tickEntertain(this, nowMs);
-    } catch (error) {
-      this.log("entertainment failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'entertainment failed',
+      run: () => {
+        tickEntertain(this, nowMs);
+      },
+    },
     // Citizen day/night: transitions, sleep, night watch, stargazing.
     // Data tier, zero LLM.
-    try {
-      tickDayNight(this, nowMs);
-    } catch (error) {
-      this.log("daynight failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'daynight failed',
+      run: () => {
+        tickDayNight(this, nowMs);
+      },
+    },
     // Citizen reputation: fame decay, crime sync, skill-mastery renown,
     // fame announcements, bard songs. Data tier, zero LLM.
-    try {
-      tickReputation(this, nowMs);
-    } catch (error) {
-      this.log("reputation failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'reputation failed',
+      run: () => {
+        tickReputation(this, nowMs);
+      },
+    },
     // Citizen guilds: favor decay, rank announcements, mission expiry,
     // rivalry drift, training favor. Data tier, zero LLM.
-    try {
-      tickGuilds(this, nowMs);
-    } catch (error) {
-      this.log("guilds failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'guilds failed',
+      run: () => {
+        tickGuilds(this, nowMs);
+      },
+    },
     // Citizen pets: hunger/happiness decay, breeding, taming.
     // Data tier, zero LLM.
-    try {
-      tickPets(this, nowMs);
-    } catch (error) {
-      this.log("pets failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'pets failed',
+      run: () => {
+        tickPets(this, nowMs);
+      },
+    },
     // Citizen art: exhibitions, market expiry, inspiration.
     // Data tier, zero LLM.
-    try {
-      tickArt(this, nowMs);
-    } catch (error) {
-      this.log("art failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'art failed',
+      run: () => {
+        tickArt(this, nowMs);
+      },
+    },
     // Citizen music & dance: concerts, rehearsals, lessons.
     // Data tier, zero LLM.
-    try {
-      tickMusicDance(this, nowMs);
-    } catch (error) {
-      this.log("musicdance failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'musicdance failed',
+      run: () => {
+        tickMusicDance(this, nowMs);
+      },
+    },
     // Citizen fashion: trends, shops, competitions.
     // Data tier, zero LLM.
-    try {
-      tickFashion(this, nowMs);
-    } catch (error) {
-      this.log("fashion failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'fashion failed',
+      run: () => {
+        tickFashion(this, nowMs);
+      },
+    },
     // Citizen cuisine: competitions, critic reviews, restaurant menus.
     // Data tier, zero LLM.
-    try {
-      tickCuisine(this, nowMs);
-    } catch (error) {
-      this.log("cuisine failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'cuisine failed',
+      run: () => {
+        tickCuisine(this, nowMs);
+      },
+    },
     // Citizen celebrations: planners, custom festivals, parades, fireworks, carnival.
     // Data tier, zero LLM.
-    try {
-      tickCelebrationLife(this, nowMs);
-    } catch (error) {
-      this.log("celebrations failed", { error: String(error?.message ?? error) });
-    }
-
-// Citizen tournaments: seasonal brackets, entries, payouts, betting.
+    {
+      name: 'celebrations failed',
+      run: () => {
+        tickCelebrationLife(this, nowMs);
+      },
+    },
+    // Citizen tournaments: seasonal brackets, entries, payouts, betting.
     // Data tier, zero LLM.
-    try {
-      tickTournaments(this, nowMs);
-    } catch (error) {
-      this.log("tournaments failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'tournaments failed',
+      run: () => {
+        tickTournaments(this, nowMs);
+      },
+    },
     // Citizen covert diplomacy: marriage alliances, espionage.
     // Data tier, zero LLM. (CitizenDiplomats owns the overt layer.)
-    try {
-      tickCovertDiplomacy(this, nowMs);
-    } catch (error) {
-      this.log("diplomacy failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'diplomacy failed',
+      run: () => {
+        tickCovertDiplomacy(this, nowMs);
+      },
+    },
     // Citizen treaties: formal peace/trade/alliance treaties, embassies,
     // summits. Data tier, zero LLM. (Complements the envoy, covert, and
     // kingdoms pact layers — never duplicates them.)
-    try {
-      tickTreaties(this, nowMs);
-    } catch (error) {
-      this.log("treaties failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'treaties failed',
+      run: () => {
+        tickTreaties(this, nowMs);
+      },
+    },
     // Citizen espionage operations: covert ops, counter-intelligence,
     // spy networks. Data tier, zero LLM. (CitizenDiplomacy owns passive
     // intel gathering; this owns what happens after the intel.)
-    try {
-      tickEspionage(this, nowMs);
-    } catch (error) {
-      this.log("espionage failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'espionage failed',
+      run: () => {
+        tickEspionage(this, nowMs);
+      },
+    },
     // Citizen trade charters: guild monopolies, tolls, renewals, lapses.
     // Data tier, zero LLM. (CitizenGuilds owns membership; this owns the
     // exclusive trade-rights layer on top.)
-    try {
-      tickTradeCharters(this, nowMs);
-    } catch (error) {
-      this.log("trade charters failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'trade charters failed',
+      run: () => {
+        tickTradeCharters(this, nowMs);
+      },
+    },
     // Citizen archaeology: dig sites from real explorer discoveries,
     // artifacts, museums, restoration. Data tier, zero LLM.
     // (CitizenExplorers owns expeditions; CitizenArt owns gallery flavor.)
-    try {
-      tickArchLife(this, nowMs);
-    } catch (error) {
-      this.log("archaeology failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'archaeology failed',
+      run: () => {
+        tickArchLife(this, nowMs);
+      },
+    },
     // Citizen theater: playwrights, plays, troupes, touring, ticketed
     // performances, reviews. Data tier, zero LLM. (CitizenActors owns the
     // scripted scenes; CitizenEntertainment owns the house shows.)
-    try {
-      tickTheaterLife(this, nowMs);
-    } catch (error) {
-      this.log("theater failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'theater failed',
+      run: () => {
+        tickTheaterLife(this, nowMs);
+      },
+    },
     // Citizen runways: designers, houses, seasonal collections, ticketed
     // runway shows, ateliers, fashion-week tours. Data tier, zero LLM.
     // (CitizenFashion owns trends, clothing shops, style competitions;
     // CitizenTheater owns playhouses and troupes.)
-    try {
-      tickRunwayLife(this, nowMs);
-    } catch (error) {
-      this.log("runways failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'runways failed',
+      run: () => {
+        tickRunwayLife(this, nowMs);
+      },
+    },
     // Citizen athletics: athletes, training, fitness, stadiums, records.
     // Data tier, zero LLM. (CitizenSports owns the leagues and fixtures;
     // this owns the athlete profession layer.)
-    try {
-      tickAthleticsLife(this, nowMs);
-    } catch (error) {
-      this.log("athletics failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'athletics failed',
+      run: () => {
+        tickAthleticsLife(this, nowMs);
+      },
+    },
     // Citizen cook-offs: live chef duels, judging panels, seasonal rankings,
     // recipe invention/discovery/trading. Data tier, zero LLM. (CitizenCuisine
     // owns the monthly best-dish showcases; this owns the live circuit.)
-    try {
-      tickCookOffLife(this, nowMs);
-    } catch (error) {
-      this.log("cookoffs failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'cookoffs failed',
+      run: () => {
+        tickCookOffLife(this, nowMs);
+      },
+    },
     // Citizen music festivals: promoters, festival grounds, multi-day
     // productions, act bookings, vendors, camping, tours. Data tier, zero
     // LLM. (CitizenMusicDance owns ensembles/concerts/lessons; CitizenBards
     // owns minstrels; CitizenFestivals owns the seasonal calendar; this owns
     // the promoter-run music festival production layer.)
-    try {
-      tickMusicFestivalLife(this, nowMs);
-    } catch (error) {
-      this.log("music festivals failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'music festivals failed',
+      run: () => {
+        tickMusicFestivalLife(this, nowMs);
+      },
+    },
     // Citizen galleries: curators, auctions, acquisitions, commissions,
     // appraisals, traveling exhibitions, prestige. Data tier, zero LLM.
     // (CitizenArt owns artwork creation, display galleries, the fixed-price
     // market, and exhibitions; this owns the gallery operations layer.)
-    try {
-      tickGalleriesLife(this, nowMs);
-    } catch (error) {
-      this.log("galleries failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'galleries failed',
+      run: () => {
+        tickGalleriesLife(this, nowMs);
+      },
+    },
     // Citizen libraries: librarians, books, lending, research rooms,
     // archives, knowledge. Data tier, zero LLM.
     // (CitizenLibrarians owns hash-derived librarian flavor; CitizenScholars
     // owns the researcher profession and published findings; this owns the
     // library operations layer.)
-    try {
-      tickLibrariesLife(this, nowMs);
-    } catch (error) {
-      this.log("libraries failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'libraries failed',
+      run: () => {
+        tickLibrariesLife(this, nowMs);
+      },
+    },
     // Public observatory operations: viewing parties during celestial events,
     // tour lifecycle, premiere announcements. (CitizenAstronomyLife owns the
     // profession layer — observations and chart creation; this owns the
     // visitor layer.)
-    try {
-      tickObservatories(this, nowMs);
-    } catch (error) {
-      this.log("observatories failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'observatories failed',
+      run: () => {
+        tickObservatories(this, nowMs);
+      },
+    },
     // Citizen team leagues: seasons, fixtures, standings, championships.
     // Data tier, zero LLM. (CitizenSports owns hash-derived spectator
     // fixtures; CitizenTournaments owns individual brackets.)
-    try {
-      tickLeagues(this, nowMs);
-    } catch (error) {
-      this.log("leagues failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'leagues failed',
+      run: () => {
+        tickLeagues(this, nowMs);
+      },
+    },
     // Citizen discoveries: trade-route adoption, fame deeds, announcements.
     // Data tier, zero LLM. (CitizenExplorers owns the expedition sim.)
-    try {
-      tickDiscoveryLife(this, nowMs);
-    } catch (error) {
-      this.log("discovery failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'discovery failed',
+      run: () => {
+        tickDiscoveryLife(this, nowMs);
+      },
+    },
     // Citizen inventions: research progress, breakthroughs, patents.
     // Data tier, zero LLM. (CitizenEngineers owns the flavor layer.)
-    try {
-      tickInventionLife(this, nowMs);
-    } catch (error) {
-      this.log("invention failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'invention failed',
+      run: () => {
+        tickInventionLife(this, nowMs);
+      },
+    },
     // Citizen philosophy: debates, sage announcements, wisdom.
     // Data tier, zero LLM. (CitizenFaith owns gods/devotion/priests.)
-    try {
-      tickPhilosophy(this, nowMs);
-    } catch (error) {
-      this.log("philosophy failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'philosophy failed',
+      run: () => {
+        tickPhilosophy(this, nowMs);
+      },
+    },
     // Citizen construction: real projects, material stockpiles, built effects.
     // Data tier, zero LLM. (CitizenArchitects owns flavor, CitizenBuilders owns crews.)
-    try {
-      tickConstruction(this, nowMs);
-    } catch (error) {
-      this.log("construction failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'construction failed',
+      run: () => {
+        tickConstruction(this, nowMs);
+      },
+    },
     // Citizen science: experiments progress in real time, findings resolve.
     // Data tier, zero LLM.
-    try {
-      tickScience(this, nowMs);
-    } catch (error) {
-      this.log("science failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'science failed',
+      run: () => {
+        tickScience(this, nowMs);
+      },
+    },
     // Citizen infrastructure: real public-works projects, material
     // stockpiles, built network effects. Data tier, zero LLM.
     // (CitizenEngineers owns flavor, CitizenConstruction owns buildings.)
-    try {
-      tickInfrastructure(this, nowMs);
-    } catch (error) {
-      this.log("infrastructure failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'infrastructure failed',
+      run: () => {
+        tickInfrastructure(this, nowMs);
+      },
+    },
     // Citizen astronomy: astronomers, observatories, star charts, celestial
     // events, astrology. Data tier, zero LLM. (CitizenScience owns the
     // astronomy science field; CitizenDayNightLife owns stargazing flavor.)
-    try {
-      tickAstronomy(this, nowMs);
-    } catch (error) {
-      this.log("astronomy failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'astronomy failed',
+      run: () => {
+        tickAstronomy(this, nowMs);
+      },
+    },
     // Citizen cartography: real maps, map shops, exploration logs, treasure
     // caches. Data tier, zero LLM. (CitizenCartographers owns hash-derived
     // cartographer flavor; CitizenDiscovery owns discovery records.)
-    try {
-      tickMapLife(this, nowMs);
-    } catch (error) {
-      this.log("maps failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'maps failed',
+      run: () => {
+        tickMapLife(this, nowMs);
+      },
+    },
     // Cartographers' guild: membership, dues, map certification, survey
     // bounties, mentorship, archive. Data tier, zero LLM. (CitizenMaps owns
     // maps/shops; this owns the profession's guild layer only.)
-    try {
-      tickMapGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("map guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'map guild failed',
+      run: () => {
+        tickMapGuildLife(this, nowMs);
+      },
+    },
     // Citizen journalism: reporters, investigative stories, printing presses,
     // special editions, subscriptions. Data tier, zero LLM. (CitizenNewspaper
     // owns the weekly compiled paper and town-crier shouts.)
-    try {
-      tickPress(this, nowMs);
-    } catch (error) {
-      this.log("press failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'press failed',
+      run: () => {
+        tickPress(this, nowMs);
+      },
+    },
     // Press association: membership, dues, ethics tribunal, Inkwell awards,
     // journalism school, press passes. Data tier, zero LLM. (CitizenPress
     // owns journalists/stories/presses; this owns the profession's guild
     // layer only.)
-    try {
-      tickPressGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("press guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'press guild failed',
+      run: () => {
+        tickPressGuildLife(this, nowMs);
+      },
+    },
     // Bankers' association: membership, dues, branch audits, deposit
     // insurance, banker school, ethics tribunal. Data tier, zero LLM.
     // (CitizenBanking owns accounts/loans/branches; this owns the
     // profession's guild layer only.)
-    try {
-      tickBankGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("bank guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'bank guild failed',
+      run: () => {
+        tickBankGuildLife(this, nowMs);
+      },
+    },
     // Citizen banking: real accounts, deposits, withdrawals, interest, loans.
     // Data tier, zero LLM. (CitizenBankers owns hash-derived banker flavor;
     // CitizenBankers2 owns hash-derived moneyfolk flavor.)
-    try {
-      tickBankingLife(this, nowMs);
-    } catch (error) {
-      this.log("banking failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'banking failed',
+      run: () => {
+        tickBankingLife(this, nowMs);
+      },
+    },
     // Citizen insurance: real policies, premiums, claims, risk pricing.
     // Data tier, zero LLM.
-    try {
-      tickInsuranceLife(this, nowMs);
-    } catch (error) {
-      this.log("insurance failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'insurance failed',
+      run: () => {
+        tickInsuranceLife(this, nowMs);
+      },
+    },
     // Underwriters' association: membership, dues, solvency reviews,
     // reinsurance, actuarial school, ethics tribunal. Data tier, zero LLM.
     // (CitizenInsurance owns policies/premiums/pool/claims; this owns the
     // profession's guild layer only.)
-    try {
-      tickInsureGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("insure guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'insure guild failed',
+      run: () => {
+        tickInsureGuildLife(this, nowMs);
+      },
+    },
     // Diplomatic corps: dues, border reviews, treason board, mediations,
     // diplomatic school. Data tier, zero LLM. (CitizenDiplomats owns
     // missions; CitizenTreaties owns treaties; this owns the profession's
     // guild layer only.)
-    try {
-      tickDiplomaticCorpsLife(this, nowMs);
-    } catch (error) {
-      this.log("diplomatic corps failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'diplomatic corps failed',
+      run: () => {
+        tickDiplomaticCorpsLife(this, nowMs);
+      },
+    },
     // Shadow guild: dues, dead drops, sanctuary, mole board, interrogation
     // bounties, tradecraft school. Data tier, zero LLM. (CitizenEspionage
     // owns networks/ops/cells; this owns the profession's guild layer only.)
-    try {
-      tickSpyGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("spy guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'spy guild failed',
+      run: () => {
+        tickSpyGuildLife(this, nowMs);
+      },
+    },
     // Merchants' association: dues, licenses, inspections, fairs, tribunal,
     // merchant school. Data tier, zero LLM. (CitizenGuilds owns generic
     // trade guilds; CitizenTradeCharters owns monopolies; CitizenTradeCaravans
     // owns caravan ops; CitizenMarketStalls owns stalls — this owns the
     // profession's guild layer only.)
-    try {
-      tickTradeGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("trade guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'trade guild failed',
+      run: () => {
+        tickTradeGuildLife(this, nowMs);
+      },
+    },
     // Excavators' Guild: dues, authentication, forgery tribunal, site
     // conservation, field school. Data tier, zero LLM. (CitizenArchaeology
     // owns dig sites/artifacts/museums; this owns the profession's guild
     // layer only.)
-    try {
-      tickDigGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("dig guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'dig guild failed',
+      run: () => {
+        tickDigGuildLife(this, nowMs);
+      },
+    },
     // Players' Guild: dues, play certification, plagiarism tribunal, touring
     // circuits, critics' choice laurels, stage school. Data tier, zero LLM.
     // (CitizenTheater owns plays/troupes/performances; this owns the
     // profession's guild layer only.)
-    try {
-      tickStageGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("stage guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'stage guild failed',
+      run: () => {
+        tickStageGuildLife(this, nowMs);
+      },
+    },
     // Athletes' Guild: dues, record certification, doping tribunal, training
     // camps, golden laurel, athletic school. Data tier, zero LLM.
     // (CitizenAthletics owns athletes/training/records; this owns the
     // profession's guild layer only.)
-    try {
-      tickSportsGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("sports guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'sports guild failed',
+      run: () => {
+        tickSportsGuildLife(this, nowMs);
+      },
+    },
     // (CitizenCookOffs owns cook-offs/recipes; CitizenCuisine owns dishes/
     // menus; this owns the profession's guild layer only.)
-    try {
-      tickCookGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("cook guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'cook guild failed',
+      run: () => {
+        tickCookGuildLife(this, nowMs);
+      },
+    },
     // (CitizenRunways owns designers/collections/ateliers/shows; CitizenFashion
     // owns garments/trends/shops/competitions; this owns the designers'
     // association guild layer only.)
-    try {
-      tickWeaverGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("weaver guild failed", { error: String(error?.message ?? error) });
-    }
-    try {
-      tickMusicGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("music guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'weaver guild failed',
+      run: () => {
+        tickWeaverGuildLife(this, nowMs);
+      },
+    },
+    {
+      name: 'music guild failed',
+      run: () => {
+        tickMusicGuildLife(this, nowMs);
+      },
+    },
     // Artists' Guild: dues, masterpiece certification, forgery tribunal,
     // studio inspections, golden palette, patronage, art school. Data tier,
     // zero LLM. (CitizenArt owns artworks/market/exhibitions; CitizenGalleries
     // owns auctions/acquisitions/commissions/appraisals; this owns the
     // profession's guild layer only.)
-    try {
-      tickArtGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("art guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'art guild failed',
+      run: () => {
+        tickArtGuildLife(this, nowMs);
+      },
+    },
     // Librarians' Guild: dues, book certification, plagiarism tribunal,
     // scriptorium inspections, archive seals, restricted index, golden
     // quill, scriptorium bounties, scriptorium school. Data tier, zero LLM.
     // (CitizenLibraries owns books/lending/research rooms/archives;
     // CitizenScholars owns the researcher profession; this owns the
     // profession's guild layer only.)
-    try {
-      tickLibrarianGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("librarian guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'librarian guild failed',
+      run: () => {
+        tickLibrarianGuildLife(this, nowMs);
+      },
+    },
     // Astronomers' Guild: dues, chart certification, fabrication tribunal,
     // celestial-standard audits, eclipse predictions, silver orrery,
     // star-chart school. Data tier, zero LLM. (CitizenAstronomy owns
     // astronomers/observatories/charts/events; CitizenObservatories owns
     // public visits/tours/parties; this owns the profession's guild layer
     // only.)
-    try {
-      tickObservatoryGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("observatory guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'observatory guild failed',
+      run: () => {
+        tickObservatoryGuildLife(this, nowMs);
+      },
+    },
     // Bar association: dues, case reviews, pro bono, disciplinary board,
     // legal school. Data tier, zero LLM. (CitizenCivilLaw owns contracts/
     // disputes/judgments; this owns the profession's guild layer only.)
-    try {
-      tickLawGuildLife(this, nowMs);
-    } catch (error) {
-      this.log("law guild failed", { error: String(error?.message ?? error) });
-    }
+    {
+      name: 'law guild failed',
+      run: () => {
+        tickLawGuildLife(this, nowMs);
+      },
+    },
     // Citizen civil law: contracts, wills, disputes, judgments.
     // Data tier, zero LLM. (CitizenJusticeLife owns criminal trials;
     // CitizenLegalLife owns judges/appeals/pardons.)
-    try {
-      tickCivilLife(this, nowMs);
-    } catch (error) {
-      this.log("civil law failed", { error: String(error?.message ?? error) });
-    }
-    try {
-      if (getJournal().saveIfDirty()) {
-        this.log("citizen journal saved");
-      }
-    } catch (error) {
-      this.log("citizen journal save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      CitizenBonds.save();
-    } catch (error) {
-      this.log("citizen bonds save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenSocialBonds.save()) {
-        this.log("citizen social bonds saved");
-      }
-    } catch (error) {
-      this.log("citizen social bonds save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenClans.save()) {
-        this.log("citizen clans saved");
-      }
-    } catch (error) {
-      this.log("citizen clans save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenHomes.save()) {
-        this.log("citizen homes saved");
-      }
-    } catch (error) {
-      this.log("citizen homes save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenCareers.save()) {
-        this.log("citizen careers saved");
-      }
-    } catch (error) {
-      this.log("citizen careers save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenFamilies.save()) {
-        this.log("citizen families saved");
-      }
-    } catch (error) {
-      this.log("citizen families save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (Aging.save()) {
-        this.log("citizen aging saved");
-      }
-    } catch (error) {
-      this.log("citizen aging save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenGovernment.save()) {
-        this.log("citizen government saved");
-      }
-    } catch (error) {
-      this.log("citizen government save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenFaith.save()) {
-        this.log("citizen faith saved");
-      }
-    } catch (error) {
-      this.log("citizen faith save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenSchools.save()) {
-        this.log("citizen schools saved");
-      }
-    } catch (error) {
-      this.log("citizen schools save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenHealth.save()) {
-        this.log("citizen health saved");
-      }
-    } catch (error) {
-      this.log("citizen health save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenCrime.save()) {
-        this.log("citizen crime saved");
-      }
-    } catch (error) {
-      this.log("citizen crime save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenLegalCode.save()) {
-        this.log("citizen legal code saved");
-      }
-    } catch (error) {
-      this.log("citizen legal code save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      const CitizenSurgery = require("../lib/CitizenSurgery");
-      if (CitizenSurgery.save()) {
-        this.log("citizen surgery saved");
-      }
-    } catch (error) {
-      this.log("citizen surgery save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenTravel.save()) {
-        this.log("citizen travel saved");
-      }
-    } catch (error) {
-      this.log("citizen travel save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenEntertainment.save()) {
-        this.log("citizen entertainment saved");
-      }
-    } catch (error) {
-      this.log("citizen entertainment save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (require("../lib/CitizenSeasons").save()) {
-        this.log("citizen seasons saved");
-      }
-    } catch (error) {
-      this.log("citizen seasons save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (require("../lib/CitizenDayNight").save()) {
-        this.log("citizen daynight saved");
-      }
-    } catch (error) {
-      this.log("citizen daynight save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenReputation.save()) {
-        this.log("citizen reputation saved");
-      }
-    } catch (error) {
-      this.log("citizen reputation save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenGuilds.save()) {
-        this.log("citizen guilds saved");
-      }
-    } catch (error) {
-      this.log("citizen guilds save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      CitizenPets.save();
-    } catch (error) {
-      this.log("citizen pets save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenArt.save()) {
-        this.log("citizen art saved");
-      }
-    } catch (error) {
-      this.log("citizen art save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenMusicDance.save()) {
-        this.log("citizen musicdance saved");
-      }
-    } catch (error) {
-      this.log("citizen musicdance save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenFashion.save()) {
-        this.log("citizen fashion saved");
-      }
-    } catch (error) {
-      this.log("citizen fashion save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenCuisine.save()) {
-        this.log("citizen cuisine saved");
-      }
-    } catch (error) {
-      this.log("citizen cuisine save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenCelebrations.save()) {
-        this.log("citizen celebrations saved");
-      }
-    } catch (error) {
-      this.log("citizen celebrations save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
+    {
+      name: 'civil law failed',
+      run: () => {
+        tickCivilLife(this, nowMs);
+      },
+    },
+    {
+      name: 'citizen journal save failed',
+      run: () => {
+        if (getJournal().saveIfDirty()) {
+          this.log("citizen journal saved");
+        }
+      },
+    },
+    {
+      name: 'citizen bonds save failed',
+      run: () => {
+        CitizenBonds.save();
+      },
+    },
+    {
+      name: 'citizen social bonds save failed',
+      run: () => {
+        if (CitizenSocialBonds.save()) {
+          this.log("citizen social bonds saved");
+        }
+      },
+    },
+    {
+      name: 'citizen clans save failed',
+      run: () => {
+        if (CitizenClans.save()) {
+          this.log("citizen clans saved");
+        }
+      },
+    },
+    {
+      name: 'citizen homes save failed',
+      run: () => {
+        if (CitizenHomes.save()) {
+          this.log("citizen homes saved");
+        }
+      },
+    },
+    {
+      name: 'citizen careers save failed',
+      run: () => {
+        if (CitizenCareers.save()) {
+          this.log("citizen careers saved");
+        }
+      },
+    },
+    {
+      name: 'citizen families save failed',
+      run: () => {
+        if (CitizenFamilies.save()) {
+          this.log("citizen families saved");
+        }
+      },
+    },
+    {
+      name: 'citizen aging save failed',
+      run: () => {
+        if (Aging.save()) {
+          this.log("citizen aging saved");
+        }
+      },
+    },
+    {
+      name: 'citizen government save failed',
+      run: () => {
+        if (CitizenGovernment.save()) {
+          this.log("citizen government saved");
+        }
+      },
+    },
+    {
+      name: 'citizen faith save failed',
+      run: () => {
+        if (CitizenFaith.save()) {
+          this.log("citizen faith saved");
+        }
+      },
+    },
+    {
+      name: 'citizen schools save failed',
+      run: () => {
+        if (CitizenSchools.save()) {
+          this.log("citizen schools saved");
+        }
+      },
+    },
+    {
+      name: 'citizen health save failed',
+      run: () => {
+        if (CitizenHealth.save()) {
+          this.log("citizen health saved");
+        }
+      },
+    },
+    {
+      name: 'citizen crime save failed',
+      run: () => {
+        if (CitizenCrime.save()) {
+          this.log("citizen crime saved");
+        }
+      },
+    },
+    {
+      name: 'citizen legal code save failed',
+      run: () => {
+        if (CitizenLegalCode.save()) {
+          this.log("citizen legal code saved");
+        }
+      },
+    },
+    {
+      name: 'citizen surgery save failed',
+      run: () => {
+        const CitizenSurgery = require("../lib/CitizenSurgery");
+        if (CitizenSurgery.save()) {
+          this.log("citizen surgery saved");
+        }
+      },
+    },
+    {
+      name: 'citizen travel save failed',
+      run: () => {
+        if (CitizenTravel.save()) {
+          this.log("citizen travel saved");
+        }
+      },
+    },
+    {
+      name: 'citizen entertainment save failed',
+      run: () => {
+        if (CitizenEntertainment.save()) {
+          this.log("citizen entertainment saved");
+        }
+      },
+    },
+    {
+      name: 'citizen seasons save failed',
+      run: () => {
+        if (require("../lib/CitizenSeasons").save()) {
+          this.log("citizen seasons saved");
+        }
+      },
+    },
+    {
+      name: 'citizen daynight save failed',
+      run: () => {
+        if (require("../lib/CitizenDayNight").save()) {
+          this.log("citizen daynight saved");
+        }
+      },
+    },
+    {
+      name: 'citizen reputation save failed',
+      run: () => {
+        if (CitizenReputation.save()) {
+          this.log("citizen reputation saved");
+        }
+      },
+    },
+    {
+      name: 'citizen guilds save failed',
+      run: () => {
+        if (CitizenGuilds.save()) {
+          this.log("citizen guilds saved");
+        }
+      },
+    },
+    {
+      name: 'citizen pets save failed',
+      run: () => {
+        CitizenPets.save();
+      },
+    },
+    {
+      name: 'citizen art save failed',
+      run: () => {
+        if (CitizenArt.save()) {
+          this.log("citizen art saved");
+        }
+      },
+    },
+    {
+      name: 'citizen musicdance save failed',
+      run: () => {
+        if (CitizenMusicDance.save()) {
+          this.log("citizen musicdance saved");
+        }
+      },
+    },
+    {
+      name: 'citizen fashion save failed',
+      run: () => {
+        if (CitizenFashion.save()) {
+          this.log("citizen fashion saved");
+        }
+      },
+    },
+    {
+      name: 'citizen cuisine save failed',
+      run: () => {
+        if (CitizenCuisine.save()) {
+          this.log("citizen cuisine saved");
+        }
+      },
+    },
+    {
+      name: 'citizen celebrations save failed',
+      run: () => {
+        if (CitizenCelebrations.save()) {
+          this.log("citizen celebrations saved");
+        }
+      },
+    },
+    {
+      name: 'citizen tournaments save failed',
+      run: () => {
 
-if (CitizenTournaments.save()) {
-        this.log("citizen tournaments saved");
-      }
-    } catch (error) {
-      this.log("citizen tournaments save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
+        if (CitizenTournaments.save()) {
+          this.log("citizen tournaments saved");
+        }
+      },
+    },
+    {
+      name: 'citizen diplomacy save failed',
+      run: () => {
+        if (CitizenDiplomacy.save()) {
+          this.log("citizen diplomacy saved");
+        }
+      },
+    },
+    {
+      name: 'citizen leagues save failed',
+      run: () => {
+        if (CitizenLeagues.save()) {
+          this.log("citizen leagues saved");
+        }
+      },
+    },
+    {
+      name: 'citizen discoveries save failed',
+      run: () => {
+        if (CitizenDiscovery.save()) {
+          this.log("citizen discoveries saved");
+        }
+      },
+    },
+    {
+      name: 'citizen inventions save failed',
+      run: () => {
+        if (CitizenInventions.save()) {
+          this.log("citizen inventions saved");
+        }
+      },
+    },
+    {
+      name: 'citizen construction save failed',
+      run: () => {
+        if (CitizenConstruction.save()) {
+          this.log("citizen construction saved");
+        }
+      },
+    },
+    {
+      name: 'citizen philosophy save failed',
+      run: () => {
+        if (CitizenPhilosophy.save()) {
+          this.log("citizen philosophy saved");
+        }
+      },
+    },
+    {
+      name: 'citizen science save failed',
+      run: () => {
+        if (CitizenScience.save()) {
+          this.log("citizen science saved");
+        }
+      },
+    },
+    {
+      name: 'citizen infrastructure save failed',
+      run: () => {
+        if (CitizenInfrastructure.save()) {
+          this.log("citizen infrastructure saved");
+        }
+      },
+    },
+    {
+      name: 'citizen astronomy save failed',
+      run: () => {
+        if (CitizenAstronomy.save()) {
+          this.log("citizen astronomy saved");
+        }
+      },
+    },
+    {
+      name: 'citizen maps save failed',
+      run: () => {
+        if (CitizenMaps.save()) {
+          this.log("citizen maps saved");
+        }
+      },
+    },
+    {
+      name: 'citizen map guild save failed',
+      run: () => {
+        if (CitizenMapGuilds.save()) {
+          this.log("citizen map guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen press guild save failed',
+      run: () => {
+        if (CitizenPressGuilds.save()) {
+          this.log("citizen press guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen press save failed',
+      run: () => {
+        if (CitizenPress.save()) {
+          this.log("citizen press saved");
+        }
+      },
+    },
+    {
+      name: 'citizen bank guild save failed',
+      run: () => {
+        if (CitizenBankGuilds.save()) {
+          this.log("citizen bank guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen banking save failed',
+      run: () => {
+        if (CitizenBanking.save()) {
+          this.log("citizen banking saved");
+        }
+      },
+    },
+    {
+      name: 'citizen insurance save failed',
+      run: () => {
+        if (CitizenInsurance.save()) {
+          this.log("citizen insurance saved");
+        }
+      },
+    },
+    {
+      name: 'citizen insure guild save failed',
+      run: () => {
+        if (CitizenInsureGuilds.save()) {
+          this.log("citizen insure guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen diplomatic corps save failed',
+      run: () => {
+        if (CitizenDiplomaticCorps.save()) {
+          this.log("citizen diplomatic corps saved");
+        }
+      },
+    },
+    {
+      name: 'citizen spy guild save failed',
+      run: () => {
+        if (CitizenSpyGuilds.save()) {
+          this.log("citizen spy guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen trade guild save failed',
+      run: () => {
+        if (CitizenTradeGuilds.save()) {
+          this.log("citizen trade guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen dig guild save failed',
+      run: () => {
+        if (CitizenDigGuilds.save()) {
+          this.log("citizen dig guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen stage guild save failed',
+      run: () => {
+        if (CitizenStageGuilds.save()) {
+          this.log("citizen stage guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen sports guild save failed',
+      run: () => {
+        if (CitizenSportsGuilds.save()) {
+          this.log("citizen sports guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen cook guild save failed',
+      run: () => {
+        if (CitizenCookGuilds.save()) {
+          this.log("citizen cook guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen weaver guild save failed',
+      run: () => {
+        if (CitizenWeaverGuilds.save()) {
+          this.log("citizen weaver guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen weaver guild save failed',
+      run: () => {
+        if (CitizenMusicGuilds.save()) {
+          this.log("citizen music guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen art guild save failed',
+      run: () => {
+        if (CitizenArtGuilds.save()) {
+          this.log("citizen art guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen librarian guild save failed',
+      run: () => {
+        if (CitizenLibrarianGuilds.save()) {
+          this.log("citizen librarian guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen observatory guild save failed',
+      run: () => {
+        if (CitizenObservatoryGuilds.save()) {
+          this.log("citizen observatory guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen law guild save failed',
+      run: () => {
+        if (CitizenLawGuilds.save()) {
+          this.log("citizen law guild saved");
+        }
+      },
+    },
+    {
+      name: 'citizen civil law save failed',
+      run: () => {
+        if (CitizenCivilLaw.save()) {
+          this.log("citizen civil law saved");
+        }
+      },
+    },
+    {
+      name: 'citizen treaties save failed',
+      run: () => {
+        if (CitizenTreaties.save()) {
+          this.log("citizen treaties saved");
+        }
+      },
+    },
+    {
+      name: 'citizen espionage save failed',
+      run: () => {
+        if (CitizenEspionage.save()) {
+          this.log("citizen espionage saved");
+        }
+      },
+    },
+    {
+      name: 'citizen trade charters save failed',
+      run: () => {
+        if (CitizenTradeCharters.save()) {
+          this.log("citizen trade charters saved");
+        }
+      },
+    },
+    {
+      name: 'citizen archaeology save failed',
+      run: () => {
+        if (CitizenArchaeology.save()) {
+          this.log("citizen archaeology saved");
+        }
+      },
+    },
+    {
+      name: 'citizen theater save failed',
+      run: () => {
+        if (CitizenTheater.save()) {
+          this.log("citizen theater saved");
+        }
+      },
+    },
+    {
+      name: 'citizen runways save failed',
+      run: () => {
+        if (CitizenRunways.save()) {
+          this.log("citizen runways saved");
+        }
+      },
+    },
+    {
+      name: 'citizen athletics save failed',
+      run: () => {
+        if (CitizenAthletics.save()) {
+          this.log("citizen athletics saved");
+        }
+      },
+    },
+    {
+      name: 'citizen cookoffs save failed',
+      run: () => {
+        if (CitizenCookOffs.save()) {
+          this.log("citizen cookoffs saved");
+        }
+      },
+    },
+    {
+      name: 'citizen music festivals save failed',
+      run: () => {
+        if (CitizenMusicFestivals.save()) {
+          this.log("citizen music festivals saved");
+        }
+      },
+    },
+    {
+      name: 'citizen galleries save failed',
+      run: () => {
+        if (CitizenGalleries.save()) {
+          this.log("citizen galleries saved");
+        }
+      },
+    },
+    {
+      name: 'citizen libraries save failed',
+      run: () => {
+        if (CitizenLibraries.save()) {
+          this.log("citizen libraries saved");
+        }
+      },
+    },
+    {
+      name: 'citizen observatories save failed',
+      run: () => {
+        if (CitizenObservatories.save()) {
+          this.log("citizen observatories saved");
+        }
+      },
+    },
+    {
+      name: 'citizen funerals save failed',
+      run: () => {
+        if (saveFuneralsIfDirty()) {
+          this.log("citizen funerals saved");
+        }
+      },
+    },
+    {
+      name: 'citizen deaths save failed',
+      run: () => {
+        if (saveDeathsIfDirty()) {
+          this.log("citizen deaths saved");
+        }
+      },
+    },
+    {
+      name: 'guild registry save failed',
+      run: () => {
+        require("../../guilds/GuildRegistry").save();
+      },
+    },
+    {
+      name: 'citizen kinship save failed',
+      run: () => {
+        CitizenKinship.getKinship().saveIfDirty();
+      },
+    },
+    ];
+    // Budgeted round-robin: run features in cursor order until the 70ms
+    // budget is spent; the cursor persists on the director so the next
+    // slow tick resumes where this one stopped. Per-item try/catch keeps
+    // one failing feature from aborting the rest.
+    const orderedFeatures = rotateStart(featureTicks, this._featureTickCursor ?? 0);
+    const featureBudget = createBudget(FEATURE_TICK_BUDGET_MS);
+    const featureResult = runWithinBudget(
+      orderedFeatures,
+      (item) => {
+        try {
+          item.run();
+        } catch (error) {
+          this.log(item.name, { error: String(error?.message ?? error) });
+        }
+      },
+      featureBudget,
+    );
+    this._featureTickCursor = advanceCursor(
+      this._featureTickCursor ?? 0,
+      featureResult.ran.length,
+      featureTicks.length,
+    );
     try {
-      if (CitizenDiplomacy.save()) {
-        this.log("citizen diplomacy saved");
-      }
-    } catch (error) {
-      this.log("citizen diplomacy save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenLeagues.save()) {
-        this.log("citizen leagues saved");
-      }
-    } catch (error) {
-      this.log("citizen leagues save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenDiscovery.save()) {
-        this.log("citizen discoveries saved");
-      }
-    } catch (error) {
-      this.log("citizen discoveries save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenInventions.save()) {
-        this.log("citizen inventions saved");
-      }
-    } catch (error) {
-      this.log("citizen inventions save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenConstruction.save()) {
-        this.log("citizen construction saved");
-      }
-    } catch (error) {
-      this.log("citizen construction save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenPhilosophy.save()) {
-        this.log("citizen philosophy saved");
-      }
-    } catch (error) {
-      this.log("citizen philosophy save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenScience.save()) {
-        this.log("citizen science saved");
-      }
-    } catch (error) {
-      this.log("citizen science save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenInfrastructure.save()) {
-        this.log("citizen infrastructure saved");
-      }
-    } catch (error) {
-      this.log("citizen infrastructure save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenAstronomy.save()) {
-        this.log("citizen astronomy saved");
-      }
-    } catch (error) {
-      this.log("citizen astronomy save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenMaps.save()) {
-        this.log("citizen maps saved");
-      }
-    } catch (error) {
-      this.log("citizen maps save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenMapGuilds.save()) {
-        this.log("citizen map guild saved");
-      }
-    } catch (error) {
-      this.log("citizen map guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenPressGuilds.save()) {
-        this.log("citizen press guild saved");
-      }
-    } catch (error) {
-      this.log("citizen press guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenPress.save()) {
-        this.log("citizen press saved");
-      }
-    } catch (error) {
-      this.log("citizen press save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenBankGuilds.save()) {
-        this.log("citizen bank guild saved");
-      }
-    } catch (error) {
-      this.log("citizen bank guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenBanking.save()) {
-        this.log("citizen banking saved");
-      }
-    } catch (error) {
-      this.log("citizen banking save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenInsurance.save()) {
-        this.log("citizen insurance saved");
-      }
-    } catch (error) {
-      this.log("citizen insurance save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenInsureGuilds.save()) {
-        this.log("citizen insure guild saved");
-      }
-    } catch (error) {
-      this.log("citizen insure guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenDiplomaticCorps.save()) {
-        this.log("citizen diplomatic corps saved");
-      }
-    } catch (error) {
-      this.log("citizen diplomatic corps save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenSpyGuilds.save()) {
-        this.log("citizen spy guild saved");
-      }
-    } catch (error) {
-      this.log("citizen spy guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenTradeGuilds.save()) {
-        this.log("citizen trade guild saved");
-      }
-    } catch (error) {
-      this.log("citizen trade guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenDigGuilds.save()) {
-        this.log("citizen dig guild saved");
-      }
-    } catch (error) {
-      this.log("citizen dig guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenStageGuilds.save()) {
-        this.log("citizen stage guild saved");
-      }
-    } catch (error) {
-      this.log("citizen stage guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenSportsGuilds.save()) {
-        this.log("citizen sports guild saved");
-      }
-    } catch (error) {
-      this.log("citizen sports guild save failed", { error: String(error?.message ?? error) });
-    }
-    try {
-      if (CitizenCookGuilds.save()) {
-        this.log("citizen cook guild saved");
-      }
-    } catch (error) {
-      this.log("citizen cook guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenWeaverGuilds.save()) {
-        this.log("citizen weaver guild saved");
-      }
-    } catch (error) {
-      this.log("citizen weaver guild save failed", { error: String(error?.message ?? error) });
-    }
-    try {
-      if (CitizenMusicGuilds.save()) {
-        this.log("citizen music guild saved");
-      }
-    } catch (error) {
-      this.log("citizen weaver guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenArtGuilds.save()) {
-        this.log("citizen art guild saved");
-      }
-    } catch (error) {
-      this.log("citizen art guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenLibrarianGuilds.save()) {
-        this.log("citizen librarian guild saved");
-      }
-    } catch (error) {
-      this.log("citizen librarian guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenObservatoryGuilds.save()) {
-        this.log("citizen observatory guild saved");
-      }
-    } catch (error) {
-      this.log("citizen observatory guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenLawGuilds.save()) {
-        this.log("citizen law guild saved");
-      }
-    } catch (error) {
-      this.log("citizen law guild save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenCivilLaw.save()) {
-        this.log("citizen civil law saved");
-      }
-    } catch (error) {
-      this.log("citizen civil law save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenTreaties.save()) {
-        this.log("citizen treaties saved");
-      }
-    } catch (error) {
-      this.log("citizen treaties save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenEspionage.save()) {
-        this.log("citizen espionage saved");
-      }
-    } catch (error) {
-      this.log("citizen espionage save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenTradeCharters.save()) {
-        this.log("citizen trade charters saved");
-      }
-    } catch (error) {
-      this.log("citizen trade charters save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenArchaeology.save()) {
-        this.log("citizen archaeology saved");
-      }
-    } catch (error) {
-      this.log("citizen archaeology save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenTheater.save()) {
-        this.log("citizen theater saved");
-      }
-    } catch (error) {
-      this.log("citizen theater save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenRunways.save()) {
-        this.log("citizen runways saved");
-      }
-    } catch (error) {
-      this.log("citizen runways save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenAthletics.save()) {
-        this.log("citizen athletics saved");
-      }
-    } catch (error) {
-      this.log("citizen athletics save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenCookOffs.save()) {
-        this.log("citizen cookoffs saved");
-      }
-    } catch (error) {
-      this.log("citizen cookoffs save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenMusicFestivals.save()) {
-        this.log("citizen music festivals saved");
-      }
-    } catch (error) {
-      this.log("citizen music festivals save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenGalleries.save()) {
-        this.log("citizen galleries saved");
-      }
-    } catch (error) {
-      this.log("citizen galleries save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenLibraries.save()) {
-        this.log("citizen libraries saved");
-      }
-    } catch (error) {
-      this.log("citizen libraries save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (CitizenObservatories.save()) {
-        this.log("citizen observatories saved");
-      }
-    } catch (error) {
-      this.log("citizen observatories save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (saveFuneralsIfDirty()) {
-        this.log("citizen funerals saved");
-      }
-    } catch (error) {
-      this.log("citizen funerals save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      if (saveDeathsIfDirty()) {
-        this.log("citizen deaths saved");
-      }
-    } catch (error) {
-      this.log("citizen deaths save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      require("../../guilds/GuildRegistry").save();
-    } catch (error) {
-      this.log("guild registry save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
-    try {
-      CitizenKinship.getKinship().saveIfDirty();
-    } catch (error) {
-      this.log("citizen kinship save failed", {
-        error: String(error?.message ?? error),
-      });
-    }
+      TickTiming.record("director.tick.features", Date.now() - t0features, this.roster?.size ?? 0);
+    } catch {}
   }
 
   /**
