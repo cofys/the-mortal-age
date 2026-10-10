@@ -75,6 +75,8 @@ module.exports = {
 
     // Web overlay data layer for the new-player guide (see OnboardingApi.js).
     require("./OnboardingApi").attach(api);
+    // Web overlay data layer for the steward's desk (see StewardApi.js).
+    require("./StewardApi").attach(api);
     api.onPlayerDisconnect(clear);
     api.onPlayerLogout(clear);
     api.log("registered");

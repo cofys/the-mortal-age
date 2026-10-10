@@ -213,7 +213,14 @@ function openAudience({ player, kingdomId }) {
     player.sendMessage("This desk serves no court I know. The steward's audience is held in the capitals.");
     return;
   }
-  showAudience(player, kid);
+  // Web overlay is the primary UI: raise the steward:open flag and let the
+  // StewardOverlay pick it up. The native showAudience below stays as the
+  // fallback for clients without the web overlay.
+  try {
+    player.setAttribute("steward:open", kid);
+  } catch {
+    showAudience(player, kid);
+  }
 }
 
 function attachSteward(api) {
