@@ -1,9 +1,9 @@
 "use strict";
 
 /**
- * Ensures the inventory holds an item, for activities whose inputs would come
- * from a bank withdrawal in a real economy (tinderbox, test ores/logs). Skilling
- * bots are conjured the same way equipTool provides their tool.
+ * Ensures the inventory holds a tool (tinderbox), conjured the same way equipTool
+ * provides an axe or pickaxe. Tools only: resources (ores, logs) must come from
+ * gathering or a bank withdrawal, so bots never add free items to the economy.
  */
 function createEnsureItemAction(spec) {
   const itemId = spec.item;

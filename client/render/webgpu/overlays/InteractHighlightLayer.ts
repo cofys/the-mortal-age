@@ -11,6 +11,8 @@ type HighlightTarget = {
     points: ReadonlyArray<readonly [number, number, number]>;
     color: number;
     alpha: number;
+    /** View-space deck placement for a target aboard a world entity (identity elsewhere). */
+    worldEntityTransform?: Float32Array;
 };
 
 /**
@@ -19,7 +21,8 @@ type HighlightTarget = {
  *
  * Targets (active + hover, NPC and loc) come from the shared getInteractHighlightDrawTargets
  * pipeline via OverlayHost; map loc metadata is read from WebGPUMapSquare's CPU loc arrays.
- * World-entity deck transforms do not exist under WebGPU, so the identity transform is used.
+ * A target aboard a world entity carries the deck's view-space placement matrix, which the mask
+ * pass applies like the WebGL uniform of the same name.
  */
 export class InteractHighlightLayer {
     private readonly host: OverlayHost;
@@ -200,6 +203,7 @@ export class InteractHighlightLayer {
                     points,
                     color: drawTarget.color ?? 0xffffff,
                     alpha: typeof drawTarget.alpha === "number" ? drawTarget.alpha : 0.45,
+                    worldEntityTransform: drawTarget.worldEntityTransform,
                 });
             }
         } catch {
@@ -304,7 +308,11 @@ export class InteractHighlightLayer {
                 size: 64,
                 usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
             });
-            this.device.queue.writeBuffer(transformBuffer, 0, IDENTITY_MAT4);
+            this.device.queue.writeBuffer(
+                transformBuffer,
+                0,
+                target.worldEntityTransform ?? IDENTITY_MAT4,
+            );
             const transformBindGroup = this.device.createBindGroup({
                 layout: this.uniformBindGroupLayout,
                 entries: [{ binding: 0, resource: { buffer: transformBuffer, offset: 0, size: 64 } }],

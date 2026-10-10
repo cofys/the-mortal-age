@@ -8,14 +8,15 @@
  * xrsps: 1 Dimintheis, 2 Caleb, 3 Caleb's piece, 4 seeking Avan, 5 gem trader,
  * 6 Avan, 7 Boot, 8 Avan's piece, 9 Johnathon, 10 cured, 11 complete.
  *
- * Ported interactions: crest-piece assembly (item on item), antipoison on Johnathon
- * and mining perfect gold (object 11371). Gaps: the perfect-gold smelting/jewellery
- * (furnace + moulds), the Chaos Temple lever doors (aux varp 149), Chronozon's
- * elemental-blast weakening and the gauntlets' post-quest enchantment (its choices
- * carry no hook/action id in the dump) are not wired.
+ * Ported interactions: crest-piece assembly (item on item), antipoison on Johnathon,
+ * mining perfect gold (object 11371), the fish/jewellery exchanges and the stage
+ * transitions driven by the transcript's choice/condition/message steps. Chronozon's
+ * four Blast spells print the wiki weakening message (the "returns to full health"
+ * gate is not simulated). The Witchaven lever/doors puzzle (aux varp 149) and the
+ * post-quest gauntlet enchantment are not wired.
  */
 module.exports = function registerFamilyCrestQuest(api) {
-  const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, CombatType, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, refreshQuestList } = require("../QuestRuntime");
 
   const PAGE = "Family Crest";
@@ -38,6 +39,28 @@ module.exports = function registerFamilyCrestQuest(api) {
   /** "Congratulations! Quest complete!" in the-crest-reassembled-talking-to-dimintheis. */
   const COMPLETE_ACTION_ID = "QH4WTh";
 
+  // Choice texts (the transcript dump gives these options no ids) and the message /
+  // condition step ids that carry the stage transitions or item hand-ins.
+  const CALEB_FISH_TASK_CHOICE = "ok, i will get those";
+  const CALEB_BROTHERS_CHOICE = "what happened to the rest of it";
+  const GEM_TRADER_AVAN_CHOICE = "avan fitzharmon";
+  const AVAN_INTRO_CHOICE = "looking for a man named avan";
+  const BOOT_PERFECT_GOLD_CHOICE = "high quality gold";
+  const CALEB_FISH_EXCHANGE_MESSAGE_ID = "1xC7CR";
+  const CALEB_PIECE_RETURN_MESSAGE_ID = "OvmzYQ";
+  const AVAN_JEWELLERY_MESSAGE_ID = "S9wqPO";
+  const JOHNATHON_INTRO_MESSAGE_ID = "gvVeH_";
+  const CALEB_AVAN_CONDITION_ID = "wAM0xw";
+
+  // Spell ids from CombatSpells.ts; Chronozon's weakening is per element.
+  const BLAST_SPELL_ELEMENTS = new Map([
+    [1172, "wind"],
+    [1175, "water"],
+    [1177, "earth"],
+    [1181, "fire"],
+  ]);
+  const weakenedByPlayer = new WeakMap();
+
   const DIMINTHEIS_NPC_IDS = new Set([NpcIdentifiers.DIMINTHEIS, NpcIdentifiers.DIMINTHEIS_2]);
   const CALEB_NPC_IDS = new Set([NpcIdentifiers.CALEB, NpcIdentifiers.CALEB_2]);
   const AVAN_NPC_IDS = new Set([NpcIdentifiers.MAN, NpcIdentifiers.AVAN, NpcIdentifiers.AVAN_2]);
@@ -48,6 +71,8 @@ module.exports = function registerFamilyCrestQuest(api) {
   const JOHNATHON_CREST = ItemIdentifiers.CREST_PART_3;
   const CREST_PARTS = [CALEB_CREST, AVAN_CREST, JOHNATHON_CREST];
   const FAMILY_CREST = ItemIdentifiers.FAMILY_CREST;
+  const PERFECT_RING = ItemIdentifiers.PERFECT_RING;
+  const PERFECT_NECKLACE = ItemIdentifiers.PERFECT_NECKLACE;
 
   const FISH = [ItemIdentifiers.SHRIMPS, ItemIdentifiers.SALMON, ItemIdentifiers.TUNA, ItemIdentifiers.BASS, ItemIdentifiers.SWORDFISH];
 
@@ -126,7 +151,7 @@ module.exports = function registerFamilyCrestQuest(api) {
       if (stage >= STAGE_COMPLETE) return page(PAGE, "post-quest-dialogue-talking-to-avan-after-the-quest");
       if (stage >= STAGE_AVAN_PIECE) return page(PAGE, "avan-talking-to-avan-after-getting-his-crest-piece");
       if (stage >= STAGE_SPOKEN_BOOT) {
-        return page(PAGE, has(player, ItemIdentifiers.PERFECT_RING) && has(player, ItemIdentifiers.PERFECT_NECKLACE)
+        return page(PAGE, has(player, PERFECT_RING) && has(player, PERFECT_NECKLACE)
           ? "avan-talking-to-avan-after-talking-to-boot-if-the-player-has-the-jewellery"
           : "avan-talking-to-avan-after-talking-to-boot-if-the-player-has-not-made-the-jewellery");
       }
@@ -157,19 +182,51 @@ module.exports = function registerFamilyCrestQuest(api) {
     if (value.includes("lacks one or more requirements")) return false;
     if (value.includes("does not have all the fish")) return !FISH.every((id) => has(player, id));
     if (value.includes("has all the fish")) return FISH.every((id) => has(player, id));
-    if (value.includes("before finding avan")) return stage < STAGE_AVAN_PIECE;
+    if (value.includes("before finding avan")) return stage < STAGE_SEEKING_AVAN;
     if (value.includes("player has the first piece")) return has(player, CALEB_CREST);
     if (value.includes("player has lost the crest piece")) return !has(player, CALEB_CREST) && !has(player, FAMILY_CREST);
     if (value.includes("player has all the crest pieces")) return CREST_PARTS.every((id) => has(player, id));
     if (value.includes("player has lost avan's crest piece")) return !has(player, AVAN_CREST) && !has(player, FAMILY_CREST);
     if (value.includes("player has lost the fragment")) return !has(player, JOHNATHON_CREST) && !has(player, FAMILY_CREST);
     if (value.includes("crest isn't assembled")) return !has(player, FAMILY_CREST);
+    if (value.includes("crest is assembled")) return has(player, FAMILY_CREST);
     return null;
   }
 
   function handleStartHook({ player, npcId, hook }) {
     if (!DIMINTHEIS_NPC_IDS.has(npcId) || hook !== START_HOOK) return;
     if (quest.getStage(player) < STAGE_SPOKEN_DIMINTHEIS) quest.setStage(player, STAGE_SPOKEN_DIMINTHEIS);
+  }
+
+  /** The quest choices the transcript dump left without an id, matched on text. */
+  function handleChoice({ player, npcId, option }) {
+    const stage = quest.getStage(player);
+    const text = String(option ?? "").toLowerCase();
+    if (CALEB_NPC_IDS.has(npcId)) {
+      if (stage === STAGE_SPOKEN_DIMINTHEIS && text.includes(CALEB_FISH_TASK_CHOICE)) {
+        quest.setStage(player, STAGE_SPOKEN_CALEB);
+      } else if (stage === STAGE_CALEB_PIECE && text.includes(CALEB_BROTHERS_CHOICE)) {
+        quest.setStage(player, STAGE_SEEKING_AVAN);
+      }
+      return;
+    }
+    if (npcId === NpcIdentifiers.GEM_TRADER && stage === STAGE_SEEKING_AVAN && text.includes(GEM_TRADER_AVAN_CHOICE)) {
+      quest.setStage(player, STAGE_SPOKEN_GEM_TRADER);
+      return;
+    }
+    if (AVAN_NPC_IDS.has(npcId) && stage === STAGE_SPOKEN_GEM_TRADER && text.includes(AVAN_INTRO_CHOICE)) {
+      quest.setStage(player, STAGE_SPOKEN_AVAN);
+      return;
+    }
+    if (npcId === NpcIdentifiers.BOOT && stage === STAGE_SPOKEN_AVAN && text.includes(BOOT_PERFECT_GOLD_CHOICE)) {
+      quest.setStage(player, STAGE_SPOKEN_BOOT);
+    }
+  }
+
+  /** Caleb's "Before finding Avan" branch tells the player where Avan went. */
+  function handleCondition({ player, stepId }) {
+    if (stepId !== CALEB_AVAN_CONDITION_ID) return;
+    if (quest.getStage(player) === STAGE_CALEB_PIECE) quest.setStage(player, STAGE_SEEKING_AVAN);
   }
 
   /** The crest pieces combine on each other once all three are held. */
@@ -227,20 +284,80 @@ module.exports = function registerFamilyCrestQuest(api) {
   }
 
   /** Chronozon drops Johnathon's crest piece once cured. */
-  function handleNpcDeath({ player, npcId }) {
-    if (npcId !== NpcIdentifiers.CHRONOZON) return;
-    if (quest.getStage(player) !== STAGE_CURED_JOHNATHON) return;
-    if (has(player, JOHNATHON_CREST) || has(player, FAMILY_CREST)) return;
-    player.getInventory().adds(JOHNATHON_CREST, 1);
-    player.sendMessage("You tear Johnathon's crest piece from the demon's claws.");
+  function handleNpcDeath({ killer, npcId }) {
+    if (!killer || npcId !== NpcIdentifiers.CHRONOZON) return;
+    if (quest.getStage(killer) !== STAGE_CURED_JOHNATHON) return;
+    if (has(killer, JOHNATHON_CREST) || has(killer, FAMILY_CREST)) return;
+    killer.getInventory().adds(JOHNATHON_CREST, 1);
+    killer.sendMessage("You tear Johnathon's crest piece from the demon's claws.");
   }
 
-  function handleAction({ player, npcId, stepId }) {
-    if (!DIMINTHEIS_NPC_IDS.has(npcId) || stepId !== COMPLETE_ACTION_ID) return;
-    if (quest.isComplete(player)) return;
-    if (quest.getStage(player) < STAGE_CURED_JOHNATHON) return;
-    if (has(player, FAMILY_CREST)) player.getInventory().deleteNumber(FAMILY_CREST, 1);
-    quest.complete(player);
+  /**
+   * Action/message steps: the item exchanges and the final completion. Hand-ins leave
+   * `handled` false so the transcript's own message still prints.
+   */
+  function handleDialogueAction({ player, npcId, stepId }) {
+    switch (stepId) {
+      case CALEB_FISH_EXCHANGE_MESSAGE_ID:
+        if (quest.getStage(player) !== STAGE_SPOKEN_CALEB || !FISH.every((id) => has(player, id))) return;
+        for (const id of FISH) player.getInventory().deleteNumber(id, 1);
+        if (!has(player, CALEB_CREST)) player.getInventory().adds(CALEB_CREST, 1);
+        quest.setStage(player, STAGE_CALEB_PIECE);
+        return;
+      case CALEB_PIECE_RETURN_MESSAGE_ID:
+        if (!has(player, CALEB_CREST) && !has(player, FAMILY_CREST)) player.getInventory().adds(CALEB_CREST, 1);
+        return;
+      case AVAN_JEWELLERY_MESSAGE_ID:
+        if (quest.getStage(player) !== STAGE_SPOKEN_BOOT) return;
+        if (!has(player, PERFECT_RING) || !has(player, PERFECT_NECKLACE)) return;
+        player.getInventory().deleteNumber(PERFECT_RING, 1);
+        player.getInventory().deleteNumber(PERFECT_NECKLACE, 1);
+        if (!has(player, AVAN_CREST)) player.getInventory().adds(AVAN_CREST, 1);
+        quest.setStage(player, STAGE_AVAN_PIECE);
+        return;
+      case JOHNATHON_INTRO_MESSAGE_ID:
+        if (quest.getStage(player) === STAGE_AVAN_PIECE) quest.setStage(player, STAGE_SPOKEN_JOHNATHON);
+        return;
+      case COMPLETE_ACTION_ID:
+        if (!DIMINTHEIS_NPC_IDS.has(npcId) || quest.isComplete(player)) return;
+        if (quest.getStage(player) < STAGE_CURED_JOHNATHON) return;
+        if (has(player, FAMILY_CREST)) player.getInventory().deleteNumber(FAMILY_CREST, 1);
+        quest.complete(player);
+        return;
+      default:
+        return;
+    }
+  }
+
+  /** The spell behind a player's pending hit (manual casts sit in previousCast). */
+  function blastElement(player) {
+    const combat = player.getCombat?.();
+    const spell = combat?.getSelectedSpell?.() ?? combat?.getPreviousCast?.();
+    return BLAST_SPELL_ELEMENTS.get(spell?.spellId?.());
+  }
+
+  /**
+   * The wiki confirms each of the four Blast spells on Chronozon with "Chronozon
+   * weakens...". ponytail: message-only; the wiki's "returns to full health when
+   * nearly dead" gate is not simulated so the quest cannot be soft-locked by it.
+   */
+  function handleNpcHitModify({ npc, hit }) {
+    if (npc?.getId?.() !== NpcIdentifiers.CHRONOZON) return;
+    if (hit?.getCombatType?.() !== CombatType.MAGIC || hit.isAccurate?.() !== true || hit.getTotalDamage?.() <= 0) return;
+    const attacker = hit.getAttacker?.();
+    if (attacker?.isPlayer?.() !== true) return;
+    const player = attacker.getAsPlayer();
+    if (quest.getStage(player) !== STAGE_CURED_JOHNATHON) return;
+    const element = blastElement(player);
+    if (!element) return;
+    let weakened = weakenedByPlayer.get(player);
+    if (!weakened) {
+      weakened = new Set();
+      weakenedByPlayer.set(player, weakened);
+    }
+    if (weakened.has(element)) return;
+    weakened.add(element);
+    player.sendMessage("Chronozon weakens...");
   }
 
   function handleLogin({ player }) {
@@ -264,10 +381,13 @@ module.exports = function registerFamilyCrestQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
-  api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:choice", handleChoice);
+  api.onCustomEvent("npc-dialogue:condition", handleCondition);
+  api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onNpcHitModify(handleNpcHitModify);
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
 };

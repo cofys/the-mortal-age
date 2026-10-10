@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Wyrms and wyrmlings in combat, from data/definitions/wyrms.json (docs/wyrms.md).
+ * Wyrms and wyrmlings in combat, from plugins/npcs/data/wyrms.json (docs/wyrms.md).
  *
  * A wyrm attacks with melee when its target is beside it, and with magic otherwise, so one
  * attacked from a distance only uses magic (Wiki). Each style has its own max hit: the hit is
@@ -21,7 +21,7 @@ function core() {
 }
 
 function data() {
-  DATA ??= JSON.parse(fs.readFileSync(path.join(core().GameConstants.DEFINITIONS_DIRECTORY, "wyrms.json"), "utf8"));
+  DATA ??= JSON.parse(fs.readFileSync(path.join(__dirname, "data", "wyrms.json"), "utf8"));
   return DATA;
 }
 

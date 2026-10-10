@@ -105,6 +105,7 @@ function init(api) {
   // Half the coal of a furnace, and iron never fails. Bars needing coal smelt first, so iron
   // ore with coal in the pot becomes steel.
   BARS = SMELTING_RECIPES
+    .filter((recipe) => barVarbits.has(recipe.barId))
     .map((recipe) => ({
       ...recipe,
       varbit: barVarbits.get(recipe.barId),

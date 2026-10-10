@@ -355,6 +355,10 @@ function farmingNpc(event) {
     if (action !== "pay" && action !== "pay-fare" && action !== "talk-to") return;
     const pos = npc.getLocation();
     const patches = Data.CACHE.patches.filter(p => p.z === pos.getZ() && Math.abs(p.x - pos.getX()) <= 20 && Math.abs(p.y - pos.getY()) <= 20);
+    // A "Pay" option alone does not make an NPC a gardener: Bonzo (contest fee), Saniboch
+    // (Brimhaven entrance) and the Blast Furnace foreman all advertise Pay. A gardener only
+    // exists where a patch does, so never claim an NPC with no patch nearby.
+    if (!patches.length) return;
     const relevant = patches.filter(p => {
         const s = Patches.farmFor(player).patches[Data.patchKey(p)];
         const c = s?.crop && Data.CROPS.get(s.crop);

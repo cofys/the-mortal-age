@@ -86,6 +86,11 @@ const BUTTON_WIDTH = Math.floor(
 
 // One list for every preset: the predefined ones first, then the player's own slots.
 const PRESET_ROW_START = 200;
+// The combat level beside each row, right-aligned at the list's edge. Numbered below the
+// rows so the row's own (transparent) text does not hand it clicks; it paints through.
+const PRESET_LEVEL_START = 60;
+const PRESET_LEVEL_WIDTH = 30;
+const PRESET_LEVEL_RIGHT_GAP = 5;
 const GLOBAL_ROW_COUNT = 18;
 const CUSTOM_ROW_COUNT = 10;
 const PRESET_ROW_COUNT = GLOBAL_ROW_COUNT + CUSTOM_ROW_COUNT;
@@ -322,6 +327,10 @@ function buildPresetsWidgetGroup() {
       actions: ["Select"],
       flags: FLAG_OP1,
     });
+    label(PRESET_LEVEL_START + row, listView, LIST_WIDTH - PRESET_LEVEL_WIDTH - PRESET_LEVEL_RIGHT_GAP, row * ROW_PITCH, PRESET_LEVEL_WIDTH, {
+      xTextAlignment: 2,
+      textColor: COLOUR_MUTED,
+    });
   }
 
   // The selected preset: its name across the middle, then its equipment and spellbook.
@@ -451,6 +460,7 @@ module.exports = {
     ].map((component) => [component, component + 50]),
   ],
   PRESET_ROW_START,
+  PRESET_LEVEL_START,
   PRESET_ROW_COUNT,
   GLOBAL_ROW_COUNT,
   CUSTOM_ROW_COUNT,

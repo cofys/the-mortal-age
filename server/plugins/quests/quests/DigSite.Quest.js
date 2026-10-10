@@ -39,6 +39,20 @@ module.exports = function registerDigSiteQuest(api) {
   ]);
   const DOUG_DEEPING_NPC_ID = NpcIdentifiers.DOUG_DEEPING;
 
+  /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
+  const DIALOGUE_NPC_IDS = new Set([
+    ...EXAMINER_NPC_IDS,
+    STUDENT_GREEN_NPC_ID,
+    STUDENT_PURPLE_NPC_ID,
+    STUDENT_ORANGE_NPC_ID,
+    RESEARCHER_NPC_ID,
+    TERRY_BALANDO_NPC_ID,
+    CURATOR_NPC_ID,
+    PANNING_GUIDE_NPC_ID,
+    ...WORKMAN_NPC_IDS,
+    DOUG_DEEPING_NPC_ID,
+  ]);
+
   const VARP_DIG_SITE = 131;
   const STAGE_STARTED = 1;
   const STAGE_EXAMS_DONE = 4;
@@ -194,8 +208,9 @@ module.exports = function registerDigSiteQuest(api) {
     return null;
   }
 
-  /** Answer the page's prose conditions. */
-  function answerCondition({ player, text }) {
+  /** Answer the page's prose conditions for this plugin's own NPCs. */
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase();
     const has = (itemId, amount = 1) => held(player, itemId, amount);
     if (value.includes("does not have a trowel")) return !has(TROWEL_ITEM_ID);

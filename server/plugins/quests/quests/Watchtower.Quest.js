@@ -22,14 +22,14 @@
  *
  * Source: LostCity quest_itwatchtower at 65b754f (pinned in issue #196).
  *
- * Gaps: the tower ladder and Gu'Tanoth gate objects are not wired (the trellis,
- * bushes, chest, lever, rock and skavid cave entrances are); the dark-cave
- * fallback, the enclave cutscene and the crystal-on-pillar placement are not
- * simulated (the lever completes the quest directly); the "Gor cur" skavid that
- * teaches "Ar" is absent from the transcript dump, so the mad skavid accepts
- * the three teachable words; guard gate/bridge/southern roles are best-effort
- * from their spawn coordinates; the rock cake source and the bank-storage
- * branches rely on the shared item/bank systems.
+ * Gaps: the dark-cave fallback, the enclave cutscene and the bridge-jump
+ * movement are not simulated; the "Gor cur" skavid that teaches "Ar" is absent
+ * from the transcript dump, so the mad skavid accepts the three teachable
+ * words; guard gate/bridge/southern roles are best-effort from their spawn
+ * coordinates; the crystal pillars' transform varbit (3127) is not sent, so the
+ * placed crystals do not render on the pillars; the bank-storage branches rely
+ * on the shared bank system. The Toban tunnel hole and the two Gu'Tanoth city
+ * gates are wired here because no shared handler owns them.
  */
 module.exports = function registerWatchtowerQuest(api) {
   const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
@@ -75,6 +75,12 @@ module.exports = function registerWatchtowerQuest(api) {
   const BIT_KILLS_SHIFT = 18;
   const KILLS_MASK = 0x7;
   const MAX_SHAMAN_KILLS = 6;
+  const BIT_PLACED_YELLOW = 21;
+  const BIT_PLACED_GREY = 22;
+  const BIT_PLACED_CYAN = 23;
+  const BIT_PLACED_MAGENTA = 24;
+  const BIT_EAST_GATE_PAID = 25;
+  const PLACED_BITS = [BIT_PLACED_YELLOW, BIT_PLACED_GREY, BIT_PLACED_CYAN, BIT_PLACED_MAGENTA];
 
   const WIZARD_ID = NpcIdentifiers.WATCHTOWER_WIZARD;
   const OTHER_WIZARD_IDS = new Set([
@@ -92,6 +98,9 @@ module.exports = function registerWatchtowerQuest(api) {
   const SOUTHERN_GUARD_IDS = new Set([NpcIdentifiers.OGRE_GUARD_6]);
   const MARKET_GUARD_IDS = new Set([NpcIdentifiers.OGRE_GUARD_7]);
   const BRIDGE_GUARD_IDS = new Set([NpcIdentifiers.OGRE_GUARD_4]);
+  // The live east-gate guards are OGRE_GUARD_4 spawns; the wiki lets a gold bar
+  // be given to one of them directly, as well as clicking the gate.
+  const EAST_GATE_GUARD_IDS = new Set([NpcIdentifiers.OGRE_GUARD_4]);
   const CITY_GUARD_ID = NpcIdentifiers.CITY_GUARD;
   const SCARED_SKAVID_ID = NpcIdentifiers.SCARED_SKAVID;
   const MAD_SKAVID_ID = NpcIdentifiers.MAD_SKAVID;
@@ -103,6 +112,9 @@ module.exports = function registerWatchtowerQuest(api) {
     [NpcIdentifiers.SKAVID_6, "skavid-search-learning-skavid-skavid-2"],
   ]);
   const ENCLAVE_GUARD_ID = NpcIdentifiers.ENCLAVE_GUARD;
+  // The six shamans that actually spawn in the Ogre Enclave (npc-spawns.json);
+  // the cache leaves these ids unnamed, so they are listed literally.
+  const ENCLAVE_SHAMAN_IDS = [6208, 6209, 6210, 6211, 6212, 6213];
   const SHAMAN_IDS = new Set([
     NpcIdentifiers.OGRE_SHAMAN_3,
     NpcIdentifiers.OGRE_SHAMAN_4,
@@ -118,6 +130,7 @@ module.exports = function registerWatchtowerQuest(api) {
     NpcIdentifiers.OGRE_SHAMAN_14,
     NpcIdentifiers.OGRE_SHAMAN_15,
     NpcIdentifiers.OGRE_SHAMAN_16,
+    ...ENCLAVE_SHAMAN_IDS,
   ]);
 
   const FINGERNAILS = ItemIdentifiers.FINGERNAILS;
@@ -158,6 +171,10 @@ module.exports = function registerWatchtowerQuest(api) {
   const GUAM_JANGER_VIAL = ItemIdentifiers.VIAL_4;
   const OGRE_POTION = ItemIdentifiers.POTION_3;
   const GROUND_BAT_BONES = ItemIdentifiers.GROUND_BAT_BONES;
+  const BAT_BONES = ItemIdentifiers.BAT_BONES;
+  const PESTLE_AND_MORTAR = ItemIdentifiers.PESTLE_AND_MORTAR;
+  const GOLD_BAR = ItemIdentifiers.GOLD_BAR;
+  const VIAL = ItemIdentifiers.VIAL;
 
   const LIGHT_SOURCES = new Set([
     ItemIdentifiers.LIT_CANDLE,
@@ -189,6 +206,11 @@ module.exports = function registerWatchtowerQuest(api) {
   const LEVER_ID = ObjectIdentifiers.LEVER_17;
   const CHEST_ID = ObjectIdentifiers.CHEST_23;
   const ROCK_ID = ObjectIdentifiers.ROCK_OF_DALGROTH;
+  // The market cave entrance into the Ogre Enclave. The reference's enclave entry teleport
+  // (quest_itwatchtower enter_skavid_cave) lands on this tile; unlike the skavid caves the
+  // enclave needs neither the map nor a light source.
+  const ENCLAVE_ENTRANCE_ID = ObjectIdentifiers.CAVE_ENTRANCE_5;
+  const ENCLAVE_ENTRANCE_DESTINATION = { x: 2588, y: 9410 };
   const CAVE_ENTRANCES = new Map([
     [ObjectIdentifiers.CAVE_ENTRANCE_6, { x: 2498, y: 9418 }],
     [ObjectIdentifiers.CAVE_ENTRANCE_7, { x: 2532, y: 9469 }],
@@ -197,6 +219,60 @@ module.exports = function registerWatchtowerQuest(api) {
     [ObjectIdentifiers.CAVE_ENTRANCE_10, { x: 2504, y: 9441 }],
     [ObjectIdentifiers.CAVE_ENTRANCE_11, { x: 2522, y: 9411 }],
   ]);
+  // The Toban tunnel hole (south-west of Gu'Tanoth, west of the gnome glider);
+  // its Enter teleport lands on Toban's island, as in the reference script.
+  const TOBAN_CAVE_ID = ObjectIdentifiers.CAVE_ENTRANCE_12;
+  const TOBAN_CAVE_DESTINATION = { x: 2576, y: 3029 };
+  // The two city gates: the north-west one is opened for the relic guard, the
+  // eastern one costs a gold bar (its guard keeps the bar). Both are two leaves
+  // with no open variant in the cache, so opening clears their clipping.
+  const CITY_GATE_IDS = new Set([
+    ObjectIdentifiers.CITY_GATE_3,
+    ObjectIdentifiers.CITY_GATE_4,
+    ObjectIdentifiers.CITY_GATE_5,
+    ObjectIdentifiers.CITY_GATE_6,
+  ]);
+  const NW_GATE_LEAVES = [
+    { id: ObjectIdentifiers.CITY_GATE_5, x: 2504, y: 3062 },
+    { id: ObjectIdentifiers.CITY_GATE_6, x: 2504, y: 3063 },
+  ];
+  const EAST_GATE_LEAVES = [
+    // The cache places the higher-id leaf west of the lower one here.
+    { id: ObjectIdentifiers.CITY_GATE_4, x: 2549, y: 3028 },
+    { id: ObjectIdentifiers.CITY_GATE_3, x: 2550, y: 3028 },
+  ];
+  // The two OGRE_GUARD_5s that open the north-west gate (the relic hand-in) spawn
+  // east of it, inside the city; a player still outside cannot path through the
+  // closed gate to reach them, which left the east gate's gold bar as the only way
+  // in. Park them on the outside walkway in front of the gate instead (the wiki
+  // has the player meet a guard before entering). The south lane stays clear so
+  // the opened gate remains walkable.
+  const NW_GATE_GUARD_ID = NpcIdentifiers.OGRE_GUARD_5; // 4370
+  // Radius 8 covers both spawns (2505/2507,3062) plus their 5-tile wander.
+  const NW_GATE_GUARD_AREA = { x: 2506, y: 3062, radius: 8 };
+  const NW_GATE_GUARD_STAND_TILES = [
+    { x: 2502, y: 3062 },
+    { x: 2503, y: 3062 },
+  ];
+  // The market counter that still has cakes on it (2793; 2792 is the empty one).
+  const ROCK_CAKE_COUNTER_ID = ObjectIdentifiers.COUNTER_5;
+  // The Watchtower's four crystal pillars are unnamed in the cache and carry a
+  // transform varbit. Positions are fixed: SW yellow, SE grey, NW cyan, NE magenta.
+  const PILLAR_CRYSTALS = new Map([
+    [20029, { crystal: CRYSTAL_1, bit: BIT_PLACED_YELLOW }],
+    [20037, { crystal: CRYSTAL_4, bit: BIT_PLACED_GREY }],
+    [20025, { crystal: CRYSTAL_3, bit: BIT_PLACED_CYAN }],
+    [20033, { crystal: CRYSTAL_2, bit: BIT_PLACED_MAGENTA }],
+  ]);
+  // Wiki item sources: two Skavid-cave nightshade spawns (100-tick respawn) and
+  // the Feldip Hills death rune west of the gnome glider (200-tick respawn).
+  const NIGHTSHADE_SPAWNS = [
+    { x: 2528, y: 9415 },
+    { x: 2530, y: 9462 },
+  ];
+  const NIGHTSHADE_RESPAWN_TICKS = 100;
+  const DEATH_RUNE_SPAWN = { x: 2500, y: 2967 };
+  const DEATH_RUNE_RESPAWN_TICKS = 200;
   const CAVE_EXITS = new Map([
     [ObjectIdentifiers.CAVE_EXIT_2, { x: 2562, y: 3024 }],
     [ObjectIdentifiers.CAVE_EXIT_3, { x: 2524, y: 3070 }],
@@ -223,6 +299,7 @@ module.exports = function registerWatchtowerQuest(api) {
   const START_HOOK = "quest:watchtower:start";
 
   let quest;
+  let itemOnGroundManager;
 
   function bits(player) {
     const value = Number(player.getAttribute(BITS_ATTRIBUTE));
@@ -280,6 +357,10 @@ module.exports = function registerWatchtowerQuest(api) {
 
   function allCrystals(player) {
     return CRYSTAL_IDS.every((itemId) => held(player, itemId));
+  }
+
+  function allPlaced(player) {
+    return PLACED_BITS.every((bit) => hasBit(player, bit));
   }
 
   function hasLightSource(player) {
@@ -409,6 +490,15 @@ module.exports = function registerWatchtowerQuest(api) {
       return lines;
     }
     if (stage === STAGE_FOUND_ALL_CRYSTALS) {
+      if (!allPlaced(player)) {
+        return [
+          "<str>I have all four power crystals.</str>",
+          "",
+          "I must place the crystals on the correct",
+          "<col=800000>pillars</col> and pull the lever to activate",
+          "the shield generator.",
+        ];
+      }
       return [
         "<str>I have all four power crystals.</str>",
         "",
@@ -423,6 +513,7 @@ module.exports = function registerWatchtowerQuest(api) {
   }
 
   function grantReward(player) {
+    player.getSkillManager().addExperiences(Skill.MAGIC, 15250);
     player.getInventory().adds(COINS, 5000);
   }
 
@@ -543,15 +634,22 @@ module.exports = function registerWatchtowerQuest(api) {
   }
 
   function selectSkavidTeacherVariant(player, stage, npcId) {
-    if (stage < STAGE_SOLVED_RIDDLE || stage >= STAGE_COMPLETE) return null;
-    if (!hasBit(player, BIT_LEARNING_SKAVID)) return null;
+    // The dump has no generic cave-skavid transcript, so returning null falls
+    // through to the Watchtower page's first variant (a Tower guard line). Play
+    // the teacher's own variant whenever the caves are open instead.
+    if (stage < STAGE_SOLVED_RIDDLE) return null;
     return SKAVID_VARIANTS.get(npcId);
   }
 
   /** Which transcript variant each speaker plays, by quest stage. */
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
-    if (npcId === WIZARD_ID) return selectWizardVariant(player, stage);
+    if (npcId === WIZARD_ID) {
+      const variant = selectWizardVariant(player, stage);
+      // Hearing the recipe is the quest step; the transcript is speech only.
+      if (stage === STAGE_FED_NIGHTSHADE) quest.setStage(player, STAGE_LEARNED_POTION);
+      return variant;
+    }
     if (OTHER_WIZARD_IDS.has(npcId)) return selectOtherWizardVariant(stage);
     if (npcId === TOWER_GUARD_ID) {
       return stage >= STAGE_STARTED
@@ -801,6 +899,7 @@ module.exports = function registerWatchtowerQuest(api) {
     }
     if (stepId === "7ZK2kb") {
       if (quest.getStage(player) < STAGE_GIVEN_RELIC) quest.setStage(player, STAGE_GIVEN_RELIC);
+      openGate(player, NW_GATE_LEAVES);
       return;
     }
     if (stepId === "Q47TiK") {
@@ -857,7 +956,7 @@ module.exports = function registerWatchtowerQuest(api) {
       }
       return;
     }
-    if (npcId === GREW_ID && key.startsWith("donteatmecanhelp")) {
+    if (npcId === GREW_ID && key.startsWith("donteatmeicanhelp")) {
       setBit(player, BIT_SPOKEN_GREW);
       return;
     }
@@ -1025,6 +1124,72 @@ module.exports = function registerWatchtowerQuest(api) {
     }
   }
 
+  function stealRockCake(player) {
+    if (quest.getStage(player) < STAGE_GIVEN_RELIC && !quest.isComplete(player)) {
+      player.sendMessage("I don't think I should steal from the ogres yet.");
+      return;
+    }
+    if (player.getSkillManager().getCurrentLevel(Skill.THIEVING) < 15) {
+      player.sendMessage("You need a Thieving level of at least 15 to steal a rock cake.");
+      return;
+    }
+    if (!player.getClickDelay().elapsedTime(1000)) return;
+    if (player.getInventory().isFull()) {
+      player.getInventory().full();
+      return;
+    }
+    player.getClickDelay().reset();
+    player.performAnimation(new api.core.Animation(881));
+    player.getInventory().adds(ROCK_CAKE, 1);
+    player.getSkillManager().addExperiences(Skill.THIEVING, 6.4);
+    player.sendMessage("You steal a rock cake from the counter.");
+  }
+
+  /** Opens a two-leaf city gate: clearing its clipping lets players walk through. */
+  function openGate(player, leaves) {
+    let opened = false;
+    for (const leaf of leaves) {
+      const object = api.core.MapObjects.get(leaf.id, new Location(leaf.x, leaf.y, 0), null);
+      if (!object) continue;
+      api.core.ObjectManager.deregister(object, true);
+      opened = true;
+    }
+    if (opened) {
+      api.core.Sounds.sendSound(player, api.core.Sound.GATE_OPEN);
+      player.sendMessage("You swing the gate open.");
+    }
+    return opened;
+  }
+
+  /** Bribes/opens the east gate; false when the player has no gold bar to give. */
+  function payEastGate(player) {
+    if (quest.isComplete(player) || hasBit(player, BIT_EAST_GATE_PAID)) {
+      openGate(player, EAST_GATE_LEAVES);
+      return true;
+    }
+    if (!held(player, GOLD_BAR)) return false;
+    remove(player, GOLD_BAR);
+    setBit(player, BIT_EAST_GATE_PAID);
+    player.sendMessage("You hand the ogre guard a gold bar.");
+    openGate(player, EAST_GATE_LEAVES);
+    return true;
+  }
+
+  function handleCityGate(player, objectId) {
+    const east = objectId === ObjectIdentifiers.CITY_GATE_3 || objectId === ObjectIdentifiers.CITY_GATE_4;
+    if (east) {
+      if (!payEastGate(player)) {
+        player.sendMessage("An ogre guard blocks the gate. Perhaps a bar of gold would change his mind.");
+      }
+      return;
+    }
+    if (quest.getStage(player) >= STAGE_GIVEN_RELIC || quest.isComplete(player)) {
+      openGate(player, NW_GATE_LEAVES);
+      return;
+    }
+    player.sendMessage("The ogre guards eye you suspiciously. Perhaps you should talk to one of them.");
+  }
+
   function enterSkavidCave(player, objectId) {
     if (!held(player, SKAVID_MAP)) {
       player.sendMessage("There's no way I can find my way through without a map of some kind.");
@@ -1087,7 +1252,7 @@ module.exports = function registerWatchtowerQuest(api) {
     }
     if (objectId === LEVER_ID) {
       event.handled = true;
-      if (allCrystals(player) && quest.getStage(player) >= STAGE_FOUND_ALL_CRYSTALS) {
+      if (allPlaced(player)) {
         startTranscript(
           api,
           player,
@@ -1126,6 +1291,28 @@ module.exports = function registerWatchtowerQuest(api) {
       mineRock(player);
       return;
     }
+    if (objectId === ENCLAVE_ENTRANCE_ID) {
+      event.handled = true;
+      player.moveTo(new Location(ENCLAVE_ENTRANCE_DESTINATION.x, ENCLAVE_ENTRANCE_DESTINATION.y, 0));
+      return;
+    }
+    if (objectId === TOBAN_CAVE_ID) {
+      event.handled = true;
+      player.sendMessage("You enter the cave.");
+      player.sendMessage("Wow! That tunnel went a long way.");
+      player.moveTo(new Location(TOBAN_CAVE_DESTINATION.x, TOBAN_CAVE_DESTINATION.y, 0));
+      return;
+    }
+    if (objectId === ROCK_CAKE_COUNTER_ID) {
+      event.handled = true;
+      stealRockCake(player);
+      return;
+    }
+    if (CITY_GATE_IDS.has(objectId)) {
+      event.handled = true;
+      handleCityGate(player, objectId);
+      return;
+    }
     if (CAVE_ENTRANCES.has(objectId)) {
       event.handled = true;
       enterSkavidCave(player, objectId);
@@ -1140,20 +1327,24 @@ module.exports = function registerWatchtowerQuest(api) {
     }
   }
 
-  function potionOnShaman(player) {
+  function potionOnShaman(player, shaman) {
     const stage = quest.getStage(player);
     if (stage < STAGE_MADE_POTION) return;
+    if (!held(player, MAGIC_OGRE_POTION)) return;
     if (player.getSkillManager().getCurrentLevel(Skill.MAGIC) < 14) {
       player.sendMessage("You need a Magic level of 14 or over to use this potion.");
       return;
     }
     const kills = shamanKills(player);
     if (kills >= MAX_SHAMAN_KILLS) return;
-    remove(player, MAGIC_OGRE_POTION);
     player.sendMessage("There is a bright flash!");
     player.sendMessage("The ogre dissolves into spirit form.");
     setShamanKills(player, kills + 1);
+    if (shaman?.setHitpoints) shaman.setHitpoints(0);
     if (kills + 1 >= MAX_SHAMAN_KILLS) {
+      // The wiki: after the last shaman the potion becomes an empty vial.
+      remove(player, MAGIC_OGRE_POTION);
+      give(player, VIAL);
       give(player, CRYSTAL_3);
       player.sendMessage("A crystal drops from the hand of the disappearing ogre. You snatch it up quickly.");
     } else {
@@ -1166,6 +1357,11 @@ module.exports = function registerWatchtowerQuest(api) {
     const targetId = event.npcId ?? event.target?.getId?.();
     if (!player || !targetId) return;
 
+    if (EAST_GATE_GUARD_IDS.has(targetId) && itemId === GOLD_BAR) {
+      event.handled = true;
+      payEastGate(player);
+      return;
+    }
     if (targetId === CITY_GUARD_ID) {
       const stage = quest.getStage(player);
       if (stage < STAGE_GIVEN_RELIC) return;
@@ -1264,7 +1460,7 @@ module.exports = function registerWatchtowerQuest(api) {
       return;
     }
     if (SHAMAN_IDS.has(targetId) && itemId === MAGIC_OGRE_POTION) {
-      potionOnShaman(player);
+      potionOnShaman(player, event.target);
       event.handled = true;
     }
   }
@@ -1279,6 +1475,14 @@ module.exports = function registerWatchtowerQuest(api) {
       player.sendMessage("I think these fit together, but I can't seem to make them fit.");
       player.sendMessage("I am going to need someone with experience to help me with this.");
       event.handled = true;
+      return;
+    }
+    // No shared Herblore handler grinds bat bones; the quest potion needs them.
+    if (both(BAT_BONES, PESTLE_AND_MORTAR)) {
+      event.handled = true;
+      remove(player, BAT_BONES);
+      player.getInventory().adds(GROUND_BAT_BONES, 1);
+      player.sendMessage("You grind the bat bones to a powder.");
       return;
     }
     const mixable =
@@ -1358,22 +1562,107 @@ module.exports = function registerWatchtowerQuest(api) {
       event.handled = true;
       startTranscript(api, player, TOBAN_ID, PAGE, "ogre-investigations-toban-looting-toban-s-chest");
       remove(player, TOBANS_KEY);
+      return;
+    }
+    const pillar = PILLAR_CRYSTALS.get(objectId);
+    if (pillar && CRYSTAL_IDS.includes(itemId)) {
+      event.handled = true;
+      if (pillar.crystal !== itemId) {
+        startTranscript(
+          api,
+          player,
+          WIZARD_ID,
+          PAGE,
+          "reviving-the-watchtower-placing-a-crystal-on-the-wrong-pillar"
+        );
+        return;
+      }
+      if (hasBit(player, pillar.bit)) {
+        player.sendMessage("That crystal is already in place.");
+        return;
+      }
+      remove(player, itemId);
+      setBit(player, pillar.bit);
+      player.sendMessage("You place the crystal on the pillar. It fits perfectly.");
+      if (allPlaced(player) && quest.getStage(player) < STAGE_FOUND_ALL_CRYSTALS) {
+        quest.setStage(player, STAGE_FOUND_ALL_CRYSTALS);
+      }
     }
   }
 
-  function handleNpcDeath({ player, npcId }) {
-    if (!player || npcId !== GORAD_ID) return;
-    const stage = quest.getStage(player);
+  function handleNpcDeath({ killer, npc, npcId }) {
+    if (!killer || npcId !== GORAD_ID) return;
+    const stage = quest.getStage(killer);
     if (stage < STAGE_GIVEN_FINGERNAILS || stage >= STAGE_MADE_RELIC) return;
-    setBit(player, BIT_GORAD_DEAD);
-    if (!held(player, OGRE_TOOTH)) {
-      player.getInventory().adds(OGRE_TOOTH, 1);
-      player.sendMessage("He's dropped a tooth. You grab it quickly.");
+    setBit(killer, BIT_GORAD_DEAD);
+    if (hasBit(killer, BIT_HELPED_GREW)) return;
+    if (!held(killer, OGRE_TOOTH) && !killer.getInventory().isFull()) {
+      killer.getInventory().adds(OGRE_TOOTH, 1);
+      killer.sendMessage("He's dropped a tooth. You grab it quickly.");
+      // The quest kill is the only tooth source; once grabbed, Gorad stays dead.
+      // With no inventory room the tooth is lost and the default respawn lets
+      // the player try again (the wiki warns to keep a slot free).
+      if (npc) npc.__skipDefaultRespawn = true;
     }
+  }
+
+  /**
+   * The wiki's static item sources are not in ground-items.json and this plugin
+   * owns no data file, so they are registered once (first login) and marked as
+   * never-despawn static spawns that respawn after a pick-up.
+   */
+  function ensureGroundSpawn(player, itemId, spawn, respawnTicks) {
+    const exists = api.core.World.getItems().some(
+      (item) =>
+        !item.isPendingRemoval() &&
+        item.getItem().getId() === itemId &&
+        item.getPosition().getX() === spawn.x &&
+        item.getPosition().getY() === spawn.y
+    );
+    if (exists) return;
+    const ground = itemOnGroundManager.registerLocation(
+      player,
+      new api.core.Item(itemId, 1),
+      new Location(spawn.x, spawn.y, 0)
+    );
+    ground.staticSpawn = true;
+    ground.respawnTimer = respawnTicks;
+  }
+
+  function ensureWorldSpawns(player) {
+    ensureGroundSpawn(player, DEATH_RUNE, DEATH_RUNE_SPAWN, DEATH_RUNE_RESPAWN_TICKS);
+    for (const spawn of NIGHTSHADE_SPAWNS) {
+      ensureGroundSpawn(player, CAVE_NIGHTSHADE, spawn, NIGHTSHADE_RESPAWN_TICKS);
+    }
+  }
+
+  /**
+   * The north-west gate's relic guards must be talkable from outside the closed
+   * gate. Called on login so the move happens before anyone can walk up, and
+   * idempotent: once on the outer tiles they are only pinned in place.
+   */
+  function placeNorthWestGateGuards() {
+    const guards = [];
+    for (const npc of api.core.World.getNpcs()) {
+      if (npc?.getId?.() !== NW_GATE_GUARD_ID) continue;
+      const location = npc.getLocation?.();
+      if (!location) continue;
+      if (Math.abs(location.getX() - NW_GATE_GUARD_AREA.x) > NW_GATE_GUARD_AREA.radius) continue;
+      if (Math.abs(location.getY() - NW_GATE_GUARD_AREA.y) > NW_GATE_GUARD_AREA.radius) continue;
+      guards.push(npc);
+    }
+    guards.forEach((npc, index) => {
+      const tile = NW_GATE_GUARD_STAND_TILES[index % NW_GATE_GUARD_STAND_TILES.length];
+      npc.getMovementCoordinator?.().setRadius?.(0);
+      if (npc.getLocation().getX() === tile.x && npc.getLocation().getY() === tile.y) return;
+      npc.moveTo(new Location(tile.x, tile.y, 0));
+    });
   }
 
   function handleLogin({ player }) {
     refreshQuestList(player);
+    ensureWorldSpawns(player);
+    placeNorthWestGateGuards();
   }
 
   quest = registerQuest(api, {
@@ -1392,6 +1681,7 @@ module.exports = function registerWatchtowerQuest(api) {
   });
 
   api.persistAttribute(BITS_ATTRIBUTE);
+  itemOnGroundManager = api.getItemOnGroundManager();
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);

@@ -2,7 +2,7 @@ const core = require("./Core.Farming");
 const fs = require("fs");
 const path = require("path");
 
-const CACHE = JSON.parse(fs.readFileSync(path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "farming-data.json"), "utf8"));
+const CACHE = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "farming-data.json"), "utf8"));
 
 // Gameplay tables: https://oldschool.runescape.wiki/w/Seeds and each linked crop.
 // Names resolve against this server's cache, excluding notes and placeholders.

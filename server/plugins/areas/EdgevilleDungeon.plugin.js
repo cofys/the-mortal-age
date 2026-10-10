@@ -1,6 +1,6 @@
 /**
  * The Edgeville Dungeon (https://oldschool.runescape.wiki/w/Edgeville_Dungeon), from
- * data/definitions/edgeville-dungeon.json: the brass key door and the area's diary tasks, as
+ * plugins/areas/data/edgeville-dungeon.json: the brass key door and the area's diary tasks, as
  * captured. Each lives in ./edgevilledungeon/. Obor's and Bryophyta's lairs are the GiantLairs
  * plugin (plugins/bosses). See docs/edgeville-dungeon.md.
  */

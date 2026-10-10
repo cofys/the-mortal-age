@@ -101,6 +101,7 @@ export class StatusBarsPlugin extends Plugin implements ClientPlugin {
     private readonly osrsClient: OsrsClient;
 
     readonly widgetOverlay: WidgetOverlay = {
+        drawAtAnchor: true,
         signature: () => {
             const layout = this.layout();
             if (!layout) return "";

@@ -46,9 +46,28 @@ function healTeammate(event) {
   event.handled = true;
 }
 
+/** Scripted use (bots): the same heal as using a bandage on a teammate. */
+function useBandageOn(healer, target) {
+  if (!healer || !target || healer.getInventory().getAmount(core.ItemIdentifiers.BANDAGES) <= 0) {
+    return false;
+  }
+  if (!game.isPlaying(healer) || !game.isPlaying(target)) {
+    return false;
+  }
+  if (game.getTeamId(healer) !== game.getTeamId(target)) {
+    return false;
+  }
+  if (process.env.CW_BOT_DEBUG === "1" && game.getCarriedFlagTeam(target)) {
+    console.log(`[cw_flag] bandage_carrier ${healer.getUsername?.()} -> ${target.getUsername?.()}`);
+  }
+  bandage(healer, target);
+  return true;
+}
+
 module.exports = function attachCastleWarsBandages(api, castleWars) {
   game = castleWars;
   core = api.core;
+  castleWars.useBandageOn = useBandageOn;
   api.onItemAction("Bandages", { Heal: healSelf });
   api.onItemOnPlayer(healTeammate);
 };

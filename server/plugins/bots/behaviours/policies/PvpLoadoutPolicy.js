@@ -108,8 +108,8 @@ const BOT_PRESET_GROUPS = Object.freeze(BOT_LOADOUT_DEFINITIONS.presetGroups.map
 ));
 
 function matchesHotspotCombatBand(stats, state) {
-  const hotspot = getWildernessHotspot(state?.pvp?.hotspotId);
-  const band = hotspot?.combatLevelRange;
+  // Hotspot assignments carry their band; minigames (Castle Wars tiers) set one directly.
+  const band = state?.pvp?.combatLevelRange ?? getWildernessHotspot(state?.pvp?.hotspotId)?.combatLevelRange;
   if (!band) return true;
   // Match SkillManager.getCombatLevel, using the preset's seven combat stats.
   const [attack, defence, strength, hp, ranged, prayer, magic] = stats;
@@ -142,12 +142,15 @@ function selectBotPreset(state, rng = Math.random) {
     return null;
   }
   pvp.presetPoolGroup = group.id;
-  if (group.id === "random") {
-    return null;
-  }
-  const presetKey = group.presetKeys.includes(pvp.presetPoolPresetKey)
+  // The "random" group means any of the player presets, not archetype fallbacks: roaming
+  // bots should wear the same members kits players run, never budget f2p-looking gear.
+  const presetKeys =
+    group.id === "random"
+      ? groups.filter((entry) => entry.id !== "random").flatMap((entry) => entry.presetKeys)
+      : group.presetKeys;
+  const presetKey = presetKeys.includes(pvp.presetPoolPresetKey)
     ? pvp.presetPoolPresetKey
-    : choose(group.presetKeys, rng);
+    : choose(presetKeys, rng);
   const preset = getGlobalPresetByKey(presetKey);
   if (!preset) {
     return null;
@@ -425,12 +428,23 @@ function buildGeneratedPreset(player, state) {
   return selectBotPreset(state) ?? buildRandomPvpPreset(player, state);
 }
 
+/** True when the bot wears nothing: a regear cannot disturb any fight. */
+function hasNoEquipment(player) {
+  const worn = player.getEquipment?.()?.getItems?.() ?? [];
+  return !worn.some((item) => (item?.getId?.() ?? -1) > 0);
+}
+
 function applyGeneratedPvpLoadout(player, state, options = {}) {
   if (!player || player.isPlayerBot?.() !== true) {
     return false;
   }
   const combat = player.getCombat?.();
-  if (combat?.getTarget?.() || combat?.getAttacker?.() || player.getCombatFollowing?.()) {
+  // A bot wearing nothing gears up even mid-fight: it has nothing to swap and would
+  // otherwise stay naked forever in a hotspot that never lets it out of combat.
+  if (
+    !hasNoEquipment(player) &&
+    (combat?.getTarget?.() || combat?.getAttacker?.() || player.getCombatFollowing?.())
+  ) {
     if (state?.pvp) state.pvp.loadoutPending = true;
     return false;
   }

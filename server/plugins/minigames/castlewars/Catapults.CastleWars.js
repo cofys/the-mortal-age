@@ -29,6 +29,9 @@ const SPLASH_MIN = 5;
 const SPLASH_MAX = 15;
 const ROCK_PROJECTILE = 304;
 const ROCK_FLIGHT_TICKS = 3;
+const BOT_FIRE_COOLDOWN_MS = 4200;
+const CATAPULT_RELEASE_ANIM = 441;
+const CATAPULT_RESET_ANIM = 442;
 
 let game;
 let core;
@@ -40,9 +43,16 @@ const uid = (child) => (CATAPULT_INTERFACE << 16) | child;
 function catapults() {
   const O = core.ObjectIdentifiers;
   return {
-    [game.TEAM.SARADOMIN]: { id: O.CATAPULT_5, brokenId: O.CATAPULT_6, face: 3, from: [2414, 3089], landing: [2412, 3091], marker: [167, 168], step: -1 },
-    [game.TEAM.ZAMORAK]: { id: O.CATAPULT_4, brokenId: O.CATAPULT_7, face: 1, from: [2385, 3118], landing: [2387, 3116], marker: [60, 59], step: 1 },
+    [game.TEAM.SARADOMIN]: { id: O.CATAPULT_5, brokenId: O.CATAPULT_6, face: 3, from: [2414, 3089], at: [2413, 3088], landing: [2412, 3091], marker: [167, 168], step: -1 },
+    [game.TEAM.ZAMORAK]: { id: O.CATAPULT_4, brokenId: O.CATAPULT_7, face: 1, from: [2385, 3118], at: [2384, 3117], landing: [2387, 3116], marker: [60, 59], step: 1 },
   };
+}
+
+/** Swing the machine itself, not just the flying rock. */
+function animateCatapult(teamId, animationId) {
+  const catapult = catapults()[teamId];
+  const object = core.MapObjects.get(catapult.id, new core.Location(catapult.at[0], catapult.at[1], 0), null);
+  object?.performAnimation?.(new core.Animation(animationId));
 }
 
 function ownerOf(objectId) {
@@ -125,6 +135,17 @@ function splash(target) {
   }
 }
 
+/** Fly one rock: swing the machine, launch the projectile and splash on arrival. */
+function launchRock(teamId, target) {
+  const [fromX, fromY] = catapults()[teamId].from;
+  animateCatapult(teamId, CATAPULT_RELEASE_ANIM);
+  new core.Projectile(new core.Location(fromX, fromY, 0), target, null, ROCK_PROJECTILE, 0, 100, 50, 5, null).sendProjectile();
+  game.later(ROCK_FLIGHT_TICKS, () => {
+    splash(target);
+    animateCatapult(teamId, CATAPULT_RESET_ANIM);
+  });
+}
+
 function fireCatapult({ player }) {
   const aim = aims.get(player);
   aims.delete(player);
@@ -133,10 +154,7 @@ function fireCatapult({ player }) {
     return true;
   }
   player.getInventory().delete(core.ItemIdentifiers.ROCK_5, 1);
-  const target = landingTile(aim);
-  const [x, y] = catapults()[aim.teamId].from;
-  new core.Projectile(new core.Location(x, y, 0), target, null, ROCK_PROJECTILE, 0, 100, 50, 5, null).sendProjectile();
-  game.later(ROCK_FLIGHT_TICKS, () => splash(target));
+  launchRock(aim.teamId, landingTile(aim));
   return true;
 }
 
@@ -155,6 +173,51 @@ function breakCatapult({ player, objectId, object, itemSlot }) {
   player.getInventory().deleteAtSlot(itemSlot, 1);
   game.swapObject(object, catapultObject(owner, true, object.getLocation()));
   game.setTeamVar(owner, game.TEAM_VARBIT.CATAPULT_BROKEN, 1);
+  return true;
+}
+
+/** Clicks whose landing tile matches the wanted (x, y); 0-30, trunc(h/2) picks the tile. */
+function clicksForTarget(teamId, x, y) {
+  const { landing, step } = catapults()[teamId];
+  const clicks = (steps) => {
+    const k = Math.max(0, Math.min(MAX_CLICKS >> 1, Math.trunc(steps)));
+    return Math.min(MAX_CLICKS, k * 2 + 1);
+  };
+  return landingTile({
+    horizontal: clicks(step * (x - landing[0])),
+    vertical: clicks(-step * (y - landing[1])),
+    teamId,
+  });
+}
+
+const lastBotShot = new WeakMap();
+
+/**
+ * Scripted fire (bot crew): same rock/projectile/splash as the interface, aimed straight
+ * at the tile by inverting the landing mapping. False when the machine is not ready.
+ */
+function botFire(player, x, y) {
+  if (!player || !game.isPlaying(player)) {
+    return false;
+  }
+  const teamId = game.getTeamId(player);
+  const catapult = catapults()[teamId];
+  if (!catapult || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return false;
+  }
+  const now = Date.now();
+  if (now < (lastBotShot.get(player) ?? 0)) {
+    return false;
+  }
+  if (game.getTeamVar(teamId, game.TEAM_VARBIT.CATAPULT_BROKEN) === 1) {
+    return false;
+  }
+  if (!player.getInventory().contains(core.ItemIdentifiers.ROCK_5)) {
+    return false;
+  }
+  lastBotShot.set(player, now + BOT_FIRE_COOLDOWN_MS);
+  player.getInventory().delete(core.ItemIdentifiers.ROCK_5, 1);
+  launchRock(teamId, clicksForTarget(teamId, x, y));
   return true;
 }
 
@@ -182,6 +245,7 @@ function repairCatapult({ player, objectId, object }) {
 module.exports = function attachCastleWarsCatapults(api, castleWars) {
   game = castleWars;
   core = api.core;
+  castleWars.catapultFire = botFire;
   api.onObjectInteraction("Catapult", { Operate: operateCatapult, Repair: repairCatapult });
   api.onItemOnObject("Explosive potion", "Catapult", breakCatapult);
   api.onItemOnObject("Toolkit", "Catapult", repairCatapult);

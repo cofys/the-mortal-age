@@ -10,14 +10,26 @@
  * Stages (varp 14): 1 started, 2 asked Gawain, 3 asked Lancelot, 4 met Morgan,
  * 5 Excalibur bound, 6 Merlin freed, 7 complete.
  *
- * Gaps: the Catherby/Keep Le Faye crates, the chaos altar, the ritual circle,
- * the beehive/wax and the crystal object are item/object interactions the dump
- * does not pin to object ids; only the conversation stages, start hook, candle,
- * Excalibur gift, smashing and completion actions are ported.
+ * The transcript carries the journal-unfriendly parts, so the plugin owns them:
+ * the Catherby crate (object 63) cutscene into Keep Le Faye, Sir Mordred's
+ * death spawning Morgan Le Faye, the trapped Merlin spawn by the giant crystal,
+ * the Port Sarim beggar during the Lady of the Lake's test, the beehive wax,
+ * the chaos altar check, the ritual drop of bat bones (the star scenery itself
+ * is absent from the map), lighting the black candle and smashing the crystal.
+ *
+ * Source: OSRS Wiki "Merlin's Crystal" walkthrough and quick guide; the ritual
+ * symbol is at 2780,3515 and the crystal at 2767,3493 (plane 2).
  */
 module.exports = function registerMerlinsCrystalQuest(api) {
-  const { ItemIdentifiers, NpcIdentifiers } = api.core;
-  const { registerQuest, refreshQuestList } = require("../QuestRuntime");
+  const {
+    ItemIdentifiers,
+    NpcIdentifiers,
+    ObjectIdentifiers,
+    Location,
+    CountdownTask,
+    TaskManager,
+  } = api.core;
+  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "Merlin's Crystal";
   const VARP_MERLINS_CRYSTAL = 14;
@@ -31,13 +43,41 @@ module.exports = function registerMerlinsCrystalQuest(api) {
   const STAGE_COMPLETE = 7;
 
   const START_HOOK = "quest:merlin-s-crystal:start";
-  /** Conversation actions: candle received, crystal shattered, quest finished. */
+  /** Conversation actions: candle received, crate arrives, crystal shattered, quest finished. */
   const BLACK_CANDLE_ACTION_ID = "nlk77H";
+  const CRATE_ARRIVED_STEP_ID = "X6UH6e";
   const CRYSTAL_SHATTERED_ACTION_ID = "q6WlmM";
   const COMPLETE_ACTION_ID = "pVUc-a";
+  const MORDRED_ATTACK_MESSAGE_ID = "hIw3H-";
+  const MORGAN_APPEARS_MESSAGE_ID = "wJ33io";
+  const MORGAN_VANISH_STEP_IDS = new Set(["N1Z186", "J8gccZ"]);
+  const WRONG_INCANTATION_STEP_IDS = new Set(["vYwlTM", "zIiS0O"]);
   /** Beggar test: handing over bread, then the Lady of the Lake's gift. */
   const BEGGAR_BREAD_STEP_IDS = new Set(["emEYqa", "aS5Xkw"]);
   const EXCALIBUR_GIFT_STEP_IDS = new Set(["4DJqdx", "IgIzfo"]);
+  const WRONG_INCANTATIONS = new Set([
+    "Snarthtrick Candanto Termon",
+    "Snarthanto Candon Termtrick",
+  ]);
+
+  const READ_INCANTATION_ATTRIBUTE = "quest.merlin-s-crystal:read-incantation";
+  const LADY_TEST_ATTRIBUTE = "quest.merlin-s-crystal:lady-s-test";
+  const BEGGAR_DONE_ATTRIBUTE = "quest.merlin-s-crystal:beggar-rewarded";
+  const HIVE_REPELLED_ATTRIBUTE = "quest.merlin-s-crystal:hive-repelled";
+
+  const CATHERBY_CRATE_OBJECT_ID = ObjectIdentifiers.CRATE_2; // 63
+  const GIANT_CRYSTAL_OBJECT_ID = ObjectIdentifiers.GIANT_CRYSTAL; // 62
+  const CHAOS_ALTAR_OBJECT_ID = ObjectIdentifiers.CHAOS_ALTAR; // 61
+  const BEEHIVE_OBJECT_ID = ObjectIdentifiers.BEEHIVE; // 68
+
+  const RITUAL_TILE = new Location(2780, 3515, 0);
+  const RITUAL_TILE_RADIUS = 1;
+  const TOWER_MERLIN_TILE = { x: 2766, y: 3493, z: 2 };
+  const KEEP_CRATE_ARRIVAL = new Location(2779, 3400, 0);
+  const MORGAN_TILE = { x: 2771, y: 3403, z: 2 };
+  const BEGGAR_TILE = { x: 3016, y: 3247, z: 0 };
+  const TOWER_ZONE = { minX: 2764, maxX: 2771, minY: 3489, maxY: 3496, levels: [2] };
+  const SARIM_SHOP_ZONE = { minX: 3010, maxX: 3020, minY: 3242, maxY: 3254, levels: [0] };
 
   const ARTHUR_IDS = new Set([
     NpcIdentifiers.KING_ARTHUR,
@@ -47,6 +87,18 @@ module.exports = function registerMerlinsCrystalQuest(api) {
   ]);
   const MORGAN_IDS = new Set([NpcIdentifiers.MORGAN_LE_FAYE, NpcIdentifiers.MORGAN_LE_FAYE_2]);
   const MERLIN_IDS = new Set([NpcIdentifiers.MERLIN, NpcIdentifiers.MERLIN_2]);
+  const MORDRED_IDS = new Set([NpcIdentifiers.SIR_MORDRED]);
+  const GAWAIN_IDS = new Set([
+    NpcIdentifiers.SIR_GAWAIN,
+    NpcIdentifiers.SIR_GAWAIN_2,
+    NpcIdentifiers.SIR_GAWAIN_3,
+    NpcIdentifiers.SIR_GAWAIN_4,
+  ]);
+  const LANCELOT_IDS = new Set([
+    NpcIdentifiers.SIR_LANCELOT,
+    NpcIdentifiers.SIR_LANCELOT_2,
+    NpcIdentifiers.SIR_LANCELOT_3,
+  ]);
 
   function knight(entrapment, keep, search) {
     return { entrapment, keep, search };
@@ -68,15 +120,24 @@ module.exports = function registerMerlinsCrystalQuest(api) {
 
   const EXCALIBUR_ITEM_ID = ItemIdentifiers.EXCALIBUR;
   const BLACK_CANDLE_ITEM_ID = ItemIdentifiers.BLACK_CANDLE;
+  const LIT_BLACK_CANDLE_ITEM_ID = ItemIdentifiers.LIT_BLACK_CANDLE;
   const BUCKET_OF_WAX_ITEM_ID = ItemIdentifiers.BUCKET_OF_WAX;
   const BAT_BONES_ITEM_ID = ItemIdentifiers.BAT_BONES;
   const BREAD_ITEM_ID = ItemIdentifiers.BREAD;
   const HAMMER_ITEM_ID = ItemIdentifiers.HAMMER;
+  const BEEKEEPER_ITEM_IDS = [
+    ItemIdentifiers.BEEKEEPERS_HAT,
+    ItemIdentifiers.BEEKEEPERS_TOP,
+    ItemIdentifiers.BEEKEEPERS_LEGS,
+    ItemIdentifiers.BEEKEEPERS_GLOVES,
+    ItemIdentifiers.BEEKEEPERS_BOOTS,
+  ];
 
   const page = (variant) => ({ page: PAGE, variant });
   const has = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
 
   let quest;
+  const npcsByPlayer = new Map();
 
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
@@ -136,7 +197,7 @@ module.exports = function registerMerlinsCrystalQuest(api) {
     const k = KNIGHTS.get(npcId);
     if (k) return page(knightVariant(k, stage));
     if (MORGAN_IDS.has(npcId)) return page("inside-keep-le-faye-defeating-sir-mordred");
-    if (npcId === NpcIdentifiers.SIR_MORDRED) return page("inside-keep-le-faye-encountering-sir-mordred");
+    if (MORDRED_IDS.has(npcId)) return page("inside-keep-le-faye-encountering-sir-mordred");
     if (MERLIN_IDS.has(npcId)) {
       return page(stage >= STAGE_MERLIN_FREED ? "smashing-talking-to-merlin-again" : "smashing");
     }
@@ -192,12 +253,131 @@ module.exports = function registerMerlinsCrystalQuest(api) {
     if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
   }
 
+  /** Raises the stage to `stage`; later stages are never lowered. */
+  function advanceTo(player, stage) {
+    if (quest.getStage(player) < stage) quest.setStage(player, stage);
+  }
+
+  // ==========================================================================
+  // Owner-only quest NPCs (Merlin, Morgan, the beggar, Thrantax)
+  // ==========================================================================
+
+  function trackedEntry(player) {
+    let entry = npcsByPlayer.get(player);
+    if (!entry) {
+      entry = {};
+      npcsByPlayer.set(player, entry);
+    }
+    return entry;
+  }
+
+  function spawnTracked(player, key, id, tile) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    const entry = trackedEntry(player);
+    if (entry[key]) return;
+    const npc = api.spawnNpc({ id, x: tile.x, y: tile.y, z: tile.z, owner: player, ownerOnly: true, wanderRadius: 0 });
+    if (npc) entry[key] = npc;
+  }
+
+  function removeTracked(player, key) {
+    const entry = npcsByPlayer.get(player);
+    if (!entry?.[key]) return;
+    api.removeNpc(entry[key]);
+    delete entry[key];
+  }
+
+  function clearTracked(player) {
+    const entry = npcsByPlayer.get(player);
+    if (!entry) return;
+    for (const npc of Object.values(entry)) api.removeNpc(npc);
+    npcsByPlayer.delete(player);
+  }
+
+  /** Merlin sits inside the giant crystal until it shatters. */
+  function ensureTowerMerlin(player) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    if (!quest.isStarted(player) || quest.getStage(player) >= STAGE_MERLIN_FREED) {
+      removeTracked(player, "merlin");
+      return;
+    }
+    spawnTracked(player, "merlin", NpcIdentifiers.MERLIN, TOWER_MERLIN_TILE);
+  }
+
+  /** The beggar exists while the Lady of the Lake's Port Sarim test is pending. */
+  function ensureBeggar(player) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    if (player.getAttribute(LADY_TEST_ATTRIBUTE) !== true || player.getAttribute(BEGGAR_DONE_ATTRIBUTE) === true) {
+      return;
+    }
+    spawnTracked(player, "beggar", NpcIdentifiers.BEGGAR, BEGGAR_TILE);
+  }
+
+  function ensureQuestNpcs(player) {
+    ensureTowerMerlin(player);
+    ensureBeggar(player);
+  }
+
+  // ==========================================================================
+  // Conversations
+  // ==========================================================================
+
+  /**
+   * Choices carry no ids in the dump, so the stage writes key off the option
+   * text: Gawain names Morgan, Lancelot names the Catherby deliveries, Morgan
+   * offers the ritual and the Lady sets her test. Thrantax's correct
+   * incantation binds the spell to Excalibur.
+   */
+  function handleChoice({ player, npcId, option }) {
+    const text = String(option ?? "");
+    if (GAWAIN_IDS.has(npcId) && text === "Do you know how Merlin got trapped?") {
+      advanceTo(player, STAGE_SPOKEN_GAWAIN);
+      return;
+    }
+    if (LANCELOT_IDS.has(npcId) && text === "Any ideas on how to get into Morgan Le Faye's stronghold?") {
+      advanceTo(player, STAGE_SPOKEN_LANCELOT);
+      return;
+    }
+    if (MORGAN_IDS.has(npcId)) {
+      if (text === "Tell me how to untrap Merlin and I might.") {
+        advanceTo(player, STAGE_SPOKEN_MORGAN);
+        return;
+      }
+      if (text === "OK I will do all that." || text === "Ok then.") {
+        removeTracked(player, "morgan");
+      }
+      return;
+    }
+    if (npcId === NpcIdentifiers.THRANTAX_THE_MIGHTY) {
+      if (text === "Snarthon Candtrick Termanto") {
+        advanceTo(player, STAGE_EXCALIBUR_BOUND);
+        removeTracked(player, "thrantax");
+        return;
+      }
+      if (WRONG_INCANTATIONS.has(text)) destroyBlackCandle(player);
+      return;
+    }
+    if (npcId === NpcIdentifiers.THE_LADY_OF_THE_LAKE && text === "I seek the sword Excalibur.") {
+      player.setAttribute(LADY_TEST_ATTRIBUTE, true);
+      ensureBeggar(player);
+    }
+  }
+
+  function destroyBlackCandle(player) {
+    if (has(player, LIT_BLACK_CANDLE_ITEM_ID)) {
+      player.getInventory().deleteNumber(LIT_BLACK_CANDLE_ITEM_ID, 1);
+      return;
+    }
+    if (has(player, BLACK_CANDLE_ITEM_ID)) player.getInventory().deleteNumber(BLACK_CANDLE_ITEM_ID, 1);
+  }
+
   /**
    * Conversation actions: the candle maker trades wax for a candle, Thrantax's
    * boon shatters the crystal, and King Arthur finishes the quest. The beggar
    * test consumes bread and the Lady of the Lake gifts Excalibur.
    */
-  function handleAction({ player, npcId, stepId }) {
+  function handleAction(event) {
+    const { player, npcId, stepId } = event;
+    const text = String(event.text ?? "");
     if (stepId === BLACK_CANDLE_ACTION_ID && npcId === NpcIdentifiers.CANDLE_MAKER) {
       if (has(player, BUCKET_OF_WAX_ITEM_ID)) {
         player.getInventory().deleteNumber(BUCKET_OF_WAX_ITEM_ID, 1);
@@ -206,25 +386,219 @@ module.exports = function registerMerlinsCrystalQuest(api) {
       return;
     }
     if (stepId === CRYSTAL_SHATTERED_ACTION_ID) {
-      if (quest.getStage(player) < STAGE_MERLIN_FREED) quest.setStage(player, STAGE_MERLIN_FREED);
+      advanceTo(player, STAGE_MERLIN_FREED);
       if (has(player, BAT_BONES_ITEM_ID)) player.getInventory().deleteNumber(BAT_BONES_ITEM_ID, 1);
+      removeTracked(player, "merlin");
       return;
     }
     if (stepId === COMPLETE_ACTION_ID && ARTHUR_IDS.has(npcId)) {
       if (!quest.isComplete(player)) quest.complete(player);
       return;
     }
-    if (BEGGAR_BREAD_STEP_IDS.has(stepId) && has(player, BREAD_ITEM_ID)) {
-      player.getInventory().deleteNumber(BREAD_ITEM_ID, 1);
+    if (BEGGAR_BREAD_STEP_IDS.has(stepId)) {
+      if (has(player, BREAD_ITEM_ID)) player.getInventory().deleteNumber(BREAD_ITEM_ID, 1);
       return;
     }
-    if (EXCALIBUR_GIFT_STEP_IDS.has(stepId) && !has(player, EXCALIBUR_ITEM_ID)) {
-      player.getInventory().adds(EXCALIBUR_ITEM_ID, 1);
+    if (EXCALIBUR_GIFT_STEP_IDS.has(stepId)) {
+      if (!has(player, EXCALIBUR_ITEM_ID)) player.getInventory().adds(EXCALIBUR_ITEM_ID, 1);
+      player.setAttribute(BEGGAR_DONE_ATTRIBUTE, true);
+      removeTracked(player, "beggar");
+      return;
+    }
+    if (stepId === CRATE_ARRIVED_STEP_ID) {
+      const location = player.getLocation();
+      if (Math.abs(location.getX() - KEEP_CRATE_ARRIVAL.x) > 10 || Math.abs(location.getY() - KEEP_CRATE_ARRIVAL.y) > 10) {
+        player.moveTo(KEEP_CRATE_ARRIVAL.clone());
+      }
+      return;
+    }
+    if (MORGAN_VANISH_STEP_IDS.has(stepId)) {
+      removeTracked(player, "morgan");
+      return;
+    }
+    if (WRONG_INCANTATION_STEP_IDS.has(stepId)) {
+      destroyBlackCandle(player);
+      player.sendMessage(text);
+      return;
+    }
+    if (stepId === MORGAN_APPEARS_MESSAGE_ID || stepId === MORDRED_ATTACK_MESSAGE_ID) {
+      player.sendMessage(text);
     }
   }
 
+  /** Sir Mordred yields; Morgan Le Faye appears for whoever struck the blow. */
+  function handleNpcDeath(event) {
+    if (!MORDRED_IDS.has(event.npcId)) return;
+    const player = event.killer?.isPlayer?.() ? event.killer : null;
+    if (!player || !quest.isStarted(player)) return;
+    if (quest.getStage(player) >= STAGE_SPOKEN_MORGAN) return;
+    const entry = trackedEntry(player);
+    if (!entry.morgan) {
+      const morgan = api.spawnNpc({
+        id: NpcIdentifiers.MORGAN_LE_FAYE,
+        x: MORGAN_TILE.x,
+        y: MORGAN_TILE.y,
+        z: MORGAN_TILE.z,
+        owner: player,
+        ownerOnly: true,
+        wanderRadius: 0,
+      });
+      if (morgan) entry.morgan = morgan;
+    }
+    TaskManager.submit(
+      new CountdownTask(player, 1, () => {
+        if (player.isRegistered?.() === false) return;
+        startTranscript(api, player, NpcIdentifiers.MORGAN_LE_FAYE, PAGE, "inside-keep-le-faye-defeating-sir-mordred");
+      })
+    );
+  }
+
+  // ==========================================================================
+  // Objects, items and the ritual
+  // ==========================================================================
+
+  /** Hide in the Catherby crates; the cutscene drops the player in the keep. */
+  function hideInCatherbyCrate(event) {
+    if (event.objectId !== CATHERBY_CRATE_OBJECT_ID) return false;
+    const { player } = event;
+    if (!quest.isStarted(player) || quest.isComplete(player)) return false;
+    startTranscript(api, player, NpcIdentifiers.ARHEIN, PAGE, "infiltrating-the-keep-hiding-in-arhein-s-crate");
+    return true;
+  }
+
+  function smashCrystal(player) {
+    if (quest.getStage(player) >= STAGE_MERLIN_FREED) {
+      player.sendMessage("The giant crystal lies shattered.");
+      return;
+    }
+    startTranscript(api, player, NpcIdentifiers.MERLIN, PAGE, "smashing");
+  }
+
+  function smashGiantCrystal(event) {
+    if (event.objectId !== GIANT_CRYSTAL_OBJECT_ID) return false;
+    smashCrystal(event.player);
+    return true;
+  }
+
+  function excaliburOnCrystal(event) {
+    smashCrystal(event.player);
+  }
+
+  function checkChaosAltar(event) {
+    if (event.objectId !== CHAOS_ALTAR_OBJECT_ID) return false;
+    const { player } = event;
+    player.setAttribute(READ_INCANTATION_ATTRIBUTE, true);
+    startTranscript(api, player, NpcIdentifiers.THRANTAX_THE_MIGHTY, PAGE, "searching-the-altar-for-the-spell");
+    return true;
+  }
+
+  /** Wearing the full Beekeeper's outfit also keeps the bees calm, per the wiki. */
+  function wearingBeekeeperOutfit(player) {
+    const items = player.getEquipment?.()?.getItems?.() ?? [];
+    return BEEKEEPER_ITEM_IDS.every((id) => items.some((item) => item?.getId?.() === id));
+  }
+
+  /** A wax extraction needs an empty bucket and a hive the player has calmed. */
+  function collectWax(player) {
+    if (!has(player, ItemIdentifiers.BUCKET)) {
+      player.sendMessage("I need an empty bucket to collect the wax.");
+      return true;
+    }
+    if (player.getAttribute(HIVE_REPELLED_ATTRIBUTE) !== true && !wearingBeekeeperOutfit(player)) {
+      player.sendMessage("The bees are too angry to approach. I should use some insect repellent first.");
+      return true;
+    }
+    player.getInventory().deleteNumber(ItemIdentifiers.BUCKET, 1);
+    player.getInventory().adds(BUCKET_OF_WAX_ITEM_ID, 1);
+    player.setAttribute(HIVE_REPELLED_ATTRIBUTE, false);
+    player.sendMessage("You collect a bucket of wax from the beehive.");
+    return true;
+  }
+
+  function repellentOnHive(event) {
+    if (event.objectId !== BEEHIVE_OBJECT_ID) return false;
+    const { player } = event;
+    player.getInventory().deleteNumber(event.itemId, 1);
+    player.setAttribute(HIVE_REPELLED_ATTRIBUTE, true);
+    player.sendMessage("You spray the beehive with the insect repellent. The bees calm down.");
+    return true;
+  }
+
+  function bucketOnHive(event) {
+    if (event.objectId !== BEEHIVE_OBJECT_ID) return false;
+    return collectWax(event.player);
+  }
+
+  function takeFromHive(event) {
+    if (event.objectId !== BEEHIVE_OBJECT_ID) return false;
+    return collectWax(event.player);
+  }
+
+  function lightBlackCandle(event) {
+    const { player } = event;
+    player.getInventory().deleteNumber(BLACK_CANDLE_ITEM_ID, 1);
+    player.getInventory().adds(LIT_BLACK_CANDLE_ITEM_ID, 1);
+    player.sendMessage("You light the black candle.");
+  }
+
+  /**
+   * Dropping bat bones inside the ritual circle: the words have to be learnt
+   * first and a lit black candle carried, then Thrantax appears. The star
+   * scenery is not in this map, so the wiki tile 2780,3515 is the circle.
+   */
+  function batBonesOnCircle(event) {
+    if (event.itemId !== BAT_BONES_ITEM_ID) return;
+    const { player } = event;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_SPOKEN_MORGAN || stage >= STAGE_EXCALIBUR_BOUND || quest.isComplete(player)) return;
+    const location = player.getLocation();
+    if (
+      location.getZ() !== RITUAL_TILE.z ||
+      Math.abs(location.getX() - RITUAL_TILE.x) > RITUAL_TILE_RADIUS ||
+      Math.abs(location.getY() - RITUAL_TILE.y) > RITUAL_TILE_RADIUS
+    ) {
+      return;
+    }
+    const summonVariant = "performing-the-ritual-dropping-bat-bones-on-the-ritual-circle-with-a-lit-black-candle-after-reading-the-incantation";
+    if (player.getAttribute(READ_INCANTATION_ATTRIBUTE) !== true) {
+      event.handled = true;
+      startTranscript(
+        api,
+        player,
+        NpcIdentifiers.THRANTAX_THE_MIGHTY,
+        PAGE,
+        "performing-the-ritual-dropping-bat-bones-on-the-ritual-circle-with-a-lit-black-candle-without-having-read-the-incantation"
+      );
+      return;
+    }
+    if (!has(player, LIT_BLACK_CANDLE_ITEM_ID)) {
+      event.handled = true;
+      startTranscript(
+        api,
+        player,
+        NpcIdentifiers.THRANTAX_THE_MIGHTY,
+        PAGE,
+        "performing-the-ritual-dropping-bat-bones-on-the-ritual-circle-without-a-lit-black-candle"
+      );
+      return;
+    }
+    event.handled = true;
+    player.getInventory().deleteNumber(BAT_BONES_ITEM_ID, 1);
+    spawnTracked(player, "thrantax", NpcIdentifiers.THRANTAX_THE_MIGHTY, RITUAL_TILE);
+    startTranscript(api, player, NpcIdentifiers.THRANTAX_THE_MIGHTY, PAGE, summonVariant);
+  }
+
+  function handleZoneEnter({ player }) {
+    ensureQuestNpcs(player);
+  }
+
   function handleLogin({ player }) {
+    ensureQuestNpcs(player);
     refreshQuestList(player);
+  }
+
+  function handleLogout({ player }) {
+    if (player) clearTracked(player);
   }
 
   quest = registerQuest(api, {
@@ -235,15 +609,35 @@ module.exports = function registerMerlinsCrystalQuest(api) {
     completionValue: STAGE_COMPLETE,
     questPoints: 6,
     xpRewards: [],
-    rewardItemId: EXCALIBUR_ITEM_ID,
+    scrollItemId: EXCALIBUR_ITEM_ID,
     rewardItemLabel: "Excalibur",
     otherRewards: ["Become a Knight of the Round Table"],
     buildJournal,
   });
 
+  api.persistAttribute(READ_INCANTATION_ATTRIBUTE);
+  api.persistAttribute(LADY_TEST_ATTRIBUTE);
+  api.persistAttribute(BEGGAR_DONE_ATTRIBUTE);
+  api.persistAttribute(HIVE_REPELLED_ATTRIBUTE);
+
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
+  api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onObjectInteraction("Crate", { "Hide-in": hideInCatherbyCrate });
+  api.onObjectInteraction("Giant crystal", { Smash: smashGiantCrystal });
+  api.onObjectInteraction("Chaos altar", { Check: checkChaosAltar });
+  api.onObjectInteraction("Beehive", { "Take-from": takeFromHive });
+  api.onItemOnObject("Excalibur", "Giant crystal", excaliburOnCrystal);
+  api.onItemOnObject("Insect repellent", "Beehive", repellentOnHive, { noted: false });
+  api.onItemOnObject("Bucket", "Beehive", bucketOnHive, { noted: false });
+  api.onItemOnItem("Tinderbox", "Black candle", lightBlackCandle, { noted: false });
+  api.onItemDropPolicy(batBonesOnCircle);
+  api.onNpcDeath(handleNpcDeath);
+  api.onZoneEnter(TOWER_ZONE, handleZoneEnter);
+  api.onZoneEnter(SARIM_SHOP_ZONE, handleZoneEnter);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
+  api.onPlayerDisconnect(handleLogout);
 };

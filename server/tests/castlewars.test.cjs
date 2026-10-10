@@ -22,11 +22,12 @@ const { TEAM } = data;
 let game;
 let objectHandler;
 let botLogins = 0;
+let prompt = null;
 
 const registry = {
   core,
   getAreaManager: () => ({ areas: [] }),
-  getBonusManager: () => ({}),
+  getBonusManager: () => ({ update: () => {} }),
   getObjectManager: () => ({ register: () => {}, deregister: () => {}, existsLocation: () => false }),
   getRegionManager: () => RegionManager,
   getTaskManager: () => ({ submit: () => {}, cancelTasks: () => {} }),
@@ -35,6 +36,12 @@ const registry = {
   emitPlayerLogin: () => { botLogins += 1; },
   onObjectInteraction: (handler) => { objectHandler = handler; },
   onNpcInteraction: () => {},
+  sendMultiChatboxPrompt: (player, title, ...pairs) => {
+    const options = [];
+    for (let i = 0; i < pairs.length; i += 2) options.push({ text: pairs[i], pick: pairs[i + 1] });
+    prompt = { player, title, options };
+    return true;
+  },
 };
 
 function fakeArea(players = []) {
@@ -51,6 +58,7 @@ function fakePlayer({ head = -1, cape = -1, inventory = [], bot = false } = {}) 
     getInventory: () => ({ containsAny: (ids) => inventory.some((id) => ids.includes(id)) }),
     sendMessage: (message) => state.messages.push(message),
     smartMove: (location) => state.moves.push(location),
+    moveTo: (location) => state.moves.push(location),
     isPlayerBot: () => bot,
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
@@ -91,6 +99,7 @@ before(() => {
 
 afterEach(() => {
   PluginManager.pluginConfigCache = {};
+  prompt = null;
   World.getAddPlayerQueue().splice(0);
   for (const area of Object.values(game.waitingAreas)) area.players.length = 0;
   game.lobbyArea.players.length = 0;
@@ -242,4 +251,79 @@ test('both waiting rooms release seeded bots on leave and honour the transition 
     assert.equal(calls.coloured, 0, 'a released bot never gets team colours');
     calls.released = 0;
   }
+});
+
+test('a real player joining an empty lobby is prompted to pick a bot tier', () => {
+  const player = fakePlayer();
+  enterPortal(player, core.ObjectIdentifiers.GUTHIX_PORTAL);
+  assert.ok(prompt, 'the empty-lobby prompt was shown');
+  assert.equal(prompt.title, 'The Castle Wars lobby is empty. Which bots should populate the game?');
+  assert.deepEqual(prompt.options.map((option) => option.text), ['Novice', 'Intermediate', 'Veteran', 'None']);
+  assert.equal(player.moves.length, 0, 'the player is not moved before answering');
+
+  const loginsBefore = botLogins;
+  prompt.options[3].pick();
+  assert.equal(player.moves.length, 1, 'None still moves the player to a waiting room');
+  assert.equal(World.getAddPlayerQueue().length, 0, 'None spawns no bots');
+  assert.equal(botLogins, loginsBefore, 'None logs in no bots');
+});
+
+test('picking a tier populates both teams with the 12/6/5 mix plus the specialists', () => {
+  assert.equal(game.BOT_ROLE_KEY, 'castlewars:bot-role');
+  assert.equal(game.BOT_TIER_KEY, 'castlewars:bot-tier');
+  const player = fakePlayer();
+  enterPortal(player, core.ObjectIdentifiers.SARADOMIN_PORTAL);
+  assert.ok(prompt, 'the empty-lobby prompt was shown');
+  prompt.options[2].pick();
+
+  assert.equal(player.moves.length, 1, 'the player joins the team they asked for');
+  assert.equal(game.getTeamId(player), TEAM.SARADOMIN);
+
+  const bots = World.getAddPlayerQueue();
+  assert.equal(bots.length, 60, 'thirty bots a side');
+  for (const teamId of [TEAM.SARADOMIN, TEAM.ZAMORAK]) {
+    const teamBots = bots.filter((bot) => game.getTeamId(bot) === teamId);
+    assert.equal(teamBots.length, 30, `${teamId} has thirty bots`);
+    const roles = {
+      attacker: 0, flag: 0, guard: 0, doorman: 0, 'side-doorman': 0,
+      archer: 0, mage: 0, catapult: 0,
+    };
+    for (const bot of teamBots) {
+      assert.equal(bot.getAttribute('castlewars:bot-tier'), 'veteran', `${bot.getUsername()} is the picked tier`);
+      const role = bot.getAttribute('castlewars:bot-role');
+      assert.ok(role in roles, `${bot.getUsername()} has a real role`);
+      roles[role] += 1;
+    }
+    assert.deepEqual(
+      roles,
+      { attacker: 12, flag: 6, guard: 5, doorman: 1, 'side-doorman': 1, archer: 2, mage: 2, catapult: 1 },
+      `${teamId} gets the 12/6/5 mix plus the specialists`
+    );
+  }
+});
+
+test('bots entering an empty lobby are never prompted', () => {
+  const bot = fakePlayer({ bot: true });
+  enterPortal(bot, core.ObjectIdentifiers.GUTHIX_PORTAL);
+  assert.equal(prompt, null, 'no prompt for a bot');
+  assert.equal(bot.moves.length, 1, 'the bot still joins a waiting room');
+});
+
+test('a carrier whose banner was stripped before the drop hook still drops the flag', () => {
+  const player = fakePlayer();
+  enterPortal(player, core.ObjectIdentifiers.SARADOMIN_PORTAL);
+  prompt.options[0].pick();
+  const carrier = World.getAddPlayerQueue().find((bot) => game.getTeamId(bot) === TEAM.ZAMORAK);
+  assert.ok(carrier, 'a Zamorak bot was spawned');
+  game.carryFlag(carrier, TEAM.ZAMORAK);
+  assert.equal(game.flagStatus[TEAM.ZAMORAK], 1, 'the flag is recorded as carried');
+  assert.equal(game.getCarriedFlagTeam(carrier), TEAM.ZAMORAK, 'the banner is equipped');
+  // Bot deaths run through the bot loot system, which removes the banner before any
+  // Castle Wars drop hook can see it - the case that used to leave the flag carried
+  // forever with no carrier, so no hint arrow and no way to score.
+  carrier.getEquipment().resetItems();
+  game.dropCarriedFlag(carrier);
+  assert.equal(game.flagStatus[TEAM.ZAMORAK], 2, 'the flag now lies where the carrier fell');
+  assert.equal(game.getCarriedFlagTeam(carrier), null, 'nobody is holding it');
+  game.restoreFlagToBase(TEAM.ZAMORAK);
 });

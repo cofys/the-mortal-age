@@ -3,7 +3,7 @@
  * as live OSRS plays it (rsprox capture database):
  *
  * - Travel on a tree opens the menu interface (187) through its script with "Spirit Tree
- *   Locations" and every tree in data/definitions/spirit-trees.json, those the player can't
+ *   Locations" and every tree in plugins/world/data/spirit-trees.json, those the player can't
  *   use greyed out. The choice comes back as a pause button on 187:3 whose sub is the slot.
  * - Choosing a tree: the menu closes, "You place your hands on the dry tough bark..." appears
  *   (an objectbox without a button), the player reaches for the tree, and two ticks later they
@@ -64,7 +64,7 @@ let pluginApi = null;
 let trees = [];
 
 function loadTrees() {
-  const file = path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "spirit-trees.json");
+  const file = path.join(__dirname, "data", "spirit-trees.json");
   return JSON.parse(fs.readFileSync(file, "utf8")).trees;
 }
 

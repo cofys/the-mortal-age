@@ -15,9 +15,7 @@
  * implemented; the wiki "level 10 combat" gate is assumed satisfied; the cache
  * item is named SHED_KEY (4186) but the quest's shed key is 2411, exposed here as
  * ItemIdentifiers.KEY_9; the diary (2408) has no spawn supplied by this plugin,
- * so reading it depends on another source placing it; the "grab the ball before
- * killing the experiment" branch is replaced by spawning the experiment on shed
- * entry and dropping the ball when its final form dies; the cupboard open state
+ * so reading it depends on another source placing it; the cupboard open state
  * is not swapped in the world.
  */
 module.exports = function registerWitchsHouseQuest(api) {
@@ -28,6 +26,7 @@ module.exports = function registerWitchsHouseQuest(api) {
     ItemIdentifiers,
     NpcIdentifiers,
     ObjectIdentifiers,
+    World,
   } = api.core;
   const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
 
@@ -60,6 +59,7 @@ module.exports = function registerWitchsHouseQuest(api) {
   const FRONT_DOOR_LOC_ID = ObjectIdentifiers.DOOR_102;
   const BACK_DOOR_LOC_ID = ObjectIdentifiers.DOOR_103;
   const SHED_DOOR_LOC_ID = ObjectIdentifiers.DOOR_104;
+  const WALL_DOOR_LOC_IDS = new Set([FRONT_DOOR_LOC_ID, BACK_DOOR_LOC_ID, SHED_DOOR_LOC_ID]);
   const FOUNTAIN_LOC_ID = ObjectIdentifiers.FOUNTAIN_4;
   const GATE_LOC_IDS = new Set([ObjectIdentifiers.GATE_66, ObjectIdentifiers.GATE_67]);
   const POTTED_PLANT_LOC_ID = ObjectIdentifiers.POTTED_PLANT_3;
@@ -74,6 +74,7 @@ module.exports = function registerWitchsHouseQuest(api) {
 
   const MOUSE_TILE = { x: 2903, y: 3466, z: 0 };
   const EXPERIMENT_TILE = { x: 2935, y: 3462, z: 0 };
+  const BALL_SPAWN_TILE = { x: 2935, y: 3460, z: 0 };
   const BASEMENT_TILE = { x: 2907, y: 9876, z: 0 };
   const GROUND_FLOOR_TILE = { x: 2907, y: 3476, z: 0 };
 
@@ -161,14 +162,37 @@ module.exports = function registerWitchsHouseQuest(api) {
     if (npcId !== BOY_NPC_ID || stepId !== COMPLETE_ACTION_ID) return;
     if (!held(player, BALL_ITEM_ID) || quest.isComplete(player)) return;
     player.getInventory().deleteNumber(BALL_ITEM_ID, 1);
+    for (const itemId of [DOOR_KEY_ITEM_ID, DIARY_ITEM_ID, SHED_KEY_ITEM_ID]) {
+      const amount = player.getInventory().getAmount(itemId);
+      if (amount > 0) player.getInventory().deleteNumber(itemId, amount);
+    }
     quest.complete(player);
   }
 
-  function crossNorthSouthDoor(event) {
+  /**
+   * A wall loc blocks the tile edge it faces from, so the two tiles it separates
+   * are the door's own tile and its neighbour across that edge: rot 0 west
+   * (x/x-1), rot 2 east (x/x+1), rot 1 south (y/y+1), rot 3 north (y/y-1).
+   * Crossing toggles between those two tiles. The old x+1/y-1 guess stepped a
+   * tile past the shed's west-wall door, out of the door's own reach, so clicking
+   * Open from inside could never leave; toggling also keeps the entry landing on
+   * the door tile itself (the shed's interior starts there, unlike the house).
+   */
+  function crossDoor(event) {
     const { player, location } = event;
-    const y = player.getLocation().getY();
-    const destinationY = y >= location.y ? location.y - 1 : location.y + 1;
-    player.moveTo(new Location(location.x, destinationY, location.z));
+    const position = player.getLocation();
+    const face = Number(event.object?.getFace?.() ?? 0) & 0x3;
+    if (face === 0 || face === 2) {
+      const destinationX = position.getX() === location.x
+        ? location.x + (face === 0 ? -1 : 1)
+        : location.x;
+      player.moveTo(new Location(destinationX, position.getY(), location.z));
+      return;
+    }
+    const destinationY = position.getY() === location.y
+      ? location.y + (face === 1 ? 1 : -1)
+      : location.y;
+    player.moveTo(new Location(position.getX(), destinationY, location.z));
   }
 
   function crossElectricGate(event) {
@@ -176,6 +200,32 @@ module.exports = function registerWitchsHouseQuest(api) {
     const x = player.getLocation().getX();
     const destinationX = x <= location.x ? location.x + 1 : location.x - 1;
     player.moveTo(new Location(destinationX, location.y, location.z));
+  }
+
+  /**
+   * Walk-to for a wall door otherwise settles on the nearest floor tile beside
+   * the door tile, and for a wall loc that tile is not always one the door can
+   * be used from (north or south of the shed door): the click then fails with
+   * "You can't reach that!". Send the player to the accepted reach tile on
+   * their own side of the wall instead; the interaction that follows crosses.
+   */
+  function routeWallDoor(event) {
+    const { player, object } = event;
+    if (!object || !WALL_DOOR_LOC_IDS.has(event.objectId)) return;
+    const location = object.getLocation();
+    const position = player.getLocation();
+    const face = Number(object.getFace?.() ?? 0) & 0x3;
+    if (face === 0 || face === 2) {
+      const destinationX = face === 0
+        ? (position.getX() < location.getX() ? location.getX() - 1 : location.getX())
+        : (position.getX() <= location.getX() ? location.getX() : location.getX() + 1);
+      event.destination = { x: destinationX, y: location.getY(), z: location.getZ() };
+      return;
+    }
+    const destinationY = face === 1
+      ? (position.getY() <= location.getY() ? location.getY() : location.getY() + 1)
+      : (position.getY() >= location.getY() ? location.getY() : location.getY() - 1);
+    event.destination = { x: location.getX(), y: destinationY, z: location.getZ() };
   }
 
   function searchPottedPlant(event) {
@@ -220,7 +270,12 @@ module.exports = function registerWitchsHouseQuest(api) {
       owner: player,
       ownerOnly: true,
     });
-    if (npc) experimentByPlayer.set(player, npc);
+    if (npc) {
+      // Quest spawn: without this its death queues the definition's own respawn,
+      // leaving an untracked shapeshifter behind in the shed.
+      npc.__skipDefaultRespawn = true;
+      experimentByPlayer.set(player, npc);
+    }
   }
 
   function dropBall(player, location) {
@@ -229,6 +284,27 @@ module.exports = function registerWitchsHouseQuest(api) {
       new Item(BALL_ITEM_ID, 1),
       new Location(location.getX(), location.getY(), location.getZ())
     );
+  }
+
+  /** The shed's ball is a permanent ground spawn; only drop one if that is gone. */
+  function ballSpawnPresent() {
+    return World.getItems().some((ground) => {
+      if (ground?.getItem?.().getId?.() !== BALL_ITEM_ID) return false;
+      const position = ground.getPosition?.();
+      return position?.getX?.() === BALL_SPAWN_TILE.x &&
+        position?.getY?.() === BALL_SPAWN_TILE.y &&
+        position?.getZ?.() === BALL_SPAWN_TILE.z;
+    });
+  }
+
+  /** Wiki: taking the shed's ball before the experiment dies leaves the player weakened. */
+  function handleBallPickup(event) {
+    if (event.groundItemId !== BALL_ITEM_ID) return;
+    const { x, y, z } = event.location ?? {};
+    if (Math.abs(x - BALL_SPAWN_TILE.x) > 2 || Math.abs(y - BALL_SPAWN_TILE.y) > 2 || z !== BALL_SPAWN_TILE.z) return;
+    if (quest.getStage(event.player) >= STAGE_DEFEATED_EXPERIMENT) return;
+    event.handled = true;
+    event.player.sendMessage("The shapeshifter glares at you. You feel slightly weakened.");
   }
 
   /** Each shapeshifter form dies into the next; the fourth one stays dead. */
@@ -246,7 +322,7 @@ module.exports = function registerWitchsHouseQuest(api) {
         quest.setStage(owner, STAGE_DEFEATED_EXPERIMENT);
       }
       owner.sendMessage("You finally kill the shapeshifter once and for all.");
-      dropBall(owner, npc.getLocation());
+      if (!ballSpawnPresent()) dropBall(owner, npc.getLocation());
       return;
     }
 
@@ -262,7 +338,10 @@ module.exports = function registerWitchsHouseQuest(api) {
       owner,
       ownerOnly: true,
     });
-    if (next) experimentByPlayer.set(owner, next);
+    if (next) {
+      next.__skipDefaultRespawn = true;
+      experimentByPlayer.set(owner, next);
+    }
     const forms = ["spider", "bear", "wolf"];
     owner.sendMessage(`The shapeshifter's body deforms and turns into a ${forms[index]}!`);
     event.preventDeath = true;
@@ -275,9 +354,24 @@ module.exports = function registerWitchsHouseQuest(api) {
       startTranscript(api, player, BOY_NPC_ID, PAGE, "getting-past-the-witch-attempting-to-open-the-shed-door-without-the-key-or-before-using-the-key-on-it");
       return;
     }
-    const entering = player.getLocation().getY() >= event.location.y;
+    const entering = player.getLocation().getX() < event.location.x;
     if (entering && stage < STAGE_DEFEATED_EXPERIMENT) ensureExperiment(player);
-    crossNorthSouthDoor(event);
+    crossDoor(event);
+  }
+
+  /** The basement gate shocks bare hands; Doors asks here first via door:toggle. */
+  function handleElectricGate(event) {
+    const { player } = event;
+    event.handled = true;
+    if (player.getEquipment().get(api.core.Equipment.HANDS_SLOT)?.getId?.() !== GLOVES_ITEM_ID) {
+      startTranscript(api, player, BOY_NPC_ID, PAGE, "the-witch-s-house-attempting-to-open-the-gate-without-correct-gloves");
+      return;
+    }
+    crossElectricGate(event);
+  }
+
+  function handleDoorToggle(event) {
+    if (GATE_LOC_IDS.has(event.objectId)) handleElectricGate(event);
   }
 
   /** All the object interactions in and around the house. */
@@ -300,7 +394,7 @@ module.exports = function registerWitchsHouseQuest(api) {
     }
     if (objectId === FRONT_DOOR_LOC_ID) {
       event.handled = true;
-      const leaving = player.getLocation().getY() < event.location.y;
+      const leaving = player.getLocation().getX() > event.location.x;
       const stage = quest.getStage(player);
       if (!leaving && (stage < STAGE_STARTED || stage >= STAGE_COMPLETE)) {
         player.sendMessage("It would be rude to break into this house.");
@@ -310,16 +404,11 @@ module.exports = function registerWitchsHouseQuest(api) {
         startTranscript(api, player, BOY_NPC_ID, PAGE, "the-witch-s-house-attempting-to-open-the-garden-door-without-unlocking-it");
         return;
       }
-      crossNorthSouthDoor(event);
+      crossDoor(event);
       return;
     }
     if (GATE_LOC_IDS.has(objectId)) {
-      event.handled = true;
-      if (player.getEquipment().get(api.core.Equipment.HANDS_SLOT)?.getId?.() !== GLOVES_ITEM_ID) {
-        startTranscript(api, player, BOY_NPC_ID, PAGE, "the-witch-s-house-attempting-to-open-the-gate-without-correct-gloves");
-        return;
-      }
-      crossElectricGate(event);
+      handleElectricGate(event);
       return;
     }
     if (objectId === BACK_DOOR_LOC_ID) {
@@ -328,7 +417,7 @@ module.exports = function registerWitchsHouseQuest(api) {
         player.sendMessage("This door is locked.");
         return;
       }
-      crossNorthSouthDoor(event);
+      crossDoor(event);
       return;
     }
     if (objectId === SHED_DOOR_LOC_ID) {
@@ -431,11 +520,14 @@ module.exports = function registerWitchsHouseQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("door:toggle", handleDoorToggle);
+  api.onObjectRoute(routeWallDoor);
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcBeforeDeath(handleExperimentBeforeDeath);
   api.onItemOnObject(handleItemOnMouseHole, { noted: false });
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemAction(handleItemAction);
+  api.onGroundItemPickup(handleBallPickup);
   api.onPlayerLogout(handleLogout);
   api.onPlayerLogin(handleLogin);
 };

@@ -1,5 +1,5 @@
 /**
- * Obor's and Bryophyta's lairs, from data/definitions/giant-boss-lairs.json, as captured:
+ * Obor's and Bryophyta's lairs, from plugins/bosses/data/giant-boss-lairs.json, as captured:
  * - a key-locked gate (the key is kept, and needed only until the gate is first unlocked)
  *   leads into a lair of the player's own, a private area over the lair's real tiles, with the
  *   boss waiting;

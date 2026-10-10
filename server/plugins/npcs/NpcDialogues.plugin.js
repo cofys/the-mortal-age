@@ -32,6 +32,58 @@ const MAX_JUMPS = 100;
 const SPECIAL_NPC_DIALOGUES = new Set(["Skully", "Estate agent", "Estate Agent", "Alwyn"]);
 
 /**
+ * Wiki transcripts leave parts of a line to the reader's character: their name
+ * ("[player name]", "<player name>") and gendered alternatives ("[sir/madam]",
+ * "[Greetings, sir/Greetings, madam/Greetings]"). Resolve them from the player
+ * seeing the dialogue; alternatives without a gendered form (numbers, item
+ * picks, NPC choices) stay for quest plugins to fill.
+ */
+const PLAYER_NAME_PLACEHOLDER = /\[(?:player name|playername|player|player vampyre name)(\.?)\]|<player name>/gi;
+const PLAYER_NAME_ALTERNATIVE = /^(?:player name|playername|player vampyre name)$/i;
+const GENDERED_ALTERNATIVE = /\[([^\[\]]*\/[^\[\]]*)\]/g;
+
+/** The address words the wiki templates use for each gender. */
+const MALE_ADDRESS_WORDS = new Set([
+  "sir", "sirrah", "mister", "master", "milord", "lord", "lad", "laddie", "man", "men", "boy", "boys",
+  "brother", "fellow", "fella", "chap", "guy", "prince", "strongman", "craftsman", "monsieur",
+]);
+const FEMALE_ADDRESS_WORDS = new Set([
+  "madam", "madame", "ma'am", "m'am", "miss", "lady", "milady", "m'lady", "mistress", "lass", "lassie",
+  "woman", "women", "girl", "girls", "gal", "sister", "princess", "strongwoman", "craftswoman",
+]);
+
+/** The gender an alternative addresses, or null when it addresses neither or both. */
+function genderedForm(text) {
+  const words = String(text).toLowerCase().match(/[a-z']+/g) ?? [];
+  const male = words.some((word) => MALE_ADDRESS_WORDS.has(word));
+  const female = words.some((word) => FEMALE_ADDRESS_WORDS.has(word));
+  return male === female ? null : male ? "male" : "female";
+}
+
+/** The alternative to show a player of this gender, or null to leave the group alone. */
+function pickAlternative(parts, name, male) {
+  if (parts.some((part) => PLAYER_NAME_ALTERNATIVE.test(part))) return name ?? null;
+  const forms = parts.map((part) => ({ text: part, gender: genderedForm(part) }));
+  if (!forms.some((form) => form.gender)) return null;
+  const wanted = male ? "male" : "female";
+  const match = forms.find((form) => form.gender === wanted) ?? forms.find((form) => !form.gender);
+  return (match ?? forms[0]).text;
+}
+
+function formatPlayerText(text, player) {
+  let out = String(text ?? "");
+  const name = player?.getUsername?.();
+  // "[player.]" keeps the sentence's closing period.
+  if (name) out = out.replace(PLAYER_NAME_PLACEHOLDER, (_, period) => `${name}${period ?? ""}`);
+  if (!out.includes("/")) return out;
+  const male = player?.getAppearance?.()?.isMale?.() !== false;
+  return out.replace(GENDERED_ALTERNATIVE, (whole, body) => {
+    const parts = body.split("/").map((part) => part.trim());
+    return parts.length < 2 ? whole : pickAlternative(parts, name, male) ?? whole;
+  });
+}
+
+/**
  * Most records list several variants and name no default, which used to leave the
  * NPC silent. Prefer the standard talk transcript over overhead shouts.
  */
@@ -343,7 +395,9 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     const match = /^previous(\d*)/i.exec(reference);
     const back = match && match[1] ? Number(match[1]) : 1;
     const index = current ? history.indexOf(current) : history.length - 1;
-    const target = index - back >= 0 ? history[index - back] : undefined;
+    // "previous" on the first menu means the menu the option came from; only walk
+    // further back when the conversation actually has earlier menus.
+    const target = index - back >= 0 ? history[index - back] : current ?? history[history.length - 1];
     return target ? { menu: target } : "end";
   };
 
@@ -370,6 +424,38 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       if (after?.length && after[0] !== step && !jumpOnly(after)) return after;
     }
     const current = context.currentRecord;
+    /**
+     * True when a candidate would replay the branch the jump is in. A wiki jump
+     * whose target was lost falls back to "the most similar option", which can be
+     * the very option containing the jump (Garden of Tranquillity's retake menu,
+     * X Marks' "I'm looking for a quest."); resolving to "end" beats looping.
+     */
+    const sameBranch = (candidate) => {
+      if (!candidate || !current?.steps) return true;
+      if (candidate === current.steps) return true;
+      const signature = (steps) => (steps ?? [])
+        .map((entry) => typeof entry?.player === "string" ? `p:${entry.player}`
+          : typeof entry?.npc === "string" ? `n:${entry.npc}`
+          : entry?.type === "line" && typeof entry?.text === "string" ? `l:${entry.text}` : null)
+        .filter(Boolean).join("|");
+      const mine = signature(current.steps);
+      return mine.length > 0 && signature(candidate) === mine;
+    };
+    // A random alternative ending "same as above" repeats the previous alternative's
+    // continuation, not an unrelated menu elsewhere on the page.
+    if (/^above/i.test(reference) && current?.randomOptions) {
+      let continuation = realBody(current.randomOptions[current.randomIndex - 1]?.steps);
+      while (
+        continuation?.length &&
+        (typeof continuation[0]?.player === "string" ||
+          typeof continuation[0]?.npc === "string" ||
+          continuation[0]?.type === "line")
+      ) {
+        continuation = continuation.slice(1);
+      }
+      continuation = realBody(continuation);
+      if (continuation?.length) return continuation;
+    }
     const key = current ? normText(current.text) : "";
     // A jump never leads back into the branch it is in: that replays the branch forever.
     const elsewhere = (steps) => (steps && steps !== current?.steps ? steps : undefined);
@@ -401,7 +487,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     const fromLine = key.length >= 8 ? realBody(context.pageLines?.get(key)) : undefined;
     if (/^below/i.test(reference)) {
       const next = current ? records[current.id + 1] : records[0];
-      const pick = [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(next?.steps)].find(Boolean);
+      const pick = [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(next?.steps)]
+        .find((candidate) => candidate && !sameBranch(candidate));
       if (pick) return pick;
       if (!current && context.pageMenuBefore) return { menu: context.pageMenuBefore };
       const last = records[records.length - 1];
@@ -415,13 +502,14 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       return realBody(last?.steps) ?? "end";
     }
     const prev = current.id > 0 ? records[current.id - 1] : undefined;
-    return [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(prev?.steps)].find(Boolean) ?? "end";
+    return [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(prev?.steps)]
+      .find((candidate) => candidate && !sameBranch(candidate)) ?? "end";
   };
 
   const flattenOptions = () => ({ resolveCondition, resolveJump,
     wrapBranch: (chosen, branch) => [{ type: "condition_chosen", id: chosen.id, text: chosen.text }, ...branch] });
 
-  function presentMenu(menu, offset = 0) {
+  function presentMenu(menu, offset = 0, tail = []) {
     const { step, rest, record } = menu;
     context.currentMenu = menu;
     if (!context.menuHistory.includes(menu)) context.menuHistory.push(menu);
@@ -434,24 +522,33 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     // Record every option when the prompt is shown (not on selection) so that a
     // nested option's "jump above" can find its unselected sibling by text.
     visible.forEach(recordOption);
-    const pairs = visible.flatMap((option) => [option.text, () => {
-      // Quest-gated choices carry a slug like "quest:cook-s-assistant:start";
-      // let the owning quest run its action, then play the branch.
-      if (option.hook) {
-        api.emitCustomEvent("npc-dialogue:hook", { player, npc: event.npc, npcId, definition, hook: option.hook, quest: option.quest, option: option.text });
-      }
-      api.emitCustomEvent("npc-dialogue:choice", { player, npc: event.npc, npcId, definition, option: option.text, stepId: option.id });
-      context.currentMenu = menu;
-      run([...(option.steps || []), ...rest], recordOption(option));
-    }]);
-    if (more) pairs.push("More...", () => presentMenu(menu, offset + 4));
+    const pairs = visible.flatMap((option) => {
+      // A dump-gap option can carry blank text (the wording lives in its condition
+      // or its first player line); fall back so the branch stays reachable.
+      const formatted = formatPlayerText(option.text, player);
+      const label = String(formatted ?? "").trim()
+        || String(option.condition ?? "").replace(/^if\s+.*?:\s*/i, "").trim()
+        || (option.steps ?? []).find((entry) => typeof entry?.player === "string")?.player
+        || "Continue.";
+      return [label, () => {
+        // Quest-gated choices carry a slug like "quest:cook-s-assistant:start";
+        // let the owning quest run its action, then play the branch.
+        if (option.hook) {
+          api.emitCustomEvent("npc-dialogue:hook", { player, npc: event.npc, npcId, definition, hook: option.hook, quest: option.quest, option: option.text });
+        }
+        api.emitCustomEvent("npc-dialogue:choice", { player, npc: event.npc, npcId, definition, option: option.text, stepId: option.id });
+        context.currentMenu = menu;
+        run([...(option.steps || []), ...rest, ...tail], recordOption(option));
+      }];
+    });
+    if (more) pairs.push("More...", () => presentMenu(menu, offset + 4, tail));
     if (visible.length === 1) pairs.push("Goodbye.", close);
     // A parsed menu with no options is a wiki-export gap; continue the branch
     // instead of silently closing the chat.
     if (!pairs.length) return run(rest, record);
     playedAny = true;
     manager.reset();
-    if (!api.sendMultiChatboxPrompt(player, step.prompt || "Select an Option", ...pairs)) {
+    if (!api.sendMultiChatboxPrompt(player, formatPlayerText(step.prompt || "Select an Option", player), ...pairs)) {
       unavailable();
     }
   }
@@ -484,9 +581,18 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         manager.startDialogues(chain);
         return;
       }
-      // "shows other/previous options": replay a menu already shown.
+      // "shows other/previous options": replay a menu already shown, then carry
+      // on with whatever followed the jump in this queue.
       if (step.type === "gomenu" && step.menu) {
-        chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu) }));
+        // A parser-split "shows other options" jump immediately before a choice
+        // really means "show that choice" (Wanted!'s squireship offer); replaying
+        // the current menu forever would never reach it.
+        const next = queue[position + 1];
+        if (next && next.type === "choice") {
+          continue;
+        }
+        const after = queue.slice(position + 1);
+        chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu, 0, after) }));
         manager.startDialogues(chain);
         return;
       }
@@ -508,7 +614,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           continue;
         }
         // `text` is mutable too, so a plugin can fill in the wiki's "[number]"-style blanks.
-        const lines = Misc.wrapText(request.text, 53);
+        const lines = Misc.wrapText(formatPlayerText(request.text, player), 53);
         playedAny = true;
         // A typed line spoken by someone other than the NPC being talked to (a
         // paired NPC talking to them, a cutscene actor) gets that speaker's head.
@@ -536,14 +642,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         }
         // Quest actions ("Quest complete!", "receive", ...) let a plugin drive
         // state through the mutable payload, then the branch continues.
-        const action = {
-          player, npc: event.npc, npcId, definition, step,
-          text: step.text, action: step.action, target: step.target, stepId: step.id, handled: false,
-        };
-        api.emitCustomEvent("npc-dialogue:action", action);
-        // A handler can also hand back `steps` to play first (a story picked from another page).
-        if (action.handled) return action.end ? close() : run([...(action.steps ?? []), ...rest], currentRecord);
-        if (step.type === "end") return close();
+        // Message steps are their own event (`kind: "message"`); emitting the
+        // generic event first made handlers keyed on step ids act twice.
         if (step.type === "message") {
           // Item hand-outs are also `message` steps; let quests hook their id.
           const message = {
@@ -553,9 +653,17 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           api.emitCustomEvent("npc-dialogue:action", message);
           if (message.end) return close();
           playedAny = true;
-          if (!message.handled) player.sendMessage(String(step.text ?? ""));
+          if (!message.handled) player.sendMessage(formatPlayerText(String(step.text ?? ""), player));
           return run(rest, currentRecord);
         }
+        const action = {
+          player, npc: event.npc, npcId, definition, step,
+          text: step.text, action: step.action, target: step.target, stepId: step.id, handled: false,
+        };
+        api.emitCustomEvent("npc-dialogue:action", action);
+        // A handler can also hand back `steps` to play first (a story picked from another page).
+        if (action.handled) return action.end ? close() : run([...(action.steps ?? []), ...rest], currentRecord);
+        if (step.type === "end") return close();
         // Wiki markers for content this server does not implement.
         if (step.type === "unavailable" || step.type === "reference") return unavailable();
         if (step.type === "call" && Object.hasOwn(branches, step.branch) && Array.isArray(branches[step.branch])) {
@@ -570,9 +678,19 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           const options = (step.options ?? []).filter((option) =>
             !option.condition || resolveCondition({ text: option.condition, id: option.id }) !== false);
           if (!options.length) return run(rest, currentRecord);
-          const option = options[Math.floor(Math.random() * options.length)];
+          const index = Math.floor(Math.random() * options.length);
+          const option = options[index];
           if (option.hook) return unavailable();
-          return run([...(option.steps || []), ...rest], currentRecord);
+          // The record lets an "above" jump see the other random alternatives
+          // ({{tact|above}} = "same as the alternative above").
+          const record = {
+            id: -1,
+            text: String(option.text ?? ""),
+            steps: Array.isArray(option.steps) ? option.steps : [],
+            randomOptions: options,
+            randomIndex: index,
+          };
+          return run([...(option.steps || []), ...rest], record);
         }
         if (step.type === "action" && step.action === "open_shop") {
           const target = step.target;
@@ -620,6 +738,7 @@ module.exports = {
   pickVariant,
   aliasKeys,
   flatten,
+  formatPlayerText,
   startDialogue,
   collectPageLines,
   collectPageOptions,

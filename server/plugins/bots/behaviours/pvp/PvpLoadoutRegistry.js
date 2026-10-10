@@ -13,11 +13,7 @@ function freezeLoadout(loadout) {
   return Object.freeze({
     ...loadout,
     tags: freezeArray(loadout.tags),
-    weaponFamilies: freezeArray(loadout.weaponFamilies),
-    armorFamilies: freezeArray(loadout.armorFamilies),
     archetypes: freezeArray(loadout.archetypes),
-    inventoryBias: Object.freeze({ ...loadout.inventoryBias }),
-    hotspots: freezeArray(loadout.hotspots),
   });
 }
 

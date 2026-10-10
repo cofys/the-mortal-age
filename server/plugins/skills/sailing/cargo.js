@@ -1,6 +1,6 @@
 // A boat's cargo hold and the account-wide tools compartment, as plain state operations shared
 // by the cargo hold, the sidepanel and the shipwright. What the hold accepts comes from
-// data/definitions/sailing-cargo.json (OSRS Wiki, Cargo hold); behaviour from live captures
+// plugins/skills/sailing/data/sailing-cargo.json (OSRS Wiki, Cargo hold); behaviour from live captures
 // (docs/sailing-osrs-reference.md).
 const { ItemDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ItemDefinition");
 const { content, boatType } = require("./sailingContent");

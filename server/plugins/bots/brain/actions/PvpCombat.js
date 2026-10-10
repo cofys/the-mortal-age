@@ -10,8 +10,20 @@
 function createPvpCombatAction(spec, controller) {
   const id = spec?.id ?? "pvpCombat";
   const exitWhenIdle = spec?.exitWhenIdle === true;
+  const lastSpot = new WeakMap();
   return {
     id,
+    // The pvp loop never ends by itself; fighting or moving (seeking, wandering a
+    // hotspot) is progress, so the brain's stall check does not end it every few
+    // minutes (which used to drop wilderness bots into random skilling).
+    madeProgress(ctx) {
+      const player = ctx.player;
+      const loc = player?.getLocation?.();
+      const spot = loc ? `${loc.getX()},${loc.getY()},${loc.getZ()}` : null;
+      const moved = spot !== lastSpot.get(player);
+      lastSpot.set(player, spot);
+      return moved || !!player?.getCombat?.()?.getTarget?.() || !!player?.getCombat?.()?.getAttacker?.();
+    },
     update(ctx) {
       const player = ctx.player;
       const state = ctx.state;
@@ -45,9 +57,6 @@ function createPvpCombatAction(spec, controller) {
         controller.wanderWhileSeeking?.({ player, state, nowMs: ctx.nowMs });
       }
       return "running";
-    },
-    madeProgress(ctx) {
-      return !!ctx.state?.pvp?.targetUsername;
     },
   };
 }

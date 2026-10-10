@@ -508,6 +508,18 @@ export abstract class Mobile extends Entity {
         return this;
     }
 
+    /**
+     * Like setPositionToFace, but always flags the face update. The field can already
+     * hold the target while the client still shows another direction (walking turned
+     * it), so the same-coordinate short-circuit would skip the packet and leave bots
+     * facing their last walk direction.
+     */
+    forcePositionToFace(positionToFace: Location): Mobile {
+        this.positionToFace = positionToFace;
+        this.getUpdateFlag().flag(Flag.FACE_POSITION);
+        return this;
+    }
+
     setPositionToFaceCoordinates(x: number, y: number, z: number): Mobile {
         const current = this.positionToFace;
         if (

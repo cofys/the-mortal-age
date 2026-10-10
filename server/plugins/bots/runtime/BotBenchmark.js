@@ -45,7 +45,7 @@ function createBotBenchmark(options = {}) {
   if (count <= 0 || !runtime || !tickMetrics) {
     return null;
   }
-  const brainActivityId = process.env.BOT_BENCH_ACTIVITY ?? "lumbridge_normal_trees";
+  const brainActivityId = process.env.BOT_BENCH_ACTIVITY ?? "normal_trees";
   const brainActivity = brainRegistry?.byId?.get(brainActivityId) ?? null;
   if (!brainActivity) {
     botApi?.log?.("bot_bench_unknown_activity", { activity: brainActivityId });

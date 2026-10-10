@@ -70,6 +70,11 @@ function buildData(core) {
     // object id -> [[object tile, destination], ...]
     CLIMB_ROUTES: {
       [O.STAIRCASE_15]: [[[2428, 3081, 1], [2430, 3080, 2]], [[2425, 3074, 2], [2426, 3074, 3]], [[2419, 3078, 0], [2420, 3080, 1]]],
+      // Up onto the raised battlements (both floors read as z0; the stair carries across).
+      [O.STAIRCASE_17]: [[[2416, 3074, 0], [2415, 3083, 0]]],
+      [O.STAIRCASE_18]: [[[2379, 3132, 0], [2384, 3124, 0]]],
+      // The middle-island gate down into the tunnels (Navigation claims its click).
+      [O.GATE_26]: [[[2399, 3099, 0], [2399, 9500, 0]]],
       [O.STAIRCASE_13]: [[[2419, 3080, 1], [2419, 3077, 0]], [[2430, 3081, 2], [2427, 3081, 1]], [[2425, 3074, 3], [2425, 3077, 2]], [[2374, 3133, 3], [2374, 3130, 2]], [[2369, 3126, 2], [2372, 3126, 1]], [[2380, 3127, 1], [2380, 3130, 0]]],
       [O.LADDER_46]: [[[2421, 3073, 1], [2421, 3074, 0]], [[2378, 3134, 1], [2378, 3133, 0]]],
       [O.LADDER_195]: [[[2421, 3073, 0], [2421, 3074, 1]], [[2378, 3134, 0], [2378, 3133, 1]]],
@@ -87,6 +92,9 @@ function buildData(core) {
       [O.TABLE_452]: [I.EXPLOSIVE_POTION, "You get an explosive potion."],
       [O.TABLE_453]: [I.EXPLOSIVE_POTION, "You get an explosive potion."],
       [O.TABLE_454]: [I.BUCKET, "You get a bucket."],
+      // One rock table per spawn: the static props for the catapults.
+      [O.TABLE_455]: [I.ROCK_5, "You get a rock."],
+      [O.TABLE_456]: [I.ROCK_5, "You get a rock."],
       [O.TABLE_44]: [I.BARRICADE, "You get a barricade."],
       [O.TABLE_46]: [I.EXPLOSIVE_POTION, "You get an explosive potion."],
       [O.TABLE_47]: [I.BRONZE_PICKAXE, "You get a bronze pickaxe for mining."],

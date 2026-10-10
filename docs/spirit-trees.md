@@ -4,7 +4,7 @@ Two travel networks where an interface picks the destination, played as live OSR
 
 ## Spirit trees
 
-`server/plugins/world/SpiritTrees.plugin.js`, with the trees in `server/data/definitions/spirit-trees.json`.
+`server/plugins/world/SpiritTrees.plugin.js`, with the trees in `server/plugins/world/data/spirit-trees.json`.
 
 **Travel** on a spirit tree opens the menu interface (187) in the main modal:
 - **The packets:** `toplevel_mainmodal_open`, then the menu script (217) with "Spirit Tree Locations" and the trees joined by `|`, ending with Cancel, then pause-button events on 187:3, slots 0–127.
@@ -57,7 +57,7 @@ Before this, the plugin listened for "Spirit Tree", the farming patch's name. Th
 
 ## Magic Mushtrees
 
-Fossil Island's Mycelium Transportation System: `server/plugins/world/MagicMushtrees.plugin.js`, with the four trees in `server/data/definitions/magic-mushtrees.json`.
+Fossil Island's Mycelium Transportation System: `server/plugins/world/MagicMushtrees.plugin.js`, with the four trees in `server/plugins/world/data/magic-mushtrees.json`.
 
 **Use** opens `fossil_mushtrees` (608) in the main modal, with the four names written in: "<col=8f8f8f>1.</col> House on the Hill", "2. Verdant Valley", "3. Sticky Swamp", "4. Mushroom Meadow". Its buttons (608:4, 8, 12, 16) come back as pause buttons.
 

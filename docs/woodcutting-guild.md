@@ -8,7 +8,7 @@ The guild is part of the Woodcutting plugin.
 | Ent trunks | `EntTrunk.Woodcutting.js` |
 | The egg shrine | `Shrine.Woodcutting.js` |
 
-Data lives in `server/data/definitions/woodcutting-guild.json`. Praying at a shrine is the Altars plugin's job.
+Data lives in `server/plugins/skills/data/woodcutting-guild.json`. Praying at a shrine is the Altars plugin's job.
 
 The facts come from rsprox captures (`rsprox/wcguild/`), the OSRS Wiki and the cache's map.
 

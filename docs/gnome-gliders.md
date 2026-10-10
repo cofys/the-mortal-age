@@ -1,6 +1,6 @@
 # Gnome gliders
 
-Gnome gliders are handled by `server/plugins/world/GnomeGliders.plugin.js`. Each destination's index, map button, arrival tile and pilot is listed in `server/data/definitions/gnome-gliders.json`. `server/tests/gnome-gliders.test.cjs` replays the captured flights tick by tick.
+Gnome gliders are handled by `server/plugins/world/GnomeGliders.plugin.js`. Each destination's index, map button, arrival tile and pilot is listed in `server/plugins/world/data/gnome-gliders.json`. `server/tests/gnome-gliders.test.cjs` replays the captured flights tick by tick.
 
 ## Destinations
 

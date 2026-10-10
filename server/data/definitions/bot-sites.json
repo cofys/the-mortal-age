@@ -1,0 +1,104 @@
+{
+  "sites": [
+    {
+      "id": "lumbridge", "enabled": false, "x": 3222, "y": 3218,
+      "switchMinutes": [15, 25],
+      "bots": {
+        "woodcutting": 35, "mining": 30, "fishing": 30,
+        "combat_training": { "novices": 50, "intermediates": 30 }
+      }
+    },
+    {
+      "id": "varrock", "enabled": false, "x": 3212, "y": 3424,
+      "switchMinutes": [15, 25],
+      "bots": {
+        "mining": 30, "fishing": 30,
+        "woodcutting": { "experts": 50 },
+        "combat_training": { "novices": 50, "intermediates": 30 }
+      }
+    },
+    {
+      "id": "falador", "enabled": false, "x": 2964, "y": 3378,
+      "switchMinutes": [15, 25],
+      "bots": { "combat_training": 80, "woodcutting": 50, "mining": 40, "fishing": 30 }
+    },
+    {
+      "id": "seers", "enabled": false, "x": 2723, "y": 3484,
+      "switchMinutes": [15, 25],
+      "bots": { "combat_training": 80, "woodcutting": 50, "mining": 40, "fishing": 30 }
+    },
+    {
+      "id": "east_ardougne", "enabled": false, "x": 2662, "y": 3305,
+      "switchMinutes": [15, 25],
+      "bots": {
+        "woodcutting": 50, "mining": 40, "fishing": 30,
+        "combat_training": { "novices": 10, "intermediates": 10, "advanced": 20, "experts": 40 }
+      }
+    },
+    {
+      "id": "edge_low", "enabled": true, "x": 3073, "y": 3531, "radius": 5, "bots": 18,
+      "pvp": {
+        "style": "pure",
+        "combat": [55, 85],
+        "profiles": ["novice", "standard", "veteran"],
+        "weights": { "seek": 0.03, "bait": 0.32, "fight": 0.02, "escape": 0.63 },
+        "roam": 4, "lingerMs": 30000, "maxFights": 2
+      }
+    },
+    {
+      "id": "edge_mid", "enabled": true, "x": 3090, "y": 3531, "radius": 5, "bots": 14,
+      "pvp": {
+        "style": "mid",
+        "combat": [88, 100],
+        "profiles": ["standard", "veteran"],
+        "weights": { "seek": 0.03, "bait": 0.32, "fight": 0.02, "escape": 0.63 },
+        "roam": 4, "lingerMs": 30000, "maxFights": 2
+      }
+    },
+    {
+      "id": "edge_mains", "enabled": true, "x": 3108, "y": 3531, "radius": 5, "bots": 20,
+      "pvp": {
+        "style": "main",
+        "combat": [115, 126],
+        "profiles": ["standard", "veteran", "elite"],
+        "weights": { "seek": 0.03, "bait": 0.32, "fight": 0.02, "escape": 0.63 },
+        "roam": 4, "lingerMs": 30000, "maxFights": 2
+      }
+    },
+    {
+      "id": "varrock_ditch", "enabled": true, "x": 3243, "y": 3526, "bots": 80,
+      "area": { "minX": 3228, "maxX": 3262, "minY": 3525, "maxY": 3542 },
+      "pvp": {
+        "style": "f2p",
+        "weights": { "seek": 0.35, "bait": 0.2, "fight": 0.12, "escape": 0.33 },
+        "roam": 3, "lingerMs": 12000, "maxFights": 8
+      }
+    },
+    {
+      "id": "green_drags_gate", "enabled": true, "x": 2988, "y": 3610, "bots": 8,
+      "area": { "minX": 2974, "maxX": 3002, "minY": 3598, "maxY": 3622 },
+      "pvp": {
+        "style": "pure",
+        "combat": [55, 85],
+        "profiles": ["novice", "standard", "veteran"],
+        "weights": { "seek": 0.25, "bait": 0.3, "fight": 0.08, "escape": 0.37 },
+        "roam": 8, "lingerMs": 15000
+      }
+    },
+    {
+      "id": "revs_entrance", "enabled": true, "x": 3134, "y": 3838, "radius": 5, "bots": 8,
+      "pvp": {
+        "style": "deep",
+        "combat": [115, 126],
+        "profiles": ["standard", "veteran", "elite"],
+        "weights": { "seek": 0.3, "bait": 0.25, "fight": 0.08, "escape": 0.37 },
+        "roam": 4, "lingerMs": 15000
+      }
+    }
+  ],
+  "pvp": {
+    "botPool": 0,
+    "activeRegionBotsPerRegion": 24,
+    "activeRegionInset": 1
+  }
+}

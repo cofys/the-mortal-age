@@ -13,6 +13,7 @@ import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
 import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
+import { OpponentInfoPlugin } from "../../../game/plugins/opponentinfo/OpponentInfoPlugin";
 import {
     FreezeTimerPlugin,
     PoisonTimerPlugin,
@@ -45,6 +46,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     FreezeTimerPlugin,
     WeatherPlugin,
     StatusBarsPlugin,
+    OpponentInfoPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */

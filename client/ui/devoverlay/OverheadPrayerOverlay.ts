@@ -1,4 +1,5 @@
 import { vec3 } from "gl-matrix";
+import { isHintArrowBlinkOn } from "../../game/HintArrow";
 import {
     DrawCall,
     App as PicoApp,
@@ -54,14 +55,16 @@ export class OverheadPrayerOverlay implements Overlay {
     private iconSprites = {
         pk: new Map<number, SpriteTexture>(),
         prayer: new Map<number, SpriteTexture>(),
+        hint: new Map<number, SpriteTexture>(),
     };
     private failedSpriteIndices = {
         pk: new Set<number>(),
         prayer: new Set<number>(),
+        hint: new Set<number>(),
     };
     private npcIconSprites = new Map<string, SpriteTexture>();
     private failedNpcIconKeys = new Set<string>();
-    private archiveIds = { pk: -1, prayer: -1 };
+    private archiveIds = { pk: -1, prayer: -1, hint: -1 };
 
     private screenSize: Float32Array = new Float32Array(2);
     private tint: Float32Array = new Float32Array([1, 1, 1, 1]);
@@ -97,7 +100,7 @@ export class OverheadPrayerOverlay implements Overlay {
     }
 
     private destroyTextures(): void {
-        for (const kind of ["pk", "prayer"] as const) {
+        for (const kind of ["pk", "prayer", "hint"] as const) {
             for (const sprite of this.iconSprites[kind].values()) {
                 try {
                     sprite.tex.delete?.();
@@ -140,15 +143,16 @@ export class OverheadPrayerOverlay implements Overlay {
                 const defaults = GraphicsDefaults.load(cacheInfo, cacheSystem);
                 this.archiveIds.pk = defaults.headIconsPk;
                 this.archiveIds.prayer = defaults.headIconsPrayer;
+                this.archiveIds.hint = defaults.headIconsHint;
             }
 
             // Fallback for cache variants without populated graphics defaults.
             if (this.spriteIndex) {
-                for (const kind of ["pk", "prayer"] as const) {
+                for (const kind of ["pk", "prayer", "hint"] as const) {
                     if (this.archiveIds[kind] >= 0) continue;
                     try {
                         this.archiveIds[kind] = this.spriteIndex.getArchiveId(
-                            kind === "pk" ? "headicons_pk" : "headicons_prayer",
+                            kind === "pk" ? "headicons_pk" : kind === "prayer" ? "headicons_prayer" : "headicons_hint",
                         );
                     } catch {}
                 }
@@ -158,7 +162,7 @@ export class OverheadPrayerOverlay implements Overlay {
         }
     }
 
-    private getSprite(kind: "pk" | "prayer", index: number): SpriteTexture | undefined {
+    private getSprite(kind: "pk" | "prayer" | "hint", index: number): SpriteTexture | undefined {
         if (index < 0) return undefined;
         const cached = this.iconSprites[kind].get(index);
         if (cached) return cached;
@@ -289,9 +293,12 @@ export class OverheadPrayerOverlay implements Overlay {
         const stacks = this.actorStacks;
 
         for (const entry of entries) {
+            // Icons only render on the viewer's floor: a flag upstairs is not marked down here.
+            if ((entry.plane | 0) !== (args.state?.playerLevel ?? 0)) continue;
             const sprites = [
                 this.getSprite("pk", entry.headIconPk | 0),
                 this.getSprite("prayer", entry.headIconPrayer | 0),
+                entry.headIconHint && isHintArrowBlinkOn() ? this.getSprite("hint", 0) : undefined,
                 ...(entry.npcHeadIcons ?? []).map((icon) => this.getNpcSprite(icon.archiveId, icon.spriteId)),
             ].filter((sprite): sprite is SpriteTexture => sprite !== undefined);
             if (sprites.length === 0) continue;

@@ -17,16 +17,24 @@
  * "quest.underground_pass.bits" attribute (bit 30 reuses the source's reserved
  * maze range for Kamen's free food).
  *
- * Gaps (no dump/coordinate support): the pass tile map is not reproduced, so
- * obstacle interactions show the transcript words and advance the stage instead
- * of teleporting; the unicorn boulder is folded into the smashed cage; the
- * grid-tile maze, Iban's bolt pattern and the soulless bite damage are not
- * simulated. Source: LostCity quest_upass (pinned in issue #196).
+ * Gaps (no dump/coordinate support): the grid-tile maze, Iban's bolt pattern
+ * and the soulless bite damage are not simulated; the unicorn boulder is folded
+ * into the smashed cage; most other obstacles show the transcript words and
+ * advance the stage without moving the player. Source: LostCity quest_upass
+ * (pinned in issue #196).
+ *
+ * Movement that is reproduced: entering the cave appears by the interior cave
+ * exit (3214 at 2496,9713), the cave exit returns to West Ardougne, crossing
+ * the bridge (both action step ids) swaps the player between the two connected
+ * banks of the gap at y 9716, and a rockslide lands the player on the walkable
+ * tile beyond it, away from the side they approached from.
  */
 module.exports = function registerUndergroundPassQuest(api) {
   const {
     Skill,
     Equipment,
+    Location,
+    RegionManager,
     ItemIdentifiers,
     NpcIdentifiers,
     ObjectIdentifiers,
@@ -138,6 +146,25 @@ module.exports = function registerUndergroundPassQuest(api) {
     [ItemIdentifiers.PALADINS_BADGE_2, BIT_THROWN_CARL],
     [ItemIdentifiers.PALADINS_BADGE_3, BIT_THROWN_HARRY],
   ]);
+  // NpcDeath reports the raw world spawn id rather than the resolved content id,
+  // so the death handlers accept both the cache ids and the live spawn ids.
+  const KALRAG_IDS = new Set([NpcIdentifiers.KALRAG, 9216]);
+  const AMULET_BY_NPC = new Map([
+    [NpcIdentifiers.OTHAINIAN, ItemIdentifiers.AMULET_OF_OTHANIAN],
+    [9217, ItemIdentifiers.AMULET_OF_OTHANIAN],
+    [NpcIdentifiers.DOOMION, ItemIdentifiers.AMULET_OF_DOOMION],
+    [9218, ItemIdentifiers.AMULET_OF_DOOMION],
+    [NpcIdentifiers.HOLTHION, ItemIdentifiers.AMULET_OF_HOLTHION],
+    [9219, ItemIdentifiers.AMULET_OF_HOLTHION],
+  ]);
+  const BADGE_BY_NPC = new Map([
+    [NpcIdentifiers.SIR_JERRO, ItemIdentifiers.PALADINS_BADGE],
+    [9210, ItemIdentifiers.PALADINS_BADGE],
+    [NpcIdentifiers.SIR_CARL, ItemIdentifiers.PALADINS_BADGE_2],
+    [9211, ItemIdentifiers.PALADINS_BADGE_2],
+    [NpcIdentifiers.SIR_HARRY, ItemIdentifiers.PALADINS_BADGE_3],
+    [9212, ItemIdentifiers.PALADINS_BADGE_3],
+  ]);
   const CATSPEAK_AMULET_IDS = new Set([
     ItemIdentifiers.CATSPEAK_AMULET,
     ItemIdentifiers.CATSPEAK_AMULET_E_,
@@ -174,6 +201,19 @@ module.exports = function registerUndergroundPassQuest(api) {
 
   const CAVE_ENTRANCE = ObjectIdentifiers.CAVE_ENTRANCE_17;
   const CAVE_EXIT = ObjectIdentifiers.CAVE_EXIT_23;
+  // Action step ids the page uses for movement (see npc-dialogues.json).
+  const CAVE_ENTER_ACTION_ID = "MlOWGs";
+  const BRIDGE_WALK_ACTION_IDS = new Set(["MwPfuo", "MdOVEF"]);
+  // The interior cave exit (3214) stands at 2496,9713; entering appears beside it.
+  const CAVE_INTERIOR = { x: 2494, y: 9716, z: 0 };
+  const CAVE_SURFACE = { x: 2435, y: 3315, z: 0 };
+  // The bridge gap is x 2443-2446 at y 9716, between these two connected banks.
+  const BRIDGE_WEST = { x: 2435, y: 9716, z: 0 };
+  const BRIDGE_EAST = { x: 2447, y: 9716, z: 0 };
+  const BRIDGE_EAST_X = 2444;
+  // The temple door's bare "After reading the history of Iban:" condition means the
+  // doll is not finished yet; the first branch must fall through to the robes check.
+  const TEMPLE_DOOR_DOLL_CONDITION_ID = "_NEbY7";
   const BRIDGE_LEVER_IDS = new Set([ObjectIdentifiers.LEVER_19, ObjectIdentifiers.LEVER_20]);
   const PORTCULLIS_LEVER_IDS = new Set([ObjectIdentifiers.LEVER_21]);
   const GUIDE_ROPE_IDS = new Set([ObjectIdentifiers.GUIDE_ROPE, ObjectIdentifiers.GUIDE_ROPE_2]);
@@ -181,13 +221,24 @@ module.exports = function registerUndergroundPassQuest(api) {
   const BLOOD_WELL = ObjectIdentifiers.WELL_4;
   const WELL_OF_VOYAGE = ObjectIdentifiers.WELL_5;
   const FURNACE = ObjectIdentifiers.FURNACE_3;
-  const UNICORN_DOOR_IDS = new Set([ObjectIdentifiers.DOOR_109, ObjectIdentifiers.DOOR_110]);
-  const TEMPLE_DOOR_IDS = new Set([
-    ObjectIdentifiers.TEMPLE_DOOR,
-    ObjectIdentifiers.DOOR_111,
-    ObjectIdentifiers.DOOR_112,
+  // Live world: the doors beside the blood well are 3220/3221; 3333/3334 are the
+  // openable Iban temple doors (3332/3335/3336 are not placed).
+  const UNICORN_DOOR_IDS = new Set([3220, 3221]);
+  const TEMPLE_DOOR_IDS = new Set([3333, 3334]);
+  const SEARCHABLE_CAGE_IDS = new Set([3267]); // Unicorn-room cage (railing piece).
+  // The dwarf-camp cages 3352 hold the half-soulless with Iban's dove (3351 is
+  // the plain half-soulless cage); the unicorn-room railing cage is 3267.
+  const DOVE_CAGE_IDS = new Set([ObjectIdentifiers.CAGE_5]);
+  const ABANDONED_EQUIPMENT = 35938;
+  // Scenery "Orb of light" objects and the item each Take yields. The fourth orb
+  // waits under the trapped flat rock (3339).
+  const ORB_OBJECT_ITEMS = new Map([
+    [37324, ItemIdentifiers.ORB_OF_LIGHT],
+    [37325, ItemIdentifiers.ORB_OF_LIGHT_2],
+    [37326, ItemIdentifiers.ORB_OF_LIGHT_3],
   ]);
-  const SEARCHABLE_CAGE_IDS = new Set([ObjectIdentifiers.CAGE_4, ObjectIdentifiers.CAGE_5]);
+  const ORB_TRAP_ROCK = 3339;
+  const ORB_TRAP_MESSAGE_IDS = new Set(["dZ4m5q"]);
   const SMASHED_CAGE = ObjectIdentifiers.SMASHED_CAGE;
   const CRATE = ObjectIdentifiers.CRATE_26;
   const WITCH_CHEST_IDS = new Set([ObjectIdentifiers.CHEST_28, ObjectIdentifiers.CHEST_29]);
@@ -239,6 +290,7 @@ module.exports = function registerUndergroundPassQuest(api) {
   const NILOOF_BOOK_MESSAGE_IDS = new Set(["Ndmv27", "37Ws3c"]);
   const TOMB_ASHES_MESSAGE_IDS = new Set(["Y2Bdpv"]);
   const WELL_DOLL_MESSAGE_IDS = new Set(["eL5hdF"]);
+  const DOVE_MESSAGE_IDS = new Set(["CXdupU"]);
 
   let quest;
 
@@ -359,6 +411,44 @@ module.exports = function registerUndergroundPassQuest(api) {
 
   function playVariant(player, variant) {
     startTranscript(api, player, NpcIdentifiers.KOFTIK, PAGE, variant);
+  }
+
+  function moveTo(player, tile) {
+    player.moveTo(new Location(tile.x, tile.y, tile.z ?? 0));
+  }
+
+  /** Teleport to the far bank of the bridge, whichever bank the player is on. */
+  function crossBridge(player) {
+    const x = player.getLocation?.()?.getX?.() ?? 0;
+    moveTo(player, x >= BRIDGE_EAST_X ? BRIDGE_WEST : BRIDGE_EAST);
+  }
+
+  /**
+   * Climb a rockslide the way OSRS moves the player: over the object, onto the walkable
+   * tile beyond it, away from the side the player approached from.
+   */
+  function climbOverRockslide(player, event) {
+    const at = event.location ?? {};
+    const here = player.getLocation();
+    const z = at.z ?? here.getZ();
+    const ox = at.x ?? here.getX();
+    const oy = at.y ?? here.getY();
+    const dx = Math.sign(ox - here.getX());
+    const dy = Math.sign(oy - here.getY());
+    const landings = [
+      { x: ox + dx, y: oy + dy, z },
+      { x: ox + dx, y: oy, z },
+      { x: ox, y: oy + dy, z },
+    ];
+    const area = player.getPrivateArea?.() ?? null;
+    for (const landing of landings) {
+      const location = new Location(landing.x, landing.y, landing.z);
+      if (!RegionManager.blocked(location, area)) {
+        player.moveTo(location);
+        break;
+      }
+    }
+    player.sendMessage("You climb over the rocks.");
   }
 
   function buildJournal(player, questHandle) {
@@ -575,6 +665,12 @@ module.exports = function registerUndergroundPassQuest(api) {
     const slots = freeSlots(player);
     const coins = player.getInventory().getAmount(COINS);
 
+    // The temple door's "After reading the history of Iban:" branch is the "doll not
+    // finished yet" case; with the finished doll it must fall through to the robes check.
+    if (stepId === TEMPLE_DOOR_DOLL_CONDITION_ID) {
+      return testBit(player, BIT_READ_HISTORY) && !hasFinishedDoll(player);
+    }
+
     // Regicide follow-up at the end of the King Lathas conversation.
     if (value.includes("requirements for regicide")) {
       const requirements =
@@ -788,6 +884,14 @@ module.exports = function registerUndergroundPassQuest(api) {
   function handleAction(event) {
     const { player, stepId } = event;
     if (!player || !stepId) return;
+    if (stepId === CAVE_ENTER_ACTION_ID) {
+      moveTo(player, CAVE_INTERIOR);
+      return;
+    }
+    if (BRIDGE_WALK_ACTION_IDS.has(stepId)) {
+      crossBridge(player);
+      return;
+    }
     if (CLOTH_MESSAGE_IDS.has(stepId)) {
       if (!hasItem(player, OILY_CLOTH)) give(player, OILY_CLOTH, 1);
       return;
@@ -840,8 +944,15 @@ module.exports = function registerUndergroundPassQuest(api) {
       if (!hasItem(player, IBANS_ASHES)) give(player, IBANS_ASHES, 1);
       return;
     }
+    if (ORB_TRAP_MESSAGE_IDS.has(stepId)) {
+      if (!hasItem(player, ORB_IDS[3])) give(player, ORB_IDS[3], 1);
+      return;
+    }
     if (WELL_DOLL_MESSAGE_IDS.has(stepId)) {
       defeatIban(player);
+    }
+    if (DOVE_MESSAGE_IDS.has(stepId)) {
+      if (!hasItem(player, IBANS_DOVE)) give(player, IBANS_DOVE, 1);
     }
   }
 
@@ -853,6 +964,29 @@ module.exports = function registerUndergroundPassQuest(api) {
     give(player, ItemIdentifiers.FIRE_RUNE, 30);
     quest.setStage(player, STAGE_DEFEATED_IBAN);
     player.sendMessage("Amongst Iban's remains you find his staff and some runes.");
+  }
+
+  /**
+   * The witch's cat sits in Kardia's pass house; the player must carry it to the
+   * witch's door to distract her. The wiki variant lists only the failure lines,
+   * so a successful pick-up is silent.
+   */
+  function pickUpWitchCat({ player }) {
+    if (hasItem(player, WITCHS_CAT)) {
+      player.sendMessage(
+        "You already have a cat in your inventory. Trying to squeeze another in would just be plain cruel!"
+      );
+      return;
+    }
+    if (freeSlots(player) < 1) {
+      player.sendMessage("You don't have enough inventory space to hold the cat.");
+      return;
+    }
+    if (quest.getStage(player) < STAGE_SPOKEN_NILOOF) {
+      player.sendMessage("You don't have any need to pick the cat up.");
+      return;
+    }
+    give(player, WITCHS_CAT, 1);
   }
 
   /** Oil the arrows, light them, and smear the doll's four elements. */
@@ -1064,7 +1198,7 @@ module.exports = function registerUndergroundPassQuest(api) {
     if (!player || typeof player.getInventory !== "function") return;
     const stage = quest.getStage(player);
 
-    if (npcId === NpcIdentifiers.KALRAG) {
+    if (KALRAG_IDS.has(npcId)) {
       if (stage < STAGE_FOUND_DOLL) {
         player.sendMessage("Kalrag slumps to the floor...");
         return;
@@ -1081,23 +1215,59 @@ module.exports = function registerUndergroundPassQuest(api) {
       return;
     }
 
-    const amulet = npcId === NpcIdentifiers.OTHANIAN ? ItemIdentifiers.AMULET_OF_OTHANIAN
-      : npcId === NpcIdentifiers.DOOMION ? ItemIdentifiers.AMULET_OF_DOOMION
-      : npcId === NpcIdentifiers.HOLTHION ? ItemIdentifiers.AMULET_OF_HOLTHION
-      : undefined;
+    const amulet = AMULET_BY_NPC.get(npcId);
     if (amulet !== undefined && stage >= STAGE_FOUND_DOLL && !hasItem(player, amulet)) {
       give(player, amulet, 1);
       player.sendMessage("The demon leaves its amulet behind.");
       return;
     }
 
-    const badge = npcId === NpcIdentifiers.SIR_JERRO ? ItemIdentifiers.PALADINS_BADGE
-      : npcId === NpcIdentifiers.SIR_CARL ? ItemIdentifiers.PALADINS_BADGE_2
-      : npcId === NpcIdentifiers.SIR_HARRY ? ItemIdentifiers.PALADINS_BADGE_3
-      : undefined;
+    const badge = BADGE_BY_NPC.get(npcId);
     if (badge !== undefined && !hasItem(player, badge) && !quest.isComplete(player)) {
       give(player, badge, 1);
       player.sendMessage("The paladin's badge clatters to the ground and you pick it up.");
+    }
+  }
+
+  function useUnicornDoor(player) {
+    if (!unicornDoorUnlocked(player)) {
+      player.sendMessage("The door is locked.");
+      return;
+    }
+    if (quest.getStage(player) < STAGE_MAIN_AREA) {
+      quest.setStage(player, STAGE_MAIN_AREA);
+      setBit(player, BIT_KOFTIK_INSANE);
+    }
+    playVariant(player, UP + "opening-the-door");
+  }
+
+  function useTempleDoor(player) {
+    if (!testBit(player, BIT_READ_HISTORY)) {
+      player.sendMessage("You have no reason to go in there.");
+      return;
+    }
+    if (!hasFinishedDoll(player)) {
+      player.sendMessage("You should wait until you have the finished doll before going in there.");
+      return;
+    }
+    if (!wearingZamorakRobes(player)) {
+      player.sendMessage("The door refuses to open. Only followers of Zamorak may enter.");
+      return;
+    }
+    if (quest.getStage(player) < STAGE_CONFRONTED_IBAN) quest.setStage(player, STAGE_CONFRONTED_IBAN);
+    playVariant(player, UP + "entering-iban-s-temple");
+  }
+
+  /** Doors' generic name hook claims "Door" locs; claim the quest doors first. */
+  function handleDoorToggle(event) {
+    if (UNICORN_DOOR_IDS.has(event.objectId)) {
+      event.handled = true;
+      useUnicornDoor(event.player);
+      return;
+    }
+    if (TEMPLE_DOOR_IDS.has(event.objectId)) {
+      event.handled = true;
+      useTempleDoor(event.player);
     }
   }
 
@@ -1123,24 +1293,22 @@ module.exports = function registerUndergroundPassQuest(api) {
     if (objectId === CAVE_EXIT) {
       event.handled = true;
       playVariant(player, UP + "exiting-back-out-to-west-ardougne");
+      moveTo(player, CAVE_SURFACE);
       return;
     }
 
     if (BRIDGE_LEVER_IDS.has(objectId)) {
       event.handled = true;
-      if (stage < STAGE_PASSED_BRIDGE) {
-        quest.setStage(player, STAGE_PASSED_BRIDGE);
-        playVariant(player, UP + "pulling-the-lever-to-lower-the-bridge");
-      } else {
-        player.sendMessage("The bridge is already lowered.");
-      }
+      if (stage < STAGE_PASSED_BRIDGE) quest.setStage(player, STAGE_PASSED_BRIDGE);
+      playVariant(player, UP + "pulling-the-lever-to-lower-the-bridge");
       return;
     }
 
     if (GUIDE_ROPE_IDS.has(objectId)) {
       event.handled = true;
-      if (stage >= STAGE_PASSED_BRIDGE) {
-        player.sendMessage("The bridge has already fallen.");
+      // The rope is shot from the bank the player enters on; the far side cannot reach it.
+      if ((player.getLocation?.()?.getX?.() ?? 0) < BRIDGE_EAST_X) {
+        player.sendMessage("You can't shoot the bridge from this side.");
         return;
       }
       if (!hasBow(player)) {
@@ -1153,11 +1321,12 @@ module.exports = function registerUndergroundPassQuest(api) {
         );
         return;
       }
-      removeLitFireArrow(player);
-      player.sendMessage("You fire your arrow at the rope supporting the bridge...");
-      player.sendMessage("...the arrow impales the rope support.");
-      quest.setStage(player, STAGE_PASSED_BRIDGE);
+      // The transcript's "Without fire arrows" condition is resolved while it is
+      // flattened, so the arrow must only be consumed after the success branch
+      // has been chosen; the transcript prints the firing lines itself.
       playVariant(player, UP + "firing-arrows-at-the-bridge");
+      removeLitFireArrow(player);
+      quest.setStage(player, STAGE_PASSED_BRIDGE);
       return;
     }
 
@@ -1188,34 +1357,58 @@ module.exports = function registerUndergroundPassQuest(api) {
 
     if (UNICORN_DOOR_IDS.has(objectId)) {
       event.handled = true;
-      if (!unicornDoorUnlocked(player)) {
-        player.sendMessage("The door is locked.");
-        return;
-      }
-      if (stage < STAGE_MAIN_AREA) {
-        quest.setStage(player, STAGE_MAIN_AREA);
-        setBit(player, BIT_KOFTIK_INSANE);
-      }
-      playVariant(player, UP + "opening-the-door");
+      useUnicornDoor(player);
       return;
     }
 
-    if (TEMPLE_DOOR_IDS.has(objectId)) {
+    if (ORB_OBJECT_ITEMS.has(objectId)) {
       event.handled = true;
-      if (!testBit(player, BIT_READ_HISTORY)) {
-        player.sendMessage("You have no reason to go in there.");
+      const orbItem = ORB_OBJECT_ITEMS.get(objectId);
+      if (hasItem(player, orbItem)) {
+        playVariant(player, UP + "trying-to-pick-up-duplicate-orbs-of-light");
         return;
       }
-      if (!hasFinishedDoll(player)) {
-        player.sendMessage("You should wait until you have the finished doll before going in there.");
+      give(player, orbItem, 1);
+      return;
+    }
+
+    if (objectId === ORB_TRAP_ROCK) {
+      event.handled = true;
+      playVariant(player, UP + "flat-rock-beneath-an-orb");
+      return;
+    }
+
+    if (objectId === ABANDONED_EQUIPMENT) {
+      event.handled = true;
+      playVariant(player, UP + "searching-the-abandoned-equipment");
+      return;
+    }
+
+    if (PLANK_ROCK_IDS.has(objectId)) {
+      event.handled = true;
+      playVariant(player, UP + "flat-rock");
+      return;
+    }
+
+    if (DOVE_CAGE_IDS.has(objectId)) {
+      event.handled = true;
+      if (hasItem(player, IBANS_DOVE) || testBit(player, BIT_DOVE)) {
+        player.sendMessage("You search through the bottom of the cage but find nothing.");
         return;
       }
-      if (!wearingZamorakRobes(player)) {
-        player.sendMessage("The door refuses to open. Only followers of Zamorak may enter.");
+      // The wiki's "(same as above)" under the no-gauntlets branch is the
+      // half-soulless bite from the neighbouring cages.
+      if (freeSlots(player) >= 1 && !wearingGauntlets(player)) {
+        startTranscript(
+          api,
+          player,
+          NpcIdentifiers.HALF_SOULLESS,
+          PAGE,
+          UP + "searching-half-soulless-cages"
+        );
         return;
       }
-      if (stage < STAGE_CONFRONTED_IBAN) quest.setStage(player, STAGE_CONFRONTED_IBAN);
-      playVariant(player, UP + "entering-iban-s-temple");
+      playVariant(player, UP + "searching-the-cage-with-the-dove");
       return;
     }
 
@@ -1387,7 +1580,7 @@ module.exports = function registerUndergroundPassQuest(api) {
 
     if (objectId === ROCKSLIDE) {
       event.handled = true;
-      player.sendMessage("You climb over the rocks.");
+      climbOverRockslide(player, event);
       return;
     }
 
@@ -1395,6 +1588,28 @@ module.exports = function registerUndergroundPassQuest(api) {
       event.handled = true;
       player.sendMessage("The writing seems to have been scratched into the rock with bare hands.");
     }
+  }
+
+  /**
+   * The bridge is shot at the guide rope from across the gap, where no adjacent
+   * tile is walkable; route the click to the player's own tile so the fire
+   * handler runs instead of "You can't reach that!". Roughly a bow's range.
+   */
+  function routeToGuideRope(event) {
+    if (event.objectId !== ObjectIdentifiers.GUIDE_ROPE) return;
+    const playerLocation = event.player.getLocation();
+    const objectLocation = event.object?.getLocation?.();
+    if (!objectLocation) return;
+    const distance = Math.max(
+      Math.abs(playerLocation.getX() - objectLocation.getX()),
+      Math.abs(playerLocation.getY() - objectLocation.getY())
+    );
+    if (distance > 10) return;
+    event.destination = {
+      x: playerLocation.getX(),
+      y: playerLocation.getY(),
+      z: playerLocation.getZ(),
+    };
   }
 
   function handleLogin({ player }) {
@@ -1428,7 +1643,10 @@ module.exports = function registerUndergroundPassQuest(api) {
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemAction(handleItemAction);
+  api.onNpcInteraction("Witch's cat", { "Pick-up": pickUpWitchCat });
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectRoute(routeToGuideRope);
+  api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
 };

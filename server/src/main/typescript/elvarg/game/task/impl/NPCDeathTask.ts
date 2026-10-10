@@ -18,6 +18,7 @@ export class NPCDeathTask extends Task {
     private npc: NPC
     private ticks: number;
     private killer: Player | null;
+    private damagers: Player[] = [];
     private remains: { ticks: number; respawnTicks?: number } | null = null;
     
     /**
@@ -35,6 +36,8 @@ export class NPCDeathTask extends Task {
         switch (this.ticks) {
             case 1:
                 this.npc.getMovementQueue().setBlockMovement(true).reset();
+                // Every player who damaged it, before getKiller clears the record.
+                this.damagers = this.npc.getCombat().getRecentDamagers();
                 this.killer = this.npc.getCombat().getKiller(true);
                 this.npc.performAnimation(new Animation(this.npc.getCurrentDefinition().getDeathAnim()));
                 const deathSound = this.npc.getCurrentDefinition().getDeathSound();
@@ -48,8 +51,9 @@ export class NPCDeathTask extends Task {
                 if (this.killer != null) {
                     const event: PluginNpcDeathEvent = {
                         killer: this.killer,
+                        damagers: this.damagers,
                         npc: this.npc,
-                        npcId: this.npc.getId(),
+                        npcId: this.npc.getContentId(this.killer),
                         location: {
                             x: this.npc.getLocation().getX(),
                             y: this.npc.getLocation().getY(),

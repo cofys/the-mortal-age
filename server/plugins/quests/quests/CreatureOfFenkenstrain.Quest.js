@@ -141,12 +141,16 @@ module.exports = function registerCreatureOfFenkenstrainQuest(api) {
   const FLAG_GARDENER_FOLLOWING = 4;
   const FLAG_MOULD_TAKEN = 8;
 
-  /** Grave dig rewards (reference tiles). */
+  /**
+   * Grave dig rewards, keyed by the grave objects' own tiles (5168 at 3502/3504/3506,3576-7
+   * and 5169 at 3608,3491): the reference part tiles were one tile off, so nearest-grave
+   * resolution sent the middle grave's Dig to the torso instead of the arms.
+   */
   const GRAVE_PARTS = [
-    { x: 3503, y: 3576, bit: 2, itemId: ItemIdentifiers.TORSO, message: "... and you unearth a torso." },
-    { x: 3504, y: 3576, bit: 4, itemId: ItemIdentifiers.ARMS, message: "... and you unearth a pair of arms." },
-    { x: 3505, y: 3576, bit: 8, itemId: ItemIdentifiers.LEGS, message: "... and you unearth a pair of legs." },
-    { x: 3608, y: 3490, bit: 1, itemId: ItemIdentifiers.DECAPITATED_HEAD, message: "... and you unearth a decapitated head." },
+    { x: 3502, y: 3576, bit: 2, itemId: ItemIdentifiers.TORSO, message: "... and you unearth a torso." },
+    { x: 3504, y: 3577, bit: 4, itemId: ItemIdentifiers.ARMS, message: "... and you unearth a pair of arms." },
+    { x: 3506, y: 3576, bit: 8, itemId: ItemIdentifiers.LEGS, message: "... and you unearth a pair of legs." },
+    { x: 3608, y: 3491, bit: 1, itemId: ItemIdentifiers.DECAPITATED_HEAD, message: "... and you unearth a decapitated head." },
   ];
 
   /** Inscriptions keyed by the gravestone tile (reference data). */
@@ -846,6 +850,11 @@ module.exports = function registerCreatureOfFenkenstrainQuest(api) {
   function handleSilverOnFurnace(event) {
     if (event.itemId !== ItemIdentifiers.SILVER_BAR) return;
     const { player } = event;
+    // Only the conductor step of this quest owns silver on a furnace; leave the
+    // action to other silver recipes (e.g. Nature Spirit's sickle) otherwise.
+    // Returning false (not undefined) lets the next handler run.
+    if (!quest.isStarted(player) || quest.isComplete(player)) return false;
+    if (!held(player, ItemIdentifiers.CONDUCTOR_MOULD) && held(player, ItemIdentifiers.SICKLE_MOULD)) return false;
     event.handled = true;
     if (!held(player, ItemIdentifiers.CONDUCTOR_MOULD)) {
       player.sendMessage("You need a conductor mould to cast anything useful.");
@@ -924,12 +933,16 @@ module.exports = function registerCreatureOfFenkenstrainQuest(api) {
 
   /** Spade right-click Dig while standing next to one of the quest graves. */
   function handleItemAction(event) {
-    if (!SPADE_IDS.has(event.itemId)) return;
-    if (String(event.option).toLowerCase() !== "dig") return;
+    if (!SPADE_IDS.has(event.itemId)) return false;
+    if (String(event.option).toLowerCase() !== "dig") return false;
     const grave = nearestGravePart(event.player.getLocation?.());
-    if (!grave) return;
+    // Returning false off the graves lets other quests' dig spots (X Marks the
+    // Spot, Making History, ...) run: a named hook that returns anything else
+    // claims the click.
+    if (!grave) return false;
     event.handled = true;
     digGrave(event.player, event.player.getLocation());
+    return true;
   }
 
   /** Picking the pub's pickled brain opens Roavar's sale dialogue. */

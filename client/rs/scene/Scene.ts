@@ -897,7 +897,9 @@ export class Scene {
         }
 
         for (const loc of tile.locs) {
-            if (loc.entity instanceof ModelData) {
+            // A multi-tile loc is listed on every tile it covers; merge it once, from its
+            // start tile, as OSRS does (it lights the loc there, so later tiles skip it).
+            if (loc.entity instanceof ModelData && loc.startX === tileX && loc.startY === tileY) {
                 this.mergeLargeLocNormals(
                     loc.entity,
                     level,

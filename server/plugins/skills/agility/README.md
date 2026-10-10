@@ -1,7 +1,7 @@
 # Agility
 
 `Agility.plugin.js` plays the courses (`courses/`, code) and the shortcuts
-(`data/definitions/agility-shortcuts.json`, data) through `ObstacleRunner.js`, a step list run one
+(`plugins/skills/data/agility-shortcuts.json`, data) through `ObstacleRunner.js`, a step list run one
 game tick at a time.
 
 ## Shortcuts

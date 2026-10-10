@@ -54,7 +54,7 @@ function createTraversalAssist(api, options = {}) {
   const INIT_RETRY_BACKOFF_MS = 5000;
   const persistentIndexPath =
     options.cachePath ??
-    path.join(process.cwd(), "plugins", "bots", "data", "object-index.json");
+    path.join(__dirname, "..", "data", "object-index.json");
 
   /** Sorted id list: a dump built for a different set of tracked kinds is rejected. */
   function trackedIdsFingerprint() {
@@ -696,6 +696,49 @@ function createTraversalAssist(api, options = {}) {
     return candidates;
   }
 
+  /**
+   * Nearest indexed tile of any of `objectIds` within `regionRadius` regions,
+   * straight from the index: far regions are never loaded or scanned. A walk
+   * target for when nothing is in live range; `accept(id, x, y, z)` filters.
+   */
+  function findNearestIndexedLocation(player, objectIds, options = {}) {
+    const loc = player?.getLocation?.();
+    if (!loc || player.getPrivateArea?.() || !Array.isArray(objectIds) || objectIds.length === 0) {
+      return null;
+    }
+    trackObjectIds(objectIds);
+    if (!ensurePersistentIndex()) {
+      return null;
+    }
+    const radius = Math.max(0, Math.floor(options.regionRadius ?? 8));
+    const z = loc.getZ();
+    const regionX = loc.getX() >> 6;
+    const regionY = loc.getY() >> 6;
+    let best = null;
+    let bestDistSq = Infinity;
+    for (let rx = regionX - radius; rx <= regionX + radius; rx += 1) {
+      for (let ry = regionY - radius; ry <= regionY + radius; ry += 1) {
+        const byId = objectsByRegion.get((rx << 8) + ry);
+        if (!byId) {
+          continue;
+        }
+        for (const objectId of objectIds) {
+          for (const entry of byId.get(objectId) ?? []) {
+            const x = rx * 64 + entry.lx;
+            const y = ry * 64 + entry.ly;
+            const distSq = (x - loc.getX()) ** 2 + (y - loc.getY()) ** 2;
+            if (entry.z !== z || distSq >= bestDistSq || options.accept?.(objectId, x, y, z) === false) {
+              continue;
+            }
+            best = { x, y, z };
+            bestDistSq = distSq;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
   // Keep the index authoritative: a region loaded after startup (lazy region, region
   // pack, edited map) replaces its entries, so searches never read stale coordinates.
   if (typeof api?.onRegionLoaded === "function") {
@@ -713,6 +756,7 @@ function createTraversalAssist(api, options = {}) {
     findNearestObject,
     findObjectOnRoute,
     findCandidatesByIds,
+    findNearestIndexedLocation,
     trackObjectId,
     trackObjectIds,
     initializePersistentIndex,

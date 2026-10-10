@@ -10,16 +10,17 @@
  * Stages (varp 30): 10 started, 20 blanket returned, 30 looking for Cedric,
  * 40 finding water, 50 given water, 60 fixing cart, 70 cart fixed, 80 complete.
  *
- * Gaps (no dump support): the final Omad variant
+ * The thieves' cave ladder (18987) is not placed on the map: it only exists
+ * while a player is in the stone circle, so the circle is an Area that spawns it
+ * on entry ("A ladder mysteriously appears.") and removes it once the last
+ * player leaves. The final Omad variant
  * ("...after-finding-and-helping-brother-cedric") has a wiki UNAVAILABLE marker
- * in the middle that stops playback before its dance cutscene, so stage 70 plays
- * the dump's "brother-cedric-dancing-cutscene" directly (it ends with "Quest
- * complete!"). The hidden ladder object is placed by the reference's region
- * handler; here the ladders just teleport when clicked.
+ * mid-branch; the plugin skips it and splices the dance cutscene in, so the
+ * reward lines play before the completion action.
  */
 module.exports = function registerMonksFriendQuest(api) {
-  const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, Location } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, Location, Boundary, GameObject } = api.core;
+  const { registerQuest, loadTranscripts } = require("../QuestRuntime");
 
   const PAGE = "Monk's Friend";
 
@@ -47,6 +48,18 @@ module.exports = function registerMonksFriendQuest(api) {
   const CAVE_LADDER_LOC_ID = ObjectIdentifiers.LADDER_216;
   const CAVE_LADDER_TILE = { x: 2561, y: 9622, z: 0 };
 
+  // The stone circle the wiki marks with {{Map|2561,3221|r=4|mtype=square}}.
+  const STONE_CIRCLE_BOUNDS = new Boundary(2557, 2565, 3217, 3225, 0);
+  const HIDDEN_LADDER_LOCATION = new Location(2561, 3221, 0);
+  const HIDDEN_LADDER_TYPE = 10;
+  const HIDDEN_LADDER_FACE = 0;
+  const LADDER_APPEARS_MESSAGE = "A ladder mysteriously appears.";
+  const CAVE_LADDER_DESTINATION = new Location(2561, 9621, 0);
+  const CAVE_LADDER_RETURN = new Location(2561, 3221, 0);
+
+  const DANCING_CUTSCENE_VARIANT = "brother-cedric-dancing-cutscene";
+  const DANCING_CUTSCENE_ACTION_ID = "KiiD54";
+
   const START_HOOK = "quest:monk-s-friend:start";
   const COMPLETE_ACTION_ID = "QwqMu_";
   const BLANKET_MESSAGE_ID = "bT1LEg";
@@ -55,9 +68,38 @@ module.exports = function registerMonksFriendQuest(api) {
   const PLANK_MESSAGE_ID = "Gil6fA";
 
   let quest;
+  // The hidden ladder exists only while the stone circle has a player in it.
+  let hiddenLadder = null;
 
   const hasItem = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
   const hasWood = (player) => hasItem(player, LOGS_ITEM_ID) || hasItem(player, PLANK_ITEM_ID);
+
+  /** Object 18987 is not on the map; it appears for whoever stands in the ring. */
+  function createStoneCircleArea() {
+    class StoneCircleArea extends api.core.Area {
+      postEnter(mobile) {
+        if (!mobile.isPlayer()) return;
+        if (!hiddenLadder) {
+          hiddenLadder = new GameObject(
+            HIDDEN_LADDER_LOC_ID,
+            HIDDEN_LADDER_LOCATION.clone(),
+            HIDDEN_LADDER_TYPE,
+            HIDDEN_LADDER_FACE,
+            null
+          );
+          api.getObjectManager().register(hiddenLadder, true);
+        }
+        mobile.getAsPlayer().sendMessage(LADDER_APPEARS_MESSAGE);
+      }
+
+      postLeave(mobile) {
+        if (!mobile.isPlayer() || !hiddenLadder || this.getPlayers().length > 0) return;
+        api.getObjectManager().deregister(hiddenLadder, true);
+        hiddenLadder = null;
+      }
+    }
+    return new StoneCircleArea([STONE_CIRCLE_BOUNDS]);
+  }
 
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
@@ -113,7 +155,7 @@ module.exports = function registerMonksFriendQuest(api) {
 
   function omadVariant(stage, player) {
     if (stage >= STAGE_COMPLETE) return "post-quest-dialogue-for-20-minutes-talking-to-brother-omad";
-    if (stage >= STAGE_FIXED_CART) return "brother-cedric-dancing-cutscene";
+    if (stage >= STAGE_FIXED_CART) return "brother-cedric-talking-to-brother-omad-after-finding-and-helping-brother-cedric";
     if (stage >= STAGE_GIVEN_WATER) return "brother-cedric-talking-to-brother-omad-after-giving-brother-cedric-water";
     if (stage >= STAGE_FINDING_WATER) return "brother-cedric-talking-to-brother-omad-after-finding-brother-cedric";
     if (stage >= STAGE_LOOKING_FOR_CEDRIC) return "brother-cedric-talking-to-brother-omad-before-finding-brother-cedric";
@@ -184,6 +226,20 @@ module.exports = function registerMonksFriendQuest(api) {
   function handleAction(event) {
     const { player, npcId, stepId } = event;
     const stage = quest.getStage(player);
+    // The dump wraps a wiki gap in the final hand-in as `unavailable` mid-branch;
+    // skip past it so the reward lines and the cutscene that follow still play.
+    if (npcId === BROTHER_OMAD_NPC_ID && event.step?.type === "unavailable") {
+      event.handled = true;
+      return;
+    }
+    // "Dancing cutscene begins" points at the cutscene's own transcript variant,
+    // which carries the completion action.
+    if (stepId === DANCING_CUTSCENE_ACTION_ID) {
+      const steps = loadTranscripts(api)?.[PAGE]?.variants?.[DANCING_CUTSCENE_VARIANT];
+      event.handled = true;
+      event.steps = Array.isArray(steps) ? steps : [];
+      return;
+    }
     if (stepId === COMPLETE_ACTION_ID) {
       if (!quest.isComplete(player) && stage >= STAGE_FIXED_CART) quest.complete(player);
       event.handled = true;
@@ -217,6 +273,25 @@ module.exports = function registerMonksFriendQuest(api) {
     }
   }
 
+  /** Wiki editor footnotes like {{^|...}} are not spoken dialogue. */
+  function handleDialogueLine(event) {
+    if (event.npcId !== BROTHER_OMAD_NPC_ID || typeof event.text !== "string") return;
+    if (event.text.includes("{{")) event.text = event.text.replace(/\{\{[^}]*\}\}/g, "").trim();
+  }
+
+  /**
+   * Object 18987 is shared with the King Black Dragon's Lava Maze ladder, and the
+   * KBD plugin claims its first click before quests load, always routing to the
+   * lair. When that climb-down starts while the player is at our hidden ladder,
+   * go to the thieves' cave instead: the lair climb is queued a tick out and
+   * cancels itself once the player is no longer where it started.
+   */
+  function handleClimbDown(event) {
+    const { player } = event;
+    if (!hiddenLadder || !player || !STONE_CIRCLE_BOUNDS.inside(player.getLocation())) return;
+    player.moveTo(CAVE_LADDER_DESTINATION.clone());
+  }
+
   function isCaveLadder(location) {
     return location?.x === CAVE_LADDER_TILE.x && location?.y === CAVE_LADDER_TILE.y && location?.z === CAVE_LADDER_TILE.z;
   }
@@ -225,10 +300,10 @@ module.exports = function registerMonksFriendQuest(api) {
   function handleLadderInteraction(event) {
     const { objectId, player } = event;
     if (objectId === HIDDEN_LADDER_LOC_ID) {
-      player.moveTo(new Location(2561, 9621, 0));
+      player.moveTo(CAVE_LADDER_DESTINATION.clone());
       event.handled = true;
     } else if (objectId === CAVE_LADDER_LOC_ID && isCaveLadder(event.location)) {
-      player.moveTo(new Location(2561, 3221, 0));
+      player.moveTo(CAVE_LADDER_RETURN.clone());
       event.handled = true;
     }
   }
@@ -252,5 +327,8 @@ module.exports = function registerMonksFriendQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
+  api.onCustomEvent("ladders:climbDown", handleClimbDown);
   api.onObjectInteraction(handleLadderInteraction);
+  api.registerArea(createStoneCircleArea());
 };

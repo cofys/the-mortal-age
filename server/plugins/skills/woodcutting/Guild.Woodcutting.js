@@ -1,7 +1,7 @@
 /**
  * Woodcutting Guild (OSRS Wiki): level 60 Woodcutting to go in through the gates, and an
  * invisible +7 Woodcutting boost to the cut chance anywhere inside. From
- * data/definitions/woodcutting-guild.json, as captured:
+ * plugins/skills/data/woodcutting-guild.json, as captured:
  * - a gate pass swaps both halves for invisible walls with the open gates beside them (sound
  *   62), the player steps through, the east gate's guard welcomes them in, and two ticks later
  *   the gates are shut;

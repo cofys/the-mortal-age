@@ -1,6 +1,6 @@
 /**
  * Sawmill operators (https://oldschool.runescape.wiki/w/Sawmill), from
- * data/definitions/sawmill.json, as captured:
+ * plugins/npcs/data/sawmill.json, as captured:
  * - Buy-plank (and Talk-to's "Yes, please make me some planks.") opens the skillmulti menu:
  *   "How many do you wish to make?", "Wood - 100gp" ... "Rosewood - 7,500gp", at most the logs
  *   carried, opening on the last amount chosen;
@@ -23,7 +23,7 @@ let DATA = null;
 
 /** The data, read on first use through api.core's definitions path. */
 function data() {
-  if (!DATA) DATA = JSON.parse(fs.readFileSync(path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "sawmill.json"), "utf8"));
+  if (!DATA) DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "data", "sawmill.json"), "utf8"));
   return DATA;
 }
 

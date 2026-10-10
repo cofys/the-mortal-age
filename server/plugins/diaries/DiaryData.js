@@ -1,5 +1,5 @@
 /**
- * data/definitions/achievement-diaries.json, loaded once: the diaries by key, by diary tab row
+ * plugins/diaries/data/achievement-diaries.json, loaded once: the diaries by key, by diary tab row
  * and by reward NPC, and where each task lives.
  */
 const fs = require("fs");
@@ -9,7 +9,7 @@ const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameCon
 const TIERS = ["easy", "medium", "hard", "elite"];
 
 const DATA = JSON.parse(
-  fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "achievement-diaries.json"), "utf8"),
+  fs.readFileSync(path.join(__dirname, "data", "achievement-diaries.json"), "utf8"),
 );
 const DIARIES = DATA.diaries;
 const BY_KEY = new Map(DIARIES.map((diary) => [diary.key, diary]));

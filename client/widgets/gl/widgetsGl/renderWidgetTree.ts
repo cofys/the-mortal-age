@@ -2189,6 +2189,16 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         });
                     }
                 }
+                const playerDots: number[][] = worldMapRenderHost?.worldMapPlayers ?? [];
+                const dotSize = Math.max(2, 3 * renderScale);
+                for (const [dotX, dotY, dotPlane, isBot] of playerDots) {
+                    const displayPos = currentArea.position(dotPlane, dotX, dotY);
+                    if (!displayPos) continue;
+                    const dot = projectDisplayToScreen(displayPos.x + 0.5, displayPos.y + 0.5);
+                    if (dot.x < x || dot.y < y || dot.x > x + width || dot.y > y + height) continue;
+                    glr.drawRect(dot.x - dotSize / 2, dot.y - dotSize / 2, dotSize, dotSize,
+                        isBot ? [1, 1, 1, 1] : [1, 1, 0, 1]);
+                }
                 for (const labelDraw of worldMapLabelDraws) {
                     if (labelDraw.font && !/<(?!br\s*\/?\s*>)/i.test(labelDraw.text)) {
                         drawWorldMapLabelGL(
@@ -2723,8 +2733,18 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                                 targetFineY = ((mapId & 0xff) << 13) + (npcEcs.getY(ecsIdx) | 0);
                             }
                         } else if (hintArrow.type === 2) {
+                            // The minimap marks the target on every floor; only the world
+                            // arrow (overlay passes) is scoped to the viewer's plane.
                             targetFineX = (hintArrow.x << 7) + 64;
                             targetFineY = (hintArrow.y << 7) + 64;
+                        } else if (hintArrow.type === 3) {
+                            // Player hint: playerEcs coordinates are already world-fine.
+                            const pe = osrsClient.playerEcs;
+                            const playerIdx = pe?.getIndexForServerId?.(hintArrow.playerId);
+                            if (playerIdx !== undefined && playerIdx >= 0) {
+                                targetFineX = pe.getX(playerIdx) | 0;
+                                targetFineY = pe.getY(playerIdx) | 0;
+                            }
                         }
                         if (targetFineX >= 0) {
                             // Native minimap pixels (4 per tile) after zoom, north-up.
@@ -3618,6 +3638,12 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             if (profileWidgetRender) {
                 debugRectMs += performance.now() - debugRectStartMs;
             }
+        }
+
+        // Side-panel anchors draw first, then the host's widget overlays (status bars), then
+        // this widget's children and every later widget - so tooltips stay on top.
+        if (widgetUid !== 0 && opts.widgetOverlayAnchors?.has(widgetUid)) {
+            opts.widgetOverlayAnchorDrawn?.(widgetUid);
         }
 
         if (!isContainer && hasChildren) {

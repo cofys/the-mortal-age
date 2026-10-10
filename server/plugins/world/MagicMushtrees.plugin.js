@@ -42,7 +42,7 @@ let core = null;
 let mushtrees = [];
 
 function loadMushtrees() {
-  const file = path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "magic-mushtrees.json");
+  const file = path.join(__dirname, "data", "magic-mushtrees.json");
   return JSON.parse(fs.readFileSync(file, "utf8")).mushtrees;
 }
 

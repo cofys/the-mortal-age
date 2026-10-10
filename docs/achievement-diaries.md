@@ -1,6 +1,6 @@
 # Achievement diaries
 
-The diary framework lives in `server/plugins/diaries/`, and its data is `server/data/definitions/achievement-diaries.json`. It covers:
+The diary framework lives in `server/plugins/diaries/`, and its data is `server/plugins/diaries/data/achievement-diaries.json`. It covers:
 - progress and the diary tab;
 - every diary's task list;
 - claiming rewards from all 12 diary NPCs;

@@ -22,12 +22,13 @@
  * data/area/morytania/braindeath_island/*). Rewards per the OSRS Wiki: 2 Quest
  * points, 7,000 Prayer/Fishing/Farming XP and the Holy wrench.
  *
- * Gaps: the intro cutscene camera/transform, the grow-cutscene and the fishing
- * roll are text/state only; the blindweed growth is a flat 60s timer instead of
- * the real farming tick cycle; the bailing bucket named in the issue belongs to
- * Fishing Trawler, not this quest (the reference uses a plain bucket); 50% Luke
- * and the gate are handled by NPC dialogue + a one-tile pass-through rather than
- * the reference's object swap; zombie swabs only play the six insult variants
+ * Gaps: the intro cutscene is a knockout teleport plus the cutscene-1/meeting
+ * transcript (no camera change); the grow-cutscene and the fishing roll are
+ * text/state only; the blindweed growth is a flat 60s timer instead of the real
+ * farming tick cycle; the bailing bucket named in the issue belongs to Fishing
+ * Trawler, not this quest (the reference uses a plain bucket); 50% Luke and the
+ * gate are handled by NPC dialogue + a one-tile pass-through rather than the
+ * reference's object swap; zombie swabs only play the six insult variants
  * (roam-away/re-intimidate are not fired); the Fishing spot uses NPC 635 (the
  * only spot spawned on Braindeath Island in this cache).
  */
@@ -39,7 +40,7 @@ module.exports = function registerRumDealQuest(api) {
     ObjectIdentifiers,
     Skill,
   } = api.core;
-  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
+  const { registerQuest, refreshQuestList, startTranscript, loadTranscripts } = require("../QuestRuntime");
 
   const PAGE = "Rum Deal";
   const VARP_RUM_DEAL = 600; // real OSRS varp, unused in this repo
@@ -119,19 +120,39 @@ module.exports = function registerRumDealQuest(api) {
     NpcIdentifiers.BREWER_7, // 633
     NpcIdentifiers.BREWER_8, // 634
   ]);
+
+  /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
+  const DIALOGUE_NPC_IDS = new Set([
+    ...PETE_NPC_IDS,
+    BRAINDEATH_NPC_ID,
+    LUKE_NPC_ID,
+    DAVEY_NPC_ID,
+    DONNIE_NPC_ID,
+    ...PROTESTER_NPC_IDS,
+    ...SWAB_NPC_IDS,
+    ...BREWER_NPC_IDS,
+  ]);
   const EVIL_SPIRIT_NPC_ID = NpcIdentifiers.EVIL_SPIRIT; // 625
   const FEVER_SPIDER_NPC_ID = NpcIdentifiers.FEVER_SPIDER; // 626
   const FISHING_SPOT_NPC_ID = NpcIdentifiers.FISHING_SPOT; // 635, only spawned on Braindeath
 
   const INTAKE_HOPPER_OBJECT_ID = ObjectIdentifiers.HOPPER_2; // 10170
   const PRESSURE_BARREL_OBJECT_ID = ObjectIdentifiers.PRESSURE_BARREL; // 10171
+  // The map places the unnamed multi-loc root (varbit 1354 resolves to the children);
+  // the object click carries the root id, so both the root and the children are accepted.
+  const PRESSURE_LEVER_ROOT_OBJECT_ID = 10164;
   const PRESSURE_LEVER_OBJECT_IDS = new Set([
+    PRESSURE_LEVER_ROOT_OBJECT_ID,
     ObjectIdentifiers.PRESSURE_LEVER, // 10165
     ObjectIdentifiers.PRESSURE_LEVER_2, // 10166
   ]);
   const STAGNANT_LAKE_OBJECT_ID = ObjectIdentifiers.STAGNANT_LAKE; // 10105
   const OUTPUT_TAP_OBJECT_ID = ObjectIdentifiers.OUTPUT_TAP; // 10148
+  // Same multi-loc root miss as the lever: 10104 (varbit 1355) is what the map places
+  // and what item-on-object reports; 10142-10144 are the children it resolves to.
+  const BREWING_CONTROL_ROOT_OBJECT_ID = 10104;
   const BREWING_CONTROL_OBJECT_IDS = new Set([
+    BREWING_CONTROL_ROOT_OBJECT_ID,
     ObjectIdentifiers.BREWING_CONTROL, // 10142
     ObjectIdentifiers.BREWING_CONTROL_2, // 10143
     ObjectIdentifiers.BREWING_CONTROL_3, // 10144
@@ -140,7 +161,11 @@ module.exports = function registerRumDealQuest(api) {
     ObjectIdentifiers.CUPBOARD_34, // 10162
     ObjectIdentifiers.OPEN_CUPBOARD_4, // 10163
   ]);
+  // The map places the unnamed multi-loc root 10096 (its resolved variant is "Blindweed
+  // Patch"); the cache has no name for the root, so ObjectIdentifiers has no constant.
+  const BLINDWEED_PATCH_ROOT_OBJECT_ID = 10096;
   const BLINDWEED_PATCH_OBJECT_IDS = new Set([
+    BLINDWEED_PATCH_ROOT_OBJECT_ID,
     ObjectIdentifiers.BLINDWEED_PATCH, // 10097
     ObjectIdentifiers.BLINDWEED_PATCH_2, // 10098
     ObjectIdentifiers.BLINDWEED_PATCH_3, // 10099
@@ -153,6 +178,13 @@ module.exports = function registerRumDealQuest(api) {
     ObjectIdentifiers.GATE_96, // 10172
     ObjectIdentifiers.GATE_104, // 11771
   ]);
+  // The player is knocked out at Pete's dock and wakes in front of Braindeath.
+  const WAKE_TILE = { x: 2144, y: 5108, z: 1 };
+  // The south brewery stair (10137 at 2153,5109 z1) pairs with a Climb-up stair two
+  // tiles west (10136 at 2151,5109 z0), which ClimbLinks' landing search misses.
+  const SOUTH_STAIR_OBJECT_ID = ObjectIdentifiers.WOODEN_STAIR_2; // 10137
+  const SOUTH_STAIR_TILE = { x: 2153, y: 5109, z: 1 };
+  const SOUTH_STAIR_LANDING = { x: 2153, y: 5110, z: 0 };
 
   const INTRO_ATTRIBUTE = "quest.rum_deal.intro";
   const PLANTED_ATTRIBUTE = "quest.rum_deal.planted";
@@ -442,10 +474,12 @@ module.exports = function registerRumDealQuest(api) {
   }
 
   /**
-   * Answer the page's prose conditions. Called for every condition on the page,
-   * so every branch is handled and nothing throws on a missing inventory method.
+   * Answer the page's prose conditions for this plugin's own NPCs. Called for
+   * every condition on the page, so every branch is handled and nothing throws
+   * on a missing inventory method.
    */
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text ?? "").toLowerCase();
     const inventory = player.getInventory();
     const has = (itemId) => inventory.getAmount(itemId) > 0;
@@ -522,10 +556,22 @@ module.exports = function registerRumDealQuest(api) {
         if (quest.getStage(player) < STAGE_KNOCKED_OUT) quest.setStage(player, STAGE_KNOCKED_OUT);
         event.handled = true;
         return;
-      case "3cIEz2": // cutscene 1 ends; the intro conversation comes next
-        if (npcId === BRAINDEATH_NPC_ID) player.setAttribute(INTRO_ATTRIBUTE, 1);
+      case "ZTlTFa": // cutscene 1 begins: the player wakes on Braindeath Island
+        if (PETE_NPC_IDS.has(npcId) && !quest.isComplete(player)) {
+          player.moveTo(new api.core.Location(WAKE_TILE.x, WAKE_TILE.y, WAKE_TILE.z));
+        }
         event.handled = true;
         return;
+      case "3cIEz2": { // cutscene 1 ends; the meeting conversation continues below
+        event.handled = true;
+        if (npcId !== BRAINDEATH_NPC_ID) return;
+        player.setAttribute(INTRO_ATTRIBUTE, 1);
+        // The wiki transcript says "dialogue continues below", so play the meeting
+        // variant in this same conversation instead of making the player talk again.
+        const meeting = loadTranscripts(api)?.[PAGE]?.variants?.["setting-out-meeting-captain-braindeath"];
+        if (Array.isArray(meeting)) event.steps = meeting;
+        return;
+      }
       case "c5zoBJ": // another blindweed seed
         giveIfMissing(player, BLINDWEED_SEED);
         event.handled = true;
@@ -614,6 +660,9 @@ module.exports = function registerRumDealQuest(api) {
       case "at2XLU": // water added, no free space for the fishbowl
         if (quest.getStage(player) === STAGE_WATER_ADDED && !quest.isComplete(player)) {
           quest.setStage(player, STAGE_CATCH_CREATURES);
+          // A generic inventory condition in another plugin can answer this branch
+          // true even when the player has space; hand the fishbowl over anyway.
+          if (hasFreeSlot(player)) giveIfMissing(player, FISHBOWL_AND_NET);
         }
         return;
       case "Sy3jOe": // water added, fishbowl and net handed over
@@ -863,21 +912,21 @@ module.exports = function registerRumDealQuest(api) {
   }
 
   /** Evil Spirit death banishes it; a Fever Spider drops its body. */
-  function handleNpcDeath({ player, npcId }) {
-    if (!player) return;
+  function handleNpcDeath({ killer, npcId }) {
+    if (!killer) return;
     if (npcId === EVIL_SPIRIT_NPC_ID) {
-      player.setAttribute(SPIRIT_ATTRIBUTE, 0);
-      clearSpirit(player);
-      if (quest.getStage(player) === STAGE_BLESS_WRENCH) {
-        quest.setStage(player, STAGE_SPIRIT_BANISHED);
-        player.sendMessage("You have banished the Evil Spirit!");
+      killer.setAttribute(SPIRIT_ATTRIBUTE, 0);
+      clearSpirit(killer);
+      if (quest.getStage(killer) === STAGE_BLESS_WRENCH) {
+        quest.setStage(killer, STAGE_SPIRIT_BANISHED);
+        killer.sendMessage("You have banished the Evil Spirit!");
       }
       return;
     }
-    if (npcId === FEVER_SPIDER_NPC_ID && quest.getStage(player) === STAGE_KILL_SPIDER) {
-      if (!held(player, FEVER_SPIDER_BODY) && hasFreeSlot(player)) {
-        player.getInventory().adds(FEVER_SPIDER_BODY, 1);
-        player.sendMessage("You take the fever spider's body.");
+    if (npcId === FEVER_SPIDER_NPC_ID && quest.getStage(killer) === STAGE_KILL_SPIDER) {
+      if (!held(killer, FEVER_SPIDER_BODY) && hasFreeSlot(killer)) {
+        killer.getInventory().adds(FEVER_SPIDER_BODY, 1);
+        killer.sendMessage("You take the fever spider's body.");
       }
     }
   }
@@ -929,15 +978,17 @@ module.exports = function registerRumDealQuest(api) {
     event.handled = false;
   }
 
-  function handleItemOnItem({ player, itemId, targetItemId }) {
-    const fb = itemId === FISHBOWL || targetItemId === FISHBOWL;
-    const net = itemId === BIG_FISHING_NET || targetItemId === BIG_FISHING_NET;
+  function handleItemOnItem(event) {
+    const { player, usedItemId, usedWithItemId } = event;
+    const fb = usedItemId === FISHBOWL || usedWithItemId === FISHBOWL;
+    const net = usedItemId === BIG_FISHING_NET || usedWithItemId === BIG_FISHING_NET;
     if (!fb || !net) return;
     if (!held(player, FISHBOWL) || !held(player, BIG_FISHING_NET)) return;
     player.getInventory().deleteNumber(FISHBOWL, 1);
     player.getInventory().deleteNumber(BIG_FISHING_NET, 1);
     player.getInventory().adds(FISHBOWL_AND_NET, 1);
     player.sendMessage("You wrap the net around the empty bowl.");
+    event.handled = true;
   }
 
   function unwrapFishbowl({ player }) {
@@ -979,7 +1030,27 @@ module.exports = function registerRumDealQuest(api) {
     }
     if (GATE_OBJECT_IDS.has(objectId)) {
       useGate(event);
+      return;
     }
+    if (objectId === SOUTH_STAIR_OBJECT_ID) {
+      climbSouthStair(event);
+    }
+  }
+
+  /**
+   * The map pairs the south brewery stair (10137) with a Climb-up stair two tiles
+   * west, which ClimbLinks' landing search misses; send the explicit destination
+   * through the Ladders climb so the climb animation still plays.
+   */
+  function climbSouthStair(event) {
+    const { player, location } = event;
+    if (!location || location.x !== SOUTH_STAIR_TILE.x || location.y !== SOUTH_STAIR_TILE.y) return;
+    event.handled = true;
+    api.emitCustomEvent("ladders:climbDown", {
+      player,
+      destination: new api.core.Location(SOUTH_STAIR_LANDING.x, SOUTH_STAIR_LANDING.y, SOUTH_STAIR_LANDING.z),
+      handled: false,
+    });
   }
 
   /**
@@ -1039,7 +1110,7 @@ module.exports = function registerRumDealQuest(api) {
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnItem(handleItemOnItem);
-  api.onItemAction("Fishbowl and net", { Unwrap: unwrapFishbowl });
+  api.onItemAction("Fishbowl and net", { Untangle: unwrapFishbowl });
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcInteraction(handleNpcInteraction);
   api.onNpcDeath(handleNpcDeath);

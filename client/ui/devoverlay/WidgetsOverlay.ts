@@ -60,6 +60,17 @@ type WidgetRenderEntry = {
     renderOpts: GLRenderOpts;
 };
 
+/**
+ * Side-panel widgets the widget overlays anchor to: the fixed 317 side panels, the
+ * resizable side container and the modern side background. Overlays are drawn right after
+ * one of these is drawn, so later widgets (tooltips, menus) stay on top of them.
+ */
+const WIDGET_OVERLAY_ANCHORS = new Set<number>([
+    (548 << 16) | 80, // Toplevel.SIDE_PANELS
+    (161 << 16) | 73, // ToplevelOsrsStretch.SIDE_CONTAINER
+    (164 << 16) | 70, // ToplevelPreEoc.SIDE_BACKGROUND
+]);
+
 type DirtyRect = {
     x: number;
     y: number;
@@ -91,6 +102,9 @@ export class WidgetsOverlay implements Overlay {
     private overlayScaleX: number = 1;
     private overlayScaleY: number = 1;
     private widgetEntries: WidgetRenderEntry[] = [];
+    /** Overlays for the current pass, drawn from inside the tree at an anchor widget. */
+    private currentWidgetOverlays: WidgetOverlay[] | null = null;
+    private overlayDrawnThisPass = false;
     private visible: Map<number, boolean> = new Map();
     private hasPresentedFrame: boolean = false;
 
@@ -333,6 +347,8 @@ export class WidgetsOverlay implements Overlay {
             ...baseRenderOpts,
             widgetRules: gameFrame?.widgetRules?.(),
             keepChromeUids: gameFrame?.keepChrome?.(),
+            widgetOverlayAnchors: WIDGET_OVERLAY_ANCHORS,
+            widgetOverlayAnchorDrawn: () => this.drawWidgetOverlaysAtAnchor(),
             rootOffsetX:
                 typeof (root as any).__widgetRenderOffsetX === "number"
                     ? Math.round(Number((root as any).__widgetRenderOffsetX) * this.overlayScaleX)
@@ -903,18 +919,22 @@ export class WidgetsOverlay implements Overlay {
                         }
                     } catch {}
 
-                    const lastEntry = this.widgetEntries[this.widgetEntries.length - 1];
+                    this.currentWidgetOverlays = widgetOverlays;
+                    this.overlayDrawnThisPass = false;
                     for (const entry of this.widgetEntries) {
                         renderWidgetTreeGL(
                             this.glRenderer,
                             entry.root,
-                            entry === lastEntry
-                                ? {
-                                      ...entry.renderOpts,
-                                      drawAboveWidgets: () => this.drawWidgetOverlays(widgetOverlays),
-                                  }
-                                : entry.renderOpts,
+                            entry.renderOpts,
                         );
+                    }
+                    // Anchor overlays (status bars) draw inside the tree so tooltips win;
+                    // the rest (opponent info, ...) draw above the tree as before.
+                    const aboveOverlays = widgetOverlays.filter((overlay) => overlay.drawAtAnchor !== true);
+                    if (this.overlayDrawnThisPass) {
+                        if (aboveOverlays.length > 0) this.drawWidgetOverlays(aboveOverlays, false);
+                    } else {
+                        this.drawWidgetOverlays(widgetOverlays, true);
                     }
                     this.drawTradeAmountOverlay(widgetManager);
                     this.drawMouseOverText(mouseOverTextState);
@@ -925,6 +945,10 @@ export class WidgetsOverlay implements Overlay {
                     // bounds into dirtyRects so an open menu no longer forces a full widget pass.
                     for (const dirtyRect of dirtyRects) {
                         this.clearOffscreenRect(dirtyRect);
+                    }
+                    this.currentWidgetOverlays = widgetOverlays;
+                    this.overlayDrawnThisPass = false;
+                    for (const dirtyRect of dirtyRects) {
                         const rootClip = {
                             x0: dirtyRect.x,
                             y0: dirtyRect.y,
@@ -949,7 +973,18 @@ export class WidgetsOverlay implements Overlay {
                             });
                         }
                     }
-                    if (redrawWidgetOverlays) this.drawWidgetOverlays(widgetOverlays);
+                    // Bar values changed: repaint them even if the panel was not the dirty
+                    // region (the anchor callback did not fire for that case).
+                    if (redrawWidgetOverlays) {
+                        const aboveOverlays = widgetOverlays.filter(
+                            (overlay) => overlay.drawAtAnchor !== true,
+                        );
+                        if (this.overlayDrawnThisPass) {
+                            if (aboveOverlays.length > 0) this.drawWidgetOverlays(aboveOverlays, false);
+                        } else {
+                            this.drawWidgetOverlays(widgetOverlays, true);
+                        }
+                    }
                     this.drawTradeAmountOverlay(widgetManager);
                     const mouseOverTextRect = mouseOverTextState.rect;
                     if (
@@ -984,7 +1019,7 @@ export class WidgetsOverlay implements Overlay {
         }
     }
 
-    private drawWidgetOverlays(overlays: WidgetOverlay[]): void {
+    private drawWidgetOverlays(overlays: WidgetOverlay[], resetRects = true): void {
         const glr = this.glRenderer;
         if (!glr) return;
         const context = {
@@ -992,7 +1027,7 @@ export class WidgetsOverlay implements Overlay {
             fontLoader: this.ctx.getFontLoader?.() || (() => undefined),
             sprite: (id: number) => (glr.canvas as any).__textureCache?.getSpriteById(id),
         };
-        this.widgetOverlayRects = [];
+        if (resetRects) this.widgetOverlayRects = [];
         for (const overlay of overlays) {
             for (const r of overlay.draw(context)) {
                 const rect = this.clampRectToCanvas(
@@ -1005,6 +1040,21 @@ export class WidgetsOverlay implements Overlay {
             }
         }
         glr.flush();
+    }
+
+    /**
+     * Draws the widget overlays (status bars) as soon as a side-panel anchor widget has
+     * drawn its own content. Everything the tree draws afterwards - tab content, tooltips,
+     * menus - stays on top of the bars.
+     */
+    private drawWidgetOverlaysAtAnchor(): void {
+        if (this.overlayDrawnThisPass) return;
+        const overlays = (this.currentWidgetOverlays ?? []).filter(
+            (overlay) => overlay.drawAtAnchor === true,
+        );
+        if (overlays.length === 0) return;
+        this.overlayDrawnThisPass = true;
+        this.drawWidgetOverlays(overlays, true);
     }
 
     private buildGameFrameContext(glr: GLRenderer): GameFrameDrawContext {

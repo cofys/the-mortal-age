@@ -172,6 +172,8 @@ export interface PluginNpcInteractionDefinition {
 
 export interface PluginNpcDeathEvent {
   killer: any;
+  /** Every player who damaged the npc recently, the killer among them. */
+  damagers?: any[];
   npc: any;
   npcId: number;
   location: { x: number; y: number; z: number };
@@ -404,7 +406,15 @@ export interface PluginCanUnequipEvent {
 export interface PluginPlayerDeathEvent {
   player: any;
   killer: any;
+  /** Whether the player lost items (a dangerous death); false for a safe one (minigames). */
+  itemsLost?: boolean;
   handled: boolean;
+}
+
+/** Fired before a player enters the death task. Set preventDeath to keep them alive (Tutorial Island). */
+export interface PluginPlayerBeforeDeathEvent {
+  player: any;
+  preventDeath: boolean;
 }
 
 export interface PluginPlayerOptionEvent {
@@ -838,6 +848,7 @@ export interface PluginApi {
   onPrayerDisabled(handler: (event: PluginPrayerDisabledEvent) => void): void;
   onCanUnequip(handler: (event: PluginCanUnequipEvent) => void): void;
   onPlayerDeath(handler: (event: PluginPlayerDeathEvent) => void): void;
+  onPlayerBeforeDeath(handler: (event: PluginPlayerBeforeDeathEvent) => void): void;
   onPlayerOption(handler: (event: PluginPlayerOptionEvent) => void): void;
   onPlayerDealtDamage(
     handler: (event: PluginPlayerDealtDamageEvent) => void
@@ -1054,6 +1065,10 @@ export interface PluginApi {
   emitShouldKeepItemOnDeath(player: any, item: any): boolean | null;
   emitFiremakingBlocked(event: PluginFiremakingBlockedEvent): boolean;
   emitObjectInteraction(event: PluginObjectInteractionEvent): boolean;
+  /** Runs the NPC option handlers as a click would (a bot fishing a spot). */
+  emitNpcInteraction(event: PluginNpcInteractionEvent): boolean;
+  /** Runs the item-on-object handlers as a use would (a bot cooking on a range). */
+  emitItemOnObject(event: PluginItemOnObjectEvent): boolean;
   emitPlayerLogin(event: PluginPlayerLoginEvent): void;
   /** Dispatches synchronously; payloads are not queued or retained by the manager. */
   emitCustomEvent(
@@ -1225,11 +1240,14 @@ export interface PluginCoreApi {
   ItemDefinition: any;
   CacheDefinitions: any;
   PathFinder: any;
+  RsmodRouteFinding: any;
   NpcDefinition: any;
   ObjectDefinition: any;
   MagicSpellbook: any;
   Spell: any;
   CombatNormalSpell: any;
+  CombatSpells: any;
+  Autocasting: any;
   NPC: any;
   GameConstants: any;
   Music: any;

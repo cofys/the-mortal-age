@@ -15,13 +15,15 @@ const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Player } = require("../dist/game/entity/impl/player/Player");
 const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
 
-const { choose, isNetwork, refusals, toEntry } = require("../scripts/loc-teleport-matching.cjs");
+const { choose, isNetwork, refusals, toEntry, requirementFor } = require("../scripts/loc-teleport-matching.cjs");
 const LocTeleports = require("../plugins/world/LocTeleports.plugin");
-const data = require("../data/definitions/loc-teleports.json");
-const decisions = require("../data/definitions/loc-teleport-sync.json");
+const data = require("../plugins/world/data/loc-teleports.json");
+const decisions = require("../plugins/world/data/loc-teleport-sync.json");
 
 let core;
 const hooks = {};
+const prompts = [];
+const emitted = [];
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
@@ -29,8 +31,12 @@ before(async () => {
   core.RegionManager.init();
   LocTeleports.register({
     core,
+    persistAttribute() {},
     onObjectInteraction: (handler) => (hooks.object = handler),
+    onItemOnObject: (handler) => (hooks.itemOnObject = handler),
     onCustomEvent: (name, handler) => (hooks[name] = handler),
+    sendMultiChatboxPrompt: (player, title, ...pairs) => prompts.push({ title, options: pairs.filter((_, i) => i % 2 === 0), pick: (text) => pairs[pairs.indexOf(text) + 1]() }),
+    emitCustomEvent: (name, payload) => emitted.push([name, payload]),
   });
 });
 
@@ -61,6 +67,9 @@ test("left out: instances, networks, requirements, dialogue choices, other kinds
   assert.deepEqual(refusals(captured({ failures: [["You drink some of your stamina potion.", 1]] })), [], "a potion isn't a requirement");
   assert.equal(reason({ dialogue: { prompt: "Climb up or down the ladder?" } }), "dialogue choice");
   assert.equal(reason({}, "Rowboat"), "not a ladder, stair, cave or hole");
+  assert.equal(reason({}, "Passageway"), undefined, "doors, gates and passageways that move the player are taken");
+  assert.equal(reason({ name: "lift_back" }, "Lift"), undefined, "an included loc of another kind (a Haunted Mine lift)");
+  assert.match(reason({ name: "freedomfighterentrancel" }, "Wooden doors"), /In Search of the Myreque/);
   assert.equal(reason({ name: "sailing_gangplank_shipyard" }), "In the shipyard; Sailing handles it.");
   assert.match(reason({ name: "ladder", x: 3284, y: 3165 }), /Leagues/, "one placement of a shared name");
   assert.equal(reason({ name: "ladder" }), undefined, "the other ladders of that name");
@@ -175,7 +184,7 @@ test("a staircase used from either end takes the side the player stands on", () 
 });
 
 test("trapdoor swaps: each loc has its option, and becomes the other state", () => {
-  const swaps = require("../data/definitions/loc-swaps.json").swaps;
+  const swaps = require("../plugins/world/data/loc-swaps.json").swaps;
   for (const swap of swaps) {
     assert.equal(CacheDefinitions.getObject(swap.id)?.actions?.[swap.op - 1], swap.option, swap.name);
     assert.ok(CacheDefinitions.getObject(swap.becomes)?.name, `${swap.name} becomes ${swap.becomes}`);
@@ -204,4 +213,94 @@ test("Monk's Friend keeps its cave ladder; other cellar ladders of that id go wh
   const entry = data.locs.find((loc) => loc.id === 17385 && loc.x === 3405 && loc.y === 9907);
   assert.deepEqual(entry?.to, [3405, 3506, 0], "the cellar under the trapdoor north of Paterdomus");
   assert.ok(!data.locs.some((loc) => loc.x === 2561 && loc.y === 9622), "the cave's own ladder stays with the quest");
+});
+
+test("status lines, level-ups, food and unreachable clicks aren't refusals; a character turning the player away is", () => {
+  const noise = ["<col=ff#>Your prayers have been drained!</col>", "Congratulations, you've just advanced your Agility level. You are now level #.",
+    "You eat the shark.", "It heals some health.", "I can't reach that!", "<col=ef#>You have completed your task! You killed</col> # Bloodveld"];
+  assert.deepEqual(refusals(captured({ failures: noise.map((message) => [message, 1]) })), []);
+  assert.deepEqual(refusals(captured({ failures: [["Goblin guard|Go away, human! We already tell you not to come in!", 1]] })), ["Goblin guard|Go away, human! We already tell you not to come in!"]);
+});
+
+test("a gate decided in loc-teleport-sync.json lets a refused loc in, for one tile or every placement of a name", () => {
+  const refused = { failures: [["Monk of Zamorak|You better dress appropriately, if you want to go up there!", 4]] };
+  assert.match(choose(captured({ name: "chaos_temple_ladder", x: 2939, y: 3518, ...refused }), nothing, "Ladder", { ...decisions, requirements: [] }).reason, /refused/);
+  assert.deepEqual(choose(captured({ name: "chaos_temple_ladder", x: 2939, y: 3518, ...refused }), nothing, "Ladder", decisions), { take: true });
+  assert.ok(requirementFor({ name: "elid_crevice_clickzone", x: 3373, y: 2906, z: 0 }, decisions), "no tile: every placement");
+  for (const entry of data.locs.filter((loc) => loc.name === "elid_crevice_clickzone")) assert.equal(entry.requires?.[0]?.tied, 954, `${entry.x},${entry.y}`);
+});
+
+/** Sets every skill's level, for a total. */
+function withLevels(player, level) {
+  for (const skill of core.Skill.values()) player.getSkillManager().setMaxLevel(skill, level, false).setCurrentLevels(skill, level, false);
+}
+
+test("the Chaos Temple ladder needs a total level of 500 and Zamorak robes worn, refusing as captured", () => {
+  const object = locAt(31580, 2939, 3518, 0);
+  const climb = (setup) => {
+    const visit = explorer([2939, 3517, 0]);
+    const said = [];
+    visit.player.sendMessage = (text) => said.push(text);
+    visit.player.getDialogueManager().startDialogues = (chain) => said.push([...chain.getDialogues().values()].map((line) => line.text).join(" / "));
+    setup(visit.player);
+    const request = { player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false };
+    hooks["ladders:climb"](request);
+    runTicks(visit, 2);
+    return { said, at: visit.player.getLocation().getZ() };
+  };
+  assert.deepEqual(climb((player) => withLevels(player, 1)), { said: ["You need a skill total of 500 and a set of Zamorak robes equipped to go upstairs."], at: 0 });
+  assert.deepEqual(climb((player) => withLevels(player, 30)), { said: ["You better dress appropriately, if you want to go up there!"], at: 0 });
+  const robed = climb((player) => {
+    withLevels(player, 30);
+    player.getEquipment().setItem(core.Equipment.BODY_SLOT, new core.Item(1035, 1)).setItem(core.Equipment.LEG_SLOT, new core.Item(1033, 1));
+  });
+  assert.deepEqual(robed, { said: [], at: 1 });
+});
+
+test("the Elid crevice needs a rope tied first: too steep without, and the rope stays tied", () => {
+  const object = locAt(10416, 3374, 2905, 0);
+  const visit = explorer([3375, 2905, 0]);
+  const said = [];
+  visit.player.getDialogueManager().startDialogues = (chain) => said.push([...chain.getDialogues().values()].map((line) => line.text).join(" / "));
+  const climb = () => hooks.object({ player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false });
+  climb();
+  runTicks(visit, 5);
+  assert.deepEqual([said, visit.player.getLocation().getY()], [["That looks too steep to safely climb down with just your bare hands."], 2905]);
+  const rope = { player: visit.player, object, objectId: object.getId(), itemId: 954, handled: false };
+  hooks.itemOnObject(rope);
+  assert.equal(rope.handled, true);
+  runTicks(visit, 5);
+  assert.deepEqual([said.at(-1), visit.player.getLocation().getY()], ["You climb down the rope.", 9305]);
+  assert.deepEqual(visit.player.getAttribute("loc-teleports:tied"), ["elid_crevice_clickzone"], "tied for every later climb");
+});
+
+test("a window that asks first: the game's question, then out on Yes, a tick after the climb", () => {
+  // Captured: "Climb out of the window?" Yes./No.; the climb and sound a tick after the answer, out a tick later.
+  const object = locAt(52998, 1670, 3088, 0);
+  const visit = explorer([1670, 3088, 0]);
+  hooks.object({ player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false });
+  const prompt = prompts.pop();
+  assert.deepEqual([prompt.title, prompt.options], ["Climb out of the window?", ["Yes.", "No."]]);
+  prompt.pick("Yes.");
+  runTicks(visit, 2);
+  assert.deepEqual(visit.ticks, [[], ["anim 828", "sound 2452"], ["move 1670,3087,0"]]);
+  const stay = explorer([1670, 3088, 0]);
+  hooks.object({ player: stay.player, object, objectId: object.getId(), clickType: 1, handled: false });
+  prompts.pop().pick("No.");
+  runTicks(stay, 3);
+  assert.deepEqual([stay.player.getLocation().getX(), stay.player.getLocation().getY()], [1670, 3088], "No. stays");
+});
+
+test("a ladder that asks up or down: the captured way goes there, the other is Ladders' to find", () => {
+  const object = locAt(12965, 3164, 3307, 1);
+  const visit = explorer([3164, 3306, 1]);
+  hooks["ladders:climb"]({ player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false });
+  const prompt = prompts.pop();
+  assert.deepEqual([prompt.title, prompt.options], ["Climb up or down the ladder?", ["Climb Up.", "Climb Down."]]);
+  prompt.pick("Climb Down.");
+  assert.equal(emitted.at(-1)[0], "ladders:climbDown");
+  hooks["ladders:climb"]({ player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false });
+  prompts.pop().pick("Climb Up.");
+  runTicks(visit, 1);
+  assert.equal(visit.player.getLocation().getZ(), 2);
 });

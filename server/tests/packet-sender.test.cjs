@@ -56,3 +56,28 @@ test('sendCollectionLogSnapshot emits opcode 190 with the owned collection_log i
   assert.equal(buf.readUInt16BE(15), 20659);
   assert.equal(buf.readInt32BE(17), 1);
 });
+
+test("a dialogue box opened again resends its texts: the client turns 'Click here to continue' into 'Please wait...' on its own", () => {
+  // Two NPC lines in a row (Gee): the second line's "Click here to continue" was skipped as
+  // unchanged, so the client kept the "Please wait..." it shows after a continue click.
+  const { FrameUpdater } = require('../dist/util/FrameUpdater');
+  const frames = [];
+  const updater = new FrameUpdater();
+  const fake = {
+    chatboxGroupId: -1,
+    player: {
+      getSession: () => ({ sendClientPacket: (frame) => { frames.push(Buffer.from(frame)); return true; } }),
+      getFrameUpdater: () => updater,
+    },
+  };
+  const CONTINUE = (231 << 16) | 5;
+  const sent = () => frames.filter((frame) => frame.includes('Click here to continue')).length;
+  for (let line = 0; line < 2; line++) {
+    PacketSender.prototype.sendChatboxInterface.call(fake, 231);
+    PacketSender.prototype.sendString.call(fake, 'Click here to continue', CONTINUE);
+  }
+  assert.equal(sent(), 2, 'sent with every line');
+  // Without reopening, an unchanged text is still skipped.
+  PacketSender.prototype.sendString.call(fake, 'Click here to continue', CONTINUE);
+  assert.equal(sent(), 2);
+});

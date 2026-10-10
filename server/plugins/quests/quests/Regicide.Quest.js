@@ -76,6 +76,19 @@ module.exports = function registerRegicideQuest(api) {
     NpcIdentifiers.ARIANWYN_5,
     NpcIdentifiers.ARIANWYN_6,
   ]);
+  /** Every npc this plugin plays a Regicide page for; condition answers are scoped to them. */
+  const DIALOGUE_NPC_IDS = new Set([
+    ...KING_LATHAS_IDS,
+    NpcIdentifiers.KINGS_MESSENGER,
+    ...SCOUT_IDS,
+    ...IORWERTH_IDS,
+    NpcIdentifiers.ELF_TRACKER,
+    ...GENERAL_HINING_IDS,
+    NpcIdentifiers.TYRAS_GUARD_5,
+    ...TYRAS_GUARD_IDS,
+    NpcIdentifiers.CHEMIST,
+    ...ARIANWYN_IDS,
+  ]);
 
   const VARP_REGICIDE = 328;
   const STAGE_NOT_STARTED = 0;
@@ -389,8 +402,9 @@ module.exports = function registerRegicideQuest(api) {
     return null;
   }
 
-  /** Answer the page's prose conditions. */
-  function answerCondition({ player, text }) {
+  /** Answer the page's prose conditions, only for this plugin's own NPCs. */
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase();
     const full = player && inventoryFull(player);
     const hasItem = (itemId) => Boolean(player) && held(player, itemId);

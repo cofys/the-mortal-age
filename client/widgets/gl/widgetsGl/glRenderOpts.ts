@@ -48,6 +48,10 @@ export type GLRenderOpts = {
     widgetManager?: WidgetManager;
     // Drawn after the widgets, before the right-click menu.
     drawAboveWidgets?: () => void;
+    /** Side-panel widget uids: the host draws its widget overlays right after one of these. */
+    widgetOverlayAnchors?: ReadonlySet<number>;
+    /** Called once per pass, right after an anchor widget's own content is drawn. */
+    widgetOverlayAnchorDrawn?: (uid: number) => void;
     // Optional: request a full repaint from the host overlay when any widget input mutates state.
     requestRepaintAll?: () => void;
     steelFrame?: {

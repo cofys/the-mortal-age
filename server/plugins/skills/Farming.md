@@ -73,7 +73,7 @@ cache states, Tithe growth/scoring, null bank tabs, growth cadence, seedling dea
 and nearby patch selection across region boundaries. Cache-only audits also checked crop item
 resolution and growing, diseased, dead, and mature visual values.
 
-To regenerate `data/definitions/farming-data.json` (one crop, patch type, patch or loc per line):
+To regenerate `plugins/skills/data/farming-data.json` (one crop, patch type, patch or loc per line):
 
 ```powershell
 node -r ts-node/register/transpile-only scripts/generate-farming-data.ts ../..\runelite

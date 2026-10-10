@@ -14,17 +14,24 @@
  *   gang                    0 none, 1 Phoenix, 2 Black Arm
  *   phoenixLocationKnown    Baraek was paid
  *   charliePaid             Charlie was paid for the hideout tip
+ *   reldoMet                Reldo's first-time greeting was used
  *
- * Reachability caveat: NPC variant selection is only consulted for cache ids
- * that the dialogue index lists against the "Shield of Arrav" page. The
- * reference ids 6203 (Reldo) and 5211 (Weaponsmaster) are not in the index;
- * 4242/4243 and 14137 are, so both are handled here. The curator (5214) has an
- * index entry but it does not list Shield of Arrav, so the curator branch is
- * not selectable without a shared-data fix (see gaps at the end).
+ * Reachability notes:
+ *  - NPC variant selection is only consulted for cache ids the dialogue index
+ *    lists against the "Shield of Arrav" page. The reference ids 6203 (Reldo)
+ *    and 5211 (Weaponsmaster) are not in the index; 4242/4243 and 14137 are,
+ *    so both are handled here.
+ *  - The curator (5214) is indexed, but not against Shield of Arrav, so Talk-to
+ *    would play The Dig Site instead. An id-specific npc hook intercepts his
+ *    Talk-to for the shield-half hand-in and replays the Shield of Arrav page
+ *    with startTranscript, which keeps his chathead and the action step ids.
+ *  - The world Jonny the Beard (5213) is Talk-to only. When a Phoenix player
+ *    takes Straven's task, an owner-only attackable Jonny (14139) spawns on the
+ *    Blue Moon Inn spawn tile so the kill and the intel report drop work.
  */
 module.exports = function registerShieldOfArravQuest(api) {
   const { Location, Item, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   const VARP_SHIELD_OF_ARRAV = 145;
 
@@ -68,6 +75,9 @@ module.exports = function registerShieldOfArravQuest(api) {
     NpcIdentifiers.KING_ROALD_7,
   ]);
   const JONNY_NPC_IDS = new Set([JONNY_REFERENCE_NPC_ID, NpcIdentifiers.JONNY_THE_BEARD, NpcIdentifiers.JONNY_THE_BEARD_2]);
+  const JONNY_ATTACKABLE_NPC_ID = NpcIdentifiers.JONNY_THE_BEARD_2;
+  const JONNY_SPAWN_X = 3223;
+  const JONNY_SPAWN_Y = 3395;
 
   const BOOKCASE_ID = ObjectIdentifiers.BOOKCASE_10;
   const PHOENIX_CHEST_ID = ObjectIdentifiers.CHEST_11;
@@ -86,6 +96,7 @@ module.exports = function registerShieldOfArravQuest(api) {
   const GANG_ATTRIBUTE = "shield-of-arrav.gang";
   const PHOENIX_LOCATION_ATTRIBUTE = "shield-of-arrav.phoenix-location-known";
   const CHARLIE_PAID_ATTRIBUTE = "shield-of-arrav.charlie-paid";
+  const RELDO_MET_ATTRIBUTE = "shield-of-arrav.reldo-met";
 
   const PAGE = "Shield of Arrav";
   const START_HOOK = "quest:shield-of-arrav:start";
@@ -102,12 +113,17 @@ module.exports = function registerShieldOfArravQuest(api) {
   const KATRINE_HANDIN_ACTION = "q34K2Z";
   const CURATOR_CERT_MESSAGE = "2pltJk";
   const CURATOR_REPLACE_MESSAGE = "g7REXu";
+  const CURATOR_SHIELD_VARIANT = "finishing-up-talking-to-curator-haig-halen";
+  const CURATOR_REPLACE_VARIANT = "finishing-up-talking-to-the-curator-again-after-giving-him-the-shield-half";
   const KING_COMPLETE_ACTIONS = new Set(["25_j1f", "e0pTWp"]);
 
   const CHARLIE_ALLEY_OPTION = "Is there anything down this alleyway?";
 
   let quest;
   let groundItems;
+
+  const jonnyByPlayer = new Map();
+  const reldoFirstTalk = new WeakMap();
 
   const attr = (player, key) => Number(player.getAttribute(key)) || 0;
   const gang = (player) => attr(player, GANG_ATTRIBUTE);
@@ -169,7 +185,39 @@ module.exports = function registerShieldOfArravQuest(api) {
     player.getInventory().deleteNumber(REPORT_ID, 1);
     giveItem(player, KEY_ID);
     questHandle.setStage(player, STAGE_JOINED_GANG);
+    removeJonny(player);
     return true;
+  }
+
+  /**
+   * The world Jonny (5213) only has Talk-to, so a Phoenix player on the gang
+   * task gets a private attackable copy (14139) on the same tile. Kept while
+   * the task is open, respawned after a kill so a lost report is recoverable.
+   */
+  function ensureJonny(player) {
+    if (!isPhoenix(player) || quest.getStage(player) !== STAGE_GANG_TASK) return;
+    if (jonnyByPlayer.has(player)) return;
+    const npc = api.spawnNpc({
+      id: JONNY_ATTACKABLE_NPC_ID,
+      x: JONNY_SPAWN_X,
+      y: JONNY_SPAWN_Y,
+      z: 0,
+      wanderRadius: 0,
+      owner: player,
+      ownerOnly: true,
+    });
+    if (!npc) return;
+    // Without this the death task queues the definition's own respawn, leaving an
+    // untracked copy behind alongside the one handleNpcDeath spawns.
+    npc.__skipDefaultRespawn = true;
+    jonnyByPlayer.set(player, npc);
+  }
+
+  function removeJonny(player) {
+    const npc = jonnyByPlayer.get(player);
+    if (!npc) return;
+    jonnyByPlayer.delete(player);
+    api.removeNpc(npc);
   }
 
   function handInShieldHalf(player, questHandle) {
@@ -248,7 +296,13 @@ module.exports = function registerShieldOfArravQuest(api) {
     const stage = quest.getStage(player);
 
     if (RELDO_NPC_IDS.has(npcId)) {
-      if (stage === STAGE_NOT_STARTED) return { page: PAGE, variant: "shared-starting-talking-to-reldo" };
+      if (stage === STAGE_NOT_STARTED) {
+        // The first-time and "otherwise" branches are sibling conditions in one
+        // transcript; remember which one this talk is before they are resolved.
+        reldoFirstTalk.set(player, !attr(player, RELDO_MET_ATTRIBUTE));
+        player.setAttribute(RELDO_MET_ATTRIBUTE, true);
+        return { page: PAGE, variant: "shared-starting-talking-to-reldo" };
+      }
       if (stage === STAGE_STARTED) {
         return hasItem(player, BOOK_ID)
           ? { page: PAGE, variant: "shared-starting-talking-to-reldo-before-reading-the-book" }
@@ -271,9 +325,10 @@ module.exports = function registerShieldOfArravQuest(api) {
       if (isPhoenix(player) && stage >= STAGE_READ_BOOK) {
         return { page: PAGE, variant: "phoenix-gang-learning-the-location-of-the-black-arm-gang-from-charlie-the-tramp" };
       }
-      if (stage === STAGE_READ_BOOK && !gangChosen(player)) {
-        return { page: PAGE, variant: "black-arm-gang-talking-to-charlie-the-tramp" };
-      }
+      // Before a gang is chosen Charlie must play his standard transcript: its
+      // "Is there anything down this alleyway?" option is what picks Black Arm
+      // (handleGangChoice). The Shield of Arrav Charlie branches below only
+      // apply once the choice is made.
       if (stage === STAGE_GANG_TASK && isBlackArm(player)) {
         return { page: PAGE, variant: "black-arm-gang-talking-to-charlie-the-tramp-after-accepting-katrine-s-task" };
       }
@@ -309,6 +364,7 @@ module.exports = function registerShieldOfArravQuest(api) {
       if (isPhoenix(player)) {
         if (stage === STAGE_READ_BOOK) {
           quest.setStage(player, STAGE_GANG_TASK);
+          ensureJonny(player);
           return { page: PAGE, variant: "phoenix-gang-talking-to-straven-or-attempting-to-open-the-door" };
         }
         if (stage === STAGE_GANG_TASK) {
@@ -364,8 +420,10 @@ module.exports = function registerShieldOfArravQuest(api) {
 
     if (RELDO_NPC_IDS.has(npcId)) {
       if (value.includes("combat level is less than 10")) return player.getSkillManager().getCombatLevel() < 10;
-      if (value.includes("first time ever")) return true;
-      if (value.includes("otherwise")) return true;
+      if (value.includes("first time ever") || value.includes("otherwise")) {
+        const first = reldoFirstTalk.has(player) ? reldoFirstTalk.get(player) : !attr(player, RELDO_MET_ATTRIBUTE);
+        return value.includes("first time ever") ? first : !first;
+      }
       return null;
     }
 
@@ -427,6 +485,21 @@ module.exports = function registerShieldOfArravQuest(api) {
 
   function handleDialogueAction(event) {
     const { player, npcId, stepId } = event;
+
+    // The full-certificate transcript marks its final line "end" before the
+    // "Congratulations! Quest complete!" action step. The runtime's end marker
+    // closes the chain, so let that action run instead of swallowing it.
+    if (
+      KING_ROALD_NPC_IDS.has(npcId) &&
+      event.step?.type === "end" &&
+      quest.getStage(player) === STAGE_CERTIFICATE &&
+      hasItem(player, CERTIFICATE_ID)
+    ) {
+      event.handled = true;
+      event.end = false;
+      return;
+    }
+
     if (!stepId) return;
 
     if (BARAEK_NPC_IDS.has(npcId) && BARAEK_PAY_ACTIONS.has(stepId)) {
@@ -466,14 +539,22 @@ module.exports = function registerShieldOfArravQuest(api) {
     }
 
     if (npcId === CURATOR_NPC_ID) {
+      // A message step emits the generic action first, then the message itself;
+      // act once so the transcript line still shows and nothing is granted twice.
+      const isMessageStep = event.kind === "message";
       if (stepId === CURATOR_CERT_MESSAGE) {
-        handInShieldHalf(player, quest);
+        if (isMessageStep) return;
+        if (!handInShieldHalf(player, quest)) event.handled = true;
         return;
       }
       if (stepId === CURATOR_REPLACE_MESSAGE) {
+        if (isMessageStep) return;
         const own = ownShieldAndCert(player);
-        if (!own) return;
-        giveItems(player, own.half, 2);
+        if (!own || quest.getStage(player) !== STAGE_CERTIFICATE || hasItem(player, own.half)) {
+          event.handled = true;
+          return;
+        }
+        if (!giveItems(player, own.half, 2)) event.handled = true;
         return;
       }
     }
@@ -485,6 +566,49 @@ module.exports = function registerShieldOfArravQuest(api) {
       event.handled = true;
       event.end = true;
     }
+  }
+
+  /**
+   * The curator is not indexed to the Shield of Arrav page, so his own Talk-to
+   * would play The Dig Site. While the player is on the shield half-in, replay
+   * the curator's Shield of Arrav variant instead; the action steps then reach
+   * the hand-in above with the real curator id and chathead.
+   */
+  function handleNpcInteraction(event) {
+    if (event.npcId !== CURATOR_NPC_ID) return;
+    const action = String(event.definition?.getActions?.()?.[event.clickType - 1] ?? "");
+    if (action.toLowerCase() !== "talk-to") return;
+
+    const { player } = event;
+    const stage = quest.getStage(player);
+    const own = ownShieldAndCert(player);
+    if (!own || stage < STAGE_JOINED_GANG || stage >= STAGE_COMPLETE) return;
+
+    if (stage === STAGE_JOINED_GANG && hasItem(player, own.shield)) {
+      event.handled = true;
+      startTranscript(api, player, CURATOR_NPC_ID, PAGE, CURATOR_SHIELD_VARIANT);
+      return;
+    }
+    if (stage === STAGE_CERTIFICATE && !hasItem(player, CERTIFICATE_ID) && !hasItem(player, own.half)) {
+      event.handled = true;
+      startTranscript(api, player, CURATOR_NPC_ID, PAGE, CURATOR_REPLACE_VARIANT);
+    }
+  }
+
+  /** Fill the wiki transcript's "[player name]" blanks in Reldo's lines. */
+  function fillReldoPlayerName(request) {
+    if (!request?.player || typeof request.text !== "string") return;
+    if (!RELDO_NPC_IDS.has(request.npcId)) return;
+    if (!request.text.includes("[player name]")) return;
+    request.text = request.text.replace(/\[player name\]/gi, request.player.getUsername());
+  }
+
+  function handleLogin({ player }) {
+    ensureJonny(player);
+  }
+
+  function handleLogout({ player }) {
+    if (player) removeJonny(player);
   }
 
   function readBook(event) {
@@ -619,6 +743,10 @@ module.exports = function registerShieldOfArravQuest(api) {
     if (!location) return;
 
     if (JONNY_NPC_IDS.has(npcId)) {
+      if (jonnyByPlayer.get(killer) === npc) {
+        jonnyByPlayer.delete(killer);
+        ensureJonny(killer);
+      }
       if (!isPhoenix(killer) || quest.getStage(killer) !== STAGE_GANG_TASK) return;
       if (hasItem(killer, REPORT_ID)) return;
       groundItems.registerLocation(killer, new Item(REPORT_ID, 1), location);
@@ -685,6 +813,7 @@ module.exports = function registerShieldOfArravQuest(api) {
   api.persistAttribute(GANG_ATTRIBUTE);
   api.persistAttribute(PHOENIX_LOCATION_ATTRIBUTE);
   api.persistAttribute(CHARLIE_PAID_ATTRIBUTE);
+  api.persistAttribute(RELDO_MET_ATTRIBUTE);
 
   groundItems = api.getItemOnGroundManager();
 
@@ -693,6 +822,10 @@ module.exports = function registerShieldOfArravQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleGangChoice);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
+  api.onCustomEvent("npc-dialogue:line", fillReldoPlayerName);
+  api.onNpcInteraction(handleNpcInteraction);
+  api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
   api.onItemAction(readBook);
   api.onItemOnItem(combineCertificateHalves);
   api.onItemOnNpc(handReportToStraven);
@@ -703,10 +836,8 @@ module.exports = function registerShieldOfArravQuest(api) {
   /**
    * Gaps (not selectable / not covered by the dump):
    *  - Curator Haig Halen (5214) is indexed but the index does not list the
-   *    "Shield of Arrav" page against it, so onNpcDialogueVariant is never asked
-   *    for the curator. The hand-in/certificate branch is implemented here but
-   *    needs a shared-data fix (add the page to index "5214", or spawn a curator
-   *    id that is indexed) to become reachable.
+   *    "Shield of Arrav" page against it; handleNpcInteraction replays the page
+   *    through startTranscript so the hand-in is reachable without a data fix.
    *  - Reference ids 6203 (Reldo) and 5211 (Weaponsmaster) are not in the index;
    *    the indexed cache ids 4242/4243 and 14137 are handled instead, so the
    *    spawned ids must be the indexed ones for the overrides to apply.

@@ -32,6 +32,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
     Skill,
     Equipment,
     Item,
+    ItemDefinition,
     Location,
     ItemIdentifiers,
     NpcIdentifiers,
@@ -67,6 +68,14 @@ module.exports = function registerGhostsAhoyQuest(api) {
   ]);
 
   const VARP_GHOSTS_AHOY = 408;
+  /**
+   * The real quest progress varbit (bits 28-31 of varp 408) that NPC/object
+   * transforms read: Ak-Haranu (5859) and the Port Phasmatys energy barrier
+   * (57722) only resolve once it is written, which the raw stage varp never does.
+   */
+  const GHOSTS_AHOY_PROGRESS_VARBIT = 217;
+  /** 5859s cache transform resolves Ak-Haranu only for varbit values 4-8. */
+  const progressVarbitValue = (stage) => (stage >= 8 ? 8 : Math.min(8, Math.max(4, stage | 0)));
   const STAGE_STARTED = 1;
   const STAGE_PLEADED = 2;
   const STAGE_OLD_CRONE = 3;
@@ -138,6 +147,8 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const COLOUR_NAMES = ["white", "red", "yellow", "blue", "orange", "green", "purple"];
 
   const MAST_OBJECT_ID = ObjectIdentifiers.MAST_6; // 16640 (Ahoy shipwreck mast)
+  /** 57722 is the cache transform parent of the Energy Barrier (16105/57723). */
+  const ENERGY_BARRIER_ID = 57722;
   const COFFIN_ID = ObjectIdentifiers.COFFIN_14; // 16644
   const COFFIN_OPEN_ID = ObjectIdentifiers.COFFIN_15; // 16645
   const ECTOFUNTUS_ID = ObjectIdentifiers.ECTOFUNTUS; // 16648
@@ -159,6 +170,13 @@ module.exports = function registerGhostsAhoyQuest(api) {
     ObjectIdentifiers.POOL_OF_SLIME_4,
   ]);
   const NETTLE_OBJECT_ID = ObjectIdentifiers.NETTLES; // 1181
+  const COOKING_OBJECT_NAMES = new Set([
+    "Cooking range",
+    "Range",
+    "Stove",
+    "Fire",
+    "Forester's Campfire",
+  ]);
   const SHIPWRECK_GANGPLANKS = new Set([
     ObjectIdentifiers.GANGPLANK_28, // 16651
     ObjectIdentifiers.GANGPLANK_29, // 16652
@@ -177,6 +195,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const DIG_X = 3803;
   const DIG_Y = 3530;
   const DRAGONTOOTH_LANDING = { x: 3792, y: 3559, z: 0 };
+  const PORT_PHASMATYS_LANDING = { x: 3702, y: 3492, z: 0 };
   const ECTOFUNTUS_LANDING = { x: 3654, y: 3519, z: 0 };
 
   const START_HOOK = "quest:ghosts-ahoy:start";
@@ -205,6 +224,20 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const held = (player, itemId, amount = 1) =>
     player.getInventory().getAmount(itemId) >= amount;
 
+  /** Keep the transform varbit in step with the quest stage after every write. */
+  function setStage(player, value) {
+    quest.setStage(player, value);
+    player.getPacketSender().sendVarbit(GHOSTS_AHOY_PROGRESS_VARBIT, progressVarbitValue(value));
+  }
+
+  function completeQuest(player) {
+    const completed = quest.complete(player);
+    if (completed) {
+      player.getPacketSender().sendVarbit(GHOSTS_AHOY_PROGRESS_VARBIT, STAGE_COMPLETE);
+    }
+    return completed;
+  }
+
   function freeSlots(player) {
     const inventory = player.getInventory();
     return typeof inventory.getFreeSlots === "function"
@@ -231,6 +264,18 @@ module.exports = function registerGhostsAhoyQuest(api) {
     held(player, TREASURE_MAP) ||
     held(player, BOOK_OF_HARICANTO) ||
     attr(player, GIVEN_BOOK_ATTRIBUTE) === 1;
+
+  /**
+   * The three shipwreck chests each give their own scrap, so holding another
+   * piece must not stop a chest handing out its own. Once the map is assembled
+   * (or the book handed over) the chests are done for good.
+   */
+  const hasMapPieceOrBook = (player) =>
+    held(player, TREASURE_MAP) ||
+    held(player, BOOK_OF_HARICANTO) ||
+    attr(player, GIVEN_BOOK_ATTRIBUTE) === 1;
+  const scrapTaken = (player, index) =>
+    held(player, MAP_SCRAPS[index]) || hasMapPieceOrBook(player);
 
   const hasRepairKit = (player) =>
     held(player, SILK) && held(player, NEEDLE) && held(player, THREAD) && held(player, KNIFE);
@@ -433,7 +478,16 @@ module.exports = function registerGhostsAhoyQuest(api) {
     if (npcId === GRAVINGAS_NPC_ID) {
       if (stage <= STAGE_OLD_CRONE) return "robes-of-necrovarus-talking-to-gravingas";
       if (stage <= STAGE_ENCHANTED) {
-        return "robes-of-necrovarus-talking-to-gravingas-talking-to-gravingas-again";
+        // A player who reached the crone without ever taking the petition form
+        // must still be able to start: replay the offer, not the signature
+        // catch-up that only makes sense once the form is in play.
+        const petitionInPlay =
+          held(player, PETITION_FORM) ||
+          attr(player, SIGNATURES_ATTRIBUTE) > 0 ||
+          attr(player, BURNED_ATTRIBUTE) === 1;
+        return petitionInPlay
+          ? "robes-of-necrovarus-talking-to-gravingas-talking-to-gravingas-again"
+          : "robes-of-necrovarus-talking-to-gravingas";
       }
       return "post-quest-dialogue-gravingas";
     }
@@ -467,6 +521,18 @@ module.exports = function registerGhostsAhoyQuest(api) {
       if (stage >= STAGE_CRONE_HELP) {
         if (attr(player, TOY_ATTRIBUTE) >= 2 && attr(player, TOLD_ATTRIBUTE) !== 1) {
           return "book-of-haricanto-talking-to-the-old-crone-after-finding-the-old-man";
+        }
+        // The son/model-ship branch only exists in the initial conversation; keep
+        // it reachable until the toy has changed hands and materials are in play.
+        const materialsInPlay =
+          held(player, BOOK_OF_HARICANTO) ||
+          held(player, MYSTICAL_ROBES) ||
+          held(player, TRANSLATION_MANUAL) ||
+          attr(player, GIVEN_BOOK_ATTRIBUTE) === 1 ||
+          attr(player, GIVEN_MANUAL_ATTRIBUTE) === 1 ||
+          attr(player, GIVEN_ROBES_ATTRIBUTE) === 1;
+        if (attr(player, TOY_ATTRIBUTE) < 1 && !materialsInPlay) {
+          return "talking-to-the-old-crone";
         }
         return "talking-to-the-old-crone-with-the-materials";
       }
@@ -642,7 +708,11 @@ module.exports = function registerGhostsAhoyQuest(api) {
       if (value.includes("does not have")) return tokens < 500;
       return tokens >= 500;
     }
-    if (value.includes("at least 25 ectotokens")) return tokens >= 25;
+    if (value.includes("at least 25 ectotokens")) {
+      // On Dragontooth the same option rows the player back for free (the 25
+      // covers the return trip), so it must show even with no tokens left.
+      return tokens >= 25 || atDragontooth(player);
+    }
 
     // ---- petition ----
     if (value.includes("petition form")) {
@@ -680,7 +750,12 @@ module.exports = function registerGhostsAhoyQuest(api) {
       return attr(player, SIGNATURES_ATTRIBUTE) >= 10;
     }
     if (value.includes("full petition form")) return attr(player, SIGNATURES_ATTRIBUTE) >= 10;
-    if (value.includes("not enough ecto-tokens")) return tokens < 1;
+    if (
+      value.includes("does not have enough ecto-tokens") ||
+      value.includes("not enough ecto-tokens")
+    ) {
+      return tokens < 1;
+    }
     if (value.includes("ecto-tokens")) return tokens >= 1;
 
     // ---- bedsheet disguise ----
@@ -728,7 +803,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
 
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== VELORINA_NPC_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) <= 0) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) <= 0) setStage(player, STAGE_STARTED);
   }
 
   /** Chosen-condition side effects: hand-ins and stage advances. */
@@ -736,11 +811,11 @@ module.exports = function registerGhostsAhoyQuest(api) {
     const { player, npcId, stepId } = event;
     const stage = quest.getStage(player);
     if (npcId === NECROVARUS_NPC_ID && stepId === "wNrTfA") {
-      if (stage === STAGE_STARTED) quest.setStage(player, STAGE_PLEADED);
+      if (stage === STAGE_STARTED) setStage(player, STAGE_PLEADED);
       return;
     }
     if (npcId === VELORINA_NPC_ID && stepId === "TQFhQ8") {
-      if (stage === STAGE_PLEADED) quest.setStage(player, STAGE_OLD_CRONE);
+      if (stage === STAGE_PLEADED) setStage(player, STAGE_OLD_CRONE);
       return;
     }
     if (npcId !== OLD_CRONE_NPC_ID) return;
@@ -763,13 +838,37 @@ module.exports = function registerGhostsAhoyQuest(api) {
       return;
     }
     if (stepId === "BUgbCE" && stage === STAGE_CRONE_HELP) {
-      quest.setStage(player, STAGE_CRONE_RITUAL);
+      setStage(player, STAGE_CRONE_RITUAL);
     }
   }
 
   function handleChoice(event) {
     const { player, npcId, option } = event;
     const value = String(option ?? "").toLowerCase();
+    if (npcId === VELORINA_NPC_ID && value.includes("very sad story")) {
+      // The short "Yes, I do" branch's "Start the Ghosts Ahoy quest?" prompt was
+      // lost in the transcript dump, leaving the branch a dead end; the option is
+      // already consent, so start the quest here.
+      if (quest.getStage(player) <= 0) setStage(player, STAGE_STARTED);
+      return;
+    }
+    if (npcId === AK_HARANU_NPC_ID && value.includes("get you your bow")) {
+      if (attr(player, BOW_ATTRIBUTE) < 1) setAttr(player, BOW_ATTRIBUTE, 1);
+      return;
+    }
+    if (npcId === OLD_CRONE_NPC_ID && value.includes("anything i can do for you")) {
+      if (attr(player, TOY_ATTRIBUTE) < 1) setAttr(player, TOY_ATTRIBUTE, 1);
+      return;
+    }
+    if (npcId === GHOST_INNKEEPER_NPC_ID && value.includes("delighted")) {
+      // The bedsheet receive action sits after the transcript's end step and can
+      // never run, so the sheet changes hands when the option is chosen instead.
+      if (!held(player, BEDSHEET) && !held(player, GREEN_BEDSHEET)) {
+        player.getInventory().adds(BEDSHEET, 1);
+        player.sendMessage("The ghost innkeeper hands you a clean bedsheet.");
+      }
+      return;
+    }
     if (npcId === OLD_CRONE_NPC_ID && value.includes("found your son")) {
       setAttr(player, TOLD_ATTRIBUTE, 1);
       return;
@@ -781,11 +880,16 @@ module.exports = function registerGhostsAhoyQuest(api) {
     ) {
       dischargeEnchanted(player);
       setAttr(player, TOMB_ATTRIBUTE, 1);
-      quest.setStage(player, STAGE_COMMANDED);
+      setStage(player, STAGE_COMMANDED);
     }
   }
 
   function sailToDragontooth(player) {
+    if (atDragontooth(player)) {
+      player.sendMessage("After a long boat trip you arrive at Port Phasmatys.");
+      player.moveTo(new Location(PORT_PHASMATYS_LANDING.x, PORT_PHASMATYS_LANDING.y, PORT_PHASMATYS_LANDING.z));
+      return;
+    }
     player.sendMessage("After a long boat trip you arrive at Dragontooth Island.");
     player.moveTo(new Location(DRAGONTOOTH_LANDING.x, DRAGONTOOTH_LANDING.y, DRAGONTOOTH_LANDING.z));
   }
@@ -809,14 +913,14 @@ module.exports = function registerGhostsAhoyQuest(api) {
     switch (stepId) {
       case "xK-8eQ":
         if (stage >= STAGE_COMMANDED && !quest.isComplete(player)) {
-          quest.complete(player);
+          completeQuest(player);
           event.handled = true;
           event.end = true;
         }
         return;
       case "zy3bCu":
         becomeEnchanted(player);
-        if (stage === STAGE_CRONE_RITUAL) quest.setStage(player, STAGE_ENCHANTED);
+        if (stage === STAGE_CRONE_RITUAL) setStage(player, STAGE_ENCHANTED);
         event.handled = true;
         return;
       case "YWXokZ":
@@ -889,19 +993,27 @@ module.exports = function registerGhostsAhoyQuest(api) {
         event.handled = true;
         return;
       case "_LN511":
-        if (!hasAnyMapPiece(player)) {
+        if (!scrapTaken(player, 0)) {
           player.getInventory().adds(ItemIdentifiers.MAP_SCRAP, 1);
         }
         event.handled = true;
         return;
       case "DF_gCD":
-        if (!held(player, ItemIdentifiers.MAP_SCRAP_3) && !held(player, TREASURE_MAP)) {
+        if (!scrapTaken(player, 2)) {
           player.getInventory().adds(ItemIdentifiers.MAP_SCRAP_3, 1);
         }
         event.handled = true;
         return;
       case "0rh2a0":
       case "6iEugl": {
+        // The bribe variant costs 1-3 ecto-tokens; the support lines are free.
+        if (stepId === "6iEugl") {
+          const bribe = Math.min(
+            player.getInventory().getAmount(ECTO_TOKEN),
+            1 + Math.floor(Math.random() * 3)
+          );
+          if (bribe > 0) player.getInventory().deleteNumber(ECTO_TOKEN, bribe);
+        }
         const signatures = Math.min(10, attr(player, SIGNATURES_ATTRIBUTE) + 1);
         setAttr(player, SIGNATURES_ATTRIBUTE, signatures);
         event.handled = true;
@@ -917,12 +1029,18 @@ module.exports = function registerGhostsAhoyQuest(api) {
         event.handled = true;
         return;
       case "Ct4wPs":
+        // The 25-token fare covers the return trip; sailing back is free.
+        if (!atDragontooth(player) && player.getInventory().getAmount(ECTO_TOKEN) >= 25) {
+          player.getInventory().deleteNumber(ECTO_TOKEN, 25);
+        }
         sailToDragontooth(player);
         event.handled = true;
         return;
       case "d8PAqv":
-        if (player.getInventory().getAmount(ECTO_TOKEN) >= 500) {
+        if (!atDragontooth(player) && player.getInventory().getAmount(ECTO_TOKEN) >= 500) {
           player.getInventory().deleteNumber(ECTO_TOKEN, 500);
+          sailToDragontooth(player);
+        } else if (atDragontooth(player)) {
           sailToDragontooth(player);
         }
         event.handled = true;
@@ -981,7 +1099,17 @@ module.exports = function registerGhostsAhoyQuest(api) {
         "As the old woman drinks the tea, enlightenment glows from within her eyes."
       );
       player.sendMessage("Ah, that's better. Now, let me see... Yes, I was once a disciple of Necrovarus.");
-      quest.setStage(player, STAGE_CRONE_HELP);
+      setStage(player, STAGE_CRONE_HELP);
+      // The tea shortcut skips the conversation that offers her son's model ship,
+      // so the toy changes hands now; without it the Book of Haricanto chain locks.
+      if (attr(player, TOY_ATTRIBUTE) < 1) {
+        setAttr(player, TOY_ATTRIBUTE, 1);
+        if (!held(player, MODEL_SHIP) && !held(player, REPAIRED_SHIP)) {
+          player.getInventory().adds(MODEL_SHIP, 1);
+          randomizeMast(player);
+          player.sendMessage("She talks fondly of her lost son and gives you his model ship.");
+        }
+      }
       event.handled = true;
     }
   }
@@ -1083,6 +1211,21 @@ module.exports = function registerGhostsAhoyQuest(api) {
     player.sendMessage("You unearth the Book of Haricanto.");
   }
 
+  /**
+   * Barrows registers its global Spade "Dig" handler before this plugin and
+   * swallows every dig, so claim the Dragontooth dig through the can-use veto,
+   * which the item-action pipeline consults first.
+   */
+  function interceptDragontoothDig(event) {
+    if (event.action !== "action" || event.itemId !== SPADE) return;
+    if (!String(event.option ?? "").toLowerCase().includes("dig")) return;
+    const { player } = event;
+    if (!atDigSpot(player) || !held(player, TREASURE_MAP)) return;
+    if (held(player, BOOK_OF_HARICANTO) || attr(player, GIVEN_BOOK_ATTRIBUTE) === 1) return;
+    digForBook(player);
+    event.allow = false;
+  }
+
   function emptyEctophial(player) {
     if (!held(player, ECTOPHIAL)) return;
     player.getInventory().deleteNumber(ECTOPHIAL, 1);
@@ -1090,6 +1233,35 @@ module.exports = function registerGhostsAhoyQuest(api) {
     player.sendMessage("You empty the ectoplasm onto the ground around your feet...");
     player.moveTo(new Location(ECTOFUNTUS_LANDING.x, ECTOFUNTUS_LANDING.y, ECTOFUNTUS_LANDING.z));
     player.sendMessage("... and the world changes around you.");
+  }
+
+  /**
+   * OSRS source of ecto-tokens (the ghost captain's fare): worship the
+   * Ectofuntus with a bucket of slime and bones, and the disciples hand over 5
+   * tokens per worship.
+   * ponytail: the bone grinder/bonemeal step is not implemented, so raw bones
+   * stand in; add the grinder if Prayer training needs it.
+   */
+  function worshipEctofuntus(player) {
+    if (!held(player, BUCKET_OF_SLIME)) {
+      player.sendMessage("You need a bucket of slime to worship the Ectofuntus.");
+      return;
+    }
+    const bone = player
+      .getInventory()
+      .getItems()
+      .find((item) => {
+        const name = String(ItemDefinition.forId(item?.getId?.())?.getName?.() ?? "");
+        return /bones?$/i.test(name);
+      });
+    if (!bone) {
+      player.sendMessage("You need some bones to worship the Ectofuntus.");
+      return;
+    }
+    player.getInventory().deleteNumber(BUCKET_OF_SLIME, 1);
+    player.getInventory().deleteNumber(bone.getId(), 1);
+    player.getInventory().adds(ECTO_TOKEN, 5);
+    player.sendMessage("You worship the Ectofuntus. The ghost disciples give you 5 ecto-tokens.");
   }
 
   function handleItemAction(event) {
@@ -1115,6 +1287,9 @@ module.exports = function registerGhostsAhoyQuest(api) {
       return;
     }
     if (itemId === SPADE && option.includes("dig")) {
+      // Only claim the Dragontooth dig (treasure map in hand); other quests
+      // dig their own spots (X Marks the Spot, Making History, ...).
+      if (!held(player, TREASURE_MAP) || !atDigSpot(player)) return;
       digForBook(player);
       event.handled = true;
       return;
@@ -1135,8 +1310,28 @@ module.exports = function registerGhostsAhoyQuest(api) {
     }
   }
 
+  /** A range or fire: the wiki boils nettle-water into tea on either. */
+  function isCookingObject(object) {
+    const definition = object?.getDefinition?.();
+    if (!definition) return false;
+    if (COOKING_OBJECT_NAMES.has(definition.getName?.())) return true;
+    return (definition.getInteractions?.() ?? []).includes("Cook");
+  }
+
   function handleItemOnObject(event) {
     const { player, itemId, objectId } = event;
+    if (itemId === NETTLE_WATER && isCookingObject(event.object)) {
+      event.handled = true;
+      if (player.getSkillManager().getCurrentLevel(Skill.COOKING) < 20) {
+        player.sendMessage("You need a Cooking level of at least 20 to cook this.");
+        return;
+      }
+      player.getInventory().deleteNumber(NETTLE_WATER, 1);
+      player.getInventory().adds(ItemIdentifiers.NETTLE_TEA, 1);
+      player.getSkillManager().addExperiences(Skill.COOKING, 52);
+      player.sendMessage("You boil the water and make nettle tea.");
+      return;
+    }
     if (itemId === ECTOPHIAL_EMPTY && objectId === ECTOFUNTUS_ID) {
       player.getInventory().deleteNumber(ECTOPHIAL_EMPTY, 1);
       player.getInventory().adds(ECTOPHIAL, 1);
@@ -1160,7 +1355,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
       if (!held(player, CHEST_KEY)) return;
       player.getInventory().deleteNumber(CHEST_KEY, 1);
       player.sendMessage("You unlock the chest.");
-      if (!hasAnyMapPiece(player)) {
+      if (!scrapTaken(player, 0)) {
         player.getInventory().adds(ItemIdentifiers.MAP_SCRAP, 1);
         player.sendMessage("You find a piece of a map inside the chest.");
       }
@@ -1181,7 +1376,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
       }
       player.getInventory().deleteNumber(CHEST_KEY, 1);
       player.sendMessage("You unlock the chest.");
-      if (!hasAnyMapPiece(player)) {
+      if (!scrapTaken(player, 0)) {
         player.getInventory().adds(ItemIdentifiers.MAP_SCRAP, 1);
         player.sendMessage("You find a piece of a map inside the chest.");
       } else {
@@ -1190,7 +1385,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
       return;
     }
     if (x === OPEN_CHEST_SCRAP_3_X && y === OPEN_CHEST_SCRAP_3_Y) {
-      if (hasAnyMapPiece(player)) {
+      if (scrapTaken(player, 2)) {
         player.sendMessage("You search the chest but find nothing.");
         return;
       }
@@ -1204,7 +1399,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
         spawnGiantLobster(player);
         return;
       }
-      if (hasAnyMapPiece(player)) {
+      if (scrapTaken(player, 1)) {
         player.sendMessage("You search the chest but find nothing.");
         return;
       }
@@ -1261,6 +1456,11 @@ module.exports = function registerGhostsAhoyQuest(api) {
       }
       return;
     }
+    if (objectId === ECTOFUNTUS_ID && option.includes("worship")) {
+      worshipEctofuntus(player);
+      event.handled = true;
+      return;
+    }
     if (objectId === NETTLE_OBJECT_ID && option.includes("pick")) {
       if (freeSlots(player) < 1) {
         player.sendMessage("You don't have enough inventory space.");
@@ -1269,6 +1469,22 @@ module.exports = function registerGhostsAhoyQuest(api) {
       player.getInventory().adds(NETTLES, 1);
       player.sendMessage("You pick some nettles.");
       event.handled = true;
+      return;
+    }
+    /** Port Phasmatys energy barrier: 2 ecto-tokens, free once the quest is done. */
+    if (objectId === ENERGY_BARRIER_ID && (option.includes("pass") || option.includes("pay-toll"))) {
+      event.handled = true;
+      const barrierY = location?.y ?? player.getLocation().getY();
+      if (!quest.isComplete(player)) {
+        if (player.getInventory().getAmount(ECTO_TOKEN) < 2) {
+          player.sendMessage("You need 2 ecto-tokens to pass through the barrier.");
+          return;
+        }
+        player.getInventory().deleteNumber(ECTO_TOKEN, 2);
+      }
+      const destinationY = player.getLocation().getY() < barrierY ? barrierY + 1 : barrierY - 1;
+      player.moveTo(new Location(player.getLocation().getX(), destinationY, player.getLocation().getZ()));
+      player.sendMessage("You pass through the energy barrier.");
       return;
     }
     if (SHIPWRECK_GANGPLANKS.has(objectId)) {
@@ -1323,6 +1539,9 @@ module.exports = function registerGhostsAhoyQuest(api) {
 
   function handleLogin({ player }) {
     refreshQuestList(player);
+    // The progress varbit drives NPC/object transforms and is not persisted, so
+    // replay it from the stage attribute on every login.
+    player.getPacketSender().sendVarbit(GHOSTS_AHOY_PROGRESS_VARBIT, progressVarbitValue(quest.getStage(player)));
   }
 
   quest = registerQuest(api, {
@@ -1349,6 +1568,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnItem(handleItemOnItem);
   api.onItemAction(handleItemAction);
+  api.onCanUseItem(interceptDragontoothDig);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcDeath(handleNpcDeath);

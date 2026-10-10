@@ -1,7 +1,7 @@
 /**
  * Achievement diaries (https://oldschool.runescape.wiki/w/Achievement_Diary): progress, the diary
  * tab's task lists, reward claiming and the reward lamps, from
- * data/definitions/achievement-diaries.json. See docs/achievement-diaries.md.
+ * plugins/diaries/data/achievement-diaries.json. See docs/achievement-diaries.md.
  *
  * Other plugins complete tasks and ask about tiers through custom events:
  *   api.emitCustomEvent("diary:task", { player, diary: "ardougne", task: "<task key>" })

@@ -42,7 +42,7 @@ class OpenPresetsAfterDeath extends Task {
 }
 
 function openPresetsAfterDeath({ victim }) {
-  if (!victim || victim.isPlayerBot?.() || !Presets.shouldOpenOnDeath(victim)) return;
+  if (!victim || victim.isPlayerBot?.() || !Presets.shouldOpenOnDeath(victim) || !Presets.canUsePresets(victim, true)) return;
   TaskManager.submit(new OpenPresetsAfterDeath(victim));
 }
 

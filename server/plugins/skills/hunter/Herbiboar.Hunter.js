@@ -2,7 +2,7 @@
 
 // Search coordinates from RuneLite (BSD-2-Clause, Herbiboar.LICENSE).
 const C = require("./Context.Hunter"), { H } = C;
-const data = require("./HerbiboarData.json");
+const data = require("../data/herbiboar-data.json");
 const hunts = new Map();
 const near = (point, location, range = 0) => location.getZ() === 0 && Math.max(Math.abs(point[0] - location.getX()), Math.abs(point[1] - location.getY())) <= range;
 

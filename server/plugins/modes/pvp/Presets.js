@@ -22,6 +22,7 @@ const {
   GROUP_ID,
   COMPONENT,
   PRESET_ROW_START,
+  PRESET_LEVEL_START,
   PRESET_ROW_COUNT,
   GLOBAL_ROW_COUNT,
   CUSTOM_ROW_COUNT,
@@ -42,6 +43,19 @@ const OPEN_ON_DEATH_ATTRIBUTE = "pvp:open-presets-on-death";
 const CUSTOM_PRESETS_ATTRIBUTE = "pvp:custom-presets";
 const CUSTOM_PRESET_SLOT_ATTRIBUTE = "pvp:selected-custom-preset-slot";
 let presetsEnabled = false;
+
+let pluginApi = null;
+
+/**
+ * "presets:can-use" { player, allow, message }: other content may keep a player from presets
+ * (an Ironman). `quiet` skips the message (the automatic opening after a death).
+ */
+function canUsePresets(player, quiet = false) {
+  const request = { player, allow: true, message: null };
+  pluginApi?.emitCustomEvent?.("presets:can-use", request);
+  if (!request.allow && !quiet && request.message) player.sendMessage(request.message);
+  return request.allow;
+}
 
 function shouldOpenOnDeath(player) {
   return player.getAttribute(OPEN_ON_DEATH_ATTRIBUTE) !== false;
@@ -82,7 +96,7 @@ const SPELLBOOKS = { NORMAL: MagicSpellbook.NORMAL, ANCIENT: MagicSpellbook.ANCI
 const EQUIPMENT_KEYS = new Set(["head", "cape", "amulet", "weapon", "body", "shield", "legs", "hands", "feet", "ring", "ammo"]);
 
 function loadPlayerPresets() {
-  const file = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-presets-players.json");
+  const file = path.join(__dirname, "..", "data", "pvp-presets-players.json");
   const rows = JSON.parse(fs.readFileSync(file, "utf8"));
   if (!Array.isArray(rows) || rows.length !== GLOBAL_ROW_COUNT) throw new Error(`[presets] ${file} must contain ${GLOBAL_ROW_COUNT} presets`);
   const keys = new Set();
@@ -375,6 +389,24 @@ function isPresetBlockedInWilderness(player) {
   return Wilderness.isIn(player) && !isFeroxSafeLocation(player?.getLocation?.()) && !isPlayerBot(player);
 }
 
+/** The combat level a preset's stat line would give (same formula as SkillManager). */
+function presetCombatLevel(preset) {
+  const stats = Array.isArray(preset?.getStats?.()) ? preset.getStats() : [];
+  if (stats.length < 7) {
+    return null;
+  }
+  const [attack, defence, strength, hp, ranged, prayer, magic] = stats.map((level) =>
+    Math.max(1, Math.floor(Number(level) || 1))
+  );
+  const base = Math.floor((defence + hp + Math.floor(prayer / 2)) * 0.2535) + 1;
+  const level = base + Math.max(
+    (attack + strength) * 0.325,
+    Math.floor(ranged * 1.5) * 0.325,
+    Math.floor(magic * 1.5) * 0.325
+  );
+  return Math.min(126, Math.max(3, Math.floor(level)));
+}
+
 function renderPresetLists(player) {
   const sender = player.getPacketSender();
   const pool = getGlobalPresetPool();
@@ -394,6 +426,12 @@ function renderPresetLists(player) {
           ? "<col=6f6355>Empty slot</col>"
           : "",
       uid(PRESET_ROW_START + row)
+    );
+    // The combat level sits right-aligned in its own column beside the name.
+    const combatLevel = preset ? presetCombatLevel(preset) : null;
+    sender.sendString(
+      combatLevel != null ? `<col=${isSelected ? "ffffff" : "c5b79b"}>${combatLevel}</col>` : "",
+      uid(PRESET_LEVEL_START + row)
     );
   }
 }
@@ -469,6 +507,9 @@ function openPresetInterface(player, preset = null) {
   if (!player) {
     return false;
   }
+  if (!canUsePresets(player)) {
+    return false;
+  }
 
   if (isPresetBlockedInWilderness(player)) {
     player.sendMessage("You can't open presets in the wilderness!");
@@ -490,6 +531,9 @@ function openPresetInterface(player, preset = null) {
 
 function applyPreset(player, preset) {
   if (!player || !preset) {
+    return false;
+  }
+  if (!canUsePresets(player)) {
     return false;
   }
 
@@ -749,8 +793,10 @@ module.exports = {
   isEnabled: () => presetsEnabled,
   openPresetInterface,
   shouldOpenOnDeath,
-  _test: { spawnPresetItem, bankCarriedItems },
+  canUsePresets,
+  _test: { spawnPresetItem, bankCarriedItems, presetCombatLevel },
   register(api) {
+    pluginApi = api;
     presetsEnabled = true;
     setPresetShopPricesEnabled(true);
     api.persistAttribute(CUSTOM_PRESETS_ATTRIBUTE);

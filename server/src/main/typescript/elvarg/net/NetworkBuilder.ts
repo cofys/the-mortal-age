@@ -977,6 +977,9 @@ export class ClientConnection {
       .sendSkillsSnapshot()
       .sendRunEnergy();
     player.getQuickPrayers().sync();
+    // Plugins re-sync client state that sendTabInterface(6)'s spell-unlock varps
+    // overwrote (quest varps share storage with NPC transform varps).
+    PluginManager.emitCustomEvent("player:bootstrap-complete", { player, username: player.getUsername() });
   }
 
   private walk(x: number, y: number, modifierFlags: number, forceRun = false): void {

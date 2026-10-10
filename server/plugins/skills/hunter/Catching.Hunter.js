@@ -2,7 +2,7 @@
 
 const C = require("./Context.Hunter");
 const { H, ANIM, level, requireLevel, hasTool, nearby, available, roll, exchange, xp, begin, hide, chance } = C;
-const tables = require("./ImplingLoot.json");
+const tables = require("../data/impling-loot.json");
 const falcons = new Map();
 const caught = new Map();
 // Players wearing a falconer's glove, so leaving the falconry grounds is checked for them only.

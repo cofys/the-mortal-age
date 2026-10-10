@@ -256,6 +256,13 @@ export function handleInboundUi(msg: any): boolean {
         return true;
     }
     if (msg.type === "gamemode_data") {
+        const datasets = msg.payload?.datasets;
+        if (datasets?.length === 1 && datasets[0].key === "worldMapPlayers") {
+            // Staff world map dots: [x, y, plane, isBot] rows, drawn by the map renderer.
+            const g: any = (typeof window !== "undefined" ? window : globalThis) as any;
+            if (g.__osrsClient) g.__osrsClient.worldMapPlayers = datasets[0].rows;
+            return true;
+        }
         try {
             const { loadFromPayload } = require("../../../common/gamemode/GamemodeContentStore");
             loadFromPayload(msg.payload);

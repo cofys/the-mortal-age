@@ -1,6 +1,6 @@
 # Sawmill
 
-`server/plugins/npcs/Sawmill.plugin.js` runs the sawmill operators: "Sawmill operator" (3101) and "Sawmill Operator" (9140 in Prifddinas, 14659 in Auburnvale). Its data is in `server/data/definitions/sawmill.json`.
+`server/plugins/npcs/Sawmill.plugin.js` runs the sawmill operators: "Sawmill operator" (3101) and "Sawmill Operator" (9140 in Prifddinas, 14659 in Auburnvale). Its data is in `server/plugins/npcs/data/sawmill.json`.
 
 The rules come from rsprox captures (`rsprox/sawmill/operator*.txt`) and the OSRS Wiki.
 

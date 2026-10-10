@@ -277,6 +277,19 @@ const SPOT_TOOLS_BY_NPC = new Map([
 const FISHING_SPOT_NAMES = ["Fishing spot", "Rod Fishing spot"];
 const FISHING_SPOT_OPTIONS = ["Small Net", "Net", "Big Net", "Bait", "Lure", "Cage", "Harpoon", "Use-rod"];
 
+const TOOL_NAMES = new Map(Object.entries(TOOLS).map(([name, tool]) => [tool, name]));
+
+/** The tools a spot fishes with, by option: [{ clickType, tool: "LOBSTER_POT" }] (bots index spots by tool). */
+function spotTools(npcId, definition) {
+  const actions = definition?.getActions?.() ?? [];
+  const found = [];
+  for (let clickType = 1; clickType <= actions.length; clickType++) {
+    const tool = getSpotTool(npcId, definition, clickType);
+    if (tool) found.push({ clickType, tool: TOOL_NAMES.get(tool) });
+  }
+  return found;
+}
+
 function getSpotTool(npcId, definition, clickType) {
   const actions = definition?.getActions?.() ?? [];
   const option = actions[clickType - 1];
@@ -564,6 +577,11 @@ class FishingTask extends Task {
 let TaskManager;
 let World;
 let pluginApi;
+let activeSessionsRef = null;
+
+function isFishingActive(player) {
+  return activeSessionsRef?.has(player) === true;
+}
 
 module.exports = {
   name: "Fishing",
@@ -572,6 +590,7 @@ module.exports = {
     TaskManager = api.getTaskManager();
     World = api.getWorld();
     const activeSessions = new Map();
+    activeSessionsRef = activeSessions;
     TaskManager.submit(new FishingTask(activeSessions));
     InfernalHarpoon.attach(api);
     CrystalHarpoon.attach(api);
@@ -615,6 +634,9 @@ module.exports = {
   rollCatch,
   findTool,
   getSpotTool,
+  spotTools,
+  isFishingActive,
+  FISHING_SPOT_NAMES,
   hasToolRequirements,
   landCatch,
   anglerXpMultiplier: (player) => AnglerOutfit.xpMultiplier(player),

@@ -34,11 +34,13 @@ const barricades = new Set();
 const objectSwaps = [];
 let teamVars;
 let flagStatus;
+let flagCarriers;
 let score;
 let droppedFlagObjects;
 let phase = PHASE.IDLE;
 let startTask = null;
 let endTask = null;
+let flagHintTask = null;
 
 // --- Vars and overlays -------------------------------------------------------------------
 
@@ -265,37 +267,12 @@ function getCarriedFlagTeam(player) {
   return carriedId === SARADOMIN_BANNER ? data.TEAM.SARADOMIN : carriedId === ZAMORAK_BANNER ? data.TEAM.ZAMORAK : null;
 }
 
-function sendGameHintRemoval(location = null) {
-  for (const player of game.gameArea.getPlayers()) {
-    player.getPacketSender().sendEntityHintRemoval(true);
-    if (location) {
-      player.getPacketSender().sendPositionalHint(location, -1);
-    }
-  }
-}
-
-function showCarrierHint(carrier, flagTeam) {
-  sendGameHintRemoval();
-  for (const player of getTeamMembersInGame(flagTeam)) {
-    player.getPacketSender().sendEntityHint(carrier);
-  }
-  carrier.getUpdateFlag().flag(core.Flag.APPEARANCE);
-}
-
-function showDroppedFlagHint(location) {
-  sendGameHintRemoval();
-  for (const player of game.gameArea.getPlayers()) {
-    player.getPacketSender().sendPositionalHint(location, 2);
-  }
-}
-
 function removeDroppedFlagObject(flagTeam) {
   const dropped = droppedFlagObjects[flagTeam];
   if (!dropped) {
     return;
   }
   ObjectManager.deregister(dropped, true);
-  sendGameHintRemoval(dropped.getLocation());
   droppedFlagObjects[flagTeam] = null;
 }
 
@@ -304,18 +281,24 @@ function updateFlagStand(flagTeam, objectId) {
   ObjectManager.register(new core.GameObject(objectId, team.standLocation, team.standType, team.standFace, null), true);
 }
 
-function restoreFlagToBase(flagTeam) {
+function restoreFlagToBase(flagTeam, cause = "reset") {
   removeDroppedFlagObject(flagTeam);
   flagStatus[flagTeam] = 0;
+  flagCarriers[flagTeam] = null;
   updateFlagStand(flagTeam, getTeamData(flagTeam).safeStandId);
-  sendGameHintRemoval();
+  if (process.env.CW_BOT_DEBUG === "1") {
+    console.log(`[cw_flag] restore ${flagTeam} (${cause})`);
+  }
 }
 
 function carryFlag(player, flagTeam) {
   flagStatus[flagTeam] = 1;
+  flagCarriers[flagTeam] = player;
   player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(getTeamData(flagTeam).bannerId, 1));
   refreshPlayerAppearance(player, true);
-  showCarrierHint(player, flagTeam);
+  if (process.env.CW_BOT_DEBUG === "1") {
+    console.log(`[cw_flag] carry ${flagTeam} by ${player.getUsername?.()}`);
+  }
 }
 
 function isSteppingStone(tile) {
@@ -325,29 +308,78 @@ function isSteppingStone(tile) {
   );
 }
 
-/** Drops a carried flag where the carrier stands; dropped on the stepping stones, it goes home. */
-function dropCarriedFlag(player) {
-  const carriedFlagTeam = getCarriedFlagTeam(player);
-  if (!carriedFlagTeam) {
-    return;
+/** The team this player is recorded as carrying for, banner still equipped or not. */
+function carriedTeamOf(player) {
+  for (const teamId of Object.keys(flagCarriers)) {
+    if (flagCarriers[teamId] === player) {
+      return teamId;
+    }
   }
-  clearWeaponSlot(player);
-  const tile = getLocationTile(player);
-  if (tile && isSteppingStone(tile)) {
-    restoreFlagToBase(carriedFlagTeam);
-    return;
+  return null;
+}
+
+/** Put the dropped standard on the floor where the player stands. */
+function placeDroppedFlag(flagTeam, player) {
+  // One standard per team: remove whatever drop a previous life left behind, so repeated
+  // deaths in the same spot cannot stack flag objects.
+  removeDroppedFlagObject(flagTeam);
+  flagStatus[flagTeam] = 2;
+  flagCarriers[flagTeam] = null;
+  if (process.env.CW_BOT_DEBUG === "1") {
+    const tile = getLocationTile(player);
+    console.log(`[cw_flag] drop ${flagTeam} by ${player.getUsername?.()} at ${tile.x},${tile.y},${tile.z}`);
   }
-  flagStatus[carriedFlagTeam] = 2;
   const dropped = new core.GameObject(
-    getTeamData(carriedFlagTeam).droppedFlagObjectId,
+    getTeamData(flagTeam).droppedFlagObjectId,
     player.getLocation().clone(),
     10,
     0,
     player.getPrivateArea()
   );
-  droppedFlagObjects[carriedFlagTeam] = dropped;
+  droppedFlagObjects[flagTeam] = dropped;
   ObjectManager.register(dropped, true);
-  showDroppedFlagHint(dropped.getLocation());
+}
+
+/**
+ * Removes every dropped-standard object inside the arena, tracked or stray: drops from
+ * older sessions lingered on the floor and each new carry stacked another one.
+ */
+function clearStrayDroppedFlags() {
+  // The dropped-standard ids are Castle Wars-only, so every instance goes no matter the
+  // floor: AreaManager.inside is z-gated and never matched the flag rooms upstairs, which
+  // let orphaned drops pile up there across matches.
+  const ids = new Set(Object.values(data.TEAM_DATA).map((team) => team.droppedFlagObjectId));
+  for (const list of [...core.MapObjects.mapObjects.values()]) {
+    for (const object of [...list]) {
+      if (ids.has(object.getId())) {
+        ObjectManager.deregister(object, true);
+      }
+    }
+  }
+  droppedFlagObjects[data.TEAM.SARADOMIN] = null;
+  droppedFlagObjects[data.TEAM.ZAMORAK] = null;
+}
+
+/** Drops a carried flag where the carrier stands; dropped on the stepping stones, it goes home. */
+function dropCarriedFlag(player) {
+  // The equipment is authoritative for live carries; the tracked carrier covers deaths
+  // whose item processing stripped the banner before this ran (bot deaths are handled
+  // by the bot loot system, which removes the banner without emitting an item drop).
+  const carriedFlagTeam = getCarriedFlagTeam(player) ?? carriedTeamOf(player);
+  if (!carriedFlagTeam) {
+    return;
+  }
+  if (flagStatus[carriedFlagTeam] !== 1) {
+    flagCarriers[carriedFlagTeam] = null;
+    return;
+  }
+  clearWeaponSlot(player);
+  const tile = getLocationTile(player);
+  if (tile && isSteppingStone(tile)) {
+    restoreFlagToBase(carriedFlagTeam, "stones");
+    return;
+  }
+  placeDroppedFlag(carriedFlagTeam, player);
 }
 
 // --- Barricades --------------------------------------------------------------------------
@@ -433,6 +465,8 @@ function resetMatchState() {
   score[data.TEAM.ZAMORAK] = 0;
   restoreFlagToBase(data.TEAM.SARADOMIN);
   restoreFlagToBase(data.TEAM.ZAMORAK);
+  clearStrayDroppedFlags();
+  clearFlagHints();
 }
 
 function beginStartCountdown() {
@@ -494,8 +528,152 @@ function startGame() {
       player.smartMove(getTeamData(teamId).startRoom, 3);
     }
   }
+  // A bot that missed the waiting room (still walking, or queued late) would sit in the lobby
+  // for the whole match — and its presence then blocks the next empty-lobby prompt.
+  for (const player of [...(game.lobbyArea?.getPlayers() ?? [])]) {
+    if (player.getAttribute(BOT_KEY) !== true) {
+      continue;
+    }
+    const teamId = getTeamId(player);
+    if (teamId == null) {
+      continue;
+    }
+    resetIdleTicks(player);
+    chargeBracelet(player);
+    player.setAttribute(TRANSITION_KEY, true);
+    closeOverlay(player);
+    player.moveTo(getTeamData(teamId).startRoom);
+  }
   endTask = new core.CountdownTask(data.END_TASK_KEY, secondsToTicks(data.GAME_SECONDS), endGame);
   TaskManager.submit(endTask);
+  startFlagHints();
+}
+
+/** Every ground item inside the arena: arrows, bones and dropped supplies go with the match. */
+function clearGroundItems() {
+  const area = game.gameArea;
+  if (!area || typeof World.getItems !== "function") {
+    return;
+  }
+  for (const item of [...World.getItems()]) {
+    const at = item.getPosition();
+    // The arena's boundaries carry z0; probe at z0 so items left on the upper floors
+    // (flag rooms, battlements walkways) are cleared too.
+    if (AreaManager.inside(new core.Location(at.getX(), at.getY(), 0), area)) {
+      core.ItemOnGroundManager.deregister(item);
+    }
+  }
+}
+
+/**
+ * The yellow flag arrow every player sees: their opponents' standard while it is carried
+ * (an overhead player hint, so it rides the carrier's head like a head icon) or lying
+ * dropped (a tile hint at the flag). The client blinks both natively.
+ *
+ * This task is the only writer of the match's native hint arrow. Its WeakMap holds the last
+ * target sent per player so a stationary flag does not spam packets, and it still re-sends
+ * every HINT_REFRESH_MS in case any other system cleared the arrow behind its back.
+ */
+// Keyed by player so a hint can be cleared later even after the player has left the arena
+// (area-membership lists miss anyone who crossed the boundary at the wrong tick).
+const hintState = new Map();
+const HINT_REFRESH_MS = 2000;
+
+function updateFlagHint(player) {
+  const teamId = getTeamId(player);
+  if (teamId == null) {
+    return;
+  }
+  const flagTeam = opposingTeam(teamId);
+  const sender = player.getPacketSender();
+  let flagLocation = null;
+  let carrier = null;
+  if (flagStatus[flagTeam] === 1) {
+    for (const other of game.gameArea.getPlayers()) {
+      if (getCarriedFlagTeam(other) === flagTeam) {
+        carrier = other;
+        flagLocation = other.getLocation();
+        break;
+      }
+    }
+  } else if (flagStatus[flagTeam] === 2 && droppedFlagObjects[flagTeam]) {
+    flagLocation = droppedFlagObjects[flagTeam].getLocation();
+  }
+  if (!flagLocation) {
+    if (
+      flagStatus[flagTeam] !== 0 &&
+      process.env.CW_BOT_DEBUG === "1" &&
+      player.getUsername?.() === process.env.CW_BOT_DEBUG_USER
+    ) {
+      console.log(`[cw_hint] ${player.getUsername?.()} flag=${flagTeam} out (status=${flagStatus[flagTeam]}) but no carrier found`);
+    }
+    if (hintState.has(player)) {
+      hintState.delete(player);
+      sender.clearHintArrow();
+    }
+    return;
+  }
+  const key = carrier
+    ? `p:${carrier.getIndex()}`
+    : `t:${flagLocation.getX()},${flagLocation.getY()},${flagLocation.getZ()}`;
+  const sent = hintState.get(player);
+  const nowMs = Date.now();
+  if (sent?.key !== key || nowMs - sent.at >= HINT_REFRESH_MS) {
+    hintState.set(player, { key, at: nowMs });
+    if (carrier) {
+      // Type 3 (player) renders through the head-icon pass, following the head smoothly.
+      sender.sendPlayerHint(carrier);
+    } else {
+      // height 0, the flag's own plane: a client on another floor must not draw it.
+      sender.sendPositionalHint(flagLocation, 2, 0, flagLocation.getZ());
+    }
+    if (process.env.CW_BOT_DEBUG === "1" && player.getUsername?.() === process.env.CW_BOT_DEBUG_USER) {
+      console.log(`[cw_hint] ${player.getUsername?.()} flag=${flagTeam} at ${key}`);
+    }
+  }
+}
+
+function clearFlagHints() {
+  let cleared = 0;
+  for (const player of hintState.keys()) {
+    player.getPacketSender?.()?.clearHintArrow?.();
+    cleared += 1;
+  }
+  hintState.clear();
+  if (process.env.CW_BOT_DEBUG === "1" && cleared > 0) {
+    console.log(`[cw_hint] clearFlagHints cleared=${cleared}`);
+  }
+}
+
+/** One lightweight task for the whole match; it stops with the phase and clears on the way out. */
+function startFlagHints() {
+  stopFlagHints();
+  if (process.env.CW_BOT_DEBUG === "1") {
+    console.log("[cw_hint] task started");
+  }
+  // Every tick, not every other: a walking carrier must not drag the arrow a tile behind.
+  const task = new core.Task(1);
+  task.execute = () => {
+    if (phase !== PHASE.ACTIVE || !game.gameArea) {
+      clearFlagHints();
+      task.stop();
+      flagHintTask = null;
+      return;
+    }
+    for (const player of game.gameArea.getPlayers()) {
+      updateFlagHint(player);
+    }
+  };
+  flagHintTask = task;
+  TaskManager.submit(task);
+}
+
+function stopFlagHints() {
+  if (flagHintTask) {
+    flagHintTask.stop();
+    flagHintTask = null;
+  }
+  clearFlagHints();
 }
 
 function endGame() {
@@ -505,6 +683,10 @@ function endGame() {
   phase = PHASE.ENDING;
   cancelStartCountdown();
   cancelEndCountdown();
+  clearGroundItems();
+  // Clear the flag arrows while everyone is still in the area: the hint task stops below
+  // and would otherwise find no players left to clear.
+  stopFlagHints();
   for (const player of [...game.gameArea.getPlayers()]) {
     rewardPlayer(player);
     clearCastleWarsItems(player);
@@ -512,6 +694,17 @@ function endGame() {
     closeOverlay(player);
     player.getPacketSender().sendPlayerOption(data.ATTACK_OPTION_SLOT, "", false);
     returnToLobby(player);
+  }
+  // Bots that missed the start sit in the lobby or a waiting room instead of the game area;
+  // log them out here too or they squat the next lobby (and its prompt).
+  for (const area of [game.lobbyArea, ...Object.values(game.waitingAreas ?? {})].filter(Boolean)) {
+    for (const player of [...area.getPlayers()]) {
+      if (player.getAttribute(BOT_KEY) === true) {
+        clearCastleWarsItems(player);
+        setTeamId(player, null);
+        returnToLobby(player);
+      }
+    }
   }
   resetMatchState();
   phase = PHASE.IDLE;
@@ -569,9 +762,12 @@ module.exports = function createCastleWarsGame(registry) {
   RegionManager = registry.getRegionManager();
   TaskManager = registry.getTaskManager();
   World = registry.getWorld();
+  // Hint state holds a strong ref only while a hint is live; forget players on logout.
+  registry.onPlayerLogout?.(({ player }) => hintState.delete(player));
   const { SARADOMIN, ZAMORAK } = data.TEAM;
   teamVars = { [SARADOMIN]: new Map(), [ZAMORAK]: new Map() };
   flagStatus = { [SARADOMIN]: 0, [ZAMORAK]: 0 };
+  flagCarriers = { [SARADOMIN]: null, [ZAMORAK]: null };
   score = { [SARADOMIN]: 0, [ZAMORAK]: 0 };
   droppedFlagObjects = { [SARADOMIN]: null, [ZAMORAK]: null };
 
@@ -618,7 +814,7 @@ module.exports = function createCastleWarsGame(registry) {
     hasBraceletEffect,
     clearBraceletEffect,
     getCarriedFlagTeam,
-    sendGameHintRemoval,
+    getDroppedFlagObject: (flagTeam) => droppedFlagObjects[flagTeam] ?? null,
     removeDroppedFlagObject,
     updateFlagStand,
     restoreFlagToBase,
@@ -633,6 +829,7 @@ module.exports = function createCastleWarsGame(registry) {
     beginStartCountdown,
     checkStartCountdown,
     checkTeamsRemain,
+    endGame,
     releaseSeededBots,
     resetMatchState,
     returnToLobby,

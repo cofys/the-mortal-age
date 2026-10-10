@@ -2,6 +2,7 @@ const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model
 const { FriendsChatManager } = require("../../interface/FriendsChatManager");
 const { isPvpOnlyBotState } = require("../behaviours/state/PlayerBotState");
 const { ATTR_RECRUIT_OWNER_USERNAME } = require("./BotRecruitConstants");
+const { peekMovementRequest } = require("../behaviours/navigation/BotNavigation");
 const {
   startActivity,
   startBrainRoam,
@@ -310,6 +311,42 @@ function registerBotCommands(options) {
     });
     return true;
   }, PlayerRights.ADMINISTRATOR, "Set bot behaviour");
+
+  // Live brain state for one bot: activity frames, the top action's own summary,
+  // pending walk and combat target. For diagnosing stuck bots without a debugger.
+  api.registerCommand("botinfo", ({ player, parts }) => {
+    let bot = parts[1] ? runtime.resolveControlledPlayer(parts[1]) : null;
+    if (!bot && parts[1]) {
+      // Bots owned by other plugins (Castle Wars, Pest Control) are not in this runtime.
+      const other = api.getWorld()?.getPlayerByName?.(parts[1]) ?? null;
+      bot = other?.isPlayerBot?.() === true ? other : null;
+    }
+    const username = bot?.getUsername?.();
+    const entry = username ? runtime.entriesByUsername?.get?.(username) : null;
+    if (!bot) {
+      player.sendMessage(`botinfo: no bot ${parts[1] ?? ""}`);
+      return true;
+    }
+    const nowMs = Date.now();
+    const brain = entry?.brain ?? null;
+    const frames = (brain?.frames ?? [])
+      .map((frame) => `${frame.behaviour?.id}:${frame.state}:${frame.action()?.id ?? "-"}`).join(" > ");
+    const top = brain?.frames?.at(-1);
+    const loc = bot.getLocation();
+    const request = peekMovementRequest(bot);
+    player.sendMessage(`${username} @${loc.getX()},${loc.getY()} mode=${runtime.botStatesByName.get(username)?.mode ?? "-"} ` +
+      `frames=${frames || "none"} switchIn=${brain?.switchAt ? Math.round((brain.switchAt - nowMs) / 1000) : "-"}s`);
+    const detail = top && brain ? top.action()?.describe?.(brain.context(top, nowMs)) : null;
+    if (detail) player.sendMessage(detail);
+    const door = runtime.botStatesByName.get(username)?.doorAttempt;
+    const face = bot.getPositionToFace?.();
+    player.sendMessage(`walk=${request ? `${request.x},${request.y} seg=${request.lastSegmentX},${request.lastSegmentY}` : "none"} ` +
+      `face=${face ? `${face.getX()},${face.getY()}` : "none"} ` +
+      `queue=${bot.getMovementQueue().size()} fighting=${bot.getCombat().getTarget()?.getDefinition?.()?.getName?.() ?? "none"} ` +
+      `door=${door ? `${door.key} stand=${door.stand.x},${door.stand.y} routes=${door.routes}` : "none"} ` +
+      `ticked=${brain?.lastTickAt ? Math.round((nowMs - brain.lastTickAt) / 100) / 10 : "-"}s ago`);
+    return true;
+  }, PlayerRights.DEVELOPER, "Inspect a bot's brain");
 
   api.registerCommand("bothotspots", ({ player }) => {
     const countsByHotspot = new Map();

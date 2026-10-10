@@ -183,6 +183,7 @@ export class PlayerDeathTask extends Task {
                     const handledDeath = PluginManager.emitPlayerDeath({
                         player: this.player,
                         killer: this.killer ?? null,
+                        itemsLost: this.loseItems,
                         handled: false,
                     });
 

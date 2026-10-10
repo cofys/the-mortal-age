@@ -1,6 +1,6 @@
 /**
  * The Mad Angel (https://oldschool.runescape.wiki/w/Mad_Angel), from
- * data/definitions/mad-angel.json, as captured in Ardeaglais on Wyrmscraig: the cathedral's
+ * plugins/bosses/data/mad-angel.json, as captured in Ardeaglais on Wyrmscraig: the cathedral's
  * doors and broken pew, a cathedral of the player's own, the fight and the kill. Each lives in
  * ./madangel/. Fallen From Grace isn't on this server: the post-quest angel is open to all (the
  * Wyrmscraig plugin). See docs/wyrmscraig.md.

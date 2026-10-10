@@ -121,8 +121,9 @@ function endVisit(player) {
     VARBIT_SHIPYARD_BOAT_OFFSET_FINEX, VARBIT.SIDEPANEL_VISIBLE]) {
     setVarbit(player, id, 0);
   }
-  // Back to what the tools unlock says (::sailingtools).
-  setVarbit(player, VARBIT.SAILING_INTRO, 0);
+  // Back to what the tools unlock says; on a real save that may be Pandemonium
+  // progress (varbit 18314 is that quest's stage), so restore what we saved.
+  setVarbit(player, VARBIT.SAILING_INTRO, visit.sailingIntro ?? 0);
   sendToolUnlocks(player);
   clearBoatVarps(player);
   player.getPacketSender().sendTabInterface(0, 0);
@@ -144,7 +145,8 @@ function enterShipyard(player, dock, slot) {
 /** Puts the player in the shipyard with the boat in `slot` shown. */
 function beginVisit(player, dock, slot) {
   player.moveTo(new Location(SHIPYARD.arrival.x, SHIPYARD.arrival.y, SHIPYARD.arrival.z));
-  const visit = { slot, dock: dock.id, shown: undefined, aboard: false, hotspot: undefined };
+  const visit = { slot, dock: dock.id, shown: undefined, aboard: false, hotspot: undefined,
+    sailingIntro: player.getPacketSender().getVarbit(VARBIT.SAILING_INTRO) };
   visits.set(player, visit);
   // Owning a boat means The Pandemonium is done; the customisation refuses every build without
   // it (script 8807 via 9022). Only for the visit, so the tools stay behind ::sailingtools.

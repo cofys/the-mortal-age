@@ -32,6 +32,8 @@ module.exports = function registerGoblinDiplomacyQuest(api) {
   const ORANGE_GOBLIN_MAIL_ITEM_ID = ItemIdentifiers.ORANGE_GOBLIN_MAIL;
   const BLUE_GOBLIN_MAIL_ITEM_ID = ItemIdentifiers.BLUE_GOBLIN_MAIL;
   const GOBLIN_MAIL_ITEM_ID = ItemIdentifiers.GOBLIN_MAIL;
+  const RED_DYE_ITEM_ID = ItemIdentifiers.RED_DYE;
+  const YELLOW_DYE_ITEM_ID = ItemIdentifiers.YELLOW_DYE;
   const BLUE_DYE_ITEM_ID = ItemIdentifiers.BLUE_DYE;
   const ORANGE_DYE_ITEM_ID = ItemIdentifiers.ORANGE_DYE;
   const GOLD_BAR_ITEM_ID = ItemIdentifiers.GOLD_BAR;
@@ -274,10 +276,21 @@ module.exports = function registerGoblinDiplomacyQuest(api) {
     event.handled = true;
   }
 
-  // Dye an ordinary goblin mail orange or blue.
+  // Mix orange dye (the wiki's only source), then dye an ordinary goblin mail orange or blue.
   function handleItemOnItem(event) {
     const used = event.usedItemId;
     const with_ = event.usedWithItemId;
+    if (
+      (used === RED_DYE_ITEM_ID && with_ === YELLOW_DYE_ITEM_ID) ||
+      (used === YELLOW_DYE_ITEM_ID && with_ === RED_DYE_ITEM_ID)
+    ) {
+      event.player.getInventory().deleteNumber(RED_DYE_ITEM_ID, 1);
+      event.player.getInventory().deleteNumber(YELLOW_DYE_ITEM_ID, 1);
+      event.player.getInventory().adds(ORANGE_DYE_ITEM_ID, 1);
+      event.player.sendMessage("You mix the red and yellow dyes to make orange dye.");
+      event.handled = true;
+      return;
+    }
     const pairsWith = (dyeId) =>
       (used === dyeId && with_ === GOBLIN_MAIL_ITEM_ID) ||
       (used === GOBLIN_MAIL_ITEM_ID && with_ === dyeId);

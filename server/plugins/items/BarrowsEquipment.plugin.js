@@ -167,6 +167,9 @@ function repairEquipment(event) {
   const { player } = event;
   const cost = barrowsItems(player).reduce((total, item) => total + repairCost(item), 0);
   if (cost <= 0) {
+    // Talk-to must fall through so the NPC apostrophe-s own dialogue (e.g. Troll Stronghold Dunstan) plays;
+    // only the Repair option answers when there is nothing to fix.
+    if (Number(event.clickType) <= 1) return false;
     player.sendMessage("You have no damaged Barrows equipment to repair.");
     event.handled = true;
     return true;

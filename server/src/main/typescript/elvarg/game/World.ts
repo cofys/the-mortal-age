@@ -618,6 +618,28 @@ export class World {
         return World.getBucketNearbyPlayersForUpdate(player);
     }
 
+    /**
+     * Registered, visible NPCs within `radius` tiles (Chebyshev) of `location` on its plane, from
+     * the region index of every NPC. Unlike getNearbyNpcsForUpdate, which only sees NPCs in
+     * regions active around real players, this works anywhere (bots far from players).
+     */
+    public static getNpcsNear(location: Location, radius: number, privateArea: any = null): NPC[] {
+        const found: NPC[] = [];
+        const x = location.getX();
+        const y = location.getY();
+        const z = location.getZ();
+        for (let regionX = (x - radius) >> 6; regionX <= (x + radius) >> 6; regionX++) {
+            for (let regionY = (y - radius) >> 6; regionY <= (y + radius) >> 6; regionY++) {
+                for (const npc of World.npcRegionOccupants.get(`${z}:${regionX}:${regionY}`) ?? []) {
+                    const at = npc.getLocation();
+                    if (!npc.isRegistered() || !npc.isVisible() || npc.getPrivateArea() !== privateArea) continue;
+                    if (Math.max(Math.abs(at.getX() - x), Math.abs(at.getY() - y)) <= radius) found.push(npc);
+                }
+            }
+        }
+        return found;
+    }
+
     public static getNearbyNpcsForUpdate(player: Player): NPC[] {
         const radius = Math.max(World.UPDATE_BUCKET_RADIUS, Math.ceil(World.npcViewDistance(player) / 8));
         const nearby = World.collectFromBuckets(World.npcUpdateBuckets, BoatManager.rootLocation(player), radius);

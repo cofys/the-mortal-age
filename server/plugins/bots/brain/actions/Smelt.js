@@ -3,7 +3,11 @@
 const Smithing = require("../../../skills/Smithing.plugin");
 const { resolveCatalogObjectIds } = require("../BotObjectCatalog");
 const { playerState } = require("../ActionState");
-const { approachObject } = require("../../behaviours/navigation/BotNavigation");
+const { createObjectReachChecker } = require("../../behaviours/navigation/ObjectReach");
+const {
+  approachBlockedObject,
+  approachObject,
+} = require("../../behaviours/navigation/BotNavigation");
 
 const FURNACE_IDS = Object.freeze(
   resolveCatalogObjectIds({ catalog: "furnace" })
@@ -30,6 +34,7 @@ function resolveRecipe(spec) {
  */
 function createSmeltAction(spec, world) {
   const recipe = resolveRecipe(spec);
+  const canReach = createObjectReachChecker(world.core);
   const stateFor = (player) =>
     playerState(action, player, () => ({ lastClickAt: 0 }));
 
@@ -113,6 +118,9 @@ function createSmeltAction(spec, world) {
         return "running";
       }
       bot.lastClickAt = nowMs;
+      if (approachBlockedObject(player, furnace, { nowMs, reason: "brain_furnace_approach", canReach })) {
+        return "running";
+      }
 
       player.getMovementQueue().walkToObject(furnace, {
         execute: () => {

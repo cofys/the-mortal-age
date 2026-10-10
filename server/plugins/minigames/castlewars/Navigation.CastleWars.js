@@ -36,7 +36,11 @@ function climb(player, object) {
   const id = object.getId();
   const x = player.getLocation().getX();
   if (data.CLIMB_ROUTES[id]) {
-    return climbFromRoutes(player, object, data.CLIMB_ROUTES[id]);
+    // Only a matching pair claims the click; the battlement stairs fall through to their
+    // fixed teleports below instead of the generic up/down prompt.
+    if (climbFromRoutes(player, object, data.CLIMB_ROUTES[id])) {
+      return true;
+    }
   }
   if (data.FIXED_MOVES[id]) {
     game.climbTo(player, data.FIXED_MOVES[id]);

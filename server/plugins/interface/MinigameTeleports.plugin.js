@@ -6,7 +6,7 @@
  * client builds from the cache (enum 5924: list position -> component, enum 5923: list position ->
  * db row of table 214, which names the minigame). A choice plays the home teleport cast
  * (HomeTeleportSequence) to the minigame; Rat Pits first asks which pit. Destinations and
- * requirements are in data/definitions/minigame-teleports.json. The 20-minute cooldown is the
+ * requirements are in plugins/interface/data/minigame-teleports.json. The 20-minute cooldown is the
  * minute of the last one (varp 888).
  */
 
@@ -30,7 +30,7 @@ let pluginApi;
 let minigames = {};
 
 function loadMinigames() {
-  const file = path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "minigame-teleports.json");
+  const file = path.join(__dirname, "data", "minigame-teleports.json");
   return JSON.parse(fs.readFileSync(file, "utf8")).minigames ?? {};
 }
 

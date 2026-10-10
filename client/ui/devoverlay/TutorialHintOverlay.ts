@@ -101,7 +101,8 @@ export class TutorialHintOverlay implements Overlay {
     draw(phase: RenderPhase): void {
         if (phase !== RenderPhase.ToFrameTexture) return;
         if (!this.drawCall || !this.positions || !this.uvs || !this.array) return;
-        if (hintArrow.type === 0) return;
+        // Actor hints (type 3) are overhead head icons, drawn by OverheadPrayerOverlay.
+        if (hintArrow.type !== 1 && hintArrow.type !== 2) return;
 
         const args = this.lastArgs;
         const helpers = args?.helpers;
@@ -139,10 +140,12 @@ export class TutorialHintOverlay implements Overlay {
             plane = npcEcs.getLevel(ecsId) | 0;
             heightOffsetTiles = anchor.logicalHeightTiles + 15 / 128;
         } else {
+            // Tile hints carry their own floor: another floor's target is not drawn here.
+            const localPlane = args?.state.playerLevel ?? 0;
+            if ((hintArrow.plane | 0) !== localPlane) return;
             worldX = hintArrow.x + 0.5;
             worldY = hintArrow.y + 0.5;
-            // Tile hints have no plane of their own; the arrow rides the local plane.
-            plane = args?.state.playerLevel ?? 0;
+            plane = localPlane;
             heightOffsetTiles = 0.7 + (hintArrow.height | 0);
         }
 

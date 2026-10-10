@@ -1,6 +1,6 @@
 /**
  * Pickable scenery (Wheat, Potato, Onion, Cabbage, Sweetcorn, Flax, Nettles), from
- * data/definitions/pickables.json.
+ * plugins/objects/data/pickables.json.
  *
  * As in rsprox captures of picking potatoes and wheat: the pick animation (827) plays on the tick
  * the player is beside the plant; a tick later come the message, the item, sound 2581 and, when
@@ -24,7 +24,7 @@ const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const PICK_ANIMATION = new Animation(827);
 const NETTLE_DAMAGE_MAX = 2;
 const PICKABLES = JSON.parse(
-  fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "pickables.json"), "utf8"),
+  fs.readFileSync(path.join(__dirname, "data", "pickables.json"), "utf8"),
 ).pickables;
 const PICKABLE_BY_NAME = new Map(PICKABLES.map((pickable) => [pickable.name, pickable]));
 

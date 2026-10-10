@@ -1,6 +1,6 @@
 /**
  * Obor (https://oldschool.runescape.wiki/w/Obor) and Bryophyta
- * (https://oldschool.runescape.wiki/w/Bryophyta), from data/definitions/giant-boss-lairs.json:
+ * (https://oldschool.runescape.wiki/w/Bryophyta), from plugins/bosses/data/giant-boss-lairs.json:
  * their key-locked lairs, fights and chests, and their giant bones, as captured. Each lives in
  * ./giantlairs/. See docs/edgeville-dungeon.md.
  */

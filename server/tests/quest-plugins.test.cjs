@@ -85,13 +85,32 @@ test('each quest varp is sent again on login, so quest-gated locs show after a r
   const village = getRegisteredQuests().find((quest) => quest.name === 'Tree Gnome Village');
   const attributes = new Map();
   const varps = new Map();
-  const sender = new Proxy({}, { get: (t, key) => (key === 'sendConfig' ? (id, value) => (varps.set(id, value), sender) : () => sender) });
+  const varbits = new Map();
+  const sender = new Proxy({}, {
+    get: (t, key) => {
+      if (key === 'sendConfig') return (id, value) => (varps.set(id, value), sender);
+      if (key === 'sendVarbit') return (id, value) => (varbits.set(id, value), sender);
+      return () => sender;
+    },
+  });
   const player = { getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value), getPacketSender: () => sender };
   village.setStage(player, village.completionValue);
   varps.clear();
+  varbits.clear();
   sendQuestVarps({ player });
-  assert.equal(varps.get(village.varpId), village.completionValue);
-  assert.equal(varps.size, 1, 'quests not started send nothing');
+  if (village.varbitId !== undefined) {
+    assert.equal(varbits.get(village.varbitId), village.completionValue);
+  } else {
+    assert.equal(varps.get(village.varpId), village.completionValue);
+  }
+  // Unstarted quests are sent as 0 too: the login bootstrap clobbers shared varps (QuestRuntime).
+  // Quests with a bitfield stage write their varbit instead, so sibling bits survive.
+  // Earlier tests register the list more than once, so skip every Tree Gnome
+  // Village registration (same stage attribute) rather than just this instance.
+  const others = getRegisteredQuests().filter((quest) => quest.key !== village.key);
+  const sent = (quest) => (quest.varbitId !== undefined ? varbits.get(quest.varbitId) : varps.get(quest.varpId));
+  const offenders = others.filter((quest) => sent(quest) !== 0).map((quest) => `${quest.name}:${quest.varpId}/${quest.varbitId}=${sent(quest)}`);
+  assert.ok(offenders.length === 0, `unstarted quests are reset to 0 (${offenders.slice(0, 5).join(', ')})`);
 });
 
 test("Tree Gnome Village sends King Bolren's orbs (varbit 598): the village's spirit tree has Travel at 2", () => {

@@ -40,11 +40,18 @@ ItemDefinition.forId = (id) => {
 };
 
 function createPlayer() {
-  // Every packet-sender call is a chainable no-op.
-  const sender = new Proxy({}, { get: () => () => sender });
+  // Every packet-sender call is a chainable no-op; sendVarbit also records.
+  const varbits = [];
+  const sender = new Proxy({}, {
+    get: (_target, prop) =>
+      prop === "sendVarbit"
+        ? (id, value) => { varbits.push([id, value]); return sender; }
+        : () => sender,
+  });
   let currentTab = 0;
   const messages = [];
   const player = {
+    varbits,
     messages,
     getUsername: () => "alice",
     sendMessage: (message) => messages.push(message),
@@ -459,4 +466,38 @@ test("as captured: closing the bank by any route ends a bank search; closing any
     assert.deepEqual(close(Bank.MAIN_INTERFACE_ID), [[101, 11]], route);
     assert.deepEqual(close(300), [], route);
   }
+});
+
+const bankTabsSent = (player) => player.varbits.filter(([id]) => id === 4150);
+
+test("moving items does not re-send the viewed tab, so the client's own tab stays", () => {
+  const player = createPlayer();
+  bankOf(player, [TRIDENT], [LAVA_BATTLESTAFF]);
+  // The bank's tab buttons are handled by the client (it sets BANK_CURRENTTAB
+  // itself), so the server's current tab can be stale while the player views
+  // another tab. A refresh must not drag them back to it.
+  Bank.withdraw(player, LAVA_BATTLESTAFF, 0, 1, 1);
+
+  assert.equal(player.getBank(1).getAmount(LAVA_BATTLESTAFF), 0);
+  assert.deepEqual(bankTabsSent(player), []);
+});
+
+test("viewing a tab for the client sends BANK_CURRENTTAB", () => {
+  const player = createPlayer();
+  player.getBank(1).add(new Item(TRIDENT, 1), false);
+
+  clickTab(player, 1, 1, "View tab");
+  assert.equal(player.getCurrentBankTab(), 1);
+  assert.deepEqual(bankTabsSent(player), [[4150, 1]]);
+});
+
+test("collapsing the viewed tab sends the main tab", () => {
+  const player = createPlayer();
+  player.getBank(1).add(new Item(TRIDENT, 1), false);
+  clickTab(player, 1, 1, "View tab");
+  player.varbits.length = 0;
+
+  clickTab(player, 1, 6, "Collapse tab");
+  assert.equal(player.getCurrentBankTab(), 0);
+  assert.deepEqual(bankTabsSent(player), [[4150, 0]]);
 });

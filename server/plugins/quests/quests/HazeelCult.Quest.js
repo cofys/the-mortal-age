@@ -19,8 +19,8 @@
  * entrance/stairs travel are not wired.
  */
 module.exports = function registerHazeelCultQuest(api) {
-  const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest, refreshQuestList } = require("../QuestRuntime");
+  const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, CountdownTask, TaskManager } = api.core;
+  const { registerQuest, refreshQuestList, QUEST_POINTS_ATTRIBUTE } = require("../QuestRuntime");
 
   const CERIL_IDS = new Set([NpcIdentifiers.CERIL_CARNILLEAN]);
   const CLIVET_IDS = new Set([NpcIdentifiers.CLIVET, NpcIdentifiers.CLIVET_2]);
@@ -35,8 +35,10 @@ module.exports = function registerHazeelCultQuest(api) {
     NpcIdentifiers.GUARD_181,
     NpcIdentifiers.GUARD_182,
   ]);
-  const HENRYETA_IDS = new Set([NpcIdentifiers.HENRYETA_CARNILLEAN_2]);
+  // 1202 is the id the world spawn actually uses; 12101 is the post-quest variant.
+  const HENRYETA_IDS = new Set([NpcIdentifiers.HENRYETA_CARNILLEAN, NpcIdentifiers.HENRYETA_CARNILLEAN_2]);
   const CULTIST_IDS = new Set([
+    NpcIdentifiers.HAZEEL_CULTIST,
     NpcIdentifiers.HAZEEL_CULTIST_2,
     NpcIdentifiers.HAZEEL_CULTIST_3,
     NpcIdentifiers.HAZEEL_CULTIST_4,
@@ -53,7 +55,53 @@ module.exports = function registerHazeelCultQuest(api) {
     ObjectIdentifiers.SEWER_VALVE_5,
   ];
   const RAFT_ID = ObjectIdentifiers.RAFT;
+  const CAVE_ENTRANCE_ID = ObjectIdentifiers.CAVE_ENTRANCE_14; // 2852
+  const SEWER_STAIRS_ID = ObjectIdentifiers.STAIRS_14; // 2853
+  const MANSION_BASEMENT_LADDER_ID = ObjectIdentifiers.LADDER_428; // 46717
+  const BASEMENT_LADDER_ID = ObjectIdentifiers.LADDER_427; // 46716
+  const HIDEOUT_CHEST_ID = ObjectIdentifiers.CHEST_178; // 46713
+  const MANSION_STAIRS_UP_ID = ObjectIdentifiers.STAIRCASE_203; // 46704
+  const MANSION_STAIRS_DOWN_ID = ObjectIdentifiers.STAIRCASE_204; // 46705
   const HIDEOUT_TILE = { x: 2606, y: 9692, z: 0 };
+  const HIDEOUT_RAFT_TILE = { x: 2606, y: 9693, z: 0 };
+  const RAFT_RETURN_TILE = { x: 2568, y: 9681, z: 0 };
+  const SEWER_LANDING = { x: 2584, y: 9633, z: 0 };
+  const SEWER_STAIRS_SURFACE = { x: 2570, y: 3283, z: 0 };
+  const MANSION_BASEMENT = { x: 2544, y: 9695, z: 0 };
+  const MANSION_FROM_BASEMENT = { x: 2570, y: 3268, z: 0 };
+
+  // Both staircase objects sit in collision, so neither is reached by a plain
+  // click. The up route walks to the walkable tile south of the ground-floor base
+  // (2568,3271) and climbs to the first-floor landing east of the top (2570,3268),
+  // from which the corridor through door 1540 reaches the cupboard at (2573,3267).
+  // Climbing down mirrors it.
+  const STAIRS_UP_FROM = { x: 2568, y: 3271, z: 0 };
+  const STAIRS_UP_TO = { x: 2570, y: 3268, z: 1 };
+  const STAIRS_DOWN_FROM = { x: 2570, y: 3268, z: 1 };
+  const STAIRS_DOWN_TO = { x: 2568, y: 3271, z: 0 };
+
+  // The world's npc-spawns.json still points the mansion/cave tiles at ids that
+  // the cache now resolves to nameless or wrong NPCs; these correct-id spawns
+  // are owner-only, so they replace those for the questing player.
+  const CERIL_TILE = { x: 2565, y: 3271, z: 0 };
+  const JONES_TILE = { x: 2569, y: 3272, z: 0 };
+  const CLIVET_TILE = { x: 2566, y: 9683, z: 0 };
+  const ALOMONE_TILE = { x: 2609, y: 9670, z: 0 };
+  const MANSION_ZONE = { minX: 2555, maxX: 2585, minY: 3258, maxY: 3285, levels: [0, 1] };
+  const SEWER_ZONE = { minX: 2540, maxX: 2630, minY: 9615, maxY: 9725, levels: [0] };
+  const npcsByPlayer = new Map();
+
+  // The fake "reward" shown when the armour is handed in: same scroll, no point.
+  const PARTIAL_SCROLL_MESSAGE_ID = "o-fWjz";
+  const PARTIAL_SCROLL_REWARD = 5;
+  const COMPLETED_GROUP = 153;
+  const COMPLETED_TITLE_CHILD = 3;
+  const COMPLETED_NAME_CHILD = 4;
+  const COMPLETED_REWARD_ITEM_CHILD = 5;
+  const COMPLETED_POINTS_CHILD = 6;
+  const COMPLETED_FIRST_LINE_CHILD = 8;
+  const COMPLETED_LINE_COUNT = 8;
+  const COMPLETED_CLOSE_CHILD = 16;
 
   const VARP_HAZEEL_CULT = 223;
   const SIDE_CARNILLEAN = 0;
@@ -88,6 +136,8 @@ module.exports = function registerHazeelCultQuest(api) {
   const has = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
   const take = (player, itemId, amount = 1) => player.getInventory().deleteNumber(itemId, amount);
   const give = (player, itemId, amount = 1) => player.getInventory().adds(itemId, amount);
+  const actionOf = (event) =>
+    String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "").toLowerCase();
 
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
@@ -276,15 +326,19 @@ module.exports = function registerHazeelCultQuest(api) {
     }
   }
 
-  function handleAction({ player, npcId, stepId }) {
+  function handleAction({ player, npcId, stepId, kind }) {
     if (quest.isComplete(player)) return;
+    if (stepId === PARTIAL_SCROLL_MESSAGE_ID && kind === "message" && CERIL_IDS.has(npcId)) {
+      showPartialCompletionScroll(player);
+      return;
+    }
     if (stepId === CARNILLEAN_COMPLETE_ACTION && CERIL_IDS.has(npcId)) {
-      quest.complete(player);
+      completeQuest(player);
       return;
     }
     if (stepId === HAZEEL_COMPLETE_ACTION && ALOMONE_IDS.has(npcId)) {
       if (has(player, HAZEEL_SCROLL)) take(player, HAZEEL_SCROLL);
-      quest.complete(player);
+      completeQuest(player);
     }
   }
 
@@ -313,7 +367,7 @@ module.exports = function registerHazeelCultQuest(api) {
       return;
     }
     player.sendMessage("You find poison and a cult amulet, proving Butler Jones's treachery.");
-    quest.complete(player);
+    completeQuest(player);
     event.handled = true;
   }
 
@@ -326,6 +380,90 @@ module.exports = function registerHazeelCultQuest(api) {
     if (side(player) !== SIDE_CARNILLEAN || stage < STAGE_CHOSEN_SIDE || stage >= STAGE_FINISHED_SIDE_TASK) return;
     quest.setStage(player, STAGE_FINISHED_SIDE_TASK);
     player.sendMessage("Alomone falls. The Carnillean armour is now unguarded.");
+  }
+
+  /**
+   * When Alomone's last line lands he turns into the attackable variant. There is
+   * no transcript action to hang this off, so watch the line itself.
+   */
+  function handleAlomoneLine(request) {
+    const { npc, npcId, text } = request;
+    if (npcId !== NpcIdentifiers.ALOMONE || !npc?.setNpcTransformationId) return;
+    if (!String(text ?? "").toLowerCase().includes("live long enough")) return;
+    npc.setNpcTransformationId(NpcIdentifiers.ALOMONE_2);
+  }
+
+  /** Cave entrance, sewer stairs and the mansion basement ladder travel. */
+  function handleTravel(event) {
+    const option = actionOf(event);
+    const { player } = event;
+    if (event.objectId === CAVE_ENTRANCE_ID && option.includes("enter")) {
+      player.moveTo(new Location(SEWER_LANDING.x, SEWER_LANDING.y, SEWER_LANDING.z));
+      player.sendMessage("You climb down into the Ardougne sewers.");
+    } else if (event.objectId === SEWER_STAIRS_ID && option.includes("climb-up")) {
+      player.moveTo(new Location(SEWER_STAIRS_SURFACE.x, SEWER_STAIRS_SURFACE.y, SEWER_STAIRS_SURFACE.z));
+      player.sendMessage("You climb up the stairs to the surface.");
+    } else if (event.objectId === MANSION_BASEMENT_LADDER_ID && option.includes("climb-down")) {
+      player.moveTo(new Location(MANSION_BASEMENT.x, MANSION_BASEMENT.y, MANSION_BASEMENT.z));
+      player.sendMessage("You climb down into the mansion basement.");
+    } else if (event.objectId === BASEMENT_LADDER_ID && option.includes("climb-up")) {
+      player.moveTo(new Location(MANSION_FROM_BASEMENT.x, MANSION_FROM_BASEMENT.y, MANSION_FROM_BASEMENT.z));
+      player.sendMessage("You climb up into the mansion.");
+    } else if (event.objectId === MANSION_STAIRS_UP_ID && option.includes("climb-up")) {
+      player.moveTo(new Location(STAIRS_UP_TO.x, STAIRS_UP_TO.y, STAIRS_UP_TO.z));
+      player.sendMessage("You climb the stairs to the first floor.");
+    } else if (event.objectId === MANSION_STAIRS_DOWN_ID && option.includes("climb-down")) {
+      player.moveTo(new Location(STAIRS_DOWN_TO.x, STAIRS_DOWN_TO.y, STAIRS_DOWN_TO.z));
+      player.sendMessage("You climb down the stairs.");
+    } else {
+      return;
+    }
+    event.handled = true;
+  }
+
+  /**
+   * The staircase tiles are blocked from every side (accessMask 27/30), so a plain
+   * object click cannot route to them. Route to a walkable neighbour first; the
+   * interaction then fires there and the ladders:climb claim below moves the player.
+   */
+  function routeMansionStairs(event) {
+    const location = event.player.getLocation();
+    if (event.objectId === MANSION_STAIRS_UP_ID && location.getZ() === 0) {
+      event.destination = { ...STAIRS_UP_FROM };
+    } else if (event.objectId === MANSION_STAIRS_DOWN_ID && location.getZ() === 1) {
+      event.destination = { ...STAIRS_DOWN_FROM };
+    }
+  }
+
+  /** Claims the mansion staircase click before Ladders' generic fallback guesses a landing. */
+  function claimMansionStairs(request) {
+    const location = request.player.getLocation();
+    if (request.objectId === MANSION_STAIRS_UP_ID && location.getZ() === 0) {
+      request.player.moveTo(new Location(STAIRS_UP_TO.x, STAIRS_UP_TO.y, STAIRS_UP_TO.z));
+      request.handled = true;
+    } else if (request.objectId === MANSION_STAIRS_DOWN_ID && location.getZ() === 1) {
+      request.player.moveTo(new Location(STAIRS_DOWN_TO.x, STAIRS_DOWN_TO.y, STAIRS_DOWN_TO.z));
+      request.handled = true;
+    }
+  }
+
+  /** Looting the hideout chest after Alomone's death recovers the family armour. */
+  function handleHideoutChest(event) {
+    if (event.objectId !== HIDEOUT_CHEST_ID) return;
+    const option = actionOf(event);
+    if (!option.includes("search") && !option.includes("open")) return;
+    event.handled = true;
+    const { player } = event;
+    if (
+      side(player) !== SIDE_CARNILLEAN ||
+      quest.getStage(player) < STAGE_FINISHED_SIDE_TASK ||
+      has(player, ARMOUR)
+    ) {
+      player.sendMessage("You search the chest but find nothing.");
+      return;
+    }
+    give(player, ARMOUR);
+    player.sendMessage("Inside the chest you find the Carnillean family armour.");
   }
 
   function handleValve(event) {
@@ -354,13 +492,113 @@ module.exports = function registerHazeelCultQuest(api) {
       event.handled = true;
       return;
     }
-    player.moveTo(new Location(HIDEOUT_TILE.x, HIDEOUT_TILE.y, HIDEOUT_TILE.z));
+    const location = player.getLocation();
+    const atHideout =
+      Math.max(
+        Math.abs(location.getX() - HIDEOUT_RAFT_TILE.x),
+        Math.abs(location.getY() - HIDEOUT_RAFT_TILE.y)
+      ) <= 2;
+    const destination = atHideout ? RAFT_RETURN_TILE : HIDEOUT_TILE;
+    player.moveTo(new Location(destination.x, destination.y, destination.z));
     player.sendMessage("The raft carries you past the islands to the end of the sewer passage.");
     event.handled = true;
   }
 
+  /**
+   * Spawns one owner-only NPC per key for the player, if that key is not already tracked.
+   * The world's own stale-id spawns stay put; these are what the player interacts with.
+   */
+  function spawnTracked(player, key, id, tile) {
+    const entry = npcsByPlayer.get(player) ?? {};
+    if (!entry[key]) {
+      const npc = api.spawnNpc({ ...tile, id, owner: player, ownerOnly: true, wanderRadius: 0 });
+      if (npc) entry[key] = npc;
+    }
+    npcsByPlayer.set(player, entry);
+  }
+
+  /** Correct-id quest NPCs for this player. Alomone is gone once killed/completed. */
+  function ensureQuestNpcs(player) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    spawnTracked(player, "ceril", NpcIdentifiers.CERIL_CARNILLEAN, CERIL_TILE);
+    spawnTracked(player, "clivet", NpcIdentifiers.CLIVET, CLIVET_TILE);
+    if (quest.isComplete(player)) return;
+    spawnTracked(player, "jones", NpcIdentifiers.BUTLER_JONES, JONES_TILE);
+    const alomoneDead =
+      side(player) === SIDE_CARNILLEAN && quest.getStage(player) >= STAGE_FINISHED_SIDE_TASK;
+    if (!alomoneDead) spawnTracked(player, "alomone", NpcIdentifiers.ALOMONE, ALOMONE_TILE);
+  }
+
+  function clearNpcs(player) {
+    const entry = npcsByPlayer.get(player);
+    if (!entry) return;
+    for (const npc of Object.values(entry)) api.removeNpc(npc);
+    npcsByPlayer.delete(player);
+  }
+
+  /** Completion drops the quest-state spawns (Jones, Alomone); Ceril and Clivet persist. */
+  function completeQuest(player) {
+    if (!quest.complete(player)) return;
+    clearNpcs(player);
+    ensureQuestNpcs(player);
+  }
+
+  /** Fills the wiki transcript's "[player name]" blank in Ceril's start. */
+  function fillPlayerName(request) {
+    if (!request?.player || typeof request.text !== "string") return;
+    if (!CERIL_IDS.has(request.npcId)) return;
+    if (!request.text.includes("[player name]")) return;
+    request.text = request.text.replace(/\[player name\]/gi, request.player.getUsername());
+  }
+
+  /** The armour hand-in's fake reward scroll (5 coins, no quest point), per the wiki. */
+  function openPartialCompletionScroll(player) {
+    const packet = player.getPacketSender();
+    const updater = player.getFrameUpdater?.();
+    const setText = (uid, text) => {
+      updater?.clear?.(uid);
+      packet.sendString(String(text ?? ""), uid);
+    };
+    packet.sendInterfaceRemoval();
+    packet.sendInterface(COMPLETED_GROUP);
+    packet.sendInterfaceFlagsRange((COMPLETED_GROUP << 16) | COMPLETED_CLOSE_CHILD, -1, -1, 1 << 1);
+    setText((COMPLETED_GROUP << 16) | COMPLETED_TITLE_CHILD, "Congratulations!");
+    setText((COMPLETED_GROUP << 16) | COMPLETED_NAME_CHILD, "You have... kind of... completed Hazeel Cult!");
+    packet.sendItemOnInterfaces((COMPLETED_GROUP << 16) | COMPLETED_REWARD_ITEM_CHILD, COINS, PARTIAL_SCROLL_REWARD);
+    const points = Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0;
+    setText((COMPLETED_GROUP << 16) | COMPLETED_POINTS_CHILD, `Total Quest Points: ${points}`);
+    const lines = ["You are awarded:", `${PARTIAL_SCROLL_REWARD} Coins`];
+    for (let i = 0; i < COMPLETED_LINE_COUNT; i++) {
+      setText((COMPLETED_GROUP << 16) | (COMPLETED_FIRST_LINE_CHILD + i), lines[i] ?? "");
+    }
+  }
+
+  /** The hand-in dialogue closes right after its last message, so open the scroll a tick later. */
+  function showPartialCompletionScroll(player) {
+    if (player.isRegistered?.() === false) return;
+    TaskManager.submit(
+      new CountdownTask(player, 1, () => {
+        if (player.isRegistered?.() === false) return;
+        if (player.getDialogueManager?.()?.isActive?.() === true) {
+          showPartialCompletionScroll(player);
+          return;
+        }
+        openPartialCompletionScroll(player);
+      })
+    );
+  }
+
   function handleLogin({ player }) {
+    ensureQuestNpcs(player);
     refreshQuestList(player);
+  }
+
+  function handleZoneEnter({ player }) {
+    ensureQuestNpcs(player);
+  }
+
+  function handleLogout({ player }) {
+    if (player) clearNpcs(player);
   }
 
   quest = registerQuest(api, {
@@ -386,10 +624,20 @@ module.exports = function registerHazeelCultQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:line", handleAlomoneLine);
+  api.onCustomEvent("npc-dialogue:line", fillPlayerName);
+  api.onCustomEvent("ladders:climb", claimMansionStairs);
   api.onItemOnObject(handlePoisonRange, { noted: false });
+  api.onObjectRoute(routeMansionStairs);
   api.onObjectInteraction(handleEvidenceCupboard);
   api.onObjectInteraction(handleValve);
   api.onObjectInteraction(handleRaft);
+  api.onObjectInteraction(handleTravel);
+  api.onObjectInteraction(handleHideoutChest);
   api.onNpcDeath(handleNpcDeath);
+  api.onZoneEnter(MANSION_ZONE, handleZoneEnter);
+  api.onZoneEnter(SEWER_ZONE, handleZoneEnter);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
+  api.onPlayerDisconnect(handleLogout);
 };

@@ -1,14 +1,23 @@
 /**
  * Ladders, stairs, caves and holes tsps had no working handler for, and trapdoors that open and
  * close, played as live OSRS does (docs/loc-teleports.md):
- * - data/definitions/loc-teleports.json: where a loc placement takes the player
+ * - plugins/world/data/loc-teleports.json: where a loc placement takes the player
  *   (scripts/sync-loc-teleports.cjs writes it from the rsprox capture database);
- * - data/definitions/loc-swaps.json: trapdoors whose Open/Close swaps the loc for its other state.
+ * - plugins/world/data/loc-swaps.json: trapdoors whose Open/Close swaps the loc for its other state.
  *
  * - A loc nobody else handles: the generic object hook takes the click when the clicked tile
  *   and option have an entry, or the loc and option have a swap.
  * - A ladder or staircase: Ladders asks other plugins first (ladders:climb), and an entry
  *   answers before Ladders guesses from the map.
+ *
+ * Gates (an entry's `requires`, decided in plugins/world/data/loc-teleport-sync.json) are checked in
+ * order first: a total level, worn items (any one set), or an item used on the loc once before (a
+ * rope tied to the Elid crevice). The first one the player lacks plays its captured refusal: a
+ * game message, a message box, or an NPC's line.
+ *
+ * A loc whose option asks first (`ask`: "Climb out of the window?") shows the game's question and
+ * options; the options that lead on move the player, and a ladder direction the captures never
+ * saw goes to Ladders (ladders:climbUp / ladders:climbDown), which finds it on the map.
  *
  * Each plays its captured animation, sound and fade, and moves the player (or swaps the loc) on
  * the captured tick. Ticks in the data count from the player arriving at the loc; the click is
@@ -26,10 +35,13 @@ const OVERLAY_ATMOSPHERE_UID = (161 << 16) | 1;
 const FADE_OVERLAY = 174;
 const FADE_SCRIPT = 948;
 const FADE_CYCLES = 50;
+/** Locs a player has used an item on to pass (a rope tied to a crevice), by gameval name. */
+const TIED_ATTRIBUTE = "loc-teleports:tied";
 /** The handler runs one tick after the arrival the captured ticks count from. */
 const HANDLER_TICK = 1;
 
 let core = null;
+let pluginApi = null;
 /** "x,y,z:op" -> loc teleport entry. */
 let entries = new Map();
 /** "id:op" -> trapdoor swap. */
@@ -40,7 +52,7 @@ const keyOf = (x, y, z, op) => `${x},${y},${z}:${op}`;
 const fromClick = (tick) => Math.max(0, tick - HANDLER_TICK);
 
 function readDefinitions(name) {
-  return JSON.parse(fs.readFileSync(path.join(core.GameConstants.DEFINITIONS_DIRECTORY, name), "utf8"));
+  return JSON.parse(fs.readFileSync(path.join(__dirname, "data", name), "utf8"));
 }
 
 function loadEntries() {
@@ -133,13 +145,15 @@ function animateAndSound(player, { anim, sound }) {
  * off a tick later, the move, then the fade back in a tick after it and the overlay closed two
  * ticks later.
  */
-function travel(player, entry, destination) {
+function travel(player, entry, destination, answer = null) {
   const { steps, at } = schedule();
-  const animTick = fromClick(entry.animTick ?? entry.tick);
-  const moveTick = Math.max(animTick + 1, fromClick(entry.tick));
+  // After a question, the captured ticks count from the answer, which is handled on its own tick.
+  const animTick = answer ? answer.animTick : fromClick(entry.animTick ?? entry.tick);
+  const moveTick = answer ? Math.max(animTick + 1, answer.tick) : Math.max(animTick + 1, fromClick(entry.tick));
   at(animTick, () => {
     animateAndSound(player, entry);
     if (entry.fade) fade(player, true);
+    if (entry.mesbox) player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.StatementDialogue(0, entry.mesbox)));
   });
   if (entry.fade) at(animTick + 1, () => player.getPacketSender().sendVarbit(MINIMAP_STATE_VARBIT, MINIMAP_OFF));
   at(moveTick, () => player.moveTo(new core.Location(destination[0], destination[1], destination[2])));
@@ -174,12 +188,66 @@ function swapLoc(player, object, swap) {
   runSteps(player, steps, swapTick);
 }
 
+function tied(player) {
+  const value = player.getAttribute(TIED_ATTRIBUTE);
+  return Array.isArray(value) ? value : [];
+}
+
+function meets(player, entry, requirement) {
+  if (requirement.totalLevel !== undefined) return player.getSkillManager().getTotalLevel() >= requirement.totalLevel;
+  if (requirement.wornAny) return requirement.wornAny.some((set) => set.every((id) => player.getEquipment().contains(id)));
+  if (requirement.tied !== undefined) return tied(player).includes(entry.name);
+  return true;
+}
+
+/** The captured refusal: a game message, a message box, or an NPC's line. */
+function refuse(player, { message, mesbox, npc, say }) {
+  if (message) player.sendMessage(message);
+  if (mesbox) player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.StatementDialogue(0, mesbox)));
+  if (say) player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.NpcDialogue(0, npc, say)));
+}
+
+/** The game's question; each option leads on, hands the climb to Ladders, or just closes. */
+function ask(player, object, entry, destination) {
+  const start = player.getLocation().clone();
+  const location = object.getLocation();
+  const choose = (option) => () => {
+    if (!player.getLocation().equals(start)) return;
+    if (option.go) {
+      travel(player, entry, destination, entry.ask.answer ?? { animTick: 0, tick: 1 });
+      return;
+    }
+    if (option.ladder) {
+      pluginApi.emitCustomEvent(option.ladder === "up" ? "ladders:climbUp" : "ladders:climbDown", {
+        player, object, objectId: object.getId(),
+        location: { x: location.getX(), y: location.getY(), z: location.getZ() },
+        sourceLocation: { x: start.getX(), y: start.getY(), z: start.getZ() },
+      });
+    }
+  };
+  pluginApi.sendMultiChatboxPrompt(player, entry.ask.prompt, ...entry.ask.options.flatMap((option) => [option.text, choose(option)]));
+}
+
+/** The first gate the player doesn't pass, or null. */
+function failedGate(player, entry) {
+  return (entry.requires ?? []).find((requirement) => !meets(player, entry, requirement)) ?? null;
+}
+
 /** Plays the entry or swap for this click, if there is one; true when it did. */
 function play(player, object, clickType) {
   const entry = entryFor(object, clickType);
   if (entry) {
     const destination = destinationFor(entry, player.getLocation());
     if (!destination) return false;
+    const gate = failedGate(player, entry);
+    if (gate) {
+      refuse(player, gate.refuse);
+      return true;
+    }
+    if (entry.ask) {
+      ask(player, object, entry, destination);
+      return true;
+    }
     travel(player, entry, destination);
     return true;
   }
@@ -187,6 +255,21 @@ function play(player, object, clickType) {
   if (!swap) return false;
   swapLoc(player, object, swap);
   return true;
+}
+
+/** An item used on a gated loc that wants it (a rope on the Elid crevice): tied once, then down. */
+function useItemOnLoc(event) {
+  if (event.handled) return;
+  const location = event.object?.getLocation?.();
+  if (!location) return;
+  const entry = [...entries.values()].find((candidate) => candidate.x === location.getX() && candidate.y === location.getY()
+    && candidate.z === location.getZ() && candidate.id === event.object.getId()
+    && (candidate.requires ?? []).some((requirement) => requirement.tied === event.itemId));
+  if (!entry) return;
+  const { player } = event;
+  if (!tied(player).includes(entry.name)) player.setAttribute(TIED_ATTRIBUTE, [...tied(player), entry.name]);
+  event.handled = true;
+  play(player, event.object, entry.op);
 }
 
 function useLoc(event) {
@@ -202,12 +285,15 @@ function claimLadder(request) {
 
 module.exports = {
   name: "LocTeleports",
-  _test: { entryFor, destinationFor, play, get entries() { return entries; }, get swaps() { return swaps; } },
+  _test: { entryFor, destinationFor, play, useItemOnLoc, get entries() { return entries; }, get swaps() { return swaps; } },
   register(api) {
     core = api.core;
+    pluginApi = api;
     entries = loadEntries();
     swaps = loadSwaps();
+    api.persistAttribute(TIED_ATTRIBUTE);
     api.onObjectInteraction(useLoc);
+    api.onItemOnObject(useItemOnLoc);
     api.onCustomEvent("ladders:climb", claimLadder);
   },
 };

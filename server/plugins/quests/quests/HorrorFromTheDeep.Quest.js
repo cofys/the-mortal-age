@@ -13,13 +13,18 @@
  * halves, key, door, tar/glass/light, wall offerings) lives in the persisted
  * "quest.horror_from_the_deep.flags" bitmask.
  *
+ * Travel is explicit: the ground-floor iron ladder drops into the basement (the
+ * strange-wall room at 2513-2516,10003), the basement's foyer ladders (4485/4413)
+ * drop into the dagannoth dungeon at 2515,4632 where Jossik (4424) sits, and each
+ * ladder climbs back the way it came. The upstairs Jossik (4423) only speaks the
+ * post-quest transcript; the basement fight is Jossik 4424 in the dungeon.
+ *
  * Source: LostCityRS/Content quest_horror (pinned in issue #196).
  * Gaps: the dagannoth mother colour phases and their change messages are not
- * reproduced (one attackable form, 988, is spawned); stair/ladder travel between
- * the lighthouse floors and the cave, the basalt-rock and broken-bridge jumps, the
- * lighthouse shop, the god-book reward choice/reclaim and the post-quest bookcase
- * are not simulated; sword/arrow wall offerings are matched by item name rather
- * than the cache weapon category.
+ * reproduced (one attackable form, 988, is spawned); the basalt-rock and
+ * broken-bridge jumps, the lighthouse shop, the god-book reward choice/reclaim
+ * and the post-quest bookcase are not simulated; sword/arrow wall offerings are
+ * matched by item name rather than the cache weapon category.
  */
 module.exports = function registerHorrorFromTheDeepQuest(api) {
   const {
@@ -33,7 +38,7 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
   const { registerQuest, refreshQuestList } = require("../QuestRuntime");
 
   const LARRISSA_NPC_IDS = new Set([NpcIdentifiers.LARRISSA, NpcIdentifiers.LARRISSA_2]);
-  const JOSSIK_NPC_IDS = new Set([NpcIdentifiers.JOSSIK, NpcIdentifiers.JOSSIK_2]);
+  const JOSSIK_DUNGEON_ID = NpcIdentifiers.JOSSIK_2; // 4424, seated in the cave during the quest
   const GUNNJORN_NPC_ID = NpcIdentifiers.GUNNJORN;
   const DAGANNOTH_JR_ID = NpcIdentifiers.DAGANNOTH_11; // 979, walkable level-100 Dagannoth
   const DAGANNOTH_MOTHER_ID = NpcIdentifiers.DAGANNOTH_MOTHER_9; // 988, attackable mother
@@ -61,6 +66,25 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
     ObjectIdentifiers.IRON_LADDER_3,
     ObjectIdentifiers.IRON_LADDER_4,
   ]);
+  /** 4485, the foyer/dungeon ladder half that has no cache identifier. */
+  const CAVE_LADDER_ID = 4485;
+  const GROUND_LADDER_IDS = new Set([
+    ObjectIdentifiers.IRON_LADDER, // 4380, lighthouse ground floor
+    ObjectIdentifiers.IRON_LADDER_2, // 4383
+  ]);
+  const BASEMENT_LADDER_ID = ObjectIdentifiers.IRON_LADDER_3; // 4412
+  const FOYER_LADDER_IDS = new Set([
+    CAVE_LADDER_ID,
+    ObjectIdentifiers.IRON_LADDER_4, // 4413
+  ]);
+
+  // The cache carries the lighthouse twice; all four landings are the quest map's.
+  const BASEMENT_LANDING = new Location(2519, 9995, 0);
+  const LIGHTHOUSE_LANDING = new Location(2508, 3645, 0);
+  const FOYER_LANDING = new Location(2515, 10005, 0);
+  const DUNGEON_LANDING = new Location(2515, 4632, 0);
+
+  const BRIDGE_NAILS = 30;
 
   const VARP_HORROR_FROM_THE_DEEP = 351; // "deephorror"
   const STAGE_STARTED = 1;
@@ -268,9 +292,70 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
 
   function selectVariant({ npcId, player }) {
     if (LARRISSA_NPC_IDS.has(npcId)) return larrissaVariant(player);
-    if (JOSSIK_NPC_IDS.has(npcId)) return jossikVariant(player);
+    // Only the dungeon Jossik (4424) runs the basement scenes; the one upstairs
+    // (4423) is the post-quest shop keeper and keeps the default Jossik page.
+    if (npcId === JOSSIK_DUNGEON_ID) return jossikVariant(player);
     if (npcId === GUNNJORN_NPC_ID) return gunnjornVariant(player);
     return null;
+  }
+
+  /**
+   * Gunnjorn's key transcript carries two prose branches (full inventory /
+   * open inventory) as plain action steps, so the first would always play and
+   * end the chat. Play the variant ourselves and drop the branch that does not
+   * apply, leaving the "Sure. Here you go." hand-out reachable.
+   */
+  function talkToGunnjorn(event) {
+    const { player } = event;
+    const variant = gunnjornVariant(player);
+    if (!variant) return false;
+    const roomy = freeSlots(player) >= 1;
+    api.emitCustomEvent("npc-dialogue:start", {
+      player,
+      npcId: GUNNJORN_NPC_ID,
+      variant,
+      select: (steps) => steps.filter((step) =>
+        roomy ? step.id !== "RSeXNc" && step.id !== "zQMARq" : step.id !== "Wh6Z8x" && step.id !== "fpqzrz"),
+    });
+    return true;
+  }
+
+  /** Where a lighthouse ladder leads, or null when the object is not one. */
+  function ladderMove(object) {
+    if (!object) return null;
+    const { x, y } = object.getLocation();
+    if (GROUND_LADDER_IDS.has(object.getId()) && x >= 2500 && x <= 2520 && y >= 3635 && y <= 3655) {
+      return { destination: BASEMENT_LANDING, up: false };
+    }
+    if (object.getId() === BASEMENT_LADDER_ID) {
+      // The main basement (y~9994) goes back up to the lighthouse; the dungeon's
+      // copy of that room (y~4618) leads out to the basement foyer.
+      return y > 9000
+        ? { destination: LIGHTHOUSE_LANDING, up: true }
+        : { destination: FOYER_LANDING, up: true };
+    }
+    if (FOYER_LADDER_IDS.has(object.getId())) {
+      return y > 9000
+        ? { destination: DUNGEON_LANDING, up: false }
+        : { destination: FOYER_LANDING, up: true };
+    }
+    return null;
+  }
+
+  /** Claims the lighthouse ladders from the generic ladder handler. */
+  function handleLadderClaim(request) {
+    const { player } = request;
+    const move = ladderMove(request.object);
+    if (!move) return;
+    request.handled = true;
+    if (quest.getStage(player) < STAGE_REPAIRED_LIGHTHOUSE) {
+      player.sendMessage("You must fix the lighthouse before any ships crash!");
+      return;
+    }
+    api.emitCustomEvent(move.up ? "ladders:climbUp" : "ladders:climbDown", {
+      player,
+      destination: move.destination,
+    });
   }
 
   /** Answer the bookcase prose conditions; everything else belongs to another plugin. */
@@ -291,7 +376,9 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
   }
 
   function spawnAtPlayer(player, npcId) {
-    if (bossesByPlayer.has(player)) return;
+    // A stale spawn (logged out mid-fight, interrupted conversation) must not
+    // leave two dagannoths in the room; replace everything tracked for them.
+    clearBoss(player);
     const location = player.getLocation();
     const npc = api.spawnNpc({
       id: npcId,
@@ -306,9 +393,17 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
   }
 
   function clearBoss(player) {
-    const npc = bossesByPlayer.get(player);
-    if (npc) api.removeNpc(npc);
+    // Tracked spawn plus any of ours the map lost (a relog mid-fight leaves the
+    // NPC behind): never let two dagannoths share the room.
+    const tracked = bossesByPlayer.get(player);
+    if (tracked) api.removeNpc(tracked);
     bossesByPlayer.delete(player);
+    for (const npc of api.core.World.getNpcs()) {
+      const npcId = npc?.getId?.();
+      if ((npcId === DAGANNOTH_JR_ID || npcId === DAGANNOTH_MOTHER_ID) && npc.getOwner?.() === player) {
+        api.removeNpc(npc);
+      }
+    }
   }
 
   /** Gunnjorn's key hand-out, the dagannoth spawns and the terminal completion action. */
@@ -322,13 +417,13 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
       }
       return;
     }
-    if (JOSSIK_NPC_IDS.has(npcId) && stepId === SPAWN_DAGANNOTH_ACTION_ID) {
+    if (npcId === JOSSIK_DUNGEON_ID && stepId === SPAWN_DAGANNOTH_ACTION_ID) {
       if (quest.getStage(player) < STAGE_REPAIRED_LIGHTHOUSE) return;
       if (quest.getStage(player) >= STAGE_DEFEATED_DAGANNOTH) return;
       spawnAtPlayer(player, DAGANNOTH_JR_ID);
       return;
     }
-    if (JOSSIK_NPC_IDS.has(npcId) && stepId === SPAWN_MOTHER_ACTION_ID) {
+    if (npcId === JOSSIK_DUNGEON_ID && stepId === SPAWN_MOTHER_ACTION_ID) {
       if (quest.getStage(player) < STAGE_DEFEATED_DAGANNOTH || quest.isComplete(player)) return;
       spawnAtPlayer(player, DAGANNOTH_MOTHER_ID);
       return;
@@ -445,8 +540,8 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
       player.sendMessage("You have already fixed this half of the bridge.");
       return;
     }
-    if (!hasItem(player, STEEL_NAILS, 4)) {
-      player.sendMessage("You need 4 steel nails to attach the plank with.");
+    if (!hasItem(player, STEEL_NAILS, BRIDGE_NAILS)) {
+      player.sendMessage(`You need ${BRIDGE_NAILS} steel nails to attach the plank with.`);
       return;
     }
     if (!hasItem(player, HAMMER)) {
@@ -454,7 +549,7 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
       return;
     }
     player.getInventory().deleteNumber(PLANK, 1);
-    player.getInventory().deleteNumber(STEEL_NAILS, 4);
+    player.getInventory().deleteNumber(STEEL_NAILS, BRIDGE_NAILS);
     setFlag(player, side, true);
     const other = side === FLAG_BRIDGE_LEFT ? FLAG_BRIDGE_RIGHT : FLAG_BRIDGE_LEFT;
     player.sendMessage(
@@ -567,6 +662,10 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
     if (player) clearBoss(player);
   }
 
+  function handlePlayerDeath({ player }) {
+    if (player) clearBoss(player);
+  }
+
   function handleLogin({ player }) {
     refreshQuestList(player);
   }
@@ -594,11 +693,14 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onNpcInteraction("Gunnjorn", { "Talk-to": talkToGunnjorn });
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("ladders:climb", handleLadderClaim);
   api.onNpcDeath(handleNpcDeath);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onPlayerLogout(handleLogout);
+  api.onPlayerDeath(handlePlayerDeath);
   api.onPlayerLogin(handleLogin);
 };

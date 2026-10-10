@@ -1,6 +1,6 @@
 /**
  * Gnome gliders (https://oldschool.runescape.wiki/w/Gnome_glider), from
- * data/definitions/gnome-gliders.json.
+ * plugins/world/data/gnome-gliders.json.
  *
  * The cache's glider map (interface 138) draws the flight itself from pilot_journey (varp 153,
  * from << 14 | to), and the pilots are multi-NPCs whose "Glider-to <last destination>" option
@@ -42,7 +42,7 @@ const ORIGIN_ATTRIBUTE = "gnome-gliders:origin";
 const FLYING_ATTRIBUTE = "gnome-gliders:flying";
 
 const DATA = JSON.parse(
-  fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "gnome-gliders.json"), "utf8"),
+  fs.readFileSync(path.join(__dirname, "data", "gnome-gliders.json"), "utf8"),
 );
 const DESTINATIONS = DATA.destinations.map((entry) => ({
   ...entry,

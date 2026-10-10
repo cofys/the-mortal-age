@@ -18,6 +18,9 @@ const CLIMBABLE_NAMES = [
   "Vine ladder", "Ship's ladder", "Bamboo Ladder", "Metal ladder", "Iron ladder", "Rope ladder", "Stone ladder",
   "Stone Ladder", "Copper Ladder", "Tower ladder", "Boney ladder", "Kings' ladder", "Troll ladder", "Ladder top",
   "Rope", "Climbing rope", "Escape rope", "Anchor rope", "Rope anchor",
+  // Witchaven's mine: "Old ruin entrance" (Climb-down) on the surface, "Exit"
+  // (Climb-up) underground; ClimbLinks pairs them through the 6400-tile offset.
+  "Old ruin entrance", "Exit",
   "Stairs up", "Stairs down", "Wooden Stair", "Stone Staircase", "Crystal Staircase", "Crypt staircase",
   "Broken stairs", "Cellar stairs", "Stairwell",
 ];

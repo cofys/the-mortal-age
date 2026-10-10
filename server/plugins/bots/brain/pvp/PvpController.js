@@ -409,6 +409,7 @@ class PvpController {
     queueRouteAndFlagAppearance(player, returnTile.x, returnTile.y, {
       state,
       reason: "pvp_non_wild_strip_return",
+      basicPather: true,
     });
     this.setPhase(state, PVP_PHASE.SEEKING);
     return true;
@@ -1333,7 +1334,7 @@ class PvpController {
       });
       if (occupied) continue;
       return queueRouteAndFlagAppearance(player, x, y, {
-        state, nowMs, reason: "pvp_idle_wander",
+        state, nowMs, reason: "pvp_idle_wander", basicPather: true,
       });
     }
     return false;

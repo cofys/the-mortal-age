@@ -31,6 +31,11 @@ against live OSRS, never against another private server.
     value. Edit the canonical data (`data/definitions/items.json`, `shops.json`) instead.
 14. **Attribute keys** are kebab-case and namespaced (`warriors-guild:basement-unlocked`),
     declared once in a `*_ATTRIBUTE` constant.
+15. **Plugin data lives with the plugin.** Data that only drives one plugin's own behaviour
+    goes in a `data/` directory in its plugin directory (`plugins/world/data/`,
+    `plugins/skills/sailing/data/`), loaded relative to the plugin file. World data stays in
+    `data/definitions/`: world/shops/items/music, and everything about NPCs - definitions,
+    animations, drops, dialogues, spawns, dormants - plus the bot population config.
 
 ## A plugin that follows them
 

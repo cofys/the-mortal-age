@@ -444,7 +444,7 @@ function tableForNpc(npcId) {
   return tables[0];
 }
 
-function dropFor(player, npc, npcId, location) {
+function dropFor(player, npc, npcId, location, damagers = []) {
   const table = tableForNpc(npcId);
   if (!table || !itemOnGroundManager) {
     return 0;
@@ -452,7 +452,8 @@ function dropFor(player, npc, npcId, location) {
 
   const drops = rollTable(table, player, npc);
   // Drops that depend on the killer's progress (Warriors' Guild defenders) are edited in place.
-  pluginApi?.emitCustomEvent("npc-drops:roll", { player, npc, npcId, drops });
+  // `damagers`: every player who damaged the npc (an Ironman gets nothing when others helped).
+  pluginApi?.emitCustomEvent("npc-drops:roll", { player, npc, npcId, drops, damagers });
   const event = { player, npc, npcId, drops, handled: false };
   pluginApi.emitCustomEvent("npc-drops:generated", event);
   if (event.handled) return drops.length;
@@ -512,7 +513,7 @@ module.exports = {
       request.drops.push(...rollTable(request.table, request.player, null));
     });
 
-    api.onNpcDeath(({ killer, npc, npcId }) => {
+    api.onNpcDeath(({ killer, npc, npcId, damagers }) => {
       if (!killer || !npc) {
         return;
       }
@@ -522,7 +523,7 @@ module.exports = {
       }
       try {
         ensureDrops();
-        dropFor(killer, npc, id, npc.getLocation());
+        dropFor(killer, npc, id, npc.getLocation(), damagers ?? []);
       } catch (error) {
         console.error("[NpcDrops] failed to roll drops for npc", id, error);
       }

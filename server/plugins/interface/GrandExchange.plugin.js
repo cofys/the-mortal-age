@@ -358,6 +358,13 @@ function collectAll(player, action) {
 }
 
 function openGrandExchange({ player }) {
+  // "grand-exchange:can-open": other content may keep a player out (an Ironman).
+  const request = { player, allow: true, message: null };
+  pluginApi.emitCustomEvent("grand-exchange:can-open", request);
+  if (!request.allow) {
+    if (request.message) player.sendMessage(request.message);
+    return true;
+  }
   if ([GE, GE_COLLECT].includes(player.getInterfaceId())) player.getPacketSender().sendInterfaceRemoval();
   if (player.busy()) {
     player.sendMessage("Finish what you are doing before opening the Grand Exchange.");

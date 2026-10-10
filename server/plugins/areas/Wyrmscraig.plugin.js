@@ -1,6 +1,6 @@
 /**
  * Wyrmscraig (https://oldschool.runescape.wiki/w/Wyrmscraig), from
- * data/definitions/wyrmscraig.json, as captured: Fallen From Grace's finished state for every
+ * plugins/areas/data/wyrmscraig.json, as captured: Fallen From Grace's finished state for every
  * player (open access) and the cave under Ardeaglais. Each lives in ./wyrmscraig/. The
  * shortcuts are Agility's (shortcuts/Wyrmscraig.js); the Mad Angel is the MadAngel plugin
  * (plugins/bosses). See docs/wyrmscraig.md.

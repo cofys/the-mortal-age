@@ -9,32 +9,54 @@
  * Stages (varp 32): 1 started, 2 Oddenstein told you about the machine parts,
  * 3 complete.
  *
- * Supporting state kept in attributes (the reference's varps 33/34):
+ * Supporting state kept in attributes (the reference's varps 33/668):
  *   ernest-the-chicken.fountain  1 = piranhas poisoned
  *   ernest-the-chicken.levers    the 6-bit basement lever/pulley puzzle
+ *
+ * The basement puzzle is the cache's own multi-loc set, not new map content:
+ * levers 146-151 resolve through varbits 1788-1793 (varp 33, bits 1-6) and
+ * doors 137-145 through varbits 1794-1802 (varp 668, bits 0-8). syncLevers
+ * drives both and sends the resolved loc (up/down, closed/ajar) to the player,
+ * since this client does not re-resolve multi-locs on a varp change; only an
+ * ajar door (11450) offers its Open option.
  *
  * Gaps (no dump support, see summary):
  *   - Oddenstein before the quest has no "busy" line; the standard machine
  *     conversation plays.
- *   - Ernest 3563 has no chicken-specific transcript, so he references the
- *     shared "finishing-up" conversation (a wiki infobox artifact).
- *   - The finishing-up conversation ends with two lines spoken by Ernest while
- *     the runtime only renders the clicked NPC, so those two lines are skipped
- *     to keep the branch going (the runtime has no multi-speaker support).
- *   - Lever/door *visuals* are not driven by varbits here (state lives in an
- *     attribute); door access and lever toggling work, the map content is the
- *     human's to add.
+ *   - Ernest 3563 has no stand-alone transcript, so he references the shared
+ *     "finishing-up" conversation (a wiki infobox artifact). The runtime can
+ *     only render the clicked NPC, so the plugin starts that variant itself
+ *     with a speaker map that gives Ernest his own chathead.
  */
 module.exports = function registerErnestTheChickenQuest(api) {
-  const { Location, HitDamage, HitMask, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const {
+    GameConstants,
+    GameObject,
+    Location,
+    HitDamage,
+    HitMask,
+    ItemIdentifiers,
+    MapObjects,
+    NpcDefinition,
+    NpcIdentifiers,
+    ObjectIdentifiers,
+    RegionManager,
+    World,
+  } = api.core;
   const { registerQuest } = require("../QuestRuntime");
+  const { startDialogue } = require("../../npcs/NpcDialogues.plugin.js");
+  const fs = require("fs");
+  const path = require("path");
 
   const VERONICA_NPC_ID = NpcIdentifiers.VERONICA;
   const ODDENSTEIN_NPC_ID = NpcIdentifiers.PROFESSOR_ODDENSTEIN;
   const ERNEST_NPC_ID = NpcIdentifiers.ERNEST;
 
   const VARP_ERNEST = 32;
+  /** varp "ernestlever": levers A-F are bits 1-6 (varbits 1788-1793). */
   const VARP_LEVERS = 33;
+  /** varp "ernestdoors": doors 1-9 are bits 0-8 (varbits 1794-1802). */
+  const VARP_DOORS = 668;
   const STAGE_STARTED = 1;
   const STAGE_ODDENSTEIN = 2;
   const STAGE_COMPLETE = 3;
@@ -52,6 +74,8 @@ module.exports = function registerErnestTheChickenQuest(api) {
   const COMPOST = ObjectIdentifiers.COMPOST_HEAP;
   const FOUNTAIN = ObjectIdentifiers.FOUNTAIN;
   const CLOSET_DOOR = ObjectIdentifiers.DOOR_14;
+  /** Door 131's alcove (the skeleton and rubber tube) is one tile east of it. */
+  const CLOSET_THROUGH = { x: 1, y: 0 };
   const LADDER_UP = ObjectIdentifiers.LADDER_5;
   const LADDER_DOWN = ObjectIdentifiers.LADDER_6;
   const BOOKCASES = [ObjectIdentifiers.BOOKCASE, ObjectIdentifiers.BOOKCASE_2];
@@ -71,19 +95,24 @@ module.exports = function registerErnestTheChickenQuest(api) {
     [151, ObjectIdentifiers.LEVER_F, ObjectIdentifiers.LEVER_F_2],
   ];
 
-  /** Puzzle doors 137-145 are nameless in the cache; 11450 is DOOR_274. */
-  const DOORS = [
-    137,
-    138,
-    139,
-    140,
-    141,
-    142,
-    143,
-    144,
-    145,
-    ObjectIdentifiers.DOOR_274,
+  /** Puzzle lever base tiles, in the same order as PUZZLE_LEVER_IDS (from the cache map). */
+  const PUZZLE_LEVER_TILES = [
+    [3108, 9745],
+    [3118, 9752],
+    [3112, 9760],
+    [3108, 9767],
+    [3097, 9767],
+    [3096, 9765],
   ];
+
+  /** The 9 puzzle door base ids (137-145 are nameless in the cache), in DOOR_TILES order. */
+  const PUZZLE_DOOR_IDS = [137, 138, 139, 140, 141, 142, 143, 144, 145];
+  const DOORS = [...PUZZLE_DOOR_IDS, ObjectIdentifiers.DOOR_274];
+  /** Resolved door variants: 11449 closed, 11450 ajar (offers Open). */
+  const DOOR_CLOSED = ObjectIdentifiers.DOOR_273;
+  const DOOR_OPEN = ObjectIdentifiers.DOOR_274;
+  /** The manor basement region; loc swaps are only sent to players standing in it. */
+  const BASEMENT_BOUNDS = { minX: 3072, maxX: 3135, minY: 9600, maxY: 9855 };
 
   /** Door tiles, in the reference's door order, used to map a click to a state. */
   const DOOR_TILES = [
@@ -106,8 +135,17 @@ module.exports = function registerErnestTheChickenQuest(api) {
   const FOUNTAIN_ATTRIBUTE = "ernest-the-chicken.fountain";
   const LEVERS_ATTRIBUTE = "ernest-the-chicken.levers";
   const START_HOOK = "quest:ernest-the-chicken:start";
+  /** "The machine turns Ernest back into human form." */
+  const MACHINE_ACTION_ID = "7lApN_";
   /** "Congratulations! Quest complete!" on the shared finishing-up page. */
   const COMPLETE_ACTION_ID = "2wle32";
+  /** The nameless multi chicken (varp 32 picks Chicken 10556 or, at stage 3, nothing). */
+  const CHICKEN_MULTI_NPC_ID = 2831;
+  /** The secret room's eastern-wall lever (160); pulling it opens the bookcase and shoves you out. */
+  const SECRET_ROOM_LEVER = ObjectIdentifiers.LEVER_7;
+  const SECRET_ROOM_EXIT_X = 3098;
+  /** The finishing-up variant's Ernest lines get Ernest's chathead, not the professor's. */
+  const FINISHING_UP_SPEAKERS = new Map([["Ernest", ERNEST_NPC_ID]]);
 
   const PAGE_VERONICA = "Veronica";
   const PAGE_ODDENSTEIN = "Professor Oddenstein";
@@ -191,22 +229,98 @@ module.exports = function registerErnestTheChickenQuest(api) {
     ];
   }
 
-  /** Teleport the player to the far side of a door/bookcase they clicked. */
-  function crossDoor(player, tile) {
+  /**
+   * Teleport the player to the far side of a door/bookcase they clicked. Door 131
+   * is unclipped, so the default route can stop on the door tile itself; `through`
+   * says which side it opens to then (the closet's alcove lies east).
+   */
+  function crossDoor(player, tile, through) {
     const position = player.getLocation();
     const z = tile.z ?? position.getZ();
     const dx = position.getX() - tile.x;
     const dy = position.getY() - tile.y;
     let x = position.getX();
     let y = position.getY();
-    if (Math.abs(dx) > Math.abs(dy)) x = tile.x - Math.sign(dx);
-    else y = tile.y - Math.sign(dy);
+    if (dx === 0 && dy === 0) {
+      if (!through) return;
+      x = tile.x + through.x;
+      y = tile.y + through.y;
+    } else if (Math.abs(dx) > Math.abs(dy)) {
+      x = tile.x - Math.sign(dx);
+    } else {
+      y = tile.y - Math.sign(dy);
+    }
     player.moveTo(new Location(x, y, z));
   }
 
+  /**
+   * Door 131's click routes onto the door tile (it has no clipping), where
+   * crossDoor cannot tell which way the player came from. Route to the tile on
+   * the clicked side first, so the crossing mirrors through to the other side.
+   */
+  function routeClosetDoor(event) {
+    if (event.objectId !== CLOSET_DOOR || !event.object?.getLocation) return;
+    const tile = event.object.getLocation();
+    const from = event.sourceLocation ?? event.player.getLocation();
+    const side = from.x > tile.getX() ? 1 : -1;
+    event.destination = { x: tile.getX() + side, y: tile.getY(), z: tile.getZ() };
+  }
+
+  /**
+   * Show one resolved multi-loc variant to a single player. The client keeps
+   * LOC_ADD_CHANGE locs and reuses them on scene rebuilds, so the puzzle stays
+   * per-player (each player's varps resolve their own doors).
+   */
+  function sendLocVariant(player, baseId, tile, replacementId) {
+    const position = player.getLocation();
+    if (
+      position.getZ() !== 0 ||
+      position.getX() < BASEMENT_BOUNDS.minX || position.getX() > BASEMENT_BOUNDS.maxX ||
+      position.getY() < BASEMENT_BOUNDS.minY || position.getY() > BASEMENT_BOUNDS.maxY
+    ) {
+      return;
+    }
+    const location = new Location(tile[0], tile[1], 0);
+    const base = MapObjects.get(baseId, location, null);
+    if (!base) return;
+    player.getPacketSender().sendObject(
+      new GameObject(replacementId, location, base.getType(), base.getFace(), null)
+    );
+  }
+
+  function syncPuzzleVisuals(player, previous, bits) {
+    if (previous === bits) return;
+    for (let index = 0; index < PUZZLE_LEVER_IDS.length; index++) {
+      const was = (previous & (1 << index)) !== 0;
+      const now = (bits & (1 << index)) !== 0;
+      if (was === now) continue;
+      // PUZZLE_LEVER_IDS[index] = [base, up, down].
+      const variant = now ? PUZZLE_LEVER_IDS[index][2] : PUZZLE_LEVER_IDS[index][1];
+      sendLocVariant(player, PUZZLE_LEVER_IDS[index][0], PUZZLE_LEVER_TILES[index], variant);
+    }
+    const previousStates = getErnestPuzzleDoorStates(previous);
+    const states = getErnestPuzzleDoorStates(bits);
+    for (let index = 0; index < states.length; index++) {
+      if (previousStates[index] === states[index]) continue;
+      sendLocVariant(player, PUZZLE_DOOR_IDS[index], DOOR_TILES[index], states[index] ? DOOR_OPEN : DOOR_CLOSED);
+    }
+  }
+
   function syncLevers(player, bits) {
-    setAttr(player, LEVERS_ATTRIBUTE, bits & 0x3f);
-    player.getPacketSender().sendConfig(VARP_LEVERS, bits & 0x3f);
+    const value = bits & 0x3f;
+    const previous = attr(player, LEVERS_ATTRIBUTE);
+    setAttr(player, LEVERS_ATTRIBUTE, value);
+    const sender = player.getPacketSender();
+    // Levers A-F are varp 33 bits 1-6 (bit 0 is unused).
+    sender.sendConfig(VARP_LEVERS, value << 1);
+    // Doors 1-9 are varp 668 bits 0-8, in the same order as getErnestPuzzleDoorStates.
+    let doorBits = 0;
+    const states = getErnestPuzzleDoorStates(value);
+    for (let index = 0; index < states.length; index++) {
+      if (states[index]) doorBits |= 1 << index;
+    }
+    sender.sendConfig(VARP_DOORS, doorBits);
+    syncPuzzleVisuals(player, previous, value);
   }
 
   function bite(player, message) {
@@ -282,7 +396,7 @@ module.exports = function registerErnestTheChickenQuest(api) {
       player.sendMessage("The door is locked.");
       return;
     }
-    crossDoor(player, tile);
+    crossDoor(player, tile, CLOSET_THROUGH);
   }
 
   function useLever(player, index) {
@@ -301,6 +415,115 @@ module.exports = function registerErnestTheChickenQuest(api) {
       return;
     }
     crossDoor(player, tile);
+  }
+
+  /**
+   * The puzzle doors are map scenery (shape 10) sitting next to wall pieces, so
+   * the walk-to-object reach check refuses one side of some. Route the click to
+   * the nearest walkable tile in front on the player's side instead; the
+   * interaction then runs and usePuzzleDoor crosses the door.
+   */
+  function routePuzzleDoor(event) {
+    if (!DOORS.includes(event.objectId)) return;
+    const tile = event.object?.getLocation?.();
+    if (!tile) return;
+    const position = event.player.getLocation();
+    let best = null;
+    for (const [x, y] of [[tile.getX() + 1, tile.getY()], [tile.getX() - 1, tile.getY()], [tile.getX(), tile.getY() + 1], [tile.getX(), tile.getY() - 1]]) {
+      const stand = new Location(x, y, tile.getZ());
+      if (RegionManager.blocked(stand, event.player.getPrivateArea?.() ?? null)) continue;
+      const distance = Math.max(Math.abs(x - position.getX()), Math.abs(y - position.getY()));
+      if (!best || distance < best.distance) best = { x, y, distance };
+    }
+    if (!best) return;
+    event.destination = { x: best.x, y: best.y, z: tile.getZ() };
+  }
+
+  /** "The machine turns Ernest back into human form." (LostCity's change_ernest). */
+  function transformErnest(player) {
+    const here = player.getLocation();
+    for (const npc of World.getNpcs()) {
+      if (npc?.getId?.() !== CHICKEN_MULTI_NPC_ID) continue;
+      const location = npc.getLocation();
+      if (location.getZ() !== here.getZ()) continue;
+      if (Math.max(Math.abs(location.getX() - here.getX()), Math.abs(location.getY() - here.getY())) > 8) continue;
+      npc.setNpcTransformationId(ERNEST_NPC_ID);
+      return;
+    }
+  }
+
+  /** The secret room's eastern-wall lever opens the bookcase and moves you out through it. */
+  function exitSecretRoom(player) {
+    if (player.getLocation().getX() >= SECRET_ROOM_EXIT_X) return;
+    player.sendMessage("The lever opens the secret door!");
+    player.moveTo(new Location(SECRET_ROOM_EXIT_X, player.getLocation().getY(), 0));
+  }
+
+  /**
+   * The basement ladder and the secret room's ladder: both ends are on plane 0
+   * (the basement lies at y~9750, not on a plane below), so ClimbLinks cannot
+   * pair them and the generic resolver sent the basement ladder up into the
+   * manor's stairs. Claim the click through the ladders module's content hook.
+   */
+  function claimPuzzleLadder(request) {
+    if (request.handled) return;
+    const { player, objectId } = request;
+    if (objectId !== LADDER_UP && objectId !== LADDER_DOWN) return;
+    syncLevers(player, 0);
+    const destination = objectId === LADDER_UP
+      ? new Location(3092, 3362, 0) // secret room
+      : new Location(3117, 9754, 0); // basement
+    api.emitCustomEvent(objectId === LADDER_UP ? "ladders:climbUp" : "ladders:climbDown", {
+      player,
+      destination,
+    });
+    request.handled = true;
+  }
+
+  let finishingUpSteps;
+
+  /** The finishing-up variant, loaded from the dialogue dump on first use. */
+  function loadFinishingUpSteps() {
+    if (finishingUpSteps) return finishingUpSteps;
+    try {
+      const file = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
+      const data = JSON.parse(fs.readFileSync(file, "utf8"));
+      finishingUpSteps = data?.[PAGE_ERNEST]?.variants?.[FINISHING_UP_VARIANT] ?? [];
+    } catch {
+      finishingUpSteps = [];
+    }
+    return finishingUpSteps;
+  }
+
+  /**
+   * The transcript runtime voices every line with the clicked NPC, so it puts
+   * Ernest's thank-you in Oddenstein's mouth. Start the hand-in variant here
+   * instead, with a speaker map the runtime resolves to Ernest's chathead.
+   */
+  function handleOddensteinTalk(event) {
+    const { player, npcId, definition, clickType } = event;
+    if (npcId !== ODDENSTEIN_NPC_ID) return;
+    const option = String(definition?.getActions?.()?.[clickType - 1] ?? "").toLowerCase();
+    if (option !== "talk-to") return;
+    if (quest.getStage(player) < STAGE_ODDENSTEIN || !hasAllParts(player)) return;
+    const steps = loadFinishingUpSteps();
+    if (!steps.length) return;
+    const npcDefinition = NpcDefinition.forId(ODDENSTEIN_NPC_ID);
+    if (!npcDefinition) return;
+    startDialogue(
+      api,
+      { player, npc: event.npc, npcId: ODDENSTEIN_NPC_ID, definition: npcDefinition },
+      steps,
+      undefined,
+      {
+        player,
+        npc: event.npc,
+        npcId: ODDENSTEIN_NPC_ID,
+        definition: npcDefinition,
+        speakerIdByName: FINISHING_UP_SPEAKERS,
+      }
+    );
+    event.handled = true;
   }
 
   function reward(player) {
@@ -365,12 +588,12 @@ module.exports = function registerErnestTheChickenQuest(api) {
   }
 
   function handleAction(event) {
-    const { player, step } = event;
+    const { player } = event;
 
-    // The runtime cannot render a `line` whose speaker is not the clicked
-    // NPC, so consume Ernest's two lines in finishing-up to keep the branch
-    // alive instead of showing "conversation unavailable".
-    if (step?.type === "line" && step.speaker === "Ernest") {
+    // "The machine turns Ernest back into human form.": swap the chicken NPC
+    // for human Ernest 3563, as LostCity's change_ernest does.
+    if (event.stepId === MACHINE_ACTION_ID) {
+      transformErnest(player);
       event.handled = true;
       return;
     }
@@ -383,6 +606,11 @@ module.exports = function registerErnestTheChickenQuest(api) {
     quest.complete(player);
     event.handled = true;
     event.end = true;
+  }
+
+  /** The lever/door state lives in a persisted attribute; restore its visuals on login. */
+  function handleLogin({ player }) {
+    syncLevers(player, attr(player, LEVERS_ATTRIBUTE));
   }
 
   function handleItemOnItem(event) {
@@ -400,7 +628,7 @@ module.exports = function registerErnestTheChickenQuest(api) {
       return;
     }
     if (objectId === CLOSET_DOOR && itemId === KEY) {
-      crossDoor(player, event.location);
+      crossDoor(player, event.location, CLOSET_THROUGH);
       event.handled = true;
       return;
     }
@@ -433,6 +661,11 @@ module.exports = function registerErnestTheChickenQuest(api) {
       event.handled = true;
       return;
     }
+    if (objectId === SECRET_ROOM_LEVER && option.includes("pull")) {
+      exitSecretRoom(player);
+      event.handled = true;
+      return;
+    }
     if (objectId === COMPOST && option.includes("search")) {
       searchCompost(player);
       event.handled = true;
@@ -450,18 +683,6 @@ module.exports = function registerErnestTheChickenQuest(api) {
     }
     if (BOOKCASES.includes(objectId) && option.includes("search")) {
       searchBookcase(player, location);
-      event.handled = true;
-      return;
-    }
-    if (objectId === LADDER_DOWN && option.includes("climb")) {
-      syncLevers(player, 0);
-      player.moveTo(new Location(3117, 9754, 0));
-      event.handled = true;
-      return;
-    }
-    if (objectId === LADDER_UP && option.includes("climb")) {
-      syncLevers(player, 0);
-      player.moveTo(new Location(3092, 3362, 0));
       event.handled = true;
     }
   }
@@ -486,6 +707,11 @@ module.exports = function registerErnestTheChickenQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleOddensteinChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("ladders:climb", claimPuzzleLadder);
+  api.onNpcInteraction(handleOddensteinTalk);
+  api.onObjectRoute(routePuzzleDoor);
+  api.onObjectRoute(routeClosetDoor);
+  api.onPlayerLogin(handleLogin);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnObject(handleItemOnObject);
   api.onObjectInteraction(handleObjectInteraction);

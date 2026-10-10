@@ -48,6 +48,9 @@ module.exports = function registerTheGolemQuest(api) {
     NpcIdentifiers.BROKEN_CLAY_GOLEM, // 5134
     NpcIdentifiers.DAMAGED_CLAY_GOLEM, // 5135
     NpcIdentifiers.CLAY_GOLEM_3, // 5136
+    // The world's single Uzer spawn is 6277, a nameless transform placeholder
+    // (varbit 348 -> 5134/5135/5136); interaction events can carry the raw id.
+    6277,
   ]);
   const ELISSA_NPC_ID = NpcIdentifiers.ELISSA; // 5138
   const CURATOR_NPC_ID = NpcIdentifiers.CURATOR_HAIG_HALEN; // 5214
@@ -75,22 +78,31 @@ module.exports = function registerTheGolemQuest(api) {
   const EMERALD_ITEM_ID = ItemIdentifiers.EMERALD; // 1605
   const SAPPHIRE_ITEM_ID = ItemIdentifiers.SAPPHIRE; // 1607
 
-  const BOOKCASE_OBJECT_ID = ObjectIdentifiers.BOOKCASE_15; // 4617 Exam Centre
-  const DISPLAY_CASE_IDS = new Set([ObjectIdentifiers.DISPLAY_CASE, ObjectIdentifiers.DISPLAY_CASE_2]); // 6294/6295
-  const THRONE_IDS = new Set([ObjectIdentifiers.THRONE_10, ObjectIdentifiers.THRONE_11]); // 6301/6302
-  const ALCOVE_OBJECT_IDS = new Set([
-    ObjectIdentifiers.STATUETTE_IN_ALCOVE, // 6307 facing right
-    ObjectIdentifiers.STATUETTE_IN_ALCOVE_2, // 6308 facing left
-    ObjectIdentifiers.ALCOVE, // 6309 missing statuette
+  // Exam Centre library bookcases (the world has no 4617 there).
+  const BOOKCASE_OBJECT_IDS = new Set([
+    ObjectIdentifiers.BOOKCASE_20, // 6292
+    ObjectIdentifiers.BOOKCASE_63, // 17319
+    ObjectIdentifiers.BOOKCASE_64, // 17320
+    ObjectIdentifiers.BOOKCASE_65, // 17321
+    ObjectIdentifiers.BOOKCASE_66, // 17382
   ]);
+  // 24626 is the world's Open-able museum case; 6294/6295 are not placed.
+  const DISPLAY_CASE_IDS = new Set([24626]);
+  const THRONE_IDS = new Set([ObjectIdentifiers.THRONE_10, ObjectIdentifiers.THRONE_11]); // 6301/6302
+  // Uzer temple alcoves: 6303/6304/6305 hold the statuettes, 6306 is the empty
+  // one the player fills (6307-6309 are not placed).
+  const ALCOVE_OBJECT_IDS = new Set([6303, 6304, 6305, 6306, 6307, 6308, 6309]);
   const MUSHROOM_OBJECT_ID = ObjectIdentifiers.BLACK_MUSHROOMS; // 6311
-  const SEALED_DOOR_OBJECT_ID = ObjectIdentifiers.DOOR_169; // 6363
-  const OPEN_DOOR_OBJECT_ID = ObjectIdentifiers.DOOR_170; // 6364
+  // Both states of the temple door are the same live loc (6363/6364 are not placed).
+  const TEMPLE_DOOR_OBJECT_ID = 6310;
+  const SURFACE_STAIRS_OBJECT_ID = ObjectIdentifiers.STAIRCASE_35; // 6373 Climb-down
+  const TEMPLE_STAIRS_OBJECT_ID = ObjectIdentifiers.STAIRCASE_34; // 6372 Climb-up
+  const SURFACE_STAIRS_TILE = { x: 3492, y: 3092, z: 0 };
+  const TEMPLE_STAIRS_TILE = { x: 2721, y: 4886, z: 0 };
   const DEMON_PORTAL_OBJECT_ID = ObjectIdentifiers.PORTAL_13; // 6282 back out of the lair
 
   const START_HOOK = "quest:the-golem:start";
   const REPAIR_DONE_MESSAGE_ID = "qjXp0f"; // "You repair the golem with a final piece of clay."
-  const FIRST_ENTRY_CONDITION_ID = "HuSKOr"; // "If this is the first time the player has entered the portal:"
 
   /** This page's condition step ids; several texts ("player succeeds", ...) are shared pages' too. */
   const OWN_CONDITION_IDS = new Set([
@@ -320,6 +332,11 @@ module.exports = function registerTheGolemQuest(api) {
     if (event.npcId === ELISSA_NPC_ID && /notes he made are in the library/i.test(String(event.text))) {
       if (letterProgress(event.player) < 2) event.player.setAttribute(LETTER_ATTRIBUTE, 2);
     }
+    // The golem refuses to believe the demon is dead; this ends the stage-6
+    // conversation and starts the reprogramming hunt (stage 7).
+    if (GOLEM_NPC_IDS.has(event.npcId) && /demon must be defeated.*task incomplete/i.test(String(event.text))) {
+      if (quest.getStage(event.player) === STAGE_DEMON_DEAD) quest.setStage(event.player, STAGE_CONVINCE_GOLEM);
+    }
   }
 
   /** Message steps fired by the transcript variants we replay drive state. */
@@ -330,12 +347,11 @@ module.exports = function registerTheGolemQuest(api) {
   }
 
   /**
-   * The portal's "first time" condition is the branch that describes the
-   * demon's skeleton; mark the sighting and the demon dead there.
+   * The portal's first-entry branch describes the demon's skeleton; walking
+   * through the temple door marks the sighting and moves the quest on.
    */
-  function handleCondition(event) {
-    if (event.stepId !== FIRST_ENTRY_CONDITION_ID) return;
-    const { player } = event;
+  function markFirstEntry(player) {
+    if (player.getAttribute(SEEN_ATTRIBUTE)) return;
     player.setAttribute(SEEN_ATTRIBUTE, true);
     if (quest.getStage(player) === STAGE_PORTAL_OPENED) quest.setStage(player, STAGE_DEMON_DEAD);
   }
@@ -589,6 +605,26 @@ module.exports = function registerTheGolemQuest(api) {
     player.sendMessage("The statuettes are already turned correctly.");
   }
 
+  /** The temple door is the same loc before and after the statuettes open it. */
+  function useTempleDoor(player) {
+    if (quest.getStage(player) < STAGE_PORTAL_OPENED) {
+      player.sendMessage("You can't find any way to open the door.");
+      return;
+    }
+    // The throne room behind the door is not on this server's map, so the
+    // sighting plays as the portal transcript instead of teleporting into a
+    // void; stage 6 and the skeleton message still follow.
+    startTranscript(api, player, GOLEM_CHAT_HEAD, PAGE, "returning-to-uzer-entering-the-portal");
+    markFirstEntry(player);
+  }
+
+  /** Doors owns the generic "Door" name hook, so claim the temple door first. */
+  function handleDoorToggle(event) {
+    if (event.objectId !== TEMPLE_DOOR_OBJECT_ID) return;
+    event.handled = true;
+    useTempleDoor(event.player);
+  }
+
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
     if (objectId === MUSHROOM_OBJECT_ID) {
@@ -597,7 +633,7 @@ module.exports = function registerTheGolemQuest(api) {
       player.sendMessage("You pick a mushroom.");
       return;
     }
-    if (objectId === BOOKCASE_OBJECT_ID) {
+    if (BOOKCASE_OBJECT_IDS.has(objectId)) {
       event.handled = true;
       player.sendMessage("You search the bookcase");
       if (!held(player, NOTES_ITEM_ID)) {
@@ -608,6 +644,8 @@ module.exports = function registerTheGolemQuest(api) {
       return;
     }
     if (DISPLAY_CASE_IDS.has(objectId)) {
+      const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "").toLowerCase();
+      if (!option.includes("open")) return;
       event.handled = true;
       if (!held(player, CABINET_KEY_ITEM_ID)) {
         player.sendMessage("The cabinet is locked.");
@@ -616,20 +654,24 @@ module.exports = function registerTheGolemQuest(api) {
       openDisplayCase(player);
       return;
     }
-    if (objectId === ObjectIdentifiers.STATUETTE_IN_ALCOVE || objectId === ObjectIdentifiers.STATUETTE_IN_ALCOVE_2) {
+    if (ALCOVE_OBJECT_IDS.has(objectId)) {
       event.handled = true;
       turnStatuette(player);
       return;
     }
-    if (objectId === SEALED_DOOR_OBJECT_ID) {
+    if (objectId === TEMPLE_DOOR_OBJECT_ID) {
       event.handled = true;
-      player.sendMessage("You can't find any way to open the door.");
+      useTempleDoor(player);
       return;
     }
-    if (objectId === OPEN_DOOR_OBJECT_ID) {
+    if (objectId === SURFACE_STAIRS_OBJECT_ID) {
       event.handled = true;
-      startTranscript(api, player, GOLEM_CHAT_HEAD, PAGE, "returning-to-uzer-entering-the-portal");
-      player.moveTo(new api.core.Location(3552, 4948, 0));
+      player.moveTo(new api.core.Location(TEMPLE_STAIRS_TILE.x, TEMPLE_STAIRS_TILE.y, TEMPLE_STAIRS_TILE.z));
+      return;
+    }
+    if (objectId === TEMPLE_STAIRS_OBJECT_ID) {
+      event.handled = true;
+      player.moveTo(new api.core.Location(SURFACE_STAIRS_TILE.x, SURFACE_STAIRS_TILE.y, SURFACE_STAIRS_TILE.z));
       return;
     }
     if (objectId === DEMON_PORTAL_OBJECT_ID) {
@@ -644,6 +686,17 @@ module.exports = function registerTheGolemQuest(api) {
     const { player } = event;
     const actions = event.definition?.getActions?.() ?? [];
     const action = String(actions[event.clickType - 1] ?? "").toLowerCase();
+    // The world's Uzer golem is a transform placeholder (6277 -> 5134...); when
+    // an interaction carries the raw id it is not in the dialogue index, so the
+    // Talk-to variant is replayed here for every handled golem id.
+    if (GOLEM_NPC_IDS.has(event.npcId) && action === "talk-to") {
+      const selected = selectVariant({ npcId: event.npcId, player });
+      if (selected) {
+        event.handled = true;
+        startTranscript(api, player, event.npcId, selected.page ?? PAGE, selected.variant ?? selected);
+      }
+      return;
+    }
     if (event.npcId === CURATOR_NPC_ID && action === "pickpocket") {
       event.handled = true;
       if (quest.getStage(player) < STAGE_FIND_STATUETTE) {
@@ -712,12 +765,12 @@ module.exports = function registerTheGolemQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
-  api.onCustomEvent("npc-dialogue:condition", handleCondition);
   api.onItemAction(handleItemAction);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);
+  api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onNpcInteraction(handleNpcInteraction);
   api.onPlayerLogin(handleLogin);
 };

@@ -16,7 +16,7 @@
  * (action=open_interface) is not implemented.
  */
 module.exports = function registerElementalWorkshopIQuest(api) {
-  const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, refreshQuestList } = require("../QuestRuntime");
 
   const VARP_ELEMENTAL_WORKSHOP = 244;
@@ -42,15 +42,26 @@ module.exports = function registerElementalWorkshopIQuest(api) {
   const BOOKCASE = ObjectIdentifiers.BOOKCASE_99;
   const ODD_WALLS = [ObjectIdentifiers.ODD_LOOKING_WALL_7, ObjectIdentifiers.ODD_LOOKING_WALL_8];
   const OPEN_ODD_WALL = ObjectIdentifiers.ODD_LOOKING_WALL_6;
-  const BOWL_CRATE = ObjectIdentifiers.CRATE_27;
+  // The cache places multi-loc bases; the 185xx ids are their varbit children.
+  const BOWL_CRATE = ObjectIdentifiers.BOXES_5; // 3397, the wiki's stone-bowl boxes
   const NEEDLE_CRATE = ObjectIdentifiers.CRATE_28;
-  const LEATHER_CRATE = ObjectIdentifiers.BOXES_5;
+  const LEATHER_CRATE = ObjectIdentifiers.CRATE_27; // 3394, the wiki's leather crate
   const WORKBENCH = ObjectIdentifiers.WORKBENCH_5;
-  const WATER_CONTROLS = [ObjectIdentifiers.WATER_CONTROLS, ObjectIdentifiers.WATER_CONTROLS_2];
+  const WATER_CONTROL_EAST = 3403; // elemental_workshop_valve_1 at 2726,9908
+  const WATER_CONTROL_WEST = 3404; // elemental_workshop_valve_2 at 2713,9908
+  const WATER_WHEEL_X = 2720; // wheel spans x2718-2720; east valve 2726, west valve 2713
+  const WATER_CONTROLS = [
+    ObjectIdentifiers.WATER_CONTROLS,
+    ObjectIdentifiers.WATER_CONTROLS_2,
+    WATER_CONTROL_EAST,
+    WATER_CONTROL_WEST,
+  ];
   const WATER_LEVER = ObjectIdentifiers.LEVER_22;
-  const BELLOWS = [ObjectIdentifiers.BELLOWS_3, ObjectIdentifiers.BELLOWS_4];
+  const BELLOWS_BASE = 3407; // elemental_workshop_bellows_multiloc, children 18515/18516
+  const BELLOWS = [ObjectIdentifiers.BELLOWS_3, ObjectIdentifiers.BELLOWS_4, BELLOWS_BASE];
   const AIR_LEVER = ObjectIdentifiers.LEVER_23;
-  const FURNACES = [ObjectIdentifiers.FURNACE_14, ObjectIdentifiers.FURNACE_15];
+  const FURNACE_BASE = 3410; // elemental_workshop_furnace, children 18525/18526
+  const FURNACES = [ObjectIdentifiers.FURNACE_14, ObjectIdentifiers.FURNACE_15, FURNACE_BASE];
   const LAVA_TROUGHS = [
     ObjectIdentifiers.LAVA_TROUGH,
     ObjectIdentifiers.LAVA_TROUGH_2,
@@ -152,7 +163,7 @@ module.exports = function registerElementalWorkshopIQuest(api) {
 
   function handleObjectInteraction(event) {
     const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "").toLowerCase();
-    const { player, objectId } = event;
+    const { player, objectId, location } = event;
 
     if (objectId === BOOKCASE && option.includes("search")) {
       if (!has(player, ItemIdentifiers.BATTERED_BOOK)) {
@@ -173,11 +184,13 @@ module.exports = function registerElementalWorkshopIQuest(api) {
     if (objectId === SURFACE_STAIRS && option.includes("climb")) {
       setBit(player, BIT.enteredWorkshop);
       player.sendMessage("You climb down into the Elemental Workshop.");
+      player.moveTo(new Location(2716, 9888, 0));
       event.handled = true;
       return;
     }
     if (objectId === WORKSHOP_STAIRS && option.includes("climb")) {
       player.sendMessage("You climb back up to the smithy.");
+      player.moveTo(new Location(2709, 3498, 0));
       event.handled = true;
       return;
     }
@@ -211,7 +224,7 @@ module.exports = function registerElementalWorkshopIQuest(api) {
       if (hasBit(player, BIT.waterFlowing)) {
         player.sendMessage("The controls are locked while the water wheel is running.");
       } else {
-        const east = objectId === ObjectIdentifiers.WATER_CONTROLS_2;
+        const east = location ? location.x > WATER_WHEEL_X : objectId === ObjectIdentifiers.WATER_CONTROLS_2;
         if (east && !hasBit(player, BIT.waterLeft)) setBit(player, BIT.waterRight, !hasBit(player, BIT.waterRight));
         else if (!east) setBit(player, BIT.waterLeft, !hasBit(player, BIT.waterLeft));
         player.sendMessage("You turn the water control.");

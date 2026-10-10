@@ -298,6 +298,23 @@ test('1727/1728 metal gates open from either leaf order (west leaf is left)', ()
   }
 });
 
+test('52/53 double metal gates open both leaves into their nameless open panels', () => {
+  // Real map: 53 west (2649,3470), 52 east (2650,3470). Open ids are nameless in the cache.
+  const h = buildHarness();
+  try {
+    h.place(53, 3100, 3500, 1);
+    h.place(52, 3101, 3500, 1);
+    assert.deepEqual(h.click(52, 3101, 3500, 1), [
+      ['deregister', 53, 3100, 3500, 1],
+      ['deregister', 52, 3101, 3500, 1],
+      ['register', 28854, 3100, 3501, 0],
+      ['register', 28853, 3101, 3501, 2],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
 test('reversed large doors (1513 south of 1511, as cached at 3287,3172) pick the left leaf by position', () => {
   const h = buildHarness();
   try {

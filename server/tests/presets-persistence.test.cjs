@@ -312,3 +312,18 @@ test("a player preset bot announces its suppressed drops once", () => {
 
   assert.deepEqual(messages, ["This bot was using a player preset and therefore has not dropped its items. Regular bots will still drop items"]);
 });
+
+test('preset combat levels in the list match the skill manager formula', () => {
+  const { SkillManager } = require("../dist/game/content/skill/SkillManager");
+  const pool = presets.getGlobalPresetPool();
+  assert.equal(pool.length, 18, 'the global preset pool is the eighteen player presets');
+  for (const preset of pool) {
+    const stats = preset.getStats();
+    const expected = SkillManager.prototype.getCombatLevel.call({ skills: { maxLevel: stats } });
+    assert.equal(
+      presets._test.presetCombatLevel(preset),
+      expected,
+      `${preset.getName()} shows its combat level`
+    );
+  }
+});

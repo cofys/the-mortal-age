@@ -13,12 +13,11 @@ const {
 const {
   ATTR_SKIP_PERSISTENCE,
 } = require("./BotPersistenceConstants");
+const { SPAWNS_PER_BATCH, SPAWN_BATCH_DELAY_MS, runPaced } = require("./BotSpawnPacing");
 
 const WILDERNESS_SPAWN_TILE_PROBE_LIMIT = 256;
 const WILDERNESS_REGION_SIZE = 64;
 const WILDERNESS_REGION_DESPAWN_DELAY_MS = 30000;
-const BOT_STARTUP_BATCH_SIZE = 24;
-const BOT_STARTUP_BATCH_DELAY_MS = 40;
 
 function createBotRegistry(options) {
   const {
@@ -570,7 +569,9 @@ function createBotRegistry(options) {
       assignPvpMetadata(state, {
         metadata: pvpMetadata,
       });
-      state.pvp.presetPoolEnabled = true;
+      // Hotspot clusters use their loadout catalogue bands (wide variety inside a level
+      // band); only the free-roaming region bots wear a player preset.
+      state.pvp.presetPoolEnabled = assignedHotspotId == null;
       syncBotProfileAttribute(bot, state);
       if (!applyInitialPvpLoadout(bot, state)) state.pvp.loadoutPending = true;
     }
@@ -617,6 +618,17 @@ function createBotRegistry(options) {
         hotspotId: plan.hotspotId ?? null,
       }
     );
+  }
+
+  // A reconcile spawns at most SPAWNS_PER_BATCH bots, then one follow-up per kind tops up
+  // the rest a game tick later, so a big shortfall fills gradually.
+  const topUpTimers = new Map();
+  function scheduleTopUp(kind, reconcile) {
+    if (topUpTimers.has(kind)) return;
+    topUpTimers.set(kind, setTimeout(() => {
+      topUpTimers.delete(kind);
+      reconcile();
+    }, SPAWN_BATCH_DELAY_MS));
   }
 
   function reconcilePersistentHotspotBots() {
@@ -669,6 +681,8 @@ function createBotRegistry(options) {
       filledCountsByHotspot.set(hotspotId, Math.min(usernames.length, desiredCount));
     }
 
+    let budget = SPAWNS_PER_BATCH;
+    let spawnedAny = false;
     for (const plan of plans) {
       const hotspotId = plan.hotspotId;
       const filled = filledCountsByHotspot.get(hotspotId) ?? 0;
@@ -676,9 +690,16 @@ function createBotRegistry(options) {
       if (filled >= desired) {
         continue;
       }
+      // Only come back if this batch made progress (a full name pool would loop forever).
+      if (budget <= 0) {
+        if (spawnedAny) scheduleTopUp("hotspot", reconcilePersistentHotspotBots);
+        return;
+      }
+      budget--;
       if (!spawnHotspotWildernessBot(plan)) {
         continue;
       }
+      spawnedAny = true;
       filledCountsByHotspot.set(hotspotId, filled + 1);
     }
   }
@@ -846,15 +867,24 @@ function createBotRegistry(options) {
       }
     }
 
+    let budget = SPAWNS_PER_BATCH;
+    let spawnedAny = false;
     for (const plan of plans) {
       const filled = filledCountsByRegion.get(plan.regionKey) ?? 0;
       const desired = desiredCountsByRegion.get(plan.regionKey) ?? 0;
       if (filled >= desired) {
         continue;
       }
+      // Only come back if this batch made progress (a full name pool would loop forever).
+      if (budget <= 0) {
+        if (spawnedAny) scheduleTopUp("regional", () => reconcileRegionalWildernessBots());
+        return;
+      }
+      budget--;
       if (!spawnRegionalWildernessBot(plan)) {
         continue;
       }
+      spawnedAny = true;
       filledCountsByRegion.set(plan.regionKey, filled + 1);
     }
   }
@@ -908,20 +938,8 @@ function createBotRegistry(options) {
       });
     }
 
-    let spawnCursor = 0;
-    const flushSpawnBatch = () => {
-      const end = Math.min(
-        spawnCursor + BOT_STARTUP_BATCH_SIZE,
-        pendingSpawns.length
-      );
-      while (spawnCursor < end) {
-        pendingSpawns[spawnCursor++]?.();
-      }
-      ensureBehaviorTaskStarted();
-      if (spawnCursor < pendingSpawns.length) {
-        setTimeout(flushSpawnBatch, BOT_STARTUP_BATCH_DELAY_MS);
-        return;
-      }
+    ensureBehaviorTaskStarted();
+    runPaced(pendingSpawns, () => {
       const spawnSummary = {
         spawned,
         configured: botCount,
@@ -934,9 +952,7 @@ function createBotRegistry(options) {
       }
       reconcilePersistentHotspotBots();
       reconcileRegionalWildernessBots();
-    };
-
-    flushSpawnBatch();
+    });
   }
 
   function scheduleInitialSpawn() {

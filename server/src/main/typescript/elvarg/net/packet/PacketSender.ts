@@ -425,6 +425,10 @@ export class PacketSender {
     // decoding group 162 directly from the cache. Child 9 of 161 is an
     // unrelated 0x0 icon-cluster anchor nested under the sidebar tree.
     this.chatboxGroupId = id;
+    // A (re)mounted group starts with its cache text, so resend everything written to it. The
+    // client also rewrites some itself (a dialogue's "Click here to continue" becomes "Please
+    // wait..." when clicked), which this per-player cache never sees.
+    this.player.getFrameUpdater().clearGroup(id);
     this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, false));
     if (this.player.getSession().sendClientPacket(encodeWidgetOpenSub(CHATBOX_MODAL_TARGET_UID, id, 0))) return this;
   }
@@ -518,7 +522,12 @@ export class PacketSender {
    * scenery, like the tutorial tree. `tilePosition` is kept for signature
    * compatibility.
    */
-  public sendPositionalHint(position: any, _tilePosition = 2, height = 0): this {
+  /**
+   * A tile hint. `height` lifts the arrow above the tile (tutorial island), `plane` scopes
+   * it to the target's floor so a client on another level does not draw it; the two are
+   * packed into the hint packet's one spare byte (height in the high 6 bits).
+   */
+  public sendPositionalHint(position: any, _tilePosition = 2, height = 0, plane = 0): this {
     if (
       !position ||
       typeof position.getX !== "function" ||
@@ -528,7 +537,7 @@ export class PacketSender {
     }
     this.player
       .getSession()
-      .sendClientPacket(encodeHintArrow(2, position.getX(), position.getY(), height));
+      .sendClientPacket(encodeHintArrow(2, position.getX(), position.getY(), ((height & 0x3f) << 2) | (plane & 0x03)));
     return this;
   }
 
@@ -538,6 +547,15 @@ export class PacketSender {
       return this;
     }
     this.player.getSession().sendClientPacket(encodeHintArrow(1, mobile.getIndex(), 0, 0));
+    return this;
+  }
+
+  /** An overhead arrow over a player (Type 3); the client renders it as a head icon. */
+  public sendPlayerHint(player: any): this {
+    if (!player || typeof player.getIndex !== "function") {
+      return this;
+    }
+    this.player.getSession().sendClientPacket(encodeHintArrow(3, player.getIndex(), 0, 0));
     return this;
   }
 

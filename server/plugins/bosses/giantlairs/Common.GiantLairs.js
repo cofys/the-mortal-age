@@ -1,6 +1,6 @@
 /**
  * Obor's and Bryophyta's lairs: what the units share - the plugin api, the data from
- * data/definitions/giant-boss-lairs.json, tick timing and the saved attributes.
+ * plugins/bosses/data/giant-boss-lairs.json, tick timing and the saved attributes.
  */
 const fs = require("fs");
 const path = require("path");
@@ -24,7 +24,7 @@ let lairs = null;
 function init(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
-  const file = path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "giant-boss-lairs.json");
+  const file = path.join(__dirname, "..", "data", "giant-boss-lairs.json");
   data = JSON.parse(fs.readFileSync(file, "utf8"));
   lairs = Object.entries(data.lairs).map(([slug, lair]) => Object.assign(lair, { slug }));
 }

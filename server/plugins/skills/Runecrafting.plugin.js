@@ -14,7 +14,10 @@ let ObjectIdentifiers;
 let RUNES_BY_ALTAR_ID;
 let TALISMANS;
 let ALTAR_DESTINATIONS;
+let EXIT_PORTALS;
 let RIFT_RUNES;
+/** The exit portal's sound (synth 200). */
+const EXIT_PORTAL_SOUND = 200;
 let POUCH_TIERS;
 let POUCH_ACTIONS;
 let ABYSS_OBSTACLES;
@@ -139,6 +142,22 @@ function initialize(api) {
       { x: talisman.x, y: talisman.y },
     ])
   );
+
+  // Each altar's exit portal leads back outside its ruins (ruinX, ruinY), as rsprox captures show
+  // for the earth, fire, water, nature and cosmic altars.
+  EXIT_PORTALS = new Map([
+    [ObjectIdentifiers.PORTAL_39, ItemIdentifiers.AIR_TALISMAN],
+    [ObjectIdentifiers.PORTAL_40, ItemIdentifiers.MIND_TALISMAN],
+    [ObjectIdentifiers.PORTAL_41, ItemIdentifiers.WATER_TALISMAN],
+    [ObjectIdentifiers.PORTAL_42, ItemIdentifiers.EARTH_TALISMAN],
+    [ObjectIdentifiers.PORTAL_43, ItemIdentifiers.FIRE_TALISMAN],
+    [ObjectIdentifiers.PORTAL_44, ItemIdentifiers.BODY_TALISMAN],
+    [ObjectIdentifiers.PORTAL_45, ItemIdentifiers.COSMIC_TALISMAN],
+    [ObjectIdentifiers.PORTAL_46, ItemIdentifiers.LAW_TALISMAN],
+    [ObjectIdentifiers.PORTAL_47, ItemIdentifiers.NATURE_TALISMAN],
+    [ObjectIdentifiers.PORTAL_48, ItemIdentifiers.CHAOS_TALISMAN],
+    [ObjectIdentifiers.PORTAL_49, ItemIdentifiers.DEATH_TALISMAN],
+  ].map(([portal, talisman]) => [portal, TALISMANS.get(talisman)]));
 
   RIFT_RUNES = new Map([
     [ObjectIdentifiers.AIR_RIFT, ItemIdentifiers.AIR_RUNE],
@@ -573,6 +592,22 @@ function handleAbyssObstacle(event) {
   return true;
 }
 
+/**
+ * An altar's exit portal: outside its ruins, with the portal's sound and "You step through the
+ * portal...", as captured (on the tick after arriving, when the click is handled). Leaving
+ * through Guardians of the Rift's altars returns to the Temple of the Eye instead; that's the
+ * minigame's.
+ */
+function handleExitPortal(event) {
+  const talisman = EXIT_PORTALS.get(event.objectId);
+  if (!talisman || talisman.ruinX === undefined) return false;
+  const { player } = event;
+  player.moveTo(new Location(talisman.ruinX, talisman.ruinY, 0));
+  player.getPacketSender().sendSound(EXIT_PORTAL_SOUND, 1, 0);
+  player.sendMessage("You step through the portal...");
+  return true;
+}
+
 function handleEnterRift(event) {
   const runeId = RIFT_RUNES.get(event.objectId);
   if (!runeId) {
@@ -609,6 +644,7 @@ module.exports = {
 
     api.onObjectInteraction("Altar", { "Craft-rune": handleCraftRunes });
     api.onObjectInteraction("Blood Altar", { Bind: handleCraftRunes });
+    api.onObjectInteraction("Portal", { Use: handleExitPortal });
 
     for (const tier of POUCH_TIERS) {
       api.onItemAction(tier.name, {

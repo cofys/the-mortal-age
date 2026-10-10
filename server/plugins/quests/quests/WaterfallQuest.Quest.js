@@ -185,12 +185,15 @@ module.exports = function registerWaterfallQuest(api) {
 
   /** Golrie's junk pile yields Glarial's pebble. */
   function handleAction(event) {
-    if (event.stepId === "2-d8NO") {
+    // Mid-quest ("2-d8NO") advances the stage; after completion a reclaim
+    // ("rXLNXI") just re-grants the pebble for Roving Elves without regressing.
+    if (event.stepId === "2-d8NO" || event.stepId === "rXLNXI" || event.stepId === "LNQqz6") {
       const { player } = event;
-      if (quest.getStage(player) >= STAGE_READ_BOOK && !hasItem(player, GLARIALS_PEBBLE_ITEM_ID)) {
+      const stage = quest.getStage(player);
+      if (stage >= STAGE_READ_BOOK && !hasItem(player, GLARIALS_PEBBLE_ITEM_ID)) {
         if (!player.getInventory().isFull()) {
           player.getInventory().adds(GLARIALS_PEBBLE_ITEM_ID, 1);
-          quest.setStage(player, STAGE_GOT_PEBBLE);
+          if (stage < STAGE_GOT_PEBBLE) quest.setStage(player, STAGE_GOT_PEBBLE);
         }
       }
       event.handled = true;

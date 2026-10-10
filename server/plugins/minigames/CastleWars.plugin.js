@@ -22,5 +22,6 @@ module.exports = {
     require("./castlewars/Ropes.CastleWars")(api, game);
     require("./castlewars/Bandages.CastleWars")(api, game);
     require("./castlewars/Bracelet.CastleWars")(api, game);
+    require("./castlewars/Bots.CastleWars")(api, game);
   },
 };

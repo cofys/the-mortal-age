@@ -15,25 +15,35 @@ function isBetween(fromY, toY, objectY) {
   return (fromY - objectY) * (toY - objectY) <= 0 && fromY !== toY;
 }
 
+/**
+ * The axis a ditch piece is crossed along: most of the ditch runs east-west (crossed
+ * in y), but pieces facing 1/3 run north-south (2996,3530-3533), crossed in x.
+ */
+function crossAxis(object) {
+  return (object.getFace?.() & 1) === 1 ? "x" : "y";
+}
+const along = (axis, loc) => (axis === "x" ? (loc.getX?.() ?? loc.x) : (loc.getY?.() ?? loc.y));
+
 // A retreating bot runs deeper/away inside the Wilderness and never escapes
 // south over the ditch; crossing back north is still allowed.
-function isRetreatBlocked(player, state, objectY) {
-  return !!state.pvp?.retreat && player.getLocation().getY() > objectY;
+function isRetreatBlocked(player, state, objectY, axis = "y") {
+  return axis === "y" && !!state.pvp?.retreat && player.getLocation().getY() > objectY;
 }
 
-function startCross({ player, state, world, object, objectY, request, nowMs }) {
+function startCross({ player, state, world, object, objectY, axis, request, nowMs }) {
   const objectLoc = object.getLocation();
   const ditch = world.ditch;
   state.nextDitchAttemptAt = nowMs + Number(ditch?.attemptCooldownMs ?? DEFAULT_ATTEMPT_COOLDOWN_MS);
   player.getMovementQueue().walkToObject(object, {
     execute: () => {
       // A crossing queued before the retreat began must not fire.
-      if (isRetreatBlocked(player, state, objectY)) {
+      if (isRetreatBlocked(player, state, objectY, axis)) {
         return;
       }
-      const startSide = player.getLocation().getY() <= objectY ? "south" : "north";
+      const startSide = along(axis, player.getLocation()) <= objectY ? "south" : "north";
       state.awaitingDitchTransition = {
         ditchY: objectY,
+        axis,
         startSide,
         startedAt: Date.now(),
       };
@@ -86,7 +96,7 @@ function maybeCrossDitch({ player, state, world, request }) {
     if (player.getForceMovement?.() != null) {
       return true;
     }
-    const y = player.getLocation().getY();
+    const y = along(pending.axis ?? "y", player.getLocation());
     const crossed =
       pending.startSide === "north" ? y < pending.ditchY : y > pending.ditchY;
     if (crossed) {
@@ -118,11 +128,13 @@ function maybeCrossDitch({ player, state, world, request }) {
   if (!object?.getLocation) {
     return false;
   }
-  const objectY = object.getLocation().getY();
-  if (!isBetween(from.getY(), to.y, objectY) || isRetreatBlocked(player, state, objectY)) {
+  // "Y" below is the coordinate along the crossing axis (x for north-south pieces).
+  const axis = crossAxis(object);
+  const objectY = along(axis, object.getLocation());
+  if (!isBetween(along(axis, from), along(axis, to), objectY) || isRetreatBlocked(player, state, objectY, axis)) {
     return false;
   }
-  return startCross({ player, state, world, object, objectY, request, nowMs: now });
+  return startCross({ player, state, world, object, objectY, axis, request, nowMs: now });
 }
 
 module.exports = {

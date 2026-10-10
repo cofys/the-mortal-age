@@ -5,6 +5,8 @@ const PROGRESS_EVENTS = Object.freeze([
   "mining:success",
   "firemaking:success",
   "smelting:success",
+  "fishing:success",
+  "cooking:success",
 ]);
 
 /**

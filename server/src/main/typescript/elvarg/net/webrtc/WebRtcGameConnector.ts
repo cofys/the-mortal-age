@@ -18,7 +18,9 @@ type PeerState = {
 };
 
 const DEFAULT_SIGNAL_URL = "wss://worlds.rsps.app";
-const MAX_REGISTRATION_ATTEMPTS = 5;
+// Never give up: the relay only evicts a stale registration of ours after ~30s of
+// missed status checks, so retries must outlast that window.
+const MAX_RECONNECT_DELAY_MS = 30_000;
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.rsps.app:3478" }];
 
 function parseIceServers(raw: string | undefined): RTCIceServer[] {
@@ -96,7 +98,6 @@ export class WebRtcGameConnector {
   ) {}
 
   public connect(): void {
-    if (this.registrationAttempts >= MAX_REGISTRATION_ATTEMPTS) return;
     if (this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING) return;
     this.registrationAttempts++;
     const socket = new WebSocket(this.signalUrl, { maxPayload: 64 * 1024 });
@@ -125,11 +126,8 @@ export class WebRtcGameConnector {
       for (const [sessionId, state] of this.peers) {
         if (!state.channel) this.closePeer(sessionId);
       }
-      if (this.registrationAttempts >= MAX_REGISTRATION_ATTEMPTS) {
-        console.warn(`[webrtc] stopping signalling retries after ${MAX_REGISTRATION_ATTEMPTS} unsuccessful registration attempts`);
-        return;
-      }
-      this.reconnectTimer = setTimeout(() => this.connect(), 1000);
+      const delay = Math.min(MAX_RECONNECT_DELAY_MS, 1000 * 2 ** (this.registrationAttempts - 1));
+      this.reconnectTimer = setTimeout(() => this.connect(), delay);
       this.reconnectTimer.unref?.();
     });
     socket.on("error", (error) => console.warn("[webrtc] signalling error", error.message));

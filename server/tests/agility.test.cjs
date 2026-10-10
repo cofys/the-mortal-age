@@ -54,7 +54,7 @@ Agility.register({
 const { COURSES } = require("../plugins/skills/agility/courses");
 const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts");
 const { build } = require("../plugins/skills/agility/shortcuts/ShortcutData");
-const SHORTCUT_DATA = require("../data/definitions/agility-shortcuts.json");
+const SHORTCUT_DATA = require("../plugins/skills/data/agility-shortcuts.json");
 
 function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] } = {}) {
   let location = new Location(x, y, z);

@@ -492,6 +492,11 @@ export class Combat {
         return killer;
     }
 
+    /** Forgets recorded player damage; a fight that disengaged must not win a later kill. */
+    public clearDamageMap(): void {
+        this.damageMap.clear();
+    }
+
     public damageMapContains(player: Player): boolean {
         const cached = this.damageMap.get(player);
         return cached != null && cached.getStopwatch() < CombatConstants.DAMAGE_CACHE_TIMEOUT;

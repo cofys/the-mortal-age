@@ -50,6 +50,18 @@ type TerrainOverride = {
     renderFlags?: number;
 };
 
+/**
+ * How deep floor holes (ladder and trapdoor openings) are drawn. The map gives those tiles
+ * no floor, so without pit geometry the sky clear colour shows through the opening.
+ */
+const FLOOR_HOLE_DEPTH = 64;
+
+/** Surface drawn inside floor holes: the pit bottom. */
+const FLOOR_HOLE_HSL = packHsl(0, 0, 0);
+
+/** Pit walls, a touch lighter than the bottom so the rim reads as depth. */
+const FLOOR_HOLE_WALL_HSL = packHsl(0, 0, 14);
+
 export class SceneBuilder {
     static readonly BLEND_RADIUS = 5;
 
@@ -1475,7 +1487,9 @@ export class SceneBuilder {
                     const overlayId = (overlayIds[level][x][y] & 0x7fff) - 1;
 
                     if (underlayId === -1 && overlayId === -1) {
-                        continue;
+                        if (!this.isEnclosedFloorHole(scene, level, x, y)) {
+                            continue;
+                        }
                     }
 
                     const heightSw = heights[level][x][y];
@@ -1506,6 +1520,9 @@ export class SceneBuilder {
                         if (underlayHslNw === -1 || !smoothUnderlays) {
                             underlayHslNw = underlayHslSw;
                         }
+                    } else if (overlayId === -1) {
+                        // An enclosed hole (the tile was not skipped above): its pit model is built below.
+                        underlayHslSw = underlayHslSe = underlayHslNe = underlayHslNw = FLOOR_HOLE_HSL;
                     }
 
                     let underlayRgb = 0;
@@ -1514,7 +1531,16 @@ export class SceneBuilder {
                     }
 
                     let tileModel: SceneTileModel;
-                    if (overlayId === -1) {
+                    if (underlayId === -1 && overlayId === -1) {
+                        tileModel = this.buildFloorHoleModel(
+                            x,
+                            y,
+                            heightSw,
+                            heightSe,
+                            heightNe,
+                            heightNw,
+                        );
+                    } else if (overlayId === -1) {
                         tileModel = new SceneTileModel(
                             0,
                             0,
@@ -1612,6 +1638,102 @@ export class SceneBuilder {
                 }
             }
         }
+    }
+
+    /**
+     * True when a floor-less tile is enclosed by floor on all four sides (a ladder or
+     * trapdoor opening inside a building) rather than an unloaded map edge. Those holes
+     * get a pit model so the sky is not visible through them.
+     */
+    private isEnclosedFloorHole(scene: Scene, level: number, x: number, y: number): boolean {
+        const sizeX = scene.sizeX;
+        const sizeY = scene.sizeY;
+        const floored = (tileX: number, tileY: number): boolean =>
+            tileX >= 0 &&
+            tileY >= 0 &&
+            tileX < sizeX &&
+            tileY < sizeY &&
+            (scene.tileUnderlays[level][tileX][tileY] > 0 ||
+                (scene.tileOverlays[level][tileX][tileY] & 0x7fff) > 0);
+        return floored(x - 1, y) && floored(x + 1, y) && floored(x, y - 1) && floored(x, y + 1);
+    }
+
+    /**
+     * A ladder/trapdoor opening: the tile's top rim sits at the map heights and a black pit
+     * drops FLOOR_HOLE_DEPTH below it, with dark walls linking the two so the opening reads
+     * as a hole instead of a painted square. Terrain y is stored negated (higher ground is
+     * more negative), so below the floor means a larger y. Faces are added in both windings
+     * because terrain back-face culling is a client setting (the constructor's flat quad is
+     * dropped).
+     */
+    private buildFloorHoleModel(
+        x: number,
+        y: number,
+        heightSw: number,
+        heightSe: number,
+        heightNe: number,
+        heightNw: number,
+    ): SceneTileModel {
+        const model = new SceneTileModel(
+            0,
+            0,
+            -1,
+            x,
+            y,
+            heightSw,
+            heightSe,
+            heightNe,
+            heightNw,
+            0,
+            0,
+            0,
+            0,
+            FLOOR_HOLE_HSL,
+            FLOOR_HOLE_HSL,
+            FLOOR_HOLE_HSL,
+            FLOOR_HOLE_HSL,
+            -1,
+            -1,
+            0,
+            0,
+        );
+
+        const tileX = x * 128;
+        const tileY = y * 128;
+        const bottomY = Math.max(heightSw, heightSe, heightNe, heightNw) + FLOOR_HOLE_DEPTH;
+        const vertex = (vx: number, vy: number, vz: number, hsl: number) => ({
+            x: vx,
+            y: vy,
+            z: vz,
+            hsl,
+            u: 0,
+            v: 0,
+            textureId: -1,
+        });
+        const sw = vertex(tileX, heightSw, tileY, FLOOR_HOLE_WALL_HSL);
+        const se = vertex(tileX + 128, heightSe, tileY, FLOOR_HOLE_WALL_HSL);
+        const ne = vertex(tileX + 128, heightNe, tileY + 128, FLOOR_HOLE_WALL_HSL);
+        const nw = vertex(tileX, heightNw, tileY + 128, FLOOR_HOLE_WALL_HSL);
+        const bsw = vertex(tileX, bottomY, tileY, FLOOR_HOLE_HSL);
+        const bse = vertex(tileX + 128, bottomY, tileY, FLOOR_HOLE_HSL);
+        const bne = vertex(tileX + 128, bottomY, tileY + 128, FLOOR_HOLE_HSL);
+        const bnw = vertex(tileX, bottomY, tileY + 128, FLOOR_HOLE_HSL);
+
+        const addQuad = (a: any, b: any, c: any, d: any): void => {
+            model.faces.push({ isOverlay: false, vertices: [a, b, c] });
+            model.faces.push({ isOverlay: false, vertices: [a, c, d] });
+            model.faces.push({ isOverlay: false, vertices: [a, c, b] });
+            model.faces.push({ isOverlay: false, vertices: [a, d, c] });
+        };
+        // The constructor's flat quad at floor level would cover the pit.
+        model.faces.length = 0;
+        addQuad(bsw, bse, bne, bnw); // pit bottom
+        addQuad(sw, se, bse, bsw); // south wall
+        addQuad(se, ne, bne, bse); // east wall
+        addQuad(ne, nw, bnw, bne); // north wall
+        addQuad(nw, sw, bsw, bnw); // west wall
+        model.normalFaceCount = model.faces.length;
+        return model;
     }
 
     // ====================================================================

@@ -6,15 +6,22 @@ const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill"
 const { ItemIds } = require("../../../src/main/typescript/elvarg/util/IdEnums");
 const { createInteractObjectAction } = require("./actions/InteractObject");
 const { createDropItemsAction } = require("./actions/DropItems");
+const { createChooseAction } = require("./actions/Choose");
+const { createSellItemsAction } = require("./actions/SellItems");
 const { createEquipToolAction } = require("./actions/EquipTool");
 const { createBankAction } = require("./actions/Bank");
+const { readBotSites } = require("./BotSites");
+const { createOrElseAction } = require("./actions/OrElse");
 const { createWalkToAction } = require("./actions/WalkTo");
 const { createEnsureItemAction } = require("./actions/EnsureItem");
 const { createLightFireAction } = require("./actions/LightFire");
 const { createSmeltAction } = require("./actions/Smelt");
+const { createTrainCombatAction } = require("./actions/TrainCombat");
 const { createPvpCombatAction } = require("./actions/PvpCombat");
 const { createWanderAction } = require("./actions/Wander");
 const { createFollowOwnerAction } = require("./actions/FollowOwner");
+const { createFishAction } = require("./actions/Fish");
+const { createCookAction } = require("./actions/Cook");
 
 const DEFAULT_DEFINITIONS_PATH = path.join(
   process.cwd(),
@@ -51,6 +58,15 @@ function registerBotConditionKind(kind, factory) {
 function getBotActivityRegistries() {
   return TRACKED_REGISTRIES.slice();
 }
+
+const DEFAULT_SITES_PATH = path.join(process.cwd(), "data", "definitions", "bot-sites.json");
+
+// Modes a site never rotates through: PvP and roaming belong to the wilderness pool.
+const NON_SITE_MODES = new Set(["pvp", "roaming"]);
+
+const SITE_DEFAULTS = Object.freeze({
+  spawnRadius: 6,
+});
 
 function applyFields(value, fields) {
   if (typeof value === "string") {
@@ -151,8 +167,21 @@ function createAction(spec, world) {
   if (extended) {
     return extended(spec, world);
   }
+  if (spec.orElse) {
+    const { orElse, ...primary } = spec;
+    return createOrElseAction(createAction(primary, world), createAction(orElse, world));
+  }
   if (spec.type === "interactObject") {
     return createInteractObjectAction(spec, world);
+  }
+  if (spec.type === "choose") {
+    return createChooseAction(spec, (option) => createAction(option, world));
+  }
+  if (spec.type === "sellItems") {
+    return createSellItemsAction(
+      { ...spec, itemIds: (spec.itemIds ?? []).map(resolveItemId).filter((id) => Number.isInteger(id)) },
+      world
+    );
   }
   if (spec.type === "dropItems") {
     return createDropItemsAction({
@@ -167,6 +196,7 @@ function createAction(spec, world) {
     return createBankAction(
       {
         ...spec,
+        itemIds: (spec.itemIds ?? []).map(resolveItemId).filter((id) => Number.isInteger(id)),
         withdraw: (spec.withdraw ?? [])
           .map((entry) => ({
             item: resolveItemId(entry.item),
@@ -192,6 +222,9 @@ function createAction(spec, world) {
   if (spec.type === "smelt") {
     return createSmeltAction(spec, world);
   }
+  if (spec.type === "trainCombat") {
+    return createTrainCombatAction(spec, world);
+  }
   if (spec.type === "pvpCombat") {
     return createPvpCombatAction(spec, world?.pvpController ?? null);
   }
@@ -200,6 +233,12 @@ function createAction(spec, world) {
   }
   if (spec.type === "followOwner") {
     return createFollowOwnerAction(spec, world);
+  }
+  if (spec.type === "fish") {
+    return createFishAction({ ...spec, bait: spec.bait ? resolveItemId(spec.bait) : null }, world);
+  }
+  if (spec.type === "cook") {
+    return createCookAction(spec, world);
   }
   throw new Error(`[bot activities] unknown action type '${spec.type}'`);
 }
@@ -235,6 +274,29 @@ function compileActivity(definition, templates, world, options = {}) {
 }
 
 /**
+ * An action may name a gear table (`gearRef`) instead of carrying one inline; the tables
+ * live in bot-combat-gear.json next to the activity definitions.
+ */
+function expandGearRefs(definition, gearTables) {
+  if (!Array.isArray(definition?.actions)) {
+    return definition;
+  }
+  const actions = definition.actions.map((action) => {
+    const gearRef = action?.gearRef;
+    if (!gearRef) {
+      return action;
+    }
+    const gear = gearTables[gearRef];
+    if (!gear) {
+      throw new Error(`[bot activities] '${definition.id}' references unknown gear '${gearRef}'`);
+    }
+    const { gearRef: _ref, ...rest } = action;
+    return { ...rest, ...gear };
+  });
+  return { ...definition, actions };
+}
+
+/**
  * Loads data-driven activities, their resolver links and sites. Capacity slots
  * cap how many bots may run an activity at once; assignment happens only when a
  * brain goes idle, never per tick.
@@ -247,15 +309,31 @@ function createBotActivityRegistry(options = {}) {
   if (!raw || typeof raw !== "object") {
     throw new Error("[bot activities] definitions must be an object");
   }
+  const gearPath = options.combatGearPath ?? path.join(path.dirname(definitionsPath), "bot-combat-gear.json");
+  const gearTables = JSON.parse(fs.readFileSync(gearPath, "utf8"));
   const templates = raw.templates ?? {};
   const activities = [];
   const resolvers = [];
   const byId = new Map();
+  const fieldsById = new Map();
   for (const definition of raw.activities ?? []) {
     if (!definition?.id || byId.has(definition.id)) {
       throw new Error("[bot activities] activity ids must be unique");
     }
-    const activity = compileActivity(definition, templates, world);
+    // `fieldsFrom` copies another activity's fields first (a burn tier reuses its tree's
+    // level and log), so only the differences stay in the file.
+    let fields = definition.fields;
+    if (definition.fieldsFrom) {
+      const inherited = fieldsById.get(definition.fieldsFrom);
+      if (!inherited) {
+        throw new Error(
+          `[bot activities] '${definition.id}' fieldsFrom unknown activity '${definition.fieldsFrom}'`
+        );
+      }
+      fields = { ...inherited, ...(definition.fields ?? {}) };
+    }
+    fieldsById.set(definition.id, fields);
+    const activity = compileActivity(expandGearRefs({ ...definition, fields }, gearTables), templates, world);
     activities.push(activity);
     byId.set(activity.id, activity);
   }
@@ -270,13 +348,93 @@ function createBotActivityRegistry(options = {}) {
     resolvers.push(resolver);
     byId.set(resolver.id, resolver);
   }
-  const sites = (raw.sites ?? []).map((site) => {
-    const activity = byId.get(site.activity);
-    if (!activity) {
-      throw new Error(`[bot activities] site '${site.id}' references unknown activity '${site.activity}'`);
+  // A tier picks one activity per mode: the highest-level activity its
+  // weakest bot can do (a 60 woodcutter chops yews, not normal trees).
+  const siteCandidates = activities.filter(
+    (activity) => !activity.manual && !activity.ephemeral && activity.mode && !NON_SITE_MODES.has(activity.mode)
+  );
+  const requiredLevel = (activity) => Number(fieldsById.get(activity.id)?.level ?? 1);
+  function activitiesForLevel(lowest) {
+    const bestByMode = new Map();
+    for (const activity of siteCandidates) {
+      const level = requiredLevel(activity);
+      const best = bestByMode.get(activity.mode);
+      if (level <= lowest && (!best || level > requiredLevel(best))) {
+        bestByMode.set(activity.mode, activity);
+      }
     }
-    return { ...site, activity };
-  });
+    return siteCandidates.filter((activity) => bestByMode.get(activity.mode) === activity);
+  }
+
+  // bot-sites.json: a skilling site's `bots` maps each mode to a count, split evenly over
+  // the tiers (here, in `tiers`; the lowest tiers take any remainder), or to per-tier counts. Each mode x tier is a
+  // runtime site `<site>_<mode>_<tier>` whose bots only do that tier's activity for the mode.
+  // A tier rolls every skill in its `skills` band and the combat stats into its `combat`
+  // level band. PvP sites (with a `pvp` block) are hotspots, loaded by WildernessHotspotRegistry.
+  // The world config's pluginConfig "PlayerBots:sites" switches sites on or off (BotSites.js).
+  const sitesFile = readBotSites(options.sitesPath ?? DEFAULT_SITES_PATH);
+  const tiers = Object.entries(raw.tiers ?? {});
+  for (const [tierName, tier] of tiers) {
+    if (!Array.isArray(tier?.skills) || tier.skills.length !== 2 || !Array.isArray(tier.combat)) {
+      throw new Error(`[bot activities] tier '${tierName}' needs skills and combat bands`);
+    }
+  }
+  const siteModes = new Set(siteCandidates.map((activity) => activity.mode));
+  const sites = [];
+  for (const place of sitesFile.sites ?? []) {
+    if (place.pvp) continue;
+    const placeSites = [];
+    for (const [mode, counts] of Object.entries(place.bots ?? {})) {
+      if (!siteModes.has(mode)) {
+        throw new Error(`[bot sites] site '${place.id}' has unknown mode '${mode}' (${[...siteModes].join(", ")})`);
+      }
+      // A number is split over every tier; an object gives per-tier counts (missing tiers get none).
+      const perTier = typeof counts === "object" && counts !== null;
+      const unknownTier = perTier && Object.keys(counts).find((name) => !tiers.some(([tierName]) => tierName === name));
+      if (unknownTier) {
+        throw new Error(`[bot sites] site '${place.id}' ${mode} has unknown tier '${unknownTier}'`);
+      }
+      tiers.forEach(([tierName, tier], index) => {
+        const count = perTier
+          ? Number(counts[tierName] ?? 0)
+          : Math.floor(counts / tiers.length) + (index < counts % tiers.length ? 1 : 0);
+        const activity = activitiesForLevel(tier.skills[0]).find((candidate) => candidate.mode === mode);
+        if (count === 0 || !activity) return;
+        placeSites.push({
+          ...SITE_DEFAULTS,
+          ...(place.radius != null ? { spawnRadius: place.radius } : {}),
+          id: `${place.id}_${mode}_${tierName}`,
+          tier: tierName,
+          enabled: place.enabled === true,
+          anchor: { x: place.x, y: place.y, z: place.z ?? 0 },
+          count,
+          levels: { all: [tier.skills[0], tier.skills[1]], combat: [tier.combat[0], tier.combat[1]] },
+          activities: [activity],
+          rotation: null,
+        });
+      });
+    }
+    // `switchMinutes: [min, max]` lets a bot change mode within its tier: each bot rolls its
+    // own timer in the range, and the next mode is weighted by the tier's counts so the
+    // mix stays near the configured one. Omitted, bots stay on their mode.
+    if (place.switchMinutes != null) {
+      const [min, max] = place.switchMinutes;
+      if (!(min > 0 && max >= min)) {
+        throw new Error(`[bot sites] site '${place.id}' switchMinutes must be [min, max] minutes`);
+      }
+      for (const [tierName] of tiers) {
+        const tierSites = placeSites.filter((site) => site.tier === tierName);
+        if (tierSites.length < 2) continue;
+        const rotation = {
+          activityIds: tierSites.map((site) => site.activities[0].id),
+          weights: Object.fromEntries(tierSites.map((site) => [site.activities[0].id, site.count])),
+          switchAfterMs: { min: min * 60000, max: max * 60000 },
+        };
+        for (const site of tierSites) site.rotation = rotation;
+      }
+    }
+    sites.push(...placeSites);
+  }
   const slots = new Map();
   const lastActivityByPlayer = new WeakMap();
   const blockedUntilByPlayer = new WeakMap();
@@ -337,9 +495,19 @@ function createBotActivityRegistry(options = {}) {
       }
       blocked.set(activityId, nowMs + Math.max(0, durationMs));
     },
-    pickActivity(player, nowMs = Date.now()) {
+    /** `allowed` limits the pick to those ids; `avoid` excludes one (a rotation switch). */
+    /** `weights` (id -> weight, default 1) biases a fresh pick, e.g. by a site's mode counts. */
+    pickActivity(player, nowMs = Date.now(), { allowed = null, avoid = null, own = null, weights = null } = {}) {
+      if (own) {
+        // A bot going back to the activity it was given: only its failure cooldown
+        // holds it back (capacity and `manual` are about handing out new activities).
+        const activity = byId.get(own) ?? null;
+        return activity && !isBlocked(player, own, nowMs) ? activity : null;
+      }
       const previousId = lastActivityByPlayer.get(player);
-      const candidates = available(player, nowMs);
+      const candidates = available(player, nowMs).filter(
+        (activity) => activity.id !== avoid && (!allowed || allowed.includes(activity.id))
+      );
       if (activityPicker) {
         let picked = null;
         try {
@@ -355,7 +523,9 @@ function createBotActivityRegistry(options = {}) {
         }
       }
       const previous = candidates.find((activity) => activity.id === previousId);
-      const picked = previous ?? candidates[Math.floor(Math.random() * candidates.length)] ?? null;
+      const weightOf = (activity) => Math.max(0, Number(weights?.[activity.id] ?? 1));
+      let roll = Math.random() * candidates.reduce((sum, activity) => sum + weightOf(activity), 0);
+      const picked = previous ?? candidates.find((activity) => (roll -= weightOf(activity)) < 0) ?? candidates[0] ?? null;
       if (picked) {
         lastActivityByPlayer.set(player, picked.id);
       }

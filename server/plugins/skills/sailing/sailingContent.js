@@ -85,7 +85,7 @@ let loaded = null;
 /** Loads boats.json and sailing-docks.json into Sailing (and sailing-cargo.json) once, for every plugin. */
 function content() {
   if (loaded) return loaded;
-  const read = (file) => JSON.parse(fs.readFileSync(path.resolve(process.cwd(), GameConstants.DEFINITIONS_DIRECTORY, file), "utf8"));
+  const read = (file) => JSON.parse(fs.readFileSync(path.join(__dirname, "data", file), "utf8"));
   const boats = read("boats.json");
   // Every port and mooring point from the cache (sailing-ports.json), with what only some have
   // (a shipwright, the shipyard) from sailing-docks.json.

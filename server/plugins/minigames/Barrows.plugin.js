@@ -285,10 +285,14 @@ function spawnNpc(player, npcId, location, brother = false) {
 }
 
 function dig({ player }) {
+  const location = player.getLocation();
+  // Barrows owns only its own mounds: quest digs elsewhere (X Marks the Spot,
+  // Making History, Corsair Curse, ...) must fall through to their handlers.
+  if (!BOUNDS.some((bounds) => bounds.inside(location))) return false;
   const state = session(player);
   if (state.dig || player.getForceMovement()) return true;
   player.performAnimation(DIG_ANIMATION);
-  const brother = BROTHERS.find((entry) => entry.mound.inside(player.getLocation()));
+  const brother = BROTHERS.find((entry) => entry.mound.inside(location));
   if (!brother) {
     player.sendMessage("You dig into the ground, but find nothing.");
     return true;

@@ -25,7 +25,7 @@ The dormant and awake forms were never switched, and their combat animations wer
 
 ## Combat
 
-`server/plugins/npcs/Wyrms.plugin.js`, data in `server/data/definitions/wyrms.json`:
+`server/plugins/npcs/Wyrms.plugin.js`, data in `server/plugins/npcs/data/wyrms.json`:
 - **The style:** melee when the target touches the wyrm's footprint along an edge, magic otherwise, chosen as each attack starts. Its reach is magic's (10), so a wyrm attacked from a distance casts rather than walking in, and only uses magic (Wiki).
 - **Max hits:** the hit is rolled up to the NPC's max hit (13, the magic one) with protection prayers applied, and a melee hit is scaled down to 10.
 - **Animations and graphics (cache names):** `wyrm_attack_melee` 8270, `wyrm_attack_magic` 8271, the projectile `wyrm_range_proj` 1634, the impact `wyrm_range_impact` 1635 (a missed cast splashes).

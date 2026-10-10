@@ -1,6 +1,6 @@
 /**
  * The Edgeville Dungeon: what the units share - the plugin api and the data from
- * data/definitions/edgeville-dungeon.json.
+ * plugins/areas/data/edgeville-dungeon.json.
  */
 const fs = require("fs");
 const path = require("path");
@@ -13,7 +13,7 @@ let data = null;
 function init(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
-  const file = path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "edgeville-dungeon.json");
+  const file = path.join(__dirname, "..", "data", "edgeville-dungeon.json");
   data = JSON.parse(fs.readFileSync(file, "utf8"));
 }
 

@@ -2,7 +2,7 @@
 
 // Trail coordinates/varbits adapted from GregHib/void (BSD-3-Clause).
 // See Tracking.LICENSE. Trail generation and handlers are local implementations.
-const data = require("./TrackingData.json");
+const data = require("../data/tracking-data.json");
 const { H, ANIM, requireLevel, hasTool, nearby, exchange, xp, begin, roll, distance } = require("./Context.Hunter");
 const trails = new Map();
 const ATTRIBUTE = "hunter.pursuit-charges";

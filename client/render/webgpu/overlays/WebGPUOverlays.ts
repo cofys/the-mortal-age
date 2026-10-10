@@ -1,4 +1,5 @@
 import type { HitsplatEventPayload } from "../../../game/GameRenderer";
+import type { Ray } from "../../../game/math/Raycast";
 import type { SdMapData } from "../../loader/SdMapData";
 import type { WebGPUMapSquare } from "../WebGPUMapSquare";
 import type { WebGPURenderer } from "../WebGPURenderer";
@@ -38,6 +39,11 @@ export class WebGPUOverlays {
     private clickCross?: ClickCrossLayer;
     private groundItemLabels?: GroundItemLabelLayer;
     private hitsplats?: HitsplatLayer;
+
+    /** Screen position to a world ray (HelmSteering), through the shared overlay host. */
+    screenToRay(mouseX: number, mouseY: number): Ray | null {
+        return this.host?.screenToRay(mouseX, mouseY) ?? null;
+    }
     private healthBars?: HealthBarLayer;
     private overheadText?: OverheadTextLayer;
     private overheadPrayer?: OverheadPrayerLayer;

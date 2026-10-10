@@ -1,6 +1,7 @@
 const { Flag } = require("../../../../src/main/typescript/elvarg/game/model/Flag");
 const { PathFinder } = require("../../../../src/main/typescript/elvarg/game/model/movement/path/PathFinder");
 const { isOutsideWildernessHotspots } = require("../pvp/WildernessHotspotRegistry");
+const { nextWaypoint } = require("./BotLongRoutes");
 
 const MAX_ROUTE_SEGMENT_TILES = 24;
 // Objects farther than this are approached in segments; see approachObject.
@@ -413,15 +414,20 @@ function dispatchMovementRequest(player, request, state = request?.state) {
     return null;
   }
   const nowMs = Date.now();
+  // Long walks follow a planned route (detours past fences/rivers the route
+  // finder's 128-tile window cannot see); short ones walk straight at the target.
+  // A walk to another floor heads for the stairs first (brain/Climbing sets climbVia).
+  const target = request.climbVia ?? request;
+  const waypoint = nextWaypoint(player, target, nowMs);
   const segmentTarget = resolveSegmentTarget(
     player,
     request.pvpOnly === true,
-    request.x,
-    request.y,
+    waypoint?.x ?? target.x,
+    waypoint?.y ?? target.y,
     request.maxRouteSegmentTiles
   );
-  const segmentZ = Number.isFinite(request.z)
-    ? request.z
+  const segmentZ = Number.isFinite(target.z)
+    ? target.z
     : player.getLocation()?.getZ?.() ?? 0;
   const unreachableTracker = getUnreachableSegmentTracker(player);
   if (unreachableTracker) {
@@ -474,6 +480,24 @@ function dispatchMovementRequest(player, request, state = request?.state) {
     }
   }
   const hasRoute = Number.isFinite(steps) ? steps > 0 : false;
+  if (
+    process.env.BOT_NAV_DEBUG === "1" &&
+    !hasRoute &&
+    nowMs - Number(request.debugAt ?? 0) >= 10000
+  ) {
+    request.debugAt = nowMs;
+    const username = player.getUsername?.() ?? "?";
+    const here = player.getLocation();
+    const nextWaypoints = (request.route?.waypoints ?? [])
+      .slice(request.route?.index ?? 0, (request.route?.index ?? 0) + 3)
+      .map((point) => `${point.x},${point.y}${point.door ? "d" : ""}`)
+      .join(" ");
+    console.log(
+      `[bot_nav] ${username} @${here.getX()},${here.getY()} reason=${request.reason ?? "-"} goal=${request.x},${request.y} ` +
+      `seg=${segmentTarget.x},${segmentTarget.y} waypoint=${waypoint ? `${waypoint.x},${waypoint.y}${waypoint.door ? " door" : ""}` : "none"} ` +
+      `route=${request.route ? `${request.route.index}/${request.route.waypoints.length}` : "none"} next=[${nextWaypoints}] steps=${steps}`
+    );
+  }
   request.lastSegmentX = segmentTarget.x;
   request.lastSegmentY = segmentTarget.y;
   request.lastSegmentZ = segmentZ;
@@ -536,7 +560,23 @@ function dispatchMovementRequest(player, request, state = request?.state) {
   };
 }
 
+/**
+ * Brain-side fallback for an object the core route finder cannot reach from here (a wall,
+ * a closed gate, an agility shortcut): queue a brain walk at it, whose traversal hooks
+ * open the gate or climb the shortcut on the way. Returns true when the caller should keep
+ * running instead of falling through to a core walkToObject that would fail silently.
+ */
+function approachBlockedObject(player, object, { nowMs, reason, canReach }) {
+  if (!object || canReach(player, object)) {
+    return false;
+  }
+  const at = object.getLocation();
+  queueRouteAndFlagAppearance(player, at.getX(), at.getY(), { nowMs, reason, basicPather: true });
+  return true;
+}
+
 module.exports = {
+  approachBlockedObject,
   approachObject,
   calculateStrictWalkRoute,
   chooseNextTarget,

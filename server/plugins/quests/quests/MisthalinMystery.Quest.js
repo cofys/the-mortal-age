@@ -30,7 +30,7 @@
  *   moves the player; the manor objects are otherwise handled in place.
  */
 module.exports = function registerMisthalinMysteryQuest(api) {
-  const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Location, ObjectDefinition, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
 
   const PAGE = "Misthalin Mystery";
@@ -135,6 +135,18 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     ObjectIdentifiers.UNLIT_CANDLE, // 30129
     ObjectIdentifiers.CANDLE_2, // 30130, lit
   ]);
+  /**
+   * The four candles share varp 1535 bits 8-11 (varbits 4039-4042), so lighting one
+   * has to set its own varbit or the client keeps the unlit model. The placement id
+   * is the only thing that tells the four apart; the resolved 30129/30130 ids are
+   * shared.
+   */
+  const CANDLE_VARBIT_BY_PLACEMENT = new Map([
+    [29652, 4039],
+    [29653, 4040],
+    [29654, 4041],
+    [29655, 4042],
+  ]);
   const FIREPLACE_LOC_IDS = new Set([
     ObjectIdentifiers.FIREPLACE_24, // 30136
     ObjectIdentifiers.FIREPLACE_25, // 30137
@@ -202,6 +214,21 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   const gemProgressByPlayer = new Map();
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
+
+  /**
+   * The manor's riddle scenery is placed as varbit-gated multi-loc bases (barrel 29649,
+   * painting 29650, piano 29658, walls 29656/29657, fireplace 29659, notes 2266/2267/
+   * 29648, candles 29652-29655) whose children are the 3012x/3013x ids below. Dispatch
+   * on the player-resolved child, not the raw placement id.
+   */
+  function resolvedObjectId(event) {
+    if (event.definition?.id != null) return event.definition.id;
+    if (event.object) {
+      const definition = ObjectDefinition.forPlayer(event.object.getId(), event.player);
+      if (definition) return definition.id;
+    }
+    return event.objectId;
+  }
 
   function freeSlots(player) {
     const inventory = player.getInventory();
@@ -367,7 +394,9 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   /** Answer the page's prose conditions. `stepId` disambiguates repeated wording. */
-  function answerCondition({ player, text, stepId }) {
+  function answerCondition({ player, text, stepId, pages }) {
+    // Conditions on other pages that happen to share wording ("already has the key") are not ours.
+    if (Array.isArray(pages) && !pages.some((entry) => entry?.page === PAGE)) return null;
     const value = String(text).toLowerCase();
     const inventory = player.getInventory();
     const has = (itemId) => inventory.getAmount(itemId) > 0;
@@ -640,6 +669,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     }
     if (requiredKeyId === RUBY_KEY_ITEM_ID && stage === STAGE_FUSE_LIT) {
       quest.setStage(player, STAGE_WALL_BLOWN);
+      resendLitCandles(player);
       player.sendMessage("You hear a muffled explosion as the damaged wall gives way.");
       return;
     }
@@ -764,7 +794,8 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   function searchPainting(event) {
-    const { player, objectId } = event;
+    const { player } = event;
+    const objectId = resolvedObjectId(event);
     const stage = quest.getStage(player);
     if (PAINTING_LOC_IDS.has(objectId) && stage >= STAGE_PAINTING_SLASHED) {
       startTranscript(
@@ -786,8 +817,11 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   function slashPainting(event) {
-    const { player, objectId } = event;
-    if (objectId === ObjectIdentifiers.PAINTING_22 && quest.getStage(player) === STAGE_NOTE1_READ) {
+    const { player } = event;
+    if (
+      resolvedObjectId(event) === ObjectIdentifiers.PAINTING_22 &&
+      quest.getStage(player) === STAGE_NOTE1_READ
+    ) {
       startTranscript(
         api,
         player,
@@ -819,15 +853,18 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       return;
     }
     const lit = litCandlesByPlayer.get(player) ?? new Set();
-    const tile = `${location.x},${location.y}`;
+    const varbit = CANDLE_VARBIT_BY_PLACEMENT.get(event.object?.getId?.() ?? event.objectId);
+    const tile = varbit ?? `${location.x},${location.y}`;
     if (lit.has(tile)) {
       player.sendMessage("You have already lit this candle.");
       return;
     }
     lit.add(tile);
     litCandlesByPlayer.set(player, lit);
+    if (varbit !== undefined) player.getPacketSender().sendVarbit(varbit, 1);
     if (lit.size >= 4) {
       if (stage === STAGE_RUBY_ROOM_OPEN) quest.setStage(player, STAGE_CANDLES_LIT);
+      resendLitCandles(player);
       startTranscript(
         api,
         player,
@@ -838,6 +875,13 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       return;
     }
     startTranscript(api, player, NpcIdentifiers.KILLER, PAGE, "the-first-riddle-lighting-a-candle");
+  }
+
+  /** A stage write sends the whole varp, clearing the candle bits 8-11; put them back. */
+  function resendLitCandles(player) {
+    for (const id of litCandlesByPlayer.get(player) ?? []) {
+      if (typeof id === "number") player.getPacketSender().sendVarbit(id, 1);
+    }
   }
 
   function lightFuse(event) {
@@ -871,6 +915,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       "the-first-riddle-attempting-to-light-the-fuse-once-the-candles-are-lit"
     );
     quest.setStage(player, STAGE_FUSE_LIT);
+    resendLitCandles(player);
   }
 
   function climbWall(event) {
@@ -950,7 +995,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   function handleObjectInteraction(event) {
-    const { objectId } = event;
+    const objectId = resolvedObjectId(event);
     if (BOAT_LOC_IDS.has(objectId)) {
       event.handled = true;
       boardRowboat(event);
@@ -1064,19 +1109,20 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   function handleItemOnObject(event) {
+    const objectId = resolvedObjectId(event);
     if (event.itemId === BUCKET_ITEM_ID) {
-      if (!WATER_BARREL_LOC_IDS.has(event.objectId)) return;
+      if (!WATER_BARREL_LOC_IDS.has(objectId)) return;
       event.handled = true;
       fillBucket(event);
       return;
     }
     if (event.itemId === KNIFE_ITEM_ID) {
-      if (PAINTING_LOC_IDS.has(event.objectId) || WRONG_PAINTING_LOC_IDS.has(event.objectId)) {
+      if (PAINTING_LOC_IDS.has(objectId) || WRONG_PAINTING_LOC_IDS.has(objectId)) {
         event.handled = true;
         slashPainting(event);
         return;
       }
-      if (FIREPLACE_LOC_IDS.has(event.objectId)) {
+      if (FIREPLACE_LOC_IDS.has(objectId)) {
         event.handled = true;
         if (quest.getStage(event.player) !== STAGE_NOTE3_READ) {
           event.player.sendMessage("You have no reason to do that.");
@@ -1094,19 +1140,19 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       return;
     }
     if (event.itemId === TINDERBOX_ITEM_ID) {
-      if (CANDLE_LOC_IDS.has(event.objectId)) {
+      if (CANDLE_LOC_IDS.has(objectId)) {
         event.handled = true;
         lightCandle(event);
         return;
       }
-      if (event.objectId === ObjectIdentifiers.BARREL_139) {
+      if (objectId === ObjectIdentifiers.BARREL_139) {
         event.handled = true;
         lightFuse(event);
       }
       return;
     }
     if (!COLOURED_KEY_ITEM_IDS.has(event.itemId)) return;
-    const requiredKey = DOOR_KEY_BY_LOC.get(event.objectId);
+    const requiredKey = DOOR_KEY_BY_LOC.get(objectId);
     if (!requiredKey) return;
     event.handled = true;
     if (event.itemId !== requiredKey) {
@@ -1119,13 +1165,57 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       );
       return;
     }
-    if (event.objectId === ObjectIdentifiers.DOOR_561) {
+    if (objectId === ObjectIdentifiers.DOOR_561) {
       sapphireDoor(event);
       return;
     }
     const unlockedAt =
       requiredKey === RUBY_KEY_ITEM_ID ? STAGE_RUBY_ROOM_OPEN : STAGE_EMERALD_ROOM_OPEN;
     colouredDoor(event, requiredKey, unlockedAt);
+  }
+
+  /**
+   * Doors.plugin.js registers before quest plugins, so it would swap the manor's quest
+   * doors before this plugin's object hook runs. It emits door:toggle first; claim the
+   * door here and run the quest's own door logic.
+   */
+  function claimQuestDoor(request) {
+    if (request.handled) return;
+    const { objectId } = request;
+    if (FRONT_DOOR_LOC_IDS.has(objectId)) {
+      request.handled = true;
+      enterManor(request);
+      return;
+    }
+    if (objectId === ObjectIdentifiers.DOOR_554) {
+      request.handled = true;
+      taytenDoor(request);
+      return;
+    }
+    if (LOCKED_DOOR_LOC_IDS.has(objectId)) {
+      request.handled = true;
+      request.player.sendMessage("The door is securely locked.");
+      return;
+    }
+    if (objectId === ObjectIdentifiers.DOOR_560) {
+      request.handled = true;
+      diamondDoor(request);
+      return;
+    }
+    if (objectId === ObjectIdentifiers.DOOR_561) {
+      request.handled = true;
+      sapphireDoor(request);
+      return;
+    }
+    if (objectId === ObjectIdentifiers.DOOR_558) {
+      request.handled = true;
+      colouredDoor(request, RUBY_KEY_ITEM_ID, STAGE_RUBY_ROOM_OPEN);
+      return;
+    }
+    if (objectId === ObjectIdentifiers.DOOR_559) {
+      request.handled = true;
+      colouredDoor(request, EMERALD_KEY_ITEM_ID, STAGE_EMERALD_ROOM_OPEN);
+    }
   }
 
   function handleItemAction(event) {
@@ -1277,6 +1367,10 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   function handleLogin({ player }) {
+    // The client (and this player's loc/NPC resolvers) pick the manor's multi-loc
+    // scenery and the static quest NPCs from varp 1535; without this they all fall
+    // back to their stage-0 variants after a relog.
+    player.getPacketSender().sendConfig(VARP_MISTHALIN_MYSTERY, quest.getStage(player));
     refreshQuestList(player);
     ensureMandy(player);
   }
@@ -1299,6 +1393,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("door:toggle", claimQuestDoor);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemAction(handleItemAction);

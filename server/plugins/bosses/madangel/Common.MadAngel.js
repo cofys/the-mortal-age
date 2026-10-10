@@ -1,6 +1,6 @@
 /**
  * The Mad Angel: what the units share - the plugin api, the data from
- * data/definitions/mad-angel.json, tick timing, the captured fade, and the saved attributes.
+ * plugins/bosses/data/mad-angel.json, tick timing, the captured fade, and the saved attributes.
  */
 const fs = require("fs");
 const path = require("path");
@@ -26,7 +26,7 @@ let data = null;
 function init(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
-  data = JSON.parse(fs.readFileSync(path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "mad-angel.json"), "utf8"));
+  data = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "mad-angel.json"), "utf8"));
 }
 
 /** Runs `action` `ticks` ticks from now (at least one). */

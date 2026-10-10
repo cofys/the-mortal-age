@@ -4,7 +4,7 @@
  * ::maxgear <melee|range|mage> [void] - a developer's best-in-slot gear for testing bosses.
  * Worn gear goes to the bank; the inventory and stats are left alone (::master gives 99s).
  * `void` swaps in that style's void helm and elite void. The sets are data:
- * data/definitions/dev-loadouts.json.
+ * plugins/commands/data/dev-loadouts.json.
  */
 
 const fs = require("fs");
@@ -29,7 +29,7 @@ function core() {
 /** The sets, read on first use. */
 function data() {
   if (loadouts) return loadouts;
-  const file = path.join(core().GameConstants.DEFINITIONS_DIRECTORY, "dev-loadouts.json");
+  const file = path.join(__dirname, "data", "dev-loadouts.json");
   loadouts = JSON.parse(fs.readFileSync(file, "utf8"));
   return loadouts;
 }

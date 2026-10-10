@@ -1,5 +1,5 @@
 /**
- * The agility shortcuts, read from data/definitions/agility-shortcuts.json and turned into the
+ * The agility shortcuts, read from plugins/skills/data/agility-shortcuts.json and turned into the
  * obstacle entries Agility.plugin.js plays. The format is described in ../README.md.
  *
  * Steps in the data are templates: animations by name (`"CLIMB_ROCKS"`), the builders as macros
@@ -8,7 +8,7 @@
  * two-way shortcut its ends (`"from"`, `"to"`) and the tiles it passes in travel order (`"via0"`,
  * `"...via"`). Behaviour no template can say is a named script from the region files.
  */
-const DATA = require("../../../../data/definitions/agility-shortcuts.json");
+const DATA = require("../../data/agility-shortcuts.json");
 const { Anim } = require("../constants");
 const { climb } = require("../steps");
 const builders = require("./builders");

@@ -79,6 +79,19 @@ const COOKABLES = Object.freeze([
 
 const COOKABLE_BY_RAW = new Map(COOKABLES.map((cookable) => [cookable.raw, cookable]));
 
+// Wiki: cooking a raw karambwan yields a poison karambwan until Tinsay teaches
+// proper preparation after Tai Bwo Wannai Trio (post-quest Cooking training).
+const KARAMBWAN_TAUGHT_ATTRIBUTE = "quest.tai_bwo_wannai_trio.tinsay";
+const KARAMBWAN_TAUGHT_VALUE = 8;
+
+function cookedResult(player, cookable) {
+  if (cookable.raw !== ItemIds.RAW_KARAMBWAN) return cookable;
+  if ((Number(player.getAttribute?.(KARAMBWAN_TAUGHT_ATTRIBUTE)) || 0) >= KARAMBWAN_TAUGHT_VALUE) {
+    return cookable;
+  }
+  return { ...cookable, cooked: ItemIds.POISON_KARAMBWAN, xp: 80, name: "poison karambwan" };
+}
+
 const FIRE_OBJECT_NAMES = new Set(["Fire", "Forester's Campfire"]);
 const COOKABLE_OBJECT_NAMES = new Set(["Cooking range", "Range", "Stove", ...FIRE_OBJECT_NAMES]);
 
@@ -230,26 +243,27 @@ class CookingTask extends Task {
       Sounds.sendSound(player, Sound.COOKING_COOK);
       player.performAnimation(session.animation);
 
+      const cookable = cookedResult(player, session.cookable);
       player.getInventory().deleteNumber(session.cookable.raw, 1);
       const burnRequest = {
         player,
         rawId: session.cookable.raw,
-        itemId: session.cookable.cooked,
+        itemId: cookable.cooked,
         burn: !isSuccess(player, session.cookable),
       };
       pluginApi.emitCustomEvent("cooking:burn", burnRequest);
       if (!burnRequest.burn) {
-        player.getInventory().addItem(new Item(session.cookable.cooked, 1));
-        player.sendMessage(`You cook the ${session.cookable.name}.`);
+        player.getInventory().addItem(new Item(cookable.cooked, 1));
+        player.sendMessage(`You cook the ${cookable.name}.`);
         pluginApi.emitCustomEvent("cooking:success", {
           player,
           skill: Skill.COOKING,
-          itemId: session.cookable.cooked,
+          itemId: cookable.cooked,
         });
         const levelBefore = player
           .getSkillManager()
           .getMaxLevel(Skill.COOKING);
-        player.getSkillManager().addExperiences(Skill.COOKING, session.cookable.xp);
+        player.getSkillManager().addExperiences(Skill.COOKING, cookable.xp);
         const levelAfter = player
           .getSkillManager()
           .getMaxLevel(Skill.COOKING);
@@ -362,5 +376,9 @@ module.exports = {
       cookObjectNames: COOKABLE_OBJECT_NAMES.size,
     });
   },
+  isCookingActive,
+  COOKABLE_BY_RAW,
+  COOKABLE_OBJECT_NAMES,
+  FIRE_OBJECT_NAMES,
   _test: { isSuccess, stopBurnLevel, wearingCookingCape, GAUNTLETS_STOP_BURN, COOKABLE_BY_RAW },
 };

@@ -4,22 +4,22 @@
  * Gertrude (7284/7723) and the boys Shilop (3501) / Wilough (3503) are indexed on
  * the "Gertrude's Cat" transcript page, so their talk is transcript-driven; this
  * plugin selects the variant by stage, runs the start hook, consumes the 100 coins
- * hand-in and completes on the "finishing-up" action. Fluffs (3497) is not indexed,
- * so her milk/sardine/kitten hand-overs, the doogle-sardine recipe and the crate
- * search are supplied here.
+ * hand-in and completes on the "finishing-up" action. Fluffs (3497) is indexed only
+ * for her post-quest catspeak pages, so her quest interactions are replayed from the
+ * "Gertrude's Cat" page by stage, and her milk/sardine/kitten hand-overs, the
+ * doogle-sardine recipe and the crate search are supplied here.
  *
  * Stages (varp 180): 1 started, 2 paid the boy, 3 gave milk, 4 gave sardine,
  * 5 rescued the kitten, 6 complete.
  *
- * Gaps (no dump support): the "finding-fluffs-*-fluffs" flavour variants (hiss,
- * stroke) are not replayed; the crate search does not honour the reference's
+ * Gaps (no dump support): the crate search does not honour the reference's
  * kitten-crate varp (181) and always finds the kitten at stage 4. At completion
  * Gertrude plays her generic "Gertrude" page dialogue (the cat page has no
  * post-quest variant).
  */
 module.exports = function registerGertrudesCatQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "Gertrude's Cat";
 
@@ -27,6 +27,7 @@ module.exports = function registerGertrudesCatQuest(api) {
   const SHILOP_NPC_ID = NpcIdentifiers.SHILOP;
   const WILOUGH_NPC_ID = NpcIdentifiers.WILOUGH;
   const FLUFFS_NPC_ID = NpcIdentifiers.GERTRUDES_CAT_2;
+  const QUEST_NPC_IDS = new Set([...GERTRUDE_NPC_IDS, SHILOP_NPC_ID, WILOUGH_NPC_ID, FLUFFS_NPC_ID]);
 
   const VARP_GERTRUDES_CAT = 180;
   const STAGE_STARTED = 1;
@@ -43,6 +44,16 @@ module.exports = function registerGertrudesCatQuest(api) {
   const SEASONED_SARDINE_ITEM_ID = ItemIdentifiers.SEASONED_SARDINE;
   const FLUFFS_KITTEN_ITEM_ID = ItemIdentifiers.FLUFFS_KITTEN;
   const DOOGLE_LEAVES_ITEM_ID = ItemIdentifiers.DOOGLE_LEAVES;
+  const CHOCOLATE_CAKE_ITEM_ID = ItemIdentifiers.CHOCOLATE_CAKE;
+  const STEW_ITEM_ID = ItemIdentifiers.STEW;
+
+  /** Fluffs' quest flavour: talking is the same throughout, the hiss hint moves by stage. */
+  const FLUFFS_TALK_VARIANT = "finding-fluffs-talk-to-fluffs";
+  const FLUFFS_STAGE_HINTS = {
+    [STAGE_PAID_BOY]: { "pick-up": "finding-fluffs-pick-up-fluffs", stroke: "finding-fluffs-stroke-fluffs" },
+    [STAGE_GAVE_MILK]: { "pick-up": "finding-fluffs-pick-up-fluffs-2", stroke: "finding-fluffs-pick-up-fluffs-2" },
+    [STAGE_GAVE_SARDINE]: { "pick-up": "making-seasoned-sardines-pick-up-fluffs", stroke: "making-seasoned-sardines-pick-up-fluffs" },
+  };
 
   const CRATE_LOC_ID = ObjectIdentifiers.CRATE_18;
 
@@ -93,6 +104,9 @@ module.exports = function registerGertrudesCatQuest(api) {
 
   function grantReward(player) {
     player.getSkillManager().addExperiences(Skill.COOKING, 1525);
+    // The wiki's completion hand-out also includes the cake and stew the scroll advertises.
+    player.getInventory().adds(CHOCOLATE_CAKE_ITEM_ID, 1);
+    player.getInventory().adds(STEW_ITEM_ID, 1);
   }
 
   function gertrudeVariant(stage) {
@@ -119,10 +133,19 @@ module.exports = function registerGertrudesCatQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ npcId, player, text }) {
+    // Gertrude's pages only; other quests share the same prose ("free inventory
+    // space") and must answer it themselves.
+    if (
+      !GERTRUDE_NPC_IDS.has(npcId) &&
+      npcId !== SHILOP_NPC_ID &&
+      npcId !== WILOUGH_NPC_ID
+    ) {
+      return null;
+    }
     const value = String(text).toLowerCase();
-    if (value.includes("at least 100 coins")) return hasItem(player, COINS_ITEM_ID);
     if (value.includes("does not have at least 100 coins")) return !hasItem(player, COINS_ITEM_ID);
+    if (value.includes("at least 100 coins")) return hasItem(player, COINS_ITEM_ID);
     if (value.includes("no free inventory space")) return player.getInventory().isFull();
     if (value.includes("free inventory space")) return !player.getInventory().isFull();
     return null;
@@ -136,6 +159,14 @@ module.exports = function registerGertrudesCatQuest(api) {
   function handleAction(event) {
     const { player, stepId } = event;
     const stage = quest.getStage(player);
+    // The dump wraps wiki conditionals as `unavailable` steps mid-branch (the boys'
+    // first-talk LgothB, Gertrude's mDyVfF before the completion action). The shared
+    // dialogue runtime closes on them; for this quest's NPCs skip past them instead.
+    if (QUEST_NPC_IDS.has(event.npcId) && (event.step?.type === "unavailable" || event.step?.type === "reference")) {
+      event.handled = true;
+      event.end = false;
+      return;
+    }
     if (stepId === COINS_ACTION_ID) {
       if (stage >= STAGE_PAID_BOY) {
         event.handled = true;
@@ -143,6 +174,7 @@ module.exports = function registerGertrudesCatQuest(api) {
       }
       if (player.getInventory().getAmount(COINS_ITEM_ID) < 100) {
         event.handled = true;
+        event.end = true;
         return;
       }
       player.getInventory().deleteNumber(COINS_ITEM_ID, 100);
@@ -189,6 +221,30 @@ module.exports = function registerGertrudesCatQuest(api) {
       player.sendMessage("Fluffs is not interested right now.");
       event.handled = true;
     }
+  }
+
+  /** The stage-appropriate wiki flavour for a Fluffs click ("pick-up" / "stroke"). */
+  function fluffsVariant(action, stage) {
+    if (action === "talk-to") return FLUFFS_TALK_VARIANT;
+    const hints = FLUFFS_STAGE_HINTS[stage] ?? FLUFFS_STAGE_HINTS[STAGE_PAID_BOY];
+    return hints?.[action] ?? null;
+  }
+
+  /**
+   * Fluffs' quest clicks: the id index only carries her post-quest catspeak pages, so
+   * replay the stage-appropriate "Gertrude's Cat" variant and claim the click before
+   * NpcDialogues/Pets pick the catspeak conversation or the generic fallback.
+   */
+  function handleFluffsInteraction(event) {
+    if (event.npcId !== FLUFFS_NPC_ID) return;
+    const stage = quest.getStage(event.player);
+    if (stage >= STAGE_RESCUED) return;
+    const actions = event.definition?.getActions?.() ?? [];
+    const action = String(actions[event.clickType - 1] ?? "").toLowerCase();
+    const variant = fluffsVariant(action, stage);
+    if (!variant) return;
+    event.handled = true;
+    startTranscript(api, event.player, FLUFFS_NPC_ID, PAGE, variant);
   }
 
   /** Seasoning a raw sardine with doogle leaves (either order). */
@@ -241,6 +297,7 @@ module.exports = function registerGertrudesCatQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onNpcInteraction(handleFluffsInteraction);
   api.onItemOnNpc(handleItemOnCat);
   api.onItemOnItem(handleItemOnItem);
   api.onObjectInteraction(handleCrateSearch);

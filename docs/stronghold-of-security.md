@@ -1,6 +1,6 @@
 # Stronghold of Security
 
-The Stronghold of Security lives in `server/plugins/areas/strongholdofsecurity/`. Its data is `server/data/definitions/stronghold-of-security.json`: the floors, their objects, rewards and destinations, the 33 security questions, and the boots.
+The Stronghold of Security lives in `server/plugins/areas/strongholdofsecurity/`. Its data is `server/plugins/areas/data/stronghold-of-security.json`: the floors, their objects, rewards and destinations, the 33 security questions, and the boots.
 
 ## Sources
 

@@ -1,0 +1,63 @@
+{
+  "$comment": "Lasting decisions for scripts/sync-loc-teleports.cjs (docs/loc-teleports.md): captured loc teleports to leave out, by tile (one placement of a name many locs share), exact gameval name or pattern, with the reason; and `requirements`, the gates live OSRS refused some players at, with the requirement (Wiki) and the captured refusal; and `dialogues`, locs whose option asks first, with the question and options as the game sends them (chatbox_multi_init in the recordings): `go` are the options that lead to the captured destination, `ladder` hands an uncaptured direction to Ladders, and `answer` has the ticks from the answer (the captured ticks count from arriving, and include reading the question). A requirement or dialogue without a tile applies to every placement of that name. `include` takes locs of other kinds that are a plain move (exits, lifts, wells), by name, with the reason.",
+  "include": {
+    "fossil_slayer_cave_task": "The Fossil Island Slayer cave's exit.",
+    "karam_dungeon_exit": "The Brimhaven Dungeon's exit.",
+    "wild_boss_escape_cave_exit03": "A Wilderness boss escape cave's exit.",
+    "royal_light_exit_multiloc": "The Lighthouse dungeon's exit.",
+    "lift_back": "A Haunted Mine lift.",
+    "lift_flooded": "A Haunted Mine lift.",
+    "lift_side_l": "A Haunted Mine lift.",
+    "lift_side_r": "A Haunted Mine lift.",
+    "regicide_voyage_temple_well1": "The Regicide temple's well.",
+    "regicide_voyage_temple_well2": "The Regicide temple's well.",
+    "tapoyauik_main_entrance": "Tapoyauik's lift platform.",
+    "tapoyauik_main_exit": "Tapoyauik's lift platform.",
+    "dt2_war_room_exit": "Desert Treasure II's war-room exit.",
+    "ii_magic_wheat_m_zanaris": "Zanaris's crop circle to Puro-Puro (the wandering ones are hidden by a varbit here)."
+  },
+  "skip": {
+    "locs": [
+      {"name": "ladder", "x": 3284, "y": 3165, "z": 0, "why": "Only seen on a Leagues world, from Al Kharid to Varlamore; not the normal game's."}
+    ],
+    "names": {
+      "sailing_gangplank_shipyard": "In the shipyard; Sailing handles it."
+    },
+    "patterns": [
+      {"pattern": "^sailing_", "why": "Sailing content (boats, docks, the shipyard)."},
+      {"pattern": "^(tob|gotr|soul|sepulchre|roguesden|magearena|brimstone|cof|pmoon|bloodtemple|abyss|rcu|ntk)_", "why": "A minigame, raid or boss area; its plugin owns the way in and out."},
+      {"pattern": "^(tempoross|giants_foundry)_", "why": "A minigame; its plugin owns the way in and out."},
+      {"pattern": "^(magictraining|zalcano|nex|toa|royal_titans)_", "why": "A minigame, raid or boss area; its plugin owns the way in and out."},
+      {"pattern": "^kalphite_(burrow|chamber)_entrance", "why": "A rope used on it is used up and sets a varbit that shows the roped version; needs that state kept."},
+      {"pattern": "^dungeon_tree_closed$", "why": "The Brimhaven Dungeon's entrance takes a fare through a dialogue."},
+      {"pattern": "^freedomfighterentrance", "why": "The Myreque hideout's doors: In Search of the Myreque gates them."},
+      {"pattern": "^xmas\\d*_|^easter\\d*_|^halloween\\d*_", "why": "A holiday event."},
+      {"pattern": "^dagexp_bossroom", "why": "The Dagannoth Kings' ladder picks a boss instance (Standard or Slayer)."},
+      {"pattern": "^fossil_underwater_", "why": "Fossil Island's underwater caves need diving gear."}
+    ]
+  },
+  "requirements": [
+    {"name": "chaos_temple_ladder", "x": 2939, "y": 3518, "z": 0, "source": "https://oldschool.runescape.wiki/w/Chaos_Temple_(Asgarnia)",
+      "requires": [
+        {"totalLevel": 500, "refuse": {"message": "You need a skill total of 500 and a set of Zamorak robes equipped to go upstairs."}},
+        {"wornAny": [[1035, 1033], [10460, 10468]], "refuse": {"npc": 8400, "say": "You better dress appropriately, if you want to go up there!"}}
+      ]},
+    {"name": "brain_underwater_falloff_stairs", "x": 3788, "y": 9254, "z": 0, "source": "https://oldschool.runescape.wiki/w/The_Great_Brain_Robbery",
+      "requires": [
+        {"wornAny": [[7534, 7535], [32386]], "refuse": {"message": "You cannot go diving without your diving helmet and diving apparatus!"}}
+      ]},
+    {"name": "elid_crevice_clickzone", "source": "https://oldschool.runescape.wiki/w/Crevice_(Spirits_of_the_Elid)",
+      "requires": [
+        {"tied": 954, "refuse": {"mesbox": "That looks too steep to safely climb down with just your bare hands."}}
+      ],
+      "mesbox": "You climb down the rope."}
+  ],
+  "dialogues": [
+    {"name": "varlamore_thieving_house_window_multi", "prompt": "Climb out of the window?", "options": ["Yes.", "No."], "go": ["Yes."], "answer": {"animTick": 1, "tick": 2}},
+    {"name": "qip_obs_door_left", "prompt": "Climb down the cliff?", "options": ["Yes.", "No."], "go": ["Yes."], "answer": {"animTick": 1, "tick": 5}},
+    {"name": "mm2_stronghold_fence_multi", "prompt": "Leave the Gnome Stronghold?", "options": ["Yes.", "Yes, and don't ask again.", "No."], "go": ["Yes.", "Yes, and don't ask again."], "answer": {"animTick": 1, "tick": 3}},
+    {"name": "max_boat", "prompt": "Do you want to leave the island?", "options": ["Yes", "No"], "go": ["Yes"], "answer": {"animTick": 0, "tick": 2}},
+    {"name": "qip_cook_ladder_middle", "prompt": "Climb up or down the ladder?", "options": ["Climb Up.", "Climb Down."], "go": ["Climb Up."], "ladder": {"Climb Down.": "down"}, "answer": {"animTick": 0, "tick": 1}},
+    {"name": "dagannoth_ladder_base_ext2", "prompt": "Climb up or down the ladder?", "options": ["Climb Up.", "Climb Down."], "go": ["Climb Down."], "ladder": {"Climb Up.": "up"}, "answer": {"animTick": 0, "tick": 1}}
+  ]
+}

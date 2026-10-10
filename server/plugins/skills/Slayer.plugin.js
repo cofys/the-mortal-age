@@ -15,7 +15,7 @@ const SLAYER_POINTS_CURRENCY = "SLAYER_POINTS";
 
 const SLAYER_MASTERS = Object.freeze(Object.fromEntries(
   Object.entries(JSON.parse(fs.readFileSync(
-    path.join(GameConstants.DEFINITIONS_DIRECTORY, "slayer-tasks.json"),
+    path.join(__dirname, "data", "slayer-tasks.json"),
     "utf8"
   ))).map(([id, master]) => [id, { ...master, id: Number(id) }])
 ));

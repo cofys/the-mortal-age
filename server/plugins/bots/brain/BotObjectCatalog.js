@@ -3,6 +3,7 @@
 const Woodcutting = require("../../skills/Woodcutting.plugin");
 const Mining = require("../../skills/Mining.plugin");
 const Smithing = require("../../skills/Smithing.plugin");
+const Cooking = require("../../skills/Cooking.plugin");
 const {
   CacheDefinitions,
 } = require("../../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
@@ -20,6 +21,14 @@ const CATALOGS = {
       objectNames: rock.objectName ? [rock.objectName] : [],
       ids: rock.objectIds ?? [],
     })),
+  // Ranges and stoves food is cooked on (fires are runtime objects, found separately).
+  range: () => [
+    {
+      name: "range",
+      objectNames: [...(Cooking.COOKABLE_OBJECT_NAMES ?? [])].filter((name) => !Cooking.FIRE_OBJECT_NAMES?.has(name)),
+      ids: [],
+    },
+  ],
   furnace: () => [
     {
       name: "furnace",
@@ -30,6 +39,9 @@ const CATALOGS = {
 };
 
 let idsByName = null;
+// Cache options per id: many objects share a resource's name without being one
+// (149 of 216 "Tree"s are scenery with no Chop down option).
+const optionsById = new Map();
 
 /**
  * The hand-written id lists in the skill plugins can go stale when the cache
@@ -51,10 +63,12 @@ function buildNameIndex() {
   try {
     const count = CacheDefinitions.getCounts?.().objects ?? 0;
     for (let id = 0; id < count; id++) {
-      const name = CacheDefinitions.getObject(id)?.name;
+      const cached = CacheDefinitions.getObject(id);
+      const name = cached?.name;
       if (!name || !wanted.has(name)) {
         continue;
       }
+      optionsById.set(id, (cached.actions ?? []).filter(Boolean).map((action) => String(action).toLowerCase()));
       const list = idsByName.get(name) ?? [];
       list.push(id);
       idsByName.set(name, list);
@@ -69,6 +83,10 @@ function normalize(value) {
 }
 
 function matchEntry(kind, tier) {
+  // A tier list ("copper", "tin") gathers from every listed kind.
+  if (Array.isArray(tier)) {
+    return tier.flatMap((entry) => matchEntry(kind, entry));
+  }
   const load = CATALOGS[kind];
   if (!load) {
     throw new Error(`[bot activities] unknown object catalog '${kind}'`);
@@ -118,7 +136,10 @@ function resolveCatalogObjectIds(spec = {}) {
       ids.add(id);
     }
   }
-  return [...ids];
+  // Only objects that offer the action's option ("Chop down", "Mine"); ids whose
+  // options are unknown (plugin fallback lists without a cache) are kept.
+  const option = spec.option ? String(spec.option).toLowerCase() : null;
+  return [...ids].filter((id) => !option || !optionsById.has(id) || optionsById.get(id).includes(option));
 }
 
 /** Every catalog id, for boot-time index tracking before the dump is built. */

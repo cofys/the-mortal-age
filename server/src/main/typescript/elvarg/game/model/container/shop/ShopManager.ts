@@ -581,12 +581,26 @@ export class ShopManager {
         if (quantity <= 0) {
             return;
         }
-        const available = shop.stock.get(itemId) ?? 0;
+        let available = shop.stock.get(itemId) ?? 0;
         if (available <= 0) {
             player.sendMessage(
                 "This item is currently out of stock. Come back later."
             );
             return;
+        }
+        // "shop:buy-limit": a plugin may lower how many of the stock this player can buy (an
+        // Ironman buys only the shop's own stock, not what players sold it).
+        const limit = {
+            player, shopId: shop.definition.getId(), itemId, available,
+            original: shop.originalAmounts.get(itemId) ?? 0, limit: available, message: null as string | null,
+        };
+        PluginManager.emitCustomEvent("shop:buy-limit", limit);
+        if (limit.limit < available) {
+            available = Math.max(0, limit.limit);
+            if (available <= 0) {
+                if (limit.message) player.sendMessage(limit.message);
+                return;
+            }
         }
         quantity = Math.min(
             quantity,

@@ -7,6 +7,7 @@ import { Systems } from "./Systems";
 import { RegionManager } from "./collision/RegionManager";
 import { GameEngine } from "./GameEngine";
 import { ObjectSpawnDefinitionLoader } from "./definition/loader/impl/ObjectSpawnDefinitionLoader";
+import { GroundItemSpawnDefinitionLoader } from "./definition/loader/impl/GroundItemSpawnDefinitionLoader";
 import { NpcDefinitionLoader } from "./definition/loader/impl/NpcDefinitionLoader";
 import { InterfaceLayoutDefinitionLoader } from "./definition/loader/impl/InterfaceLayoutDefinitionLoader";
 import { NpcSpawnDefinitionLoader } from "./definition/loader/impl/NpcSpawnDefinitionLoader";
@@ -43,6 +44,7 @@ export class GameBuilder {
         new NpcInteractionDefinitionLoader().load();
         new InterfaceLayoutDefinitionLoader().load();
         new ObjectSpawnDefinitionLoader().load();
+        new GroundItemSpawnDefinitionLoader().load();
         new NpcDefinitionLoader().load();
         new NpcSpawnDefinitionLoader().load();
         new ShopDefinitionLoader().load();

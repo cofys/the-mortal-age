@@ -966,9 +966,14 @@ function startWoodcutting(player, treeObject, tree, activeSessions) {
 
   player.getSkillManager()?.stopSkillable?.();
   stopWoodcutting(activeSessions, player, false);
-  // reset() clears the face the object click set, so face the tree again.
+  // reset() clears the face the object click set, so face the tree again - forced,
+  // because the field can already hold it while the client was turned by walking.
   player.getCombat()?.reset?.();
-  player.setPositionToFace(treeObject.getLocation());
+  if (typeof player.forcePositionToFace === "function") {
+    player.forcePositionToFace(treeObject.getLocation());
+  } else {
+    player.setPositionToFace(treeObject.getLocation());
+  }
 
   activeSessions.set(player, {
     tree,

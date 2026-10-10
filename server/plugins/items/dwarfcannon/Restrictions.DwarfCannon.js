@@ -1,6 +1,6 @@
 /**
  * Where a cannon can't be set up: the Wiki's prohibited areas, with their messages, in
- * data/definitions/cannon-restrictions.json. Instanced content is refused with the default.
+ * plugins/items/data/cannon-restrictions.json. Instanced content is refused with the default.
  */
 const fs = require("fs");
 const path = require("path");
@@ -12,7 +12,7 @@ let restrictions = null;
 
 function load() {
   if (restrictions) return restrictions;
-  const file = path.join(Cannon.core.GameConstants.DEFINITIONS_DIRECTORY, FILE);
+  const file = path.join(__dirname, "..", "data", FILE);
   restrictions = JSON.parse(fs.readFileSync(file, "utf8"));
   return restrictions;
 }

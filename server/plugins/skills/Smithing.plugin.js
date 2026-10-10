@@ -196,7 +196,38 @@ const SMELTING_RECIPES = [
       [ItemIds.COAL, 8],
     ],
   },
+  // Wiki: https://oldschool.runescape.wiki/w/'perfect'_gold_bar - 1 'perfect' gold ore,
+  // 40 Smithing, 22.5 XP. Quest item for Family Crest. Still a bar, so it stays in the
+  // smelt menu; the filter below only drops non-bars (molten glass).
+  {
+    name: "'perfect' gold bar",
+    barId: ItemIds.PERFECT_GOLD_BAR,
+    level: 40,
+    xp: 22.5,
+    missingMessage: "You need 'perfect' gold ore to smelt this bar.",
+    successMessage: "You smelt the 'perfect' gold ore into a bar.",
+    ingredients: [[ItemIds.PERFECT_GOLD_ORE, 1]],
+  },
+  // Wiki: https://oldschool.runescape.wiki/w/Molten_glass - 1 Crafting, 20 XP. Not a bar:
+  // made by using sand or soda ash on a furnace, so it stays out of the smelt menu.
+  {
+    name: "Molten glass",
+    barId: ItemIds.MOLTEN_GLASS,
+    level: 1,
+    xp: 20,
+    skill: Skill.CRAFTING,
+    missingMessage: "You need sand and soda ash to make glass.",
+    successMessage: "You heat the sand and soda ash in the furnace to make glass.",
+    ingredients: [
+      [ItemIds.BUCKET_OF_SAND, 1],
+      [ItemIds.SODA_ASH, 1],
+    ],
+  },
 ];
+
+const SMELTING_MENU_RECIPES = SMELTING_RECIPES.filter(
+  (recipe) => recipe.name !== "Molten glass"
+);
 
 const SMITHABLE_EQUIPMENT_DATA = [
   ["Dagger", 2349, 1205, 1, 1119, 0, 1094, 1, 1, 1125],
@@ -386,7 +417,7 @@ for (const recipe of SMELTING_RECIPES) {
   }
 }
 
-const SMELTING_SKILLMULTI_BUTTON_IDS = SMELTING_RECIPES.map(
+const SMELTING_SKILLMULTI_BUTTON_IDS = SMELTING_MENU_RECIPES.map(
   (_, index) =>
     (SMELTING_SKILLMULTI_GROUP_ID << 16) |
     (SMELTING_SKILLMULTI_FIRST_ITEM_COMPONENT + index)
@@ -419,7 +450,7 @@ function consumeIngredients(inventory, recipe) {
 
 function openSmeltingInterface(player) {
   const sender = player.getPacketSender();
-  const itemIds = SMELTING_RECIPES.map((recipe) => recipe.barId);
+  const itemIds = SMELTING_MENU_RECIPES.map((recipe) => recipe.barId);
   while (itemIds.length < 18) itemIds.push(-1);
 
   ACTIVE_SMELTING_MENUS.add(player);
@@ -437,7 +468,7 @@ function openSmeltingInterface(player) {
   }
   sender.sendInterfaceScript(2046, [
     13,
-    ["What would you like to smelt?", ...SMELTING_RECIPES.map((recipe) => recipe.name)].join("|"),
+    ["What would you like to smelt?", ...SMELTING_MENU_RECIPES.map((recipe) => recipe.name)].join("|"),
     SMELTING_SKILLMULTI_MAX_QUANTITY,
     ...itemIds,
     SMELTING_SKILLMULTI_MAX_QUANTITY,
@@ -464,8 +495,9 @@ function smeltingXp(player, recipe) {
 
 function performSmeltAction(player, recipe) {
   const inventory = player.getInventory();
-  const smithingLevel = getSmithingLevel(player);
-  if (smithingLevel < recipe.level) {
+  const skill = recipe.skill ?? Skill.SMITHING;
+  const level = player.getSkillManager().getCurrentLevel(skill);
+  if (level < recipe.level) {
     player.sendMessage(
       `You need a Smithing level of at least ${recipe.level} to smelt this bar.`
     );
@@ -473,7 +505,9 @@ function performSmeltAction(player, recipe) {
   }
 
   if (!hasIngredients(inventory, recipe)) {
-    player.sendMessage("You don't have the required ores to smelt this bar.");
+    player.sendMessage(
+      recipe.missingMessage ?? "You don't have the required ores to smelt this bar."
+    );
     return false;
   }
 
@@ -485,9 +519,9 @@ function performSmeltAction(player, recipe) {
   const successChance = recipe.successChance ?? 1;
   if (Math.random() <= successChance) {
     inventory.addItem(new Item(recipe.barId, 1));
-    player.getSkillManager().addExperiences(Skill.SMITHING, smeltingXp(player, recipe));
-    player.sendMessage("You retrieve a bar of metal.");
-    pluginApi?.emitCustomEvent("smelting:success", { player, skill: Skill.SMITHING, itemId: recipe.barId });
+    player.getSkillManager().addExperiences(skill, smeltingXp(player, recipe));
+    player.sendMessage(recipe.successMessage ?? "You retrieve a bar of metal.");
+    pluginApi?.emitCustomEvent("smelting:success", { player, skill, itemId: recipe.barId });
   } else {
     player.sendMessage("The ore is too impure and fails to become a bar.");
   }
@@ -911,7 +945,7 @@ module.exports = {
       ({ player, buttonId, action }) => {
         if (!ACTIVE_SMELTING_MENUS.has(player)) return false;
         const recipe =
-          SMELTING_RECIPES[
+          SMELTING_MENU_RECIPES[
             (buttonId & 0xffff) - SMELTING_SKILLMULTI_FIRST_ITEM_COMPONENT
           ];
         if (!recipe) return false;

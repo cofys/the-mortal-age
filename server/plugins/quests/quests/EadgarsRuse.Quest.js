@@ -50,6 +50,16 @@ module.exports = function registerEadgarsRuseQuest(api) {
     NpcIdentifiers.GUARD_60, // 4156
   ]);
 
+  /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
+  const DIALOGUE_NPC_IDS = new Set([
+    EADGAR_NPC_ID,
+    BURNTMEAT_NPC_ID,
+    SANFEW_NPC_ID,
+    TEGID_NPC_ID,
+    PARROTY_PETE_NPC_ID,
+    ...GUARD_NPC_IDS,
+  ]);
+
   const VARP_EADGARS_RUSE = 335;
   const STAGE_STARTED = 10;
   const STAGE_TOLD_ABOUT_COOK = 15;
@@ -474,9 +484,10 @@ module.exports = function registerEadgarsRuseQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, pages, text }) {
+  function answerCondition({ player, npcId, pages, text }) {
     // Conditions on other pages that happen to share wording are not ours.
     if (Array.isArray(pages) && !pages.some((entry) => entry && entry.page === PAGE)) return null;
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase();
     const base = hasBaseRequirements(player);
     if (value.includes("requirements") && value.includes("eadgar")) {
@@ -865,6 +876,11 @@ module.exports = function registerEadgarsRuseQuest(api) {
       return;
     }
     if (objectId === LAUNDRY_BASKET_LOC_ID) {
+      // Shared with Mourning's End Part I (the soap in the same basket); only
+      // claim it while this quest still needs the dirty robes.
+      const stage = quest.getStage(player);
+      if (stage < STAGE_NEEDS_ITEMS || stage >= STAGE_COMPLETE ||
+        supplies(player).clothes || held(player, DIRTY_ROBE)) return;
       event.handled = true;
       player.sendMessage("You search the laundry basket... It's full of dirty robes.");
     }

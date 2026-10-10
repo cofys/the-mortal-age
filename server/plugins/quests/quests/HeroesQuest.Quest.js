@@ -43,6 +43,22 @@ module.exports = function registerHeroesQuest(api) {
   const ICE_QUEEN_NPC_ID = NpcIdentifiers.ICE_QUEEN;
   const FIREBIRD_NPC_ID = NpcIdentifiers.ENTRANA_FIREBIRD;
 
+  /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
+  const DIALOGUE_NPC_IDS = new Set([
+    ...ACHIETTIES_IDS,
+    STRAVEN_NPC_ID,
+    ALFONSE_NPC_ID,
+    CHARLIE_NPC_ID,
+    GARV_NPC_ID,
+    GRUBOR_NPC_ID,
+    TROBERT_NPC_ID,
+    GRIP_NPC_ID,
+    KATRINE_NPC_ID,
+    GERRANT_NPC_ID,
+    ICE_QUEEN_NPC_ID,
+    FIREBIRD_NPC_ID,
+  ]);
+
   const CANDLESTICK_CHEST_IDS = [ObjectIdentifiers.CHEST_18, ObjectIdentifiers.CHEST_19];
 
   const VARP_HEROES_QUEST = 188;
@@ -138,6 +154,8 @@ module.exports = function registerHeroesQuest(api) {
 
   function stravenVariant(player) {
     const stage = quest.getStage(player);
+    // Straven also fronts Shield of Arrav's Phoenix Gang; defer until Heroes' Quest begins.
+    if (stage < STAGE_STARTED) return null;
     if (stage === STAGE_STARTED) return "master-thieves-armband-phoenix-gang-talking-to-straven";
     if (stage === STAGE_PHOENIX_GRIP && has(player, CANDLESTICK)) {
       take(player, CANDLESTICK);
@@ -156,6 +174,8 @@ module.exports = function registerHeroesQuest(api) {
 
   function katrineVariant(player) {
     const stage = quest.getStage(player);
+    // Katrine also fronts Shield of Arrav's Black Arm Gang; defer until Heroes' Quest begins.
+    if (stage < STAGE_STARTED) return null;
     if (stage === STAGE_BLACK_CANDLESTICK && has(player, CANDLESTICK)) {
       take(player, CANDLESTICK);
       if (!has(player, ARMBAND)) give(player, ARMBAND);
@@ -218,7 +238,8 @@ module.exports = function registerHeroesQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase();
     if (value.includes("skill levels are lower than the quest requirements")) return false;
     if (value.includes("full inventory")) return false;

@@ -29,6 +29,56 @@ let core;
 
 const attackers = new WeakMap();
 const openSideDoors = new Map();
+const lastPlane = new WeakMap();
+
+/** The swung-in leaves: Sara opens to y3087, Zamorak to y3120 (one tile inside). */
+function openLeaves() {
+  const O = core.ObjectIdentifiers;
+  return {
+    [game.TEAM.SARADOMIN]: [[O.LARGE_DOOR_26, 2426, 3087, 0], [O.LARGE_DOOR_27, 2427, 3087, 0]],
+    [game.TEAM.ZAMORAK]: [[O.LARGE_DOOR_30, 2373, 3120, 0], [O.LARGE_DOOR_31, 2372, 3120, 0]],
+  };
+}
+
+/**
+ * A player who changed plane kept the old door leaves on their client (the close happened
+ * while they were upstairs). Resend both castles' leaf tiles: spawn what is in the world,
+ * remove what is not.
+ */
+function resendLargeDoorState(player) {
+  const sender = player.getPacketSender?.();
+  if (!sender) {
+    return;
+  }
+  const table = largeDoors();
+  const open = openLeaves();
+  for (const teamId of Object.keys(table)) {
+    const spots = [...table[teamId].leaves.map(([id, x, y, z]) => [id, x, y, z]), ...open[teamId]];
+    for (const [id, x, y, z] of spots) {
+      const location = new core.Location(x, y, z);
+      const object = core.MapObjects.get(id, location, null);
+      if (object) {
+        sender.sendObject(object);
+      } else {
+        sender.sendObjectRemoval(new core.GameObject(id, location, 0, 0, null));
+      }
+    }
+  }
+}
+
+/** The per-tick hook that notices plane changes and re-sends the door leaves. */
+function watchPlaneChange(player) {
+  const z = player.getLocation().getZ();
+  const previous = lastPlane.get(player);
+  if (previous === z) {
+    return;
+  }
+  lastPlane.set(player, z);
+  if (previous === undefined) {
+    return;
+  }
+  resendLargeDoorState(player);
+}
 
 function largeDoors() {
   const O = core.ObjectIdentifiers;
@@ -209,4 +259,5 @@ module.exports = function attachCastleWarsDoors(api, castleWars) {
   api.onObjectInteraction("Broken door", { Repair: repairDoor });
   api.onObjectInteraction("Door", { Unlock: unlockSideDoor, Lock: lockSideDoor });
   game.inGameProcessors.push(swingAtDoor);
+  game.inGameProcessors.push(watchPlaneChange);
 };

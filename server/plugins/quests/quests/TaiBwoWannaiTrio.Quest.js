@@ -338,7 +338,12 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
       }
       if (progress >= LUBUFU_GIVEN) return "talking-to-lubufu-talking-to-lubufu-after-delivering-raw-karambwanji";
       if (progress >= LUBUFU_FETCH) return "talking-to-lubufu-delivering-raw-karambwanji-to-lubufu";
-      return progress <= 0 ? "talking-to-lubufu" : "talking-to-lubufu-talking-to-lubufu-again";
+      if (progress <= 0) {
+        // Met him once: the second talk is the "You again!" recruitment branch.
+        setState(player, LUBUFU_KEY, 1);
+        return "talking-to-lubufu";
+      }
+      return "talking-to-lubufu-talking-to-lubufu-again";
     }
     return null;
   }
@@ -373,14 +378,19 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
     if (value.includes("has not done so")) return state(player, TIADECHE_KEY) < TIADECHE_HAS_MANUAL;
 
     // Tamayu.
+    const huntOver = state(player, TAMAYU_KEY) >= TAMAYU_DONE;
     if (value.includes("stuffed monkey or monkey corpse on tamayu")) {
-      return (used === ITEM.MONKEY_CORPSE || used === ITEM.STUFFED_MONKEY) && state(player, TAMAYU_KEY) < TAMAYU_DONE;
+      return (used === ITEM.MONKEY_CORPSE || used === ITEM.STUFFED_MONKEY) && !huntOver;
     }
     if (value.includes("uses the monkey corpse on tamayu")) {
-      return used === ITEM.MONKEY_CORPSE && state(player, TAMAYU_KEY) >= TAMAYU_DONE;
+      return (used === ITEM.MONKEY_CORPSE || used === ITEM.STUFFED_MONKEY) && huntOver;
     }
     const spearFlags = state(player, SPEAR_KEY);
     const watched = state(player, TAMAYU_KEY) >= TAMAYU_WATCHED;
+    // The wiki branches choose the handed weapon: a plain spear is the first
+    // "iron or better spear", karambwan/poisoned spears are their own branches.
+    // Without excluding them here, this condition shadows every later branch.
+    const plainSpear = ACCEPTABLE_SPEARS.has(used) && !POISONED_SPEARS.has(used) && !KP_SPEARS.has(used);
     if (value.includes("partially full agility potion on tamayu before handing the better spear")) {
       return AGILITY_POTION_DOSES.has(used) && !(spearFlags & 1) && watched;
     }
@@ -394,18 +404,18 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
     if (value.includes("agility potion has two doses")) return AGILITY_POTION_DOSES.get(used) === 2;
     if (value.includes("agility potion has three doses")) return AGILITY_POTION_DOSES.get(used) === 3;
     if (value.includes("agility potion has four doses")) return AGILITY_POTION_DOSES.get(used) === 4;
-    if (value.includes("iron or better spear on tamayu")) return ACCEPTABLE_SPEARS.has(used) && watched;
-    if (value.includes("next hunt with the iron spear")) return ACCEPTABLE_SPEARS.has(used) && watched;
+    if (value.includes("iron or better spear on tamayu")) return plainSpear && watched && !(spearFlags & 1);
+    if (value.includes("next hunt with the iron spear")) return plainSpear && watched && !(spearFlags & 1);
     if (value.includes("asks to take them to his next battle")) return AGILITY_POTION_DOSES.has(used) && watched;
     const agileEnough = state(player, AGILITY_KEY) >= 4;
     if (value.includes("better spear and a four-dose agility potion and wants to join the hunt again")) {
-      return Boolean(spearFlags & 1) && !Boolean(spearFlags & 2) && !Boolean(spearFlags & 4) && agileEnough;
+      return Boolean(spearFlags & 1) && !Boolean(spearFlags & 2) && !Boolean(spearFlags & 4) && agileEnough && !POISONED_SPEARS.has(used) && !KP_SPEARS.has(used);
     }
     if (value.includes("brings a poisoned spear to tamayu")) {
-      return Boolean(spearFlags & 2) && !Boolean(spearFlags & 4) && agileEnough;
+      return POISONED_SPEARS.has(used) && watched && agileEnough && !huntOver;
     }
     if (value.includes("brings a poisoned karambwan spear")) {
-      return Boolean(spearFlags & 4) && agileEnough;
+      return KP_SPEARS.has(used) && watched && agileEnough && !huntOver;
     }
 
     // Lubufu's Karambwanji delivery.
@@ -473,10 +483,14 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
     quest.setStage(player, STAGE_STARTED);
   }
 
-  /** Remember which "I am a ..." title the player picked. */
+  /** Remember which "I am a ..." title the player picked, and Lubufu's agreement. */
   function handleChoice({ player, npcId, option }) {
-    if (npcId !== TIMFRAKU_ID) return;
     const value = String(option).toLowerCase();
+    if (npcId === LUBUFU_ID) {
+      if (value.includes("could do with the help")) setState(player, LUBUFU_KEY, LUBUFU_FETCH);
+      return;
+    }
+    if (npcId !== TIMFRAKU_ID) return;
     if (value.includes("roving adventurer")) setState(player, TITLE_KEY, 0);
     else if (value.includes("travelling explorer")) setState(player, TITLE_KEY, 1);
     else if (value.includes("wandering wayfarer")) setState(player, TITLE_KEY, 2);
@@ -792,7 +806,14 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
 
     if (TIADECHE_IDS.has(npcId)) {
       const progress = state(player, TIADECHE_KEY);
-      if (stage < STAGE_STARTED || progress !== TIADECHE_WAITING) return;
+      if (stage < STAGE_STARTED) return;
+      if (itemId === ITEM.CRAFTING_MANUAL && progress >= TIADECHE_MANUAL && progress < TIADECHE_DONE) {
+        lastUsedItem.set(player, itemId);
+        startTranscript(api, player, npcId, PAGE, "talking-to-tiadeche-subsequent-dialogue-with-tiadeche");
+        event.handled = true;
+        return;
+      }
+      if (progress !== TIADECHE_WAITING) return;
       if (
         itemId !== ITEM.KARAMBWAN_VESSEL &&
         itemId !== ITEM.KARAMBWAN_VESSEL_3 &&
@@ -815,7 +836,16 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
         if (progress >= TINSAY_DONE) {
           if (state(player, TIADECHE_KEY) < TIADECHE_MANUAL) return;
           lastUsedItem.set(player, itemId);
-          startTranscript(api, player, npcId, PAGE, "making-the-burnt-marinated-jogre-bones-subsequent-dialogue-with-tinsay");
+          // The variant opens with the previous hand-in's two lines and a wiki
+          // "jump above" the runtime cannot follow; skip to the vessel condition.
+          startTranscript(
+            api,
+            player,
+            npcId,
+            PAGE,
+            "making-the-burnt-marinated-jogre-bones-subsequent-dialogue-with-tinsay",
+            (steps) => steps.slice(3)
+          );
           event.handled = true;
         } else {
           player.sendMessage("You first help me, then I'll help you.");
@@ -867,15 +897,20 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
       const progress = state(player, TAMAYU_KEY);
       if (itemId === ITEM.MONKEY_CORPSE || itemId === ITEM.STUFFED_MONKEY) {
         lastUsedItem.set(player, itemId);
-        startTranscript(
-          api,
-          player,
-          npcId,
-          PAGE,
-          progress >= TAMAYU_DONE
-            ? "talking-to-tamayu-talking-to-tamayu-after-his-triumph-against-the-shaikahan"
-            : "talking-to-tamayu-using-several-items-on-tamayu"
-        );
+        if (progress >= TAMAYU_DONE) {
+          // The skinning branch sits behind a wiki "end" marker in the triumph
+          // variant, so play only the conditions (the corpse branch).
+          startTranscript(
+            api,
+            player,
+            npcId,
+            PAGE,
+            "talking-to-tamayu-talking-to-tamayu-after-his-triumph-against-the-shaikahan",
+            (steps) => steps.filter((step) => step.type === "condition")
+          );
+        } else {
+          startTranscript(api, player, npcId, PAGE, "talking-to-tamayu-using-several-items-on-tamayu");
+        }
         event.handled = true;
         return;
       }
@@ -993,6 +1028,13 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
     }
   }
 
+  /** Wiki-export artefact: a couple of lines end in stray "}}" braces. */
+  function handleLine(event) {
+    if (typeof event.text === "string" && event.text.endsWith("}}")) {
+      event.text = event.text.replace(/\}+$/, "");
+    }
+  }
+
   function handleLogout({ player }) {
     if (player) lastUsedItem.delete(player);
   }
@@ -1041,6 +1083,7 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcInteraction(handleNpcInteraction);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onPlayerLogout(handleLogout);
   api.onPlayerLogin(handleLogin);
 };

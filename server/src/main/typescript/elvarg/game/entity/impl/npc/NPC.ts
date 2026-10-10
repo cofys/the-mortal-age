@@ -700,6 +700,9 @@ export class NPC extends Mobile {
         const npc = NPC.create(this.getId(), this.getSpawnPosition());
         npc.setFace(this.getFace());
         npc.getMovementCoordinator().setRadius(this.getMovementCoordinator().getRadius());
+        // A respawn clone must keep its scope, or it leaks to every player.
+        if (this.getOwner?.()) npc.setOwner(this.getOwner());
+        if (this.isOwnerOnly?.()) npc.setOwnerOnly(true);
         return npc;
     }
 

@@ -23,7 +23,17 @@
  * approximated - cache object names drive the hooks.
  */
 module.exports = function registerFremennikTrialsQuest(api) {
-  const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const {
+    Skill,
+    Location,
+    GameObject,
+    ObjectManager,
+    ItemIdentifiers,
+    NpcIdentifiers,
+    ObjectIdentifiers,
+    CountdownTask,
+    TaskManager,
+  } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "The Fremennik Trials";
@@ -149,6 +159,34 @@ module.exports = function registerFremennikTrialsQuest(api) {
     ObjectIdentifiers.MARKET_STALL_7,
   ]);
   const SWAYING_TREE_ID = ObjectIdentifiers.SWAYING_TREE;
+  // Peer's house: the map only places the puzzle floor two planes up, with no
+  // ladder on the intermediate plane, so the generic climb handlers refuse them.
+  const PEER_LADDER_IDS = new Set([ObjectIdentifiers.LADDER_35, ObjectIdentifiers.LADDER_36]);
+  const PEER_TRAPDOOR_IDS = new Set([ObjectIdentifiers.TRAPDOOR_14, ObjectIdentifiers.TRAPDOOR_15]);
+  const PEER_PUZZLE_FLOOR = 2;
+
+  /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
+  const DIALOGUE_NPC_IDS = new Set([
+    ...BRUNDT_IDS,
+    ...OLAF_IDS,
+    ...LALLI_IDS,
+    ...MANNI_IDS,
+    ...SIGMUND_IDS,
+    ...SIGLI_IDS,
+    ...SWENSEN_IDS,
+    ...PEER_IDS,
+    ...THORVALD_IDS,
+    ...ASKELADDEN_IDS,
+    ...THORA_IDS,
+    ...YRSA_IDS,
+    ...FISHERMAN_IDS,
+    ...SKULGRIMEN_IDS,
+    ...SAILOR_IDS,
+    COUNCIL_WORKMAN_ID,
+    POISON_SALESMAN_ID,
+    LONGHALL_BOUNCER_ID,
+    FOSSEGRIMEN_ID,
+  ]);
 
   const {
     BEER,
@@ -475,15 +513,16 @@ module.exports = function registerFremennikTrialsQuest(api) {
   }
 
   function olafVariant(player, stage) {
-    if (trialState(player, BARD) === 2) return V.olafDone;
+    const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
-    if (held(player, STURDY_BOOTS)) return swensenGiving("the-boots-to-olaf");
-    if (step === M_SAILOR) {
+    if (merchantActive && held(player, STURDY_BOOTS)) return swensenGiving("the-boots-to-olaf");
+    if (merchantActive && step === M_SAILOR) {
       setMerchantStep(player, M_OLAF);
       return `${SAILOR_FAVOR}-talking-to-olaf-the-bard`;
     }
-    if (step >= M_BOWSTRING) return bowAsk("olaf");
-    if (step >= M_STARTED) return flowerAsk("olaf");
+    if (merchantActive && step >= M_BOWSTRING) return bowAsk("olaf");
+    if (merchantActive && step >= M_STARTED) return flowerAsk("olaf");
+    if (trialState(player, BARD) === 2) return V.olafDone;
     if (stage >= STAGE_STARTED) return trialState(player, BARD) >= 1 ? V.olafAgain : V.olafOffer;
     return null;
   }
@@ -495,10 +534,11 @@ module.exports = function registerFremennikTrialsQuest(api) {
   }
 
   function askeladdenVariant(player) {
+    const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
-    if (step === M_THORA) return swensenTalk("askeladden");
-    if (step >= M_BOWSTRING) return bowAsk("askeladden");
-    if (step >= M_STARTED) return flowerAsk("askeladden");
+    if (merchantActive && step === M_THORA) return swensenTalk("askeladden");
+    if (merchantActive && step >= M_BOWSTRING) return bowAsk("askeladden");
+    if (merchantActive && step >= M_STARTED) return flowerAsk("askeladden");
     if (trialState(player, BARD) >= 1) {
       return held(player, PET_ROCK) ? V.askeladdenOlafAgain : V.askeladdenOlaf;
     }
@@ -507,17 +547,18 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function manniVariant(player, stage) {
     const state = trialState(player, REVELLER);
-    if (state === 2) return V.revellerDone;
+    const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
-    if (held(player, LEGENDARY_COCKTAIL)) return swensenGiving("manni-his-legendary-cocktail");
-    if (step === M_THORVALD) {
+    if (merchantActive && held(player, LEGENDARY_COCKTAIL)) return swensenGiving("manni-his-legendary-cocktail");
+    if (merchantActive && step === M_THORVALD) {
       setMerchantStep(player, M_MANNI);
       return swensenTalk("manni-the-reveller");
     }
-    if (step >= M_COCKTAIL) return swensenTalk("manni-again-2");
-    if (step >= M_MANNI) return swensenTalk("manni-again");
-    if (step >= M_BOWSTRING) return bowAsk("manni");
-    if (step >= M_STARTED) return flowerAsk("manni");
+    if (merchantActive && step >= M_COCKTAIL) return swensenTalk("manni-again-2");
+    if (merchantActive && step >= M_MANNI) return swensenTalk("manni-again");
+    if (merchantActive && step >= M_BOWSTRING) return bowAsk("manni");
+    if (merchantActive && step >= M_STARTED) return flowerAsk("manni");
+    if (state === 2) return V.revellerDone;
     if (stage >= STAGE_STARTED) {
       if (state === 0) return V.revellerOffer;
       if (flag(player, FLAG_LOW_ALCOHOL) && held(player, KEG_OF_BEER)) return V.revellerWin;
@@ -535,60 +576,64 @@ module.exports = function registerFremennikTrialsQuest(api) {
   }
 
   function sigliVariant(player, stage) {
-    if (trialState(player, HUNTER) === 2) return V.sigliDone;
-    if (held(player, CUSTOM_BOW_STRING)) return swensenGiving("the-bowstring-to-sigli");
+    const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
-    if (step === M_CHIEF) {
+    if (merchantActive && held(player, CUSTOM_BOW_STRING)) return swensenGiving("the-bowstring-to-sigli");
+    if (merchantActive && step === M_CHIEF) {
       setMerchantStep(player, M_SIGLI);
       return V.sigliBow;
     }
-    if (step >= M_SIGLI) return swensenTalk("sigli-again");
-    if (step >= M_STARTED) return flowerAsk("sigli");
+    if (merchantActive && step >= M_SIGLI) return swensenTalk("sigli-again");
+    if (merchantActive && step >= M_STARTED) return flowerAsk("sigli");
+    if (trialState(player, HUNTER) === 2) return V.sigliDone;
     if (trialState(player, HUNTER) === 1) return flag(player, FLAG_DRAUGEN) ? V.sigliHuntDone : V.sigliAgain;
     if (stage >= STAGE_STARTED) return V.sigliOffer;
     return null;
   }
 
   function swensenVariant(player, stage) {
-    if (trialState(player, NAVIGATOR) === 2) return V.swensenDone;
-    if (held(player, WEATHER_FORECAST)) return swensenGiving("swensen-the-forecast");
+    const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
-    if (step === M_FISHERMAN) {
+    if (merchantActive && held(player, WEATHER_FORECAST)) return swensenGiving("swensen-the-forecast");
+    if (merchantActive && step === M_FISHERMAN) {
       setMerchantStep(player, M_SWENSEN);
       return SWENSEN_FAVOR;
     }
-    if (step >= M_SWENSEN) return swensenTalk("swensen-again");
-    if (step >= M_STARTED) return SWENSEN_FAVOR;
+    if (merchantActive && step >= M_SWENSEN) return swensenTalk("swensen-again");
+    if (merchantActive && step >= M_STARTED) return SWENSEN_FAVOR;
+    if (trialState(player, NAVIGATOR) === 2) return V.swensenDone;
     if (stage >= STAGE_STARTED) return trialState(player, NAVIGATOR) === 1 ? V.swensenAgain : V.swensenOffer;
     return null;
   }
 
   function peerVariant(player, stage) {
-    if (trialState(player, SEER) === 2) return V.peerDone;
-    if (held(player, WARRIORS_CONTRACT)) return V.peerBodyguard;
+    const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
-    if (step === M_SWENSEN) {
+    if (merchantActive && held(player, WARRIORS_CONTRACT)) return V.peerBodyguard;
+    if (merchantActive && step === M_SWENSEN) {
       setMerchantStep(player, M_SEER);
       return `${SWENSEN_FAVOR}-peer-the-seer-s-favour`;
     }
-    if (step >= M_SEER) return swensenTalk("peer-the-seer-again");
-    if (step >= M_BOWSTRING && step < M_SWENSEN) return bowAsk("peer-the-seer");
-    if (step >= M_STARTED) return flowerAsk("peer-the-seer");
+    if (merchantActive && step >= M_SEER) return swensenTalk("peer-the-seer-again");
+    if (merchantActive && step >= M_BOWSTRING && step < M_SWENSEN) return bowAsk("peer-the-seer");
+    if (merchantActive && step >= M_STARTED) return flowerAsk("peer-the-seer");
+    if (trialState(player, SEER) === 2) return V.peerDone;
     if (stage >= STAGE_STARTED) return trialState(player, SEER) === 1 ? V.peerTrialAgain : V.peerMenu;
     return null;
   }
 
   function thorvaldVariant(player, stage) {
-    if (trialState(player, WARRIOR) === 2) return V.thorvaldDone;
-    if (held(player, CHAMPIONS_TOKEN)) return V.thorvaldBoots;
+    const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
-    if (step === M_SEER) {
+    if (merchantActive && held(player, CHAMPIONS_TOKEN)) return V.thorvaldBoots;
+    if (merchantActive && step === M_SEER) {
       setMerchantStep(player, M_THORVALD);
       return V.thorvaldConvince;
     }
-    if (step >= M_THORVALD) return V.thorvaldAgain2;
-    if (step >= M_BOWSTRING) return bowAsk("thorvald");
-    if (step >= M_STARTED) return flowerAsk("thorvald");
+    if (merchantActive && step >= M_THORVALD) return V.thorvaldAgain2;
+    if (merchantActive && step >= M_BOWSTRING) return bowAsk("thorvald");
+    if (merchantActive && step >= M_STARTED) return flowerAsk("thorvald");
+    if (trialState(player, WARRIOR) === 2) return V.thorvaldDone;
     if (stage >= STAGE_STARTED) return trialState(player, WARRIOR) === 1 ? V.thorvaldAgain : V.thorvaldOffer;
     return null;
   }
@@ -646,6 +691,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
   }
 
   function sailorVariant(player) {
+    if (quest.getStage(player) < STAGE_STARTED || quest.isComplete(player)) return null;
     const step = merchantStep(player);
     if (held(player, FREMENNIK_BALLAD)) return swensenGiving("the-ballad-to-the-sailor");
     if (step === M_STARTED) {
@@ -691,7 +737,8 @@ module.exports = function registerFremennikTrialsQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text ?? "").toLowerCase();
     if (!value) return null;
     const inventory = player.getInventory();
@@ -711,7 +758,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
     if (value.includes("does not already have the tankard and/or beer tankard")) return !has(BEER_TANKARD);
     if (value.includes("does not have the beer tankards")) return !has(BEER_TANKARD);
     if (value.includes("has the beer tankards")) return has(BEER_TANKARD);
-    if (value.includes("does not have a keg of beer")) return !has(KEG_OF_BEER) && !has(LOW_ALCOHOL_KEG);
+    if (value.includes("does not have a keg of beer")) return !has(KEG_OF_BEER);
     if (value.includes("has a regular keg of beer")) return has(KEG_OF_BEER) && !flag(player, FLAG_LOW_ALCOHOL);
 
     if (value.includes("does not have 250 gp")) return coins < 250;
@@ -837,7 +884,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function spawnKoschei(player) {
     const location = player.getLocation();
-    api.spawnNpc({
+    const npc = api.spawnNpc({
       id: NpcIdentifiers.KOSCHEI_THE_DEATHLESS,
       x: location.getX(),
       y: location.getY() + 1,
@@ -846,11 +893,39 @@ module.exports = function registerFremennikTrialsQuest(api) {
       owner: player,
       ownerOnly: true,
     });
+    if (npc) npc.__skipDefaultRespawn = true;
     player.sendMessage("Koschei the deathless steps forward. Fight him unarmed!");
+  }
+
+  /**
+   * The trial-acceptance dialogue for a council member. The transcript dump lost
+   * the wiki jump targets for the "Ask about becoming a Fremennik" option, so the
+   * option is replayed through the member's own trial variant instead.
+   */
+  function trialOfferVariant(npcId) {
+    if (PEER_IDS.has(npcId)) return V.peerTrial;
+    if (SWENSEN_IDS.has(npcId)) return V.swensenOffer;
+    if (THORVALD_IDS.has(npcId)) return V.thorvaldOffer;
+    if (SIGLI_IDS.has(npcId)) return V.sigliOffer;
+    if (MANNI_IDS.has(npcId)) return V.revellerOffer;
+    return null;
   }
 
   function handleChoice({ player, npcId, option }) {
     const text = String(option ?? "").trim().toLowerCase();
+    if (text.startsWith("ask about becoming a fremennik")) {
+      const offer = trialOfferVariant(npcId);
+      if (offer && quest.getStage(player) >= STAGE_STARTED) {
+        // Let the option's dead branch close the chatbox first, then replay.
+        TaskManager.submit(
+          new CountdownTask(player, 1, () => {
+            if (player.isRegistered?.() === false) return;
+            startTranscript(api, player, npcId, PAGE, offer);
+          })
+        );
+      }
+      return;
+    }
     if (text !== "yes" && text !== "yes.") return;
     const stage = quest.getStage(player);
     if (stage < STAGE_STARTED) return;
@@ -873,25 +948,18 @@ module.exports = function registerFremennikTrialsQuest(api) {
       if (quest.getStage(player) < STAGE_STARTED) return;
       if (trialState(player, REVELLER) === 0) setTrialState(player, REVELLER, 1);
       if (!held(player, BEER_TANKARD)) give(player, BEER_TANKARD, 1);
-      if (
-        !held(player, KEG_OF_BEER) &&
-        !held(player, LOW_ALCOHOL_KEG) &&
-        !flag(player, FLAG_LOW_ALCOHOL)
-      ) {
+      if (!held(player, KEG_OF_BEER) && !flag(player, FLAG_LOW_ALCOHOL)) {
         give(player, KEG_OF_BEER, 1);
         player.sendMessage("You take a keg of beer from the table near the bar.");
       }
       return;
     }
-    if (stepId === "TneElg") {
+    if (stepId === "TneElg" || stepId === "nHsqoq") {
       if (trialState(player, REVELLER) !== 1) return;
       if (!held(player, BEER_TANKARD)) give(player, BEER_TANKARD, 1);
-      if (
-        !held(player, KEG_OF_BEER) &&
-        !held(player, LOW_ALCOHOL_KEG) &&
-        !flag(player, FLAG_LOW_ALCOHOL)
-      ) {
+      if (!held(player, KEG_OF_BEER) && !flag(player, FLAG_LOW_ALCOHOL)) {
         give(player, KEG_OF_BEER, 1);
+        player.sendMessage("You take a keg of beer from the table near the bar.");
       }
       return;
     }
@@ -1344,7 +1412,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerChest(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, EMPTY_JUG) && !heldKind(player, JUG_UNITS)) {
       give(player, EMPTY_JUG, 1);
@@ -1365,7 +1433,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerCupboard(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, EMPTY_BUCKET) && !heldKind(player, BUCKET_UNITS)) {
       give(player, EMPTY_BUCKET, 1);
@@ -1379,7 +1447,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerBookcase(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, RED_HERRING)) {
       give(player, RED_HERRING, 1);
@@ -1393,7 +1461,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerBoxes(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, MAGNET_2)) {
       give(player, MAGNET_2, 1);
@@ -1413,7 +1481,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerCrate(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, TOY_SHIP)) {
       give(player, TOY_SHIP, 1);
@@ -1536,7 +1604,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
       return;
     }
     const location = player.getLocation();
-    api.spawnNpc({
+    const npc = api.spawnNpc({
       id: DRAUGEN_ID,
       x: location.getX() + 1,
       y: location.getY(),
@@ -1545,6 +1613,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
       owner: player,
       ownerOnly: true,
     });
+    if (npc) npc.__skipDefaultRespawn = true;
     player.sendMessage("The Draugen is here! Beware!");
   }
 
@@ -1607,6 +1676,18 @@ module.exports = function registerFremennikTrialsQuest(api) {
   function handleNpcInteraction(event) {
     const { player, npcId } = event;
     if (event.clickType !== 1) return;
+    if (BRUNDT_IDS.has(npcId) && votesFor(player) >= VOTES_REQUIRED && !quest.isComplete(player)) {
+      // The transcript's "I have seven votes" branch sits after a generic end, so it
+      // can never play; replay just that branch.
+      event.handled = true;
+      api.emitCustomEvent("npc-dialogue:start", {
+        player,
+        npcId,
+        variant: V.brundtProgress,
+        select: (steps) => steps.filter((step) => step.id === "Ve_OpV"),
+      });
+      return;
+    }
     if (npcId === FOSSEGRIMEN_ID) {
       event.handled = true;
       startTranscript(api, player, npcId, PAGE, V.fossegrimen);
@@ -1623,8 +1704,44 @@ module.exports = function registerFremennikTrialsQuest(api) {
     if (SIGLI_IDS.has(npcId) && trialState(player, HUNTER) === 1) completeHunterTrial(player);
   }
 
+  /** Opens the east trapdoor by swapping in the already-open variant. */
+  function openPeerTrapdoor(event) {
+    event.handled = true;
+    const object = event.object;
+    if (!object) return;
+    const location = object.getLocation();
+    ObjectManager.deregister(object, true);
+    ObjectManager.register(
+      new GameObject(
+        ObjectIdentifiers.TRAPDOOR_14,
+        new Location(location.getX(), location.getY(), location.getZ()),
+        object.getType(),
+        object.getFace(),
+        object.getPrivateArea() ?? null
+      ),
+      true
+    );
+  }
+
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
+    if (inPeerHouse(player) && event.clickType === 1) {
+      const location = player.getLocation();
+      if (PEER_LADDER_IDS.has(objectId) && location.getZ() === 0) {
+        event.handled = true;
+        player.moveTo(new Location(location.getX(), location.getY(), PEER_PUZZLE_FLOOR));
+        return;
+      }
+      if (PEER_TRAPDOOR_IDS.has(objectId) && location.getZ() === PEER_PUZZLE_FLOOR) {
+        if (objectId === ObjectIdentifiers.TRAPDOOR_15) {
+          openPeerTrapdoor(event);
+          return;
+        }
+        event.handled = true;
+        player.moveTo(new Location(location.getX(), location.getY(), 0));
+        return;
+      }
+    }
     if (objectId === SWAYING_TREE_ID) {
       event.handled = true;
       if (trialState(player, BARD) !== 1) {
@@ -1702,12 +1819,12 @@ module.exports = function registerFremennikTrialsQuest(api) {
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemAction(handleItemAction);
   api.onItemOnObject("Golden fleece", "Spinning wheel", spinGoldenFleece);
-  api.onItemOnObject("Lyre", "Altar", offerLyre);
-  api.onItemOnObject("Lit strange object", "Drain", placeFirecracker);
-  api.onItemOnObject("Pet rock", "Cauldron", addToCauldron);
-  api.onItemOnObject("Cabbage", "Cauldron", addToCauldron);
-  api.onItemOnObject("Potato", "Cauldron", addToCauldron);
-  api.onItemOnObject("Onion", "Cauldron", addToCauldron);
+  api.onItemOnObject("Lyre", "Strange altar", offerLyre);
+  api.onItemOnObject("Lit strange object", "Pipe", placeFirecracker);
+  api.onItemOnObject("Pet rock", "Lalli's Stew", addToCauldron);
+  api.onItemOnObject("Cabbage", "Lalli's Stew", addToCauldron);
+  api.onItemOnObject("Potato", "Lalli's Stew", addToCauldron);
+  api.onItemOnObject("Onion", "Lalli's Stew", addToCauldron);
   api.onItemOnObject("Empty bucket", "Tap", fillAtTap);
   api.onItemOnObject("Empty jug", "Tap", fillAtTap);
   api.onItemOnObject("Vase", "Tap", fillAtTap);
@@ -1732,9 +1849,9 @@ module.exports = function registerFremennikTrialsQuest(api) {
   api.onItemOnObject("Vase of water", "Frozen table", freezeOnTable);
   api.onItemOnObject("Full bucket", "Frozen table", freezeOnTable);
   api.onItemOnObject("Full jug", "Frozen table", freezeOnTable);
-  api.onItemOnObject("Frozen key", "Range", meltOnRange);
-  api.onItemOnObject("Frozen bucket", "Range", meltOnRange);
-  api.onItemOnObject("Frozen jug", "Range", meltOnRange);
+  api.onItemOnObject("Frozen key", "Cooking range", meltOnRange);
+  api.onItemOnObject("Frozen bucket", "Cooking range", meltOnRange);
+  api.onItemOnObject("Frozen jug", "Cooking range", meltOnRange);
   api.onItemOnObject("Seer's key", "Door", unlockSeerDoor);
   api.onObjectInteraction(handleObjectInteraction);
   api.onObjectInteraction("Chest", { Open: searchSeerChest, Search: searchSeerChest });

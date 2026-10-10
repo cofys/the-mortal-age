@@ -9,9 +9,10 @@ import type { TileMarkersPluginConfig } from "../../../game/plugins/tilemarkers/
 import type { Model } from "../../../rs/model/Model";
 import type { OsrsMenuEntry } from "../../../rs/MenuEntry";
 import type { LocModelLoader } from "../../../rs/config/loctype/LocModelLoader";
-import type { Ray } from "../../../game/math/Raycast";
+import { Ray } from "../../../game/math/Raycast";
 import type { MapManager } from "../../../game/MapManager";
 import { SceneRaycaster } from "../../../game/scene/SceneRaycaster";
+import { getControlledPlayerWorldViewId } from "../camera";
 import type { SimpleMenuEntry } from "../../../ui/menu/MenuEngine";
 import type { MenuClickContext } from "../../../ui/menu/MenuEngine";
 import type { InteractHighlightDrawTarget } from "../../../ui/devoverlay/InteractHighlightOverlay";
@@ -27,6 +28,7 @@ import {
 import { resolveGroundItemStackPlane } from "../../../game/scene/PlaneResolver";
 import { getMapSquareId } from "../../../rs/map/MapFileIndex";
 import type { WebGLOsrsRendererHost } from "../../render/hostInterface";
+import { getWorldEntityIndexForMapId } from "../worldEntity";
 import {
     addHitSplatOsrs,
     actorAddHealthBar,
@@ -96,6 +98,7 @@ import {
     trimActorHealthBars,
     trimHitsplats,
     updateHoveredTile as updateHoveredTileViaHost,
+    projectDeckToWorld,
     updateInteractHighlightHoverTarget as updateInteractHighlightHoverTargetViaHost,
     worldToScreen,
     getInteractNpcModelLoader,
@@ -250,12 +253,36 @@ export class OverlayHost {
             this.mapManager as unknown as MapManager<WebGLMapSquare>,
             renderer.osrsClient,
         );
+        // Same providers WebGLOsrsRenderer installs: deck loc triangles need the deck's
+        // placement matrix and deck hits are projected back to world coordinates; NPC hits
+        // need the default height and model triangles.
+        this.sceneRaycaster.worldEntityTransformProvider = (map) =>
+            this.renderer.worldEntityForMap(map as unknown as WebGPUMapSquare)?.transform;
+        this.sceneRaycaster.deckToWorldProvider = (entityIndex, fineX, fineY) =>
+            projectDeckToWorld(this.renderer, entityIndex, fineX, fineY);
+        this.sceneRaycaster.npcHeightProvider = (npcTypeId) => this.getNpcDefaultHeight(npcTypeId);
+        this.sceneRaycaster.npcTrianglesProvider = (ecsId, serverId) =>
+            this.buildNpcModelHighlightTriangles({
+                kind: "npc",
+                ecsId,
+                serverId,
+                npcTypeId: this.osrsClient.npcEcs.getNpcTypeId(ecsId),
+                plane: 0,
+            });
         this.boundToCssEvent = (gx?: number, gy?: number) =>
             this.toCssEvent(gx, gy, this.currentFrameCount);
     }
 
     private get typedHost(): WebGLOsrsRendererHost {
         return this as unknown as WebGLOsrsRendererHost;
+    }
+
+    /**
+     * Deck placement read by the shared overlay pop helpers (projectDeckToWorld): an actor
+     * aboard a boat has deck coordinates, so their labels are anchored where the deck is drawn.
+     */
+    get worldEntityAnimator(): WebGPURenderer["worldEntityAnimator"] {
+        return this.renderer.worldEntityAnimator;
     }
 
     // ── Pools ────────────────────────────────────────────────────────────────────────────────
@@ -600,6 +627,21 @@ export class OverlayHost {
     // ── Map sampling (same math as the WebGL helpers, reading WebGPUMapSquare's public data) ─
 
     getPreferredMapForWorldTile(tileX: number, tileY: number): WebGPUMapSquare | undefined {
+        // Port of render/interact/menu.ts getPreferredMapForWorldTile: a deck tile belongs to
+        // the controlled player's world view, whose overlay map is deliberately kept out of the
+        // world-tile grid (MapManager.getMapForWorldTile skips world entity maps), so loc
+        // interaction on a boat would otherwise find no map and offer no options.
+        const worldViewId = getControlledPlayerWorldViewId(this.renderer);
+        if (worldViewId >= 0) {
+            const view = this.osrsClient.worldViewManager.getWorldView(worldViewId);
+            if (view?.containsTile(tileX | 0, tileY | 0)) {
+                const overlay = this.osrsClient.worldViewManager.getOverlayMapSquare(
+                    worldViewId,
+                    this.mapManager,
+                );
+                if (overlay) return overlay;
+            }
+        }
         return this.mapManager.getMapForWorldTile(tileX, tileY);
     }
 
@@ -613,6 +655,24 @@ export class OverlayHost {
         const localY = (tileY | 0) - (map.getRenderBaseTileY?.() ?? map.mapY * Scene.MAP_SQUARE_SIZE);
         if (localX < 0 || localY < 0 || localX >= span || localY >= span) return undefined;
         return { x: localX | 0, y: localY | 0 };
+    }
+
+    /** The world entity a deck map id belongs to (loc/NPC highlight transforms). */
+    getWorldEntityIndexForMapId(mapId: number): number | undefined {
+        return getWorldEntityIndexForMapId(this.renderer, mapId);
+    }
+
+    /**
+     * Port of render/render/worldEntity.ts getWorldEntityDeckHeight: an overlay loc's highlight
+     * model sits on the boat's deck, so its triangles are raised by the deck height.
+     */
+    getWorldEntityDeckHeight(_tileX?: number, _tileY?: number): number {
+        for (const overlay of this.renderer.worldEntityOverlays.values()) {
+            if (overlay.deckHeight !== undefined && overlay.deckHeight !== 0) {
+                return overlay.deckHeight;
+            }
+        }
+        return 0;
     }
 
     sampleHeightAtExactPlane(worldX: number, worldZ: number, plane: number): number {
@@ -760,9 +820,33 @@ export class OverlayHost {
         );
     }
 
-    /** WebGPU has no world-entity overlay maps, so the terrain ray needs no deck transform. */
-    getWorldEntityAdjustedTerrainRay(ray: Ray, _map?: unknown): Ray {
-        return ray;
+    /**
+     * Port of getWorldEntityAdjustedTerrainRay (render/worldEntity2.ts): a ray that hits the sea
+     * is moved into a deck map's own coordinates before its pick triangles are tested.
+     */
+    getWorldEntityAdjustedTerrainRay(ray: Ray, map?: unknown): Ray {
+        if (!map) return ray;
+        const deck = this.renderer.worldEntityForMap(map as WebGPUMapSquare);
+        if (!deck) return ray;
+
+        const viewMatrix = this.osrsClient.camera?.viewMatrix as Float32Array | undefined;
+        if (!viewMatrix) return ray;
+
+        const weInv = mat4.invert(mat4.create(), deck.transform);
+        if (!weInv) return ray;
+        const viewInv = mat4.invert(mat4.create(), viewMatrix);
+        if (!viewInv) return ray;
+
+        const transformInv = mat4.create();
+        mat4.multiply(transformInv, weInv, viewMatrix);
+        mat4.multiply(transformInv, viewInv, transformInv);
+
+        const newOrigin = vec3.transformMat4(vec3.create(), ray.origin, transformInv);
+        const farPoint = vec3.scaleAndAdd(vec3.create(), ray.origin, ray.direction, 1.0);
+        const newFar = vec3.transformMat4(vec3.create(), farPoint, transformInv);
+        const newDir = vec3.subtract(vec3.create(), newFar, newOrigin);
+        vec3.normalize(newDir, newDir);
+        return new Ray(newOrigin, newDir);
     }
 
     getRoofPlaneLimit(): number {

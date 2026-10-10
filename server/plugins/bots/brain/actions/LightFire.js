@@ -5,9 +5,13 @@ const { ObjectManager } = require("../../../../src/main/typescript/elvarg/game/e
 const { RegionManager } = require("../../../../src/main/typescript/elvarg/game/collision/RegionManager");
 const Firemaking = require("../../../skills/Firemaking.plugin");
 const { requestMovement } = require("../../behaviours/navigation/BotNavigation");
+const { playerState } = require("../ActionState");
 
-const TILE_SEARCH_ATTEMPTS = 20;
-const TILE_SEARCH_RADIUS = 3;
+const TILE_SEARCH_ATTEMPTS = 40;
+// Banks are where the logs come from, and their floors refuse fires: look past the room.
+const TILE_SEARCH_RADIUS = 6;
+// Refused this many lights in a row (nowhere clear nearby): give the step up.
+const MAX_REFUSED = 4;
 
 /**
  * Burns the inventory's logs one at a time on clear tiles near the bank, then
@@ -50,10 +54,11 @@ function createLightFireAction(spec, world) {
     return false;
   }
 
-  return {
+  const action = {
     id: "lightFire",
     update(ctx) {
       const { player } = ctx;
+      const bot = playerState(action, player, () => ({ refused: 0 }));
       if (Firemaking.isFiremakingActive?.(player)) {
         return "running";
       }
@@ -68,13 +73,25 @@ function createLightFireAction(spec, world) {
         return "running";
       }
       const loc = player.getLocation();
-      if (ObjectManager.existsLocation(loc)) {
-        return moveToClearTile(player) ? "running" : "failed";
+      // The skill's own rule: a fire, or a map object here (a bank floor), refuses the light.
+      const blocked = ObjectManager.existsLocation(loc) ||
+        Firemaking.isFireTileBlocked?.(loc, player.getPrivateArea?.() ?? null) === true;
+      if (!blocked && Firemaking.startBotInventoryFiremaking?.(player, logId) !== false) {
+        bot.refused = 0;
+        return "running";
       }
-      Firemaking.startBotInventoryFiremaking?.(player, logId);
-      return "running";
+      bot.refused += 1;
+      if (bot.refused >= MAX_REFUSED) {
+        bot.refused = 0;
+        return "failed";
+      }
+      return moveToClearTile(player) ? "running" : "failed";
+    },
+    stop(ctx) {
+      playerState(action, ctx.player, () => ({ refused: 0 })).refused = 0;
     },
   };
+  return action;
 }
 
 module.exports = {

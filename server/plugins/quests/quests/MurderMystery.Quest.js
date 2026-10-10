@@ -11,18 +11,25 @@
  * player attributes (murderer, poison proof, evidence flags) because the wiki's
  * 193/194/195 varps are not read by this runtime.
  *
- * Gaps (no dump/index support): the crime-scene criminal's dagger and pungent pot
- * are not spawned on the ground by this plugin, and the flying-fingerprint chain
- * needs the dagger's unknown print, so the fingerprint evidence is only reachable
- * if those items enter the world another way. The dog-gate / gate-sacks / drain
- * objects with unnamed ids (2662/2664/2665/26109/2653/2651/26120/2634) are not in
- * ObjectIdentifiers and are skipped.
+ * The crime-scene criminal's dagger and pungent pot come from the static ground
+ * spawns (ground-items.json). Gaps: the drain/gate investigate-prose is reduced
+ * to the wiki's clue messages; the guard dog itself has no dialogue.
  */
 module.exports = function registerMurderMysteryQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, refreshQuestList } = require("../QuestRuntime");
 
-  const GUARD_IDS = new Set([NpcIdentifiers.GUARD_61]);
+  // npc-spawns.json spawns the mansion family and one guard under ids the
+  // identifiers dump does not name; 4220-4225 are the same characters' older ids.
+  const GUARD_MANSION_ID = 6194;
+  const MANSION_ANNA_ID = 6195;
+  const MANSION_BOB_ID = 6196;
+  const MANSION_CAROL_ID = 6197;
+  const MANSION_DAVID_ID = 6198;
+  const MANSION_ELIZABETH_ID = 6199;
+  const MANSION_FRANK_ID = 6200;
+
+  const GUARD_IDS = new Set([NpcIdentifiers.GUARD_61, GUARD_MANSION_ID]);
   const ANNA_ID = NpcIdentifiers.ANNA_3;
   const BOB_ID = NpcIdentifiers.BOB_5;
   const CAROL_ID = NpcIdentifiers.CAROL;
@@ -39,13 +46,20 @@ module.exports = function registerMurderMysteryQuest(api) {
   const MARY_ID = NpcIdentifiers.MARY;
   const STANFORD_ID = NpcIdentifiers.STANFORD;
 
+  /** The murder-room smashed window on the map is 26123, unnamed in the dump. */
+  const SMASHED_WINDOW_STUDY_ID = 26123;
   const SMASHED_WINDOW_IDS = [
     ObjectIdentifiers.SMASHED_WINDOW,
     ObjectIdentifiers.SMASHED_WINDOW_2,
     ObjectIdentifiers.WINDOW_9,
+    SMASHED_WINDOW_STUDY_ID,
   ];
   const FLOUR_BARREL_ID = ObjectIdentifiers.BARREL_OF_FLOUR_2;
   const FLYPAPER_SACKS_ID = ObjectIdentifiers.SACKS_6;
+  const STURDY_GATE_IDS = [
+    ObjectIdentifiers.STURDY_WOODEN_GATE,
+    ObjectIdentifiers.STURDY_WOODEN_GATE_2,
+  ];
 
   const VARP_MURDER_MYSTERY = 192;
   const STAGE_NOT_STARTED = 0;
@@ -108,12 +122,20 @@ module.exports = function registerMurderMysteryQuest(api) {
   const SPEAKER_FRAGMENT = new Map([
     [ANNA_ID, "anna"], [BOB_ID, "bob"], [CAROL_ID, "carol"], [DAVID_ID, "david"],
     [DAVID_ALT_ID, "david"], [ELIZABETH_ID, "elizabeth"], [FRANK_ID, "frank"],
+    [MANSION_ANNA_ID, "anna"], [MANSION_BOB_ID, "bob"], [MANSION_CAROL_ID, "carol"],
+    [MANSION_DAVID_ID, "david"], [MANSION_ELIZABETH_ID, "elizabeth"], [MANSION_FRANK_ID, "frank"],
     [GOSSIP_ID, "gossip"], [DONOVAN_ID, "donovan"], [PIERRE_ID, "pierre"],
     [HOBBES_ID, "hobbes"], [LOUISA_ID, "louisa"], [MARY_ID, "mary"], [STANFORD_ID, "stanford"],
   ]);
 
-  const FAMILY_IDS = new Set([ANNA_ID, CAROL_ID, ELIZABETH_ID, MARY_ID]);
-  const MEN_IDS = new Set([BOB_ID, DAVID_ID, DAVID_ALT_ID, FRANK_ID]);
+  const FAMILY_IDS = new Set([
+    ANNA_ID, CAROL_ID, ELIZABETH_ID, MARY_ID,
+    MANSION_ANNA_ID, MANSION_CAROL_ID, MANSION_ELIZABETH_ID,
+  ]);
+  const MEN_IDS = new Set([
+    BOB_ID, DAVID_ID, DAVID_ALT_ID, FRANK_ID,
+    MANSION_BOB_ID, MANSION_DAVID_ID, MANSION_FRANK_ID,
+  ]);
   const SERVANT_IDS = new Set([DONOVAN_ID, PIERRE_ID, HOBBES_ID, LOUISA_ID, MARY_ID, STANFORD_ID]);
   const SERVANTS_WITH_BEFORE = new Set([DONOVAN_ID, PIERRE_ID, HOBBES_ID, LOUISA_ID, STANFORD_ID]);
 
@@ -169,6 +191,8 @@ module.exports = function registerMurderMysteryQuest(api) {
 
   function grantReward(player) {
     player.getSkillManager().addExperiences(Skill.CRAFTING, 1406);
+    // registerQuest adds the rewardItemId coin; top the stack up to 2,000.
+    player.getInventory().adds(ITEM.COINS, 1999);
   }
 
   function selectVariant({ npcId, player }) {
@@ -179,7 +203,8 @@ module.exports = function registerMurderMysteryQuest(api) {
       if (conclusiveEvidence(player)) {
         return "presenting-the-evidence-talking-to-the-guard-with-all-evidence";
       }
-      if (attr(player, EV_ATTR) !== 0 || attr(player, POISON_ATTR) !== 0) {
+      // Proof, not just progress: the salesman or a suspect's claim is not evidence.
+      if (attr(player, EV_ATTR) !== 0 || attr(player, POISON_ATTR) >= POISON_LOCATION_CHECKED) {
         return "presenting-the-evidence-talking-to-the-guard-with-some-but-not-all-evidence";
       }
       return "getting-started-talking-to-the-guard-after-starting-the-quest";
@@ -191,7 +216,14 @@ module.exports = function registerMurderMysteryQuest(api) {
     }
     const fragment = SPEAKER_FRAGMENT.get(npcId);
     if (!fragment) return null;
-    if (stage === STAGE_STARTED) return `questioning-the-inhabitants-talking-to-${fragment}`;
+    if (stage === STAGE_STARTED) {
+      // Once the salesman has named the buyers everyone gets the "why the poison"
+      // menu; only the family have that exact question (Gossip has neither variant).
+      if (npcId !== GOSSIP_ID && attr(player, POISON_ATTR) >= POISON_SALESMAN_QUESTIONED) {
+        return `visiting-the-poison-salesman-talking-to-${fragment}-after-learning-about-the-poison`;
+      }
+      return `questioning-the-inhabitants-talking-to-${fragment}`;
+    }
     if (stage >= STAGE_COMPLETE) {
       if (npcId === GOSSIP_ID) return "post-quest-talking-to-gossip-after-the-quest";
       if (npcId === PIERRE_ID) return null; // no post-quest transcript variant
@@ -209,14 +241,34 @@ module.exports = function registerMurderMysteryQuest(api) {
     if (value.includes("criminal's thread is red")) return murderer(player).thread === ITEM.CRIMINALS_THREAD;
     if (value.includes("thread isn't red")) return murderer(player).thread !== ITEM.CRIMINALS_THREAD;
     if (value.includes("full inventory")) return player.getInventory().isFull?.() === true;
+    // The guard's evidence menu: each option is only shown when that clue is held.
+    if (value.startsWith("if the player has the thread evidence")) {
+      return (attr(player, EV_ATTR) & EVIDENCE_THREAD) !== 0;
+    }
+    if (value.startsWith("if the player has poison evidence")) {
+      return attr(player, POISON_ATTR) >= POISON_LOCATION_CHECKED;
+    }
+    if (value.startsWith("if the player has fingerprint evidence")) {
+      return (attr(player, EV_ATTR) & EVIDENCE_FINGERPRINTS) !== 0;
+    }
+    // The guard's per-suspect tellings; without this the first unanswered one wins.
+    const who = /^if (anna|bob|carol|david|elizabeth|frank) is the murderer/.exec(value);
+    if (who) return murderer(player).name.toLowerCase() === who[1];
     return null;
+  }
+
+  /** Deterministic per-account culprit (the wiki picks one at random per player). */
+  function pickMurderer(player) {
+    const name = String(player.getUsername?.() ?? "").toLowerCase();
+    let hash = 0;
+    for (let index = 0; index < name.length; index++) hash = (hash * 31 + name.charCodeAt(index)) | 0;
+    return (Math.abs(hash) % MURDERERS.length) + 1;
   }
 
   function handleStartHook({ player, npcId, hook }) {
     if (!GUARD_IDS.has(npcId) || hook !== "quest:murder-mystery:start") return;
     if (quest.getStage(player) !== STAGE_NOT_STARTED) return;
-    const selected = ((Number(player.getId?.()) || 0) % MURDERERS.length) + 1;
-    setAttr(player, MURDERER_ATTR, selected);
+    setAttr(player, MURDERER_ATTR, pickMurderer(player));
     setAttr(player, POISON_ATTR, 0);
     setAttr(player, EV_ATTR, 0);
     quest.setStage(player, STAGE_STARTED);
@@ -244,6 +296,12 @@ module.exports = function registerMurderMysteryQuest(api) {
     if (!SMASHED_WINDOW_IDS.includes(event.objectId)) return;
     const { player } = event;
     if (investigationBlocked(player)) return;
+    const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "").toLowerCase();
+    if (option === "break") {
+      player.sendMessage("You don't want to damage evidence!");
+      event.handled = true;
+      return;
+    }
     const thread = murderer(player).thread;
     if (!has(player, thread) && !player.getInventory().isFull()) player.getInventory().adds(thread, 1);
     setEvidence(player, EVIDENCE_THREAD);
@@ -298,10 +356,44 @@ module.exports = function registerMurderMysteryQuest(api) {
     event.handled = true;
   }
 
-  /** Flour + silver -> empty pot + dusted item; flypaper + dusted -> original + print. */
+  /** The sturdy wooden gate is the guard-dog clue: no intruder could pass the dog. */
+  function handleSturdyGate(event) {
+    if (!STURDY_GATE_IDS.includes(event.objectId)) return;
+    const { player } = event;
+    if (quest.getStage(player) !== STAGE_STARTED) {
+      player.sendMessage("I need the guards' permission to do that.");
+      event.handled = true;
+      return;
+    }
+    player.sendMessage(
+      "As you approach the gate the guard dog starts barking loudly at you. There is no way an intruder could have committed the murder. It must have been someone the dog knew to get past it quietly."
+    );
+    event.handled = true;
+  }
+
+  /** Flour + silver -> empty pot + dusted item; flypaper + dusted -> original + print.
+   * The crime-scene dagger follows the same recipe and yields the unknown print. */
   function handleItemOnItem(event) {
     const { player, usedItemId, usedWithItemId } = event;
     const ids = [usedItemId, usedWithItemId];
+    if (ids.includes(ITEM.POT_OF_FLOUR) && ids.includes(ITEM.CRIMINALS_DAGGER)) {
+      player.getInventory().deleteNumber(ITEM.POT_OF_FLOUR, 1);
+      player.getInventory().deleteNumber(ITEM.CRIMINALS_DAGGER, 1);
+      player.getInventory().adds(POT, 1);
+      player.getInventory().adds(ITEM.CRIMINALS_DAGGER_2, 1);
+      player.sendMessage("You sprinkle a small amount of flour on the murder weapon.");
+      event.handled = true;
+      return;
+    }
+    if (ids.includes(ITEM.FLYPAPER) && ids.includes(ITEM.CRIMINALS_DAGGER_2)) {
+      player.getInventory().deleteNumber(ITEM.FLYPAPER, 1);
+      player.getInventory().deleteNumber(ITEM.CRIMINALS_DAGGER_2, 1);
+      player.getInventory().adds(ITEM.CRIMINALS_DAGGER, 1);
+      player.getInventory().adds(ITEM.UNKNOWN_PRINT, 1);
+      player.sendMessage("You have a clean impression of the murderer's finger prints.");
+      event.handled = true;
+      return;
+    }
     if (ids.includes(ITEM.POT_OF_FLOUR)) {
       const proof = MURDERERS.find((entry) => ids.includes(entry.original));
       if (!proof) return;
@@ -342,12 +434,21 @@ module.exports = function registerMurderMysteryQuest(api) {
     }
   }
 
-  /** The poison salesman reveals who bought poison; talking to a suspect advances. */
-  function handlePoisonSalesman({ player, npcId }) {
-    if (npcId !== POISON_SALESMAN_ID) return;
+  /** Dialogue choices: the salesman names the buyers, a family member names the
+   * poison location they claim to have used. Merely talking does not count. */
+  function handlePoisonChoice({ player, npcId, option }) {
     if (quest.getStage(player) !== STAGE_STARTED) return;
-    if (attr(player, POISON_ATTR) < POISON_SALESMAN_QUESTIONED) {
-      setAttr(player, POISON_ATTR, POISON_SALESMAN_QUESTIONED);
+    const text = String(option ?? "").toLowerCase();
+    if (npcId === POISON_SALESMAN_ID && text.includes("who did you sell poison")) {
+      if (attr(player, POISON_ATTR) < POISON_SALESMAN_QUESTIONED) {
+        setAttr(player, POISON_ATTR, POISON_SALESMAN_QUESTIONED);
+      }
+      return;
+    }
+    if ((FAMILY_IDS.has(npcId) || MEN_IDS.has(npcId)) && text.includes("buy poison the other day")) {
+      if (attr(player, POISON_ATTR) < POISON_MURDERER_QUESTIONED) {
+        setAttr(player, POISON_ATTR, POISON_MURDERER_QUESTIONED);
+      }
     }
   }
 
@@ -396,11 +497,12 @@ module.exports = function registerMurderMysteryQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
-  api.onNpcInteraction(handlePoisonSalesman);
+  api.onCustomEvent("npc-dialogue:choice", handlePoisonChoice);
   api.onObjectInteraction(handleWindow);
   api.onObjectInteraction(handleBarrel);
   api.onObjectInteraction(handleFlourBarrel);
   api.onObjectInteraction(handleFlypaperSacks);
+  api.onObjectInteraction(handleSturdyGate);
   api.onObjectInteraction(handlePoisonLocation);
   api.onItemOnItem(handleItemOnItem);
   api.onPlayerLogin(handleLogin);

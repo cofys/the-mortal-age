@@ -25,9 +25,10 @@
  * doors, magic door, Melzar/Oracle chests, ship hole, gangplanks, Crandor).
  *
  * Gaps (needing content the dump/reference cannot supply, see summary):
- *   - Duke Horacio's quest dialogue lives on the "Dragon Slayer I" page but the
- *     id index only lists his own page; the generic "Duke Horacio" page already
- *     carries the shield conversation, so his shield is granted by action id.
+ *   - Duke Horacio's shield conversation lives on his own flat "Duke Horacio"
+ *     page (LnbjYr/igRDii, if_uB3/emj6I8 once the quest is done); the plugin
+ *     claims that page while Dragon Slayer still owes the player a shield and
+ *     lets Rune Mysteries own Duke the rest of the time.
  *   - Klarense has no pre-Oziach refusal variant; purchase is refused in the
  *     condition handler instead of a dedicated line.
  *   - The offered ship captains (Ahab, Seagull, Ben, Lorris/Tobias, Stan), the
@@ -98,6 +99,7 @@ module.exports = function registerDragonSlayerQuest(api) {
     blueKey: ItemIdentifiers.KEY_6,
     magentaKey: ItemIdentifiers.KEY_7,
     greenKey: ItemIdentifiers.KEY_8,
+    elvargsHead: ItemIdentifiers.ELVARGS_HEAD,
   };
 
   const MAP_PIECES = [ITEM.mapMelzar, ITEM.mapWormbrain, ITEM.mapOracle];
@@ -110,34 +112,35 @@ module.exports = function registerDragonSlayerQuest(api) {
     ObjectIdentifiers.MAGENTA_DOOR,
     ObjectIdentifiers.GREEN_DOOR,
   ];
-  // Reference maze-key droppers. 748/749 have no generated member; 750-753 map to
-  // unrelated cache names (My Arm / Adventurer) in NpcIdentifiers.
-  const MAZE_KEY_DROPPERS = [
-    748,
-    749,
-    NpcIdentifiers.MY_ARM_4,
-    NpcIdentifiers.MY_ARM_5,
-    NpcIdentifiers.ADVENTURER,
-    NpcIdentifiers.MY_ARM_6,
-  ];
+  // The maze keys come from npc-drops.json on the real Melzar's Maze NPCs
+  // (zombie rat 3969-3971, ghost 3975-3979, skeleton 3972-3974, zombie
+  // 3980/3981, Melzar 823, lesser demon 3982); the old xrsps dropper ids no
+  // longer name those NPCs, so the plugin does not grant keys itself.
   const OFFERINGS = [ITEM.silk, ITEM.unfiredBowl, ITEM.lobsterPot, ITEM.wizardMindBomb];
 
+  // The Lady Lumbridge's hole is nameless in the cache (configName dragonslayer_shiphole),
+  // option Repair, at 3047,3207. The old xrsps HOLE_3 (2589) is not placed.
+  const SHIP_HOLE_ID = 25036;
+
   const LOC = {
-    magicDoor: ObjectIdentifiers.HOPPER,
+    magicDoor: ObjectIdentifiers.MAGIC_DOOR_6,
     oracleChest: [ObjectIdentifiers.CHEST_14, ObjectIdentifiers.CHEST_15],
-    shipHole: ObjectIdentifiers.HOLE_3,
+    shipHole: SHIP_HOLE_ID,
     shipGangplanks: [ObjectIdentifiers.GANGPLANK_15, ObjectIdentifiers.GANGPLANK_16],
     melzarEntrance: ObjectIdentifiers.DOOR_91,
     melzarChest: [ObjectIdentifiers.CHEST_16, ObjectIdentifiers.CHEST_17],
-    crandorOpening: ObjectIdentifiers.STAIRCASE_8,
-    crandorRope: ObjectIdentifiers.STAIRCASE_9,
+    // Crandor's volcano: the surface hole drops into the lair by the exit rope,
+    // and the wall divides the rope corridor from Elvarg's chamber.
+    crandorOpening: ObjectIdentifiers.HOLE_40,
+    crandorRope: ObjectIdentifiers.CLIMBING_ROPE_13,
+    crandorWall: ObjectIdentifiers.WALL_161,
   };
 
   const TILE = {
     melzarInside: new Location(2933, 3248, 0),
     crandor: new Location(2835, 3235, 0),
-    elvargLair: new Location(2852, 9637, 0),
-    crandorSurface: new Location(2833, 3255, 0),
+    crandorLair: new Location(2833, 9656, 0),
+    crandorSurface: new Location(2833, 3256, 0),
   };
 
   const ATTR_ORACLE = "dragon-slayer.oracle";
@@ -147,6 +150,7 @@ module.exports = function registerDragonSlayerQuest(api) {
   const QUEST_POINTS_ATTRIBUTE = "quest.points";
 
   const PAGE = "Dragon Slayer I";
+  const DUKE_PAGE = "Duke Horacio";
   const OZIACH_PAGE = "Oziach";
   const ORACLE_PAGE = "Oracle";
   const KLARENSE_PAGE = "Klarense";
@@ -247,6 +251,15 @@ module.exports = function registerDragonSlayerQuest(api) {
         return { page: PAGE, variant: "a-quest-for-the-rune-platebody-talking-to-the-guildmaster-after-talking-to-oziach" };
       }
       return { page: PAGE, variant: "a-quest-for-the-rune-platebody-talking-to-the-guildmaster-again" };
+    }
+
+    if (npcId === DUKE_HORACIO_NPC_ID) {
+      // Duke's flat page carries the anti-dragon shield conversation (the
+      // Dragon Slayer I page only holds Oziach/Ned/etc. variants). Claim him
+      // while Dragon Slayer still owes the player a shield so Rune Mysteries'
+      // Duke branch cannot shadow it.
+      if (stage < STAGE_GUILDMASTER || hasItem(player, ITEM.antiDragonShield)) return null;
+      return { page: DUKE_PAGE };
     }
 
     if (npcId === OZIACH_NPC_ID) {
@@ -388,6 +401,12 @@ module.exports = function registerDragonSlayerQuest(api) {
     }
 
     if (npcId === DUKE_HORACIO_NPC_ID) {
+      if (value.includes("does not have an anti-dragon shield")) {
+        return !hasItem(player, ITEM.antiDragonShield);
+      }
+      if (value.includes("during dragon slayer i")) {
+        return stage >= STAGE_GUILDMASTER && stage < STAGE_COMPLETE;
+      }
       if (value.includes("has not finished dragon slayer i")) return stage < STAGE_COMPLETE;
       if (value.includes("has finished dragon slayer i")) return stage >= STAGE_COMPLETE;
       return null;
@@ -534,9 +553,7 @@ module.exports = function registerDragonSlayerQuest(api) {
       }
       player.getInventory().deleteNumber(itemId, 1);
       player.sendMessage("The key disintegrates as it unlocks the door.");
-      const loc = event.location;
-      const px = player.getLocation().getX();
-      player.moveTo(new Location(px <= loc.x ? loc.x + 1 : loc.x - 1, loc.y, loc.z));
+      crossMazeDoor(player, event.object, event.location);
       event.handled = true;
       return;
     }
@@ -547,6 +564,31 @@ module.exports = function registerDragonSlayerQuest(api) {
     }
   }
 
+  /**
+   * Cross a wall-straight maze door one tile past the edge it blocks. The
+   * use-item walk can leave the player standing on the door tile, and the old
+   * "east of the door" guess then sent them back the way they came; the door's
+   * face (0 west, 1 south, 2 east, 3 north - the blocked edge) says which way
+   * is through. A player already across the door is sent back the other way.
+   */
+  function crossMazeDoor(player, object, location) {
+    const face = Number(object?.getFace?.() ?? 0) & 0x3;
+    const pos = player.getLocation();
+    if (face === 0 || face === 2) {
+      const throughX = face === 0 ? location.x - 1 : location.x + 1;
+      const acrossX = pos.getX() === location.x
+        ? throughX
+        : pos.getX() < location.x ? location.x + 1 : location.x - 1;
+      player.moveTo(new Location(acrossX, location.y, location.z));
+      return;
+    }
+    const throughY = face === 1 ? location.y + 1 : location.y - 1;
+    const acrossY = pos.getY() === location.y
+      ? throughY
+      : pos.getY() < location.y ? location.y + 1 : location.y - 1;
+    player.moveTo(new Location(location.x, acrossY, location.z));
+  }
+
   function handleShipHoleClick(event) {
     repairShip(event.player);
   }
@@ -554,14 +596,29 @@ module.exports = function registerDragonSlayerQuest(api) {
   /** The Lady Lumbridge's gangplanks are this quest's, not the generic gangplank crossing's. */
   function claimShipGangplank(request) {
     if (!LOC.shipGangplanks.includes(request.objectId)) return;
+    const stage = quest.getStage(request.player);
+    if (stage < STAGE_BOUGHT_SHIP) {
+      request.handled = true;
+      request.player.sendMessage("The ship is not ready to sail yet.");
+      return;
+    }
+    if (stage < STAGE_NED_READY) {
+      // Boarding to repair the holes: leave it to the generic gangplank crossing.
+      return;
+    }
     request.handled = true;
-    handleGangplankClick(request);
+    sailToCrandor(request.player);
   }
 
   function handleGangplankClick(event) {
-    if (quest.getStage(event.player) !== STAGE_NED_READY) {
+    const stage = quest.getStage(event.player);
+    if (stage < STAGE_BOUGHT_SHIP) {
       event.player.sendMessage("The ship is not ready to sail yet.");
       return;
+    }
+    if (stage < STAGE_NED_READY) {
+      // Let the generic gangplank crossing board the player onto the deck.
+      return false;
     }
     sailToCrandor(event.player);
   }
@@ -605,16 +662,41 @@ module.exports = function registerDragonSlayerQuest(api) {
   }
 
   function handleCrandorOpeningClick(event) {
-    event.player.moveTo(TILE.elvargLair.clone());
+    event.player.moveTo(TILE.crandorLair.clone());
+  }
+
+  /**
+   * The Crandor climbing rope (25213) links the lair to the surface. Both tiles are
+   * plane 0; the lair is the map's +6400 underground copy, so the side the player is
+   * on decides the destination (the generic ladder map link guessed the empty plane 1).
+   */
+  function climbCrandorRope(player) {
+    player.setAttribute(ATTR_SHORTCUT, true);
+    const inLair = player.getLocation().getY() >= 6400;
+    player.moveTo((inLair ? TILE.crandorSurface : TILE.crandorLair).clone());
   }
 
   function handleCrandorRopeClick(event) {
-    event.player.setAttribute(ATTR_SHORTCUT, true);
-    event.player.moveTo(TILE.crandorSurface.clone());
+    climbCrandorRope(event.player);
+  }
+
+  /** The rope's "Climb" is claimed before Ladders' generic climb prompt can guess a plane. */
+  function claimCrandorRope(request) {
+    if (request.objectId !== LOC.crandorRope) return;
+    request.handled = true;
+    climbCrandorRope(request.player);
+  }
+
+  /** The low wall between the entrance rope and Elvarg's chamber. */
+  function handleCrandorWallClick(event) {
+    const { player, location } = event;
+    const pos = player.getLocation();
+    const x = pos.getX() < location.x ? location.x + 1 : location.x - 1;
+    player.moveTo(new Location(x, pos.getY(), location.z));
   }
 
   // ============================================================================
-  // NPC deaths: maze keys, Wormbrain's map piece and Elvarg
+  // NPC deaths: Wormbrain's map piece and Elvarg
   // ============================================================================
 
   function handleNpcDeath(event) {
@@ -624,6 +706,9 @@ module.exports = function registerDragonSlayerQuest(api) {
 
     if (ELVARG_NPC_IDS.has(npcId)) {
       if (stage === STAGE_CRANDOR) {
+        // The wiki: Elvarg's head is automatically collected on the kill when
+        // there is a free inventory slot (it is a trophy, not a requirement).
+        if (!hasItem(killer, ITEM.elvargsHead)) giveItem(killer, ITEM.elvargsHead);
         killer.sendMessage("Elvarg is slain! You have completed Dragon Slayer I.");
         quest.complete(killer);
       }
@@ -636,16 +721,6 @@ module.exports = function registerDragonSlayerQuest(api) {
         killer.sendMessage("Wormbrain drops a map piece on the floor.");
       }
       return;
-    }
-
-    const dropIndex = MAZE_KEY_DROPPERS.indexOf(npcId);
-    if (
-      dropIndex >= 0 &&
-      stage >= STAGE_OZIACH &&
-      stage < STAGE_NED_READY &&
-      !hasItem(killer, MAZE_KEYS[dropIndex])
-    ) {
-      giveItem(killer, MAZE_KEYS[dropIndex]);
     }
   }
 
@@ -711,10 +786,12 @@ module.exports = function registerDragonSlayerQuest(api) {
   api.onObjectFirstClick(LOC.shipHole, handleShipHoleClick);
   api.onObjectFirstClick(LOC.shipGangplanks, handleGangplankClick);
   api.onCustomEvent("ladders:climb", claimShipGangplank);
+  api.onCustomEvent("ladders:climb", claimCrandorRope);
   api.onObjectFirstClick(LOC.magicDoor, handleMagicDoorClick);
   api.onObjectFirstClick(LOC.oracleChest, handleOracleChestClick);
   api.onObjectFirstClick(LOC.melzarChest, handleMelzarChestClick);
   api.onObjectFirstClick(LOC.crandorOpening, handleCrandorOpeningClick);
   api.onObjectFirstClick(LOC.crandorRope, handleCrandorRopeClick);
+  api.onObjectFirstClick(LOC.crandorWall, handleCrandorWallClick);
   api.onNpcDeath(handleNpcDeath);
 };

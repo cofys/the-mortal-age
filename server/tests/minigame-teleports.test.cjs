@@ -142,7 +142,7 @@ test('interface 951 maps its components to the cache minigames, and every one ha
     const { minigameAt } = MinigameTeleports._test;
     assert.equal(minigameAt(13), 'Nightmare Zone', 'as captured: 951:13');
     assert.equal(minigameAt(11), 'Rat Pits', 'as captured: 951:11');
-    const data = require('../data/definitions/minigame-teleports.json').minigames;
+    const data = require('../plugins/interface/data/minigame-teleports.json').minigames;
     const names = [];
     for (let child = 5; child <= 25; child++) names.push(minigameAt(child));
     assert.equal(names.length, 21);

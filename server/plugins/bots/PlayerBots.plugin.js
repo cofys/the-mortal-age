@@ -13,6 +13,7 @@ const { bootPlayerBotsRuntime } = require("./runtime/BotPluginBoot");
 const { createBotBenchmark } = require("./runtime/BotBenchmark");
 const { startBotSites } = require("./brain/BotSiteSpawner");
 const { setActiveBotRuntime } = require("./runtime/BotRuntimeRegistry");
+const { PVP_BOT_SETTINGS } = require("./behaviours/pvp/WildernessHotspotRegistry");
 const {
   registerBotStatusInteractions,
 } = require("./runtime/registerBotStatusInteractions");
@@ -21,8 +22,6 @@ const BOT_BEHAVIOR_MODE = Object.freeze({
   ROAMING: "roaming",
   WOODCUTTING: "woodcutting",
   MINING: "mining",
-  SMELTING: "smelting",
-  FIREMAKING: "firemaking",
   BANK_RUN: "bank_run",
   PVP: "pvp",
 });
@@ -44,19 +43,14 @@ const BOT_EAT_OPTIONS = Object.freeze({
 const BOT_CONFIG = Object.freeze({
   behaviorMode: BOT_BEHAVIOR_MODE,
   botCount: 0,
-  wildernessRoamerBotCount: 0,
-  wildernessActiveRegionBotsPerRegion: 24,
-  // Active-region snapshots are currently radius=1 (3x3 around each player region).
-  // Inset by 1 to target only the true active core for regional wilderness bots.
-  wildernessActiveRegionInset: 1,
+  // PvP bot pool and spread live in bot-sites.json ("pvp"); hotspots are its PvP sites.
+  // Active-region snapshots are radius=1 (3x3 around each player region); the inset
+  // targets only the true active core for regional wilderness bots.
+  wildernessRoamerBotCount: PVP_BOT_SETTINGS.botPool,
+  wildernessActiveRegionBotsPerRegion: PVP_BOT_SETTINGS.activeRegionBotsPerRegion,
+  wildernessActiveRegionInset: PVP_BOT_SETTINGS.activeRegionInset,
   botWalkRadius: 10,
-  objectIndexCachePath: path.join(
-    process.cwd(),
-    "plugins",
-    "bots",
-    "data",
-    "object-index.json"
-  ),
+  objectIndexCachePath: path.join(__dirname, "data", "object-index.json"),
   // Run the scheduler every game tick; near-player throttling is handled by
   // LOD/budget logic so PvP bots do not move in visible waves.
   botDecisionTicks: 1,
@@ -67,8 +61,6 @@ const BOT_CONFIG = Object.freeze({
   npcAggroBlockedModes: [
     BOT_BEHAVIOR_MODE.WOODCUTTING,
     BOT_BEHAVIOR_MODE.MINING,
-    BOT_BEHAVIOR_MODE.SMELTING,
-    BOT_BEHAVIOR_MODE.FIREMAKING,
     BOT_BEHAVIOR_MODE.BANK_RUN,
   ],
   taskProfiler: Object.freeze({
@@ -87,7 +79,7 @@ const BOT_CONFIG = Object.freeze({
   }),
   executionBudget: Object.freeze({
     enabled: (process.env.BOT_EXECUTION_BUDGET_ENABLED ?? "1") === "1",
-    maxMs: parseEnvInt("BOT_EXECUTION_BUDGET_MS", 30, 5),
+    maxMs: parseEnvInt("BOT_EXECUTION_BUDGET_MS", 60, 5),
     minEntriesPerCycle: parseEnvInt("BOT_EXECUTION_MIN_ENTRIES_PER_CYCLE", 24, 1),
     logCooldownMs: parseEnvInt("BOT_EXECUTION_BUDGET_LOG_COOLDOWN_MS", 5000, 1000),
   }),
@@ -110,8 +102,10 @@ const BOT_CONFIG = Object.freeze({
     mediumDistanceTiles: 48,
     chunkSizeTiles: 32,
     nearStride: 1,
-    mediumStride: 3,
-    farStride: 12,
+    // Far bots every 4 cycles (2.4s): slower left them standing ~10s between
+    // decisions and walk legs; a profile showed bots under 10% of server CPU.
+    mediumStride: 2,
+    farStride: 4,
   }),
   wildernessDitchObjectId: ObjectIds.WILDERNESS_DITCH,
   logging: Object.freeze({

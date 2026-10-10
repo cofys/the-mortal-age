@@ -1,6 +1,6 @@
 # Picking crops and plants
 
-Wheat, potatoes, onions, cabbages, sweetcorn, flax and nettles are picked through `server/plugins/objects/Pickable.plugin.js`. What each gives and how it depletes is in `server/data/definitions/pickables.json`.
+Wheat, potatoes, onions, cabbages, sweetcorn, flax and nettles are picked through `server/plugins/objects/Pickable.plugin.js`. What each gives and how it depletes is in `server/plugins/objects/data/pickables.json`.
 
 ## From rsprox captures
 

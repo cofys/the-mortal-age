@@ -4,6 +4,8 @@ const { GameConstants } = require("../../../../src/main/typescript/elvarg/game/G
 const { Location } = require("../../../../src/main/typescript/elvarg/game/model/Location");
 const { isMembersArea, isMembersWorld } = require("../../../../src/main/typescript/elvarg/game/definition/WorldDefinition");
 const { isLoadoutAvailable } = require("./PvpLoadoutRegistry");
+const { listPvpProfiles } = require("./PvpProfileRegistry");
+const { readBotSites } = require("../../brain/BotSites");
 const fs = require("fs");
 const path = require("path");
 
@@ -25,7 +27,8 @@ function freezeHotspot(hotspot) {
   return Object.freeze({
     ...hotspot,
     area: freezeArea(hotspot.area),
-    combatLevelRange: isMembersWorld() ? hotspot.combatLevelRange : hotspot.freeCombatLevelRange,
+    // Free worlds only have f2p gear, which can't reach members combat bands.
+    combatLevelRange: isMembersWorld() ? hotspot.combatLevelRange : undefined,
     anchor: Object.freeze({ ...(hotspot.anchor ?? {}) }),
     roamRadius: Number.isFinite(hotspot.roamRadius) ? Math.max(1, Math.floor(hotspot.roamRadius)) : 3,
     lingerMs: Number.isFinite(hotspot.lingerMs) ? Math.max(0, Math.floor(hotspot.lingerMs)) : 10000,
@@ -33,37 +36,68 @@ function freezeHotspot(hotspot) {
       ? Math.max(1, Math.floor(hotspot.maxSimultaneousFights))
       : null,
     allowedProfiles: Object.freeze([...(hotspot.allowedProfiles ?? [])]),
-    // freeWorldLoadouts only join the pool on a free-to-play world (world.json membersWorld false).
-    allowedLoadouts: Object.freeze([
-      ...(hotspot.allowedLoadouts ?? []),
-      ...(isMembersWorld() ? [] : hotspot.freeWorldLoadouts ?? []),
-    ]),
+    allowedLoadouts: Object.freeze([...hotspot.allowedLoadouts]),
     styleWeights: Object.freeze({ ...(hotspot.styleWeights ?? {}) }),
     activityWeights: Object.freeze({ ...(hotspot.activityWeights ?? {}) }),
   });
 }
 
-function loadWildernessHotspots() {
-  const hotspotFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-bot-hotspots.json");
-  const loadoutFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-bot-loadouts.json");
-  const definitions = JSON.parse(fs.readFileSync(hotspotFile, "utf8"));
-  if (!Array.isArray(definitions?.hotspots) || definitions.hotspots.length === 0) {
-    throw new Error("[pvp bot loadouts] missing hotspots");
+/**
+ * PvP bots are configured with the rest of the bot population, in bot-sites.json: the
+ * "pvp" block holds pool size and active-region spread, and every site with a `pvp`
+ * block is a hotspot. A hotspot names a loadout `style`; the loadouts carrying that tag
+ * in pvp-bot-loadouts.json are its gear.
+ */
+const SITES_FILE = readBotSites(path.join(GameConstants.DEFINITIONS_DIRECTORY, "bot-sites.json"));
+const PVP_BOT_CONFIG = SITES_FILE.pvp ?? {};
+
+/** How many wilderness bot names exist and how they spread over players' active regions. */
+const PVP_BOT_SETTINGS = Object.freeze({
+  botPool: Math.max(0, Math.floor(Number(PVP_BOT_CONFIG.botPool ?? 0))),
+  activeRegionBotsPerRegion: Math.max(0, Math.floor(Number(PVP_BOT_CONFIG.activeRegionBotsPerRegion ?? 0))),
+  activeRegionInset: Math.max(0, Math.floor(Number(PVP_BOT_CONFIG.activeRegionInset ?? 0))),
+});
+
+/** A bot-sites.json PvP site in the hotspot shape the PvP brain reads. */
+function siteToHotspot(site, loadouts) {
+  const { pvp } = site;
+  const z = site.z ?? 0;
+  const radius = site.radius ?? 6;
+  // f2p gear only joins f2p sites; a free world filters to f2p gear on its own.
+  const allowedLoadouts = loadouts
+    .filter((loadout) => loadout.tags?.includes(pvp.style))
+    .filter((loadout) => pvp.style === "f2p" || !loadout.tags.includes("f2p"))
+    .map((loadout) => loadout.id);
+  if (allowedLoadouts.length === 0) {
+    throw new Error(`[bot sites] ${site.id}: no loadout is tagged '${pvp.style}'`);
   }
-  const loadouts = JSON.parse(fs.readFileSync(loadoutFile, "utf8"));
-  const loadoutIds = new Set((loadouts.loadouts ?? []).map((loadout) => loadout?.id));
+  return {
+    id: site.id,
+    enabled: site.enabled === true,
+    targetBots: site.bots,
+    anchor: { x: site.x, y: site.y, z },
+    area: site.area
+      ? { ...site.area, z: site.area.z ?? z }
+      : { minX: site.x - radius, maxX: site.x + radius, minY: site.y - radius, maxY: site.y + radius, z },
+    roamRadius: pvp.roam,
+    lingerMs: pvp.lingerMs,
+    maxSimultaneousFights: pvp.maxFights,
+    combatLevelRange: pvp.combat ? { min: pvp.combat[0], max: pvp.combat[1] } : undefined,
+    allowedProfiles: pvp.profiles ?? listPvpProfiles().map((profile) => profile.id),
+    allowedLoadouts,
+    activityWeights: pvp.weights,
+  };
+}
+
+function loadWildernessHotspots() {
+  const loadoutFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-bot-loadouts.json");
+  const loadouts = JSON.parse(fs.readFileSync(loadoutFile, "utf8")).loadouts ?? [];
   const hotspots = {};
-  for (const definition of definitions.hotspots) {
-    if (!definition?.id || hotspots[definition.id]) {
-      throw new Error("[pvp bot loadouts] hotspot ids must be unique");
+  for (const site of (SITES_FILE.sites ?? []).filter((entry) => entry.pvp)) {
+    if (!site.id || hotspots[site.id]) {
+      throw new Error("[bot sites] PvP site ids must be unique");
     }
-    if (!Array.isArray(definition.allowedLoadouts) ||
-        (definition.freeWorldLoadouts !== undefined && !Array.isArray(definition.freeWorldLoadouts)) ||
-        ![...definition.allowedLoadouts, ...(definition.freeWorldLoadouts ?? [])]
-          .every((loadoutId) => loadoutIds.has(loadoutId))) {
-      throw new Error("[pvp bot loadouts] " + definition.id + " has an unknown loadout");
-    }
-    hotspots[definition.id] = freezeHotspot(definition);
+    hotspots[site.id] = freezeHotspot(siteToHotspot(site, loadouts));
   }
   return Object.freeze(hotspots);
 }
@@ -116,6 +150,7 @@ function isOutsideWildernessHotspots(location) {
 }
 
 module.exports = {
+  PVP_BOT_SETTINGS,
   WILDERNESS_HOTSPOT_IDS,
   WILDERNESS_HOTSPOTS,
   createHotspotAnchorLocation,

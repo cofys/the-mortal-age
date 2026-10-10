@@ -11,7 +11,7 @@ const { Equipment } = require('../dist/game/model/container/impl/Equipment');
 const Thieving = require('../plugins/skills/Thieving.plugin');
 const Pickpocket = require('../plugins/skills/thieving/Pickpocket.Thieving');
 const CoinPouch = require('../plugins/skills/thieving/CoinPouch.Thieving');
-const DATA = require('../data/definitions/pickpocketing.json');
+const DATA = require('../plugins/skills/data/pickpocketing.json');
 
 const log = [];
 const submitted = [];

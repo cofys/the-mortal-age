@@ -16,14 +16,23 @@
  * Source: LostCityRS/Content scripts/quests/quest_mortton and
  * scripts/minigames/game_mortton (pinned in issue #196).
  *
- * Gaps: the afflicted/cured and no-fire/lit altar object transformations are
- * modelled with per-player flags rather than NPC/object changes; the diary book
- * interface, the Flamtaer resource-pool percentages, the shade lair/chests and
- * the full cremation reward table are not reproduced; pyre-log sacred-oil dose
- * counts and the cremation coin reward are approximates.
+ * Gaps: the afflicted/cured transformations are modelled with per-player flags
+ * rather than NPC changes (the fire altar is a real spawned object and its lit
+ * state is world-wide); the diary book interface, the Flamtaer resource-pool
+ * percentages, the shade lair/chests and the full cremation reward table are not
+ * reproduced; pyre-log sacred-oil dose counts and the cremation coin reward are
+ * approximates.
  */
 module.exports = function registerShadesOfMorttonQuest(api) {
-  const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const {
+    Skill,
+    Location,
+    GameObject,
+    ObjectManager,
+    ItemIdentifiers,
+    NpcIdentifiers,
+    ObjectIdentifiers,
+  } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
   const ULSQUIRE_NPC_IDS = new Set([
@@ -111,6 +120,10 @@ module.exports = function registerShadesOfMorttonQuest(api) {
     ObjectIdentifiers.FIRE_ALTAR,
     ObjectIdentifiers.BROKEN_FIRE_ALTAR,
   ]);
+  // The cache's Mort'ton map has no altar at the temple centre, so the plugin spawns one.
+  const FIRE_ALTAR_LOCATION = new Location(3506, 3316, 0);
+  const FIRE_ALTAR_OBJECT_TYPE = 10;
+  const FLAMTAER_REGION_ID = ((FIRE_ALTAR_LOCATION.getX() >> 6) << 8) | (FIRE_ALTAR_LOCATION.getY() >> 6);
   const TEMPLE_WALL_OBJECT_IDS = new Set([
     ObjectIdentifiers.BROKEN_WALL,
     ObjectIdentifiers.TEMPLE_WALL,
@@ -173,6 +186,9 @@ module.exports = function registerShadesOfMorttonQuest(api) {
     [ItemIdentifiers.YEW_LOGS, { product: ItemIdentifiers.YEW_PYRE_LOGS, doses: 4 }],
     [ItemIdentifiers.MAGIC_LOGS, { product: ItemIdentifiers.MAGIC_PYRE_LOGS, doses: 5 }],
   ]);
+  const PYRE_LOG_ITEMS = new Set(
+    [...PYRE_LOG_RECIPES.values()].map((recipe) => recipe.product)
+  );
 
   const KILLS_ATTRIBUTE = "quest.shades_of_mortton.shade_kills";
   const MET_ULSQUIRE_ATTRIBUTE = "quest.shades_of_mortton.met_ulsquire";
@@ -181,7 +197,6 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   const TABLE_SEARCHED_ATTRIBUTE = "quest.shades_of_mortton.table_searched";
   const TEMPLE_BUILD_ATTRIBUTE = "quest.shades_of_mortton.temple_build";
   const TEMPLE_BUILD_REQUIRED = 5;
-  const ALTAR_LIT_ATTRIBUTE = "quest.shades_of_mortton.altar_lit";
   const PYRE_LOGS_ATTRIBUTE = "quest.shades_of_mortton.pyre_logs";
   const PYRE_REMAINS_ATTRIBUTE = "quest.shades_of_mortton.pyre_remains";
   const PERM_SERUM_ATTRIBUTE = "quest.shades_of_mortton.perm_serum";
@@ -190,6 +205,9 @@ module.exports = function registerShadesOfMorttonQuest(api) {
     "~ Repairing the temple ~To repair the temple you need to increase your material resource pool by bringing limestone bricks, timber beams (or wooden planks) and swamp paste, either in your inventory or in a Flamtaer bag.";
 
   let quest;
+  // The Flamtaer altar is one world object: unlit (4091) until someone lights it (4090).
+  let altarObject = null;
+  let altarLit = false;
 
   const held = (player, itemId, amount = 1) =>
     player.getInventory().getAmount(itemId) >= amount;
@@ -349,8 +367,8 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   }
 
   function grantReward(player) {
-    player.getSkillManager().addExperiences(Skill.CRAFTING, 20000);
-    player.getSkillManager().addExperiences(Skill.HERBLORE, 20000);
+    player.getSkillManager().addExperiences(Skill.CRAFTING, 2000);
+    player.getSkillManager().addExperiences(Skill.HERBLORE, 2000);
   }
 
   /** Which transcript variant each speaker plays, by quest stage. */
@@ -415,9 +433,9 @@ module.exports = function registerShadesOfMorttonQuest(api) {
     }
     if (stage >= STAGE_MADE_SERUM) {
       if (!player.getAttribute(MET_RAZMIRE_ATTRIBUTE)) return null;
-      return player.getAttribute(MET_RAZMIRE_ATTRIBUTE) === "talked"
-        ? "curing-razmire-talking-to-him-again-before-accepting-to-kill-shades"
-        : "curing-razmire";
+      // The repeat-greeting variant's "shadowy creatures" answer jumps to a lost
+      // target and lands on Ulsquire's line, so always play the full menu.
+      return "curing-razmire";
     }
     return null;
   }
@@ -502,12 +520,12 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   }
 
   /** Count the shades killed for Razmire and narrate each kill. */
-  function handleNpcDeath({ player, npcId }) {
-    if (!player || !SHADE_NPC_IDS.has(npcId)) return;
-    const stage = quest.getStage(player);
+  function handleNpcDeath({ killer, npcId }) {
+    if (!killer || !SHADE_NPC_IDS.has(npcId)) return;
+    const stage = quest.getStage(killer);
     if (stage < STAGE_KILL_SHADES || stage >= STAGE_SHADES_TO_RAZMIRE) return;
-    const kills = Math.min(5, (Number(player.getAttribute(KILLS_ATTRIBUTE)) || 0) + 1);
-    player.setAttribute(KILLS_ATTRIBUTE, kills);
+    const kills = Math.min(5, (Number(killer.getAttribute(KILLS_ATTRIBUTE)) || 0) + 1);
+    killer.setAttribute(KILLS_ATTRIBUTE, kills);
     const message = [
       "",
       "That's one Shade!",
@@ -515,9 +533,9 @@ module.exports = function registerShadesOfMorttonQuest(api) {
       "That's three Shades!",
       "That's four Shades!",
     ][kills];
-    if (message) player.sendMessage(message);
-    if (kills === 5) player.sendMessage("That's all five Shades!");
-    quest.setStage(player, STAGE_KILLED_1 + (kills - 1) * 5);
+    if (message) killer.sendMessage(message);
+    if (kills === 5) killer.sendMessage("That's all five Shades!");
+    quest.setStage(killer, STAGE_KILLED_1 + (kills - 1) * 5);
   }
 
   /** Reading the diary: first read offers the quest-start branch. */
@@ -621,7 +639,7 @@ module.exports = function registerShadesOfMorttonQuest(api) {
       return;
     }
     if (objectId === FUNERAL_PYRE_OBJECT_ID) {
-      if (PYRE_LOG_RECIPES.has(itemId)) {
+      if (PYRE_LOG_ITEMS.has(itemId)) {
         event.handled = true;
         placePyreLogs(player, itemId);
         return;
@@ -693,7 +711,7 @@ module.exports = function registerShadesOfMorttonQuest(api) {
       );
       return;
     }
-    if (!player.getAttribute(ALTAR_LIT_ATTRIBUTE)) {
+    if (!altarLit) {
       player.sendMessage("The fire altar needs to be lit before you can sanctify oil.");
       return;
     }
@@ -709,6 +727,18 @@ module.exports = function registerShadesOfMorttonQuest(api) {
     }
   }
 
+  function installAltar({ regionId }) {
+    if (regionId !== FLAMTAER_REGION_ID || altarObject) return;
+    altarObject = new GameObject(
+      altarLit ? ObjectIdentifiers.FLAMING_FIRE_ALTAR : ObjectIdentifiers.FIRE_ALTAR,
+      FIRE_ALTAR_LOCATION.clone(),
+      FIRE_ALTAR_OBJECT_TYPE,
+      0,
+      null
+    );
+    ObjectManager.register(altarObject, true);
+  }
+
   function lightAltar(player) {
     if (quest.getStage(player) < STAGE_CAN_LIGHT_ALTAR) {
       player.sendMessage(
@@ -716,11 +746,27 @@ module.exports = function registerShadesOfMorttonQuest(api) {
       );
       return;
     }
-    if (player.getAttribute(ALTAR_LIT_ATTRIBUTE)) {
+    if (!held(player, ItemIdentifiers.TINDERBOX)) {
+      player.sendMessage("You need a tinderbox to light the fire altar.");
+      return;
+    }
+    if (altarLit) {
       player.sendMessage("The fire altar is already lit.");
       return;
     }
-    player.setAttribute(ALTAR_LIT_ATTRIBUTE, true);
+    altarLit = true;
+    if (altarObject) {
+      const lit = new GameObject(
+        ObjectIdentifiers.FLAMING_FIRE_ALTAR,
+        FIRE_ALTAR_LOCATION.clone(),
+        FIRE_ALTAR_OBJECT_TYPE,
+        0,
+        null
+      );
+      ObjectManager.deregister(altarObject, true);
+      ObjectManager.register(lit, true);
+      altarObject = lit;
+    }
     player.sendMessage("You light the temple fire.");
   }
 
@@ -763,6 +809,7 @@ module.exports = function registerShadesOfMorttonQuest(api) {
     }
     player.setAttribute(PYRE_LOGS_ATTRIBUTE, false);
     player.setAttribute(PYRE_REMAINS_ATTRIBUTE, false);
+    player.getSkillManager().addExperiences(Skill.PRAYER, 25);
     player.sendMessage("A reward appears on the stand.");
     player.getInventory().adds(
       ItemIdentifiers.COINS,
@@ -776,6 +823,16 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   /** The diary shelf and the smashed table of Herbi Flax's house. */
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
+    if (objectId === ObjectIdentifiers.FIRE_ALTAR && event.clickType === 1) {
+      event.handled = true;
+      lightAltar(player);
+      return;
+    }
+    if (TEMPLE_WALL_OBJECT_IDS.has(objectId) && event.clickType === 1) {
+      event.handled = true;
+      repairTemple(player);
+      return;
+    }
     if (objectId === SHELF_OBJECT_ID) {
       event.handled = true;
       if (held(player, DIARY_ITEM_ID)) {
@@ -804,6 +861,7 @@ module.exports = function registerShadesOfMorttonQuest(api) {
       }
       player.setAttribute(TABLE_SEARCHED_ATTRIBUTE, true);
       player.getInventory().adds(ItemIdentifiers.GRIMY_TARROMIN, 2);
+      player.getInventory().adds(ItemIdentifiers.GRIMY_ROGUES_PURSE, 1);
       player.sendMessage("You find a selection of herbs.");
     }
   }
@@ -818,7 +876,6 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   api.persistAttribute(OLIVE_OIL_ATTRIBUTE);
   api.persistAttribute(TABLE_SEARCHED_ATTRIBUTE);
   api.persistAttribute(TEMPLE_BUILD_ATTRIBUTE);
-  api.persistAttribute(ALTAR_LIT_ATTRIBUTE);
   api.persistAttribute(PYRE_LOGS_ATTRIBUTE);
   api.persistAttribute(PYRE_REMAINS_ATTRIBUTE);
   api.persistAttribute(PERM_SERUM_ATTRIBUTE);
@@ -829,13 +886,11 @@ module.exports = function registerShadesOfMorttonQuest(api) {
     varpId: VARP_SHADES_OF_MORTTON,
     startedValue: STAGE_READ_DIARY,
     completionValue: STAGE_COMPLETE,
-    questPoints: 2,
+    questPoints: 3,
     xpRewards: [
-      { skillId: Skill.CRAFTING.getIndex(), amount: 20000, label: "Crafting" },
-      { skillId: Skill.HERBLORE.getIndex(), amount: 20000, label: "Herblore" },
+      { skillId: Skill.CRAFTING.getIndex(), amount: 2000, label: "Crafting" },
+      { skillId: Skill.HERBLORE.getIndex(), amount: 2000, label: "Herblore" },
     ],
-    rewardItemId: ItemIdentifiers.SILVER_KEY_PURPLE,
-    rewardItemLabel: "A silver key (purple)",
     otherRewards: ["Access to the Shade Lair", "Access to Razmire's stores"],
     buildJournal,
     onReward: grantReward,
@@ -853,5 +908,6 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcDeath(handleNpcDeath);
+  api.onRegionLoaded(installAltar);
   api.onPlayerLogin(handleLogin);
 };

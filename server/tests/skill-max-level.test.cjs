@@ -44,7 +44,7 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
   assert.equal(H.data.implings.length, 12);
   assert.equal(Houses.bases.size, 4);
   assert.ok(hooks.some(hook => hook[0] === "onNpcRoute"));
-  for (const rows of Object.values(require("../plugins/skills/hunter/ImplingLoot.json"))) {
+  for (const rows of Object.values(require("../plugins/skills/data/impling-loot.json"))) {
     for (const [name, weight, min, max, noted] of rows) {
       assert.ok(name === null || Number.isInteger(I[name]), name);
       assert.ok(weight > 0 && min > 0 && max >= min, name);
@@ -225,7 +225,7 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     q.levels.set(Skill.HUNTER,0);
     assert.equal(C.chance(q,H.data.creatures[0]),false,"a drained level cannot use the base level to catch");
     q.levels.clear();
-    for(const tables of [require("../plugins/skills/hunter/LuckyLoot.json"),require("../plugins/skills/hunter/SackLoot.json")])
+    for(const tables of [require("../plugins/skills/data/lucky-loot.json"),require("../plugins/skills/data/sack-loot.json")])
       for(const rows of Object.values(tables))for(const [name,weight,min,max,noted]of rows){
         assert.ok(Number.isInteger(I[name]),name);assert.ok(weight>0&&min>0&&max>=min,name);
         if(noted)assert.ok(core.ItemDefinition.forId(I[name]).getNoteId()>0,name);

@@ -1,22 +1,43 @@
-const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
-
+/**
+ * The icon before a player's name in chat: a staff crown from their rights, else their account's
+ * icon (an Ironman's helmet), which content answers through "account:chat-icon" { player, icon }.
+ * A staff crown wins, as in OSRS. "account:refresh-chat-icons" { player } recomputes it when
+ * either changes.
+ */
 const PLAYER_MODERATOR_CROWN = 0;
 const JAGEX_MODERATOR_CROWN = 1;
 
-const CROWNS_BY_RIGHTS_ID = new Map([
-  [PlayerRights.MODERATOR.getId(), [PLAYER_MODERATOR_CROWN]],
-  [PlayerRights.ADMINISTRATOR.getId(), [JAGEX_MODERATOR_CROWN]],
-  [PlayerRights.DEVELOPER.getId(), [JAGEX_MODERATOR_CROWN]],
-]);
+let core;
+let pluginApi;
+let crownsByRightsId = new Map();
+
+function crownsFor(player) {
+  return crownsByRightsId.get(player.getRights?.().getId?.()) ?? [];
+}
+
+function applyChatIcons({ player }) {
+  const crowns = crownsFor(player);
+  if (crowns.length) {
+    player.setChatIcons(crowns);
+    return;
+  }
+  const request = { player, icon: null };
+  pluginApi.emitCustomEvent("account:chat-icon", request);
+  player.setChatIcons(Number.isInteger(request.icon) ? [request.icon] : []);
+}
 
 module.exports = {
   name: "StaffCrowns",
   register(api) {
-    api.onPlayerLogin(({ player }) => {
-      const rightsId = player.getRights?.().getId?.();
-      player.setChatIcons(CROWNS_BY_RIGHTS_ID.get(rightsId) ?? []);
-    });
-
-    api.log("registered");
+    core = api.core;
+    pluginApi = api;
+    const { PlayerRights } = core;
+    crownsByRightsId = new Map([
+      [PlayerRights.MODERATOR.getId(), [PLAYER_MODERATOR_CROWN]],
+      [PlayerRights.ADMINISTRATOR.getId(), [JAGEX_MODERATOR_CROWN]],
+      [PlayerRights.DEVELOPER.getId(), [JAGEX_MODERATOR_CROWN]],
+    ]);
+    api.onPlayerLogin(applyChatIcons);
+    api.onCustomEvent("account:refresh-chat-icons", applyChatIcons);
   },
 };

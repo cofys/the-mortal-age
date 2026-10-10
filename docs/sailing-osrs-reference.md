@@ -210,7 +210,7 @@ Buying itself hasn't been captured yet.
 
 ## Ports and docking
 
-From a capture of docking at Port Sarim's buoy and disembarking at its gangplank. The ports are the cache's, in `server/data/definitions/sailing-ports.json`.
+From a capture of docking at Port Sarim's buoy and disembarking at its gangplank. The ports are the cache's, in `server/plugins/skills/sailing/data/sailing-ports.json`.
 
 **Ports** are db table 194: port id (column 0), name (1), the name in a sentence ("the Pandemonium", 2), the Sailing level to dock there (4), and a requirement for some (5, not used yet). There are 59 rows. Ids 32 and up are islands ("mooring points"), whose gangplanks are scenery rather than jetty planks.
 
@@ -358,7 +358,7 @@ There's no message.
 
 ## Shipwreck salvaging
 
-From captures of salvaging a small shipwreck with a sloop's adamant hook, deploying away from any wreck, and sorting at the sloop's salvaging station. The rest is the OSRS Wiki's (Shipwreck salvaging, each shipwreck's and each salvage's page), in `server/data/definitions/sailing-salvage.json`.
+From captures of salvaging a small shipwreck with a sloop's adamant hook, deploying away from any wreck, and sorting at the sloop's salvaging station. The rest is the OSRS Wiki's (Shipwreck salvaging, each shipwreck's and each salvage's page), in `server/plugins/skills/sailing/data/sailing-salvage.json`.
 
 **Wrecks** are loc pairs: an active form with "Inspect" (60464 small, 60466 fisherman's, 60468 barracuda, 60470 large, 60472 pirate, 60474 mercenary, 60476 Fremennik, 60478 merchant) and a sunken form with no ops (the next id).
 - The cache map places every wreck sunken: 16 small spots (two groups of 8), and the other types in groups of 6 (barracuda's 43 are strung out unevenly). The small group south-east of the Pandemonium is at about (3085-3132, 2928-2989).

@@ -2,7 +2,7 @@
  * Ornament kits (https://oldschool.runescape.wiki/w/Ornament_kit).
  *
  * Using a kit on its base item consumes the kit and swaps the item for the
- * ornamented id from data/definitions/ornament-kits.json. The three rune
+ * ornamented id from plugins/items/data/ornament-kits.json. The three rune
  * scimitar kits are not in the table because this cache revision has no
  * ornamented rune scimitar items to point at.
  */
@@ -14,7 +14,7 @@ let kitIds = new Set();
 let byKitAndBase = new Map();
 
 function loadKits() {
-  const file = path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "ornament-kits.json");
+  const file = path.join(__dirname, "data", "ornament-kits.json");
   const data = JSON.parse(fs.readFileSync(file, "utf8"));
   return (data.kits ?? []).map((entry) => ({
     kit: Number(entry.kit),

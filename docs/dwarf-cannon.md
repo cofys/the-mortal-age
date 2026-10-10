@@ -10,7 +10,7 @@
 | `Decay` | breaking, Repair, loss, Pick-up, logout and login |
 | `Nulodion` | getting a lost cannon back |
 | `Ornament` | the shattered cannon ornament kit |
-| `Restrictions` + `data/definitions/cannon-restrictions.json` | where a cannon can't be set up |
+| `Restrictions` + `plugins/items/data/cannon-restrictions.json` | where a cannon can't be set up |
 | `Data`, `Common` | shared numbers and state |
 
 **Sources:**

@@ -1,0 +1,22 @@
+{
+  "$comment": "Ironman account types, used by plugins/modes/Ironman.plugin.js (docs/ironman.md). `varbit` is the `ironman` varbit's value (1777; the cache's enum 859 names them), `icon` the mod-icon shown before the name in chat. Each message notes where it comes from: the rsprox capture database (https://rsprox.net/database), the OSRS Wiki, or ours where neither has it.",
+  "varbits": { "mode": 1777, "downgradePermitted": 1776, "hardcoreDead": 5403, "hardcoreDowngradeDate": 5405 },
+  "modes": {
+    "none": { "label": "None", "varbit": 0, "icon": null },
+    "ironman": { "label": "Ironman", "varbit": 1, "icon": 2 },
+    "ultimate": { "label": "Ultimate Ironman", "varbit": 2, "icon": 3 },
+    "hardcore": { "label": "Hardcore Ironman", "varbit": 3, "icon": 10 }
+  },
+  "messages": {
+    "tradeSelf": { "text": "You are an Ironman. You stand alone.", "source": "capture" },
+    "tradeOther": { "text": "{name} is an Ironman. {pronoun} stands alone.", "source": "capture (He/She; Wiki adds They)" },
+    "pickup": { "text": "You're an Ironman, so you can't take items that other players have dropped.", "source": "capture" },
+    "sharedKill": { "text": "As an Ironman, you don't get loot if other players helped you kill the monster.", "source": "capture" },
+    "killCredit": { "text": "As an Ironman, you might not receive kill-credit for this monster.", "source": "capture" },
+    "grandExchange": { "text": "As an Ironman, you cannot use the Grand Exchange.", "source": "ours" },
+    "shopStock": { "text": "As an Ironman, you can only buy the shop's own stock.", "source": "ours" },
+    "presets": { "text": "As an Ironman, you cannot use presets.", "source": "ours (presets are this server's)" },
+    "ultimateBank": { "text": "As an Ultimate Ironman, you cannot use the bank.", "source": "ours" },
+    "hardcoreDeath": { "text": "You have fallen as a Hardcore Ironman. You are now a standard Ironman.", "source": "ours" }
+  }
+}

@@ -5,7 +5,7 @@ loot. Bounty tasks show on the notice boards but can't be taken yet.
 
 Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `porttasks/`
 (`Board`, `Ledger`, `PortMaster`, `Bags`, `Common`); the cargo hold's crate handling is in
-`CargoHold.plugin.js`. Data: `server/data/definitions/port-tasks.json`. Tests:
+`CargoHold.plugin.js`. Data: `server/plugins/skills/sailing/data/port-tasks.json`. Tests:
 `server/tests/port-tasks.test.cjs`.
 
 ## Sources

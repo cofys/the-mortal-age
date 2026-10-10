@@ -328,6 +328,9 @@ export class Bank extends ItemContainer {
             return;
         }
         player.setCurrentBankTab(tab);
+        // The client tracks the tab it is viewing itself (its tab buttons set
+        // BANK_CURRENTTAB locally); tell it only when we change the tab for it.
+        player.getPacketSender().sendVarbit(4150, tab);
         player.getBank(tab).refreshItems();
     }
 
@@ -345,6 +348,7 @@ export class Bank extends ItemContainer {
         player.getBank(tab).resetItems();
         if (player.getCurrentBankTab() === tab) {
             player.setCurrentBankTab(0);
+            player.getPacketSender().sendVarbit(4150, 0);
         }
         player.getBank(0).refreshItems();
     }
@@ -958,7 +962,9 @@ export class Bank extends ItemContainer {
         }
 
         const sender = this.getPlayer().getPacketSender();
-        sender.sendVarbit(4150, this.getPlayer().getCurrentBankTab());
+        // Not varbit 4150 (BANK_CURRENTTAB): the client picks its tab locally,
+        // so re-sending our idea of it would yank the player back to that tab
+        // on every item movement. It is sent where the tab actually changes.
         for (let tab = 1; tab <= 9; tab++) {
             sender.sendVarbit(4170 + tab, this.getPlayer().getBank(tab).getValidItems().length);
         }

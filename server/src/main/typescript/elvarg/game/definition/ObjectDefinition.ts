@@ -97,6 +97,8 @@ export class ObjectDefinition extends ObjectIdentifiers {
     isImpenetrable(): boolean { return this.projectileBlocking; }
     getBlockingMask(): number { return this.blockingMask; }
     getInteractions(): string[] | null { return this.interactions; }
+    /** Alias for getInteractions(): plugins call the cache's own field name, actions. */
+    getActions(): string[] | null { return this.interactions; }
     getMinimapFunction(): number { return this.minimapFunction; }
 
     // Barrows crypt staircases (Ahrim/Dharok/Guthan/Karil/Verac=20667-20670,20672,

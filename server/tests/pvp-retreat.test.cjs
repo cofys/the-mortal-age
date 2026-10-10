@@ -44,6 +44,7 @@ test('PvP retreat starts when actual food runs out at any HP, runs first, then r
   const combat = {
     getTarget: () => target, reset: () => { target = null; },
     getAttacker: () => attacker, setUnderAttack: (value) => { attacker = value; },
+    clearDamageMap: () => {},
     getTeleblockTimer: () => ({ finished: () => !blocked }),
   };
   const player = {

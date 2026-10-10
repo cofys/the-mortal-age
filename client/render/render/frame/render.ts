@@ -1,3 +1,4 @@
+import { hintArrow } from "../../../game/HintArrow";
 import { appendAttackTimerOverhead } from "../../../game/plugins/attacktimer/AttackTimerOverhead";
 import { updateSkyColor } from "../environment";
 import Denque from "denque";
@@ -1066,7 +1067,11 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                         if (!host.shouldRenderPlayerIndex(i)) continue;
                         const headIconPk = pe.getHeadIconPk(i);
                         const headIconPrayer = pe.getHeadIconPrayer(i);
-                        if (headIconPk < 0 && headIconPrayer < 0) continue;
+                        // The yellow Castle Wars flag arrow rides the carrier as a head icon.
+                        const isHinted =
+                            hintArrow.type === 3 &&
+                            (pe.getServerIdForIndex?.(i) ?? -1) === hintArrow.playerId;
+                        if (headIconPk < 0 && headIconPrayer < 0 && !isHinted) continue;
 
                         const px = pe.getX(i) | 0;
                         const py = pe.getY(i) | 0;
@@ -1085,6 +1090,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                         );
                         entry.headIconPk = headIconPk;
                         entry.headIconPrayer = headIconPrayer;
+                        entry.headIconHint = isHinted;
                         // Position above the player head, above any health bars/hitsplats
                         entry.heightOffsetTiles = host.resolvePlayerHeadIconOffset(
                             i,

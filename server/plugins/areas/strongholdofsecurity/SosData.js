@@ -1,5 +1,5 @@
 /**
- * data/definitions/stronghold-of-security.json, plus the player's progress: a floor counts as
+ * plugins/areas/data/stronghold-of-security.json, plus the player's progress: a floor counts as
  * completed once its reward is claimed, which is also what unlocks its emote (the emote tab's
  * cache scripts read the four sos_emote varbits).
  */
@@ -9,7 +9,7 @@ const { GameConstants } = require("../../../src/main/typescript/elvarg/game/Game
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 
 const DATA = JSON.parse(
-  fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "stronghold-of-security.json"), "utf8"),
+  fs.readFileSync(path.join(__dirname, "..", "data", "stronghold-of-security.json"), "utf8"),
 );
 const FLOORS = DATA.floors;
 const CLAIMED_ATTRIBUTE = "sos.claimed";

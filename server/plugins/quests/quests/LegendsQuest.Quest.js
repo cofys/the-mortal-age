@@ -51,7 +51,8 @@
  *    (Family Crest, Heroes' Quest, Shilo Village, Underground Pass) and the ten
  *    level-50 skills from the shared player attributes.
  *  - Radimus's four training rewards are granted from the guild training menu
- *    (7,650 XP each); the completion scroll lists them as an other-reward.
+ *    (30,000 XP each, the post-2022 value); the completion scroll lists them as
+ *    an other-reward.
  */
 module.exports = function registerLegendsQuest(api) {
   const {
@@ -61,6 +62,9 @@ module.exports = function registerLegendsQuest(api) {
     Location,
     GameObject,
     ObjectManager,
+    RegionManager,
+    CountdownTask,
+    TaskManager,
     ItemIdentifiers,
     NpcIdentifiers,
     ObjectIdentifiers,
@@ -197,11 +201,21 @@ module.exports = function registerLegendsQuest(api) {
     ObjectIdentifiers.ANCIENT_GATE_6, // 2925
   ]);
   const MAGIC_GATES = new Set([ObjectIdentifiers.ANCIENT_GATE_7, ObjectIdentifiers.ANCIENT_GATE_8]); // 2930/2931
+  const CLIMB_OVER_ROCKS = new Set([
+    ObjectIdentifiers.ROCKY_LEDGE, // 2959
+    ObjectIdentifiers.ROCKY_LEDGE_2, // 2960
+    ObjectIdentifiers.ROCKY_LEDGE_3, // 2961
+    ObjectIdentifiers.ROCKS_7, // 2962
+    ObjectIdentifiers.ROCKS_8, // 2963
+    ObjectIdentifiers.ROCKS_9, // 2964
+  ]);
   const SEARCH_TABLE = ObjectIdentifiers.TABLE_36; // 2906
   const SEARCH_CRATE = ObjectIdentifiers.CRATE_22; // 2905
   const SEARCH_BED = ObjectIdentifiers.BED_20; // 2907
   const SEARCH_DESK = ObjectIdentifiers.DESK; // 2910
-  const SEARCH_BOOKCASE = ObjectIdentifiers.BOOKCASE_12; // 2911
+  const SEARCH_BOOKCASE = ObjectIdentifiers.BOOKCASE_12; // 2911 (eastern bookcase, hides the trial crevice)
+  const TRIAL_CREVICE = ObjectIdentifiers.CREVICE_6; // 2918 (cave side of the bookcase crevice)
+  const TUNNEL_CREVICE = ObjectIdentifiers.CREVICE_52; // 53242 (entry tunnel shortcut to the shaman room)
   const JAGGED_WALL = ObjectIdentifiers.JAGGED_WALL; // 2926 (LostCity crumbled wall)
   const MARKED_WALL = ObjectIdentifiers.MARKED_WALL; // 2927 (LostCity lgancientwalldoor)
   const CARVED_ROCK = ObjectIdentifiers.CARVED_ROCK; // 2928
@@ -243,6 +257,7 @@ module.exports = function registerLegendsQuest(api) {
   const GILDED_TOTEM_MESSAGE_ID = "PrLJcc"; // Gujuo offers the gilded totem
   const GUIDE_TELEPORT_ACTION_ID = "Ss9xRo";
   const DAGGER_THROW_MESSAGE_ID = "_pGLCQ";
+  const TRAINING_XP_MESSAGE_ID = "2kh5We"; // "The training increases your [skill] experience."
 
   const MAP_ATTRIBUTE = "quest.legends_quest.map"; // 1 west, 2 middle, 4 east
   const BOWL_USES_ATTRIBUTE = "quest.legends_quest.bowl_uses";
@@ -254,10 +269,19 @@ module.exports = function registerLegendsQuest(api) {
   const SOAKED_ATTRIBUTE = "quest.legends_quest.soaked";
 
   const KHARAZI = { minX: 2720, maxX: 2980, minY: 2880, maxY: 2960, levels: [0] };
-  const SHAMAN_CAVE_ENTRANCE = { x: 2797, y: 9341, z: 0 };
+  // OSRS Shaman cave crevice drop (LostCity 0_43_145_21_61); the cave floor west
+  // of the entry tunnel. (2797,9341) is a wall tile and strands the player.
+  const SHAMAN_CAVE_ENTRANCE = { x: 2773, y: 9341, z: 0 };
   const SHAMAN_CAVE_EXIT = { x: 2781, y: 2934, z: 0 };
   const LOWER_CAVES = { x: 2377, y: 4712, z: 0 };
   const CLIMB_BACK = { x: 2760, y: 9328, z: 0 };
+  // The bookcase squeeze the trial route starts from (0_43_145_47_61).
+  const TRIAL_ENTRY = { x: 2799, y: 9341, z: 0 };
+  const TRIAL_RETURN = { x: 2796, y: 9338, z: 0 };
+  // The magic gate blows the player between the gem room and the winch room
+  // (0_43_145_11_40 / 0_43_145_11_32).
+  const MAGIC_GATE_LANDING = { x: 2763, y: 9320, z: 0 };
+  const MAGIC_GATE_RETURN = { x: 2763, y: 9312, z: 0 };
   const BARRIER_DESTINATION = { x: 2421, y: 4690, z: 0 };
   const JUNGLE_EDGE = { x: 2865, y: 2941, z: 0 };
   const RUNE_ORDER = [SOUL_RUNE, MIND_RUNE, EARTH_RUNE, LAW_RUNE, LAW_RUNE];
@@ -369,6 +393,22 @@ module.exports = function registerLegendsQuest(api) {
     player.getCombat().getHitQueue().addPendingDamage([new HitDamage(amount, HitMask.RED)]);
   }
 
+  /**
+   * Teleports a tick later. Object clicks first walk the player to the object
+   * (walkToObject); moving inside the same tick is reverted when that walk
+   * finishes, so the move has to be deferred.
+   */
+  function deferredMove(player, x, y, z) {
+    if (!TaskManager || !CountdownTask) {
+      player.moveTo(new Location(x, y, z));
+      return;
+    }
+    TaskManager.submit(new CountdownTask(player, 1, () => {
+      if (player.isRegistered?.() === false) return;
+      player.moveTo(new Location(x, y, z));
+    }));
+  }
+
   /** Steps the player to the far side of a blocking object (quest trial doors/rocks). */
   function moveAcross(player, objectLocation, distance = 1) {
     const location = player.getLocation();
@@ -380,9 +420,53 @@ module.exports = function registerLegendsQuest(api) {
     const dx = px - ox;
     const dy = py - oy;
     if (Math.abs(dx) > Math.abs(dy)) {
-      player.moveTo(new Location(ox + (dx <= 0 ? distance : -distance), py, location.getZ()));
+      deferredMove(player, ox + (dx <= 0 ? distance : -distance), py, location.getZ());
     } else {
-      player.moveTo(new Location(px, oy + (dy <= 0 ? distance : -distance), location.getZ()));
+      deferredMove(player, px, oy + (dy <= 0 ? distance : -distance), location.getZ());
+    }
+  }
+
+  /**
+   * True when a tile can be stood on. The old check only tested the unloaded
+   * bit, so a solid loc's own tile (e.g. a 2x2 boulder, clip 0x20100) passed
+   * and the click route walked the player onto it, where the route never
+   * resolved. Test the route finder's floor mask instead: solid loc (0x100),
+   * ground decor (0x40000), unknown (0x80000), blocked tile (0x200000) and
+   * unloaded chunk (0x1000000).
+   */
+  function standableTile(x, y, z) {
+    RegionManager.loadMapFiles?.(x, y);
+    const clip = RegionManager.getRegion?.(x, y)?.getClip?.(x, y, z);
+    return typeof clip === "number" && (clip & 0x12c0100) === 0;
+  }
+
+  /**
+   * The Viyeldi-caves rock ledges: cross to the first standable tile on the far
+   * side, trying the straight line first and then 45-degree landings. The
+   * collapsed cave is a 2D approximation of OSRS's descents, so some rocks need
+   * the diagonal landing to make the ledge chain walkable.
+   */
+  function climbOverRocks(player, objectLocation) {
+    const location = player.getLocation();
+    const px = location.getX();
+    const py = location.getY();
+    const z = location.getZ();
+    const ox = Number(objectLocation?.x ?? objectLocation?.getX?.());
+    const oy = Number(objectLocation?.y ?? objectLocation?.getY?.());
+    if (!Number.isFinite(ox) || !Number.isFinite(oy)) return;
+    const dx = Math.sign(ox - px);
+    const dy = Math.sign(oy - py);
+    if (dx === 0 && dy === 0) return;
+    const dirs = [[dx, dy]];
+    if (dx !== 0 && dy !== 0) dirs.push([dx, 0], [0, dy]);
+    else if (dx !== 0) dirs.push([dx, 1], [dx, -1]);
+    else dirs.push([1, dy], [-1, dy]);
+    for (const [mx, my] of dirs) {
+      if (standableTile(ox + mx, oy + my, z)) {
+        deferredMove(player, ox + mx, oy + my, z);
+        player.sendMessage("You climb confidently over the rocks and hold your balance well.");
+        return;
+      }
     }
   }
 
@@ -437,6 +521,24 @@ module.exports = function registerLegendsQuest(api) {
     return npc;
   }
 
+  /**
+   * The live spawned NPC of an id, dropping entries the world already removed
+   * (a killed Nezikchened otherwise blocks the next summon until relog).
+   */
+  function findSpawn(player, npcId) {
+    const set = spawnedByPlayer.get(player);
+    if (!set) return null;
+    let found = null;
+    for (const npc of [...set]) {
+      if (npc?.isRegistered?.() === false) {
+        set.delete(npc);
+        continue;
+      }
+      if (npc?.getId?.() === npcId) found = npc;
+    }
+    return found;
+  }
+
   function spawnNear(player, npcId, dx, dy, wanderRadius = 0) {
     const location = player.getLocation();
     return trackSpawn(
@@ -471,28 +573,17 @@ module.exports = function registerLegendsQuest(api) {
   }
 
   function spawnGujuo(player) {
-    const set = spawnedByPlayer.get(player);
-    if (set) for (const npc of set) if (npc?.getId?.() === GUJUO_ID) return;
+    if (findSpawn(player, GUJUO_ID)) return;
     spawnNear(player, GUJUO_ID, 1, 0, 0);
   }
 
   function ensureEchnedAndViyeldi(player) {
-    const set = spawnedByPlayer.get(player) ?? new Set();
-    let hasEchned = false;
-    let hasViyeldi = false;
-    for (const npc of set) {
-      const id = npc?.getId?.();
-      if (id === ECHNED_ID) hasEchned = true;
-      if (id === VIYELDI_ID) hasViyeldi = true;
-    }
-    if (!hasEchned) spawnNear(player, ECHNED_ID, 1, 1, 0);
-    if (!hasViyeldi) spawnNear(player, VIYELDI_ID, 3, 3, 0);
+    if (!findSpawn(player, ECHNED_ID)) spawnNear(player, ECHNED_ID, 1, 1, 0);
+    if (!findSpawn(player, VIYELDI_ID)) spawnNear(player, VIYELDI_ID, 3, 3, 0);
   }
 
   function spawnNezikchened(player, radius = 2) {
-    const set = spawnedByPlayer.get(player) ?? new Set();
-    for (const npc of set) if (npc?.getId?.() === NEZIKCHENED_ID) return npc;
-    return spawnNear(player, NEZIKCHENED_ID, 1, 1, radius);
+    return findSpawn(player, NEZIKCHENED_ID) ?? spawnNear(player, NEZIKCHENED_ID, 1, 1, radius);
   }
 
   // ==========================================================================
@@ -913,6 +1004,8 @@ module.exports = function registerLegendsQuest(api) {
     spawnNezikchened(player);
   }
 
+  const lastTrainingSkill = new Map();
+
   function claimGuildTraining(player, option) {
     const stage = questStage(player);
     if (stage < STAGE_RETURNED || stage >= STAGE_TRAINING_4) return false;
@@ -920,9 +1013,13 @@ module.exports = function registerLegendsQuest(api) {
     const entry = TRAINING_SKILLS.find(([name]) => name === key);
     if (!entry) return false;
     const [, label, skill] = entry;
-    player.getSkillManager().addExperiences(skill, 7650);
+    lastTrainingSkill.set(player, label);
+    player.getSkillManager().addExperiences(skill, 30000);
     player.sendMessage(`The training increases your ${label} experience.`);
-    quest.setStage(player, stage + 5);
+    // The fourth claim is the quest completion: quest.complete() is the only path
+    // that grants the 4 quest points, the jingle and the completion scroll.
+    if (stage + 5 >= STAGE_TRAINING_4) quest.complete(player);
+    else quest.setStage(player, stage + 5);
     return true;
   }
 
@@ -1016,8 +1113,11 @@ module.exports = function registerLegendsQuest(api) {
       default: break;
     }
 
-    if (has("interacting with the gate")) return true;
-    if (has("interacting with a guard")) return false;
+    // Talk-to always goes through a guard; the gate only ever contributes when a
+    // future gate interaction starts the transcript. Check the guard first, or the
+    // gate branch shadows it (the parser emits both conditions as a run).
+    if (has("interacting with a guard")) return true;
+    if (has("interacting with the gate")) return false;
     if (has("not met all the requirements to start")) return !meetsRequirements(player);
     if (has("met all the requirements to start")) return meetsRequirements(player);
     if (has("doesn't have 30 coins")) return !held(player, COINS, 30);
@@ -1181,6 +1281,92 @@ module.exports = function registerLegendsQuest(api) {
       }
       return;
     }
+    if (stepId === TRAINING_XP_MESSAGE_ID) {
+      const label = lastTrainingSkill.get(player) ?? "chosen";
+      player.sendMessage(`The training increases your ${label} experience.`);
+      event.handled = true;
+      return;
+    }
+  }
+
+  /** Fills the wiki's "[four/three/two/one] skill[s]" blanks from the remaining claims. */
+  function handleDialogueLine(event) {
+    if (!event?.player || typeof event.text !== "string") return;
+    if (!event.text.includes("[four/three/two/one]")) return;
+    const remaining = Math.max(1, Math.min(4, Math.round((STAGE_TRAINING_4 - questStage(event.player)) / 5)));
+    event.text = event.text
+      .replace("[four/three/two/one]", ["one", "two", "three", "four"][remaining - 1])
+      .replace("skill[s]", remaining === 1 ? "skill" : "skills");
+  }
+
+  /** The Viyeldi-caves rope is a plain "Climb" object handled by the Ladders plugin;
+   * claim it there so the Climb up/down prompt doesn't swallow the click. */
+  function handleLaddersClimb(event) {
+    if (!event?.player || event.objectId !== CLIMBING_ROPE) return;
+    event.player.sendMessage("You climb back up the rope to the Shaman Caves.");
+    event.player.moveTo(new Location(CLIMB_BACK.x, CLIMB_BACK.y, CLIMB_BACK.z));
+    event.handled = true;
+  }
+
+  const ROUTED_TRIAL_OBJECTS = new Set([
+    ...OUTER_GATES,
+    ...MINING_BOULDERS,
+    ...STRENGTH_GATES,
+    JAGGED_WALL,
+    ...FIRE_WALLS,
+    TUNNEL_CREVICE,
+  ]);
+
+  /** The tiles a multi-tile object occupies (solid locs rotate with their face). */
+  function objectFootprint(object) {
+    const definition = object?.getDefinition?.();
+    const sizeX = definition?.getSizeX?.() ?? 1;
+    const sizeY = definition?.getSizeY?.() ?? 1;
+    const face = object?.getFace?.();
+    const width = face === 1 || face === 3 ? sizeY : sizeX;
+    const length = face === 1 || face === 3 ? sizeX : sizeY;
+    const x = object.getLocation().getX();
+    const y = object.getLocation().getY();
+    return { x0: x, y0: y, x1: x + width - 1, y1: y + length - 1 };
+  }
+
+  /**
+   * The trial gates, boulders, wall and tunnel crevice have no usable route of
+   * their own (some are solid 2x2 locs), and the click route used to walk the
+   * player onto the object tile, where moveAcross then cannot tell which side
+   * they came from. Route to the standable tile in front of the object instead
+   * (as ErnestTheChicken does for its closet door), so a normal click walks up
+   * to the near side and the crossing then mirrors through to the far side. A
+   * 2x2 boulder fills its corridor, so that front tile is often the one the
+   * player already stands on, and the click resolves without a walk.
+   */
+  function routeTrialObject(event) {
+    if (!ROUTED_TRIAL_OBJECTS.has(event.objectId) || !event.object?.getLocation) return;
+    const tile = event.object.getLocation();
+    const from = event.sourceLocation ?? event.player.getLocation();
+    const fx = Number(from?.x ?? from?.getX?.());
+    const fy = Number(from?.y ?? from?.getY?.());
+    if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
+    const z = tile.getZ();
+    const { x0, y0, x1, y1 } = objectFootprint(event.object);
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const north = { x: clamp(fx, x0, x1), y: y1 + 1, z };
+    const south = { x: clamp(fx, x0, x1), y: y0 - 1, z };
+    const east = { x: x1 + 1, y: clamp(fy, y0, y1), z };
+    const west = { x: x0 - 1, y: clamp(fy, y0, y1), z };
+    const dx = fx - (x0 + x1) / 2;
+    const dy = fy - (y0 + y1) / 2;
+    const candidates = Math.abs(dy) >= Math.abs(dx)
+      ? [dy >= 0 ? north : south, dx >= 0 ? east : west]
+      : [dx >= 0 ? east : west, dy >= 0 ? north : south];
+    for (const candidate of candidates) {
+      if (standableTile(candidate.x, candidate.y, z)) {
+        event.destination = candidate;
+        return;
+      }
+    }
+    // No clean front tile (e.g. a wall edge); cross from where the player is.
+    event.destination = { x: fx, y: fy, z };
   }
 
   // ==========================================================================
@@ -1196,7 +1382,7 @@ module.exports = function registerLegendsQuest(api) {
       event.handled = true;
       return;
     }
-    if (itemId === RADIMUS_NOTES && text.includes("mapping")) {
+    if (itemId === RADIMUS_NOTES && (text.includes("mapping") || text.includes("complete"))) {
       mapJungle(player);
       event.handled = true;
       return;
@@ -1351,6 +1537,10 @@ module.exports = function registerLegendsQuest(api) {
       if (itemId === GOLDEN_BOWL_4) {
         useBowlDose(player);
         player.sendMessage("You splash some sacred water on the flames.");
+        // The doused section lets the player step through into the octagram where
+        // Ungadulu is held (LostCity legends_fire_wall_walk); without this the
+        // first fight cannot be reached on foot.
+        deferredMove(player, 2792, 9328, player.getLocation().getZ());
         event.handled = true;
       } else if (itemId === GOLDEN_BOWL_3 || itemId === GOLDEN_BOWL_2 || itemId === GOLDEN_BOWL) {
         player.sendMessage("The water evaporates in a cloud of steam... before it gets anywhere near the flames.");
@@ -1450,7 +1640,7 @@ module.exports = function registerLegendsQuest(api) {
     if (MAGIC_GATES.has(objectId) && itemId === UNPOWERED_ORB) {
       take(player, UNPOWERED_ORB, 1);
       player.sendMessage("The orb attached to the door glows brightly as you charge it. The illusory doors fade away.");
-      player.moveTo(new Location(2763, 9348, 0));
+      player.moveTo(new Location(MAGIC_GATE_LANDING.x, MAGIC_GATE_LANDING.y, MAGIC_GATE_LANDING.z));
       event.handled = true;
     }
   }
@@ -1541,7 +1731,13 @@ module.exports = function registerLegendsQuest(api) {
         player.sendMessage("You fail to jump the wall properly and clip it with your leg.");
         damage(player, 5);
       }
-      moveAcross(player, event.location);
+      // The two wall locs lie at the end of the two corridor ledges; the jump is
+      // between (2791,9295) and (2788,9296), so land on the far ledge's tile.
+      if (player.getLocation().getX() <= 2789) {
+        deferredMove(player, 2791, 9295, player.getLocation().getZ());
+      } else {
+        deferredMove(player, 2788, 9296, player.getLocation().getZ());
+      }
       return;
     }
     if (MARKED_WALL === objectId) {
@@ -1572,7 +1768,38 @@ module.exports = function registerLegendsQuest(api) {
     }
     if (SEARCH_BOOKCASE === objectId) {
       event.handled = true;
-      player.sendMessage("You search the bookcase, but find nothing of interest.");
+      player.sendMessage("You search the bookcase, it looks fairly old...");
+      player.sendMessage("After a while you notice that there is a small crevice in the back. You might just be able to force your way through.");
+      player.moveTo(new Location(TRIAL_ENTRY.x, TRIAL_ENTRY.y, TRIAL_ENTRY.z));
+      player.sendMessage("You squeeze through the crevice into a small tunnel.");
+      return;
+    }
+    if (TRIAL_CREVICE === objectId) {
+      event.handled = true;
+      player.moveTo(new Location(TRIAL_RETURN.x, TRIAL_RETURN.y, TRIAL_RETURN.z));
+      player.sendMessage("You squeeze back through the crevice into the shaman's room.");
+      return;
+    }
+    if (TUNNEL_CREVICE === objectId) {
+      event.handled = true;
+      player.moveTo(new Location(TRIAL_RETURN.x, TRIAL_RETURN.y, TRIAL_RETURN.z));
+      player.sendMessage("You squeeze your way through the crevice.");
+      return;
+    }
+    if (CLIMB_OVER_ROCKS.has(objectId)) {
+      event.handled = true;
+      climbOverRocks(player, event.location);
+      return;
+    }
+    if (MAGIC_GATES.has(objectId)) {
+      event.handled = true;
+      if (player.getLocation().getY() > Number(event.location?.y ?? 0)) {
+        player.sendMessage("The gate shimmers and changes as you approach.");
+        player.sendMessage("You feel yourself being pulled through the portal.");
+        deferredMove(player, MAGIC_GATE_RETURN.x, MAGIC_GATE_RETURN.y, MAGIC_GATE_RETURN.z);
+      } else {
+        player.sendMessage("This door is fused with rock, it doesn't seem possible to open it. But it does look slightly strange in some way.");
+      }
       return;
     }
     if (SACRED_POOL === objectId) {
@@ -1868,7 +2095,7 @@ module.exports = function registerLegendsQuest(api) {
     xpRewards: [],
     otherRewards: [
       "Access to the Legends' Guild",
-      "7,650 XP in four skills of your choice",
+      "30,000 XP in four skills of your choice",
     ],
     buildJournal,
     onReward: () => {},
@@ -1888,6 +2115,9 @@ module.exports = function registerLegendsQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
+  api.onCustomEvent("ladders:climb", handleLaddersClimb);
+  api.onObjectRoute(routeTrialObject);
   api.onItemAction(handleItemAction);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);

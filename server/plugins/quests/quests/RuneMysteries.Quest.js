@@ -213,6 +213,11 @@ module.exports = function registerRuneMysteriesQuest(api) {
     const stage = quest.getStage(player);
 
     if (npcId === DUKE_HORACIO_NPC_ID) {
+      // The Duke is shared with Dragon Slayer I, whose shield conversation lives
+      // on his own flat page. Once Rune Mysteries is complete the quest has
+      // nothing more to say through him, so step aside and let the other Duke
+      // branches (Dragon Slayer, the flat page) play.
+      if (stage >= STAGE_COMPLETE) return null;
       if (stage === STAGE_NOT_STARTED) {
         return { page: PAGE_RUNE_MYSTERIES, variant: VARIANT_DUKE_STARTING };
       }

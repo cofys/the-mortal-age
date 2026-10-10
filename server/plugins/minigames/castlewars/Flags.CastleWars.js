@@ -34,28 +34,28 @@ function returnCarriedFlag(player) {
     return;
   }
   if (carriedFlagTeam === teamId) {
-    game.restoreFlagToBase(carriedFlagTeam);
+    game.restoreFlagToBase(carriedFlagTeam, "return");
     game.clearWeaponSlot(player);
     player.sendMessage(`Returned the ${game.getTeamData(carriedFlagTeam).name.toLowerCase()} flag!`);
     return;
   }
-  if (game.flagStatus[teamId] !== 0) {
-    player.sendMessage("You need your own flag safely returned before you can score.");
-    return;
-  }
-  game.restoreFlagToBase(carriedFlagTeam);
+  // Scoring does not require the team's own flag to be home: capture is judged on the
+  // enemy standard alone.
+  game.restoreFlagToBase(carriedFlagTeam, "score");
   game.clearWeaponSlot(player);
   game.score[teamId] += 1;
   player.sendMessage(`The team of ${game.getTeamData(teamId).name} scores 1 point!`);
+  if (process.env.CW_BOT_DEBUG === "1") {
+    console.log(`[cw_flag] score ${teamId} by ${player.getUsername?.()}`);
+  }
 }
 
-function pickupDroppedFlag(player, flagTeam, object) {
+function pickupDroppedFlag(player, flagTeam) {
   if (game.flagStatus[flagTeam] !== 2 || !requireFreeWeapon(player, "Please remove your weapon before attempting to pick up the flag.")) {
     return;
   }
   game.removeDroppedFlagObject(flagTeam);
   game.carryFlag(player, flagTeam);
-  game.sendGameHintRemoval(object.getLocation());
 }
 
 function useFlagObject(event) {
@@ -71,7 +71,7 @@ function useFlagObject(event) {
     return;
   }
   if (droppedTeam) {
-    pickupDroppedFlag(player, droppedTeam, object);
+    pickupDroppedFlag(player, droppedTeam);
   } else if (game.getTeamId(player) === standTeam) {
     returnCarriedFlag(player);
   } else {

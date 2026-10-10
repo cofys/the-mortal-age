@@ -17,14 +17,20 @@
  * (varp 487 and the map stages match void's zogre_flesh_eaters.varbits.toml).
  *
  * Gaps: the Jiggig cutscene camera and the blackened-area entry event are not
- * played; the barricade climb, cave stairs and tomb-door movement rely on the
- * generic object/teleport plugins (only the door key check and its transcript
- * are wired here); the cup of tea is a ground item, so pouring is wired through
+ * played; the cup of tea is a ground item, so pouring is wired through
  * item-on-ground-item (plus a raw 4838 object fallback); Relicym's balm mixing
  * and brutal-arrow fletching are not reproduced (only the reward unlocks);
  * Slash Bash is spawned owner-only with no disease/despawn simulation; the
  * "grows weary" flee/despawn message is not triggered; the black-prism 2,000
  * coin sale to Zavistic is not wired.
+ *
+ * Jiggig access: ClimbLinks cannot pair the Jiggig staircases (the map pairs
+ * (2485,3042,0) with (2478,9437,2), and (2443,9417,2) with (2443,9417,0), all
+ * outside its search), so the four stair clicks get explicit destinations here.
+ * The guard's crush swaps the mapped Barricade locs for Crushed barricades
+ * (Climb-over) and the climb teleports over the wall; a stage-3 login re-crushes
+ * after a restart. The locked Ogre stone doors are removed (unlocked) once the
+ * player has the gate key.
  */
 module.exports = function registerZogreFleshEatersQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
@@ -80,6 +86,42 @@ module.exports = function registerZogreFleshEatersQuest(api) {
   const OGRE_SKELETON_ID = ObjectIdentifiers.SKELETON_8;
   const OGRE_STAND_ID = ObjectIdentifiers.STAND;
   const CUP_OF_TEA_OBJECT_ID = 4838; // ponytail: no ObjectIdentifiers entry, ground object fallback
+
+  const CRUSHED_BARRICADE_ID = ObjectIdentifiers.CRUSHED_BARRICADE;
+  const CRUSHED_BARRICADE_ID_2 = ObjectIdentifiers.CRUSHED_BARRICADE_2;
+  const CRUSHED_BARRICADE_IDS = new Set([CRUSHED_BARRICADE_ID, CRUSHED_BARRICADE_ID_2]);
+  /** The mapped Jiggig barricade line: five locs (four named Barricade, two nameless) per row. */
+  const JIGGIG_BARRICADE = [
+    { id: 6858, x: 2456, y: 3044, face: 1 },
+    { id: 6856, x: 2456, y: 3045, face: 3 },
+    { id: 6856, x: 2456, y: 3046, face: 3 },
+    { id: 6856, x: 2456, y: 3047, face: 3 },
+    { id: 6878, x: 2456, y: 3048, face: 3 },
+    { id: 6879, x: 2456, y: 3049, face: 3 },
+    { id: 6856, x: 2456, y: 3050, face: 3 },
+    { id: 6856, x: 2456, y: 3051, face: 3 },
+    { id: 6857, x: 2456, y: 3052, face: 3 },
+    { id: 6858, x: 2458, y: 3046, face: 1 },
+    { id: 6856, x: 2458, y: 3047, face: 3 },
+    { id: 6856, x: 2458, y: 3048, face: 3 },
+    { id: 6856, x: 2458, y: 3049, face: 3 },
+    { id: 6857, x: 2458, y: 3050, face: 3 },
+  ];
+
+  /** Stair placements whose other end ClimbLinks cannot pair, with OSRS destinations. */
+  const JIGGIG_STAIRS = [
+    { id: 6841, x: 2485, y: 3042, z: 0, option: "climb-down", to: { x: 2477, y: 9436, z: 2 } },
+    { id: 6842, x: 2478, y: 9437, z: 2, option: "climb-up", to: { x: 2484, y: 3041, z: 0 } },
+    { id: 6841, x: 2443, y: 9417, z: 2, option: "climb-down", to: { x: 2446, y: 9418, z: 0 } },
+    { id: 6842, x: 2443, y: 9417, z: 0, option: "climb-up", to: { x: 2442, y: 9417, z: 2 } },
+  ];
+
+  const OGRE_DOOR_LEAVES = [
+    { id: ObjectIdentifiers.OGRE_STONE_DOOR, x: 2440, y: 9426 },
+    { id: ObjectIdentifiers.OGRE_STONE_DOOR_2, x: 2441, y: 9426 },
+    { id: ObjectIdentifiers.OGRE_STONE_DOOR, x: 2441, y: 9433 },
+    { id: ObjectIdentifiers.OGRE_STONE_DOOR_2, x: 2442, y: 9433 },
+  ];
 
   const TORN_PAGE = ItemIdentifiers.TORN_PAGE;
   const BLACK_PRISM = ItemIdentifiers.BLACK_PRISM;
@@ -249,11 +291,8 @@ module.exports = function registerZogreFleshEatersQuest(api) {
     if (stage >= STAGE_SITHIK) {
       return "investigating-b-vahn-talking-to-zavistic-rarve-after-getting-the-potion";
     }
-    if (progress(player) >= 5) {
-      return "investigating-b-vahn-talking-to-zavistic-rarve-after-gathering-evidence";
-    }
     if (progress(player) >= 4) {
-      return "investigating-b-vahn-talking-to-zavistic-rarve-inside-the-guild";
+      return "investigating-b-vahn-talking-to-zavistic-rarve-after-gathering-evidence";
     }
     return null;
   }
@@ -541,15 +580,19 @@ module.exports = function registerZogreFleshEatersQuest(api) {
         }
         return;
       case "lKO3pR":
+        // The sketch: the wiki fail/succeed conditions sit directly after this message,
+        // so the runtime swallows them with the earlier condition run; do the roll here.
         if (has(player, PAPYRUS)) take(player, PAPYRUS);
+        if (!has(player, SITHIK_PORTRAIT) && !has(player, SITHIK_PORTRAIT_BAD) && !has(player, SIGNED_PORTRAIT)) {
+          if (Math.random() < 0.5) give(player, SITHIK_PORTRAIT);
+          else give(player, SITHIK_PORTRAIT_BAD);
+        }
+        player.sendMessage("You get a portrait of Sithik.");
         return;
       case "3b2CAk":
-        if (!has(player, PAPYRUS)) give(player, PAPYRUS);
-        return;
       case "-7JGGv":
-        if (!has(player, CHARCOAL)) give(player, CHARCOAL);
-        return;
       case "yHgbza":
+        // The drawers/wardrobe hold papyrus and charcoal; top up whichever is missing.
         if (!has(player, PAPYRUS)) give(player, PAPYRUS);
         if (!has(player, CHARCOAL)) give(player, CHARCOAL);
         return;
@@ -612,6 +655,7 @@ module.exports = function registerZogreFleshEatersQuest(api) {
         return;
       case "izwjnR":
         if (quest.getStage(player) < STAGE_BARRICADE) quest.setStage(player, STAGE_BARRICADE);
+        crushBarricade();
         event.handled = true;
         return;
       case "YrmIgh":
@@ -661,6 +705,11 @@ module.exports = function registerZogreFleshEatersQuest(api) {
       if (itemId === BLACK_PRISM) variant = "entering-jiggig-look-at-black-prism";
       else if (itemId === DRAGON_INN_TANKARD) variant = "entering-jiggig-look-at-dragon-inn-tankard";
       else if (itemId === SIGNED_PORTRAIT) variant = "investigating-b-vahn-look-at-signed-portrait";
+    } else if (option === "open" && itemId === RUINED_BACKPACK) {
+      take(player, RUINED_BACKPACK);
+      startTranscript(api, player, GRISH_NPC_ID, PAGE, "entering-jiggig-open-ruined-backpack");
+      event.handled = true;
+      return;
     }
     if (!variant) return;
     startTranscript(api, player, GRISH_NPC_ID, PAGE, variant);
@@ -742,8 +791,12 @@ module.exports = function registerZogreFleshEatersQuest(api) {
     if (!choice) return;
     const page = typeof choice === "string" ? PAGE : choice.page;
     const variant = typeof choice === "string" ? choice : choice.variant;
+    const select =
+      npcId === ZAVISTIC_RARVE_NPC_ID && variant === EVIDENCE_HAND_IN_VARIANT
+        ? zavisticEvidenceSelect(event.player)
+        : undefined;
     event.handled = true;
-    startTranscript(api, event.player, npcId, page, variant);
+    startTranscript(api, event.player, npcId, page, variant, select);
   }
 
   function pourPotion(player) {
@@ -792,6 +845,163 @@ module.exports = function registerZogreFleshEatersQuest(api) {
   }
 
   // ==========================================================================
+  // Jiggig access: barricade, stairs and the locked ogre stone doors
+  // ==========================================================================
+
+  let barricadeCrushed = false;
+
+  /**
+   * The guard's crush turns the mapped Barricade locs into Crushed barricades
+   * (Climb-over; the two null-named locs in the same row are part of the line).
+   * Register the replacement before deregistering the original, as Doors does, so
+   * the removal sticks across scene reloads.
+   */
+  function crushBarricade() {
+    if (barricadeCrushed) return;
+    barricadeCrushed = true;
+    const { GameObject, ObjectManager, MapObjects, Location } = api.core;
+    for (const tile of JIGGIG_BARRICADE) {
+      const location = new Location(tile.x, tile.y, 0);
+      const crushedId = tile.x === 2458 ? CRUSHED_BARRICADE_ID_2 : CRUSHED_BARRICADE_ID;
+      ObjectManager.register(new GameObject(crushedId, location.clone(), 10, tile.face, null), true);
+      const original = MapObjects.get(tile.id, location, null);
+      if (original) ObjectManager.deregister(original, true);
+    }
+  }
+
+  /** Climb over the crushed line: land on the far side, nudging along the row if blocked. */
+  function climbOverBarricade(event) {
+    const { player, location } = event;
+    if (!location || location.z !== 0) return;
+    const overEast = player.getLocation().getX() < location.x;
+    const targetX = overEast ? 2459 : 2453;
+    const target = freeTileNear(targetX, player.getLocation().getY(), 0, player);
+    if (target) player.moveTo(target);
+  }
+
+  function freeTileNear(x, y, z, player) {
+    const { Location, RegionManager } = api.core;
+    const privateArea = player.getPrivateArea?.() ?? null;
+    for (const dy of [0, 1, -1, 2, -2, 3, -3]) {
+      const tile = new Location(x, y + dy, z);
+      if (!RegionManager.blocked(tile, privateArea)) return tile;
+    }
+    return null;
+  }
+
+  /** The four Jiggig stair clicks ClimbLinks cannot pair, with explicit destinations. */
+  function useJiggigStairs(event) {
+    const { player, objectId, location } = event;
+    if (!location) return false;
+    const stair = JIGGIG_STAIRS.find(
+      (entry) => entry.id === objectId && entry.x === location.x && entry.y === location.y && entry.z === location.z
+    );
+    if (!stair) return false;
+    event.handled = true;
+    api.emitCustomEvent(stair.option === "climb-up" ? "ladders:climbUp" : "ladders:climbDown", {
+      player,
+      destination: new api.core.Location(stair.to.x, stair.to.y, stair.to.z),
+      handled: false,
+    });
+    return true;
+  }
+
+  /** Ogre stone door: play the transcript, then swing the pair open once the key is held. */
+  function openOgreStoneDoor(event) {
+    const { player, location } = event;
+    if (!location) return;
+    player.setAttribute(DOOR_LEAVING_ATTRIBUTE, player.getLocation().getY() < location.y);
+    startTranscript(api, player, GRISH_NPC_ID, PAGE, "defeating-the-zogres-open-ogre-stone-door");
+    player.setAttribute(DOOR_LEAVING_ATTRIBUTE, false);
+    if (!has(player, OGRE_GATE_KEY) || quest.getStage(player) < STAGE_GIVEN_KEY) return;
+    const { ObjectManager, MapObjects, Location } = api.core;
+    for (const leaf of OGRE_DOOR_LEAVES) {
+      if (leaf.y !== location.y) continue;
+      const door = MapObjects.get(leaf.id, new Location(leaf.x, leaf.y, location.z), null);
+      if (door) ObjectManager.deregister(door, true);
+    }
+  }
+
+  // ==========================================================================
+  // Zavistic's evidence hand-in
+  //
+  // The wiki transcript checks each held item with a sibling condition, but the
+  // dialogue runtime plays only the first true condition of such a run. Rewrite
+  // the "I have some items" option before it plays: keep each item's branch
+  // (separated so they all run) and inline whichever ending fits the inventory.
+  // ==========================================================================
+
+  const EVIDENCE_HAND_IN_VARIANT = "investigating-b-vahn-talking-to-zavistic-rarve-after-gathering-evidence";
+
+  function holdsAllEvidence(player) {
+    return (
+      has(player, NECROMANCY_BOOK) &&
+      has(player, BOOK_OF_H_A_M) &&
+      has(player, DRAGON_INN_TANKARD) &&
+      has(player, SIGNED_PORTRAIT)
+    );
+  }
+
+  function zavisticEvidenceSelect(player) {
+    const all = holdsAllEvidence(player);
+    const rewrite = (steps) =>
+      steps.map((step) => {
+        if (!step || typeof step !== "object") return step;
+        const copy = { ...step };
+        if (Array.isArray(copy.options)) {
+          copy.options = copy.options.map((option) =>
+            option.id === "wsqayT"
+              ? { ...option, steps: rewriteEvidenceOption(option.steps || [], all) }
+              : { ...option, steps: rewrite(option.steps || []) }
+          );
+        } else if (Array.isArray(copy.steps)) {
+          copy.steps = rewrite(copy.steps);
+        }
+        return copy;
+      });
+    return rewrite;
+  }
+
+  function rewriteEvidenceOption(steps, all) {
+    const out = [];
+    for (const step of steps) {
+      if (!step || typeof step !== "object") {
+        out.push(step);
+        continue;
+      }
+      if (step.id === "uE6dyG") {
+        if (!all) out.push(...(step.steps || []));
+        continue;
+      }
+      if (step.id === "oBTnmc") {
+        if (all) out.push(...(step.steps || []));
+        continue;
+      }
+      if (step.type === "condition" && out.length > 0 && out[out.length - 1]?.type === "condition") {
+        out.push({ type: "action", id: "zogre:evidence-separator" });
+      }
+      out.push(step);
+    }
+    return out;
+  }
+
+  /** Talk-to Zavistic override: play the rewritten evidence hand-in before the potion. */
+  function talkToZavistic(event) {
+    const { player } = event;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_STARTED || stage >= STAGE_SITHIK || progress(player) < 4) return false;
+    event.handled = true;
+    api.emitCustomEvent("npc-dialogue:start", {
+      player,
+      npc: event.npc,
+      npcId: event.npcId,
+      variant: EVIDENCE_HAND_IN_VARIANT,
+      select: zavisticEvidenceSelect(player),
+    });
+    return true;
+  }
+
+  // ==========================================================================
   // Objects
   // ==========================================================================
 
@@ -813,6 +1023,15 @@ module.exports = function registerZogreFleshEatersQuest(api) {
     const { player, objectId } = event;
     if (!player) return;
     const op = objectOp(event);
+
+    if (CRUSHED_BARRICADE_IDS.has(objectId)) {
+      if (op !== "climb-over") return;
+      event.handled = true;
+      climbOverBarricade(event);
+      return;
+    }
+
+    if (useJiggigStairs(event)) return;
 
     if (objectId === BROKEN_LECTERN_ID) {
       if (op !== "search") return;
@@ -899,9 +1118,7 @@ module.exports = function registerZogreFleshEatersQuest(api) {
     if (OGRE_TOMB_DOOR_IDS.has(objectId)) {
       if (op !== "open") return;
       event.handled = true;
-      player.setAttribute(DOOR_LEAVING_ATTRIBUTE, player.getLocation().getY() < event.location.y);
-      startTranscript(api, player, GRISH_NPC_ID, PAGE, "defeating-the-zogres-open-ogre-stone-door");
-      player.setAttribute(DOOR_LEAVING_ATTRIBUTE, false);
+      openOgreStoneDoor(event);
       return;
     }
 
@@ -1080,11 +1297,16 @@ module.exports = function registerZogreFleshEatersQuest(api) {
   function grantReward(player) {
     give(player, OURG_BONES, 2);
     give(player, ZOGRE_BONES, 2);
+    const skills = player.getSkillManager();
+    skills.addExperiences(Skill.FLETCHING, 2000);
+    skills.addExperiences(Skill.RANGED, 2000);
+    skills.addExperiences(Skill.HERBLORE, 2000);
   }
 
   function handleLogin({ player }) {
     slashBashByPlayer.delete(player);
     zombieByPlayer.delete(player);
+    if (quest.getStage(player) >= STAGE_BARRICADE) crushBarricade();
     refreshQuestList(player);
   }
 
@@ -1112,6 +1334,7 @@ module.exports = function registerZogreFleshEatersQuest(api) {
   });
 
   api.onNpcDialogueVariant(selectVariant);
+  api.onNpcInteraction("Zavistic Rarve", { "Talk-to": talkToZavistic });
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);

@@ -1,6 +1,6 @@
 # Agility shortcuts: captured behaviour
 
-The shortcuts live in `server/data/definitions/agility-shortcuts.json` (format:
+The shortcuts live in `server/plugins/skills/data/agility-shortcuts.json` (format:
 `server/plugins/skills/agility/README.md`). Entries with a `note` of `rsprox captures <ids>` were
 rebuilt from live OSRS recordings (rsprox, revisions 223-239); the rest follow the Wiki and the map,
 and say what is still a guess in `unverified`.

@@ -94,6 +94,8 @@ module.exports = function registerBiohazardQuest(api) {
   const DISTILLATOR_ITEM_ID = ItemIdentifiers.DISTILLATOR;
   const BIRD_FEED_ITEM_ID = ItemIdentifiers.BIRD_FEED;
   const MOURNER_KEY_ITEM_ID = ItemIdentifiers.KEY_2;
+  /** Biohazard's own "has the key" condition step ids (Chemist/Guidor's cell door). */
+  const BIOHAZARD_KEY_CONDITION_IDS = new Set(["21-b0A", "3MJwAD"]);
   const MEDICAL_GOWN_ITEM_ID = ItemIdentifiers.MEDICAL_GOWN;
   const GAS_MASK_ITEM_ID = ItemIdentifiers.GAS_MASK;
   const PLAGUE_SAMPLE_ITEM_ID = ItemIdentifiers.PLAGUE_SAMPLE;
@@ -274,7 +276,7 @@ module.exports = function registerBiohazardQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, text, stepId }) {
     const value = String(text).toLowerCase();
     const inventory = player.getInventory();
     const wearingGasMask = player.getEquipment().get(Equipment.HEAD_SLOT)?.getId?.() === GAS_MASK_ITEM_ID;
@@ -284,8 +286,13 @@ module.exports = function registerBiohazardQuest(api) {
     if (value.includes("not yet poisoned the stew or already has a medical gown")) {
       return quest.getStage(player) !== STAGE_POISONED_STEW || held(player, MEDICAL_GOWN_ITEM_ID);
     }
-    if (value.includes("has the key")) return held(player, MOURNER_KEY_ITEM_ID);
-    if (value.includes("does not have the key")) return !held(player, MOURNER_KEY_ITEM_ID);
+    // The Lost Tribe's chest uses the same "has the key" prose; only answer the
+    // key conditions on this quest's own step ids.
+    if (value.includes("has the key") || value.includes("does not have the key")) {
+      if (!BIOHAZARD_KEY_CONDITION_IDS.has(stepId)) return null;
+      const hasKey = held(player, MOURNER_KEY_ITEM_ID);
+      return value.includes("does not have") ? !hasKey : hasKey;
+    }
     if (value.includes("already has the distillator")) return held(player, DISTILLATOR_ITEM_ID);
     if (value.includes("has all the items")) return hasAllItems(player);
     if (value.includes("missing items")) return !hasAllItems(player);

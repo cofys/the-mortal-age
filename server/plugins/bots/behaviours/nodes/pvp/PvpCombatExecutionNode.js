@@ -8,11 +8,13 @@ const {
   CanAttackResponse,
 } = require("../../../../../src/main/typescript/elvarg/game/content/combat/CombatFactory");
 const { GameConstants } = require("../../../../../src/main/typescript/elvarg/game/GameConstants");
+const { ItemDefinition } = require("../../../../../src/main/typescript/elvarg/game/definition/ItemDefinition");
 const { Inventory } = require("../../../../../src/main/typescript/elvarg/game/model/container/impl/Inventory");
 const { ItemActionPacketListener } = require("../../../../../src/main/typescript/elvarg/net/packet/impl/ItemActionPacketListener");
 const { TimerKey } = require("../../../../../src/main/typescript/elvarg/util/timers/TimerKey");
 const { getPotionName } = require("../../../../items/Potions.plugin");
 const { randomInRange } = require("../../navigation/BotNavigation");
+const { maybeChat } = require("../../pvp/PvpChatter");
 const {
   getPvpCombatSnapshot,
   getWeaponId,
@@ -47,6 +49,20 @@ const MANAGED_OFFENSIVE_PRAYERS = Object.freeze([
   ...MAGIC_OFFENSIVE_PRAYERS,
 ]);
 const GAME_TICK_MS = Number(GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE ?? 600);
+
+/** GE value of the target's gear that makes Smite worth giving up the protective overhead. */
+const SMITE_MIN_TARGET_RISK = 3_000_000;
+
+/** Grand Exchange wealth of what the target is wearing (issue #441: Smite only high risk). */
+function equipmentGrandExchangeValue(player) {
+  let total = 0;
+  for (const item of player?.getEquipment?.()?.getItems?.() ?? []) {
+    const id = item?.getId?.();
+    if (!Number.isInteger(id) || id <= 0) continue;
+    total += (ItemDefinition.forId(id)?.getGrandExchangeValue?.() ?? 0) * (item.getAmount?.() ?? 1);
+  }
+  return total;
+}
 
 function deactivatePrayerSet(prayerHandler, player, prayerIds, exceptPrayerId = null) {
   if (!player || !Array.isArray(prayerIds)) {
@@ -292,6 +308,26 @@ class PvpCombatExecutionNode {
       nowMs,
       resolvedProfile
     );
+    // Smite the opponent's item protection while they are risking enough for it to matter;
+    // it takes the overhead, so protection and offensive overheads are dropped.
+    if (this.shouldSmite(state, target, resolvedProfile, targetUsername)) {
+      activateFirstAvailablePrayer(this.PrayerHandler, player, [this.PrayerHandler.SMITE]);
+      deactivatePrayerSet(this.PrayerHandler, player, PrayerHandler.PROTECTION_PRAYERS);
+      deactivatePrayerSet(this.PrayerHandler, player, MANAGED_OFFENSIVE_PRAYERS);
+      pvp.cachedProtectionPrayerId = this.PrayerHandler.SMITE;
+      pvp.cachedOffensivePrayerId = null;
+      pvp.cachedPrayerTargetCombatType = targetCombatType;
+      pvp.cachedPrayerPlayerCombatType = playerCombatType;
+      pvp.cachedPrayerTargetUsername = targetUsername;
+      pvp.nextPrayerReviewAt = this.resolveNextPrayerReviewAt(
+        nowMs,
+        basePrayerReviewMinMs,
+        basePrayerReviewMaxMs,
+        true,
+        0
+      );
+      return true;
+    }
     const desiredProtectionPrayer = this.resolveProtectionPrayer(
       player,
       target,
@@ -354,6 +390,32 @@ class PvpCombatExecutionNode {
       pvp.pendingPrayerTargetCombatTypeAt
     );
     return true;
+  }
+
+  /**
+   * Smite is worth the overhead only while the opponent is protecting an item and is
+   * risking enough for the drain to matter (issue #441). The choice sticks for that
+   * target until they stop protecting the item or stop risking.
+   */
+  shouldSmite(state, target, profile, targetUsername) {
+    const pvp = state?.pvp;
+    if (!pvp || !target || !targetUsername || Number(profile?.confidenceTier ?? 0) < 2) {
+      return false;
+    }
+    const protectsItem =
+      target.getPrayerActive?.()?.[this.PrayerHandler.PROTECT_ITEM] === true;
+    const smiteWanted =
+      protectsItem && equipmentGrandExchangeValue(target) >= SMITE_MIN_TARGET_RISK;
+    if (!smiteWanted) {
+      pvp.smiteTargetUsername = null;
+      pvp.smiteActive = false;
+      return false;
+    }
+    if (pvp.smiteTargetUsername !== targetUsername) {
+      pvp.smiteTargetUsername = targetUsername;
+      pvp.smiteActive = Math.random() <= Number(profile?.smiteUseChance ?? 0);
+    }
+    return pvp.smiteActive === true;
   }
 
   resolveProtectionPrayer(player, target, confidenceTier, targetMethodType = null) {
@@ -493,6 +555,7 @@ class PvpCombatExecutionNode {
     }
 
     const profile = this.getProfile?.(state) ?? null;
+    maybeChat(player, state, nowMs);
     if (this.drinkStartCombatPotion(player, state)) {
       this.setPhase?.(state, this.pvpPhase?.COMBAT ?? "combat");
       this.scheduleCombatAction?.(state, nowMs);

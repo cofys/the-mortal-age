@@ -16,12 +16,14 @@ export class CountdownTask extends Task {
   }
 
   execute() {
-      if (this.onComplete) {
-          this.onComplete();
+      try {
+          if (this.onComplete) {
+              this.onComplete();
+          }
+      } finally {
+          // Countdown task only runs once, even if the callback throws.
+          this.stop();
       }
-
-      // Countdown task only runs once
-      this.stop();
   }
 }
 

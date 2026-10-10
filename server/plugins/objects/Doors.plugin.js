@@ -47,8 +47,14 @@ function defineDoorData({ ObjectIdentifiers: O }) {
 
   // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
   // door 1517 -> 1520, same models), or it has no "Close" (DOOR_181, the open Keldagrim door on
-  // the way to the Blast Furnace, shares DOOR_180's model but offers no option).
-  SINGLE_DOOR_OPEN_IDS = new Map([[O.LARGE_DOOR_11, O.LARGE_DOOR_14], [O.DOOR_180, O.DOOR_181]]);
+  // the way to the Blast Furnace, shares DOOR_180's model but offers no option). Witch's House's
+  // interior doors (DOOR_499 closed -> DOOR_498 open) are inverted: the open "Close"-only leaf
+  // carries the lower id, so the ascending scan never sees the pair.
+  SINGLE_DOOR_OPEN_IDS = new Map([
+    [O.LARGE_DOOR_11, O.LARGE_DOOR_14],
+    [O.DOOR_180, O.DOOR_181],
+    [O.DOOR_499, O.DOOR_498],
+  ]);
 
   // OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel
   // and an extension panel. Opening/closing moves BOTH pieces, so the "closed id + 1 = open
@@ -104,6 +110,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.GATE_92, O.GATE_93, O.GATE_29, O.GATE_30]),
     // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
     Object.freeze([O.GATE_94, O.GATE_95, O.GATE_29, O.GATE_30]),
+    // Catherby/Hemenster metal gates (53 west leaf, 52 east): open into the
+    // nameless 28853/28854 leaves, same model (14356).
+    Object.freeze([O.GATE_8, O.GATE_9, 28853, 28854]),
     // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
     Object.freeze([O.LARGE_DOOR_98, O.LARGE_DOOR_99, O.LARGE_DOOR_16, O.LARGE_DOOR_18]),
   ]);
@@ -119,6 +128,7 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.GATE_40, O.GATE_41],
     [O.GATE_92, O.GATE_93],
     [O.GATE_94, O.GATE_95],
+    [O.GATE_8, O.GATE_9],
     [O.LARGE_DOOR_24, O.LARGE_DOOR_25],
     [O.LARGE_DOOR_26, O.LARGE_DOOR_27],
     [O.LARGE_DOOR_29, O.LARGE_DOOR_28],
@@ -147,6 +157,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.GATE_93, O.GATE_30],
     [O.GATE_94, O.GATE_29],
     [O.GATE_95, O.GATE_30],
+    [O.GATE_8, 28853],
+    [O.GATE_9, 28854],
     [O.LARGE_DOOR_24, O.LARGE_DOOR_26],
     [O.LARGE_DOOR_25, O.LARGE_DOOR_27],
     [O.LARGE_DOOR_29, O.LARGE_DOOR_31],

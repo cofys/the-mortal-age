@@ -1,6 +1,6 @@
 /**
  * The Stronghold of Security (https://oldschool.runescape.wiki/w/Stronghold_of_Security), from
- * data/definitions/stronghold-of-security.json: its doors and security questions, ladders,
+ * plugins/areas/data/stronghold-of-security.json: its doors and security questions, ladders,
  * portals and reward rooms, as captured. See docs/stronghold-of-security.md.
  */
 const Data = require("./SosData");

@@ -17,11 +17,12 @@
  * defeated, 14 complete, 15 complete (Khazard defeated).
  * Source: https://github.com/LostCityRS/Content/tree/65b754f768b79b941b21b2a1eb3b0d1ecae3cdfe/scripts/quests/quest_arena
  * Gaps: the cutscenes/camera moves and NPC pathing are not reproduced; the
- * arena beasts are not spawned or caged, so progression reads their world
- * spawns (1224/1225/1226) and their deaths; the Khazard barman (1214) is
- * indexed to the "Khazard Barman" page, whose flat transcript has no
- * Khali-brew option, so this plugin plays the Fight Arena barman branch
- * directly through startTranscript once the brew is known.
+ * arena's east-side pens cannot be opened (the cache map seals the cage
+ * gates), so each fight spawns the beast on the open arena floor, as the
+ * reference does when it releases one; the Khazard barman (1214) is indexed
+ * to the "Khazard Barman" page, whose flat transcript has no Khali-brew
+ * option, so this plugin plays the Fight Arena barman branch directly
+ * through startTranscript once the brew is known.
  */
 module.exports = function registerFightArenaQuest(api) {
   const {
@@ -129,16 +130,22 @@ module.exports = function registerFightArenaQuest(api) {
   const PAGE = "Fight Arena";
   const START_HOOK = "quest:fight-arena:start";
 
-  // Cell / arena / jail tiles from the reference coords.
+  // Cell / arena / jail tiles from the reference coords. The arena's east-side
+  // beast pens are sealed in the cache map, so the player only stands on the
+  // open floor west of them and the fight beasts are spawned there.
   const JAIL_TILE = { x: 2605, y: 3141, z: 0 };
-  const ARENA_TILE = { x: 2607, y: 3155, z: 0 };
-  const GENERAL_KHAZARD_TILE = { x: 2607, y: 3156, z: 0 };
+  const ARENA_TILE = { x: 2603, y: 3156, z: 0 };
+  const OGRE_TILE = { x: 2604, y: 3163, z: 0 };
+  const SCORPION_TILE = { x: 2603, y: 3161, z: 0 };
+  const BOUNCER_TILE = { x: 2604, y: 3165, z: 0 };
+  const GENERAL_KHAZARD_TILE = { x: 2603, y: 3164, z: 0 };
 
   // npc-dialogue:action step ids from the transcript.
   const BARMAN_BREW_MESSAGE_ID = "Dg8YuY";
   const HAND_BREW_MESSAGE_ID = "tRXEfT";
   const KEYS_GIVEN_MESSAGE_ID = "rUfSrN";
   const SPARE_KEYS_MESSAGE_ID = "Ck1lJV";
+  const FOLLOW_INTO_ARENA_ID = "0Xedz5";
   const JAIL_TELEPORT_ID = "ND1rhG";
   const JAIL_RETURN_TELEPORT_ID = "CDVO1E";
   const ARENA_TELEPORT_ID = "XDkdB3";
@@ -151,6 +158,7 @@ module.exports = function registerFightArenaQuest(api) {
 
   let quest;
   const generalByPlayer = new Map();
+  const fightBeastByPlayer = new Map();
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
 
@@ -459,13 +467,49 @@ module.exports = function registerFightArenaQuest(api) {
       owner: player,
       ownerOnly: true,
     });
-    if (npc) generalByPlayer.set(player, npc);
+    if (npc) {
+      npc.__skipDefaultRespawn = true;
+      generalByPlayer.set(player, npc);
+    }
   }
 
   function removeGeneralKhazard(player) {
     const npc = generalByPlayer.get(player);
     if (npc) api.removeNpc(npc);
     generalByPlayer.delete(player);
+  }
+
+  /** The east-side pens are sealed, so the fight beast is spawned on the open floor. */
+  function spawnFightBeast(player, npcId, tile) {
+    removeFightBeast(player);
+    const npc = api.spawnNpc({
+      id: npcId,
+      x: tile.x,
+      y: tile.y,
+      z: tile.z,
+      wanderRadius: 0,
+      owner: player,
+      ownerOnly: true,
+    });
+    if (npc) {
+      npc.__skipDefaultRespawn = true;
+      fightBeastByPlayer.set(player, npc);
+    }
+  }
+
+  function removeFightBeast(player) {
+    const npc = fightBeastByPlayer.get(player);
+    if (npc) api.removeNpc(npc);
+    fightBeastByPlayer.delete(player);
+  }
+
+  /** Sammy runs into the arena and the ogre attacks: bring the player in and start the fight. */
+  function startOgreFight(player) {
+    if (quest.getStage(player) < STAGE_ENTERED_OGRE_FIGHT) {
+      quest.setStage(player, STAGE_ENTERED_OGRE_FIGHT);
+    }
+    teleport(player, ARENA_TILE);
+    spawnFightBeast(player, NpcIdentifiers.KHAZARD_OGRE, OGRE_TILE);
   }
 
   /** Item hand-outs and teleports hidden in transcript message/action steps. */
@@ -513,10 +557,13 @@ module.exports = function registerFightArenaQuest(api) {
       event.end = true;
       return;
     }
+    if (stepId === FOLLOW_INTO_ARENA_ID) {
+      teleport(player, ARENA_TILE);
+      event.handled = true;
+      return;
+    }
     if (stepId === OGRE_ATTACKS_ID) {
-      if (quest.getStage(player) < STAGE_ENTERED_OGRE_FIGHT) {
-        quest.setStage(player, STAGE_ENTERED_OGRE_FIGHT);
-      }
+      startOgreFight(player);
       event.handled = true;
       return;
     }
@@ -528,6 +575,9 @@ module.exports = function registerFightArenaQuest(api) {
     }
     if (stepId === ARENA_TELEPORT_ID) {
       teleport(player, ARENA_TILE);
+      if (quest.getStage(player) >= STAGE_SENT_JAIL && quest.getStage(player) < STAGE_DEFEATED_SCORPION) {
+        spawnFightBeast(player, NpcIdentifiers.KHAZARD_SCORPION, SCORPION_TILE);
+      }
       event.handled = true;
       return;
     }
@@ -630,7 +680,7 @@ module.exports = function registerFightArenaQuest(api) {
       if (stage === STAGE_GIVEN_KHALI_BREW) {
         player.sendMessage("You unlock Sammy's cell and Sammy steps out.");
         player.sendMessage("Sammy runs off towards the arena.");
-        quest.setStage(player, STAGE_ENTERED_OGRE_FIGHT);
+        startOgreFight(player);
         return;
       }
       if (stage < STAGE_DEFEATED_BOUNCER) {
@@ -656,16 +706,20 @@ module.exports = function registerFightArenaQuest(api) {
     const { npcId } = event;
     const stage = quest.getStage(player);
     if (KHAZARD_OGRE_IDS.has(npcId) && stage >= STAGE_ENTERED_OGRE_FIGHT && stage < STAGE_DEFEATED_OGRE) {
+      fightBeastByPlayer.delete(player);
       quest.setStage(player, STAGE_DEFEATED_OGRE);
       player.sendMessage("You have defeated the Khazard Ogre.");
       return;
     }
     if (KHAZARD_SCORPION_IDS.has(npcId) && stage >= STAGE_SENT_JAIL && stage < STAGE_DEFEATED_SCORPION) {
+      fightBeastByPlayer.delete(player);
       quest.setStage(player, STAGE_DEFEATED_SCORPION);
       player.sendMessage("You have defeated the Khazard Scorpion. General Khazard releases Bouncer!");
+      spawnFightBeast(player, NpcIdentifiers.BOUNCER, BOUNCER_TILE);
       return;
     }
     if (BOUNCER_IDS.has(npcId) && stage >= STAGE_DEFEATED_SCORPION && stage < STAGE_DEFEATED_BOUNCER) {
+      fightBeastByPlayer.delete(player);
       quest.setStage(player, STAGE_DEFEATED_BOUNCER);
       player.sendMessage("You have defeated Bouncer. General Khazard is furious!");
       return;
@@ -682,7 +736,10 @@ module.exports = function registerFightArenaQuest(api) {
   }
 
   function handleLogout({ player }) {
-    if (player) removeGeneralKhazard(player);
+    if (player) {
+      removeGeneralKhazard(player);
+      removeFightBeast(player);
+    }
   }
 
   quest = registerQuest(api, {

@@ -140,7 +140,7 @@ async function main() {
         scenery.push(...regionScenery);
         } catch { unreadable.push(region); }
     }
-    const directory = path.join(root, "data/definitions");
+    const directory = path.join(root, "plugins", "skills", "data");
     // Allotments and hops have a separate multiloc on each tile of ONE patch.
     const grouped: any[] = [];
     for (const patch of patches) {

@@ -1684,6 +1684,7 @@ export class OsrsClient {
             },
             onScriptFinished: (scriptId: number) => {
                 applyWildernessHudLayout(self.widgetManager, self.varManager, scriptId);
+                self.clientPlugins.onScriptFinished(scriptId);
             },
             clientRevision: 235,
             // Canvas dimensions as defined by the renderer's current UI layout space.
@@ -2366,6 +2367,7 @@ export class OsrsClient {
                 else this.hitsplatFlush.queueHitsplat(payload as any);
             },
             onHealthBar: (payload) => {
+                this.clientPlugins.onHealthBar({ type: "player", ...payload });
                 try {
                     if (this.renderer) {
                         (this.renderer as any).registerPlayerHealthBarUpdate?.(payload);
@@ -7651,6 +7653,7 @@ export class OsrsClient {
         if (Array.isArray(block.healthBars)) {
             for (const bar of block.healthBars) {
                 const entry = { serverId, bar };
+                this.clientPlugins.onHealthBar({ type: "npc", ...entry });
                 if (this.renderer) {
                     (this.renderer as any).registerNpcHealthBarUpdate?.(entry);
                 } else {

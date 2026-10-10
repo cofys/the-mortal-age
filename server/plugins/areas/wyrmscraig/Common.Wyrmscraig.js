@@ -1,6 +1,6 @@
 /**
  * Wyrmscraig: what the units share - the plugin api, the data from
- * data/definitions/wyrmscraig.json, tick timing and the captured fade between places.
+ * plugins/areas/data/wyrmscraig.json, tick timing and the captured fade between places.
  */
 const fs = require("fs");
 const path = require("path");
@@ -22,7 +22,7 @@ let data = null;
 function init(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
-  data = JSON.parse(fs.readFileSync(path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "wyrmscraig.json"), "utf8"));
+  data = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "wyrmscraig.json"), "utf8"));
 }
 
 /** Runs `action` `ticks` ticks from now. */

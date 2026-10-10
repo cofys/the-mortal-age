@@ -81,12 +81,18 @@ class PvpDefensiveActionNode {
     const arrived = retreat.destination && player.getLocation().equals(retreat.destination);
     if (retreat.teleportStarted) {
       // Discard combat links from the old location only after arriving.
-      if (arrived) combat.setUnderAttack(null);
+      if (arrived) {
+        combat.setUnderAttack(null);
+        // An escaped fight must not win a later death's kill credit/key.
+        combat.clearDamageMap();
+      }
       retreat.teleportStarted = false;
     }
     if ((atHome || arrived) && !combat.getAttacker()) {
       // Walking home while teleblocked must finish the same recovery as teleporting.
       if (combat.getTarget()) combat.reset();
+      combat.setUnderAttack(null);
+      combat.clearDamageMap();
       clearMovementRequest(player);
       if (!applyGeneratedPvpLoadout(player, state, { api: this.api })) return running;
       state.virtualFoodChargesRemaining = null;
@@ -110,6 +116,9 @@ class PvpDefensiveActionNode {
       }
       if (TeleportHandler.checkReqs(player, retreat.destination, RETREAT_TELEPORT_LEVEL)) {
         if (combat.getTarget()) combat.reset();
+        combat.setUnderAttack(null);
+        // Escaping wipes the old opponent's damage so a later death credits its real killer.
+        combat.clearDamageMap();
         clearMovementRequest(player);
         TeleportHandler.teleport(player, retreat.destination, TeleportType.NORMAL, false);
         retreat.teleportStarted = true;

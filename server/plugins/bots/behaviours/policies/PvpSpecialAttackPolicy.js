@@ -27,12 +27,41 @@ const POST_SPEC_SWITCHBACK_DELAY_MAX_MS = 1300;
 const ONE_TICK_ATTACK_WINDOW_TICKS = 2;
 const ONE_TICK_FAST_CHECK_COOLDOWN_MS = 450;
 const SWITCHBACK_RETRY_COOLDOWN_MS = 450;
+// A bot that pulls its KO weapon out keeps it only while a KO looks possible; after
+// this long without the fight ending it stows the weapon and goes back to the main
+// DPS weapon (issue #441).
+const SPEC_WEAPON_HOLD_MIN_MS = 15000;
+const SPEC_WEAPON_HOLD_MAX_MS = 20000;
 
 function markSpecUsed(pvp, nowMs) {
   pvp.lastSpecAt = nowMs;
   pvp.specSwitchbackAt =
     nowMs + randomInRange(POST_SPEC_SWITCHBACK_DELAY_MIN_MS, POST_SPEC_SWITCHBACK_DELAY_MAX_MS);
   pvp.nextSwitchbackCheckAt = pvp.specSwitchbackAt;
+}
+
+/**
+ * Tracks how long the bot has been holding a non-primary spec weapon and returns true
+ * once it should give up and stow it. Call every combat tick before switching back.
+ */
+function trackSpecWeaponHold(pvp, player, nowMs) {
+  const currentWeaponId = getWeaponId(player);
+  const primaryWeaponId = Number(pvp?.generatedPrimaryWeaponId ?? -1);
+  const holdingSpecWeapon =
+    currentWeaponId > 0 &&
+    currentWeaponId !== primaryWeaponId &&
+    SUPPORTED_SPEC_WEAPONS.includes(currentWeaponId);
+  if (!holdingSpecWeapon) {
+    pvp.heldSpecWeaponId = 0;
+    pvp.specWeaponStowAt = 0;
+    return false;
+  }
+  if (pvp.heldSpecWeaponId !== currentWeaponId) {
+    pvp.heldSpecWeaponId = currentWeaponId;
+    pvp.specWeaponStowAt = nowMs + randomInRange(SPEC_WEAPON_HOLD_MIN_MS, SPEC_WEAPON_HOLD_MAX_MS);
+    return false;
+  }
+  return nowMs >= Number(pvp.specWeaponStowAt ?? 0);
 }
 
 /** Multiplier the special's owner declares for burst-finisher prediction. */
@@ -260,9 +289,6 @@ function maybeSwitchBackToPrimaryWeapon(context) {
   if (!player || !pvp) {
     return false;
   }
-  if (nowMs < Number(pvp.nextSwitchbackCheckAt ?? 0)) {
-    return false;
-  }
   const currentWeaponId = getWeaponId(player);
   const primaryWeaponId = Number(pvp.generatedPrimaryWeaponId ?? -1);
   if (
@@ -271,17 +297,23 @@ function maybeSwitchBackToPrimaryWeapon(context) {
     currentWeaponId === primaryWeaponId ||
     !SUPPORTED_SPEC_WEAPONS.includes(currentWeaponId)
   ) {
+    pvp.heldSpecWeaponId = 0;
+    pvp.specWeaponStowAt = 0;
     pvp.nextSwitchbackCheckAt = 0;
     return false;
   }
-  if (player?.isSpecialActivated?.() === true) {
+  const stowDue = trackSpecWeaponHold(pvp, player, nowMs);
+  if (nowMs < Number(pvp.nextSwitchbackCheckAt ?? 0)) {
+    return false;
+  }
+  if (player?.isSpecialActivated?.() === true && !stowDue) {
     pvp.nextSwitchbackCheckAt = nowMs + SWITCHBACK_RETRY_COOLDOWN_MS;
     return false;
   }
   const earliestSwitchbackAt =
     Number(pvp.specSwitchbackAt ?? 0) ||
     Number(pvp.lastSpecAt ?? 0) + POST_SPEC_SWITCHBACK_DELAY_MIN_MS;
-  if (nowMs < earliestSwitchbackAt) {
+  if (!stowDue && nowMs < earliestSwitchbackAt) {
     pvp.nextSwitchbackCheckAt = earliestSwitchbackAt;
     return false;
   }
@@ -292,6 +324,10 @@ function maybeSwitchBackToPrimaryWeapon(context) {
   }
   const combatSnapshot = getPvpCombatSnapshot(player, state, nowMs);
   const switched = switchBackToPrimaryWeapon(player, state, combatSnapshot);
+  if (switched) {
+    pvp.heldSpecWeaponId = 0;
+    pvp.specWeaponStowAt = 0;
+  }
   pvp.nextSwitchbackCheckAt = switched ? 0 : nowMs + SWITCHBACK_RETRY_COOLDOWN_MS;
   return switched;
 }
@@ -431,6 +467,19 @@ function maybeUseSpecialAttack(context) {
     player.getPacketSender().sendSpecialAttackState(false);
   }
 
+  // A held KO weapon is stowed once the hold expires, even while spec review is cooling
+  // down or a pressure script owns the tick.
+  const stowDue = trackSpecWeaponHold(pvp, player, nowMs);
+  if (stowDue && player.getCombat().willAttackBeReadyIn(1) && !player.isSpecialActivated?.()) {
+    const stowSnapshot = getPvpCombatSnapshot(player, state, nowMs);
+    if (switchBackToPrimaryWeapon(player, state, stowSnapshot)) {
+      pvp.heldSpecWeaponId = 0;
+      pvp.specWeaponStowAt = 0;
+      scheduleSpecReview?.(state, nowMs);
+      return true;
+    }
+  }
+
   if (!player.getCombat().willAttackBeReadyIn(1)) return false;
   if (pvp.pressureAttackReviewed) return false;
   if (pvp.backstep && player.getCombat().getAttackDelay() > 1) return false;
@@ -502,6 +551,7 @@ module.exports = {
   canSpecTarget,
   isSpecFinisher,
   resolveInventorySpecWeapon,
+  trackSpecWeaponHold,
   maybeSwitchBackToPrimaryWeapon,
   maybeUseSpecialAttack,
 };

@@ -115,6 +115,32 @@ Fall back to raw ids only when the name is genuinely ambiguous or the behaviour 
 id-specific (a single transformed variant, for example). When you do, use a named constant
 from `IdEnums` / the generated identifier files, never a bare number.
 
+## Plugin data
+
+Data that only drives one plugin's own behaviour lives in a `data/` directory in the
+plugin's directory - at the level of its `.plugin.js`, shared by the plugins in that
+directory - and is read relative to the plugin file, never through the core definitions
+path:
+
+```
+plugins/world/data/spirit-trees.json
+plugins/skills/sailing/data/boats.json
+plugins/skills/data/slayer-tasks.json
+```
+
+```js
+const DATA = require("./data/spirit-trees.json");
+// or, for a file named at runtime:
+const file = path.join(__dirname, "data", name);
+JSON.parse(fs.readFileSync(file, "utf8"));
+```
+
+World data stays in `data/definitions/`: the world and item/shop/music/equipment definitions,
+and everything about NPCs - definitions, animations, drops, dialogues, spawns and
+`dormant-npcs.json` - plus the bot population config. Core loaders, tools and several plugins
+share it, so it is not any one plugin's file. Names there and in plugin `data/` are lowercase
+kebab-case.
+
 ## Cross-plugin events
 
 Plugins talk to each other only through the generic custom-event API. A bespoke
@@ -194,6 +220,9 @@ fast-forward:
 { "experienceMultiplier": 10, "disabledPlugins": ["VoiceChat"] }
 ```
 
+The bot population follows the same layering: `pluginConfig` `"PlayerBots:sites"` overrides
+bot-sites.json sites by id, property by property, and adds new ones (`plugins/bots/brain/BotSites.js`; docs/bot-combat-training.md).
+
 ## Conventions
 
 - Do not hardcode semantic ids when a named symbol exists (rights, opcodes, states,
@@ -203,6 +232,9 @@ fast-forward:
   `pvp:open-presets-on-death`, `blast-furnace`). Declare each key once in a `*_ATTRIBUTE`
   constant and read/write through it; item `getMetaValue`/`setMetaValue` keys follow the
   same rule.
+- world.json `pluginConfig` keys are `<plugin name>:<camelCaseOption>`, the plugin's `name`
+  as registered (`TutorialIsland:allowSkip`, `PlayerBots:sites`). Read them with
+  `api.getPluginConfig(key, defaultValue)`, and give the key one constant.
 - Derive from the cache where the cache knows the answer. A rule that reads definitions
   (`plugins/objects/Doors.plugin.js` builds its open/closed pairs this way) beats a
   hand-picked id list that only covers what someone happened to test.

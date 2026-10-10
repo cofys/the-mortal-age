@@ -1,5 +1,5 @@
 /**
- * Pickpocketing, driven by data/definitions/pickpocketing.json (OSRS Wiki: Thieving#Pickpocketing,
+ * Pickpocketing, driven by plugins/skills/data/pickpocketing.json (OSRS Wiki: Thieving#Pickpocketing,
  * each target's page, Coin pouch, Rogue equipment, Gloves of silence, Dodgy necklace, Thieving cape).
  *
  * The click sends the attempt message and starts the two-tick cooldown. On the next tick a success
@@ -62,7 +62,7 @@ const CLUE_ITEMS = {
   elite: [ItemIdentifiers.CLUE_SCROLL_ELITE_, ItemIdentifiers.SCROLL_BOX_ELITE_],
 };
 
-const DATA = JSON.parse(fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "pickpocketing.json"), "utf8"));
+const DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "pickpocketing.json"), "utf8"));
 const TARGETS = DATA.targets;
 /** NPC name -> the targets that list it; a target with `ids` only claims those NPC ids. */
 const TARGETS_BY_NAME = new Map();

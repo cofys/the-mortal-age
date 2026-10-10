@@ -6,7 +6,7 @@ Pickpocketing is built from the OSRS Wiki: the [Thieving](https://oldschool.rune
 
 | File | What it owns |
 | --- | --- |
-| `server/data/definitions/pickpocketing.json` | Every target: its NPCs, level, experience, success chart, stun damage, coin pouch, quest, pet rate and loot. |
+| `server/plugins/skills/data/pickpocketing.json` | Every target: its NPCs, level, experience, success chart, stun damage, coin pouch, quest, pet rate and loot. |
 | `server/plugins/skills/Thieving.plugin.js` | Stalls, and registering the two modules below. |
 | `server/plugins/skills/thieving/Pickpocket.Thieving.js` | The pickpocket itself: checks, timing, success, loot, failure and the equipment effects. |
 | `server/plugins/skills/thieving/CoinPouch.Thieving.js` | Opening coin pouches ("Open-all" and "Open"). |
