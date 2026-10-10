@@ -57,6 +57,8 @@ const FORM_FRIEND_P = 0.0009;   // per pair per tick, x compat
 const FORM_ROMANCE_P = 0.00006; // per pair per tick, x compat (rare)
 const FORM_FEUD_P = 0.00012;    // per pair per tick, x clash
 const SAME_ROLE_BONUS = 1.6;    // shared routines breed friendship
+const FORM_SAMPLE_K = 8;        // partners sampled per citizen per formation tick
+                                // (O(n) sampling, not O(n²) pair enumeration)
 
 const FRIEND_CLOSE_AGE_MS = 2 * 24 * 3600 * 1000;
 const FRIEND_CLOSE_P = 0.002;
@@ -526,7 +528,13 @@ function pruneDeadBonds(director) {
   return pruned;
 }
 
-/** Formation: sample every same-kingdom pair once per tick. */
+/** Formation: sample up to K same-kingdom candidates per citizen per tick.
+ * The old code enumerated every same-kingdom pair (O(n²)); at 500 citizens
+ * that's ~18k pair checks per slow tick. Bounded sampling keeps bond
+ * formation alive at O(n·K) — every citizen still meets people, just spread
+ * across ticks. Each unordered pair is considered at most once per tick:
+ * only the lexicographically-smaller username initiates. */
+const BOND_CANDIDATES_PER_CITIZEN = 8;
 function formBonds(director, rng, now) {
   const roster = director.roster;
   const byKingdom = new Map();
@@ -536,9 +544,13 @@ function formBonds(director, rng, now) {
     byKingdom.get(record.kingdomId).push(record);
   }
   for (const members of byKingdom.values()) {
-    for (let i = 0; i < members.length; i++) {
-      for (let j = i + 1; j < members.length; j++) {
-        maybeFormPair(director, members[i], members[j], rng, now);
+    const m = members.length;
+    if (m < 2) continue;
+    for (const ra of members) {
+      for (let s = 0; s < BOND_CANDIDATES_PER_CITIZEN; s++) {
+        const rb = members[Math.floor(rng() * m)];
+        if (rb === ra || rb.username < ra.username) continue;
+        maybeFormPair(director, ra, rb, rng, now);
       }
     }
   }
