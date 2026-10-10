@@ -16,6 +16,16 @@ const SITES = JSON.parse(
 );
 const KINGDOM_IDS = Object.keys(SITES).filter((key) => !key.startsWith("_"));
 
+// Frontier settlements: towns in unclaimed regions. Each settlement carries
+// its own site anchors plus the nearest great power's kingdomId for
+// kingdom-level mechanics. Citizens live at the settlement, not the capital.
+const SETTLEMENTS = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "..", "data", "settlements.json"), "utf8")
+);
+const SETTLEMENT_IDS = Object.keys(SETTLEMENTS).filter(
+  (key) => !key.startsWith("_")
+);
+
 function kingdomIdOf(player) {
   const id = player?.getAttribute?.(ATTR_KINGDOM_ID);
   return typeof id === "string" && SITES[id] ? id : KINGDOM_IDS[0];
@@ -44,6 +54,20 @@ function siteTileByKingdom(kingdomId, kind) {
   return siteTileFor(sites, kind);
 }
 
+/** Anchor tile for a frontier settlement (director-side, pre-spawn). */
+function siteTileBySettlement(settlementId, kind) {
+  const sites = SETTLEMENTS[settlementId];
+  if (!sites) return null;
+  return siteTileFor(sites, kind);
+}
+
+/** The great power a settlement affiliates with (nearest kingdom). */
+function kingdomIdOfSettlement(settlementId) {
+  const sites = SETTLEMENTS[settlementId];
+  const id = sites?.kingdomId;
+  return typeof id === "string" && SITES[id] ? id : KINGDOM_IDS[0];
+}
+
 function patrolCircuit(player) {
   const sites = sitesFor(player);
   const circuit = Array.isArray(sites?.patrol) ? sites.patrol : [];
@@ -69,10 +93,13 @@ function dockSite(player) {
 
 module.exports = {
   KINGDOM_IDS,
+  SETTLEMENT_IDS,
   kingdomIdOf,
+  kingdomIdOfSettlement,
   sitesFor,
   siteTile,
   siteTileByKingdom,
+  siteTileBySettlement,
   patrolCircuit,
   workSite,
   dockSite,

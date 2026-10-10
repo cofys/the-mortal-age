@@ -329,7 +329,7 @@ const CitizenSocialBonds = require("../lib/CitizenSocialBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
 const CitizenWeddings = require("../lib/CitizenWeddings");
 const { normalizeName } = require("../lib/CitizenBonds");
-const { siteTileByKingdom, KINGDOM_IDS } = require("../brain/CitizenSites");
+const { siteTileByKingdom, siteTileBySettlement, kingdomIdOfSettlement, KINGDOM_IDS, SETTLEMENT_IDS } = require("../brain/CitizenSites");
 const {
   ensureNeeds,
   needsSnapshot,
@@ -409,6 +409,30 @@ function defaultPlan() {
     };
   }
   return plan;
+}
+
+/**
+ * Frontier settlement populations. Citizens live at the settlement (not the
+ * capital) and affiliate with the nearest great power for kingdom mechanics.
+ * Roles skew commoner-heavy: frontier towns are working towns.
+ */
+function defaultSettlementPlan() {
+  const mix = (total) => ({
+    [ROLE_GUARD]: Math.max(2, Math.round(total * 0.08)),
+    [ROLE_MERCHANT]: Math.max(2, Math.round(total * 0.14)),
+    [ROLE_COMMONER]: Math.max(4, Math.round(total * 0.72)),
+    [ROLE_COURTIER]: Math.max(1, Math.round(total * 0.06)),
+  });
+  return {
+    brimhaven: mix(70),
+    sophanem: mix(70),
+    pollnivneach: mix(60),
+    rellekka: mix(60),
+    alkharid: mix(50),
+    shilo: mix(30),
+    nardah: mix(30),
+    lletya: mix(30),
+  };
 }
 
 function loadPlan() {
@@ -612,12 +636,32 @@ class CitizenDirector {
         }
       }
     }
+    // Frontier settlements: citizens anchored to the settlement's own sites,
+    // affiliated with the nearest great power.
+    const settlementPlan = defaultSettlementPlan();
+    for (const [settlementId, roles] of Object.entries(settlementPlan)) {
+      if (!SETTLEMENT_IDS.includes(settlementId)) {
+        this.log("unknown settlement in settlement plan, skipped", {
+          settlementId,
+        });
+        continue;
+      }
+      const kingdomId = kingdomIdOfSettlement(settlementId);
+      for (const [role, count] of Object.entries(roles ?? {})) {
+        const wanted = Math.max(0, Math.floor(Number(count) || 0));
+        for (let index = 0; index < wanted; index += 1) {
+          this.addCitizen(kingdomId, role, settlementId);
+        }
+      }
+    }
     this.log("roster built", { citizens: this.roster.size });
     this.startTask();
   }
 
-  addCitizen(kingdomId, role) {
-    const rng = agentRng(`director:${kingdomId}:${role}:${this.roster.size}`);
+  addCitizen(kingdomId, role, settlementId = null) {
+    const rng = agentRng(
+      `director:${kingdomId}:${role}:${settlementId ?? "capital"}:${this.roster.size}`
+    );
     // Usernames are the personality names (deduplicated); bots are people.
     const personality = generatePersonality(`seed-${this.roster.size}`, {
       role,
@@ -625,25 +669,29 @@ class CitizenDirector {
       usedNames: this.usedNames,
     });
     const username = personality.name;
-    // Citizens live near the market or square of their kingdom's capital.
-    // Commoners split between market and square so cities feel populated
-    // in multiple areas, not just clustered at one spot.
+    // Citizens live near the market or square of their kingdom's capital —
+    // or of their frontier settlement, when they have one. Commoners split
+    // between market and square so towns feel populated in multiple areas,
+    // not just clustered at one spot.
     const useSquare = role === "commoner" && rng() < 0.4;
     let anchorKind = useSquare ? "square" : "market";
     // Keldagrim has two populated anchors (city center + entrance plaza);
     // split square-spawners across both so new players see life at spawn.
     if (
       useSquare &&
+      !settlementId &&
       kingdomId === "keldagrim" &&
       siteTileByKingdom(kingdomId, "square2") &&
       rng() < 0.5
     ) {
       anchorKind = "square2";
     }
-    const anchor = siteTileByKingdom(kingdomId, anchorKind)
-      ?? { x: 3200, y: 3200, z: 0 };
-    const home = this.findWalkableHome(anchor, rng);
-    home.z = anchor.z ?? 0;
+    const anchor = settlementId
+      ? siteTileBySettlement(settlementId, anchorKind)
+      : siteTileByKingdom(kingdomId, anchorKind);
+    const resolvedAnchor = anchor ?? { x: 3200, y: 3200, z: 0 };
+    const home = this.findWalkableHome(resolvedAnchor, rng);
+    home.z = resolvedAnchor.z ?? 0;
     const watch = role === ROLE_GUARD ? Math.floor(rng() * 3) : 0;
     // Guards sleep inside their off-watch hours so the night watch is actually
     // manned; everyone else keeps a seeded night window.
@@ -666,6 +714,7 @@ class CitizenDirector {
       username,
       personality,
       kingdomId,
+      settlementId,
       role,
       merchantKind,
       home,
