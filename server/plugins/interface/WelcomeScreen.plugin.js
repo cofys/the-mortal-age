@@ -73,6 +73,8 @@ module.exports = {
       return false;
     });
 
+    // Web overlay data layer for the new-player guide (see OnboardingApi.js).
+    require("./OnboardingApi").attach(api);
     api.onPlayerDisconnect(clear);
     api.onPlayerLogout(clear);
     api.log("registered");
