@@ -26,6 +26,7 @@ require.cache[sayPath] = {
 
 const Clans = require("./CitizenClans");
 const Bonds = require("./CitizenBonds");
+const SocialBonds = require("./CitizenSocialBonds");
 const { getJournal } = require("./CitizenJournal");
 const Life = require("./CitizenClanLife");
 
@@ -83,12 +84,48 @@ function befriend(a, b) {
   Bonds.addFriend(b, a);
 }
 
+// Player-facing messages (notifyPlayer) captured here.
+const sentToPlayer = [];
+
+// Director variant where named real players are online: World.getPlayerByName
+// resolves them, everyone else is offline.
+function onlineDirector(records, playerNames, botNames) {
+  const d = fakeDirector(records, botNames ?? []);
+  const online = new Map((playerNames ?? []).map((n) => [String(n).toLowerCase(), n]));
+  d.api = {
+    core: {
+      World: {
+        getPlayerByName: (name) => {
+          const key = String(name ?? "").toLowerCase();
+          if (!online.has(key)) return null;
+          return {
+            getUsername: () => online.get(key),
+            sendMessage: (t) => {
+              sentToPlayer.push({ to: online.get(key), text: String(t) });
+            },
+          };
+        },
+      },
+    },
+  };
+  return d;
+}
+
+// Five favors = +40 bond score (favor weight 8), reaching FRIEND_AT.
+function bondToFriend(owner, target, storyPrefix) {
+  for (let i = 0; i < 5; i++) {
+    SocialBonds.recordFavor(owner, target, `${storyPrefix} ${i}.`);
+  }
+}
+
 let passed = 0;
 function check(name, fn) {
   Clans.resetForTests();
+  SocialBonds.resetForTests();
   getJournal().resetForTests();
   said.length = 0;
   navCalls.length = 0;
+  sentToPlayer.length = 0;
   fn();
   passed++;
   console.log("ok - " + name);
@@ -258,6 +295,229 @@ check("tickClans runs end-to-end without throwing", () => {
   befriend("TickFounder", "TickF2");
   befriend("TickFounder", "TickF3");
   assert.doesNotThrow(() => Life.tickClans(d, Date.now()));
+});
+
+// --- player invites: inviter selection ------------------------------------------------
+
+check("maybeInvitePlayer prefers the founder as inviter", () => {
+  const founder = rec("PiFounder", "commoner", "varrock", null, ["taciturn"]);
+  const m1 = rec("PiM1", "commoner", "varrock", null, ["chatty"]);
+  const d = onlineDirector([founder, m1], ["PiPlayer"]);
+  const clan = Clans.createClan("PiFounder", "PiFounder", "varrock", Clans.KIND_SOCIAL);
+  Clans.addMember(clan.id, "PiM1", "PiM1");
+  befriend("PiFounder", "PiPlayer");
+  bondToFriend("PiFounder", "PiPlayer", "Helped me with chore");
+  assert.equal(Life.maybeInvitePlayer(d, clan, always, Date.now()), true);
+  const inv = Bonds.getInvites("PiPlayer")[0];
+  assert.ok(inv, "invite sent");
+  assert.equal(inv.from, "pifounder", "the founder extended the invite");
+});
+
+check("maybeInvitePlayer prefers social-trait members over a random pick", () => {
+  const chatty = rec("PtChatty", "commoner", "varrock", null, ["chatty"]);
+  const gruff = rec("PtGruff", "commoner", "varrock", null, ["gruff"]);
+  const d = onlineDirector([chatty, gruff], ["PtPlayer"]);
+  // Ghost founder: not on the roster, so trait preference decides.
+  const clan = Clans.createClan("PtGhost", "PtGhost", "varrock", Clans.KIND_SOCIAL);
+  Clans.addMember(clan.id, "PtGruff", "PtGruff");
+  Clans.addMember(clan.id, "PtChatty", "PtChatty");
+  for (const m of ["PtChatty", "PtGruff"]) {
+    befriend(m, "PtPlayer");
+    bondToFriend(m, "PtPlayer", `Favor from ${m}`);
+  }
+  assert.equal(Life.maybeInvitePlayer(d, clan, always, Date.now()), true);
+  const inv = Bonds.getInvites("PtPlayer")[0];
+  // always-rng would pick PtGruff (first entry); the trait pick is PtChatty.
+  assert.equal(inv.from, "ptchatty", "chatty member invited, not the random pick");
+});
+
+check("maybeInvitePlayer falls back to a random member when no traits qualify", () => {
+  const m1 = rec("PrA", "commoner", "varrock", null, ["taciturn"]);
+  const m2 = rec("PrB", "commoner", "varrock", null, ["gruff"]);
+  const d = onlineDirector([m1, m2], ["PrPlayer"]);
+  const clan = Clans.createClan("PrGhost", "PrGhost", "varrock", Clans.KIND_SOCIAL);
+  Clans.addMember(clan.id, "PrA", "PrA");
+  Clans.addMember(clan.id, "PrB", "PrB");
+  befriend("PrA", "PrPlayer");
+  bondToFriend("PrA", "PrPlayer", "Quiet favor");
+  assert.equal(Life.maybeInvitePlayer(d, clan, always, Date.now()), true);
+  const inv = Bonds.getInvites("PrPlayer")[0];
+  assert.equal(inv.from, "pra", "falls back to a member (always-rng picks the first)");
+});
+
+// --- player invites: bond threshold gate ----------------------------------------------
+
+check("maybeInvitePlayer requires a sustained bond (score >= FRIEND_AT)", () => {
+  const founder = rec("PbFounder", "commoner", "varrock", null, ["outgoing"]);
+  const d = onlineDirector([founder], ["PbPlayer"]);
+  const clan = Clans.createClan("PbFounder", "PbFounder", "varrock", Clans.KIND_SOCIAL);
+  befriend("PbFounder", "PbPlayer"); // friends list only — no bond score yet
+  assert.equal(SocialBonds.scoreOf("PbFounder", "PbPlayer"), 0);
+  assert.equal(
+    Life.maybeInvitePlayer(d, clan, always, Date.now()),
+    false,
+    "no invite below FRIEND_AT"
+  );
+  assert.equal(Bonds.getInvites("PbPlayer").length, 0, "nothing sent");
+  bondToFriend("PbFounder", "PbPlayer", "Bond favor");
+  assert.ok(SocialBonds.scoreOf("PbFounder", "PbPlayer") >= SocialBonds.FRIEND_AT);
+  assert.equal(
+    Life.maybeInvitePlayer(d, clan, always, Date.now()),
+    true,
+    "invite at FRIEND_AT"
+  );
+  const inv = Bonds.getInvites("PbPlayer")[0];
+  assert.ok(inv, "invite sent");
+  assert.equal(inv.kind, Bonds.INVITE_CLAN, "rides the INVITE_CLAN transport");
+  assert.equal(String(inv.data?.clanId), String(clan.id), "carries the clan id");
+  // The player nudge keeps the real accept path text.
+  assert.ok(
+    sentToPlayer.some((e) => e.text.includes('Reply "yes" to accept')),
+    "nudge tells the player how to accept"
+  );
+});
+
+// --- player invites: online-only ------------------------------------------------------
+
+check("maybeInvitePlayer skips offline players", () => {
+  const founder = rec("PoFounder", "commoner", "varrock", null, ["outgoing"]);
+  const d = onlineDirector([founder], []); // nobody online
+  const clan = Clans.createClan("PoFounder", "PoFounder", "varrock", Clans.KIND_SOCIAL);
+  befriend("PoFounder", "PoPlayer");
+  bondToFriend("PoFounder", "PoPlayer", "Offline favor");
+  assert.equal(
+    Life.maybeInvitePlayer(d, clan, always, Date.now()),
+    false,
+    "offline player not invited"
+  );
+  assert.equal(Bonds.getInvites("PoPlayer").length, 0, "no invite sent");
+  assert.equal(Clans.inviteCooldownOf("PoPlayer").lastInviteAt, 0, "no cooldown stamped");
+});
+
+// --- player invites: cooldown / decline / ignore --------------------------------------
+
+check("maybeInvitePlayer throttles re-invites and honors declines", () => {
+  const founder = rec("PcFounder", "commoner", "varrock", null, ["outgoing"]);
+  const d = onlineDirector([founder], ["PcPlayer"]);
+  const clan = Clans.createClan("PcFounder", "PcFounder", "varrock", Clans.KIND_SOCIAL);
+  befriend("PcFounder", "PcPlayer");
+  bondToFriend("PcFounder", "PcPlayer", "Cooldown favor");
+  const t0 = Date.now();
+  assert.equal(Life.maybeInvitePlayer(d, clan, always, t0), true, "first invite goes out");
+  // Still pending: no nag, and pending is not misread as declined.
+  assert.equal(
+    Life.maybeInvitePlayer(d, clan, always, t0 + 60 * 1000),
+    false,
+    "no nag while pending"
+  );
+  assert.equal(
+    Clans.inviteCooldownOf("PcPlayer").noAskUntil,
+    0,
+    "pending invite does not start a no-ask window"
+  );
+  // Decline it.
+  const inv = Bonds.getInvites("PcPlayer")[0];
+  Bonds.resolveInvite("PcPlayer", inv.id, false);
+  assert.equal(
+    Life.maybeInvitePlayer(d, clan, always, t0 + 2 * 3600 * 1000),
+    false,
+    "no re-ask right after a decline"
+  );
+  const cd = Clans.inviteCooldownOf("PcPlayer");
+  assert.ok(cd.noAskUntil > t0 + 2 * 3600 * 1000, "7-day no-re-ask registered");
+  // Once the window passes, the player is eligible again.
+  assert.equal(
+    Life.maybeInvitePlayer(d, clan, always, cd.noAskUntil + 1000),
+    true,
+    "eligible once the no-ask window expires"
+  );
+});
+
+check("maybeInvitePlayer treats an expired invite as ignored", () => {
+  const founder = rec("PgFounder", "commoner", "varrock", null, ["outgoing"]);
+  const d = onlineDirector([founder], ["PgPlayer"]);
+  const clan = Clans.createClan("PgFounder", "PgFounder", "varrock", Clans.KIND_SOCIAL);
+  befriend("PgFounder", "PgPlayer");
+  bondToFriend("PgFounder", "PgPlayer", "Ignore favor");
+  const t0 = Date.now();
+  assert.equal(Life.maybeInvitePlayer(d, clan, always, t0), true);
+  // Simulate the 10-minute TTL expiring with no answer.
+  Bonds.bonds("PgPlayer").pendingInvites.length = 0;
+  assert.equal(
+    Life.maybeInvitePlayer(d, clan, always, t0 + 3600 * 1000),
+    false,
+    "ignored invite -> no re-ask"
+  );
+  assert.ok(
+    Clans.inviteCooldownOf("PgPlayer").noAskUntil > t0,
+    "no-ask window registered for the ignored invite"
+  );
+});
+
+// --- player invites: history-flavored lines -------------------------------------------
+
+check("maybeInvitePlayer quotes real favor history in the invite line", () => {
+  const founder = rec("PfFounder", "commoner", "varrock", null, ["outgoing"]);
+  const d = onlineDirector([founder], ["PfPlayer"], ["PfFounder"]);
+  const clan = Clans.createClan("PfFounder", "PfFounder", "varrock", Clans.KIND_SOCIAL);
+  befriend("PfFounder", "PfPlayer");
+  for (let i = 0; i < 4; i++) SocialBonds.recordFavor("PfFounder", "PfPlayer", "Gave me a bronze dagger.");
+  SocialBonds.recordFavor("PfFounder", "PfPlayer", "Gave me an iron sword.");
+  // Unit level: the flavor builder quotes the freshest REAL story.
+  const flavor = Life.playerInviteFlavor("PfFounder", "PfPlayer", "Varrock Fellows");
+  assert.ok(flavor, "flavor built from history");
+  assert.ok(
+    flavor.plain[0].includes("gave me an iron sword"),
+    "freshest favor story quoted, got: " + flavor.plain[0]
+  );
+  assert.ok(
+    [...flavor.plain, ...flavor.terse].every((l) => l.length <= 80),
+    "flavor lines fit the 80-char chat truncation"
+  );
+  assert.equal(
+    Life.playerInviteFlavor("PfFounder", "NobodyAtAll", "Varrock Fellows"),
+    null,
+    "no history -> null (caller uses the generic pool)"
+  );
+  // Integration level: the spoken line carries the real history.
+  assert.equal(Life.maybeInvitePlayer(d, clan, always, Date.now()), true);
+  assert.ok(said.length > 0, "inviter spoke");
+  assert.ok(
+    said.some((s) => s.includes("gave me an iron sword")),
+    "spoken line quotes the real favor, got: " + JSON.stringify(said)
+  );
+  assert.ok(said.every((s) => s.length <= 80), "spoken lines fit chat truncation");
+});
+
+check("maybeInvitePlayer falls back to generic lines with no shared history", () => {
+  const founder = rec("PzFounder", "commoner", "varrock", null, ["outgoing"]);
+  const d = onlineDirector([founder], ["PzPlayer"], ["PzFounder"]);
+  const clan = Clans.createClan("PzFounder", "PzFounder", "varrock", Clans.KIND_SOCIAL);
+  befriend("PzFounder", "PzPlayer");
+  // Bond via interactions only — no favor stories on record.
+  for (let i = 0; i < 4; i++) SocialBonds.recordInteraction("PzFounder", "PzPlayer", "befriended");
+  assert.ok(SocialBonds.scoreOf("PzFounder", "PzPlayer") >= SocialBonds.FRIEND_AT);
+  assert.equal(SocialBonds.favors("PzFounder", "PzPlayer").length, 0, "no favor history");
+  assert.equal(Life.maybeInvitePlayer(d, clan, always, Date.now()), true);
+  assert.ok(said.length > 0, "inviter spoke");
+  assert.ok(said.every((s) => s.length <= 80), "lines fit chat truncation");
+  assert.ok(!said.some((s) => /remember/i.test(s)), "no history quoted");
+  assert.ok(said.some((s) => s.includes(clan.name)), "clan named in the generic line");
+});
+
+// --- accept path unchanged ------------------------------------------------------------
+
+check("clan invite accept path still joins the player", () => {
+  const clan = Clans.createClan("PaFounder", "PaFounder", "varrock", Clans.KIND_SOCIAL);
+  const id = Clans.invitePlayer("PaFounder", "PaPlayer", clan.id);
+  assert.ok(id, "invite created");
+  const inv = Bonds.getInvites("PaPlayer")[0];
+  assert.equal(inv.kind, Bonds.INVITE_CLAN, "still rides INVITE_CLAN");
+  assert.equal(String(inv.data?.clanId), String(clan.id), "still carries the clan id");
+  // Tail of the real path: player says "yes" -> CitizenChat acceptInvite ->
+  // SocialMechanics.acceptInvite -> CitizenClans.playerAcceptsClan.
+  assert.equal(Clans.playerAcceptsClan("PaPlayer", clan.id, "PaPlayer"), true);
+  assert.ok(Clans.clanOfPlayer("PaPlayer"), "player joined the clan");
 });
 
 console.log(`\n${passed} checks passed`);

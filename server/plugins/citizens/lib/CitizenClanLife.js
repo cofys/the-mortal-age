@@ -11,7 +11,9 @@
  *   1. Formation — an eligible founder (leadership traits, 3+ citizen
  *      friends, clanless) may found a clan and invite mutual friends.
  *   2. Growth — members invite their friends; friends accept.
- *   3. Player invites — leaders invite trusted player friends; players
+ *   3. Player invites — the founder (or a social/leadership-trait member)
+ *      invites player friends they have a real sustained bond with
+ *      (score >= FRIEND_AT), online only, throttled per player; players
  *      accept with "yes" (handled in CitizenChat -> acceptInvite).
  *   4. Join requests — founders accept requests from player friends.
  *   5. Warmth — nearby clanmates greet each other like real clanmates.
@@ -40,6 +42,7 @@ const {
 } = require("./CitizenBonds");
 const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
+const SocialBonds = require("./CitizenSocialBonds");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { voiceFor, voiceLine } = require("./citizenVoice");
 const { sayPublic } = require("../chat/CitizenSayPublic");
@@ -56,6 +59,17 @@ const OUTING_MINUTES = 30;
 const NUDGE_MS = 30 * 1000;
 const MOOT_MS = 7 * 24 * 3600 * 1000;
 const ARRIVE_TILES = 3;
+
+// Player-invite tuning.
+const PLAYER_INVITE_COOLDOWN_MS = 24 * 3600 * 1000; // min between invites to the same player
+const PLAYER_INVITE_NOASK_MS = 7 * 24 * 3600 * 1000; // no re-ask after a declined/ignored invite
+const PLAYER_INVITE_MIN_STORY = 12; // shortest favor story worth quoting
+
+// Inviter preference. Social traits verified against personalities.js TRAITS;
+// leadership traits mirror CitizenClans' LEADER_TRAITS (the founder-gate
+// concept) and the CitizenSocialMechanics brave/outgoing/ambitious precedent.
+const INVITER_SOCIAL_TRAITS = Object.freeze(["chatty", "cheerful", "easygoing"]);
+const INVITER_LEADER_TRAITS = Object.freeze(["outgoing", "ambitious", "charismatic", "leader"]);
 
 function journalEvent(citizenName, text, kind) {
   try {
@@ -285,6 +299,12 @@ function maybeGrowClan(director, clan, rng) {
 }
 
 // --- 3. player invites ------------------------------------------------------------
+// The inviter is the clan's face: prefer the founder, then members with
+// social/leadership traits, then any member. The invited player must be a
+// real friend of the inviter with a sustained bond (score >= FRIEND_AT),
+// online right now, and outside the per-player cooldown / no-re-ask window.
+// Invite lines quote real shared history (the freshest favor story) when
+// there is any; the generic pool is the fallback when there isn't.
 
 const PLAYER_INVITE_LINES = Object.freeze({
   plain: Object.freeze([
@@ -294,28 +314,137 @@ const PLAYER_INVITE_LINES = Object.freeze({
   terse: Object.freeze(["{name}. you'd fit. join?"]),
 });
 
-function maybeInvitePlayer(director, clan, rng) {
+/** Pick who extends the clan's player invite. Returns { name, record }. */
+function pickPlayerInviter(director, clan, rng) {
+  const entries = [];
+  for (const m of clan.members ?? []) {
+    const r = recordFor(director, m);
+    if (r) entries.push({ name: m, record: r });
+  }
+  if (entries.length === 0) return null;
+  // 1. The founder is the clan's face.
+  const founder = entries.find(
+    (e) => normalizeName(e.name) === normalizeName(clan.founder)
+  );
+  if (founder) return founder;
+  // 2. Members with social or leadership traits.
+  const traitHolders = entries.filter(({ record }) => {
+    const traits = record.personality?.traits ?? [];
+    return traits.some(
+      (t) => INVITER_SOCIAL_TRAITS.includes(t) || INVITER_LEADER_TRAITS.includes(t)
+    );
+  });
+  if (traitHolders.length > 0) return pickOne(rng, traitHolders);
+  // 3. Last resort: any member.
+  return pickOne(rng, entries);
+}
+
+/**
+ * Cooldown gate for a candidate player. Returns { ok, reason }.
+ * Side effect: a previous invite that lapsed or was declined without a join
+ * is registered as a no-re-ask window (7 days). An invite that is still
+ * pending is never misread as declined.
+ */
+function playerInviteGate(clan, playerName, nowMs) {
+  try {
+    for (const i of getInvites(playerName) ?? []) {
+      if (i.kind === INVITE_CLAN) return { ok: false, reason: "pending" };
+    }
+  } catch {
+    // Treat as no active invites.
+  }
+  let cd = null;
+  try {
+    cd = Clans.inviteCooldownOf(playerName);
+  } catch {
+    cd = null;
+  }
+  if ((cd?.noAskUntil ?? 0) > nowMs) return { ok: false, reason: "noask" };
+  const lastInviteAt = cd?.lastInviteAt ?? 0;
+  if (lastInviteAt > 0 && nowMs - lastInviteAt < PLAYER_INVITE_COOLDOWN_MS) {
+    // An invite went out recently but is no longer pending and the player
+    // never joined: declined or ignored. Register the no-re-ask window.
+    try {
+      Clans.stampInviteNoAsk(playerName, nowMs + PLAYER_INVITE_NOASK_MS);
+    } catch {
+      // Non-fatal.
+    }
+    return { ok: false, reason: "declined" };
+  }
+  return { ok: true };
+}
+
+/**
+ * History-flavored invite line from REAL shared history: the freshest favor
+ * story on the inviter->player bond, quoted verbatim. Stories are recorded
+ * from the citizen's view ("Gave me an iron sword."), so they read true in
+ * the citizen's mouth. Returns { plain: [...], terse: [...] } or null when
+ * there is no history to draw on (caller falls back to the generic pool).
+ * Every line is budgeted to fit the 80-char chat truncation.
+ */
+function playerInviteFlavor(inviterName, playerName, clanName) {
+  let story = "";
+  try {
+    const fl = SocialBonds.favors(inviterName, playerName) ?? [];
+    story = String(fl[fl.length - 1]?.text ?? "").trim();
+  } catch {
+    story = "";
+  }
+  if (!story) return null;
+  story = story.charAt(0).toLowerCase() + story.slice(1);
+  const plainPrefix = `remember "`;
+  const plainSuffix = `" — '${clanName}' would have you. join us?`;
+  const tersePrefix = `"`;
+  const terseSuffix = `" — '${clanName}'. join?`;
+  const plainBudget = 80 - (plainPrefix.length + plainSuffix.length);
+  const terseBudget = 80 - (tersePrefix.length + terseSuffix.length);
+  if (plainBudget < PLAYER_INVITE_MIN_STORY || terseBudget < PLAYER_INVITE_MIN_STORY) return null;
+  return {
+    plain: [plainPrefix + story.slice(0, plainBudget) + plainSuffix],
+    terse: [tersePrefix + story.slice(0, terseBudget) + terseSuffix],
+  };
+}
+
+function maybeInvitePlayer(director, clan, rng, nowMs = Date.now()) {
   if (!chance(rng, PLAYER_INVITE_CHANCE)) return false;
   if ((clan.playerMembers?.length ?? 0) >= Clans.MAX_PLAYER_MEMBERS) return false;
-  const members = clan.members ?? [];
-  if (members.length === 0) return false;
-  const inviter = pickOne(rng, members);
-  const inviterRecord = recordFor(director, inviter);
-  if (!inviterRecord) return false;
+  const picked = pickPlayerInviter(director, clan, rng);
+  if (!picked) return false;
+  const inviter = picked.name;
+  const inviterRecord = picked.record;
 
-  // Player friends of the inviter: friends not on the citizen roster.
-  let playerFriends = [];
+  // Player friends of the inviter: friends not on the citizen roster,
+  // clanless, with a real sustained bond, online right now, and outside
+  // the per-player cooldown / no-re-ask window.
+  let candidates = [];
   try {
-    playerFriends = (bonds(inviter).friends ?? []).filter(
-      (f) => !isRosterCitizen(director, f) && !Clans.clanOfPlayer(f)
-    );
+    for (const f of bonds(inviter).friends ?? []) {
+      if (isRosterCitizen(director, f)) continue;
+      if (!isFriend(inviter, f)) continue;
+      if (Clans.clanOfPlayer(f)) continue;
+      let score = 0;
+      try {
+        score = SocialBonds.scoreOf(inviter, f);
+      } catch {
+        continue;
+      }
+      if (score < SocialBonds.FRIEND_AT) continue;
+      if (!findPlayerByName(director, f)) continue; // online only
+      if (!playerInviteGate(clan, f, nowMs).ok) continue;
+      candidates.push(f);
+    }
   } catch {
     return false;
   }
-  if (playerFriends.length === 0) return false;
-  const playerName = pickOne(rng, playerFriends);
+  if (candidates.length === 0) return false;
+  const playerName = pickOne(rng, candidates);
   const id = Clans.invitePlayer(inviter, playerName, clan.id);
   if (!id) return false;
+  try {
+    Clans.stampInviteSent(playerName, nowMs);
+  } catch {
+    // Non-fatal.
+  }
   journalEvent(inviter, `Invited ${playerName} to join the clan '${clan.name}'.`, "social");
   notifyPlayer(
     director,
@@ -326,7 +455,7 @@ function maybeInvitePlayer(director, clan, rng) {
   speak(
     inviterRecord,
     bot,
-    {
+    playerInviteFlavor(inviter, playerName, clan.name) ?? {
       plain: PLAYER_INVITE_LINES.plain.map((l) => l.replace("{name}", clan.name)),
       terse: PLAYER_INVITE_LINES.terse.map((l) => l.replace("{name}", clan.name)),
     },
@@ -746,7 +875,7 @@ function tickClans(director, nowMs = Date.now()) {
       // Non-fatal.
     }
     try {
-      maybeInvitePlayer(director, clan, rng);
+      maybeInvitePlayer(director, clan, rng, nowMs);
     } catch {
       // Non-fatal.
     }
@@ -784,6 +913,9 @@ module.exports = {
   maybeFoundClan,
   maybeGrowClan,
   maybeInvitePlayer,
+  pickPlayerInviter,
+  playerInviteGate,
+  playerInviteFlavor,
   maybeStartOuting,
   maintainOuting,
   tickCelebrations,
