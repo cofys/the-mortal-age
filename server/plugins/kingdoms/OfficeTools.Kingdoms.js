@@ -973,6 +973,14 @@ function deliverSupplies(player, kingdomId, itemId, qty) {
   inventory.adds(COINS_ID, payout);
   const stockpile = Math.floor(flagOf(kingdomId, STOCKPILE_FLAG) ?? 0);
   Store.setFlag(kingdomId, STOCKPILE_FLAG, stockpile + units);
+  // Service earns standing: the quartermaster notes every name. Same curve
+  // as war-demand deliveries — a first chunk of influence for day-one Subjects.
+  const influence = influenceForDelivery(units);
+  try {
+    Influence.addInfluence(player, kingdomId, influence);
+  } catch {
+    // Influence is a courtesy; the coins already moved.
+  }
   const remaining = order.units - units;
   if (remaining <= 0) {
     clearSupplyOrder(kingdomId);
@@ -982,7 +990,8 @@ function deliverSupplies(player, kingdomId, itemId, qty) {
       ok: true,
       message:
         `You deliver ${count} ${spec.name.toLowerCase()} (${formatCoins(units)} units) for ${formatCoins(payout)}c. ` +
-        "The quartermaster's order is FILLED - the stores are fat.",
+        "The quartermaster's order is FILLED - the stores are fat. " +
+        `Your supplies reach the ${kingdomName(kingdomId)} war effort. The quartermaster notes your name (+${influence} standing).`,
     };
   }
   Store.setFlag(kingdomId, SUPPLY_ORDER_FLAG, { ...order, units: remaining });
@@ -992,7 +1001,8 @@ function deliverSupplies(player, kingdomId, itemId, qty) {
     ok: true,
     message:
       `You deliver ${count} ${spec.name.toLowerCase()} (${formatCoins(units)} units) for ${formatCoins(payout)}c. ` +
-      `${formatCoins(remaining)} units still wanted.`,
+      `${formatCoins(remaining)} units still wanted. ` +
+      `Your supplies reach the ${kingdomName(kingdomId)} war effort. The quartermaster notes your name (+${influence} standing).`,
   };
 }
 
@@ -1054,7 +1064,8 @@ function deliverToWarDemand(player, kingdomId, itemId, spec, qty, route) {
     message:
       `You deliver ${count} ${spec.name.toLowerCase()} to the war against ${route.foeName} ` +
       `(${catLabel}, ${formatCoins(credited)} units) for ${formatCoins(payout)}c and ${influence} influence.` +
-      moraleNote,
+      moraleNote +
+      ` Your supplies reach the ${kingdomName(kingdomId)} war effort. The quartermaster notes your name.`,
   };
 }
 

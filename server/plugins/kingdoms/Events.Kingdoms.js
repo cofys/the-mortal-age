@@ -237,6 +237,14 @@ function onDonationMade(event) {
   }
 }
 
+/** War-effort supply delivery: the quartermaster's influence may have crossed
+ * a rank threshold — let the court weigh the service. */
+function onSupplyDelivered(event) {
+  if (event?.player?.setAttribute && event?.kingdomId) {
+    settleEarnedPromotion(event.player, event.kingdomId);
+  }
+}
+
 /** A kingdom task completed: influence for the service, and the court's due. */
 function onTaskCompleted(event) {
   Influence.onTaskCompleted(event);
@@ -275,6 +283,7 @@ module.exports = function attachEvents(api) {
   api.onCustomEvent("kingdom:office-vacated", onOfficeVacated);
   api.onCustomEvent("kingdom:donation-made", onDonationMade);
   api.onCustomEvent("kingdom:task-completed", onTaskCompleted);
+  api.onCustomEvent("kingdom:supply-delivered", onSupplyDelivered);
 };
 
 module.exports.onOfficeAssigned = onOfficeAssigned;

@@ -16,6 +16,7 @@
  */
 
 const { MYKINGDOM_OPEN_ATTRIBUTE } = require("./MyKingdomApi");
+const Membership = require("./Membership.Kingdoms");
 
 let pluginApi = null;
 
@@ -70,16 +71,31 @@ function attachMyKingdom(api) {
 
   // Welcome moment: origins grants kingdom:id; open the panel once so the
   // choice lands with real information about the realm they just joined.
-  api.onCustomEvent("kingdom:rank-granted", ({ player } = {}) => {
+  // Promotions re-open it: when the court names a higher rank, the player
+  // sees the rise with their new standing (membershipLines).
+  api.onCustomEvent("kingdom:rank-granted", ({ player, kingdomId, rank } = {}) => {
     if (!player) return;
     try {
       const already = String(player.getAttribute("mykingdom:welcomed") || "").trim();
-      if (already) return;
-      player.setAttribute("mykingdom:welcomed", "1");
+      if (!already) {
+        player.setAttribute("mykingdom:welcomed", "1");
+        openPanel(player);
+        return;
+      }
     } catch {
       return;
     }
-    openPanel(player);
+    // Earned promotion above Subject: you've risen. The court message already
+    // named the rank; re-open the panel so the new standing lands visually.
+    if (rank && rank !== "Subject") {
+      try {
+        player.sendMessage(`You've risen — the court names you ${rank}.`);
+        for (const line of Membership.membershipLines(player)) player.sendMessage(line);
+        openPanel(player);
+      } catch {
+        // Cosmetic; the promotion already landed.
+      }
+    }
   });
 
   console.info("[my-kingdom] Town crier + origins welcome triggers ready");

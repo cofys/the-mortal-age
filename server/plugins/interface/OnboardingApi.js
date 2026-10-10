@@ -54,6 +54,10 @@ const FIRST_STEPS = [
     title: "Check the war table",
     text: "Find the war table in your capital and Study it — wars, campaigns, and your kingdom\u2019s standing are all there.",
   },
+  {
+    title: "Supply the war effort",
+    text: "Bring food, arrows, runes or war materials to the war table and contribute — the quartermaster notes every name, and service earns standing with your crown.",
+  },
 ];
 
 const WORLD_LINES = [
