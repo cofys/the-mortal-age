@@ -8,6 +8,7 @@ import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
 import { InteractHighlightConfig } from "../../../game/plugins/interacthighlight/InteractHighlightConfig";
 import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight/InteractHighlightPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
+import { MyKingdomPlugin } from "../../../game/plugins/mykingdom/MyKingdomPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
@@ -36,6 +37,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     InteractHighlightPlugin,
     TileMarkersPlugin,
     MenuSwapperPlugin,
+    MyKingdomPlugin,
     NotesPlugin,
     RememberLoginPlugin,
     SplitPrivateChatPlugin,

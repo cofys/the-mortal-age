@@ -1,0 +1,33 @@
+/* The Mortal Age — My Kingdom as a sidebar tab.
+ * The content reuses the heraldic tma-mykingdom-* classes from
+ * MyKingdomOverlay.css; this file only adapts the block layout to the narrow
+ * rail panel (no modal frame — the rail supplies the header and close). */
+
+.tma-mykingdom-sidebar {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 10px 10px;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+}
+
+/* The rail panel itself scrolls; the inner scroll box becomes plain flow. */
+.tma-mykingdom-sidebar .tma-mykingdom-scroll {
+    flex: none;
+    overflow: visible;
+    padding-right: 0;
+}
+
+.tma-mykingdom-sidebar .tma-mykingdom-name {
+    font-size: 19px;
+}
+
+.tma-mykingdom-sidebar .tma-mykingdom-header-rule {
+    margin: 0 24px 10px;
+}
+
+.tma-mykingdom-sidebar-loading {
+    text-align: center;
+    margin-top: 24px;
+}
