@@ -177,7 +177,9 @@ function tokensOf(template) {
   return out;
 }
 
-/** Pick a voice line whose {tokens} are all satisfied by vars. */
+/** Pick a voice line whose {tokens} are all satisfied by vars.
+ * Returns null when no line in the pool fully qualifies (the caller
+ * skips the turn rather than speaking unresolved template text). */
 function pickLine(voice, pools, vars, rng) {
   if (!pools) return null;
   const register = voice?.register === "terse" ? "terse" : "plain";
@@ -186,8 +188,13 @@ function pickLine(voice, pools, vars, rng) {
   const usable = pool.filter((line) =>
     tokensOf(line).every((t) => vars && vars[t] != null)
   );
-  const from = usable.length ? usable : pool;
-  return voiceLine(voice, { plain: from, terse: from }, rng);
+  // If nothing in the pool is fully satisfiable, speak nothing: falling
+  // back to the full pool would render unresolved {token} text verbatim —
+  // the most visible bot tell possible. The caller (speakLine via
+  // pickTurnLine) treats null as "skip this turn", which falls back to the
+  // normal reflex/LLM path rather than speaking a template.
+  if (!usable.length) return null;
+  return voiceLine(voice, { plain: usable, terse: usable }, rng);
 }
 
 // ---------------------------------------------------------------------------

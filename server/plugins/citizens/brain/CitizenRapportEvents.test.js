@@ -87,7 +87,12 @@ const {
 const {
   tryScriptedReaction,
   resetForTests: resetHeard,
+  setReactionScheduler,
 } = require("../chat/CitizenHeardReactions");
+
+// Scripted reactions are scheduled with a human typing delay (async). The
+// scenarios below assert on sayPublic synchronously, so run the seam inline.
+setReactionScheduler((fn) => fn());
 
 // --- Fakes ----------------------------------------------------------------
 

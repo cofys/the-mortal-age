@@ -22,9 +22,11 @@
  * visible bot tell in player-facing chat. Every reaction is now scheduled
  * with a typing-style delay: short reflexes ("gz!") land in ~1.2-1.5s,
  * longer lines take a few seconds, and taciturn citizens are a touch
- * slower than chatty ones. The follow-up machinery in CitizenChat/
- * CitizenConversations reads the delay back (lastReactionDelayMs) so a
- * follow-up thought lands AFTER the reply, not under it.
+ * slower than chatty ones. The follow-up machinery in CitizenChat
+ * reads the delay back from the reaction's return value ({ line,
+ * delayMs }) so a follow-up thought lands AFTER the reply, not under
+ * it. The delay rides the return, not a module global, so two citizens
+ * reacting in the same tick can't misattribute each other's pacing.
  *
  * Personality-gated (chatty citizens react more, taciturn less) and throttled
  * (per-citizen cooldown) so crowds don't become echo chambers. If no pattern
@@ -87,13 +89,6 @@ function typingDelayMs(line, personality, rng = Math.random) {
     /* personality-free default */
   }
   return Math.round(Math.min(9000, Math.max(1200, ms)));
-}
-
-// The delay used by the most recent scheduled reaction. CitizenChat reads
-// this back so a follow-up thought lands AFTER the reply, not under it.
-let lastDelayMs = 0;
-function lastReactionDelayMs() {
-  return lastDelayMs;
 }
 
 // --- Reaction pools -------------------------------------------------------
@@ -218,7 +213,6 @@ function speakShun(citizenUsername, personality, bot, nowMs) {
   const line = voiceLine(voice, voicePool("shun"));
   // Snappy, but not instant: even a cold shoulder needs a beat.
   const delay = Math.round(800 + Math.random() * 1200);
-  lastDelayMs = delay;
   scheduleReaction(() => {
     try {
       sayPublic(bot, line);
@@ -227,19 +221,23 @@ function speakShun(citizenUsername, personality, bot, nowMs) {
     }
   }, delay);
   lastReactionAt.set(citizenUsername, nowMs);
-  return line;
+  return { line, delayMs: delay };
 }
 
 /**
- * Attempt a scripted reaction. Returns the line spoken, or null if no
- * reaction fired (caller should fall through to the LLM path).
+ * Attempt a scripted reaction. Returns the scheduled reaction, or null if
+ * no reaction fired (caller should fall through to the LLM path).
+ *
+ * The return carries the typing delay used for this citizen's reply, so
+ * the follow-up path can pace itself without a shared module global:
+ * `{ line, delayMs }`.
  *
  * @param {string} citizenUsername - the hearing citizen
  * @param {string} speakerUsername - who spoke
  * @param {string} text - what they said
  * @param {object} bot - the citizen's Player object (for forceChat + personality)
  * @param {number} nowMs - Date.now()
- * @returns {string|null} the line scheduled to be spoken, or null
+ * @returns {{line: string, delayMs: number}|null} the scheduled reaction, or null
  */
 function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs = Date.now()) {
   pruneCooldowns(nowMs);
@@ -331,7 +329,6 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
   // in player-facing chat. The throttle is claimed now (at reaction
   // time), not at speak time, so a pending reply can't double-fire.
   const delay = typingDelayMs(line, personality);
-  lastDelayMs = delay;
   const capturedBot = bot;
   const capturedLine = line;
   scheduleReaction(() => {
@@ -381,14 +378,13 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
       // Bonding must never break the reaction.
     }
   }
-  return line;
+  return { line, delayMs: delay };
 }
 
 /** Clear throttle state (tests). */
 function resetForTests() {
   lastReactionAt.clear();
   lastPruneAt = 0;
-  lastDelayMs = 0;
 }
 
 module.exports = {
@@ -399,7 +395,6 @@ module.exports = {
   resetForTests,
   setReactionScheduler,
   typingDelayMs,
-  lastReactionDelayMs,
   POOLS,
   TERSE,
   REACTION_COOLDOWN_MS,

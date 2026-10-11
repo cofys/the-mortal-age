@@ -214,7 +214,9 @@ function onCitizenChatHeard(event) {
   try {
     const { tryScriptedReaction } = require("./CitizenHeardReactions");
     const bot = findPlayerByName(citizenUsername);
-    if (bot && tryScriptedReaction(citizenUsername, speakerUsername, text, bot)) {
+    const reaction =
+      bot && tryScriptedReaction(citizenUsername, speakerUsername, text, bot);
+    if (reaction) {
       pluginApi.log?.("[citizens] scripted chat reaction", {
         citizen: citizenUsername,
         speaker: speakerUsername,
@@ -228,7 +230,6 @@ function onCitizenChatHeard(event) {
       try {
         if (Math.random() < 0.35) {
           const { maybePlayerFollowUp } = require("./CitizenConversations");
-          const { lastReactionDelayMs } = require("./CitizenHeardReactions");
           const { getDirector } = require("../director/CitizenDirector");
           const { normalizeName } = require("../lib/CitizenBonds");
           const director = getDirector();
@@ -236,9 +237,12 @@ function onCitizenChatHeard(event) {
             director?.roster?.get?.(normalizeName(citizenUsername)) ?? null;
           if (director && record) {
             // The reply now lands after a human typing delay — start the
-            // follow-up's pacing window from there, not from now.
+            // follow-up's pacing window from there, not from now. The
+            // delay rides the reaction's return value (per-citizen, not a
+            // shared global), so two citizens reacting in the same tick
+            // can't misattribute each other's pacing.
             maybePlayerFollowUp(director, record, bot, speakerUsername, {
-              initialDelayMs: lastReactionDelayMs(),
+              initialDelayMs: reaction.delayMs,
             });
           }
         }

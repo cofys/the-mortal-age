@@ -10,7 +10,6 @@ const {
   resetForTests,
   setReactionScheduler,
   typingDelayMs,
-  lastReactionDelayMs,
   POOLS,
   TERSE,
   REACTION_COOLDOWN_MS,
@@ -134,7 +133,10 @@ check("tryScriptedReaction: greeting fires and speaks", () => {
   }
   assert.ok(line, "should eventually fire for chatty citizen");
   assert.ok(spoken.length === 1, "should forceChat once");
-  assert.ok(POOLS.greeting.includes(line), `line "${line}" should be from greeting pool`);
+  assert.ok(
+    POOLS.greeting.includes(line.line),
+    `line "${line.line}" should be from greeting pool`
+  );
 });
 
 check("tryScriptedReaction: no pattern → null, no speech", () => {
@@ -196,7 +198,10 @@ check("tryScriptedReaction: gruff gets terse lines", () => {
   }
   // Gruff has 0.25 chance — may not fire in 30 tries, that's fine.
   if (line) {
-    assert.ok(TERSE.greeting.includes(line), `gruff line "${line}" should be terse`);
+    assert.ok(
+      TERSE.greeting.includes(line.line),
+      `gruff line "${line.line}" should be terse`
+    );
   }
 });
 
@@ -210,7 +215,10 @@ check("tryScriptedReaction: gz directed at citizen → thanks", () => {
     line = tryScriptedReaction("Petra Stone", "Cofy", "gz Petra!", bot, Date.now());
   }
   assert.ok(line, "should fire");
-  assert.ok(POOLS.gzReceived.includes(line), `line "${line}" should be thanks, not gz`);
+  assert.ok(
+    POOLS.gzReceived.includes(line.line),
+    `line "${line.line}" should be thanks, not gz`
+  );
 });
 
 check("tryScriptedReaction: missing bot → null", () => {
@@ -230,7 +238,10 @@ check("tryScriptedReaction: broken bot degrades gracefully", () => {
   for (let i = 0; i < 20; i++) {
     resetForTests();
     const line = tryScriptedReaction("Petra Stone", "Cofy", "hi", bot, Date.now());
-    assert.ok(line === null || typeof line === "string", "must not throw");
+    assert.ok(
+      line === null || typeof line?.line === "string",
+      "must not throw"
+    );
   }
 });
 
@@ -254,8 +265,8 @@ check("greeting from a friend greets BY NAME", () => {
   }
   assert.ok(line, "friend greeting should eventually fire for chatty citizen");
   assert.ok(
-    line.toLowerCase().includes("cofys"),
-    `friend should be greeted by name, got: "${line}"`
+    line.line.toLowerCase().includes("cofys"),
+    `friend should be greeted by name, got: "${line.line}"`
   );
 });
 
@@ -269,8 +280,8 @@ check("greeting from a rival gets the cold shoulder", () => {
   const line = tryScriptedReaction("Petra Stone", "Rival Rita", "hi", bot, Date.now());
   assert.ok(line, "rival greeting should get a shun line");
   assert.ok(
-    POOLS.shun.includes(line) || TERSE.shun.includes(line),
-    `should be a shun line, got: "${line}"`
+    POOLS.shun.includes(line.line) || TERSE.shun.includes(line.line),
+    `should be a shun line, got: "${line.line}"`
   );
 });
 
@@ -324,18 +335,22 @@ check("typingDelayMs: taciturn slower than chatty on the same line", () => {
   assert.ok(slow > fast, `taciturn=${slow} should exceed chatty=${fast}`);
 });
 
-check("reaction records its typing delay for the follow-up path", () => {
+check("reaction returns its typing delay for the follow-up path", () => {
   const spoken = [];
   const bot = mockBot({ traits: ["chatty"] }, spoken);
-  let line = null;
-  for (let i = 0; i < 20 && !line; i++) {
+  let reaction = null;
+  for (let i = 0; i < 20 && !reaction; i++) {
     resetForTests();
     spoken.length = 0;
-    line = tryScriptedReaction("Petra Stone", "Cofy", "hi", bot, Date.now());
+    reaction = tryScriptedReaction("Petra Stone", "Cofy", "hi", bot, Date.now());
   }
-  assert.ok(line, "should fire");
-  const d = lastReactionDelayMs();
-  assert.ok(d >= 1200 && d <= 9000, `recorded delay ${d} out of range`);
+  assert.ok(reaction, "should fire");
+  assert.ok(
+    typeof reaction.line === "string" && reaction.line.length > 0,
+    "return carries the spoken line"
+  );
+  const d = reaction.delayMs;
+  assert.ok(d >= 1200 && d <= 9000, `returned delay ${d} out of range`);
 });
 
 check("reaction speech is scheduled, not instant", () => {
