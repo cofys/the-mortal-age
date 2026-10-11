@@ -311,10 +311,13 @@ they're the seam future LLM hooks (AI citizens, court agents) will read.
 - **War mechanics** — declaration and resolution are now simulated by the
   tension model (Tension.Kingdoms.js): wars start at 100 tension, burn 6-18h
   or until a garrison breaks, and end with peace terms, drained treasuries,
-  and a 72h armistice. Still stubbed: no battles, no territory flipping on
-  outcome, no war weariness beyond garrison attrition. Area rule overrides
-  (`canAttack` wartime PvP law, Morytania guard aggression, Keldagrim company
-  checkpoints) are stubbed to `null`.
+  and a 72h armistice. Still stubbed: no territory flipping on
+  outcome, no war weariness beyond garrison attrition. Area rule overrides:
+  the `canAttack` wartime PvP law is LIVE (WartimePvp.Kingdoms.js — enemy
+  subjects fight on either belligerent's territory during an active war,
+  capitals and frontier towns carved out as safe zones, lawful war kills
+  excluded from the assault bounty/hatred hooks); Morytania guard
+  aggression and Keldagrim company checkpoints remain stubbed to `null`.
 - **Tax collection** — the treasury has a door but no foot traffic. Shop taxes,
   market tolls, and war levies need emitters in the economy/skilling content.
 - **Courts and AI rulers** — `tagCourtier` is ready; spawning kings, generals

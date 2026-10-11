@@ -271,38 +271,62 @@ function createGuardPatrolAction(spec, world) {
             const vUsername = other.getUsername?.() ?? "?";
             if (nowMs - (state.assaultAt.get(vUsername) ?? 0) >= challengeCooldownMs) {
               state.assaultAt.set(vUsername, nowMs);
-              Influence.addInfluence(other, kingdomId, -10, "assault");
-              // The court posts a bounty on a witnessed assailant, and a
-              // foreign assailant's crime chills their home court's
-              // standing here (Jobs/Bounties phase 3). Lazy + fail-safe:
-              // the hatred above stands even if the board is unavailable.
+              // Wartime exception: a subject fighting an enemy subject on
+              // wartime ground (either kingdom's territory, outside the
+              // town safe zones) is waging lawful war, not committing
+              // assault — no hatred, no bounty, no goodwill chill. The
+              // rule has one home (WartimePvp); lazy + fail-safe like the
+              // bounty below: if it cannot be read, the crime stands.
+              let lawfulWar = false;
               try {
-                const KingdomStore = require("../../../kingdoms/KingdomStore");
-                require("../../../kingdoms/Bounties.Kingdoms").markWanted(
-                  vUsername,
-                  kingdomId,
-                  "assault",
-                  KingdomStore
-                );
-                const assailantKingdom = other.getAttribute?.(ATTR_KINGDOM_ID) ?? null;
-                if (assailantKingdom && assailantKingdom !== kingdomId) {
-                  const Relations = require("../../../kingdoms/Relations.Kingdoms");
-                  Relations.addGoodwill(
-                    assailantKingdom,
+                lawfulWar =
+                  require("../../../kingdoms/WartimePvp.Kingdoms").isLawfulWarFight(
+                    other,
+                    target
+                  ) === true;
+              } catch {
+                lawfulWar = false;
+              }
+              if (lawfulWar) {
+                world?.log?.("citizen_guard_assault_lawful_war", {
+                  guard: player.getUsername?.(),
+                  assailant: vUsername,
+                  kingdom: kingdomId,
+                });
+              } else {
+                Influence.addInfluence(other, kingdomId, -10, "assault");
+                // The court posts a bounty on a witnessed assailant, and a
+                // foreign assailant's crime chills their home court's
+                // standing here (Jobs/Bounties phase 3). Lazy + fail-safe:
+                // the hatred above stands even if the board is unavailable.
+                try {
+                  const KingdomStore = require("../../../kingdoms/KingdomStore");
+                  require("../../../kingdoms/Bounties.Kingdoms").markWanted(
+                    vUsername,
                     kingdomId,
-                    Relations.GOODWILL_CRIME,
+                    "assault",
                     KingdomStore
                   );
-                  KingdomStore.save();
+                  const assailantKingdom = other.getAttribute?.(ATTR_KINGDOM_ID) ?? null;
+                  if (assailantKingdom && assailantKingdom !== kingdomId) {
+                    const Relations = require("../../../kingdoms/Relations.Kingdoms");
+                    Relations.addGoodwill(
+                      assailantKingdom,
+                      kingdomId,
+                      Relations.GOODWILL_CRIME,
+                      KingdomStore
+                    );
+                    KingdomStore.save();
+                  }
+                } catch {
+                  // Bounty/goodwill are consequences, not the patrol.
                 }
-              } catch {
-                // Bounty/goodwill are consequences, not the patrol.
+                world?.log?.("citizen_guard_assault_witnessed", {
+                  guard: player.getUsername?.(),
+                  assailant: vUsername,
+                  kingdom: kingdomId,
+                });
               }
-              world?.log?.("citizen_guard_assault_witnessed", {
-                guard: player.getUsername?.(),
-                assailant: vUsername,
-                kingdom: kingdomId,
-              });
             }
           }
         }

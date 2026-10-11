@@ -3,7 +3,10 @@
 /**
  * Areas.Kingdoms — one Area per great power, so kingdom territory is a real
  * mechanic: per-tick process() for actors inside only, postEnter/postLeave
- * edges, and rule overrides (all stubbed to null in v1 — see DESIGN.md).
+ * edges, and rule overrides. Wartime PvP law lives here (canAttack +
+ * the client Attack option, both delegated to WartimePvp.Kingdoms, the
+ * rule's one home); guard aggression and the Salve's decay remain
+ * stubbed to null — see DESIGN.md.
  *
  * Boundaries are v2 NATURAL borders: multiple rects per kingdom following
  * rivers (the Salve), mountain ranges (White Wolf), the Wilderness line, and
@@ -16,6 +19,7 @@
 
 const Membership = require("./Membership.Kingdoms");
 const Store = require("./KingdomStore");
+const WartimePvp = require("./WartimePvp.Kingdoms");
 
 const KINGDOM_TERRITORIES = [
   {
@@ -130,13 +134,29 @@ function createKingdomArea(api, def) {
     }
 
     postLeave(mobile, logout) {
-      if (isRealPlayer(mobile)) leaveKingdom(api, def, mobile);
+      if (isRealPlayer(mobile)) {
+        WartimePvp.clearWartimeUi(mobile, logout);
+        leaveKingdom(api, def, mobile);
+      }
     }
 
-    // v1: no per-tick work; kingdom laws (guard aggression, wartime PvP rules,
-    // the Salve's decay) are stubbed in DESIGN.md. Territory edges carry v1.
-    canAttack() {
-      return null;
+    // Per-tick, actors in this territory only: keep a real player's
+    // Attack option honest — shown on wartime ground (their kingdom at
+    // war with this one, or their own ground while it is at war), gone
+    // everywhere else, and never inside a town safe zone. Sends happen
+    // only when the answer flips.
+    process(mobile) {
+      if (isRealPlayer(mobile)) {
+        WartimePvp.syncWartimeUi(mobile, WartimePvp.isHotGround(mobile, def.id));
+      }
+    }
+
+    // Wartime PvP law: enemy subjects of two kingdoms at war may fight
+    // on either's territory, outside the town safe zones. Everything
+    // else is no opinion — peacetime player pairs fall through to the
+    // engine default, which refuses the attack.
+    canAttack(attacker, target) {
+      return WartimePvp.wartimeCanAttack(attacker, target, def.id);
     }
 
     canTeleport() {
