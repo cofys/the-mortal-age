@@ -239,6 +239,46 @@ function defaultSources() {
         return null;
       }
     },
+    // Newest remembered favor/grudge STORY between the pair (real events
+    // with real text, e.g. "lent you 5k for the rune scim"). Used by the
+    // tier-flavor layer so friends reminisce and rivals nurse grudges
+    // truthfully instead of inventing history. Null when nothing stored.
+    favorStory: (a, b) => {
+      try {
+        const { favors } = require("../lib/CitizenSocialBonds");
+        const list = favors(a, b) ?? [];
+        const text = String(list[list.length - 1]?.text ?? "").trim();
+        if (!text) return null;
+        return text.length > 56 ? text.slice(0, 56).trimEnd() + "…" : text;
+      } catch {
+        return null;
+      }
+    },
+    grudgeStory: (a, b) => {
+      try {
+        const { grudges } = require("../lib/CitizenSocialBonds");
+        const list = grudges(a, b) ?? [];
+        const text = String(list[list.length - 1]?.text ?? "").trim();
+        if (!text) return null;
+        return text.length > 56 ? text.slice(0, 56).trimEnd() + "…" : text;
+      } catch {
+        return null;
+      }
+    },
+    // Spouse/partner check via the real CitizenKinship store.
+    isFamily: (a, b) => {
+      try {
+        const kin = require("../lib/CitizenKinship");
+        const norm = (n) => String(n ?? "").trim().toLowerCase();
+        const target = norm(b);
+        if (!target) return false;
+        if (norm(kin.spouseOf?.(a)) === target) return true;
+        if (norm(kin.partnerOf?.(a)?.other) === target) return true;
+        return false;
+      } catch {
+        return false;
+      }
+    },
     // Current work: live skilling session first, profession as fallback.
     workContext: (record, bot) => {
       try {
@@ -401,6 +441,39 @@ function closenessTier(aName, bName, sources) {
     return "neutral";
   } catch {
     return "neutral";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tier flavor: what the relationship sounds like.
+// ---------------------------------------------------------------------------
+
+/**
+ * Flavor bucket for one directed line: "warm" | "cold" | "family" | null.
+ * The conversation's conv.tier is the pair average; the bucket is directed
+ * (speaker -> addressee) so a warm citizen doesn't snap at someone who
+ * merely dislikes them, and a cold citizen doesn't gush at a friend of
+ * their rival. Built from real relationship state only.
+ */
+function flavorBucket(conv, speakerName, addresseeName) {
+  try {
+    const s = conv.sources ?? {};
+    // Family first: spouses/partners use familiar terms — unless the
+    // directed score says they're openly feuding.
+    if (s.isFamily?.(speakerName, addresseeName)) {
+      const directed = Number(s.bondScore?.(speakerName, addresseeName)) || 0;
+      if (directed > -25) return "family";
+    }
+    const directed = Number(s.bondScore?.(speakerName, addresseeName)) || 0;
+    if (conv.tier === "cold" && directed <= -15) return "cold";
+    if (
+      (conv.tier === "close" || conv.tier === "friend") &&
+      (directed >= 8 || s.isFriend?.(speakerName, addresseeName))
+    )
+      return "warm";
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -853,6 +926,134 @@ const TOPIC_POOLS = Object.freeze({
   },
 });
 
+// ---------------------------------------------------------------------------
+// Tier-flavor pools: what the relationship sounds like, independent of the
+// topic. Checked before the topic's own stage pools in speakLine; the
+// {favor}/{grudge} lines are only eligible when a real remembered story
+// exists (pickLine's token filter), so nothing is ever invented.
+// ---------------------------------------------------------------------------
+
+const FLAVOR_CHANCE = 0.6; // share of eligible lines that use tier flavor
+
+const TIER_FLAVOR_POOLS = Object.freeze({
+  // Friends tease, use first names, and reminisce about real shared history.
+  warm: {
+    opener: {
+      plain: [
+        "{other}! Well, well.",
+        "Look what the cat dragged in — {other}!",
+        "{other}! You look like trouble.",
+        "There's my favourite troublemaker.",
+        "I'll never forget it — {favor}.",
+        "Still think about {favor}, you know.",
+      ],
+      terse: [
+        "{other}. Good to see you.",
+        "Well. {other}.",
+        "{favor}, eh? Never forgot.",
+      ],
+    },
+    reply: {
+      plain: [
+        "Ha! Good to see you, {other}.",
+        "You know it, {other}.",
+        "Missed you, you menace.",
+        "Couldn't agree more, {other}.",
+      ],
+      terse: ["Good to see you.", "Ha. You too, {other}."],
+    },
+    follow: {
+      plain: [
+        "We should do that trip we keep talking about.",
+        "Don't work too hard, yeah?",
+        "You take care of yourself, {other}.",
+        "Same time tomorrow, then?",
+        "You always know how to cheer a person up.",
+      ],
+      terse: ["Trip soon, yeah?", "Take care, {other}."],
+    },
+    closer: {
+      plain: [
+        "Don't be a stranger, {other}.",
+        "Later, legend.",
+        "Take care out there, {other}.",
+        "Always good, {other}.",
+      ],
+      terse: ["Later, {other}.", "Take care."],
+    },
+  },
+  // Rivals trade barbs and nurse real grudges.
+  cold: {
+    opener: {
+      plain: [
+        "Oh. It's you.",
+        "What do you want, {other}?",
+        "{other}.",
+        "We got business, or are you just blocking the road?",
+        "Still haven't forgotten — {grudge}.",
+        "We still got unfinished business — {grudge}.",
+      ],
+      terse: ["You.", "What.", "Talk, {other}."],
+    },
+    reply: {
+      plain: ["Hmph.", "Make it quick.", "Is that right.", "Fascinating."],
+      terse: ["Hmph.", "Quick.", "Right."],
+    },
+    follow: {
+      plain: [
+        "Say your piece.",
+        "This better be going somewhere.",
+        "I'm listening. Barely.",
+        "And?",
+      ],
+      terse: ["And?", "Go on."],
+    },
+    closer: {
+      plain: [
+        "We're done here.",
+        "Watch yourself, {other}.",
+        "Don't follow me.",
+      ],
+      terse: ["Done.", "Watch it."],
+    },
+  },
+  // Spouses/partners use familiar terms. Only opener/closer; the middle of
+  // the chat falls back to the warm pools.
+  family: {
+    opener: {
+      plain: [
+        "Hey love.",
+        "There's my favourite.",
+        "Alright, dear?",
+        "{other}, love — how's your day going?",
+      ],
+      terse: ["Hey love.", "Alright, dear?"],
+    },
+    closer: {
+      plain: [
+        "See you at home.",
+        "Don't be late, yeah?",
+        "Mind yourself out there, love.",
+      ],
+      terse: ["See you home.", "Mind yourself."],
+    },
+  },
+});
+
+/** Resolve the tier-flavor pool for a bucket+stage, or null. */
+function flavorPoolFor(bucket, stage) {
+  try {
+    const pools = TIER_FLAVOR_POOLS[bucket];
+    if (!pools) return null;
+    if (pools[stage]) return pools[stage];
+    // Family falls back to warm for the middle of the chat.
+    if (bucket === "family") return TIER_FLAVOR_POOLS.warm[stage] ?? null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // A third citizen muscling in.
 const JOININ_POOL = Object.freeze({
   plain: [
@@ -1044,14 +1245,56 @@ function speakLine(conv, participant, stage) {
   const addressee =
     conv.participants[conv.lastSpeakerIdx ?? -1] ??
     conv.participants.find((p) => p.username !== participant.username);
+  // Tier flavor: friends tease and reminisce, rivals snap, family is
+  // familiar — strangers keep the base (shallow) pools.
+  const bucket = addressee
+    ? flavorBucket(conv, participant.username, addressee.username)
+    : null;
   const vars = {
     ...conv.topic.vars,
     other: addressee
       ? firstNameOf(addressee.record, addressee.username)
       : "friend",
   };
-  const pools =
-    stage === "joinin" ? JOININ_POOL : stage === "walkaway" ? WALKAWAY_POOL : conv.topic.pools[stage];
+  if (bucket === "warm" && addressee) {
+    const story = conv.sources.favorStory?.(
+      participant.username,
+      addressee.username
+    );
+    if (story) vars.favor = story;
+  } else if (bucket === "cold" && addressee) {
+    const story = conv.sources.grudgeStory?.(
+      participant.username,
+      addressee.username
+    );
+    if (story) vars.grudge = story;
+  }
+  let pools =
+    stage === "joinin"
+      ? JOININ_POOL
+      : stage === "walkaway"
+        ? WALKAWAY_POOL
+        : conv.topic.pools[stage];
+  if (
+    bucket &&
+    (stage === "opener" ||
+      stage === "reply" ||
+      stage === "follow" ||
+      stage === "closer")
+  ) {
+    const flavorPool = flavorPoolFor(bucket, stage);
+    // The greeting topic is pure social ritual — a cold pair saying
+    // "Good to see you." is the exact wrongness this layer exists to
+    // kill, so cold openers/replies there always use the cold pool.
+    // Substantive topics keep the 60/40 mix so real-state lines survive.
+    const threshold =
+      bucket === "cold" &&
+      conv.topic.id === "greeting" &&
+      (stage === "opener" || stage === "reply")
+        ? 1.0
+        : FLAVOR_CHANCE;
+    if (flavorPool && conv.rng() < threshold) pools = flavorPool;
+  }
   const line = pickLine(voice, pools, vars, conv.rng);
   if (!line) return false;
   // Face the person you're talking to, like a person would.
@@ -1479,5 +1722,7 @@ module.exports = {
   _planLength: planLength,
   _pickTopic: pickTopic,
   _closenessTier: closenessTier,
+  _flavorBucket: flavorBucket,
+  _flavorPoolFor: flavorPoolFor,
   _defaultSources: defaultSources,
 };

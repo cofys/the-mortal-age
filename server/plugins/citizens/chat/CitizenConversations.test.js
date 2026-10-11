@@ -890,3 +890,170 @@ describe("closenessTier", () => {
     );
   });
 });
+
+// --- tier flavor: what the relationship sounds like ---------------------------
+
+describe("flavorBucket", () => {
+  const convFor = (tier, sources) => ({ tier, sources });
+
+  it("warm for close friends with a warm directed score", () => {
+    const sources = neutralDeps({
+      bondScore: () => 55,
+      isFriend: () => true,
+    });
+    assert.equal(Engine._flavorBucket(convFor("close", sources), "Alice", "Bob"), "warm");
+    assert.equal(Engine._flavorBucket(convFor("friend", sources), "Alice", "Bob"), "warm");
+  });
+
+  it("warm via the friend flag even with a modest score", () => {
+    const sources = neutralDeps({ bondScore: () => 0, isFriend: () => true });
+    assert.equal(Engine._flavorBucket(convFor("friend", sources), "Alice", "Bob"), "warm");
+  });
+
+  it("cold for cold-tier pairs when the speaker feels it too", () => {
+    const sources = neutralDeps({ bondScore: () => -40 });
+    assert.equal(Engine._flavorBucket(convFor("cold", sources), "Alice", "Bob"), "cold");
+  });
+
+  it("no snap when the speaker is warm toward a cold-feeling addressee", () => {
+    const sources = neutralDeps({
+      bondScore: (a) => (a === "Alice" ? 20 : -40),
+    });
+    assert.equal(Engine._flavorBucket(convFor("cold", sources), "Alice", "Bob"), null);
+    assert.equal(Engine._flavorBucket(convFor("cold", sources), "Bob", "Alice"), "cold");
+  });
+
+  it("null for strangers and acquaintances", () => {
+    assert.equal(Engine._flavorBucket(convFor("neutral", neutralDeps()), "Alice", "Bob"), null);
+    assert.equal(
+      Engine._flavorBucket(convFor("familiar", neutralDeps({ bondScore: () => 12 })), "Alice", "Bob"),
+      null
+    );
+  });
+
+  it("family for spouses/partners unless feuding", () => {
+    const loving = neutralDeps({ bondScore: () => 30, isFamily: () => true });
+    assert.equal(Engine._flavorBucket(convFor("familiar", loving), "Alice", "Bob"), "family");
+    const feuding = neutralDeps({ bondScore: () => -30, isFamily: () => true });
+    assert.equal(Engine._flavorBucket(convFor("cold", feuding), "Alice", "Bob"), "cold");
+  });
+});
+
+describe("tier flavor in conversations", () => {
+  function simPair(tierDeps, seeds = 40) {
+    const seen = [];
+    for (let seed = 0; seed < seeds; seed++) {
+      Engine._resetForTests();
+      const world = makeWorld();
+      world.add("Alice", 100, 100);
+      world.add("Bob", 101, 100);
+      const harness = makeHarness();
+      const { lines } = startSim(world, harness, "Alice", "Bob", {
+        seed: 50000 + seed,
+        context: "lingering",
+        forceTopic: "greeting",
+        deps: tierDeps,
+      });
+      harness.pump();
+      for (const l of lines) seen.push(l.text);
+    }
+    return seen;
+  }
+
+  it("friends tease and use first names", () => {
+    const lines = simPair(
+      neutralDeps({
+        bondScore: () => 60,
+        isFriend: () => true,
+        memoryEntry: () => ({ met: 12 }),
+      })
+    );
+    assert.ok(lines.length > 0);
+    const flavored = lines.filter((t) =>
+      /troublemaker|legend|menace|cat dragged in|Well, well/.test(t)
+    );
+    assert.ok(
+      flavored.length > 0,
+      `expected warm flavor across sims, saw: ${lines.slice(0, 6).join(" | ")}`
+    );
+    assert.ok(
+      !lines.some((t) => /It's you|We're done here|Watch yourself/.test(t)),
+      "friends must never snap cold barbs"
+    );
+  });
+
+  it("rivals trade barbs", () => {
+    const lines = simPair(neutralDeps({ bondScore: () => -40 }));
+    assert.ok(lines.length > 0);
+    const barbs = lines.filter((t) =>
+      /It's you|We're done here|Watch yourself|Make it quick|Hmph|blocking the road/.test(t)
+    );
+    assert.ok(
+      barbs.length > 0,
+      `expected cold barbs across sims, saw: ${lines.slice(0, 6).join(" | ")}`
+    );
+    assert.ok(
+      !lines.some((t) => /troublemaker|legend|Good to see you/.test(t)),
+      "rivals must never gush warm lines"
+    );
+  });
+
+  it("strangers keep the shallow base pools", () => {
+    const lines = simPair(neutralDeps());
+    assert.ok(lines.length > 0);
+    assert.ok(
+      !lines.some((t) =>
+        /troublemaker|legend|menace|It's you|We're done here|Hey love|dear/.test(t)
+      ),
+      `strangers must stay shallow, saw: ${lines.filter((t) => /troublemaker|legend|It's you/.test(t)).join(" | ")}`
+    );
+  });
+
+  it("friends reminisce about real favors; rivals nurse real grudges", () => {
+    const warmLines = simPair(
+      neutralDeps({
+        bondScore: () => 60,
+        isFriend: () => true,
+        favorStory: () => "lent you 5k for the rune scim",
+      })
+    );
+    assert.ok(
+      warmLines.some((t) => t.includes("lent you 5k for the rune scim")),
+      `expected a real favor reference, saw: ${warmLines.slice(0, 8).join(" | ")}`
+    );
+    const coldLines = simPair(
+      neutralDeps({
+        bondScore: () => -40,
+        grudgeStory: () => "stole my rune scim",
+      })
+    );
+    assert.ok(
+      coldLines.some((t) => t.includes("stole my rune scim")),
+      `expected a real grudge reference, saw: ${coldLines.slice(0, 8).join(" | ")}`
+    );
+  });
+
+  it("family uses familiar terms", () => {
+    const lines = simPair(
+      neutralDeps({ bondScore: () => 30, isFamily: () => true })
+    );
+    assert.ok(lines.length > 0);
+    assert.ok(
+      lines.some((t) => /Hey love|dear|See you at home/.test(t)),
+      `expected familiar terms, saw: ${lines.slice(0, 6).join(" | ")}`
+    );
+  });
+
+  it("flavor lines never leak unrendered tokens", () => {
+    const lines = simPair(
+      neutralDeps({
+        bondScore: () => 60,
+        isFriend: () => true,
+        favorStory: () => "covered your shift at the mill",
+      })
+    );
+    for (const t of lines) {
+      assert.ok(!/\{/.test(t), `unrendered token: ${t}`);
+    }
+  });
+});
