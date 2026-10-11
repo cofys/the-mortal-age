@@ -245,3 +245,50 @@
     color: #9a8f7d;
     text-align: center;
 }
+
+.tma-mykingdom-notice {
+    font-family: Georgia, serif;
+    font-size: 13px;
+    font-style: italic;
+    color: #d9b45b;
+    text-align: center;
+    margin: 8px 0;
+}
+
+.tma-mykingdom-confirm-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.tma-mykingdom-small-btn {
+    font-family: Georgia, serif;
+    font-size: 13px;
+    color: #d9b45b;
+    background: #1e1812;
+    border: 1px solid #6b5a3a;
+    border-radius: 3px;
+    padding: 6px 14px;
+    cursor: pointer;
+}
+
+.tma-mykingdom-small-btn:hover {
+    background: #2a2117;
+    color: #e8ded0;
+}
+
+.tma-mykingdom-danger-btn {
+    font-family: Georgia, serif;
+    font-size: 13px;
+    color: #e8ded0;
+    background: #4a1f1f;
+    border: 1px solid #8a3a3a;
+    border-radius: 3px;
+    padding: 6px 14px;
+    cursor: pointer;
+}
+
+.tma-mykingdom-danger-btn:hover {
+    background: #5c2828;
+}

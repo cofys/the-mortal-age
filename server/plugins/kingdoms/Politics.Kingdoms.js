@@ -44,6 +44,7 @@ const Offices = require("./Offices.Kingdoms");
 const Store = require("./KingdomStore");
 const Influence = require("./Influence.Kingdoms");
 const Membership = require("./Membership.Kingdoms");
+const Switching = require("./Switching.Kingdoms");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const COINS_ID = 995;
@@ -271,6 +272,20 @@ function petition(player, args) {
     player.sendMessage("[Court] One office per subject — you already hold seals in this kingdom.");
     return;
   }
+  // Tenure gate: the court does not seat the newly sworn. Petitions and
+  // challenges are a privilege of proven membership, not of the first week.
+  if (!Switching.hasTenure(player, office.kingdomId)) {
+    const daysLeft = Math.ceil(
+      (Switching.SWITCHING_CONFIG.tenureMs - Switching.tenureMsOf(player, office.kingdomId)) /
+        DAY_MS
+    );
+    player.sendMessage(
+      `[Court] Your oath to ${kingdomName(office.kingdomId)} is still fresh — ` +
+        `the court does not seat the newly sworn. Serve the realm for ` +
+        `${daysLeft} more day${daysLeft === 1 ? "" : "s"} and petition again.`
+    );
+    return;
+  }
   // Hatred gate: a hated court will not hear petitions; an enemy of the
   // realm is barred outright. Service can redeem — the tier is checked live.
   const tier = Influence.hatredTier(Influence.effectiveInfluence(player, office.kingdomId));
@@ -371,7 +386,12 @@ function completeTrial(player, username, trial) {
 function donateToKingdom(player, kingdomId, amount) {
   const kingdom = Store.getKingdom(kingdomId);
   if (!kingdom) return false;
-  if ((player.getAttribute?.(Membership.KINGDOM_ID_ATTRIBUTE) ?? null) !== kingdomId) {
+  // Naturalization petitioners are not subjects yet, but the court accepts
+  // their gifts: this is the real-service path of the naturalization quest.
+  const sworn = (player.getAttribute?.(Membership.KINGDOM_ID_ATTRIBUTE) ?? null) === kingdomId;
+  const naturalizing =
+    !sworn && Switching.naturalizationTarget(player) === kingdomId;
+  if (!sworn && !naturalizing) {
     player.sendMessage(`[War effort] You must serve ${kingdom.name} to fund its war.`);
     return false;
   }

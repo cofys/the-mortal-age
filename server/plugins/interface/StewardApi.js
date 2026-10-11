@@ -13,17 +13,31 @@ const ContentApiAuth = require("./ContentApiAuth");
  *
  *   GET /api/steward-status?player=<username>
  *     -> { open: false }
- *      | { open: true, kingdom: { id, name }, offices: [...], held: [...],
- *          influence: { value, petitionThreshold, challengeThreshold, trial } }
+ *      | { open: true, kingdom: { id, name }, allegiance: { id, name } | null,
+ *          offices: [...], held: [...],
+ *          influence: { value, petitionThreshold, challengeThreshold, trial },
+ *          naturalization: null | { kingdomId, kingdomName, influence, target,
+ *            fee, feeCarried, cooldownDaysLeft, oathReady, blockers } }
  *
  *   ...&action=close                  — dismiss the overlay (clears steward:open)
  *   ...&action=petition&office=<id>    — petition for an office (Politics.petition;
  *                                        ruling messages go to the player's chatbox)
  *   ...&action=vacate&office=<id>      — resign an office (Commands.vacateOffice)
+ *   ...&action=renounce                — renounce the oath to this court
+ *                                        (Switching.renounce; hatred backend)
+ *   ...&action=petition-join           — petition this court for naturalization
+ *                                        (Switching.startNaturalization)
+ *   ...&action=take-oath               — swear the oath at this desk once the
+ *                                        naturalization quest is complete
+ *                                        (Switching.takeOath)
  *
  * Trigger: Steward.Kingdoms sets the steward:open attribute (to the kingdom id)
  * when the desk is clicked. The overlay polls this endpoint; closing clears it.
  * The native showAudience remains in Steward.Kingdoms as the fallback path.
+ *
+ * The desk's kingdom is the court in the room: kingdom, offices, and
+ * influence are read for the DESK's court, not the player's allegiance. A
+ * foreign desk offers naturalization; a home desk offers the oath's release.
  */
 
 const STEWARD_OPEN_ATTRIBUTE = "steward:open";
@@ -33,6 +47,7 @@ const Offices = require("../kingdoms/Offices.Kingdoms");
 const Politics = require("../kingdoms/Politics.Kingdoms");
 const Commands = require("../kingdoms/Commands.Kingdoms");
 const Influence = require("../kingdoms/Influence.Kingdoms");
+const Switching = require("../kingdoms/Switching.Kingdoms");
 const Store = require("../kingdoms/KingdomStore");
 
 function safeGet(player, key) {
@@ -61,7 +76,25 @@ function findPlayer(api, username) {
   }
 }
 
-function kingdomFor(player) {
+/**
+ * The court in the room: the desk's kingdom (steward:open holds the desk's
+ * kingdom id), not the player's allegiance. A foreign desk serves a foreign
+ * court — that is what makes naturalization diegetic.
+ */
+function deskKingdomFor(player) {
+  try {
+    const id = String(safeGet(player, STEWARD_OPEN_ATTRIBUTE) || "").trim();
+    if (!id) return null;
+    const kingdom = Store.getKingdom(id);
+    if (!kingdom) return null;
+    return { id: String(id), name: String(kingdom.name ?? id) };
+  } catch {
+    return null;
+  }
+}
+
+/** The player's own allegiance, for the home-court / foreign-court split. */
+function allegianceFor(player) {
   try {
     const id = safeGet(player, KINGDOM_ID_ATTRIBUTE);
     if (!id) return null;
@@ -140,7 +173,12 @@ function attach(api) {
       // State-changing actions require auth; the status read uses the token
       // when present but falls back to the player query param.
       const authed =
-        action === "close" || action === "petition" || action === "vacate";
+        action === "close" ||
+        action === "petition" ||
+        action === "vacate" ||
+        action === "renounce" ||
+        action === "petition-join" ||
+        action === "take-oath";
       const player = authed
         ? ContentApiAuth.requireAuth(query)
         : ContentApiAuth.requireAuth(query) || findPlayer(api, query.get("player"));
@@ -151,6 +189,42 @@ function attach(api) {
           player.setAttribute(STEWARD_OPEN_ATTRIBUTE, "");
         } catch {}
         return { open: false };
+      }
+
+      const desk = deskKingdomFor(player);
+
+      if (action === "renounce") {
+        const allegiance = allegianceFor(player);
+        if (!allegiance || !desk || allegiance.id !== desk.id) {
+          return { open: true, ok: false, message: "This court holds no oath of yours to release." };
+        }
+        let otherIds = [];
+        try {
+          otherIds = Store.getKingdoms()
+            .map((k) => k.id)
+            .filter((id) => id && id !== allegiance.id);
+        } catch {}
+        const result = Switching.renounce(player, otherIds);
+        return {
+          open: true,
+          ok: !!result,
+          spreadTo: result?.spreadTo ?? [],
+          message: result
+            ? `Your oath to ${desk.name} is renounced. The realm will remember.`
+            : "You serve no kingdom — there is nothing to renounce.",
+        };
+      }
+
+      if (action === "petition-join") {
+        if (!desk) return { open: false };
+        const res = Switching.startNaturalization(player, desk.id);
+        return { open: true, ok: res.ok, message: res.message };
+      }
+
+      if (action === "take-oath") {
+        if (!desk) return { open: false };
+        const res = Switching.takeOath(player, desk.id);
+        return { open: true, ok: res.ok, message: res.message };
       }
 
       if (action === "petition" && officeId) {
@@ -176,15 +250,17 @@ function attach(api) {
       const openAttr = String(safeGet(player, STEWARD_OPEN_ATTRIBUTE) || "").trim();
       if (!openAttr) return { open: false };
 
-      const kingdom = kingdomFor(player);
+      const kingdom = desk;
       if (!kingdom) return { open: false };
 
       return {
         open: true,
         kingdom,
+        allegiance: allegianceFor(player),
         offices: officeList(kingdom.id),
         held: officesHeldBy(player, kingdom.id),
         influence: influenceFor(player, kingdom.id),
+        naturalization: Switching.naturalizationProgress(player),
       };
     } catch (e) {
       console.warn("[steward-api] status failed", e?.message ?? e);

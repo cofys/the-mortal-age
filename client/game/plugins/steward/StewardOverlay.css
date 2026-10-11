@@ -330,3 +330,19 @@
     text-align: center;
     margin: 12px 0 0;
 }
+
+.tma-steward-progress-track {
+    height: 10px;
+    background: #1e1812;
+    border: 1px solid #3a2f22;
+    border-radius: 5px;
+    margin: 8px 0 10px;
+    overflow: hidden;
+}
+
+.tma-steward-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #6b5a3a 0%, #c9a227 100%);
+    border-radius: 5px;
+    transition: width 0.4s ease;
+}

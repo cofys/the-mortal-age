@@ -24,6 +24,9 @@ function stub(rel, exports) {
 
 const petitionCalls = [];
 const vacateCalls = [];
+const renounceCalls = [];
+const joinCalls = [];
+const oathCalls = [];
 
 stub("../kingdoms/Offices.Kingdoms", {
   getOffices: (kingdomId) => [
@@ -54,6 +57,28 @@ stub("../kingdoms/Influence.Kingdoms", {
 });
 stub("../kingdoms/KingdomStore", {
   getKingdom: (id) => ({ id, name: "Asgarnia", capital: "Falador" }),
+  getKingdoms: () => [
+    { id: "asgarnia", name: "Asgarnia" },
+    { id: "misthalin", name: "Misthalin" },
+  ],
+});
+stub("../kingdoms/Switching.Kingdoms", {
+  renounce: (player, otherIds) => {
+    renounceCalls.push({ player: player.getUsername(), otherIds });
+    return { ok: true, oldKingdomId: "asgarnia", spreadTo: ["misthalin"] };
+  },
+  startNaturalization: (player, kingdomId) => {
+    joinCalls.push({ player: player.getUsername(), kingdomId });
+    return { ok: true, kingdomId, message: "Petition heard." };
+  },
+  takeOath: (player, kingdomId) => {
+    oathCalls.push({ player: player.getUsername(), kingdomId });
+    return { ok: true, kingdomId, message: "Oath sworn." };
+  },
+  naturalizationProgress: (player) =>
+    player.getAttribute("kingdom:naturalization")
+      ? { kingdomId: "misthalin", kingdomName: "Misthalin", oathReady: false, blockers: [] }
+      : null,
 });
 
 const StewardApi = require(path.resolve(IFACE, "StewardApi.js"));
@@ -168,6 +193,79 @@ assert(endpointHandler, "endpoint registered");
   assert.equal(res.open, false);
   assert.equal(player.__store["steward:open"], "", "steward:open cleared");
   console.log("ok - close clears steward:open");
+}
+
+// --- foreign desk serves the desk's court, not the player's allegiance ---
+{
+  const player = mockPlayer("TestUser", { "kingdom:id": "asgarnia", "steward:open": "misthalin" });
+  mockApi.core.World.getPlayerByName = () => player;
+  const res = endpointHandler(mockQuery({ player: "TestUser" }));
+  assert.equal(res.open, true);
+  assert.equal(res.kingdom.id, "misthalin", "desk kingdom, not the player's");
+  assert.equal(res.allegiance.id, "asgarnia", "player's own allegiance reported");
+  assert.equal(res.naturalization, null, "no quest active");
+  console.log("ok - foreign desk shows the desk's court");
+}
+
+// --- allegiance-free player sees an active naturalization quest ---
+{
+  const player = mockPlayer("TestUser", {
+    "steward:open": "misthalin",
+    "kingdom:naturalization": { kingdomId: "misthalin", startedAt: 123 },
+  });
+  mockApi.core.World.getPlayerByName = () => player;
+  const res = endpointHandler(mockQuery({ player: "TestUser" }));
+  assert.equal(res.open, true);
+  assert.equal(res.allegiance, null);
+  assert.equal(res.naturalization.kingdomId, "misthalin");
+  console.log("ok - naturalization quest surfaced in the payload");
+}
+
+function withAuth(player, fn) {
+  const ContentApiAuth = require(path.resolve(IFACE, "ContentApiAuth.js"));
+  const orig = ContentApiAuth.requireAuth;
+  ContentApiAuth.requireAuth = () => player;
+  try {
+    return fn();
+  } finally {
+    ContentApiAuth.requireAuth = orig;
+  }
+}
+
+// --- renounce calls through to Switching.renounce ---
+{
+  const player = mockPlayer("TestUser", { "kingdom:id": "asgarnia", "steward:open": "asgarnia" });
+  renounceCalls.length = 0;
+  const res = withAuth(player, () => endpointHandler(mockQuery({ action: "renounce" })));
+  assert.equal(res.ok, true);
+  assert.equal(renounceCalls.length, 1);
+  assert.deepEqual(renounceCalls[0].otherIds, ["misthalin"], "other kingdoms passed for word-spread");
+  assert.deepEqual(res.spreadTo, ["misthalin"]);
+  console.log("ok - renounce calls through to Switching.renounce");
+}
+
+// --- renounce refused at a foreign desk ---
+{
+  const player = mockPlayer("TestUser", { "kingdom:id": "asgarnia", "steward:open": "misthalin" });
+  renounceCalls.length = 0;
+  const res = withAuth(player, () => endpointHandler(mockQuery({ action: "renounce" })));
+  assert.equal(res.ok, false);
+  assert.equal(renounceCalls.length, 0, "no renounce at a foreign court");
+  console.log("ok - renounce only at your own court's desk");
+}
+
+// --- petition-join and take-oath call through ---
+{
+  const player = mockPlayer("TestUser", { "steward:open": "misthalin" });
+  joinCalls.length = 0;
+  oathCalls.length = 0;
+  const joinRes = withAuth(player, () => endpointHandler(mockQuery({ action: "petition-join" })));
+  assert.equal(joinRes.ok, true);
+  assert.deepEqual(joinCalls, [{ player: "TestUser", kingdomId: "misthalin" }]);
+  const oathRes = withAuth(player, () => endpointHandler(mockQuery({ action: "take-oath" })));
+  assert.equal(oathRes.ok, true);
+  assert.deepEqual(oathCalls, [{ player: "TestUser", kingdomId: "misthalin" }]);
+  console.log("ok - petition-join and take-oath call through");
 }
 
 console.log("All StewardApi tests passed.");

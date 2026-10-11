@@ -14,6 +14,8 @@ interface OfficeInfo {
 interface StandingInfo {
     rank: string | null;
     office: OfficeInfo | null;
+    tenureDays: number | null;
+    warCouncilReady: boolean;
 }
 
 interface KingdomInfo {
@@ -54,6 +56,7 @@ interface MyKingdomStatus {
     standing: StandingInfo | null;
     news: NewsItem[];
     realms: RealmInfo[];
+    renounceResult?: { ok: boolean; spreadTo?: string[]; message?: string } | null;
 }
 
 function fmtCoins(n: number): string {
@@ -86,6 +89,8 @@ function realmAlerts(k: KingdomInfo): { label: string; tone: "danger" | "warn" |
 
 export function MyKingdomOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
     const [status, setStatus] = useState<MyKingdomStatus | null>(null);
+    const [confirmRenounce, setConfirmRenounce] = useState(false);
+    const [notice, setNotice] = useState<string | null>(null);
     const pollRef = useRef<number | undefined>(undefined);
     const username = connectionState.sessionUsername;
 
@@ -114,6 +119,8 @@ export function MyKingdomOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
 
     const handleClose = useCallback(async () => {
         setStatus(null);
+        setConfirmRenounce(false);
+        setNotice(null);
         if (!username) return;
         try {
             await fetchContent(
@@ -121,6 +128,25 @@ export function MyKingdomOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
             );
         } catch {
             /* next poll sees open:false anyway */
+        }
+        window.setTimeout(poll, 500);
+    }, [username, poll]);
+
+    const doRenounce = useCallback(async () => {
+        if (!username) return;
+        setConfirmRenounce(false);
+        try {
+            const data = (await fetchContent(
+                `/api/mykingdom-status?player=${encodeURIComponent(username)}&action=renounce`
+            )) as MyKingdomStatus;
+            setStatus(data);
+            setNotice(
+                data.renounceResult?.ok
+                    ? "Your oath is renounced. Seven days must pass before any court will take a new one."
+                    : (data.renounceResult?.message ?? "The court did not release you.")
+            );
+        } catch {
+            setNotice("The court could not be reached. Try again.");
         }
         window.setTimeout(poll, 500);
     }, [username, poll]);
@@ -159,6 +185,14 @@ export function MyKingdomOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
                                     You serve no kingdom yet. Your allegiance will be
                                     recorded here when you swear to a realm.
                                 </p>
+                                {notice && (
+                                    <p className="tma-mykingdom-notice">{notice}</p>
+                                )}
+                                <p className="tma-mykingdom-note">
+                                    To swear anew, travel to another capital and
+                                    petition its steward's desk. Prove yourself
+                                    through service, pay the court's fee, and kneel.
+                                </p>
                             </div>
                         </div>
                     )}
@@ -193,6 +227,63 @@ export function MyKingdomOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
                                         <p className="tma-mykingdom-note">
                                             Hold no office. Serve well and the court may notice.
                                         </p>
+                                    )}
+                                    <div className="tma-mykingdom-row">
+                                        <span className="tma-mykingdom-label">Sworn</span>
+                                        <span className="tma-mykingdom-value">
+                                            {standing?.tenureDays != null
+                                                ? `${standing.tenureDays} day${standing.tenureDays === 1 ? "" : "s"} ago`
+                                                : "Since before the ledger"}
+                                        </span>
+                                    </div>
+                                    {!standing?.warCouncilReady && (
+                                        <p className="tma-mykingdom-note">
+                                            Your oath is still fresh — the court will not
+                                            seat you in an office or heed you at the war
+                                            council until you have served 14 days.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="tma-mykingdom-section">
+                                <h3 className="tma-mykingdom-section-title">The Oath</h3>
+                                <div className="tma-mykingdom-inset">
+                                    {notice && (
+                                        <p className="tma-mykingdom-notice">{notice}</p>
+                                    )}
+                                    {confirmRenounce ? (
+                                        <>
+                                            <p className="tma-mykingdom-note">
+                                                Break your oath to {k.name}? Your
+                                                influence there falls into hatred, word
+                                                may spread to the other powers, you lay
+                                                down your offices, and seven days must
+                                                pass before any court will take a new
+                                                oath from you.
+                                            </p>
+                                            <div className="tma-mykingdom-confirm-actions">
+                                                <button
+                                                    className="tma-mykingdom-danger-btn"
+                                                    onClick={doRenounce}
+                                                >
+                                                    I renounce my oath.
+                                                </button>
+                                                <button
+                                                    className="tma-mykingdom-small-btn"
+                                                    onClick={() => setConfirmRenounce(false)}
+                                                >
+                                                    I keep my oath.
+                                                </button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <button
+                                            className="tma-mykingdom-small-btn"
+                                            onClick={() => setConfirmRenounce(true)}
+                                        >
+                                            Renounce allegiance
+                                        </button>
                                     )}
                                 </div>
                             </div>

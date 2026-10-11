@@ -51,6 +51,7 @@ const WarSupply = require("./WarSupply.Kingdoms");
 const Coalitions = require("./Coalitions.Kingdoms");
 const AiDiplomacy = require("./AiDiplomacy.Kingdoms");
 const Influence = require("./Influence.Kingdoms");
+const Switching = require("./Switching.Kingdoms");
 
 const WARTABLE_OPEN_ATTRIBUTE = "wartable:open";
 
@@ -413,6 +414,7 @@ const REASON_MESSAGES = {
   "invalid-tribute": "The tribute demand is absurd.",
   "not-a-vassal": "You swear fealty to no one.",
   "too-soon": "The oath is still fresh — independence must wait.",
+  "new-oath": "Your oath is still fresh — the war council will not heed the newly sworn.",
   "no-crisis": "No succession crisis grips that throne.",
   "no-claimant": "No such claimant presses a claim.",
   "already-backed": "You have already backed a claimant in this crisis.",
@@ -494,15 +496,24 @@ function warGatesFor(player, homeId, kingdoms) {
   } catch {
     influence = 0;
   }
+  // New-member limit: no strategic war powers until the tenure threshold.
+  // Defense (sally, repair) and service (supply contributions) stay open —
+  // they are every subject's duty.
+  const tenured = Switching.hasTenure(player, homeId);
   const warCost = Wars.WAR_DECLARE_INFLUENCE_COST;
   const gates = {};
   for (const k of kingdoms) {
     if (!k || k.id === homeId) continue;
     let warCheck = Wars.canDeclareWar(homeId, k.id, Store);
-    if (warCheck.ok && influence < warCost) {
+    if (!tenured) {
+      warCheck = { ok: false, reason: "new-oath" };
+    } else if (warCheck.ok && influence < warCost) {
       warCheck = { ok: false, reason: "insufficient-influence", available: Math.floor(influence), cost: warCost };
     }
-    const siegeCheck = Siege.canDeclareSiege(homeId, k.id, Store);
+    let siegeCheck = Siege.canDeclareSiege(homeId, k.id, Store);
+    if (!tenured) {
+      siegeCheck = { ok: false, reason: "new-oath" };
+    }
     gates[k.id] = {
       declareWar: gatePayload(warCheck),
       declareSiege: gatePayload(siegeCheck),
@@ -541,10 +552,30 @@ function contributeSupplyToWar(player, homeId, cat) {
   return { ok: false, message: `You carry no war ${cat} to contribute.` };
 }
 
+/**
+ * Strategic war-council powers: the newly sworn may not wield them. Service
+ * actions (contribute-supply) and battlefield defense (sally, repair,
+ * lift-siege) stay open to every subject — strategy is the council's
+ * privilege, defense is everyone's duty.
+ */
+const STRATEGIC_WAR_ACTIONS = new Set([
+  "declare-war",
+  "declare-siege",
+  "offer-peace",
+  "accept-peace",
+  "break-vassalage",
+  "envoy",
+  "ultimatum",
+  "back-claimant",
+]);
+
 function runWarfareAction(api, player, action, query) {
   const homeId = playerKingdomId(player);
   if (!homeId) {
     return { ok: false, message: "You swear fealty to no kingdom." };
+  }
+  if (STRATEGIC_WAR_ACTIONS.has(action) && !Switching.hasTenure(player, homeId)) {
+    return { ok: false, message: reasonMessage("new-oath"), reason: "new-oath" };
   }
   const target = (query.get("target") || "").trim() || null;
 
@@ -651,3 +682,6 @@ function attach(api) {
 module.exports = attach;
 module.exports.attach = attach;
 module.exports.WARTABLE_OPEN_ATTRIBUTE = WARTABLE_OPEN_ATTRIBUTE;
+// Test seams: the action dispatcher and the council-button gates, without
+// the full status payload.
+module.exports._test = { runWarfareAction, warGatesFor };

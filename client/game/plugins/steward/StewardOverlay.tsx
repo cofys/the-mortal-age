@@ -24,16 +24,32 @@ interface StewardInfluence {
     trial: { progress: number; target: number; daysLeft: number } | null;
 }
 
+interface NaturalizationQuest {
+    kingdomId: string;
+    kingdomName: string;
+    startedAt: number | null;
+    influence: number;
+    target: number;
+    fee: number;
+    feeCarried: number;
+    cooldownDaysLeft: number;
+    oathReady: boolean;
+    blockers: string[];
+}
+
 interface StewardStatus {
     open: boolean;
     kingdom?: { id: string; name: string } | null;
+    allegiance?: { id: string; name: string } | null;
     offices?: StewardOffice[];
     held?: StewardHeld[];
     influence?: StewardInfluence;
+    naturalization?: NaturalizationQuest | null;
     ok?: boolean;
+    message?: string;
 }
 
-type View = "menu" | "offices" | "petition" | "standing" | "resign";
+type View = "menu" | "offices" | "petition" | "standing" | "resign" | "renounce" | "join";
 
 export function StewardOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element | null {
     const [status, setStatus] = useState<StewardStatus | null>(null);
@@ -72,18 +88,21 @@ export function StewardOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.
     }, [poll]);
 
     const act = useCallback(
-        async (action: string, extra = "") => {
+        async (action: string, extra = ""): Promise<StewardStatus | null> => {
             setNotice(null);
             try {
-                await fetchContent(
+                const res = (await fetchContent(
                     `/api/steward-status?player=${encodeURIComponent(
                         username
                     )}&action=${action}${extra}`
-                );
+                )) as StewardStatus;
+                window.setTimeout(poll, 500);
+                return res;
             } catch {
                 // Action failed silently; the chatbox may still show the ruling.
+                window.setTimeout(poll, 500);
+                return null;
             }
-            window.setTimeout(poll, 500);
         },
         [username, poll]
     );
@@ -99,9 +118,15 @@ export function StewardOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.
     }
 
     const kingdom = status.kingdom ?? null;
+    const allegiance = status.allegiance ?? null;
     const offices = status.offices ?? [];
     const held = status.held ?? [];
     const influence = status.influence ?? null;
+    const naturalization = status.naturalization ?? null;
+
+    const servesThisCourt = !!allegiance && !!kingdom && allegiance.id === kingdom.id;
+    const servesAnotherCourt = !!allegiance && !!kingdom && allegiance.id !== kingdom.id;
+    const servesNone = !allegiance;
 
     const doPetition = (officeId: string) => {
         act("petition", `&office=${encodeURIComponent(officeId)}`);
@@ -115,24 +140,77 @@ export function StewardOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.
         setNotice("The seals are laid down. The court will name another.");
     };
 
+    const doRenounce = async () => {
+        const res = await act("renounce");
+        setView("menu");
+        setNotice(
+            res?.message ??
+                "Your oath is renounced. Seven days must pass before any court will take a new one."
+        );
+    };
+
+    const doPetitionJoin = async () => {
+        const res = await act("petition-join");
+        setNotice(
+            res?.message ??
+                "Your petition is heard. Prove yourself through service to the realm."
+        );
+    };
+
+    const doTakeOath = async () => {
+        const res = await act("take-oath");
+        setNotice(
+            res?.message ?? "The oath is sworn. Rise, subject of the realm."
+        );
+    };
+
     const renderMenu = () => (
         <div className="tma-steward-menu">
             <button className="tma-steward-action" onClick={() => setView("offices")}>
                 <span className="tma-steward-action-title">What offices are open?</span>
                 <span className="tma-steward-action-sub">See the seals of the court</span>
             </button>
-            <button className="tma-steward-action" onClick={() => setView("petition")}>
-                <span className="tma-steward-action-title">I wish to petition for an office.</span>
-                <span className="tma-steward-action-sub">Seek the court's favour</span>
-            </button>
-            <button className="tma-steward-action" onClick={() => setView("standing")}>
-                <span className="tma-steward-action-title">How do I stand with the court?</span>
-                <span className="tma-steward-action-sub">Your influence and trials</span>
-            </button>
-            <button className="tma-steward-action" onClick={() => setView("resign")}>
-                <span className="tma-steward-action-title">I resign my office.</span>
-                <span className="tma-steward-action-sub">Lay down your seals</span>
-            </button>
+            {servesThisCourt && (
+                <>
+                    <button className="tma-steward-action" onClick={() => setView("petition")}>
+                        <span className="tma-steward-action-title">I wish to petition for an office.</span>
+                        <span className="tma-steward-action-sub">Seek the court's favour</span>
+                    </button>
+                    <button className="tma-steward-action" onClick={() => setView("standing")}>
+                        <span className="tma-steward-action-title">How do I stand with the court?</span>
+                        <span className="tma-steward-action-sub">Your influence and trials</span>
+                    </button>
+                    <button className="tma-steward-action" onClick={() => setView("resign")}>
+                        <span className="tma-steward-action-title">I resign my office.</span>
+                        <span className="tma-steward-action-sub">Lay down your seals</span>
+                    </button>
+                    <button className="tma-steward-action" onClick={() => setView("renounce")}>
+                        <span className="tma-steward-action-title">I renounce my allegiance.</span>
+                        <span className="tma-steward-action-sub">Break your oath — at a cost</span>
+                    </button>
+                </>
+            )}
+            {servesNone && (
+                <>
+                    <button className="tma-steward-action" onClick={() => setView("join")}>
+                        <span className="tma-steward-action-title">I seek to join this realm.</span>
+                        <span className="tma-steward-action-sub">Petition for naturalization</span>
+                    </button>
+                    <button className="tma-steward-action" onClick={() => setView("standing")}>
+                        <span className="tma-steward-action-title">How do I stand with the court?</span>
+                        <span className="tma-steward-action-sub">Your influence and trials</span>
+                    </button>
+                </>
+            )}
+            {servesAnotherCourt && (
+                <div className="tma-steward-inset">
+                    <p className="tma-steward-empty">
+                        The steward studies you coldly. You already serve{" "}
+                        {allegiance?.name ?? "another court"} — renounce your oath at your own
+                        court before this one will hear you.
+                    </p>
+                </div>
+            )}
         </div>
     );
 
@@ -287,6 +365,134 @@ export function StewardOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.
         </div>
     );
 
+    const renderRenounce = () => (
+        <div>
+            <button className="tma-steward-back" onClick={() => setView("menu")}>
+                ← Back
+            </button>
+            <h3 className="tma-steward-section-title">Renounce Your Allegiance</h3>
+            <div className="tma-steward-inset">
+                <div className="tma-steward-confirm">
+                    <p className="tma-steward-confirm-text">
+                        Break your oath to {kingdom ? kingdom.name : "this court"}? Weigh
+                        it well:
+                    </p>
+                    <p className="tma-steward-standing-line">
+                        • Your influence with {kingdom ? kingdom.name : "the court"} falls
+                        by 75 — into hatred.
+                    </p>
+                    <p className="tma-steward-standing-line">
+                        • Word spreads: each other great power has a chance to hear of
+                        your oathbreaking and think less of you.
+                    </p>
+                    <p className="tma-steward-standing-line">
+                        • You lay down any offices you hold, and lose your rank and titles.
+                    </p>
+                    <p className="tma-steward-standing-line">
+                        • Seven days must pass before any court will take a new oath
+                        from you.
+                    </p>
+                    <div className="tma-steward-confirm-actions">
+                        <button className="tma-steward-danger-btn" onClick={doRenounce}>
+                            I renounce my oath.
+                        </button>
+                        <button className="tma-steward-small-btn" onClick={() => setView("menu")}>
+                            I keep my oath.
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+
+    const renderJoin = () => {
+        const quest = naturalization;
+        const questHere =
+            quest && kingdom && quest.kingdomId === kingdom.id ? quest : null;
+        const progressPct = questHere
+            ? Math.min(100, Math.max(0, Math.round((questHere.influence / questHere.target) * 100)))
+            : 0;
+        return (
+            <div>
+                <button className="tma-steward-back" onClick={() => setView("menu")}>
+                    ← Back
+                </button>
+                <h3 className="tma-steward-section-title">
+                    Petition for Naturalization
+                </h3>
+                <div className="tma-steward-inset">
+                    {!quest && (
+                        <>
+                            <p className="tma-steward-standing-line">
+                                The court of {kingdom ? kingdom.name : "this realm"} does
+                                not hand citizenship to strangers. Petition, and prove
+                                yourself through real service — war-effort donations,
+                                supplies, the court's tasks — until your influence
+                                reaches the court's measure. A fee is due when you swear.
+                            </p>
+                            <div className="tma-steward-confirm-actions">
+                                <button className="tma-steward-small-btn" onClick={doPetitionJoin}>
+                                    Petition the court.
+                                </button>
+                            </div>
+                        </>
+                    )}
+                    {quest && !questHere && (
+                        <>
+                            <p className="tma-steward-standing-line">
+                                Your petition lies before {quest.kingdomName}, not this
+                                court. Petition here instead, and the old petition is
+                                withdrawn.
+                            </p>
+                            <div className="tma-steward-confirm-actions">
+                                <button className="tma-steward-small-btn" onClick={doPetitionJoin}>
+                                    Petition this court instead.
+                                </button>
+                            </div>
+                        </>
+                    )}
+                    {questHere && (
+                        <>
+                            <p className="tma-steward-standing-big">
+                                {questHere.influence}{" "}
+                                <span className="tma-steward-standing-label">
+                                    / {questHere.target} influence
+                                </span>
+                            </p>
+                            <div className="tma-steward-progress-track">
+                                <div
+                                    className="tma-steward-progress-fill"
+                                    style={{ width: `${progressPct}%` }}
+                                />
+                            </div>
+                            <p className="tma-steward-standing-line">
+                                Court's fee: {questHere.fee.toLocaleString("en-US")} coins —
+                                you carry {questHere.feeCarried.toLocaleString("en-US")}.
+                            </p>
+                            {questHere.blockers.map((b, i) => (
+                                <p key={i} className="tma-steward-standing-line">
+                                    • {b}
+                                </p>
+                            ))}
+                            {questHere.oathReady ? (
+                                <div className="tma-steward-confirm-actions">
+                                    <button className="tma-steward-small-btn" onClick={doTakeOath}>
+                                        Kneel and swear the oath.
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="tma-steward-empty">
+                                    Serve the realm — donate to its war effort, deliver
+                                    its supplies — and return when the court is convinced.
+                                </p>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="tma-steward-backdrop" onClick={close}>
             <div className="tma-steward-panel" onClick={(e) => e.stopPropagation()}>
@@ -305,6 +511,8 @@ export function StewardOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.
                     {view === "petition" && renderPetition()}
                     {view === "standing" && renderStanding()}
                     {view === "resign" && renderResign()}
+                    {view === "renounce" && renderRenounce()}
+                    {view === "join" && renderJoin()}
                 </div>
 
                 <p className="tma-steward-footnote">The court hears all who kneel.</p>

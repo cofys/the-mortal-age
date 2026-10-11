@@ -13,6 +13,11 @@
  *
  *   ...&action=open    — mark the panel open for this player
  *   ...&action=close   — mark the panel closed for this player
+ *   ...&action=renounce — renounce the player's oath (authed; Switching.renounce)
+ *
+ * The standing payload carries oath tenure (tenureDays, warCouncilReady) so
+ * the panel can show how long the subject has served and whether the
+ * new-member limits still apply.
  *
  * Read-only by design: treasury is shown but never spent from here.
  * All data comes from the real kingdom store — nothing is invented.
@@ -22,6 +27,8 @@ const Store = require("./KingdomStore");
 const Offices = require("./Offices.Kingdoms");
 const Relations = require("./Relations.Kingdoms");
 const Coalitions = require("./Coalitions.Kingdoms");
+const Switching = require("./Switching.Kingdoms");
+const ContentApiAuth = require("../interface/ContentApiAuth");
 
 const MYKINGDOM_OPEN_ATTRIBUTE = "mykingdom:open";
 
@@ -39,13 +46,25 @@ function kingdomName(id) {
   return k ? k.name : String(id);
 }
 
-/** The player's standing: rank + any office held. */
+/** The player's standing: rank + any office held + oath tenure. */
 function standingPayload(player, kingdomId) {
   let rank = null;
   try {
     rank = player.getAttribute("kingdom:rank") || null;
   } catch {
     rank = null;
+  }
+
+  let tenureDays = null;
+  let warCouncilReady = false;
+  if (kingdomId) {
+    try {
+      tenureDays = Switching.tenureDaysOf(player, kingdomId);
+      warCouncilReady = Switching.hasTenure(player, kingdomId);
+    } catch {
+      tenureDays = null;
+      warCouncilReady = false;
+    }
   }
 
   let office = null;
@@ -75,7 +94,7 @@ function standingPayload(player, kingdomId) {
     }
   }
 
-  return { rank, office };
+  return { rank, office, tenureDays, warCouncilReady };
 }
 
 /** Realm status: what's happening to the player's kingdom right now. */
@@ -230,9 +249,43 @@ function statusPayload(player) {
 
 function attach(api) {
   console.info("[mykingdom-api] registering mykingdom-status endpoint");
+  ContentApiAuth.setPluginApi(api);
   api.registerContentEndpoint("mykingdom-status", (query) => {
     const player = findPlayer(api, query.get("player"));
     const action = (query.get("action") || "").trim().toLowerCase();
+
+    if (action === "renounce") {
+      // State-changing: the session token must name the player.
+      const authed = ContentApiAuth.requireAuth(query);
+      if (!authed) return { open: false, error: "unauthorized" };
+      const allegiance = (() => {
+        try {
+          return authed.getAttribute("kingdom:id") || null;
+        } catch {
+          return null;
+        }
+      })();
+      let otherIds = [];
+      try {
+        otherIds = Store.getKingdoms()
+          .map((k) => k.id)
+          .filter((id) => id && id !== allegiance);
+      } catch {
+        otherIds = [];
+      }
+      let result = null;
+      try {
+        result = Switching.renounce(authed, otherIds);
+      } catch (e) {
+        console.warn("[mykingdom-api] renounce failed", e?.message ?? e);
+      }
+      return {
+        ...statusPayload(authed),
+        renounceResult: result
+          ? { ok: true, spreadTo: result.spreadTo ?? [] }
+          : { ok: false, message: "You serve no kingdom — there is nothing to renounce." },
+      };
+    }
 
     if (player && (action === "open" || action === "close")) {
       try {

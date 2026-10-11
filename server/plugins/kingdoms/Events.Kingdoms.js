@@ -68,6 +68,7 @@ const Offices = require("./Offices.Kingdoms");
 const Influence = require("./Influence.Kingdoms");
 const Politics = require("./Politics.Kingdoms");
 const Treasury = require("./Treasury.Kingdoms");
+const Switching = require("./Switching.Kingdoms");
 
 let pluginApi = null;
 
@@ -99,8 +100,15 @@ function onKingdomCreated(event) {
 function onRankGranted(event) {
   const player = event?.player;
   if (!player?.setAttribute || !event?.kingdomId) return;
+  const previousKingdom = player.getAttribute?.(Membership.KINGDOM_ID_ATTRIBUTE) ?? null;
   player.setAttribute(Membership.KINGDOM_ID_ATTRIBUTE, event.kingdomId);
   player.setAttribute(Membership.KINGDOM_RANK_ATTRIBUTE, event.rank ?? "Subject");
+  // A new oath (first fealty, or a sworn kingdom change) starts the tenure
+  // clock that gates offices and war-council powers. Promotions keep the
+  // existing oath timestamp.
+  if (previousKingdom !== event.kingdomId) {
+    player.setAttribute(Switching.OATH_AT_ATTRIBUTE, Date.now());
+  }
   if (event.title) {
     const titles = [...(player.getAttribute(Membership.KINGDOM_TITLES_ATTRIBUTE) ?? [])];
     if (!titles.includes(event.title)) titles.push(event.title);

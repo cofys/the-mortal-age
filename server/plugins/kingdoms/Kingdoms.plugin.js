@@ -65,6 +65,9 @@ module.exports = {
       "kingdom:court-role",
       "kingdom:challenge-cooldown",
       "kingdom:trial",
+      "kingdom:oath-at",
+      "kingdom:renounced-at",
+      "kingdom:naturalization",
       "succession:fragments",
       "succession:heat",
       "succession:heat-at",
@@ -76,6 +79,7 @@ module.exports = {
     loadContentModule("./Events.Kingdoms")(api);
     loadContentModule("./Membership.Kingdoms")(api);
     loadContentModule("./Influence.Kingdoms")(api);
+    loadContentModule("./Switching.Kingdoms")(api);
     loadContentModule("./Politics.Kingdoms")(api);
     loadContentModule("./DonationChest.Kingdoms")(api);
     loadContentModule("./Steward.Kingdoms")(api);
