@@ -786,6 +786,46 @@ describe("player follow-ups", () => {
     assert.equal(conv.state, "done");
   });
 
+  it("shifts the follow-up after the typing-delayed reply (initialDelayMs)", () => {
+    const world = makeWorld();
+    const { record, bot } = world.add("Alice", 100, 100);
+    const baseHarness = makeHarness();
+    const offsetHarness = makeHarness();
+    const mkOpts = (harness, extra = {}) => ({
+      rng: mulberry32(79),
+      say: () => {},
+      schedule: harness.schedule,
+      now: harness.nowFn,
+      force: true,
+      deps: neutralDeps(),
+      forceTopic: "greeting",
+      ...extra,
+    });
+    const base = Engine.maybePlayerFollowUp(
+      world.director,
+      record,
+      bot,
+      "Jon",
+      mkOpts(baseHarness)
+    );
+    assert.ok(base);
+    const offset = Engine.maybePlayerFollowUp(
+      world.director,
+      record,
+      bot,
+      "Jon",
+      mkOpts(offsetHarness, { initialDelayMs: 2500 })
+    );
+    assert.ok(offset);
+    const baseDelay = baseHarness.delays[0];
+    const offsetDelay = offsetHarness.delays[0];
+    assert.ok(
+      Math.abs(offsetDelay - (baseDelay + 2500)) < 1e-9,
+      `offset delay ${offsetDelay} should be base ${baseDelay} + 2500`
+    );
+    assert.ok(offsetDelay >= 3000, "follow-up still human-paced");
+  });
+
   it("respects the per-citizen cooldown without force", () => {
     const world = makeWorld();
     const { record, bot } = world.add("Alice", 100, 100);

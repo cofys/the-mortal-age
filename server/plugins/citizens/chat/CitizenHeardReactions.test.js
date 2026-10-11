@@ -8,10 +8,17 @@ const {
   matchPattern,
   reactionChance,
   resetForTests,
+  setReactionScheduler,
+  typingDelayMs,
+  lastReactionDelayMs,
   POOLS,
   TERSE,
   REACTION_COOLDOWN_MS,
 } = require("./CitizenHeardReactions");
+
+// Reactions are scheduled now (human typing delay). Tests run them
+// synchronously through this seam; the async path gets its own check.
+setReactionScheduler((fn) => fn());
 
 let passed = 0;
 function check(name, fn) {
@@ -296,6 +303,68 @@ check("warm conversation nudges the bond score", () => {
     "a heard conversation warms the bond"
   );
   SocialBonds.resetForTests();
+});
+
+// --- Human pacing: typing delay ----------------------------------------------
+
+check("typingDelayMs: short reflexes land fast, longer lines take longer", () => {
+  const fixed = () => 0.5;
+  const short = typingDelayMs("gz!", {}, fixed);
+  const long = typingDelayMs("hey there, how has your day been going?", {}, fixed);
+  assert.ok(short >= 1200 && short <= 9000, `short=${short} out of range`);
+  assert.ok(long >= 1200 && long <= 9000, `long=${long} out of range`);
+  assert.ok(long > short, `long=${long} should exceed short=${short}`);
+});
+
+check("typingDelayMs: taciturn slower than chatty on the same line", () => {
+  const fixed = () => 0.5;
+  const line = "hey there, how has your day been going?";
+  const slow = typingDelayMs(line, { traits: ["taciturn"] }, fixed);
+  const fast = typingDelayMs(line, { traits: ["chatty"] }, fixed);
+  assert.ok(slow > fast, `taciturn=${slow} should exceed chatty=${fast}`);
+});
+
+check("reaction records its typing delay for the follow-up path", () => {
+  const spoken = [];
+  const bot = mockBot({ traits: ["chatty"] }, spoken);
+  let line = null;
+  for (let i = 0; i < 20 && !line; i++) {
+    resetForTests();
+    spoken.length = 0;
+    line = tryScriptedReaction("Petra Stone", "Cofy", "hi", bot, Date.now());
+  }
+  assert.ok(line, "should fire");
+  const d = lastReactionDelayMs();
+  assert.ok(d >= 1200 && d <= 9000, `recorded delay ${d} out of range`);
+});
+
+check("reaction speech is scheduled, not instant", () => {
+  let captured = null;
+  setReactionScheduler((fn, ms) => {
+    captured = { fn, ms };
+  });
+  try {
+    const spoken = [];
+    const bot = mockBot({ traits: ["chatty"] }, spoken);
+    let line = null;
+    for (let i = 0; i < 20 && !line; i++) {
+      resetForTests();
+      spoken.length = 0;
+      captured = null;
+      line = tryScriptedReaction("Petra Stone", "Cofy", "hi", bot, Date.now());
+    }
+    assert.ok(line, "should fire");
+    assert.ok(captured, "reaction should be scheduled");
+    assert.ok(
+      captured.ms >= 1200 && captured.ms <= 9000,
+      `scheduled delay ${captured.ms} out of range`
+    );
+    assert.equal(spoken.length, 0, "nothing spoken before the timer fires");
+    captured.fn();
+    assert.equal(spoken.length, 1, "line lands when the timer fires");
+  } finally {
+    setReactionScheduler((fn) => fn()); // back to synchronous for the rest
+  }
 });
 
 // --- Pool sanity ------------------------------------------------------------

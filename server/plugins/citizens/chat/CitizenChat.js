@@ -208,13 +208,18 @@ function onCitizenChatHeard(event) {
       try {
         if (Math.random() < 0.35) {
           const { maybePlayerFollowUp } = require("./CitizenConversations");
+          const { lastReactionDelayMs } = require("./CitizenHeardReactions");
           const { getDirector } = require("../director/CitizenDirector");
           const { normalizeName } = require("../lib/CitizenBonds");
           const director = getDirector();
           const record =
             director?.roster?.get?.(normalizeName(citizenUsername)) ?? null;
           if (director && record) {
-            maybePlayerFollowUp(director, record, bot, speakerUsername);
+            // The reply now lands after a human typing delay — start the
+            // follow-up's pacing window from there, not from now.
+            maybePlayerFollowUp(director, record, bot, speakerUsername, {
+              initialDelayMs: lastReactionDelayMs(),
+            });
           }
         }
       } catch {

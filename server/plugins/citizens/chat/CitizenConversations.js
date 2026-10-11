@@ -1321,6 +1321,9 @@ function maybeStart(director, aRecord, aBot, bRecord, bBot, nowMs, opts = {}) {
  * a nearby citizen chiming in — instead of the exchange dying after
  * exactly one reply. Called by CitizenChat after a scripted reaction.
  * Probability gating lives at the call site; cooldowns/caps live here.
+ * opts.initialDelayMs shifts the first follow-up turn later — CitizenChat
+ * passes the typing delay of the reply that precedes it, so the
+ * follow-up thought lands after the reply, not under it.
  */
 function maybePlayerFollowUp(director, record, bot, playerName, opts = {}) {
   try {
@@ -1388,8 +1391,15 @@ function maybePlayerFollowUp(director, record, bot, playerName, opts = {}) {
     };
     conversations.set(conv.id, conv);
     byParticipant.set(record.username, conv.id);
+    // The follow-up is a second thought AFTER the initial reply lands.
+    // Its pacing window starts once that reply has been spoken (the
+    // reply itself now carries a human typing delay), so it never
+    // races the reply it follows.
+    const replyDelayMs = Math.max(0, Number(opts.initialDelayMs) || 0);
     const delay =
-      TURN_DELAY_MIN_MS + rng() * (TURN_DELAY_MAX_MS - TURN_DELAY_MIN_MS);
+      replyDelayMs +
+      TURN_DELAY_MIN_MS +
+      rng() * (TURN_DELAY_MAX_MS - TURN_DELAY_MIN_MS);
     conv.schedule(() => runPlayerTurn(conv, bot), delay);
     return conv;
   } catch {

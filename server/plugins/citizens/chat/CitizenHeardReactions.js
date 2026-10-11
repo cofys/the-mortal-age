@@ -13,9 +13,18 @@
  *
  * Why scripted, not LLM:
  *   - Zero token cost (the free-tier ceiling is hard)
- *   - Instant (no LLM latency — "gz!" 30s late is worse than silence)
+ *   - Fast (no LLM latency — a "gz!" 30s late is worse than silence)
  *   - These are reflexes, not conversation — real players don't compose
  *     thoughtful prose for "gz"
+ *
+ * Human pacing: the reflexes used to fire synchronously, so a citizen
+ * answered in the same game tick as the player's keystroke — the most
+ * visible bot tell in player-facing chat. Every reaction is now scheduled
+ * with a typing-style delay: short reflexes ("gz!") land in ~1.2-1.5s,
+ * longer lines take a few seconds, and taciturn citizens are a touch
+ * slower than chatty ones. The follow-up machinery in CitizenChat/
+ * CitizenConversations reads the delay back (lastReactionDelayMs) so a
+ * follow-up thought lands AFTER the reply, not under it.
  *
  * Personality-gated (chatty citizens react more, taciturn less) and throttled
  * (per-citizen cooldown) so crowds don't become echo chambers. If no pattern
@@ -43,6 +52,48 @@ function pruneCooldowns(nowMs) {
   for (const [k, at] of lastReactionAt) {
     if (at < cutoff) lastReactionAt.delete(k);
   }
+}
+
+// --- Human pacing -----------------------------------------------------------
+// Reactions are scheduled, not spoken inline, so they land like a person
+// typed them. The scheduler is a seam so tests can run synchronously. In
+// production the timer is unref'd so a pending reaction never holds the
+// server process open.
+function defaultReactionSchedule(fn, delayMs) {
+  const t = setTimeout(fn, delayMs);
+  if (typeof t?.unref === "function") t.unref();
+  return t;
+}
+let scheduleReaction = defaultReactionSchedule;
+function setReactionScheduler(fn) {
+  scheduleReaction = typeof fn === "function" ? fn : defaultReactionSchedule;
+}
+
+/**
+ * Typing-style delay (ms) before a reaction's line is spoken. Short
+ * reflexes ("gz!") land in ~1.2-1.5s; longer lines take a few seconds.
+ * Taciturn citizens are a beat slower than chatty ones. Pure + testable.
+ */
+function typingDelayMs(line, personality, rng = Math.random) {
+  const chars = String(line ?? "").length;
+  let ms = 900 + chars * 55; // notice the moment + type the line
+  ms *= 0.75 + rng() * 0.5; // human jitter
+  try {
+    const traits = new Set(personality?.traits ?? []);
+    if (traits.has("taciturn") || traits.has("gruff") || traits.has("suspicious"))
+      ms *= 1.25;
+    else if (traits.has("chatty") || traits.has("cheerful")) ms *= 0.85;
+  } catch {
+    /* personality-free default */
+  }
+  return Math.round(Math.min(9000, Math.max(1200, ms)));
+}
+
+// The delay used by the most recent scheduled reaction. CitizenChat reads
+// this back so a follow-up thought lands AFTER the reply, not under it.
+let lastDelayMs = 0;
+function lastReactionDelayMs() {
+  return lastDelayMs;
 }
 
 // --- Reaction pools -------------------------------------------------------
@@ -165,11 +216,16 @@ function reactionChance(personality) {
 function speakShun(citizenUsername, personality, bot, nowMs) {
   const voice = voiceFor(personality);
   const line = voiceLine(voice, voicePool("shun"));
-  try {
-    sayPublic(bot, line);
-  } catch {
-    return null;
-  }
+  // Snappy, but not instant: even a cold shoulder needs a beat.
+  const delay = Math.round(800 + Math.random() * 1200);
+  lastDelayMs = delay;
+  scheduleReaction(() => {
+    try {
+      sayPublic(bot, line);
+    } catch {
+      // A failed shun just never lands — never crash the chat path.
+    }
+  }, delay);
   lastReactionAt.set(citizenUsername, nowMs);
   return line;
 }
@@ -183,7 +239,7 @@ function speakShun(citizenUsername, personality, bot, nowMs) {
  * @param {string} text - what they said
  * @param {object} bot - the citizen's Player object (for forceChat + personality)
  * @param {number} nowMs - Date.now()
- * @returns {string|null} the line spoken, or null
+ * @returns {string|null} the line scheduled to be spoken, or null
  */
 function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs = Date.now()) {
   pruneCooldowns(nowMs);
@@ -270,11 +326,21 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
   }
 
   // Speak like a player: overhead + chat box (not NPC-style overhead-only).
-  try {
-    sayPublic(bot, line);
-  } catch {
-    return null; // couldn't speak — let LLM try
-  }
+  // Scheduled with a typing delay — the reply used to fire in the same
+  // tick as the player's keystroke, which was the most visible bot tell
+  // in player-facing chat. The throttle is claimed now (at reaction
+  // time), not at speak time, so a pending reply can't double-fire.
+  const delay = typingDelayMs(line, personality);
+  lastDelayMs = delay;
+  const capturedBot = bot;
+  const capturedLine = line;
+  scheduleReaction(() => {
+    try {
+      sayPublic(capturedBot, capturedLine);
+    } catch {
+      // sayPublic degrades gracefully; a failed reflex just never lands.
+    }
+  }, delay);
 
   lastReactionAt.set(citizenUsername, nowMs);
 
@@ -322,6 +388,7 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
 function resetForTests() {
   lastReactionAt.clear();
   lastPruneAt = 0;
+  lastDelayMs = 0;
 }
 
 module.exports = {
@@ -330,6 +397,9 @@ module.exports = {
   matchPattern,
   reactionChance,
   resetForTests,
+  setReactionScheduler,
+  typingDelayMs,
+  lastReactionDelayMs,
   POOLS,
   TERSE,
   REACTION_COOLDOWN_MS,
