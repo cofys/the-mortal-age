@@ -479,6 +479,9 @@ function showFenceMenu(player) {
       showFenceMenu(player);
     });
   }
+  // The rebellion questline (quests/quests/, loaded after this plugin — the
+  // entries resolve lazily). Offer and turn-in entries slot in here.
+  addQuestEntries(player, pairs);
   pairs.push(
     "How do I stand with the Hollow?",
     () => {
@@ -489,6 +492,28 @@ function showFenceMenu(player) {
     () => {}
   );
   prompt(player, "The fence", pairs);
+}
+
+// --- Myreque rebellion questline ------------------------------------------------------------
+// Each quest module exports fenceEntry(player) -> [label, handler] | null; the
+// handler gets a reopen callback so its dialogue can return to this menu.
+
+const QUEST_ENTRY_MODULES = [
+  "../quests/quests/WordsInTheDark.Quest",
+  "../quests/quests/TheTithesLedgers.Quest",
+  "../quests/quests/BloodOnTheSwamp.Quest",
+];
+
+function addQuestEntries(player, pairs) {
+  for (const mod of QUEST_ENTRY_MODULES) {
+    let entry = null;
+    try {
+      entry = require(mod).fenceEntry?.(player) ?? null;
+    } catch {
+      entry = null; // quest not loaded — the track works without it
+    }
+    if (entry) pairs.push(entry[0], () => entry[1](() => showFenceMenu(player)));
+  }
 }
 
 /** Spreading word: carry the fence's sealed note to Polmafi. */
@@ -519,6 +544,26 @@ function carryWord(player) {
   markCooldown(player, "myreque:word-at");
   player.sendMessage("The fence presses a sealed note into your hand. \"Polmafi, by the old tunnel. Walk like you've somewhere to be.\"");
   showFenceMenu(player);
+}
+
+/**
+ * Quest handoff for "Words in the Dark": the fence's sealed word without the
+ * repeatable run's cooldown or trust gate. Delivery still goes through
+ * onPolmafiTalk, which awards the normal standing and emits
+ * myreque:word-delivered for the quest to hear.
+ */
+function carryWordQuest(player) {
+  if (player.getAttribute?.("myreque:carrying-word") === true) return false;
+  if (!giveItem(player, core.ItemIdentifiers.NOTE)) {
+    player.sendMessage("The fence frowns at your full pack. \"Make room first.\"");
+    return false;
+  }
+  try {
+    player.setAttribute("myreque:carrying-word", true);
+  } catch {
+    // best-effort
+  }
+  return true;
 }
 
 /** The black market: discount anti-vyre supplies, premium blood-rune buy. */
@@ -608,6 +653,7 @@ function deliverSupplies(player, offer) {
   markCooldown(player, "myreque:cache-at");
   Rep.addStanding(player, SMUGGLE_STANDING, "smuggled");
   player.sendMessage(`You tuck the ${offer.name} into the cache and cover it with reeds. The Hollow will remember this. (+${SMUGGLE_STANDING} standing)`);
+  api.emitCustomEvent("myreque:supply-delivered", { player });
 }
 
 // --- Sabotage: burn the tithe records -------------------------------------------------------------
@@ -654,6 +700,7 @@ function burnRecords(player) {
     "The tithe records in Canifis went up in smoke. Sarev is asking questions."
   );
   player.sendMessage(`You tip the ledgers out and set them alight. Names, debts, blood-dues — all smoke on the swamp wind. (+${BURN_STANDING} standing)`);
+  api.emitCustomEvent("myreque:records-burned", { player });
 }
 
 // --- The courier (the regime's bounty target) -------------------------------------------------------
@@ -693,6 +740,7 @@ function onCourierDeath(event) {
   Rep.addStanding(killer, COURIER_KILL_STANDING, "courier-killed");
   Rep.markDeed(killer, `${killer.getUsername?.() ?? "Someone"} cut down a Myreque runner in the swamp.`, null);
   killer.sendMessage("The runner dies quietly in the reeds. The tithe will pay for this — Sarev, in Canifis.");
+  api.emitCustomEvent("myreque:courier-slain", { player: killer });
 }
 
 // --- Polmafi: the Hollow's door (no SunkenHollow edit — this hook runs first) ------------------------
@@ -716,6 +764,7 @@ function onPolmafiTalk(event) {
     Rep.addStanding(player, WORD_STANDING, "word-delivered");
     player.sendMessage("Polmafi breaks the seal, reads, and burns the note. \"The cell hears you. We won't forget.\"");
     player.sendMessage(`(+${WORD_STANDING} standing)`);
+    api.emitCustomEvent("myreque:word-delivered", { player });
     return; // handled
   }
   return false; // not ours — let SunkenHollow's handler run
@@ -795,3 +844,4 @@ function registerActors(pluginApi) {
 module.exports = registerActors;
 module.exports.ensureCourier = ensureCourier;
 module.exports.isCourier = isCourier;
+module.exports.carryWordQuest = carryWordQuest;

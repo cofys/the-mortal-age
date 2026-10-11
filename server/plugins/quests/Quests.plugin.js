@@ -9,7 +9,7 @@
 const QUESTS = [
   "AnimalMagnetism", "AnotherSliceOfHAM", "ARuffSituation", "AscentOfArceuus",
   "AtFirstLight", "BelowIceMountain", "BeneathCursedSands", "BetweenARock",
-  "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "BoneVoyage",
+  "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "BloodOnTheSwamp", "BoneVoyage",
   "CabinFever", "ChildrenOfTheSun", "ClientOfKourend", "ClockTower",
   "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
@@ -45,11 +45,11 @@ const QUESTS = [
   "SpiritsOfTheElid", "SwanSong", "TaiBwoWannaiTrio", "TailOfTwoCats",
   "TaleOfTheRighteous", "TearsOfGuthix", "TempleOfIkov", "TempleOfTheEye",
   "TheFeud", "TheFinalDawn", "TheFremennikExiles", "TheFremennikIsles",
-  "TheGolem", "TheHeartOfDarkness", "ThroneOfMiscellania", "TouristTrap",
+  "TheGolem", "TheHeartOfDarkness", "TheTithesLedgers", "ThroneOfMiscellania", "TouristTrap",
   "TowerOfLife", "TreeGnomeVillage", "TribalTotem", "TrollRomance",
   "TrollStronghold", "TroubledTortugans", "TwilightPromise", "UndergroundPass",
   "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest",
-  "WhatLiesBelow", "WitchsHouse", "WitchsPotion", "XMarksTheSpot",
+  "WhatLiesBelow", "WitchsHouse", "WitchsPotion", "WordsInTheDark", "XMarksTheSpot",
   "ZogreFleshEaters",
 ]
 

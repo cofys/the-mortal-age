@@ -200,6 +200,7 @@ function onPatrolDeath(event) {
     "A vyre patrol was found dead in Canifis. Sarev wants answers — the Hollow wants the killer's name."
   );
   killer.sendMessage("[Myreque] The patrol lies broken in the street. The Hollow will remember this. (+60 standing)");
+  api.emitCustomEvent("myreque:patrol-slain", { player: killer });
 }
 
 // --- the exposed operative (swamp) -----------------------------------------------------------------
