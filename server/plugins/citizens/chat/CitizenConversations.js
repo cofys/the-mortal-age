@@ -1236,9 +1236,13 @@ function turnDelay(conv, nextRecord) {
   return Math.round(base * scale);
 }
 
-function speakLine(conv, participant, stage) {
-  const bot = resolveBot(conv, participant);
-  if (!bot) return false;
+/**
+ * Pick the line for a turn without saying it. Same pools/vars/flavor as
+ * speakLine — split out so a line can be picked now and spoken later
+ * (a delayed reply needs the actual line to compute its typing delay).
+ * Returns { line, addressee } or null when nothing usable is picked.
+ */
+function pickTurnLine(conv, participant, stage) {
   const voice = voiceFor(participant.record?.personality);
   // The person being addressed: whoever spoke last, else the next
   // participant round-robin. {other}/{met} come from real state.
@@ -1296,8 +1300,12 @@ function speakLine(conv, participant, stage) {
     if (flavorPool && conv.rng() < threshold) pools = flavorPool;
   }
   const line = pickLine(voice, pools, vars, conv.rng);
-  if (!line) return false;
-  // Face the person you're talking to, like a person would.
+  if (!line) return null;
+  return { line: render(line, vars), addressee };
+}
+
+/** Face the person you're talking to, like a person would. */
+function faceAddressee(conv, bot, addressee) {
   try {
     const myTile = botTile(bot);
     const theirTile = addressee ? botTile(resolveBot(conv, addressee)) : null;
@@ -1307,7 +1315,9 @@ function speakLine(conv, participant, stage) {
   } catch {
     /* cosmetic */
   }
-  conv.say(bot, render(line, vars));
+}
+
+function bookTurn(conv, participant, stage, text) {
   conv.turn += 1;
   conv.lastAt = conv.now();
   conv.lastSpeakerIdx = conv.participants.indexOf(participant);
@@ -1318,12 +1328,74 @@ function speakLine(conv, participant, stage) {
   });
   if (typeof conv.onLine === "function") {
     try {
-      conv.onLine(conv, participant.username, render(line, vars), stage);
+      conv.onLine(conv, participant.username, text, stage);
     } catch {
       /* test hook only */
     }
   }
+}
+
+function speakLine(conv, participant, stage) {
+  const bot = resolveBot(conv, participant);
+  if (!bot) return false;
+  const picked = pickTurnLine(conv, participant, stage);
+  if (!picked) return false;
+  faceAddressee(conv, bot, picked.addressee);
+  conv.say(bot, picked.line);
+  bookTurn(conv, participant, stage, picked.line);
   return true;
+}
+
+/**
+ * Speak a turn after a human typing delay (slice-2 pacing): the line is
+ * picked NOW on the current topic/flavor state, then spoken after the
+ * typing delay for its actual length plus a base pacing delay. Used when
+ * a player continues an active thread — the reply lands like a person
+ * typed it, and the thread's later turns are scheduled after the reply
+ * speaks (slice-3 offset behavior), never under it.
+ * Token-guarded: a newer continuation cancels a pending delayed reply.
+ * `after` runs after the line is spoken (thread bookkeeping).
+ */
+function speakLineDelayed(conv, participant, stage, baseDelayMs, after) {
+  try {
+    const picked = pickTurnLine(conv, participant, stage);
+    if (!picked) return false;
+    let typingMs = 0;
+    try {
+      const { typingDelayMs } = require("./CitizenHeardReactions");
+      if (typeof typingDelayMs === "function") {
+        typingMs = typingDelayMs(
+          picked.line,
+          participant.record?.personality,
+          conv.rng
+        );
+      }
+    } catch {
+      /* fail-safe: base pacing only */
+    }
+    const delay = Math.max(0, Math.round((Number(baseDelayMs) || 0) + typingMs));
+    const token = conv.turnToken ?? 0;
+    conv.schedule(() => {
+      if (conv.state !== "active" || (conv.turnToken ?? 0) !== token) return;
+      const liveBot = resolveBot(conv, participant);
+      if (!liveBot || !isOnline(conv, participant)) {
+        return finishConversation(conv, "stale");
+      }
+      faceAddressee(conv, liveBot, picked.addressee);
+      conv.say(liveBot, picked.line);
+      bookTurn(conv, participant, stage, picked.line);
+      if (typeof after === "function") {
+        try {
+          after(conv, liveBot);
+        } catch {
+          /* non-fatal */
+        }
+      }
+    }, delay);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function finishConversation(conv, reason) {
@@ -1631,6 +1703,7 @@ function maybePlayerFollowUp(director, record, bot, playerName, opts = {}) {
       history: [],
       playerLinesSpoken: 0,
       chimedIn: false,
+      turnToken: 0, // bumped by continuations to cancel stale turns
     };
     conversations.set(conv.id, conv);
     byParticipant.set(record.username, conv.id);
@@ -1643,14 +1716,116 @@ function maybePlayerFollowUp(director, record, bot, playerName, opts = {}) {
       replyDelayMs +
       TURN_DELAY_MIN_MS +
       rng() * (TURN_DELAY_MAX_MS - TURN_DELAY_MIN_MS);
-    conv.schedule(() => runPlayerTurn(conv, bot), delay);
+    schedulePlayerTurn(conv, bot, delay);
     return conv;
   } catch {
     return null;
   }
 }
 
-function runPlayerTurn(conv, citizenBot) {
+/**
+ * Schedule a player-thread turn. Token-guarded: each player continuation
+ * bumps conv.turnToken, so a turn scheduled against an older line becomes
+ * a no-op instead of double-speaking over the new reply.
+ */
+function schedulePlayerTurn(conv, citizenBot, delayMs, forcedStage) {
+  const token = conv.turnToken ?? 0;
+  conv.schedule(() => {
+    if (conv.state !== "active" || (conv.turnToken ?? 0) !== token) return;
+    runPlayerTurn(conv, citizenBot, forcedStage);
+  }, Math.max(0, Math.round(delayMs)));
+}
+
+/** Shared tail after a player-thread line is spoken: count it, finish the
+ * thread at the planned length, else schedule the next turn. */
+function afterPlayerReply(conv, liveBot) {
+  conv.playerLinesSpoken += 1;
+  if (conv.playerLinesSpoken >= conv.plannedTurns) {
+    return finishConversation(conv, "planned");
+  }
+  schedulePlayerTurn(
+    conv,
+    liveBot,
+    TURN_DELAY_MIN_MS + conv.rng() * (TURN_DELAY_MAX_MS - TURN_DELAY_MIN_MS)
+  );
+}
+
+function sameName(a, b) {
+  try {
+    const { normalizeName } = require("../lib/CitizenBonds");
+    if (typeof normalizeName === "function") {
+      return normalizeName(a) === normalizeName(b);
+    }
+  } catch {
+    /* fall through */
+  }
+  return String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
+}
+
+/**
+ * Continue an ACTIVE player conversation when the player sends another
+ * line mid-thread: the citizen answers the new line on the SAME topic
+ * (same flavor/pacing/relationship state, same bounded length) instead
+ * of the engine firing a fresh one-shot reflex.
+ *
+ * Returns true when the thread was continued — the caller should skip
+ * the normal reflex/LLM path. Returns false on any miss (no active
+ * player thread, different speaker, citizen offline, any error), and
+ * the caller must fall back to the current one-shot behavior.
+ * Zero LLM anywhere in the path.
+ */
+function continuePlayerConversation(citizenUsername, playerName, text, bot, opts = {}) {
+  try {
+    if (!citizenUsername || !playerName) return false;
+    const conv = activeConversationFor(citizenUsername);
+    if (!conv || conv.state !== "active" || conv.kind !== "player") {
+      return false;
+    }
+    const citizen = conv.participants[0];
+    if (!citizen || citizen.username !== citizenUsername) return false;
+    const player = conv.participants.find((p) => p.isPlayer === true);
+    if (!player || !sameName(player.username, playerName)) return false;
+    const liveBot = resolveBot(conv, citizen) ?? bot ?? null;
+    if (!liveBot || !isOnline(conv, citizen)) {
+      finishConversation(conv, "stale");
+      return false; // fall back to the normal one-shot path
+    }
+    // Record the player's line in the thread (shared-history context).
+    conv.history.push({
+      speaker: playerName,
+      stage: "player-line",
+      topicId: conv.topic.id,
+      text: String(text ?? "").slice(0, 80),
+    });
+    conv.lastAt = conv.now();
+    conv.startedAt = conv.now(); // a talked-to thread isn't stale
+    // Extend the thread by one citizen answer, bounded by MAX_TURNS.
+    conv.plannedTurns = Math.min(MAX_TURNS, conv.plannedTurns + 1);
+    // Invalidate any already-scheduled turn so the new reply answers
+    // THIS line; the stale timer becomes a no-op (never double-speaks).
+    const prevToken = conv.turnToken ?? 0;
+    conv.turnToken = prevToken + 1;
+    // Answer on the same topic with human typing pacing (slice 2); the
+    // thread's normal turn pacing resumes after the reply lands, so a
+    // later follow-up keeps its offset (slice 3).
+    const ok = speakLineDelayed(
+      conv,
+      citizen,
+      "reply",
+      turnDelay(conv, citizen.record),
+      afterPlayerReply
+    );
+    if (!ok) {
+      conv.turnToken = prevToken; // restore: let the pending turn stand
+      return false;
+    }
+    return true;
+  } catch {
+    return false; // fail-safe: any error falls back to current behavior
+  }
+}
+
+function runPlayerTurn(conv, citizenBot, forcedStage) {
   if (conv.state !== "active") return;
   const citizen = conv.participants[0];
   const liveBot = resolveBot(conv, citizen) ?? citizenBot;
@@ -1668,23 +1843,18 @@ function runPlayerTurn(conv, citizenBot) {
     }
   }
   const stage =
-    conv.playerLinesSpoken === 0
+    forcedStage ??
+    (conv.playerLinesSpoken === 0
       ? "follow"
       : conv.rng() < 0.5
         ? "closer"
-        : "react";
+        : "react");
   // Player-conversation lines don't consume the generic turn counter the
   // same way; track them separately so finish conditions stay clear.
   const before = conv.turn;
   speakLine(conv, citizen, stage);
   if (conv.turn === before) return finishConversation(conv, "stale");
-  conv.playerLinesSpoken += 1;
-  if (conv.playerLinesSpoken >= conv.plannedTurns) {
-    return finishConversation(conv, "planned");
-  }
-  const delay =
-    TURN_DELAY_MIN_MS + conv.rng() * (TURN_DELAY_MAX_MS - TURN_DELAY_MIN_MS);
-  conv.schedule(() => runPlayerTurn(conv, liveBot), delay);
+  afterPlayerReply(conv, liveBot);
 }
 
 /**
@@ -1709,6 +1879,7 @@ function housekeep(nowMs) {
 module.exports = {
   maybeStart,
   maybePlayerFollowUp,
+  continuePlayerConversation,
   housekeep,
   activeConversationFor,
   MAX_ACTIVE,

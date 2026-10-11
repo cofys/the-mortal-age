@@ -189,6 +189,26 @@ function onCitizenChatHeard(event) {
   if (shouldReply === false) {
     return;
   }
+  // Player-continuation: if this player is already mid-thread with this
+  // citizen (an active "player" conversation from the template engine),
+  // continue it on the SAME topic instead of firing a fresh one-shot
+  // reflex or a new LLM exchange. Zero LLM; any miss or error falls
+  // through to the normal path below.
+  try {
+    const { continuePlayerConversation } = require("./CitizenConversations");
+    const bot = findPlayerByName(citizenUsername);
+    if (
+      continuePlayerConversation(citizenUsername, speakerUsername, text, bot)
+    ) {
+      pluginApi.log?.("[citizens] continued player conversation", {
+        citizen: citizenUsername,
+        speaker: speakerUsername,
+      });
+      return; // Thread continued — no fresh reflex, no LLM needed.
+    }
+  } catch {
+    // Non-fatal — fall through to the normal path.
+  }
   // Scripted reactions: fast zero-LLM reflexes for common patterns ("gz!",
   // greetings, "thanks!"). If one fires, skip the LLM — the moment is handled.
   try {

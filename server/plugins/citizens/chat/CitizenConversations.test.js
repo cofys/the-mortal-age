@@ -854,6 +854,155 @@ describe("player follow-ups", () => {
   });
 });
 
+// --- continuations ---------------------------------------------------------------
+
+describe("player continuations", () => {
+  beforeEach(() => Engine._resetForTests());
+
+  function startPlayerThread(seed = 81) {
+    const world = makeWorld();
+    const { record, bot } = world.add("Alice", 100, 100);
+    const harness = makeHarness();
+    const lines = [];
+    const conv = Engine.maybePlayerFollowUp(world.director, record, bot, "Jon", {
+      rng: mulberry32(seed),
+      say: (b, text) => lines.push({ speaker: b.username, text }),
+      schedule: harness.schedule,
+      now: harness.nowFn,
+      force: true,
+      deps: neutralDeps({
+        newsContext: () => ({ headline: "The crier reports a festival soon." }),
+      }),
+      forceTopic: "news",
+      topicVars: { headline: "The crier reports a festival soon." },
+    });
+    assert.ok(conv, "thread should be created");
+    return { world, record, bot, harness, lines, conv };
+  }
+
+  it("continues the active thread on the same topic instead of a fresh one-shot", () => {
+    const { conv, harness, lines } = startPlayerThread();
+    const plannedBefore = conv.plannedTurns;
+    const topicBefore = conv.topic.id;
+    const ok = Engine.continuePlayerConversation(
+      "Alice",
+      "Jon",
+      "oh nice, tell me more",
+      null
+    );
+    assert.equal(ok, true, "active thread should continue");
+    assert.equal(conv.topic.id, topicBefore, "topic must not change");
+    assert.equal(
+      conv.plannedTurns,
+      Math.min(Engine.MAX_TURNS, plannedBefore + 1),
+      "thread extends by one citizen answer"
+    );
+    const playerLine = conv.history.find((h) => h.stage === "player-line");
+    assert.ok(playerLine, "player line recorded in thread history");
+    assert.equal(playerLine.topicId, topicBefore);
+    harness.pump();
+    assert.ok(
+      lines.length >= 2,
+      `expected continued thread lines, got ${lines.length}`
+    );
+    for (const h of conv.history) {
+      assert.equal(h.topicId, topicBefore, "no topic bleed between lines");
+    }
+    const stages = conv.history.map((h) => h.stage);
+    assert.ok(
+      stages.includes("reply"),
+      `continuation answer should use the reply stage, got ${stages}`
+    );
+    assert.equal(conv.state, "done");
+  });
+
+  it("answers with human typing pacing through a continuation", () => {
+    const { conv, harness, lines } = startPlayerThread();
+    Engine.continuePlayerConversation("Alice", "Jon", "tell me more", null);
+    assert.ok(harness.delays.length > 0, "reply should be scheduled");
+    const firstDelay = harness.delays[0];
+    // Turn pacing floor (3800ms) + typing-delay floor (1200ms clamp).
+    assert.ok(
+      firstDelay >= 5000,
+      `continuation reply too fast to be human: ${firstDelay}ms`
+    );
+    assert.ok(
+      firstDelay <= 17500,
+      `continuation reply unreasonably slow: ${firstDelay}ms`
+    );
+    harness.pump();
+    assert.ok(lines.length >= 1, "reply should land after its delay");
+    // Follow-up turns still land after the reply (offset behavior).
+    assert.ok(
+      harness.delays.every((d) => d >= 3000),
+      "every thread turn stays human-paced"
+    );
+  });
+
+  it("cancels a stale pending turn so the new reply answers the new line", () => {
+    const { conv, harness, lines } = startPlayerThread();
+    // The initial follow-up is still pending (not pumped).
+    const ok = Engine.continuePlayerConversation("Alice", "Jon", "and then?", null);
+    assert.equal(ok, true);
+    harness.pump();
+    // The stale pre-continuation turn must not have double-spoken:
+    // exactly the planned citizen lines speak, then the thread ends.
+    assert.equal(
+      lines.length,
+      conv.plannedTurns,
+      `stale turn leaked extra lines: ${lines.length} vs ${conv.plannedTurns}`
+    );
+    assert.equal(conv.state, "done");
+  });
+
+  it("returns false when there is no active player thread to continue", () => {
+    // Nothing started.
+    assert.equal(
+      Engine.continuePlayerConversation("Alice", "Jon", "hi", null),
+      false
+    );
+    // Thread finished already.
+    const { conv, harness } = startPlayerThread();
+    harness.pump();
+    assert.equal(conv.state, "done");
+    assert.equal(
+      Engine.continuePlayerConversation("Alice", "Jon", "hi again", null),
+      false
+    );
+    // A different speaker is not this thread's player.
+    const t2 = startPlayerThread(82);
+    assert.equal(
+      Engine.continuePlayerConversation("Alice", "NotJon", "hi", null),
+      false
+    );
+    assert.equal(t2.conv.state, "active", "thread untouched by a stranger");
+  });
+
+  it("returns false and goes stale when the citizen is offline", () => {
+    const { world, bot, conv } = startPlayerThread();
+    bot.online = false;
+    assert.equal(
+      Engine.continuePlayerConversation("Alice", "Jon", "you there?", null),
+      false
+    );
+    assert.equal(conv.state, "done");
+    void world;
+  });
+
+  it("bounds extended threads at MAX_TURNS", () => {
+    const { conv, harness } = startPlayerThread();
+    for (let i = 0; i < 20; i++) {
+      Engine.continuePlayerConversation("Alice", "Jon", `line ${i}`, null);
+      if (conv.state !== "active") break;
+    }
+    assert.ok(
+      conv.plannedTurns <= Engine.MAX_TURNS,
+      `planned turns escaped the bound: ${conv.plannedTurns}`
+    );
+    harness.pump(2000);
+  });
+});
+
 // --- closeness -------------------------------------------------------------------
 
 describe("closenessTier", () => {
