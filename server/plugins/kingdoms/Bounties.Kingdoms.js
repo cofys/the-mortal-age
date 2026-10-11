@@ -22,6 +22,11 @@
  * or after CLEAN_MS clean days, whichever comes first (the remainder
  * refunds then too). A fresh crime resets the clean clock and escalates.
  *
+ * Bank robberies (BankRobbery.plugin, 2026-10-11) are the #1 bounty
+ * generator by design: they post with an explicit amount override of
+ * 100k + 25% of the take, kingdom-funded. MAX_AMOUNT was raised from
+ * 10k to 1M for them — a capital-vault job can put 850k on a crew's head.
+ *
  * No LLM, no tick of its own: decay is applied lazily on read
  * (listWanted / collect / markWanted), the same pattern WarSupply uses
  * for demands.
@@ -35,10 +40,12 @@ const BOUNTY_CONFIG = {
     attack: 500,
     sabotage: 2000,
     "enemy-of-the-realm": 1000,
+    /** Bank robbery base; the caller overrides with 100k + 25% of take. */
+    "bank-robbery": 100000,
   },
   DEFAULT_PER_CRIME: 250,
-  /** Hard ceiling on one wanted record. */
-  MAX_AMOUNT: 10000,
+  /** Hard ceiling on one wanted record (raised for bank-robbery bounties). */
+  MAX_AMOUNT: 1000000,
   /** Fraction of the current amount that decays away per clean day. */
   DECAY_FRACTION_PER_DAY: 0.25,
   /** Clean-period cap: after this long clean, the record clears outright. */
@@ -142,14 +149,21 @@ function decayAll(store, now = Date.now()) {
  * Signature is contractual: Espionage.Kingdoms calls
  * markWanted(username, targetKingdomId, "sabotage", store).
  *
+ * The optional 5th parameter amountOverride replaces the per-crime config
+ * amount for this posting (BankRobbery.plugin passes 100k + 25% of take).
+ * Escalation against an existing record and treasury funding behave the
+ * same either way.
+ *
  * @returns the wanted record, or null when nothing could be funded.
  */
-function markWanted(username, issuingKingdomId, crime, store) {
+function markWanted(username, issuingKingdomId, crime, store, amountOverride) {
   if (!username || !issuingKingdomId || !store) return null;
   const now = Date.now();
   decayAll(store, now);
   const perCrime =
-    BOUNTY_CONFIG.PER_CRIME[crime] ?? BOUNTY_CONFIG.DEFAULT_PER_CRIME;
+    amountOverride != null && amountOverride > 0
+      ? Math.min(BOUNTY_CONFIG.MAX_AMOUNT, Math.floor(amountOverride))
+      : BOUNTY_CONFIG.PER_CRIME[crime] ?? BOUNTY_CONFIG.DEFAULT_PER_CRIME;
   let rec = findRecord(store, username, issuingKingdomId);
   const existing = rec ? rec.amount : 0;
   const wanted = Math.min(BOUNTY_CONFIG.MAX_AMOUNT, existing + perCrime);

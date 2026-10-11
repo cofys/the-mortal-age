@@ -22,7 +22,13 @@
       "recolorTo": [],
       "retextureFrom": [],
       "retextureTo": [],
-      "inventoryActions": ["Wield", null, null, null, "Drop"],
+      "inventoryActions": [
+        "Wield",
+        null,
+        null,
+        null,
+        "Drop"
+      ],
       "isTradable": false,
       "note": -1,
       "noteTemplate": -1,
@@ -31,7 +37,9 @@
       "placeholder": -1,
       "placeholderTemplate": -1
     },
-    "itemDef": { "tradeable": false },
+    "itemDef": {
+      "tradeable": false
+    },
     "models": {
       "1000000": "dragonic-katana/drop.dat",
       "1000001": "dragonic-katana/equip.dat"
@@ -43,10 +51,18 @@
     "objType": {
       "name": "Worn silver sickle",
       "examine": "A silver sickle, worn smooth by a friend of the Hollow.",
-      "inventoryActions": ["Read", null, null, null, "Drop"],
+      "inventoryActions": [
+        "Read",
+        null,
+        null,
+        null,
+        "Drop"
+      ],
       "isTradable": false
     },
-    "itemDef": { "tradeable": false }
+    "itemDef": {
+      "tradeable": false
+    }
   },
   {
     "id": 50002,
@@ -54,9 +70,55 @@
     "objType": {
       "name": "Tithe brand",
       "examine": "A dark brand, still warm from the tithe-fire.",
-      "inventoryActions": ["Wear", "Read", null, null, "Drop"],
+      "inventoryActions": [
+        "Wear",
+        "Read",
+        null,
+        null,
+        "Drop"
+      ],
       "isTradable": false
     },
-    "itemDef": { "tradeable": false }
+    "itemDef": {
+      "tradeable": false
+    }
+  },
+  {
+    "id": 50003,
+    "baseItemId": 453,
+    "objType": {
+      "name": "Smoke bomb",
+      "examine": "Packed coal-dust. Throw it to vanish in the smoke.",
+      "inventoryActions": [
+        "Use",
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "isTradable": false
+    },
+    "itemDef": {
+      "tradeable": false
+    }
+  },
+  {
+    "id": 50004,
+    "baseItemId": 970,
+    "objType": {
+      "name": "Forged vault orders",
+      "examine": "Official-looking vault inspection orders. Officially fake.",
+      "inventoryActions": [
+        "Read",
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "isTradable": false
+    },
+    "itemDef": {
+      "tradeable": false
+    }
   }
 ]
