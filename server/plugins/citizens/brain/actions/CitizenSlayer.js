@@ -4,14 +4,34 @@
  * CitizenSlayer — real Slayer tasks for citizens, the RuneScape way.
  *
  * Citizens visit a real Slayer master NPC, receive a real task assignment
- * via the Slayer plugin, then hunt the assigned monsters with the real
- * combat engine. Slayer XP flows automatically through the plugin's
- * onNpcDeath hook — no direct XP awards, no interface clicking.
+ * via the Slayer plugin's units, then hunt the assigned monsters with the
+ * real combat engine. Slayer XP flows automatically through Tasks' onNpcDeath
+ * hook (npcKilled) — no direct XP awards, no interface clicking. The hook's
+ * only gate is killer.isPlayer(), which is true for citizen bots (they are
+ * Player instances), so citizen kills count down the task like any player's.
+ *
+ * API mapping (Slayer was rebuilt from cache tables into units under
+ * server/plugins/skills/slayer/; the old top-level plugin exports are gone):
+ *   - Slayer.getActiveTask(bot)            -> Tasks.current(bot)
+ *       { taskId, task, bossId, count, original, masterId, area } | null
+ *   - task.getRemaining()                  -> task.count
+ *   - Slayer.assignTaskForNpc(bot, {...})   -> Data.masterForNpcName(name)
+ *       to resolve the master, then Tasks.assign(bot, master)
+ *   - task.getTask().getNpcNames()         -> Tasks.countsFor(task, npc)
+ *       (the sanctioned kill-count predicate: NPC param 50 / named monsters /
+ *       boss names, plus Konar-area and Krystilia-wilderness constraints)
+ *   - task.getMaster().name / locations    -> Data.get().masters.get(
+ *       task.masterId).names, task.area?.text (wilderness check)
+ *
+ * The Slayer plugin's register() runs unit.init(api) for every unit at boot,
+ * so by tick time the units are initialized and safe to require directly —
+ * the same pattern server/tests/slayer.test.cjs uses.
  *
  * Flow per tick:
- *   - No Slayer plugin -> "failed" (fail fast, don't stall).
+ *   - No Slayer units -> "failed" (fail fast, don't stall).
  *   - No active task -> find a nearby Slayer master NPC, walk to them,
- *     call assignTaskForNpc. No master nearby -> "success" (re-decide).
+ *     resolve the master and call Tasks.assign. No master nearby, or the
+ *     name resolves to nothing -> "success" (re-decide).
  *   - Wilderness task -> "success" (citizens don't hunt where they'd get
  *     PKed, per the PvP design — Krystilia's tasks stay untouched).
  *   - Task complete (remaining 0) -> "success" (brain re-decides, usually
@@ -56,9 +76,17 @@ const MASTER_SCAN_NAMES = [
   // Krystilia deliberately excluded — wilderness master.
 ];
 
-function slayerPlugin() {
+/**
+ * The Slayer units this action needs. Null when unavailable — the action
+ * fails fast rather than stalling.
+ */
+function slayerUnits() {
   try {
-    return require("../../../skills/Slayer.plugin.js");
+    const Tasks = require("../../../skills/slayer/Tasks.Slayer");
+    const Data = require("../../../skills/slayer/Data.Slayer");
+    if (typeof Tasks?.current !== "function") return null;
+    if (typeof Data?.masterForNpcName !== "function") return null;
+    return { Tasks, Data };
   } catch {
     return null;
   }
@@ -179,16 +207,29 @@ function findMasterNpc(bot) {
   return null;
 }
 
-/** True when any of the task's locations is in the Wilderness. */
-function isWildernessTask(task) {
+/** Resolve the Slayer master entry for a master NPC (by its cache name). */
+function masterForNpc(npc, Data) {
   try {
-    const locations = task?.getTask?.()?.locations ?? task?.locations ?? [];
-    for (const loc of locations) {
-      if (String(loc ?? "").toLowerCase().includes("wilderness")) return true;
-    }
-    // Krystilia's tasks are wilderness by definition.
-    const masterName = task?.getMaster?.()?.name ?? "";
-    if (String(masterName).toLowerCase().includes("krystilia")) return true;
+    return Data.masterForNpcName(npcName(npc)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when the task is a Wilderness task. Krystilia's tasks are wilderness
+ * by definition (kills only count there); Konar-style areas name the
+ * Wilderness in their text.
+ */
+function isWildernessTask(task, Data) {
+  try {
+    if (!task) return false;
+    const master = Data.get().masters.get(task.masterId);
+    const names = master?.names ?? [];
+    if (names.some((n) => String(n).toLowerCase().includes("krystilia")))
+      return true;
+    const areaText = task.area?.text ?? "";
+    if (String(areaText).toLowerCase().includes("wilderness")) return true;
     return false;
   } catch {
     return false;
@@ -197,18 +238,12 @@ function isWildernessTask(task) {
 
 /**
  * Find a huntable task NPC near the bot. Returns the NPC or null.
- * Skips claimed, dead, and contested NPCs; prefers the nearest.
+ * Skips NPCs that don't count for the task (Tasks.countsFor — the same
+ * predicate the kill hook uses), claimed, dead, and contested NPCs;
+ * prefers the nearest.
  */
-function findTaskTarget(bot, task, username) {
-  let npcNames = [];
-  try {
-    npcNames = task?.getTask?.()?.getNpcNames?.() ?? [];
-  } catch {
-    return null;
-  }
-  if (!npcNames.length) return null;
-  const wanted = new Set(npcNames.map((n) => String(n).toLowerCase()));
-
+function findTaskTarget(bot, task, username, Tasks) {
+  if (!task) return null;
   let npcs = [];
   try {
     npcs = bot.getLocalNpcs?.() ?? [];
@@ -220,7 +255,13 @@ function findTaskTarget(bot, task, username) {
   let best = null;
   let bestDist = Number.MAX_SAFE_INTEGER;
   for (const npc of npcs) {
-    if (!wanted.has(npcName(npc).toLowerCase())) continue;
+    let counts = false;
+    try {
+      counts = Tasks.countsFor(task, npc) === true;
+    } catch {
+      continue;
+    }
+    if (!counts) continue;
     if (npcUnavailable(npc, username)) continue;
     if (isClaimedByOther(username, npc)) continue;
     const nt = npcTile(npc);
@@ -239,19 +280,11 @@ function findTaskTarget(bot, task, username) {
 }
 
 /** True when the bot is already fighting a task NPC. */
-function inTaskCombat(bot, task, username) {
+function inTaskCombat(bot, task, username, Tasks) {
   try {
-    const combat = bot.getCombat?.();
-    const target = combat?.getTarget?.();
-    if (!target) return false;
-    let npcNames = [];
-    try {
-      npcNames = task?.getTask?.()?.getNpcNames?.() ?? [];
-    } catch {
-      return false;
-    }
-    const wanted = new Set(npcNames.map((n) => String(n).toLowerCase()));
-    return wanted.has(npcName(target).toLowerCase());
+    const target = bot.getCombat?.()?.getTarget?.();
+    if (!target || !task) return false;
+    return Tasks.countsFor(task, target) === true;
   } catch {
     return false;
   }
@@ -274,8 +307,9 @@ function createCitizenSlayerAction(spec, world) {
       const bot = ctx?.player;
       if (!bot) return failFast();
 
-      const Slayer = slayerPlugin();
-      if (!Slayer) return failFast();
+      const slayer = slayerUnits();
+      if (!slayer) return failFast();
+      const { Tasks, Data } = slayer;
 
       const now = Date.now();
       if (now - state.startedAt > GIVE_UP_MS) {
@@ -285,57 +319,58 @@ function createCitizenSlayerAction(spec, world) {
       const username = bot.getUsername?.() ?? "";
 
       // --- task state -------------------------------------------------------
+      // Tasks.current(bot): { taskId, task, bossId, count, original,
+      //   masterId, area } | null
       let task = null;
       try {
-        task = Slayer.getActiveTask?.(bot) ?? null;
+        task = Tasks.current(bot) ?? null;
       } catch {
         task = null;
       }
-      const remaining = task?.getRemaining?.() ?? 0;
+      const remaining = task?.count ?? 0;
 
       // No task (or finished): get an assignment from a nearby master.
       if (!task || remaining <= 0) {
-        const master = findMasterNpc(bot);
-        if (!master) return "success"; // no master here — re-decide
-        const mt = npcTile(master);
+        const masterNpc = findMasterNpc(bot);
+        if (!masterNpc) return "success"; // no master here — re-decide
+        const mt = npcTile(masterNpc);
         const bt = botTile(bot);
         if (bt && mt && chebyshev(bt.x, bt.y, mt.x, mt.y) > 3) {
           // Walk to the master.
           try {
-            approachObject(bot, master, { reason: "citizen_slayer" });
+            approachObject(bot, masterNpc, { reason: "citizen_slayer" });
           } catch {
             // approach failed — re-decide
           }
           return "running";
         }
-        // Close enough: take the assignment.
+        // Close enough: resolve the master and take the assignment.
+        const master = masterForNpc(masterNpc, Data);
+        if (!master) return "success"; // scan matched a name Data doesn't know
         try {
-          Slayer.assignTaskForNpc?.(bot, {
-            npcId: npcId(master),
-            npcName: npcName(master),
-          });
+          Tasks.assign(bot, master);
         } catch {
           return "success";
         }
         // Check what we got — wilderness tasks are left alone.
         try {
-          task = Slayer.getActiveTask?.(bot) ?? null;
+          task = Tasks.current(bot) ?? null;
         } catch {
           task = null;
         }
         if (!task) return "success";
-        if (isWildernessTask(task)) return "success";
+        if (isWildernessTask(task, Data)) return "success";
         return "running";
       }
 
       // Wilderness task: citizens don't hunt where they'd get PKed.
-      if (isWildernessTask(task)) return "success";
+      if (isWildernessTask(task, Data)) return "success";
 
       // Already fighting a task NPC: wait it out.
-      if (inTaskCombat(bot, task, username)) return "running";
+      if (inTaskCombat(bot, task, username, Tasks)) return "running";
 
       // Find something to hunt.
-      const target = findTaskTarget(bot, task, username);
+      const target = findTaskTarget(bot, task, username, Tasks);
       if (!target) return "success"; // nothing to hunt here — re-decide
 
       const tt = npcTile(target);
@@ -377,9 +412,22 @@ function createCitizenSlayerAction(spec, world) {
 
     // Test seams.
     _findMasterNpc: findMasterNpc,
-    _findTaskTarget: findTaskTarget,
-    _isWildernessTask: isWildernessTask,
-    _inTaskCombat: inTaskCombat,
+    _masterForNpc: (npc) => {
+      const slayer = slayerUnits();
+      return slayer ? masterForNpc(npc, slayer.Data) : null;
+    },
+    _findTaskTarget: (bot, task, username) => {
+      const slayer = slayerUnits();
+      return slayer ? findTaskTarget(bot, task, username, slayer.Tasks) : null;
+    },
+    _isWildernessTask: (task) => {
+      const slayer = slayerUnits();
+      return slayer ? isWildernessTask(task, slayer.Data) : false;
+    },
+    _inTaskCombat: (bot, task, username) => {
+      const slayer = slayerUnits();
+      return slayer ? inTaskCombat(bot, task, username, slayer.Tasks) : false;
+    },
     _slayerLevel: slayerLevel,
     _claims: CLAIMS,
   };
