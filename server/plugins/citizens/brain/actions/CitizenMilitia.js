@@ -149,6 +149,10 @@ function isEnemyTarget(npc, myKingdomId) {
     if (raider && raider.defenderId === String(myKingdomId)) return true;
     // Don't attack raiders fighting FOR our kingdom.
     if (raider) return false;
+    // Field-battle soldiers: enemies are the host fighting for the
+    // other crown; never strike your own side's host.
+    const battle = npc.warBattle;
+    if (battle) return battle.forKingdomId !== String(myKingdomId);
     // Enemy guards: NPCs tagged with a different kingdom.
     const npcKingdom = npc.getAttribute?.("kingdom:id");
     if (npcKingdom && npcKingdom !== String(myKingdomId)) return true;
@@ -329,6 +333,22 @@ function createCitizenMilitiaAction(spec, world) {
       state.phase = "fight";
       return "running";
     }
+    // A called battle draws both sides to the border field — the muster
+    // point for this war is the battlefield, not the capital.
+    const battleSite = activeBattleSite(kingdomId);
+    if (battleSite) {
+      const bt = botTile(bot);
+      if (bt && chebyshev(bt.x, bt.y, battleSite.x, battleSite.y) <= ARRIVE_RADIUS * 2) {
+        state.phase = "fight";
+        return "running";
+      }
+      requestMovement(bot, battleSite.x, battleSite.y, {
+        reason: "citizen_militia_battle",
+        basicPather: true,
+        z: battleSite.z ?? 0,
+      });
+      return "running";
+    }
     // Attackers march on the enemy capital; defenders hold.
     if (side === "attacker" && orders === "attack") {
       const target = attackerTarget(kingdomId);
@@ -420,6 +440,20 @@ function createCitizenMilitiaAction(spec, world) {
       z: capital.z ?? 0,
     });
     return "running";
+  }
+
+  /**
+   * Where a called battle is being fought for this kingdom's war, if
+   * one is live. Reads Battles through the kingdoms store.
+   */
+  function activeBattleSite(kingdomId) {
+    try {
+      const Battles = require("../../../kingdoms/Battles.Kingdoms");
+      const Store = require("../../../kingdoms/KingdomStore");
+      return Battles.activeBattleSiteFor(String(kingdomId), Store);
+    } catch {
+      return null;
+    }
   }
 
   /**

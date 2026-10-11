@@ -444,6 +444,35 @@ function addStock(kingdomId, warKey, cat, units, store) {
   return credited;
 }
 
+/**
+ * Espionage: a saboteur burns part of a kingdom's war stock. Removes up
+ * to `units` from the fullest category of the war's demand record and
+ * recomputes morale — the loss is real stock, really gone.
+ * @returns {{ category: string, removed: number } | null} null when no
+ * demand record exists for the war (nothing to burn)
+ */
+function sabotageStock(kingdomId, warKey, units, store) {
+  const s = store ?? Store;
+  const map = supplyMapOf(kingdomId, s);
+  const rec = map?.[warKey];
+  if (!rec?.categories) return null;
+  let bestCat = null;
+  let bestStock = 0;
+  for (const cat of CATEGORIES) {
+    const stock = rec.categories[cat]?.stock ?? 0;
+    if (stock > bestStock) {
+      bestStock = stock;
+      bestCat = cat;
+    }
+  }
+  if (!bestCat || bestStock <= 0) return { category: bestCat, removed: 0 };
+  const removed = Math.min(bestStock, Math.max(0, Math.floor(units)));
+  rec.categories[bestCat].stock -= removed;
+  rec.morale = recomputeMoraleValue(rec.categories);
+  saveSupplyMap(kingdomId, map, s);
+  return { category: bestCat, removed };
+}
+
 /** Read model for the war table, the office dashboard, and the chest. */
 function supplyStatus(kingdomId, store) {
   const s = store ?? Store;
@@ -501,4 +530,5 @@ module.exports.moraleOf = moraleOf;
 module.exports.moraleLabel = moraleLabel;
 module.exports.routeDelivery = routeDelivery;
 module.exports.addStock = addStock;
+module.exports.sabotageStock = sabotageStock;
 module.exports.supplyStatus = supplyStatus;

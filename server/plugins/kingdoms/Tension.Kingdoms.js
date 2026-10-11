@@ -82,7 +82,6 @@ const RUMOR_TIERS = [55, 75, 90];
 const ARMISTICE_MS = 72 * 60 * 60 * 1000;
 const ARMISTICE_TENSION_CAP = 40;
 const ARMISTICE_DECAY = 2;
-const TENSION_AFTER_WAR = 15;
 
 // Garrisons: the levies wars are fought with. Skirmishes and war attrition
 // bleed them; peace rebuilds them. A side at zero levies loses the war.
@@ -96,7 +95,6 @@ const WAR_ATTRITION_CHANCE = 0.2;
 // Wars burn 6-18 hours, then the treasuries give out.
 const WAR_MIN_MS = 6 * 60 * 60 * 1000;
 const WAR_MAX_MS = 18 * 60 * 60 * 1000;
-const WAR_TREASURY_DRAIN = 0.15;
 
 // Scapegoating: an empty war chest makes the court blame its hottest rival.
 const SCAPEGOAT_TENSION = 4;
@@ -396,49 +394,26 @@ function pairTick(a, b, wars) {
   if (t >= WAR_AT) declareWarByTension(a, b);
 }
 
-/** Strength for peace terms: levies plus the weight of the treasury. */
-function warStrength(kingdomId) {
-  const treasury = Store.getKingdom(kingdomId)?.treasury ?? 0;
-  return garrisonOf(kingdomId) + treasury / 10000;
-}
-
-function drainTreasury(kingdomId) {
-  const treasury = Store.getKingdom(kingdomId)?.treasury ?? 0;
-  const loss = Math.floor(treasury * WAR_TREASURY_DRAIN);
-  if (loss > 0) Store.spendTax(kingdomId, loss);
-  return loss;
-}
-
-/** A war closes: peace terms, drained treasuries, and a rebuilding window. */
+/**
+ * A war closes. The outcome is no longer invented here: WarResolution
+ * decides it from the war score the fighting actually produced (siege
+ * and battle results), and applies goal-shaped consequences —
+ * reparations, vassalage, or an honest white peace. A collapsed
+ * garrison names the loser outright.
+ */
 function endWarWithTerms(a, b, brokenLoser) {
-  const aName = nameOf(a);
-  const bName = nameOf(b);
-  const sA = warStrength(a);
-  const sB = warStrength(b);
-  let outcome;
-  if (brokenLoser) {
-    const winner = brokenLoser === a ? b : a;
-    outcome = `${nameOf(brokenLoser)}'s levies break in the field — ${nameOf(winner)} victorious`;
-  } else if (Math.abs(sA - sB) < Math.max(sA, sB) * 0.1) {
-    outcome = "white peace — the crowns count their dead and call it even";
-  } else {
-    outcome = `${sA >= sB ? aName : bName} victorious — the peace is dictated, not negotiated`;
-  }
-  const lostA = drainTreasury(a);
-  const lostB = drainTreasury(b);
-  setTension(a, b, TENSION_AFTER_WAR);
-  setGarrison(a, GARRISON_AFTER_WAR);
-  setGarrison(b, GARRISON_AFTER_WAR);
-  pluginApi.emitCustomEvent("kingdom:war-ended", {
-    attackerId: a,
-    defenderId: b,
-    outcome,
-  });
-  announceToRealm(
-    `[Realm] Peace between ${aName} and ${bName}: ${outcome}. ` +
-      `Both treasuries bled ${lostA + lostB} coins into the mud. The rebuilding begins.`
+  const WarResolution = require("./WarResolution.Kingdoms");
+  const war = Store.getActiveWars().find(
+    (w) =>
+      w &&
+      ((w.attackerId === a && w.defenderId === b) ||
+        (w.attackerId === b && w.defenderId === a))
   );
-  console.info("[tension] war ended", { a, b, outcome, lostA, lostB });
+  if (!war) return;
+  const winner = brokenLoser ? (brokenLoser === a ? b : a) : null;
+  WarResolution.resolveWar(war.attackerId, war.defenderId, winner, {
+    reason: brokenLoser ? "garrison-collapse" : "expiry",
+  }, Store);
 }
 
 /** Wars burn out (resolveAt) or collapse (a side's levies break). */
@@ -516,6 +491,19 @@ function tensionTick() {
   }
   try {
     for (const war of wars) checkWarResolution(war);
+    // A war score grown decisive ends the war from the field, not the
+    // calendar (WarResolution owns the outcome and consequences).
+    try {
+      require("./WarResolution.Kingdoms").checkDecisiveWars(Store);
+    } catch {
+      // Spine unavailable: wars still end by timer, collapse, treaty.
+    }
+    // Relations drift a step a day toward neutral (cheap; self-gated).
+    try {
+      require("./Relations.Kingdoms").driftGoodwill(Store);
+    } catch {
+      // Relations unavailable: no drift this tick.
+    }
     const liveWars = Store.getActiveWars();
     for (const [a, b] of pairsOf(kingdomIds())) pairTick(a, b, liveWars);
     storyBeats();
@@ -695,6 +683,7 @@ module.exports.addTension = addTension;
 module.exports.hottestTensionFor = hottestTensionFor;
 module.exports.hottestPairs = hottestPairs;
 module.exports.garrisonOf = garrisonOf;
+module.exports.setGarrison = setGarrison;
 module.exports.WAR_AT = WAR_AT;
 module.exports.TENSION_TICK_TICKS = TENSION_TICK_TICKS;
 module.exports.ARMISTICE_MS = ARMISTICE_MS;

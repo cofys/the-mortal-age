@@ -53,6 +53,12 @@ const WAR_GOAL_LABELS = {
 
 /** Personal influence the declarer spends to start a war. */
 const WAR_DECLARE_INFLUENCE_COST = 100;
+/**
+ * Wars declared by players or AI councils burn out after 7 days if
+ * nothing ends them sooner (WarResolution owns the outcome). Tension
+ * wars carry their own shorter resolveAt from the tension engine.
+ */
+const WAR_TIMEOUT_MS = 7 * 24 * 3600 * 1000;
 /** Per-pair cooldown after a war ends before another may be declared. */
 const WAR_DECLARE_COOLDOWN_MS = 7 * 24 * 3600 * 1000;
 /** Influence to offer peace terms. Accepting is free. */
@@ -182,6 +188,11 @@ function canDeclareWar(attackerId, defenderId, store) {
 
   const state = store.load();
 
+  // A sworn non-aggression pact binds both crowns until it lapses.
+  if (napActiveState(attackerId, defenderId, state)) {
+    return { ok: false, reason: "nap-active" };
+  }
+
   // Vassals fight their overlord by breaking away, not by declaration.
   if (isVassalOfState(attackerId, defenderId, state)) {
     return { ok: false, reason: "vassal-cannot-declare" };
@@ -245,7 +256,8 @@ function applyDeclareWar(attackerKingdomId, defenderKingdomId, goal, declaredBy,
     declaredAt: Date.now(),
     endedAt: null,
     outcome: null,
-    resolveAt: null,
+    resolveAt: Date.now() + WAR_TIMEOUT_MS,
+    score: { attacker: 0, defender: 0 },
   };
   warsOf(state).push(war);
   setTensionState(attackerKingdomId, defenderKingdomId, 100, state);
@@ -358,11 +370,35 @@ function declareWarAi(attackerKingdomId, defenderKingdomId, goal, store, opts = 
 // ---------------------------------------------------------------------------
 
 /** Peace term shapes. */
-const PEACE_TERMS = ["white-peace", "tribute", "vassalize"];
+const PEACE_TERMS = ["white-peace", "tribute", "vassalize", "nap", "trade-rights"];
+/** Default non-aggression pact length in a nap treaty (days). */
+const NAP_DEFAULT_DAYS = 14;
+/** Longest non-aggression pact a treaty may swear (days). */
+const NAP_MAX_DAYS = 30;
 
 function peaceOffersOf(state) {
   if (!Array.isArray(state.peaceOffers)) state.peaceOffers = [];
   return state.peaceOffers;
+}
+
+/** Sworn non-aggression pacts: { "a:b": { until, days } }. */
+function napsOf(state) {
+  if (!state.naps || typeof state.naps !== "object") state.naps = {};
+  return state.naps;
+}
+
+/** True while a non-aggression pact binds the pair. */
+function napActiveState(a, b, state) {
+  const nap = napsOf(state)[pairKey(a, b)];
+  return !!nap && Number.isFinite(nap.until) && nap.until > Date.now();
+}
+
+/** Mutual trade-rights grants: { "a:b": true }. */
+function tradeRightsOf(state) {
+  if (!state.tradeRights || typeof state.tradeRights !== "object") {
+    state.tradeRights = {};
+  }
+  return state.tradeRights;
 }
 
 function offerBetweenState(a, b, state) {
@@ -386,6 +422,13 @@ function validateTerms(terms) {
       return { ok: false, reason: "invalid-tribute", max: MAX_TRIBUTE };
     }
     return { ok: true, terms: { type: "tribute", amount } };
+  }
+  if (terms.type === "nap") {
+    const days = Math.max(
+      1,
+      Math.min(NAP_MAX_DAYS, Math.floor(terms.days ?? NAP_DEFAULT_DAYS))
+    );
+    return { ok: true, terms: { type: "nap", days } };
   }
   return { ok: true, terms: { type: terms.type } };
 }
@@ -511,6 +554,21 @@ function applyAcceptPeace(kingdomId, targetKingdomId, state) {
     setVassalState(loserId, winnerId, state);
     applied.vassal = loserId;
     applied.overlord = winnerId;
+  } else if (offer.terms.type === "nap") {
+    // A sworn non-aggression pact: neither crown may declare on the
+    // other until it lapses. canDeclareWar enforces it.
+    const days = offer.terms.days ?? NAP_DEFAULT_DAYS;
+    napsOf(state)[pairKey(kingdomId, targetKingdomId)] = {
+      until: Date.now() + days * 24 * 3600 * 1000,
+      days,
+    };
+    applied.napDays = days;
+  } else if (offer.terms.type === "trade-rights") {
+    // Mutual trade rights: merchants of both crowns trade freely.
+    // Relations reads this for the goodwill drift; it lapses if the
+    // pair goes to war again (checked at read time).
+    tradeRightsOf(state)[pairKey(kingdomId, targetKingdomId)] = true;
+    applied.tradeRights = true;
   }
 
   war.active = false;
@@ -656,8 +714,11 @@ module.exports = {
   WAR_GOALS,
   WAR_GOAL_LABELS,
   PEACE_TERMS,
+  NAP_DEFAULT_DAYS,
+  NAP_MAX_DAYS,
   WAR_DECLARE_INFLUENCE_COST,
   WAR_DECLARE_COOLDOWN_MS,
+  WAR_TIMEOUT_MS,
   PEACE_OFFER_INFLUENCE_COST,
   BREAK_VASSALAGE_INFLUENCE_COST,
   BREAK_VASSALAGE_MIN_DAYS,
@@ -690,6 +751,7 @@ module.exports = {
   acceptPeace,
   acceptPeaceAi,
   getPeaceOffers,
+  napActive: (a, b, store) => napActiveState(a, b, store.load()),
   // Queries
   getWars,
 };

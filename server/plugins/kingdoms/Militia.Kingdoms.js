@@ -344,11 +344,16 @@ function canVolunteer(bot) {
   return true;
 }
 
+/** Volunteer chance boost while a warband muster is called (a captain's cry carries). */
+const MUSTER_VOLUNTEER_BOOST = 0.3;
+
 /**
  * Volunteer chance for an eligible citizen: base + bravery bonus.
  * Personality is a plain object; brave/aggressive traits raise the odds.
+ * A live muster adds its boost — citizens answer a call to arms far
+ * more readily than they drift into service.
  */
-function volunteerChance(bot, rng = Math.random) {
+function volunteerChance(bot, rng = Math.random, musterBoost = 0) {
   let chance = VOLUNTEER_BASE_CHANCE;
   try {
     const p = bot.getAttribute?.("citizens:personality") ?? {};
@@ -358,7 +363,79 @@ function volunteerChance(bot, rng = Math.random) {
   } catch {
     // Personality unreadable — base chance.
   }
-  return chance;
+  return Math.min(1, chance + Math.max(0, musterBoost));
+}
+
+// ---------------------------------------------------------------------------
+// Warband musters — a captain calls, citizens answer (never summoned)
+// ---------------------------------------------------------------------------
+
+/** Call a warband muster for a kingdom (a battle is gathering). */
+function setMuster(kingdomId, battleId, calledBy, endsAt) {
+  musters.set(String(kingdomId), {
+    battleId: battleId ?? null,
+    calledBy: calledBy ?? null,
+    endsAt: endsAt ?? 0,
+  });
+}
+
+/** The live muster for a kingdom, or null (expired musters lapse). */
+function getMuster(kingdomId) {
+  const m = musters.get(String(kingdomId));
+  if (!m) return null;
+  if (m.endsAt && Date.now() > m.endsAt) {
+    musters.delete(String(kingdomId));
+    return null;
+  }
+  return m;
+}
+
+/** Stand a kingdom's muster down (the battle is over). */
+function clearMuster(kingdomId) {
+  musters.delete(String(kingdomId));
+}
+
+// ---------------------------------------------------------------------------
+// Persistence — rosters and tallies survive restarts. The module Maps
+// stay the live cache; KingdomStore is the durable copy. Hydrated once
+// per process from the director tick; written back every tick (cheap).
+// ---------------------------------------------------------------------------
+
+let militiaHydrated = false;
+
+function hydrateMilitiaState() {
+  if (militiaHydrated) return;
+  militiaHydrated = true;
+  try {
+    const saved = Store.load()?.militia;
+    if (saved?.rosters && typeof saved.rosters === "object") {
+      for (const [username, rec] of Object.entries(saved.rosters)) {
+        if (rec && !roster.has(username)) roster.set(username, rec);
+      }
+    }
+    if (saved?.tallies && typeof saved.tallies === "object") {
+      for (const [kingdomId, t] of Object.entries(saved.tallies)) {
+        if (t && !tallies.has(kingdomId)) {
+          tallies.set(kingdomId, { kills: t.kills ?? 0, deaths: t.deaths ?? 0 });
+        }
+      }
+    }
+  } catch {
+    // Persistence is a safety net, never a boot blocker.
+  }
+}
+
+function persistMilitiaState() {
+  try {
+    const state = Store.load();
+    state.militia = {
+      rosters: Object.fromEntries(roster),
+      tallies: Object.fromEntries(tallies),
+    };
+    Store.save();
+  } catch {
+    // Non-fatal: the session cache still works.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -381,6 +458,7 @@ function volunteerChance(bot, rng = Math.random) {
  * switchActivity(record, activityId). The api provides spawnNpc.
  */
 function tickMilitia(director, api) {
+  hydrateMilitiaState();
   let wars = [];
   try {
     wars = Store.getActiveWars?.() ?? [];
@@ -437,7 +515,11 @@ function tickMilitia(director, api) {
           continue;
         }
         if (!bot || !canVolunteer(bot)) continue;
-        const chance = volunteerChance(bot);
+        const chance = volunteerChance(
+          bot,
+          Math.random,
+          getMuster(kid) ? MUSTER_VOLUNTEER_BOOST : 0
+        );
         if (Math.random() >= chance) continue;
         // Volunteer! Enlist and send to muster.
         if (enlist(bot, kid, side)) {
@@ -465,6 +547,7 @@ function tickMilitia(director, api) {
       }
     }
   }
+  persistMilitiaState();
 }
 
 /**
@@ -543,6 +626,11 @@ Object.assign(module.exports, {
   canVolunteer,
   volunteerChance,
   combatLevel,
+  // Warband musters
+  setMuster,
+  getMuster,
+  clearMuster,
+  MUSTER_VOLUNTEER_BOOST,
   tickMilitia,
   // Test seams
   _roster: roster,

@@ -3,11 +3,20 @@
 /**
  * Relations.Kingdoms — the DIPLOMATIC STANCE LAYER (Phase 4).
  *
- * Every pair of kingdoms stands in one relation:
- *   "at-war"  — an active war or an active siege between them
- *   "allied"  — a live pact in the alliance registry
- *   "hostile" — bilateral tension at or above HOSTILE_TENSION (no pact)
- *   "neutral" — everything else (the default)
+ * Every pair of kingdoms stands on the ladder (Jon's diplomacy design,
+ * 2026-10-11):
+ *   "at-war"   — an active war or an active siege between them
+ *   "allied"   — a live pact in the alliance registry
+ *   "friendly" — goodwill >= 60
+ *   "cordial"  — goodwill >= 20
+ *   "neutral"  — the default middle
+ *   "tense"    — goodwill <= -20
+ *   "hostile"  — goodwill <= -60, or bilateral tension >= HOSTILE_TENSION
+ *
+ * War and pacts are reads of the state their owners write. Goodwill is
+ * the one new persisted value here (state.goodwill), and it is moved
+ * only by real events — marriages, envoys, ultimatums, crime, treaties —
+ * plus a slow daily drift back toward neutral.
  *
  * This is a READ of existing state (wars, alliances, tension, sieges) —
  * not a second source of truth. The political layer (Diplomacy.Kingdoms),
@@ -15,9 +24,10 @@
  * already own; this module just answers "where do we stand?"
  *
  * What it drives:
- *   - Sieges require hostile/at-war: canSiegeRelation() gates
- *     Siege.declareSiege. You cannot besiege an ally or a neutral power —
- *     escalate first (issueUltimatum) or fight a declared war.
+ *   - Sieges require tense or worse: canSiegeRelation() gates
+ *     Siege.declareSiege. You cannot besiege an ally or a power you
+ *     stand cordial with — escalate first (issueUltimatum) or fight a
+ *     declared war.
  *   - Alliances enable trade: alliedTradeBonus() feeds the castle tithe
  *     economy — pact roads carry goods, and the war chest feels it.
  *   - Diplomacy actions: players spend personal influence to move the
@@ -37,7 +47,10 @@ const Influence = require("./Influence.Kingdoms");
 
 const RELATION_AT_WAR = "at-war";
 const RELATION_ALLIED = "allied";
+const RELATION_FRIENDLY = "friendly";
+const RELATION_CORDIAL = "cordial";
 const RELATION_HOSTILE = "hostile";
+const RELATION_TENSE = "tense";
 const RELATION_NEUTRAL = "neutral";
 const RELATION_SELF = "self";
 
@@ -45,6 +58,107 @@ const RELATION_SELF = "self";
 const HOSTILE_TENSION = 60;
 /** Tension for a pair that has never been scored. */
 const TENSION_DEFAULT = 20;
+
+// ---------------------------------------------------------------------------
+// Goodwill — the slow memory of the ladder (Jon's diplomacy design,
+// 2026-10-11). Tension is the weather; goodwill is the climate. It is
+// moved ONLY by real events: royal marriages, envoy work, ultimatums,
+// crime, treaties — never by a hash or a dice roll in a back room.
+//   >= 60 friendly | >= 20 cordial | -19..19 neutral | <= -20 tense |
+//   <= -60 hostile (tension >= 60 also reads hostile — hot borders win)
+// ---------------------------------------------------------------------------
+
+const GOODWILL_MIN = -100;
+const GOODWILL_MAX = 100;
+const GOODWILL_FRIENDLY_AT = 60;
+const GOODWILL_CORDIAL_AT = 20;
+const GOODWILL_TENSE_AT = -20;
+const GOODWILL_HOSTILE_AT = -60;
+const GOODWILL_MARRIAGE = 40;
+const GOODWILL_ENVOY = 8;
+const GOODWILL_ULTIMATUM = -15;
+const GOODWILL_CRIME = -10;
+/** Goodwill drifts one step a day toward neutral — old grudges fade. */
+const GOODWILL_DRIFT_PER_DAY = 1;
+/** Trade-rights pairs warm by this much a day instead of cooling. */
+const GOODWILL_TRADE_DRIFT = 2;
+const GOODWILL_DRIFT_MS = 24 * 3600 * 1000;
+
+function goodwillMapOf(state) {
+  if (!state.goodwill || typeof state.goodwill !== "object") state.goodwill = {};
+  return state.goodwill;
+}
+
+/** The pair's goodwill (-100..100), 0 when never scored. */
+function goodwillOf(a, b, store) {
+  const v = store.load().goodwill?.[tensionKey(a, b)];
+  return Number.isFinite(v)
+    ? Math.max(GOODWILL_MIN, Math.min(GOODWILL_MAX, Math.round(v)))
+    : 0;
+}
+
+/** True when a royal marriage bond ties the pair (Royals' flags). */
+function marriageBondedIn(a, b, state) {
+  const fa = state?.kingdoms?.[a]?.flags?.[`royals:marriage-bond:${b}`];
+  const fb = state?.kingdoms?.[b]?.flags?.[`royals:marriage-bond:${a}`];
+  return !!(fa && fb);
+}
+
+/**
+ * Move the pair's goodwill by a real event. Marriage bonds are glue:
+ * while one holds, goodwill cannot fall below neutral. No save —
+ * callers save (same convention as setTension).
+ * @returns the new goodwill
+ */
+function addGoodwill(a, b, delta, store) {
+  if (!a || !b || a === b || !store) return 0;
+  if (!Number.isFinite(delta) || delta === 0) return goodwillOf(a, b, store);
+  const state = store.load();
+  let next = goodwillOf(a, b, store) + Math.round(delta);
+  next = Math.max(GOODWILL_MIN, Math.min(GOODWILL_MAX, next));
+  if (next < 0 && marriageBondedIn(a, b, state)) next = 0;
+  goodwillMapOf(state)[tensionKey(a, b)] = next;
+  return next;
+}
+
+/** True while mutual trade rights hold (they lapse the moment war does). */
+function hasTradeRights(a, b, store) {
+  if (!a || !b || !store) return false;
+  if (atWarBetween(a, b, store)) return false;
+  return store.load().tradeRights?.[tensionKey(a, b)] === true;
+}
+
+/**
+ * Daily drift: every scored pair steps toward neutral, except
+ * trade-rights pairs, which warm. Self-gated to once a day; called
+ * from the tension tick, where it is a cheap no-op the rest of the time.
+ */
+function driftGoodwill(store, now = Date.now()) {
+  if (!store) return 0;
+  const state = store.load();
+  const last = state.goodwillDriftAt ?? 0;
+  if (now - last < GOODWILL_DRIFT_MS) return 0;
+  state.goodwillDriftAt = now;
+  const map = goodwillMapOf(state);
+  let moved = 0;
+  for (const key of Object.keys(map)) {
+    const [a, b] = key.split(":");
+    let v = map[key];
+    if (hasTradeRights(a, b, store)) {
+      v = Math.min(GOODWILL_MAX, v + GOODWILL_TRADE_DRIFT);
+    } else if (v > 0) {
+      v = Math.max(0, v - GOODWILL_DRIFT_PER_DAY);
+    } else if (v < 0) {
+      v = Math.min(0, v + GOODWILL_DRIFT_PER_DAY);
+    }
+    if (v !== map[key]) {
+      map[key] = v;
+      moved++;
+    }
+  }
+  if (moved > 0) store.save();
+  return moved;
+}
 
 // ---------------------------------------------------------------------------
 // State readers (all work on the passed store — testable with mock stores)
@@ -115,8 +229,10 @@ function alliesOfIn(kingdomId, store) {
 // ---------------------------------------------------------------------------
 
 /**
- * The diplomatic stance between two kingdoms.
- * @returns {"at-war"|"allied"|"hostile"|"neutral"|"self"}
+ * The diplomatic stance between two kingdoms. War and pacts override;
+ * a hot border (tension) reads hostile next; otherwise the goodwill
+ * ladder decides: friendly → cordial → neutral → tense → hostile.
+ * @returns {"at-war"|"allied"|"friendly"|"cordial"|"neutral"|"tense"|"hostile"|"self"}
  */
 function relationOf(a, b, store) {
   if (!a || !b || !store) return RELATION_NEUTRAL;
@@ -126,16 +242,26 @@ function relationOf(a, b, store) {
   }
   if (alliedIn(a, b, store)) return RELATION_ALLIED;
   if (tensionOf(a, b, store) >= HOSTILE_TENSION) return RELATION_HOSTILE;
+  const g = goodwillOf(a, b, store);
+  if (g >= GOODWILL_FRIENDLY_AT) return RELATION_FRIENDLY;
+  if (g >= GOODWILL_CORDIAL_AT) return RELATION_CORDIAL;
+  if (g <= GOODWILL_HOSTILE_AT) return RELATION_HOSTILE;
+  if (g <= GOODWILL_TENSE_AT) return RELATION_TENSE;
   return RELATION_NEUTRAL;
 }
 
-/** True when the pair may go to siege: hostile borders or open war. */
+/** True when the pair may go to siege: tense or worse, or open war. */
 function canSiegeRelation(attackerKingdomId, defenderKingdomId, store) {
   const rel = relationOf(attackerKingdomId, defenderKingdomId, store);
   if (rel === RELATION_ALLIED) {
     return { ok: false, reason: "allied-cannot-siege", relation: rel };
   }
-  if (rel === RELATION_NEUTRAL || rel === RELATION_SELF) {
+  if (
+    rel === RELATION_FRIENDLY ||
+    rel === RELATION_CORDIAL ||
+    rel === RELATION_NEUTRAL ||
+    rel === RELATION_SELF
+  ) {
     return { ok: false, reason: "not-hostile", relation: rel };
   }
   return { ok: true, relation: rel };
@@ -226,12 +352,15 @@ function sendEnvoy(player, kingdomId, targetKingdomId, store) {
   const before = tensionOf(kingdomId, targetKingdomId, store);
   const after = Math.max(0, before - ENVOY_TENSION_RELIEF);
   setTension(kingdomId, targetKingdomId, after, store);
+  // Envoys also warm the climate, not just the weather.
+  const goodwill = addGoodwill(kingdomId, targetKingdomId, GOODWILL_ENVOY, store);
   store.save();
 
   return {
     ok: true,
     tensionBefore: before,
     tension: after,
+    goodwill,
     relation: relationOf(kingdomId, targetKingdomId, store),
     influenceSpent: ENVOY_INFLUENCE_COST,
   };
@@ -257,12 +386,15 @@ function issueUltimatum(player, kingdomId, targetKingdomId, store) {
   const before = tensionOf(kingdomId, targetKingdomId, store);
   const after = Math.min(ULTIMATUM_TENSION_CAP, before + ULTIMATUM_TENSION_HIT);
   setTension(kingdomId, targetKingdomId, after, store);
+  // An ultimatum is remembered long after the border cools.
+  const goodwill = addGoodwill(kingdomId, targetKingdomId, GOODWILL_ULTIMATUM, store);
   store.save();
 
   return {
     ok: true,
     tensionBefore: before,
     tension: after,
+    goodwill,
     relation: relationOf(kingdomId, targetKingdomId, store),
     influenceSpent: ULTIMATUM_INFLUENCE_COST,
   };
@@ -272,10 +404,22 @@ module.exports = {
   // Labels
   RELATION_AT_WAR,
   RELATION_ALLIED,
+  RELATION_FRIENDLY,
+  RELATION_CORDIAL,
   RELATION_HOSTILE,
+  RELATION_TENSE,
   RELATION_NEUTRAL,
   RELATION_SELF,
   HOSTILE_TENSION,
+  // Goodwill
+  GOODWILL_MARRIAGE,
+  GOODWILL_ENVOY,
+  GOODWILL_ULTIMATUM,
+  GOODWILL_CRIME,
+  goodwillOf,
+  addGoodwill,
+  driftGoodwill,
+  hasTradeRights,
   // Reads
   relationOf,
   canSiegeRelation,

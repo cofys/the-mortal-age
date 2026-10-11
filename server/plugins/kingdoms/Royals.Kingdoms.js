@@ -174,6 +174,14 @@ function royalMarriage(kingdomId) {
     Store.setFlag(partner, "royals:last-marriage-at", Date.now());
     const raw = Store.getRawTension(kingdomId, partner);
     Store.setRawTension(kingdomId, partner, Math.max(0, (raw === null ? 20 : raw) - MARRIAGE_TENSION_DROP));
+    // A dynastic marriage is alliance glue: the pair's goodwill jumps,
+    // and while the bond holds it cannot fall below neutral (Relations).
+    try {
+      const Relations = require("./Relations.Kingdoms");
+      Relations.addGoodwill(kingdomId, partner, Relations.GOODWILL_MARRIAGE, Store);
+    } catch {
+      // Relations unavailable: the bond flags above still stand.
+    }
     recordEvent(kingdomId, "marriage", text, { a: kingdomId, b: partner });
     pluginApi.emitCustomEvent("kingdom:rumor", {
       kingdomId: partner,

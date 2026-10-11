@@ -55,6 +55,7 @@ const ActivityParties = require("../lib/CitizenActivityParties");
 const BossRuns = require("../lib/CitizenBossRuns");
 const CitizenWarfare = require("../lib/CitizenWarfare");
 const Militia = require("../../kingdoms/Militia.Kingdoms");
+const Battles = require("../../kingdoms/Battles.Kingdoms");
 const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
@@ -2356,6 +2357,14 @@ class CitizenDirector {
       name: 'militia failed',
       run: () => {
         Militia.tickMilitia(this, this.api);
+      },
+    },
+    // Field battles: called battles muster, spawn their hosts at the
+    // border field, and resolve into the war score. Zero LLM.
+    {
+      name: 'battles failed',
+      run: () => {
+        Battles.tickBattles(this, this.api);
       },
     },
     // Expeditionary warfare: citizen armies rally, march to the border,

@@ -27,7 +27,6 @@
  * markers. Object/NPC ids come from the generated cache identifiers.
  */
 
-const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const Store = require("./KingdomStore");
 
 // A battlefield marker outlives the news cycle but not the season: sites
@@ -356,6 +355,9 @@ function onReadSignpost(event) {
 }
 
 function startSweepTask(api) {
+  // Lazy: the Task class is TypeScript, only resolvable at server runtime
+  // (same pattern as Siege.attachSiege).
+  const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
   class SiteSweepTask extends Task {
     execute() {
       sweepStaleSites();

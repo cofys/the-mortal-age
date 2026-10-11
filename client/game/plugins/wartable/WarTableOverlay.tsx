@@ -87,7 +87,7 @@ interface PeaceOfferInfo {
     otherName: string;
     offeredBy: string;
     offeredByName: string;
-    terms: string;
+    terms: { type: string; amount?: number; days?: number } | string;
     offeredAt: number | null;
 }
 
@@ -181,7 +181,18 @@ interface WarInfo {
     attackerName: string;
     defenderName: string;
     reason: string | null;
+    goal: string | null;
+    goalLabel: string | null;
     declaredAt: number | null;
+    score: { attacker: number; defender: number } | null;
+    battle: { id: string; status: string } | null;
+}
+
+interface IntelInfo {
+    garrison: number;
+    morale: number;
+    militia: number;
+    fortTier: number;
 }
 
 interface EndedWarInfo {
@@ -248,6 +259,7 @@ interface WarTableStatus {
     successionCrises: SuccessionCrisisInfo[];
     civilWars: CivilWarInfo[];
     homeDetail: HomeDetail | null;
+    intel: Record<string, IntelInfo> | null;
     actionResult?: ActionResult;
 }
 
@@ -358,6 +370,198 @@ function SupplyBar({ pct }: { pct: number }): JSX.Element {
                 />
             </span>
         </span>
+    );
+}
+
+const PEACE_TERM_OPTIONS: { id: string; label: string }[] = [
+    { id: "white-peace", label: "White peace" },
+    { id: "tribute", label: "Tribute (they pay)" },
+    { id: "vassalize", label: "Vassalize them" },
+    { id: "nap", label: "Non-aggression pact (14 days)" },
+    { id: "trade-rights", label: "Trade rights" },
+];
+
+/**
+ * One open war, with the actions a belligerent's court can take in it:
+ * give battle, offer/accept peace, surrender — and sally/repair when
+ * your own walls are under siege. The server enforces every gate; this
+ * card only presents them.
+ */
+function WarCard({
+    war,
+    homeId,
+    pendingOffer,
+    homeBesieged,
+    busy,
+    runAction,
+}: {
+    war: WarInfo;
+    homeId: string | null;
+    pendingOffer: PeaceOfferInfo | null;
+    homeBesieged: boolean;
+    busy: boolean;
+    runAction: (params: string) => void;
+}): JSX.Element {
+    const [terms, setTerms] = useState("white-peace");
+    const [tribute, setTribute] = useState("100000");
+    const [confirmSurrender, setConfirmSurrender] = useState(false);
+    const isBelligerent = homeId !== null && (war.attacker === homeId || war.defender === homeId);
+    const otherId = war.attacker === homeId ? war.defender : war.attacker;
+    const incomingOffer = pendingOffer && pendingOffer.offeredBy !== homeId ? pendingOffer : null;
+
+    return (
+        <div className="tma-wartable-card tma-wartable-war-card">
+            <div className="tma-wartable-card-title tma-wartable-war">
+                {war.attackerName} ⚔ {war.defenderName}
+            </div>
+            {war.reason && <p className="tma-wartable-detail-text">{war.reason}</p>}
+            <div className="tma-wartable-card-sub">
+                {war.goalLabel ? `War of ${war.goalLabel} · ` : ""}Declared {fmtDate(war.declaredAt)}
+            </div>
+            {war.score && (
+                <div className="tma-wartable-card-sub">
+                    War score — {war.attackerName} {war.score.attacker} · {war.defenderName}{" "}
+                    {war.score.defender}
+                </div>
+            )}
+            {war.battle && (
+                <div className="tma-wartable-card-sub">
+                    {war.battle.status === "mustering"
+                        ? "⚑ A battle gathers at the border field — hosts are mustering."
+                        : "⚑ Battle joined at the border field!"}
+                </div>
+            )}
+            {isBelligerent && (
+                <>
+                    <div className="tma-wartable-card-row">
+                        <button
+                            className="tma-wartable-btn"
+                            disabled={busy || !!war.battle}
+                            onClick={() =>
+                                runAction(`action=give-battle&target=${encodeURIComponent(otherId)}`)
+                            }
+                        >
+                            Give Battle
+                        </button>
+                        {homeBesieged && (
+                            <>
+                                <button
+                                    className="tma-wartable-btn"
+                                    disabled={busy}
+                                    onClick={() => runAction(`action=sally`)}
+                                >
+                                    Sally Forth
+                                </button>
+                                <button
+                                    className="tma-wartable-btn"
+                                    disabled={busy}
+                                    onClick={() => runAction(`action=repair`)}
+                                >
+                                    Repair Walls
+                                </button>
+                            </>
+                        )}
+                        {confirmSurrender ? (
+                            <>
+                                <button
+                                    className="tma-wartable-btn"
+                                    disabled={busy}
+                                    onClick={() =>
+                                        runAction(
+                                            `action=surrender&target=${encodeURIComponent(otherId)}`
+                                        )
+                                    }
+                                >
+                                    Confirm Surrender
+                                </button>
+                                <button
+                                    className="tma-wartable-btn"
+                                    disabled={busy}
+                                    onClick={() => setConfirmSurrender(false)}
+                                >
+                                    Never Mind
+                                </button>
+                            </>
+                        ) : (
+                            <button
+                                className="tma-wartable-btn"
+                                disabled={busy}
+                                onClick={() => setConfirmSurrender(true)}
+                            >
+                                Surrender
+                            </button>
+                        )}
+                    </div>
+                    <div className="tma-wartable-card-row">
+                        <select
+                            className="tma-wartable-select"
+                            value={terms}
+                            onChange={(e) => setTerms(e.target.value)}
+                            aria-label="Peace terms"
+                        >
+                            {PEACE_TERM_OPTIONS.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                    {t.label}
+                                </option>
+                            ))}
+                        </select>
+                        {terms === "tribute" && (
+                            <input
+                                className="tma-wartable-select"
+                                type="number"
+                                min={1}
+                                value={tribute}
+                                onChange={(e) => setTribute(e.target.value)}
+                                aria-label="Tribute amount"
+                                style={{ width: 110 }}
+                            />
+                        )}
+                        <button
+                            className="tma-wartable-btn"
+                            disabled={busy || !!pendingOffer}
+                            onClick={() =>
+                                runAction(
+                                    `action=offer-peace&target=${encodeURIComponent(otherId)}&terms=${encodeURIComponent(terms)}` +
+                                        (terms === "tribute"
+                                            ? `&tribute=${encodeURIComponent(tribute)}`
+                                            : "")
+                                )
+                            }
+                        >
+                            Offer Peace
+                        </button>
+                        {incomingOffer && (
+                            <button
+                                className="tma-wartable-btn"
+                                disabled={busy}
+                                onClick={() =>
+                                    runAction(
+                                        `action=accept-peace&target=${encodeURIComponent(otherId)}`
+                                    )
+                                }
+                            >
+                                Accept Their Terms
+                            </button>
+                        )}
+                    </div>
+                    {pendingOffer && (
+                        <p className="tma-wartable-note">
+                            Terms on the table:{" "}
+                            {typeof pendingOffer.terms === "string"
+                                ? pendingOffer.terms
+                                : pendingOffer.terms.type +
+                                  (pendingOffer.terms.amount
+                                      ? ` (${fmtCoins(pendingOffer.terms.amount)} gp)`
+                                      : "") +
+                                  (pendingOffer.terms.days
+                                      ? ` (${pendingOffer.terms.days} days)`
+                                      : "")}{" "}
+                            — offered by {pendingOffer.offeredByName}.
+                        </p>
+                    )}
+                </>
+            )}
+        </div>
     );
 }
 
@@ -1062,20 +1266,47 @@ export function WarTableOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX
                                 </p>
                             ) : (
                                 <div className="tma-wartable-cards">
-                                    {status.wars.map((w, i) => (
-                                        <div key={`${w.attacker}-${w.defender}-${i}`} className="tma-wartable-card tma-wartable-war-card">
-                                            <div className="tma-wartable-card-title tma-wartable-war">
-                                                {w.attackerName} ⚔ {w.defenderName}
-                                            </div>
-                                            {w.reason && (
-                                                <p className="tma-wartable-detail-text">{w.reason}</p>
-                                            )}
-                                            <div className="tma-wartable-card-sub">
-                                                Declared {fmtDate(w.declaredAt)}
-                                            </div>
-                                        </div>
-                                    ))}
+                                    {status.wars.map((w, i) => {
+                                        const otherId = w.attacker === home?.id ? w.defender : w.attacker;
+                                        const offer =
+                                            status.homeDetail?.peaceOffers.find(
+                                                (o) => o.otherId === otherId
+                                            ) ?? null;
+                                        const besieged = status.sieges.some(
+                                            (s) => s.defenderId === home?.id && s.attackerId === otherId
+                                        );
+                                        return (
+                                            <WarCard
+                                                key={`${w.attacker}-${w.defender}-${i}`}
+                                                war={w}
+                                                homeId={home?.id ?? null}
+                                                pendingOffer={offer}
+                                                homeBesieged={besieged}
+                                                busy={busy}
+                                                runAction={runAction}
+                                            />
+                                        );
+                                    })}
                                 </div>
+                            )}
+                            {status.intel && Object.keys(status.intel).length > 0 && (
+                                <>
+                                    <h2 className="tma-wartable-section-title">Spies' Report</h2>
+                                    <div className="tma-wartable-cards">
+                                        {Object.entries(status.intel).map(([id, intel]) => (
+                                            <div key={id} className="tma-wartable-card">
+                                                <div className="tma-wartable-card-title">
+                                                    {kingdomsById.get(id)?.name ?? id}
+                                                </div>
+                                                <div className="tma-wartable-card-sub">
+                                                    Garrison {intel.garrison} levies · militia{" "}
+                                                    {intel.militia} · fort tier {intel.fortTier} ·
+                                                    supply morale {Math.round(intel.morale * 100)}%
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
                             )}
                             {status.endedWars.length > 0 && (
                                 <>

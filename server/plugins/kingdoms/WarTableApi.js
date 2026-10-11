@@ -52,6 +52,9 @@ const Coalitions = require("./Coalitions.Kingdoms");
 const AiDiplomacy = require("./AiDiplomacy.Kingdoms");
 const Influence = require("./Influence.Kingdoms");
 const Switching = require("./Switching.Kingdoms");
+const WarResolution = require("./WarResolution.Kingdoms");
+const Battles = require("./Battles.Kingdoms");
+const Espionage = require("./Espionage.Kingdoms");
 
 const WARTABLE_OPEN_ATTRIBUTE = "wartable:open";
 
@@ -185,16 +188,24 @@ function statusPayload(player) {
     };
   }
 
-  const wars = Store.getActiveWars().map((w) => ({
-    attacker: w.attackerId,
-    defender: w.defenderId,
-    attackerName: kingdomName(w.attackerId),
-    defenderName: kingdomName(w.defenderId),
-    reason: w.reason ?? null,
-    goal: w.goal ?? null,
-    goalLabel: w.goal ? Wars.WAR_GOAL_LABELS[w.goal] : null,
-    declaredAt: w.declaredAt ?? null,
-  }));
+  const wars = Store.getActiveWars().map((w) => {
+    const battle = Battles.activeBattleBetween(w.attackerId, w.defenderId, Store);
+    return {
+      attacker: w.attackerId,
+      defender: w.defenderId,
+      attackerName: kingdomName(w.attackerId),
+      defenderName: kingdomName(w.defenderId),
+      reason: w.reason ?? null,
+      goal: w.goal ?? null,
+      goalLabel: w.goal ? Wars.WAR_GOAL_LABELS[w.goal] : null,
+      declaredAt: w.declaredAt ?? null,
+      // The war score the fighting has produced (WarResolution).
+      score: WarResolution.scoreFor(w),
+      battle: battle
+        ? { id: battle.id, status: battle.status, musterEndsAt: battle.musterEndsAt ?? null }
+        : null,
+    };
+  });
 
   const endedWars = Store.getEndedWars()
     .slice(-6)
@@ -367,6 +378,9 @@ function statusPayload(player) {
     successionCrises,
     civilWars,
     homeDetail,
+    // Espionage: real enemy state (garrison, supply morale, militia,
+    // fort tier) for kingdoms you fight or glare at. Empty in peacetime.
+    intel: homeId ? Espionage.intelFor(homeId, Store) : {},
   };
 }
 
@@ -409,6 +423,10 @@ const REASON_MESSAGES = {
   "on-cooldown": "Too soon — the realm needs time to forget the last war.",
   "in-civil-war": "A kingdom at war with itself cannot march on others.",
   "insufficient-funds": "The war chest cannot bear it.",
+  "nap-active": "A sworn non-aggression pact binds both crowns — the oath holds.",
+  "battle-already-called": "A battle is already gathering on that border.",
+  "battle-on-cooldown": "The field still smokes from the last battle — let it rest.",
+  "no-battlefield": "No known border field joins these crowns.",
   "invalid-goal": "Choose a war goal: plunder, territory, or vassalize.",
   "invalid-terms": "Those terms make no sense.",
   "invalid-tribute": "The tribute demand is absurd.",
@@ -443,6 +461,10 @@ function describeResult(action, result) {
         return { ok: true, message: "Peace terms laid on the table. Await their answer." };
       case "accept-peace":
         return { ok: true, message: "Peace ratified. The border cools to an armistice." };
+      case "surrender":
+        return { ok: true, message: "The white banner rises. The war ends — on their terms." };
+      case "give-battle":
+        return { ok: true, message: "The call to battle goes out. Hosts muster at the border field." };
       case "break-vassalage":
         return { ok: true, message: "The oath is broken. Independence — and the overlord's fury." };
       case "envoy":
@@ -567,6 +589,7 @@ const STRATEGIC_WAR_ACTIONS = new Set([
   "envoy",
   "ultimatum",
   "back-claimant",
+  "give-battle",
 ]);
 
 function runWarfareAction(api, player, action, query) {
@@ -582,21 +605,48 @@ function runWarfareAction(api, player, action, query) {
   switch (action) {
     case "declare-war": {
       const goal = (query.get("goal") || "").trim();
-      return describeResult(
-        action,
-        Wars.declareWar(player, homeId, target, goal, Store)
-      );
+      const result = Wars.declareWar(player, homeId, target, goal, Store);
+      if (result.ok && result.war) {
+        // Player declarations join the event bus like every other path,
+        // so refugees, battlefield sites, alliances, and diplomacy all
+        // react. Store.declareWar dedupes against the record just made.
+        try {
+          api.emitCustomEvent("kingdom:war-declared", {
+            attackerId: homeId,
+            defenderId: target,
+            declaredBy: player.getUsername?.() ?? "player",
+            reason: result.war.reason ?? null,
+            resolveAt: result.war.resolveAt ?? null,
+          });
+        } catch {
+          // Bus unavailable: the war record still stands.
+        }
+      }
+      return describeResult(action, result);
     }
     case "offer-peace": {
       const termsType = (query.get("terms") || "white-peace").trim();
       const terms =
         termsType === "tribute"
           ? { type: "tribute", amount: Math.floor(Number(query.get("tribute")) || 0) }
-          : { type: termsType };
+          : termsType === "nap"
+            ? { type: "nap", days: Math.floor(Number(query.get("days")) || 0) || undefined }
+            : { type: termsType };
       return describeResult(action, Wars.offerPeace(player, homeId, target, terms, Store));
     }
     case "accept-peace": {
       return describeResult(action, Wars.acceptPeace(player, homeId, target, Store));
+    }
+    case "surrender": {
+      return describeResult(action, WarResolution.surrender(player, homeId, target, Store));
+    }
+    case "give-battle": {
+      return describeResult(
+        action,
+        Battles.callBattle(homeId, target, Store, {
+          calledBy: player.getUsername?.() ?? null,
+        })
+      );
     }
     case "break-vassalage": {
       return describeResult(action, Wars.breakVassalage(player, homeId, Store));

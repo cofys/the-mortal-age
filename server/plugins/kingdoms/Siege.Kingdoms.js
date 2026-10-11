@@ -344,6 +344,14 @@ function tickSiege(defenderKingdomId, store) {
     siege.status = outcome;
     siege.outcome = outcome;
     siege.resolvedAt = now;
+    // The war spine: siege results feed the war score, and a vassalize
+    // victory closes the war it was fought for. Runs inside this tick's
+    // state so the war record and the siege record save together.
+    try {
+      require("./WarResolution.Kingdoms").onSiegeResolved(siege, store);
+    } catch (error) {
+      console.warn("[siege] war-resolution hook failed", error?.message ?? error);
+    }
   }
 
   store.save();

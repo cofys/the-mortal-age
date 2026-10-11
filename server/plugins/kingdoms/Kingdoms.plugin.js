@@ -100,6 +100,9 @@ module.exports = {
     loadContentModule("./WarTable.Kingdoms")(api);
     loadContentModule("./WarTableApi")(api);
     loadContentModule("./WarSupply.Kingdoms")(api);
+    loadContentModule("./WarResolution.Kingdoms")(api);
+    loadContentModule("./Battles.Kingdoms")(api);
+    loadContentModule("./Espionage.Kingdoms")(api);
     loadContentModule("./Militia.Kingdoms")(api);
     loadContentModule("./MyKingdom.Kingdoms")(api);
     loadContentModule("./MyKingdomApi")(api);

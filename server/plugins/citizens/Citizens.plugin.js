@@ -632,6 +632,19 @@ function onMilitiaKillSeen(event) {
     const Militia = require("../kingdoms/Militia.Kingdoms");
     const rec = Militia.militiaOf(username);
     if (!rec) return;
+    // Field-battle kills count toward the battle as well as the tally.
+    const battleTag = npc.warBattle;
+    if (battleTag?.battleId) {
+      try {
+        const Battles = require("../kingdoms/Battles.Kingdoms");
+        const Store = require("../kingdoms/KingdomStore");
+        Battles.recordBattleKill(battleTag.battleId, rec.kingdomId, Store);
+      } catch {
+        // Battle bookkeeping never breaks the kill path.
+      }
+      Militia.recordKill(rec.kingdomId);
+      return;
+    }
     // Only count war raiders and enemy-tagged NPCs.
     const raider = npc.warRaider;
     const npcKingdom = npc.getAttribute?.("kingdom:id");
