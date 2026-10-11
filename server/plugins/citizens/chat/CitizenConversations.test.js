@@ -141,6 +141,7 @@ function neutralDeps(overrides = {}) {
     memoryEntry: () => null,
     workContext: () => null,
     warContext: () => null,
+    bossContext: () => null,
     priceContext: () => null,
     newsContext: () => null,
     goalContext: () => null,
@@ -477,6 +478,225 @@ describe("simulated conversations", () => {
       deps: neutralDeps({ isEnemy: () => true }),
     });
     assert.equal(conv, null);
+  });
+});
+
+// --- boss topic: real boss-run state only ---------------------------------------
+
+describe("boss topic", () => {
+  beforeEach(() => Engine._resetForTests());
+
+  function assertCleanLines(lines) {
+    for (const l of lines) {
+      assert.ok(!/\{/.test(l.text), `unrendered token: ${l.text}`);
+    }
+  }
+
+  it("never selected without real boss state", () => {
+    const seen = new Set();
+    for (let seed = 0; seed < 200; seed++) {
+      Engine._resetForTests();
+      const world = makeWorld();
+      world.add("Alice", 100, 100);
+      world.add("Bob", 101, 100);
+      const harness = makeHarness();
+      const { conv } = startSim(world, harness, "Alice", "Bob", {
+        seed: 30000 + seed,
+        context: "lingering",
+        deps: neutralDeps(),
+      });
+      harness.pump();
+      if (conv) seen.add(conv.topic.id);
+    }
+    assert.ok(!seen.has("boss"), "boss topic must never be picked with no state");
+    assert.ok(seen.size >= 1, "conversations should still happen on other topics");
+  });
+
+  it("selected for a live party: own perspective, real member count", () => {
+    let picked = 0;
+    let total = 0;
+    for (let seed = 0; seed < 120; seed++) {
+      Engine._resetForTests();
+      const world = makeWorld();
+      world.add("Alice", 100, 100);
+      world.add("Bob", 101, 100);
+      const harness = makeHarness();
+      const { conv, lines } = startSim(world, harness, "Alice", "Bob", {
+        seed: 31000 + seed,
+        context: "lingering",
+        deps: neutralDeps({
+          bossContext: () => ({ boss: "the Giant Mole", n: 4 }),
+        }),
+      });
+      harness.pump();
+      if (!conv) continue;
+      total++;
+      if (conv.topic.id === "boss") {
+        picked++;
+        assert.equal(conv.topic.vars.boss, "the Giant Mole");
+        assert.equal(conv.topic.vars.n, 4);
+        assert.equal(conv.topic.vars.own, "");
+        assert.ok(!("theirs" in conv.topic.vars));
+        assert.ok(!("past" in conv.topic.vars));
+        assertCleanLines(lines);
+      }
+    }
+    assert.ok(total > 0);
+    assert.ok(picked > 0, "boss topic should be picked sometimes with live party state");
+  });
+
+  it("prefers the speaker's own run over gossip about the other", () => {
+    const deps = neutralDeps({
+      bossContext: (record) =>
+        record.username === "Alice"
+          ? { boss: "the Giant Mole", n: 4 }
+          : { boss: "Scurrius", n: 3 },
+    });
+    let bossPicks = 0;
+    for (let seed = 0; seed < 150; seed++) {
+      Engine._resetForTests();
+      const world = makeWorld();
+      world.add("Alice", 100, 100);
+      world.add("Bob", 101, 100);
+      const harness = makeHarness();
+      const { conv, lines } = startSim(world, harness, "Alice", "Bob", {
+        seed: 32000 + seed,
+        context: "lingering",
+        deps,
+      });
+      harness.pump();
+      if (conv?.topic.id === "boss") {
+        bossPicks++;
+        assert.equal(conv.topic.vars.boss, "the Giant Mole");
+        assert.equal(conv.topic.vars.own, "");
+        assert.ok(!("theirs" in conv.topic.vars));
+        assertCleanLines(lines);
+      }
+    }
+    assert.ok(bossPicks > 0);
+  });
+
+  it("gossip perspective when only the other citizen has boss state", () => {
+    let bossPicks = 0;
+    for (let seed = 0; seed < 150; seed++) {
+      Engine._resetForTests();
+      const world = makeWorld();
+      world.add("Alice", 100, 100);
+      world.add("Bob", 101, 100);
+      const harness = makeHarness();
+      const { conv, lines } = startSim(world, harness, "Alice", "Bob", {
+        seed: 33000 + seed,
+        context: "lingering",
+        deps: neutralDeps({
+          bossContext: (record) =>
+            record.username === "Bob" ? { boss: "Scurrius", n: 3 } : null,
+        }),
+      });
+      harness.pump();
+      if (conv?.topic.id === "boss") {
+        bossPicks++;
+        assert.equal(conv.topic.vars.boss, "Scurrius");
+        assert.equal(conv.topic.vars.theirs, "");
+        assert.ok(!("own" in conv.topic.vars));
+        const opener = lines[0]?.text ?? "";
+        assert.ok(
+          /You lot|Heard/.test(opener),
+          `gossip opener expected, got: ${opener}`
+        );
+        assertCleanLines(lines);
+      }
+    }
+    assert.ok(bossPicks > 0);
+  });
+
+  it("past tense for a journaled run with no live party", () => {
+    let bossPicks = 0;
+    for (let seed = 0; seed < 150; seed++) {
+      Engine._resetForTests();
+      const world = makeWorld();
+      world.add("Alice", 100, 100);
+      world.add("Bob", 101, 100);
+      const harness = makeHarness();
+      const { conv, lines } = startSim(world, harness, "Alice", "Bob", {
+        seed: 34000 + seed,
+        context: "lingering",
+        deps: neutralDeps({
+          bossContext: () => ({ boss: "Obor", n: null }),
+        }),
+      });
+      harness.pump();
+      if (conv?.topic.id === "boss") {
+        bossPicks++;
+        assert.equal(conv.topic.vars.past, "");
+        assert.ok(!("n" in conv.topic.vars));
+        const opener = lines[0]?.text ?? "";
+        assert.ok(
+          /took down|went down/i.test(opener),
+          `past-tense opener expected, got: ${opener}`
+        );
+        assertCleanLines(lines);
+      }
+    }
+    assert.ok(bossPicks > 0);
+  });
+
+  it("terse voices render boss lines cleanly (no tag leakage)", () => {
+    let bossPicks = 0;
+    for (let seed = 0; seed < 120; seed++) {
+      Engine._resetForTests();
+      const world = makeWorld();
+      world.add("Alice", 100, 100, { traits: ["gruff"] });
+      world.add("Bob", 101, 100, { traits: ["taciturn"] });
+      const harness = makeHarness();
+      const { conv, lines } = startSim(world, harness, "Alice", "Bob", {
+        seed: 35000 + seed,
+        context: "lingering",
+        deps: neutralDeps({
+          bossContext: () => ({ boss: "the Giant Mole", n: 4 }),
+        }),
+      });
+      harness.pump();
+      if (conv?.topic.id === "boss") {
+        bossPicks++;
+        for (const l of lines) {
+          assert.ok(!/\{/.test(l.text), `unrendered token: ${l.text}`);
+          assert.ok(
+            !/\bown\b|\btheirs\b|\bpast\b/.test(l.text),
+            `perspective tag leaked: ${l.text}`
+          );
+        }
+      }
+    }
+    assert.ok(bossPicks > 0);
+  });
+
+  it("_pickTopic perspective tags follow the state owner", () => {
+    const ctxFor = (bossFn, seed) => ({
+      sources: neutralDeps({ bossContext: bossFn }),
+      aRecord: { username: "Alice" },
+      aBot: null,
+      bRecord: { username: "Bob" },
+      tier: "neutral",
+      context: "lingering",
+      rng: mulberry32(seed),
+    });
+    const picks = [];
+    for (let seed = 0; seed < 60; seed++) {
+      const t = Engine._pickTopic(
+        ctxFor(
+          (r) => (r.username === "Bob" ? { boss: "Scurrius", n: 2 } : null),
+          seed
+        )
+      );
+      if (t.id === "boss") picks.push(t);
+    }
+    assert.ok(picks.length > 0, "boss should be picked across seeds");
+    for (const t of picks) {
+      assert.equal(t.vars.boss, "Scurrius");
+      assert.equal(t.vars.theirs, "");
+      assert.equal(t.vars.n, 2);
+      assert.ok(!("own" in t.vars));
+    }
   });
 });
 

@@ -31,8 +31,9 @@
  *     work (skilling session / profession), live wars from
  *     Wars.Kingdoms, the real bread price vs baseline from
  *     Prices.Economy, the latest CitizenNewspaper headline, the
- *     speaker's real CitizenIntents goal, and shared history from
- *     CitizenMemory / CitizenSocialBonds.
+ *     speaker's real CitizenIntents goal, boss runs from CitizenBossRuns
+ *     (a live party via CitizenBonds, else a recently journaled boss
+ *     event), and shared history from CitizenMemory / CitizenSocialBonds.
  *   - ZERO LLM anywhere. Templates + combinatorics + real state only.
  *
  * Volume discipline (501 citizens): a global cap on concurrent
@@ -69,6 +70,7 @@ const COOLDOWN_MAX_MS = 9 * 60 * 1000;
 const TRAIL_OFF_CHANCE = 0.1; // per turn beyond the second, end early
 const JOIN_CHANCE_LINGERING = 0.2;
 const JOIN_CHANCE_PASSING = 0.07;
+const BOSS_JOURNAL_RECENT_MS = 24 * 3600 * 1000; // a journaled boss run stays "recent" this long
 
 // Planned exchange lengths, drawn at conversation start. Contexts:
 // "passing" (either party is on the move) skews short; "lingering"
@@ -316,6 +318,51 @@ function defaultSources() {
         const active = Intents.activeIntents(bot) ?? [];
         if (active.length && active[0].label) {
           return { goal: String(active[0].label) };
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    // Live boss-run state for the speaker: a current boss party (CitizenBonds
+    // party + CitizenBossRuns bossById, with the real member count), else a
+    // recently journaled boss event (formation / descend / loot / kill lines
+    // all carry the boss label from BOSSES). Returns { boss, n? } or null —
+    // never invents a run.
+    bossContext: (record) => {
+      try {
+        const { getParty } = require("../lib/CitizenBonds");
+        const { bossById, BOSSES } = require("../lib/CitizenBossRuns");
+        const partyState = (username) => {
+          if (!username) return null;
+          const party = getParty(username);
+          if (!party) return null;
+          const boss = bossById(party.bossId ?? party.activity);
+          if (!boss?.label) return null; // not a boss party — never speak
+          const members = Array.isArray(party.members) ? party.members : [];
+          return {
+            boss: boss.label,
+            n: members.length > 0 ? members.length : null,
+          };
+        };
+        const ownParty = partyState(record?.username);
+        if (ownParty) return ownParty;
+        const labels = (BOSSES ?? [])
+          .map((b) => String(b?.label ?? "").replace(/^the\s+/i, ""))
+          .filter((l) => l.length > 0);
+        if (!labels.length) return null;
+        const { getJournal } = require("../lib/CitizenJournal");
+        const now = Date.now();
+        for (const e of getJournal().recent(record?.username, 12) ?? []) {
+          if (!e?.text || now - (e.at ?? 0) > BOSS_JOURNAL_RECENT_MS) continue;
+          const hit = labels.find((l) => String(e.text).includes(l));
+          if (hit) {
+            const full =
+              (BOSSES ?? []).find(
+                (b) => String(b?.label ?? "").replace(/^the\s+/i, "") === hit
+              )?.label ?? hit;
+            return { boss: full, n: null };
+          }
         }
         return null;
       } catch {
@@ -735,6 +782,75 @@ const TOPIC_POOLS = Object.freeze({
       terse: ["Crack on, then.", "Later."],
     },
   },
+
+  // Boss runs. Perspective tags {own}/{theirs}/{past} are present-but-empty:
+  // pickLine's token filter uses their presence to pick the right
+  // first-/second-person lines for whoever actually ran the boss, and
+  // render() prints nothing for them. {n} (live party size) is only set for
+  // a current party; a journaled run is past-tense ({past}).
+  boss: {
+    label: "about boss runs",
+    opener: {
+      plain: [
+        "We're running {boss} — {n} of us, heading down soon.{own}",
+        "Taking {n} of us down after {boss} tonight.{own}",
+        "We took down {boss}. Still buzzing.{own}{past}",
+        "{boss} went down. Good run.{own}{past}",
+        "You lot are running {boss} — {n} strong?{theirs}",
+        "Heard you're taking {n} down after {boss}.{theirs}",
+        "You lot took down {boss}, right? How'd it go?{theirs}{past}",
+        "Heard the {boss} run went well.{theirs}{past}",
+      ],
+      terse: [
+        "Running {boss}. {n} of us.{own}",
+        "Took down {boss}.{own}{past}",
+        "You lot. {boss}. {n} strong?{theirs}",
+        "{boss} run went well?{theirs}{past}",
+      ],
+    },
+    reply: {
+      plain: [
+        "Good luck down there.{own}",
+        "Watch yourself.{own}",
+        "Bring back something shiny.{own}",
+        "Nice. Get anything good?{own}{past}",
+        "No way. How'd it go?{own}{past}",
+        "Yeah — {n} of us. Heading down soon.{theirs}",
+        "{n} of us, yeah. Wish us luck.{theirs}",
+        "Went down clean.{theirs}{past}",
+        "Yeah. Split the loot even.{theirs}{past}",
+      ],
+      terse: [
+        "Good luck.{own}",
+        "Loot?{own}{past}",
+        "Yeah. {n}.{theirs}",
+        "Clean kill.{theirs}{past}",
+      ],
+    },
+    follow: {
+      plain: [
+        "Nothing like a good boss run.",
+        "You been down before, or is this the first?",
+        "Heard {boss} doesn't go down easy.",
+        "Better than standing around the square all day.",
+        "I'll get on one of those runs myself, one day.",
+      ],
+      terse: ["Boss runs. Good.", "One day, me."],
+    },
+    react: {
+      plain: ["lol", "Gods.", "No way.", "Nice."],
+      terse: ["Mm.", "Heh."],
+    },
+    closer: {
+      plain: [
+        "Right, back to it.",
+        "Stay safe out there.",
+        "Catch you later.",
+        "Good chatting.",
+      ],
+      terse: ["Later.", "Right."],
+    },
+  },
 });
 
 // A third citizen muscling in.
@@ -802,6 +918,22 @@ function buildTopicCandidates(ctx) {
 
   const goal = sources.goalContext(aRecord, aBot);
   if (goal?.goal) out.push({ id: "goals", weight: 3, vars: { goal: goal.goal } });
+
+  // Boss runs: the opener's own live party or recent run first, else the
+  // other citizen's as gossip. Never selectable with no real boss state.
+  const bossA = sources.bossContext(aRecord);
+  let bossPick = bossA?.boss ? { state: bossA, tag: "own" } : null;
+  if (!bossPick) {
+    const bossB = sources.bossContext(bRecord);
+    if (bossB?.boss) bossPick = { state: bossB, tag: "theirs" };
+  }
+  if (bossPick) {
+    const vars = { boss: bossPick.state.boss };
+    vars[bossPick.tag] = ""; // perspective tag: presence-filtered, renders empty
+    if (bossPick.state.n) vars.n = bossPick.state.n;
+    else vars.past = ""; // journaled run — no live party, past tense
+    out.push({ id: "boss", weight: 4, vars });
+  }
 
   void rng;
   return out;
