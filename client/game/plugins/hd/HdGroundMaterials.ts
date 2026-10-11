@@ -1,5 +1,8 @@
 // Default floor recipes from 117HD/RLHD scene/tile_overrides.json (38d4082).
 // Untextured terrain stores its material ID in the otherwise unused U coordinate.
+// Road/path IDs (118 = overworld cobblestone, 37/86/217 = dirt paths, etc.) were
+// missing, causing black roads — added from upstream's overlayIds (1-based = upstream + 1).
+// VARROCK_PATHS -> COBBLE, BRICK_PATHS -> BRICK, FORTIS_ROADS -> PAVING.
 export enum HdGroundMaterial {
     NONE, GRASS, DIRT, SAND, GRAVEL, ROCK, SNOW, WOOD, CARPET, BRICK,
     BRICK_BROWN, MARBLE, TILES, STONE, CONCRETE, SAND_BRICK, WORN_TILES, PAVING, COBBLE,
@@ -7,23 +10,23 @@ export enum HdGroundMaterial {
 
 const overlays = new Map<number, HdGroundMaterial>();
 for (const [material, ids] of [
-    [HdGroundMaterial.GRAVEL, [2, 3, 4, 8, 9, 10, 11, 119, 127, 180]],
+    [HdGroundMaterial.GRAVEL, [2, 3, 4, 8, 9, 10, 11, 95, 119, 127, 180, 333]],
     [HdGroundMaterial.WOOD, [5, 35, 52]],
     [HdGroundMaterial.SNOW, [30, 33, 254]],
     [HdGroundMaterial.GRASS, [29]],
-    [HdGroundMaterial.DIRT, [14, 15, 16, 21, 22, 23, 36, 49, 60, 77, 80, 81, 82, 83, 85, 88, 89, 90, 91, 101, 102, 106, 107, 108, 110, 115, 123, 131, 132, 162, 172, 173, 216, 227]],
+    [HdGroundMaterial.DIRT, [14, 15, 16, 21, 22, 23, 36, 37, 49, 60, 77, 80, 81, 82, 83, 85, 86, 88, 89, 90, 91, 101, 102, 106, 107, 108, 110, 111, 115, 123, 124, 131, 132, 162, 172, 173, 188, 216, 217, 227, 228, 275, 304, 331]],
     [HdGroundMaterial.ROCK, [48, 120, 185, 198]],
-    [HdGroundMaterial.SAND, [25, 26, 76]],
+    [HdGroundMaterial.SAND, [25, 26, 76, 204]],
     [HdGroundMaterial.CARPET, [13, 163]],
-    [HdGroundMaterial.BRICK, [28]],
+    [HdGroundMaterial.BRICK, [28, 138, 165]],
     [HdGroundMaterial.BRICK_BROWN, [27, 46]],
     [HdGroundMaterial.MARBLE, [20]],
     [HdGroundMaterial.TILES, [134, 174]],
-    [HdGroundMaterial.STONE, [12]],
+    [HdGroundMaterial.STONE, [12, 200]],
     [HdGroundMaterial.CONCRETE, [32]],
     [HdGroundMaterial.SAND_BRICK, [84, 207]],
-    [HdGroundMaterial.PAVING, [137]],
-    [HdGroundMaterial.COBBLE, [117, 171, 179]],
+    [HdGroundMaterial.PAVING, [137, 329, 330]],
+    [HdGroundMaterial.COBBLE, [45, 51, 103, 117, 118, 121, 128, 133, 171, 179]],
 ] as const) for (const id of ids) overlays.set(id, material);
 
 const grass = new Set([7, 33, 34, 40, 99, 100, 103, 114, 115, 126, 203]);
