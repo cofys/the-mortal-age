@@ -204,7 +204,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.DEBUG_PACKET]: -2,
     [ServerPacketId.PLAYER_OPTION]: -1,
     [ServerPacketId.DESTINATION]: 4, // worldX(2) + worldY(2)
-    [ServerPacketId.HINT_ARROW]: 6, // type(1) + a(2) + b(2) + c(1)
+    [ServerPacketId.HINT_ARROW]: 7, // type(1) + a(2) + b(2) + c(1) + d(1)
     [ServerPacketId.ATTACK_TIMER]: 1, // ticks(1)
 
     [ServerPacketId.WIDGET_OPEN]: 3, // groupId(2) + modal(1)

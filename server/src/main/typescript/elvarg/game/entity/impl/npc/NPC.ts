@@ -349,9 +349,11 @@ export class NPC extends Mobile {
         return this;
     }
 
-    /** Full health: the definition's hitpoints unless this NPC was scaled (raids). */
+    /** Full health of the current form (transforms resolve first): the definition's
+     * hitpoints unless this NPC was scaled (raids). */
     public getMaxHitpoints(): number {
-        return this.maxHitpointsOverride >= 0 ? this.maxHitpointsOverride : this.getDefinition().getHitpoints();
+        if (this.maxHitpointsOverride >= 0) return this.maxHitpointsOverride;
+        return this.getCurrentDefinition()?.getHitpoints() ?? this.getDefinition().getHitpoints();
     }
 
     /** Scales this one NPC's full health, e.g. by raid level or party size; -1 restores the definition's. */

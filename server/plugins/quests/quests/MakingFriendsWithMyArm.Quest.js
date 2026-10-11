@@ -551,19 +551,20 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
 
   function talkToMyArm(event) {
     const { player, npcId } = event;
-    if (!MY_ARM_NPC_IDS.has(npcId)) return;
+    if (!MY_ARM_NPC_IDS.has(npcId)) return false;
     const stage = quest.getStage(player);
     if (npcId === MY_ARM_PRISON_NPC_ID) {
       // 8411 is My Arm's Big Adventure's spawn id too: only own it in the prison cell.
-      if (stage < STAGE_PRISON || stage >= STAGE_SNOWFLAKE_AFTER) return;
-      if (player.getLocation().getY() < 10000) return;
+      if (stage < STAGE_PRISON || stage >= STAGE_SNOWFLAKE_AFTER) return false;
+      if (player.getLocation().getY() < 10000) return false;
       event.handled = true;
       startTranscript(api, player, npcId, PAGE, myArmVariant(player, stage));
-      return;
+      return true;
     }
-    if (stage < STAGE_STARTED || quest.isComplete(player)) return;
+    if (stage < STAGE_STARTED || quest.isComplete(player)) return false;
     event.handled = true;
     startTranscript(api, player, npcId, PAGE, myArmVariant(player, stage));
+    return true;
   }
 
   function talkToLarry(event) {
@@ -675,31 +676,32 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
 
   function talkToWiseOldMan(event) {
     const { player, npcId } = event;
-    if (!WISE_OLD_MAN_NPC_IDS.has(npcId)) return;
+    if (!WISE_OLD_MAN_NPC_IDS.has(npcId)) return false;
     const stage = quest.getStage(player);
     const location = player.getLocation();
     let variant;
     if (stage >= STAGE_PRISON && stage < STAGE_ODD_DIED) {
-      if (location.getY() < 10000) return;
+      if (location.getY() < 10000) return false;
       variant = "matricide-talking-to-the-wise-old-man";
     } else if (stage >= STAGE_MOTHER_DEAD && stage < STAGE_SNOWFLAKE_AFTER) {
-      if (location.getY() < 3900 || location.getY() > 3960) return;
+      if (location.getY() < 3900 || location.getY() > 3960) return false;
       advanceTo(player, STAGE_SNOWFLAKE_AFTER);
       variant = "a-new-leader";
     } else if (stage >= STAGE_PLAN && stage < STAGE_WOM_ASKED) {
-      if (!isInDraynor(location)) return;
+      if (!isInDraynor(location)) return false;
       advanceTo(player, STAGE_WOM_ASKED);
       variant = "the-wise-dead-man-talking-to-the-wise-old-man";
     } else if (stage >= STAGE_WOM_ASKED && stage < STAGE_COFFIN) {
-      if (!isInDraynor(location)) return;
+      if (!isInDraynor(location)) return false;
       variant = coffinBuilt(player) && potionObtained(player)
         ? "the-wise-dead-man-talking-to-the-wise-old-man-after-all-is-prepared"
         : "the-wise-dead-man-talking-to-the-wise-old-man-talking-to-the-wise-old-man-again";
     } else {
-      return;
+      return false;
     }
     event.handled = true;
     startTranscript(api, player, npcId, PAGE, variant);
+    return true;
   }
 
   function isInDraynor(location) {

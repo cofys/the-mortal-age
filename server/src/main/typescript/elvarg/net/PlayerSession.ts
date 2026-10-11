@@ -19,7 +19,6 @@ import {
   encodeInitialPlayerSync,
   encodeLogoutResponse,
   encodeNpcSync,
-  encodePlaySong,
   encodePlayerSync,
   encodeRebuildNormal,
   encodeTick,
@@ -59,6 +58,12 @@ const WS_CLOSE_BACKPRESSURE = 1013;
 const WS_CLOSE_SEND_FAILURE = 1011;
 
 export class PlayerSession {
+  /**
+   * The interacting-entity field (24 bits in npc/player info) marks a player by adding this to
+   * its index, as OSRS does. NPC indices run to 65534, so the marker sits above them; the client
+   * decodes it with the same offset (client/rs/interaction/InteractionIndex.ts).
+   */
+  public static readonly PLAYER_INTERACTION_OFFSET = 0x10000;
   private channel: SessionChannel;
   private pendingPackets: Buffer[] = [];
   private pendingPacketBytes = 0;
@@ -81,6 +86,7 @@ export class PlayerSession {
   private appearanceCache = new Map<number, { player: Player; payload: Buffer }>();
   private lastMusicRegion = -1;
   private lastMusicTrack = -1;
+  private lastMusicMode = -1;
   private lastGroundItemRegion = -1;
   // The first tick after login sends encodeInitialPlayerSync (no appearance/anim data at
   // all), but World's end-of-tick resetUpdating() still unconditionally clears
@@ -219,18 +225,29 @@ export class PlayerSession {
     const sceneLocation = BoatManager.rootLocation(player);
     const sceneTile = { x: sceneLocation.getX(), y: sceneLocation.getY(), level: sceneLocation.getZ() };
     ServerPerf.measurePhase("network.flush.region_updates", () => {
-      const musicRegion = ((sceneTile.x >> 6) << 8) | (sceneTile.y >> 6);
-      if (musicRegion !== this.lastGroundItemRegion) {
-        this.lastGroundItemRegion = musicRegion;
+      const groundItemRegion = ((sceneTile.x >> 6) << 8) | (sceneTile.y >> 6);
+      const privateArea = player.getArea?.();
+      const musicRegion = privateArea instanceof TemplatedInstanceArea
+        ? Music.regionForInstanceLocation(privateArea, current.x, current.y, current.level) ?? -1
+        : groundItemRegion;
+      if (groundItemRegion !== this.lastGroundItemRegion) {
+        this.lastGroundItemRegion = groundItemRegion;
         require("../game/entity/impl/grounditem/ItemOnGroundManager")
           .ItemOnGroundManager.onRegionChange(player);
       }
-      if (musicRegion !== this.lastMusicRegion) {
+      const musicMode = player.getAudioSettings?.()?.[18] ?? 0;
+      if (musicRegion !== this.lastMusicRegion || musicMode !== this.lastMusicMode) {
+        const regionChanged = musicRegion !== this.lastMusicRegion;
+        const previousMusicMode = this.lastMusicMode;
         this.lastMusicRegion = musicRegion;
-        const track = Music.forRegion(musicRegion);
-        if (track !== undefined && track !== this.lastMusicTrack) {
+        this.lastMusicMode = musicMode;
+        const track = musicRegion < 0 ? undefined : Music.forRegion(musicRegion);
+        if (regionChanged && track !== undefined) {
+          PluginManager.emitCustomEvent("music:unlock-track", { player, trackId: track });
+        }
+        if (musicMode === 0 && track !== undefined && (track !== this.lastMusicTrack || previousMusicMode !== 0)) {
           this.lastMusicTrack = track;
-          this.sendClientPacket(encodePlaySong(track));
+          player.getPacketSender().sendSong(track);
         }
       }
     });
@@ -606,7 +623,7 @@ export class PlayerSession {
   }
 
   private interactionIndex(target: any): number {
-    return target == null ? -1 : target.getIndex() + (target.isPlayer() ? 0x8000 : 0);
+    return target == null ? -1 : target.getIndex() + (target.isPlayer() ? PlayerSession.PLAYER_INTERACTION_OFFSET : 0);
   }
 
   private faceDirection(from: any, to: any): number {

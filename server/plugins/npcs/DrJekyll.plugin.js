@@ -1,7 +1,7 @@
 "use strict";
 
-const Events = require("./random-events/RandomEvents");
-const Jekyll = require("./random-events/DrJekyll");
+const Events = require("./random-events/Common.RandomEvents");
+const Jekyll = require("./random-events/DrJekyll.RandomEvents");
 
 module.exports = {
   name: "DrJekyll",

@@ -578,6 +578,8 @@ function clearGroundItems() {
 // (area-membership lists miss anyone who crossed the boundary at the wrong tick).
 const hintState = new Map();
 const HINT_REFRESH_MS = 2000;
+/** OSRS hint height byte (x2 world units): about 0.7 of a tile, where the arrow sat before heights were sent. */
+const FLAG_HINT_HEIGHT = 45;
 
 function updateFlagHint(player) {
   const teamId = getTeamId(player);
@@ -624,8 +626,8 @@ function updateFlagHint(player) {
       // Type 3 (player) renders through the head-icon pass, following the head smoothly.
       sender.sendPlayerHint(carrier);
     } else {
-      // height 0, the flag's own plane: a client on another floor must not draw it.
-      sender.sendPositionalHint(flagLocation, 2, 0, flagLocation.getZ());
+      // A little above the flag's tile, on its own plane: a client on another floor must not draw it.
+      sender.sendPositionalHint(flagLocation, 2, FLAG_HINT_HEIGHT, flagLocation.getZ());
     }
     if (process.env.CW_BOT_DEBUG === "1" && player.getUsername?.() === process.env.CW_BOT_DEBUG_USER) {
       console.log(`[cw_hint] ${player.getUsername?.()} flag=${flagTeam} at ${key}`);

@@ -37,6 +37,17 @@ const RIFT_GUARDIAN_BASE = 1795758;
 const BLOOD_RIFT_GUARDIAN_BASE = 804984;
 const ABYSS_TELEPORT_STEP = "o8m7y6";
 const ESSENCE_TELEPORT_STEPS = new Set(["ILlRUH", "SvUvek"]);
+/** The Rune Essence mine's exit portals (loc 34825, "Portal", Use). */
+const ESSENCE_MINE_PORTAL = 34825;
+/** Where the player stood when a wizard teleported them into the mine: the portals return there. */
+const ESSENCE_MINE_RETURN_ATTRIBUTE = "runecrafting:essence-mine-return";
+/** Set for the tick between stepping into a portal and the teleport, so a second click waits. */
+const ESSENCE_MINE_LEAVING_ATTRIBUTE = "runecrafting:essence-mine-leaving";
+/** Without a recorded wizard, back beside Aubury (a captured landing tile). */
+const ESSENCE_MINE_DEFAULT_RETURN = Object.freeze([3252, 3400, 0]);
+/** The Curse the portal casts on the player: projectile 109, graphic 110 (rsprox captures). */
+const ESSENCE_PORTAL_PROJECTILE = 109;
+const ESSENCE_PORTAL_IMPACT = 110;
 
 const RUNE_ESSENCE_TELEPORT_NPCS = [
   "Aubury",
@@ -521,8 +532,55 @@ function handleRuneEssenceTeleport(event) {
     return true;
   }
   player.sendMessage("Senventior disthine molenko!");
-  requestTeleport(player, RUNE_ESSENCE_MINE.clone());
+  teleportToEssenceMine(player);
   return true;
+}
+
+/** Into the mine, remembering where the player stood so the portals can send them back. */
+function teleportToEssenceMine(player) {
+  const at = player.getLocation();
+  player.setAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE, [at.getX(), at.getY(), at.getZ()]);
+  requestTeleport(player, RUNE_ESSENCE_MINE.clone());
+}
+
+/**
+ * A mine portal sends the player back to the wizard who teleported them in (Wiki: Rune
+ * Essence mine). As rsprox captures (rev 226-228) show it: on arrival "You step through the
+ * portal..." with the portal casting Curse at the player (projectile 109 over 30 cycles,
+ * graphic 110 after 30 cycles at height 124), then a tick later the teleport, with sound 200.
+ */
+function handleEssenceMinePortal(event) {
+  const { player, location } = event;
+  if (player.getAttribute(ESSENCE_MINE_LEAVING_ATTRIBUTE)) return true;
+  const saved = player.getAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE);
+  const [x, y, z] = Array.isArray(saved) && saved.length === 3 ? saved : ESSENCE_MINE_DEFAULT_RETURN;
+  const here = player.getLocation();
+  player.sendMessage("You step through the portal...");
+  player.getPacketSender().sendProjectile(
+    new Location(location.x, location.y, location.z), here, 0, 30, ESSENCE_PORTAL_PROJECTILE, 15, 31, player, 0, 16, 128
+  );
+  player.performGraphic(new Graphic(ESSENCE_PORTAL_IMPACT, 30, 124));
+  player.getMovementQueue().reset();
+  player.setAttribute(ESSENCE_MINE_LEAVING_ATTRIBUTE, true);
+  afterTicks(1, () => {
+    player.setAttribute(ESSENCE_MINE_LEAVING_ATTRIBUTE, null);
+    player.moveTo(new Location(x, y, z));
+    player.getPacketSender().sendSound(EXIT_PORTAL_SOUND, 1, 0);
+  });
+  return true;
+}
+
+function afterTicks(ticks, action) {
+  const { Task } = pluginApi.core;
+  pluginApi.getTaskManager().submit(new (class extends Task {
+    constructor() {
+      super(ticks);
+    }
+    execute() {
+      this.stop();
+      action();
+    }
+  })());
 }
 
 function teleportToAbyss(player) {
@@ -552,7 +610,7 @@ function handleDialogueAction(event) {
     if (!hasCompletedRuneMysteries(player)) {
       player.sendMessage("You need to complete Rune Mysteries before using this teleport.");
     } else {
-      requestTeleport(player, RUNE_ESSENCE_MINE);
+      teleportToEssenceMine(player);
     }
   } else {
     return;
@@ -599,6 +657,7 @@ function handleAbyssObstacle(event) {
  * minigame's.
  */
 function handleExitPortal(event) {
+  if (event.objectId === ESSENCE_MINE_PORTAL) return handleEssenceMinePortal(event);
   const talisman = EXIT_PORTALS.get(event.objectId);
   if (!talisman || talisman.ruinX === undefined) return false;
   const { player } = event;
@@ -641,6 +700,7 @@ module.exports = {
   },
   register(api) {
     initialize(api);
+    api.persistAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE);
 
     api.onObjectInteraction("Altar", { "Craft-rune": handleCraftRunes });
     api.onObjectInteraction("Blood Altar", { Bind: handleCraftRunes });

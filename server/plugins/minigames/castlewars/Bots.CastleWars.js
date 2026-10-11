@@ -27,7 +27,6 @@ const { PVP_LOADOUT_DEFINITIONS, isLoadoutAvailable } = require("../../bots/beha
 const { getPvpProfile } = require("../../bots/behaviours/pvp/PvpProfileRegistry");
 const FoodPlugin = require("../../items/Food.plugin");
 
-const FOOD_ITEM_IDS = Array.isArray(FoodPlugin.FOOD_ITEM_IDS) ? FoodPlugin.FOOD_ITEM_IDS : [];
 
 // Lobby.CastleWars.js owns the attribute and mirrors it onto the game object; the literal
 // is only the fallback if this unit is ever loaded before the lobby.
@@ -1202,11 +1201,9 @@ function ensureLoadout(player, state, teamId, nowMs) {
 /** Clears ordinary food so the bot can carry bandages; potions and runes stay. */
 function stripFood(player) {
   const inventory = player.getInventory();
-  for (const id of FOOD_ITEM_IDS) {
-    const amount = inventory.getAmount(id);
-    if (amount > 0) {
-      inventory.deleteNumber(id, amount);
-    }
+  const food = new Set(inventory.getItems().map((item) => item?.getId?.()).filter(FoodPlugin.isFoodItem));
+  for (const id of food) {
+    inventory.deleteNumber(id, inventory.getAmount(id));
   }
 }
 

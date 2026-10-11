@@ -52,6 +52,11 @@ module.exports = function registerDemonSlayerQuest(api) {
   const WEAKENED_DELRITH_NPC_ID = NpcIdentifiers.WEAKENED_DELRITH;
 
   const VARP_DEMON_SLAYER = 222;
+  /** Temple of the Eye's stage attribute. Its tower stages (6-25) give Traiborn
+   * dialogue of their own, so Demon Slayer must not shadow him there. */
+  const TEMPLE_OF_THE_EYE_STAGE_ATTRIBUTE = "quest.temple_of_the_eye.stage";
+  const TOTE_TOWER_STAGE = 6;
+  const TOTE_COMPLETE_STAGE = 26;
   const STAGE_STARTED = 1;
   const STAGE_KEY_HUNT = 2;
   const STAGE_COLLECTING_BONES = 3;
@@ -224,6 +229,13 @@ module.exports = function registerDemonSlayerQuest(api) {
     ];
   }
 
+  /** True while Temple of the Eye is in progress and using Traiborn (its tower
+   * stages: 6 brief, 7 apprentices, 8-25 riddle solved). */
+  function templeOfTheEyeUsesTraiborn(player) {
+    const stage = Number(player.getAttribute(TEMPLE_OF_THE_EYE_STAGE_ATTRIBUTE)) || 0;
+    return stage >= TOTE_TOWER_STAGE && stage < TOTE_COMPLETE_STAGE;
+  }
+
   // Which transcript each quest NPC plays, by quest stage / keys carried.
   function selectDialogueVariant({ npcId, player }) {
     const stage = quest.getStage(player);
@@ -295,7 +307,9 @@ module.exports = function registerDemonSlayerQuest(api) {
       if (stage === STAGE_KEY_HUNT) {
         return { page: "Demon Slayer", variant: "getting-the-key-from-traiborn" };
       }
-      // stage 0/1 and stage >= SILVERLIGHT: generic wizard talk.
+      // stage 0/1 and stage >= SILVERLIGHT: generic wizard talk, unless Temple
+      // of the Eye is in progress and using Traiborn for its own quest.
+      if (templeOfTheEyeUsesTraiborn(player)) return null;
       return { page: "Wizard Traiborn", variant: "standard-dialogue" };
     }
 

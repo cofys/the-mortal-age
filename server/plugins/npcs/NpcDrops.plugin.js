@@ -130,6 +130,10 @@ function applyWikiCorrections(tableById) {
   if (tableById.zulrah) {
     tableById.zulrah.rolls = 2;
   }
+  // Vorkath: two rolls on its table per kill, tertiary drops excluded (Wiki, Drops).
+  if (tableById.vorkath) {
+    tableById.vorkath.rolls = 2;
+  }
   correctMadAngel(tableById.mad_angel);
   const kalphiteQueen = tableById.kalphite_queen;
   if (!kalphiteQueen) {

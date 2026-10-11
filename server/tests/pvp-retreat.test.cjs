@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/pvp-retreat.test.cjs
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
+const { test, before } = require('node:test');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
@@ -12,6 +12,16 @@ const { Player } = require('../dist/game/entity/impl/player/Player');
 const { TeleportHandler } = require('../dist/game/model/teleportation/TeleportHandler');
 const { Wilderness } = require('../dist/game/content/wilderness/Wilderness');
 const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
+const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { PluginManager } = require('../dist/plugins/PluginManager');
+
+// The bots ask the Food plugin what is food, and it reads item names from the cache.
+before(async () => {
+  await CachePipeline.initialize();
+  require('../plugins/items/Food.plugin').register({
+    core: PluginManager.getCoreApi(), persistAttribute() {}, onPlayerLogin() {}, onItemAction() {},
+  });
+});
 const filename = path.resolve(__dirname, '../plugins/bots/behaviours/nodes/pvp/PvpDefensiveActionNode.js');
 const localRequire = createRequire(filename);
 

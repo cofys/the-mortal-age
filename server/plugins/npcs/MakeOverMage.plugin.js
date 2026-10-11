@@ -4,9 +4,7 @@ const { EndDialogue } = require("../../src/main/typescript/elvarg/game/model/dia
 
 const MAKEOVER_INTERFACE_ID = 679;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
-const WELCOME_PLAY_BUTTON_UID = (378 << 16) | 72;
 const MAKEOVER_COMMANDS = ["mm", "makeover", "makeovermage"];
-const MAKEOVER_HINT = "If you ever want to change your appearance again, type ::mm ingame";
 
 
 function startMakeoverDialogue(player, npcId) {
@@ -47,30 +45,14 @@ module.exports = {
   name: "MakeOverMage",
   register(api) {
     const CombatFactory = api.getCombatFactory();
-    const firstLoginMakeovers = new WeakSet();
-
+    // A new account designs its character first, as in OSRS (there is no welcome screen for it).
+    // The login hook runs just before the gameframe is sent: mount the modal after it.
     api.onPlayerLogin(({ player, isNewAccount }) => {
       if (!isNewAccount || player.isPlayerBot?.() === true) {
         return;
       }
-      firstLoginMakeovers.add(player);
+      queueMicrotask(() => openMakeoverInterface(player));
     });
-
-    api.onInterfaceActionButton(WELCOME_PLAY_BUTTON_UID, ({ player }) => {
-      if (!firstLoginMakeovers.delete(player)) {
-        return false;
-      }
-      // WelcomeScreen restores the gameframe first; mount the modal after that root swap.
-      queueMicrotask(() => {
-        if (openMakeoverInterface(player)) {
-          player.sendMessage(MAKEOVER_HINT);
-        }
-      });
-      return true;
-    });
-
-    api.onPlayerDisconnect(({ player }) => firstLoginMakeovers.delete(player));
-    api.onPlayerLogout(({ player }) => firstLoginMakeovers.delete(player));
 
     for (const command of MAKEOVER_COMMANDS) {
       api.registerCommand(command, ({ player }) => {

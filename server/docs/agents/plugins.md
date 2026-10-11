@@ -78,7 +78,8 @@ and give each unit its own file in a folder named after the plugin:
 - The folder sits next to the plugin and is lowercase: `SpecialAttacks.plugin.js` keeps its
   units in `./specials/`.
 - Files end with the plugin name, singular where that reads better:
-  `AbyssalWhip.SpecialAttack.js`, `DragonClaw.SpecialAttack.js`.
+  `AbyssalWhip.SpecialAttack.js`, `DragonClaw.SpecialAttack.js`,
+  `Gravedigger.RandomEvents.js`.
 - Each file exports an attach function that takes `api` and calls `api.register*` itself.
 
 Delegation lines are the one allowed addition to `register`:
@@ -107,9 +108,13 @@ always miss.
 ```js
 api.onObjectInteraction("Ladder", { "Climb-up": climbUp });
 api.onNpcInteraction("Banker", { Collect: openCollectionBox });
+api.onNpcsInteraction(["Niles", "Miles", "Giles"], { "Talk-to": talk, Dismiss: dismiss });
 api.onItemAction("Spade", { Dig: dig });
 api.onItemOnObject("Knife", "Web", slashWeb, { noted: false });
 ```
+
+`onNpcsInteraction` is the many-names-one-handler form: it registers the same actions for
+each exact, case-sensitive name, so a family of NPCs that share a transcript needs one line.
 
 Fall back to raw ids only when the name is genuinely ambiguous or the behaviour is
 id-specific (a single transformed variant, for example). When you do, use a named constant

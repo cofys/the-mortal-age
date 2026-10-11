@@ -55,7 +55,7 @@ function fakePlayer({ head = -1, cape = -1, inventory = [], bot = false } = {}) 
     getEquipment: () => ({
       getSlot: (slot) => (slot === core.Equipment.HEAD_SLOT ? head : slot === core.Equipment.CAPE_SLOT ? cape : -1),
     }),
-    getInventory: () => ({ containsAny: (ids) => inventory.some((id) => ids.includes(id)) }),
+    getInventory: () => ({ getItems: () => inventory.map((id) => ({ getId: () => id })) }),
     sendMessage: (message) => state.messages.push(message),
     smartMove: (location) => state.moves.push(location),
     moveTo: (location) => state.moves.push(location),
@@ -86,6 +86,8 @@ function mapObject(id) {
 
 before(() => {
   CachePipeline.initialize();
+  // The entry check asks the Food plugin, which reads item names from the cache.
+  require('../plugins/items/Food.plugin').register({ core, persistAttribute() {}, onPlayerLogin() {}, onItemAction() {} });
   RegionManager.init();
   RegionManager.loadMapFiles(2436, 3089);
   RegionManager.loadMapFiles(2381, 9489);
@@ -164,7 +166,7 @@ test('headwear and capes block entry before the teleport', () => {
 });
 
 test('food carried in the inventory blocks entry', () => {
-  const player = fakePlayer({ inventory: [Lobby._test.FOOD_ITEM_IDS[0]] });
+  const player = fakePlayer({ inventory: [core.ItemIdentifiers.SHARK] });
   enterPortal(player, core.ObjectIdentifiers.GUTHIX_PORTAL);
   assert.equal(game.getTeamId(player), null);
   assert.equal(player.moves.length, 0);

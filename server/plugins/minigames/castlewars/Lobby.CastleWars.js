@@ -37,7 +37,6 @@ const BOT_ROLE_MIX = Object.freeze([
   "catapult",
 ]);
 
-const FOOD_ITEM_IDS = Array.isArray(FoodPlugin.FOOD_ITEM_IDS) ? FoodPlugin.FOOD_ITEM_IDS : [];
 
 let api;
 let game;
@@ -120,7 +119,7 @@ function joinWaitingRoom(player, requestedTeam) {
     player.sendMessage("You can't wear hats, capes, or helms in Castle Wars.");
     return;
   }
-  if (FOOD_ITEM_IDS.length > 0 && player.getInventory().containsAny(FOOD_ITEM_IDS)) {
+  if (player.getInventory().getItems().some((item) => FoodPlugin.isFoodItem(item?.getId?.()))) {
     player.sendMessage("You may not bring your own consumables inside Castle Wars.");
     return;
   }
@@ -211,4 +210,4 @@ module.exports = function attachCastleWarsLobby(registry, castleWars) {
   registry.onNpcInteraction("Lanthus", { Trade: ({ player }) => ShopManager.open(player, CASTLE_WARS_TICKET_EXCHANGE_SHOP) });
 };
 
-module.exports._test = { chooseTeam, seedsBots, SEED_BOTS_CONFIG_KEY, FOOD_ITEM_IDS, BOT_TIER_OPTIONS };
+module.exports._test = { chooseTeam, seedsBots, SEED_BOTS_CONFIG_KEY, BOT_TIER_OPTIONS };

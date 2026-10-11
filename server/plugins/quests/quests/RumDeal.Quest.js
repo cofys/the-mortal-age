@@ -23,9 +23,14 @@
  * points, 7,000 Prayer/Fishing/Farming XP and the Holy wrench.
  *
  * Gaps: the intro cutscene is a knockout teleport plus the cutscene-1/meeting
- * transcript (no camera change); the grow-cutscene and the fishing roll are
- * text/state only; the blindweed growth is a flat 60s timer instead of the real
- * farming tick cycle; the bailing bucket named in the issue belongs to Fishing
+ * transcript (no camera change); the grow-cutscene is text/state only, while the
+ * slugling roll loops the cache's deal_bowl_fish animation with a catch every five
+ * ticks (Void's 1/3 Karamthulhu split) and stops on movement, lost gear or a full
+ * inventory rather than using the skill's success charts; the blindweed growth is a flat 60s timer instead of the real
+ * farming tick cycle, and its patch stage rides varbit 1366 (children 10097-10102,
+ * grown = 10102); the client only resolves that transform when it builds the scene,
+ * so every stage change also sends a per-player loc swap of the child; the bailing
+ * bucket named in the issue belongs to Fishing
  * Trawler, not this quest (the reference uses a plain bucket); 50% Luke and the
  * gate are handled by NPC dialogue + a one-tile pass-through rather than the
  * reference's object swap; zombie swabs only play the six insult variants
@@ -34,6 +39,7 @@
  */
 module.exports = function registerRumDealQuest(api) {
   const {
+    Animation,
     Equipment,
     ItemIdentifiers,
     NpcIdentifiers,
@@ -79,6 +85,7 @@ module.exports = function registerRumDealQuest(api) {
   const BIG_FISHING_NET = ItemIdentifiers.BIG_FISHING_NET; // 305
   const FISHBOWL_AND_NET = ItemIdentifiers.FISHBOWL_AND_NET; // 6673
   const RAKE = ItemIdentifiers.RAKE; // 5341
+  const WEEDS = ItemIdentifiers.WEEDS; // 6055
   const SEED_DIBBER = ItemIdentifiers.SEED_DIBBER; // 5343
   const WATERING_CAN = ItemIdentifiers.WATERING_CAN; // 5331
   const SLAYER_GLOVES = ItemIdentifiers.SLAYER_GLOVES; // 6708
@@ -135,6 +142,9 @@ module.exports = function registerRumDealQuest(api) {
   const EVIL_SPIRIT_NPC_ID = NpcIdentifiers.EVIL_SPIRIT; // 625
   const FEVER_SPIDER_NPC_ID = NpcIdentifiers.FEVER_SPIDER; // 626
   const FISHING_SPOT_NPC_ID = NpcIdentifiers.FISHING_SPOT; // 635, only spawned on Braindeath
+  const FISHING_ANIMATION = 2813; // deal_bowl_fish
+  const FISHING_INTERVAL_TICKS = 5;
+  const fishingSessions = new Map();
 
   const INTAKE_HOPPER_OBJECT_ID = ObjectIdentifiers.HOPPER_2; // 10170
   const PRESSURE_BARREL_OBJECT_ID = ObjectIdentifiers.PRESSURE_BARREL; // 10171
@@ -163,6 +173,14 @@ module.exports = function registerRumDealQuest(api) {
   ]);
   // The map places the unnamed multi-loc root 10096 (its resolved variant is "Blindweed
   // Patch"); the cache has no name for the root, so ObjectIdentifiers has no constant.
+  // Varbit 1366 picks the stage: 0 weeds, 1 raked, 2-4 growing, 5 fully grown (the only
+  // child with a Pick option, 10102). The client only resolves the transform when it
+  // builds the scene, so stage changes also send a per-player loc swap of the child.
+  const PATCH_VARBIT = 1366;
+  const PATCH_CHILDREN = [10097, 10098, 10099, 10100, 10101, 10102];
+  const PATCH_TILE = { x: 2162, y: 5069, z: 0 };
+  const PATCH_SHAPE = 10;
+  const PATCH_ROTATION = 1;
   const BLINDWEED_PATCH_ROOT_OBJECT_ID = 10096;
   const BLINDWEED_PATCH_OBJECT_IDS = new Set([
     BLINDWEED_PATCH_ROOT_OBJECT_ID,
@@ -187,6 +205,7 @@ module.exports = function registerRumDealQuest(api) {
   const SOUTH_STAIR_LANDING = { x: 2153, y: 5110, z: 0 };
 
   const INTRO_ATTRIBUTE = "quest.rum_deal.intro";
+  const WEEDED_ATTRIBUTE = "quest.rum_deal.weeded";
   const PLANTED_ATTRIBUTE = "quest.rum_deal.planted";
   const SLUGLINGS_ATTRIBUTE = "quest.rum_deal.slugs";
   const KARAMTHULHU_ATTRIBUTE = "quest.rum_deal.karam";
@@ -232,6 +251,10 @@ module.exports = function registerRumDealQuest(api) {
 
   function plantedAt(player) {
     return Number(player.getAttribute(PLANTED_ATTRIBUTE)) || 0;
+  }
+
+  function weededPatch(player) {
+    return Number(player.getAttribute(WEEDED_ATTRIBUTE)) === 1;
   }
 
   function blindweedGrown(player) {
@@ -775,9 +798,72 @@ module.exports = function registerRumDealQuest(api) {
       smiteControls(event);
       return;
     }
+    if (BLINDWEED_PATCH_OBJECT_IDS.has(objectId) && itemId === RAKE) {
+      rakeBlindweedPatch(event);
+      return;
+    }
     if (BLINDWEED_PATCH_OBJECT_IDS.has(objectId) && itemId === BLINDWEED_SEED) {
       plantBlindweed(event);
     }
+  }
+
+  /** The patch object carries no Rake option, so the rake is used on it directly. */
+  function rakeBlindweedPatch(event) {
+    const { player } = event;
+    event.handled = true;
+    if (plantedAt(player) !== 0) {
+      player.sendMessage("This patch already has something growing in it.");
+      return;
+    }
+    if (weededPatch(player)) {
+      player.sendMessage("This patch doesn't need weeding right now.");
+      return;
+    }
+    player.setAttribute(WEEDED_ATTRIBUTE, 1);
+    setPatchStage(player, 1);
+    player.performAnimation(new Animation(2273));
+    player.getInventory().adds(WEEDS, 1);
+    player.getSkillManager().addExperiences(Skill.FARMING, 4);
+    player.sendMessage("You rake the weeds from the patch.");
+  }
+
+  /** The patch child (and the client's model) follows varbit 1366. */
+  function syncPatchStage(player) {
+    const stage = plantedAt(player) === 0
+      ? (weededPatch(player) ? 1 : 0)
+      : (blindweedGrown(player) ? 5 : 2);
+    setPatchStage(player, stage);
+  }
+
+  /**
+   * Sets the varbit (for the server's action resolution and the next scene build) and
+   * swaps the child on this player's client, which does not re-resolve a multi-loc on a
+   * varbit change by itself.
+   */
+  function setPatchStage(player, stage) {
+    player.getPacketSender().sendVarbit(PATCH_VARBIT, stage);
+    const location = new api.core.Location(PATCH_TILE.x, PATCH_TILE.y, PATCH_TILE.z);
+    if (!player.getSession?.()?.isTileInScene?.(location.getX(), location.getY(), location.getZ())) return;
+    const sender = player.getPacketSender();
+    sender.sendObjectRemoval(new api.core.GameObject(PATCH_CHILDREN[0], location, PATCH_SHAPE, PATCH_ROTATION, null));
+    sender.sendObject(new api.core.GameObject(PATCH_CHILDREN[stage], location, PATCH_SHAPE, PATCH_ROTATION, null));
+  }
+
+  /** Flips the patch to its grown stage when the flat growth timer elapses. */
+  function growBlindweed(player) {
+    api.getTaskManager().submit(new (class extends api.core.Task {
+      constructor() {
+        super(Math.ceil(BLINDWEED_GROWTH_MS / 600), player);
+      }
+      execute() {
+        // The task's delay is the growth timer, so it is grown when this runs; checking
+        // the clock here raced the timer and left the patch on its planting stage.
+        if (player.isRegistered() && plantedAt(player) !== 0) {
+          setPatchStage(player, 5);
+        }
+        this.stop();
+      }
+    })());
   }
 
   function stuffSeaCreature(event) {
@@ -871,17 +957,41 @@ module.exports = function registerRumDealQuest(api) {
   function plantBlindweed(event) {
     const { player } = event;
     event.handled = true;
-    if (level(player, Skill.FARMING) < 40) {
-      player.sendMessage("You must be a Level 40 Farmer to plant those.");
-      return;
-    }
     if (plantedAt(player) !== 0) {
       player.sendMessage("This patch already has something growing in it.");
       return;
     }
+    if (!weededPatch(player)) {
+      player.sendMessage("You need to rake the weeds out first.");
+      return;
+    }
+    if (level(player, Skill.FARMING) < 40) {
+      player.sendMessage("You must be a Level 40 Farmer to plant those.");
+      return;
+    }
     player.getInventory().deleteNumber(BLINDWEED_SEED, 1);
     player.setAttribute(PLANTED_ATTRIBUTE, Date.now());
+    setPatchStage(player, 2);
+    growBlindweed(player);
     player.sendMessage("You plant a seed in the blindweed patch.");
+  }
+
+  /** Inspect reports the patch state; it never picks, so a grown patch is read, not harvested. */
+  function inspectPatch(event) {
+    const { player } = event;
+    event.handled = true;
+    syncPatchStage(player);
+    if (plantedAt(player) === 0) {
+      player.sendMessage(weededPatch(player)
+        ? "This is a blindweed patch. The soil has not been treated."
+        : "This is a blindweed patch. The soil has not been treated. The patch needs weeding.");
+      return;
+    }
+    if (!blindweedGrown(player)) {
+      player.sendMessage("This is a blindweed patch. The soil has not been treated. The patch has something growing in it.");
+      return;
+    }
+    player.sendMessage("This is a blindweed patch. The soil has not been treated. The patch is fully grown.");
   }
 
   function harvestPatch(event) {
@@ -900,6 +1010,8 @@ module.exports = function registerRumDealQuest(api) {
       return;
     }
     player.setAttribute(PLANTED_ATTRIBUTE, 0);
+    player.setAttribute(WEEDED_ATTRIBUTE, 0);
+    setPatchStage(player, 0);
     player.getInventory().adds(BLINDWEED, 1);
     if (quest.getStage(player) === STAGE_GIVEN_SEEDS) quest.setStage(player, STAGE_GROWN_BLINDWEED);
     player.sendMessage("You pick the Blindweed.");
@@ -949,14 +1061,63 @@ module.exports = function registerRumDealQuest(api) {
       player.sendMessage("You do not have any free space for anything that you will catch!");
       return;
     }
+    startFishing(player, event.npc);
+  }
+
+  /** The bowl-and-net action loops (seq 2813 deal_bowl_fish); a catch lands every interval. */
+  function startFishing(player, npc) {
+    stopFishing(player);
     player.sendMessage("You dunk the bowl in the water...");
-    if (Math.random() < 1 / 3) {
-      player.getInventory().adds(KARAMTHULHU, 1);
-      player.sendMessage("...and you catch a Karamthulhu!");
-    } else {
-      player.getInventory().adds(SLUGLINGS, 1);
-      player.sendMessage("...and you catch some Sluglings!");
-    }
+    player.performAnimation(new Animation(FISHING_ANIMATION));
+    const session = {
+      npcIndex: npc.getIndex(),
+      npcId: npc.getId(),
+      spotX: npc.getLocation().getX(),
+      spotY: npc.getLocation().getY(),
+      task: null,
+    };
+    session.task = new (class extends api.core.Task {
+      constructor() {
+        super(FISHING_INTERVAL_TICKS, player);
+      }
+      execute() {
+        if (!stillFishing(player, session)) {
+          stopFishing(player);
+          this.stop();
+          return;
+        }
+        player.performAnimation(new Animation(FISHING_ANIMATION));
+        if (Math.random() < 1 / 3) {
+          player.getInventory().adds(KARAMTHULHU, 1);
+          player.sendMessage("...and you catch a Karamthulhu!");
+        } else {
+          player.getInventory().adds(SLUGLINGS, 1);
+          player.sendMessage("...and you catch some Sluglings!");
+        }
+        if (!hasFreeSlot(player)) stopFishing(player);
+      }
+    })();
+    fishingSessions.set(player, session);
+    api.getTaskManager().submit(session.task);
+  }
+
+  /** Movement, a lost bowl/net or a moved spot ends the action, as any fishing does. */
+  function stillFishing(player, session) {
+    if (!player.isRegistered() || player.getHitpoints() <= 0) return false;
+    if (quest.getStage(player) !== STAGE_CATCH_CREATURES) return false;
+    if (!held(player, FISHBOWL_AND_NET)) return false;
+    if (player.getMovementQueue?.()?.size?.() > 0 || player.getForceMovement?.() != null) return false;
+    const npc = api.getWorld?.()?.getNpcs?.()?.get?.(session.npcIndex);
+    if (!npc || npc.getId() !== session.npcId ||
+        npc.getLocation().getX() !== session.spotX || npc.getLocation().getY() !== session.spotY) return false;
+    return player.getLocation().isWithinDistance(npc.getLocation(), 2);
+  }
+
+  function stopFishing(player) {
+    const session = fishingSessions.get(player);
+    if (!session) return;
+    fishingSessions.delete(player);
+    session.task?.stop();
   }
 
   function handleItemOnNpc(event) {
@@ -1016,7 +1177,10 @@ module.exports = function registerRumDealQuest(api) {
       return;
     }
     if (BLINDWEED_PATCH_OBJECT_IDS.has(objectId)) {
-      harvestPatch(event);
+      const interactions = (event.definition ?? api.core.ObjectDefinition?.forPlayer?.(objectId, player))
+        ?.getInteractions?.() ?? [];
+      if (interactions[event.clickType - 1]?.toLowerCase() === "inspect") inspectPatch(event);
+      else harvestPatch(event);
       return;
     }
     if (objectId === TRASHED_PATCH_OBJECT_ID) {
@@ -1069,13 +1233,18 @@ module.exports = function registerRumDealQuest(api) {
 
   function handleLogin({ player }) {
     refreshQuestList(player);
+    // Relog after raking/planting: show the stage the saved state says the patch is in.
+    if (weededPatch(player) || plantedAt(player) !== 0) syncPatchStage(player);
   }
 
   function handleLogout({ player }) {
-    if (player) clearSpirit(player);
+    if (!player) return;
+    clearSpirit(player);
+    stopFishing(player);
   }
 
   api.persistAttribute(INTRO_ATTRIBUTE);
+  api.persistAttribute(WEEDED_ATTRIBUTE);
   api.persistAttribute(PLANTED_ATTRIBUTE);
   api.persistAttribute(SLUGLINGS_ATTRIBUTE);
   api.persistAttribute(KARAMTHULHU_ATTRIBUTE);

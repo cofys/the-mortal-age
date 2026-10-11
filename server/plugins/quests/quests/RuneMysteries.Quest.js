@@ -48,6 +48,12 @@ module.exports = function registerRuneMysteriesQuest(api) {
   const STAGE_RECEIVED_NOTES = 5;
   const STAGE_COMPLETE = 6;
 
+  /** Temple of the Eye's stage attribute. Its tower/portal stages (6-25) give
+   * Sedridor dialogue of their own, so Rune Mysteries must not shadow him there. */
+  const TEMPLE_OF_THE_EYE_STAGE_ATTRIBUTE = "quest.temple_of_the_eye.stage";
+  const TOTE_TOWER_STAGE = 6;
+  const TOTE_COMPLETE_STAGE = 26;
+
   const RUNE_ESSENCE_MINE = new Location(2913, 4832, 0);
 
   /** Transcript step ids (npc-dialogues.json action slugs). */
@@ -209,6 +215,13 @@ module.exports = function registerRuneMysteriesQuest(api) {
     TeleportHandler.teleport(player, RUNE_ESSENCE_MINE, player.getSpellbook().getTeleportType(), true);
   }
 
+  /** True while Temple of the Eye is in progress at the stages where it owns
+   * Sedridor's dialogue (its tower and portal stages, 6-25). */
+  function templeOfTheEyeUsesSedridor(player) {
+    const stage = Number(player.getAttribute(TEMPLE_OF_THE_EYE_STAGE_ATTRIBUTE)) || 0;
+    return stage >= TOTE_TOWER_STAGE && stage < TOTE_COMPLETE_STAGE;
+  }
+
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
 
@@ -229,6 +242,8 @@ module.exports = function registerRuneMysteriesQuest(api) {
         return { page: PAGE_ARCHMAGE_SEDRIDOR, variant: VARIANT_SEDRIDOR_BEFORE };
       }
       if (stage >= STAGE_COMPLETE) {
+        // Temple of the Eye is still using Sedridor; let its variants play.
+        if (templeOfTheEyeUsesSedridor(player)) return null;
         return { page: PAGE_ARCHMAGE_SEDRIDOR, variant: VARIANT_SEDRIDOR_AFTER };
       }
       if (stage === STAGE_STARTED) {

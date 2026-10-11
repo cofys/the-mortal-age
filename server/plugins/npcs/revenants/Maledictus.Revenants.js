@@ -24,6 +24,8 @@ const COOLDOWN_MS = 45 * 60_000;
 const LIFETIME_TICKS = 1000; // 10 minutes
 const RANGE = 15;
 const HINT_RANGE = 64;
+/** OSRS hint height byte (x2 world units) for the out-of-view tile arrow: about 0.7 of a tile. */
+const FAR_HINT_HEIGHT = 45;
 
 /** The Wiki's eleven chambers; tiles from Near-Reality, checked walkable (the capture: 3213,10098). */
 const SPAWNS = [
@@ -216,7 +218,7 @@ function createMaledictus(api, core, { inCaves, surge }) {
       const at = player.getLocation();
       if (!inCaves(at) || !at.isWithinDistance(boss.getLocation(), HINT_RANGE)) continue;
       if (at.isWithinDistance(boss.getLocation(), 15)) player.getPacketSender().sendEntityHint(boss);
-      else player.getPacketSender().sendPositionalHint(Projectile.centreOf(boss));
+      else player.getPacketSender().sendPositionalHint(Projectile.centreOf(boss), 2, FAR_HINT_HEIGHT);
     }
     later(2, hintArrows);
   }

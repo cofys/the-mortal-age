@@ -612,6 +612,9 @@ module.exports = function registerGardenOfTranquillityQuest(api) {
 
   function wiseOldManVariant(player) {
     const current = stage(player);
+    // Post-quest the Wise Old Man belongs to other quests (Swan Song asks him for
+    // runes at close range); yield like kingRoaldVariant so their pages play.
+    if (current >= STAGE_COMPLETE) return null;
     if (current >= STAGE_BUILDING) {
       return "talking-to-the-wise-old-man-talking-to-the-wise-old-man-again-after-he-activates-the-ring-of-charos";
     }

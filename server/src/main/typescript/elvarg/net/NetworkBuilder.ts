@@ -29,6 +29,7 @@ import {
   decodeClientPackets,
   MAIN_INVENTORY_GROUP_ID,
   MOBILE_CLIENT_ATTRIBUTE,
+  XPDROPS_ENABLED_ATTRIBUTE,
   encodeDefaultAnimations,
   encodeGameframeBootstrap,
   encodeHandshake,
@@ -964,7 +965,7 @@ export class ClientConnection {
     // stores; the client maps the standard mounts onto the chosen layout.
     // Mobile clients resolve to the stock mobile toplevel (601) instead.
     const layoutRoot = resolveGameframeRoot(player);
-    for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot)) this.send(packet);
+    for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot, player.getAttribute(XPDROPS_ENABLED_ATTRIBUTE) === true)) this.send(packet);
     player.getPacketSender()
       // The bootstrap mounts the magic tab (161:82 -> 218) directly, which does not send
       // varbit 4070, so the cache scripts would draw the standard book for everyone.
@@ -1011,7 +1012,7 @@ export class ClientConnection {
           .findIndex((action) => action?.toLowerCase() === option) + 1
       : packet.optionIndex;
     if (optionIndex === 0) return;
-    if (/^(wield|wear|equip)$/.test(option)) {
+    if (/^(wield|wear|equip|hold)$/.test(option)) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
     } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
       DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);

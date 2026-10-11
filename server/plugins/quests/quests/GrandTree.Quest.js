@@ -207,7 +207,10 @@ module.exports = function registerGrandTreeQuest(api) {
   }
 
   function narnodeVariant(player, stage) {
-    if (stage >= STAGE_COMPLETE) return "saving-the-tree-the-end-of-the-tunnel-when-talking-to-king-narnode-again";
+    // Monkey Madness I owns King Narnode once the Grand Tree is complete (it
+    // starts, re-issues the orders and finishes through him); returning null
+    // lets its variant hook answer instead.
+    if (stage >= STAGE_COMPLETE) return null;
     if (stage >= STAGE_SEARCHING_DACONIA) {
       return has(player, DACONIA_ROCK_ITEM_ID)
         ? "saving-the-tree-daconia-delivered"
@@ -248,7 +251,10 @@ module.exports = function registerGrandTreeQuest(api) {
   /** Which transcript variant the clicked NPC plays. */
   function selectVariant({ npcId, npc, player }) {
     const stage = quest.getStage(player);
-    if (NARNODE_IDS.has(npcId)) return page(narnodeVariant(player, stage));
+    if (NARNODE_IDS.has(npcId)) {
+      const variant = narnodeVariant(player, stage);
+      return variant ? page(variant) : null;
+    }
     if (HAZELMERE_IDS.has(npcId)) {
       return page(stage >= STAGE_HAZELMERE ? "hazelmere-s-island-when-speaking-again-to-hazelmere" : "hazelmere-s-island");
     }

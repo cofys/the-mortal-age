@@ -8,8 +8,11 @@
  * ("npc-dialogue:choice" / "npc-dialogue:condition") so quests can run their own
  * game logic (set stage, hand in items) without re-authoring the words, and each
  * speech line emits "npc-dialogue:line" with a mutable `skip` so a quest can drop
- * lines that no longer apply (e.g. handing over an item the player does not have) and a
- * mutable `text` to fill in blanks. "npc-dialogue:start" plays a named variant on demand.
+ * lines that no longer apply (e.g. handing over an item the player does not have), a
+ * mutable `text` to fill in blanks and an `after` callback run once the player continues
+ * past it. A message step's "npc-dialogue:action" (`kind: "message"`) can set
+ * `box: { items }` (one or two item ids) to show it as an item box, as OSRS shows
+ * hand-outs, instead of a chat message. "npc-dialogue:start" plays a named variant on demand.
  * Speech, choices, random alternatives and named shops run through existing systems.
  */
 const fs = require("fs");
@@ -21,6 +24,8 @@ const { DialogueChainBuilder } = require("../../src/main/typescript/elvarg/game/
 const { NpcDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/NpcDialogue");
 const { PlayerDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/PlayerDialogue");
 const { ActionDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/ActionDialogue");
+const { ItemStatementDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/ItemStatementDialogue");
+const { DoubleItemStatementDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/DoubleItemStatementDialogue");
 const { ShopDefinition } = require("../../src/main/typescript/elvarg/game/definition/ShopDefinition");
 const { NpcDefinition } = require("../../src/main/typescript/elvarg/game/definition/NpcDefinition");
 const { ShopManager } = require("../../src/main/typescript/elvarg/game/model/container/shop/ShopManager");
@@ -627,8 +632,13 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             ? new PlayerDialogue(index++, text)
             : new NpcDialogue(index++, speakerId, text));
         }
-        if (step.steps?.length) {
-          chain.add(new ActionDialogue(index++, { execute: () => run(rest, currentRecord) }));
+        // `after` (set by a line handler) runs once the player continues past the line,
+        // before the conversation carries on: a teleport the wiki only narrates, say.
+        if (step.steps?.length || typeof request.after === "function") {
+          chain.add(new ActionDialogue(index++, { execute: () => {
+            request.after?.();
+            run(rest, currentRecord);
+          } }));
           manager.startDialogues(chain);
           return;
         }
@@ -653,6 +663,17 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           api.emitCustomEvent("npc-dialogue:action", message);
           if (message.end) return close();
           playedAny = true;
+          const [first, second] = Array.isArray(message.box?.items) ? message.box.items : [];
+          if (first !== undefined) {
+            const text = formatPlayerText(String(message.text ?? ""), player);
+            const box = new DialogueChainBuilder();
+            box.add(second === undefined
+              ? new ItemStatementDialogue(0, first, text)
+              : new DoubleItemStatementDialogue(0, first, second, text));
+            box.add(new ActionDialogue(1, { execute: () => run(rest, currentRecord) }));
+            manager.startDialogues(box);
+            return;
+          }
           if (!message.handled) player.sendMessage(formatPlayerText(String(step.text ?? ""), player));
           return run(rest, currentRecord);
         }

@@ -27,7 +27,12 @@
  */
 module.exports = function registerEadgarsRuseQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
+  const {
+    registerQuest,
+    refreshQuestList,
+    startTranscript,
+    getRegisteredQuests,
+  } = require("../QuestRuntime");
 
   const PAGE = "Eadgar's Ruse";
 
@@ -455,7 +460,16 @@ module.exports = function registerEadgarsRuseQuest(api) {
     return "finding-eadgar-talking-to-burntmeat";
   }
 
+  /** One Small Favour owns Sanfew while it asks him (10-11) and reports back (30). */
+  function oneSmallFavourNeedsSanfew(player) {
+    const osf = getRegisteredQuests().find((entry) => entry.key === "one_small_favour");
+    if (!osf || !osf.isStarted(player) || osf.isComplete(player)) return false;
+    const stage = osf.getStage(player);
+    return stage === 10 || stage === 11 || stage === 30;
+  }
+
   function selectSanfewVariant(player, stage) {
+    if (oneSmallFavourNeedsSanfew(player) && (stage < STAGE_STARTED || stage >= STAGE_COMPLETE)) return null;
     if (stage >= STAGE_COMPLETE) return "post-quest-talking-to-sanfew-after-finishing-the-quest";
     if (held(player, GOUTWEED)) return "getting-the-goutweed-talking-to-sanfew-after-getting-goutweed";
     if (stage >= STAGE_NEEDS_ITEMS && !supplies(player).clothes && !held(player, DIRTY_ROBE)) {

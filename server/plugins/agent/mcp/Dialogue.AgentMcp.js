@@ -4,7 +4,7 @@
 function readDialogue(core, p) {
   const {
     MultiChatboxPrompt, NpcDefinition, ItemDefinition,
-    NpcDialogue, PlayerDialogue, OptionDialogue, StatementDialogue, ItemStatementDialogue,
+    NpcDialogue, PlayerDialogue, OptionDialogue, StatementDialogue, ItemStatementDialogue, DoubleItemStatementDialogue,
   } = core;
   const prompt = MultiChatboxPrompt.getPending(p);
   if (prompt) return { kind: "options", title: prompt.title, options: prompt.options };
@@ -18,6 +18,10 @@ function readDialogue(core, p) {
   if (entry instanceof OptionDialogue) return { kind: "options", title: entry.getTitle() || undefined, options: entry.getOptions() };
   if (entry instanceof ItemStatementDialogue) {
     return { kind: "item", item: ItemDefinition.forId(entry.getItemId()).getName(), text: entry.getText() };
+  }
+  if (entry instanceof DoubleItemStatementDialogue) {
+    const [first, second] = entry.getItemIds().map((id) => ItemDefinition.forId(id).getName());
+    return { kind: "item", item: `${first} and ${second}`, text: entry.getText() };
   }
   if (entry instanceof StatementDialogue) return { kind: "statement", text: entry.getText() };
   return { kind: "other" };

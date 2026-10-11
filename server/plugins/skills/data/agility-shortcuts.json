@@ -1515,7 +1515,15 @@
       "object": 31842,
       "level": 1,
       "end": "You climb over the trunk.",
-      "script": "climbOverLoc"
+      "between": {"ends":[[3682,3717,0],[3682,3715,0]],"cross":[{"use":"climbOver","args":["to","CLIMB_OVER",2]}]},
+      "note": "Trunk lies east-west at 3682,3716 (dump:loc: size 1x2 rot 3); fixed ends keep the crossing straight instead of snapping x to the loc base tile. 2-tick landing so the 60-cycle flight and climb anim finish before the runner lands and resets."
+    },
+    {
+      "name": "Ice chunks (Ungael)",
+      "object": 31990,
+      "level": 1,
+      "between": {"ends":[[2272,4052,0],[2272,4054,0]],"cross":[{"use":"climbOver","args":["to","CLIMB_OVER",2]},{"msg":"You climb over the ice."}]},
+      "note": "Crater wall at 2272,4053 (dump:loc); fixed ends keep the crossing straight. As rsprox captures show both ways: 839 over a 2-tick exact move (0-60 cycles), then \"You climb over the ice.\"."
     },
     {
       "name": "Broken fence (Rellekka)",

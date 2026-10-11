@@ -368,6 +368,7 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                     a: reader.readShort(),
                     b: reader.readShort(),
                     c: reader.readByte(),
+                    d: reader.readByte(),
                 },
             };
 

@@ -13,6 +13,32 @@ const { createContext } = require("./mcp/Context.AgentMcp");
 
 const DEFAULT_PORT = 49700;
 let httpServer = null;
+let pluginApi = null;
+const savedRights = new WeakMap();
+
+function mcpEnabled() {
+  return process.env.AGENT_MCP === "1";
+}
+
+/**
+ * With MCP on, the whole server is a development target: every login is made a developer
+ * for its session, so tools work without pinning usernames or hosts. The saved rank is
+ * restored on logout (which runs before persistence), so a later login on a normal server
+ * keeps its real rank.
+ */
+function grantDeveloperRights({ player }) {
+  if (!mcpEnabled()) return;
+  if (!savedRights.has(player)) savedRights.set(player, player.getRights());
+  player.setRights(pluginApi.core.PlayerRights.DEVELOPER);
+  // StaffCrowns may have read the rights before this hook ran.
+  pluginApi.emitCustomEvent("account:refresh-chat-icons", { player });
+}
+
+function restoreRights({ player }) {
+  if (!savedRights.has(player)) return;
+  player.setRights(savedRights.get(player));
+  savedRights.delete(player);
+}
 
 function buildMcpServer(core) {
   const server = new McpServer({ name: "tsps-agent", version: "1.0.0" });
@@ -77,7 +103,11 @@ module.exports = {
   name: "AgentMcp",
   buildMcpServer,
   register(api) {
+    pluginApi = api;
     startMcpServer(api);
     api.onServerShutdown(stopMcpServer);
+    api.onPlayerLogin(grantDeveloperRights);
+    api.onPlayerLogout(restoreRights);
   },
+  _test: { grantDeveloperRights, restoreRights, mcpEnabled },
 };

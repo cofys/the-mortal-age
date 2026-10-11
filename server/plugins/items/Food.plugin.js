@@ -1,133 +1,121 @@
-const { TimerKey } = require("../../src/main/typescript/elvarg/util/timers/TimerKey");
-const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
-const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
-const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
-const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
-const { ItemDefinition } = require("../../src/main/typescript/elvarg/game/definition/ItemDefinition");
-let pluginApi;
-const { restoreRunEnergy, curePoisonAndVenom } = require("./ConsumableEffects");
-const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
-const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
-const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
-const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wilderness/Wilderness");
+/**
+ * Eating. What each food does is plugins/items/data/food.json, keyed by the item's cache name
+ * so every id with that name eats the same way; the format is in docs/food.md.
+ *
+ * Wiki (Food, Food/Fast foods): eating adds 3 ticks to the attack timer (2 for combo foods)
+ * and blocks the next bite for the food's eat delay, 3 ticks unless it is a fast food. Combo
+ * foods have their own timer, so one can follow ordinary food (and a potion) in the same tick.
+ * The messages and the food-eaten counter (varp tracking_food_eaten) follow rsprox recordings.
+ */
+const DATA = require("./data/food.json");
+const {
+  restoreRunEnergy,
+  curePoisonAndVenom,
+  boostSkill,
+  lowerSkillByMax,
+  restoreSkillToBaseWithFormula,
+} = require("./ConsumableEffects");
 
-const EAT_ANIMATION = new Animation(829);
+const EAT_OPTION = "Eat";
+const EAT_ANIMATION = 829; // human_eat
 // Ticks eating adds to the attack timer; combo foods add 2 (Wiki: Food).
 const ATTACK_DELAY = 3;
 const COMBO_ATTACK_DELAY = 2;
+const EAT_DELAY = 3;
+const COMBO_DELAY = 3;
+const HEAL_MESSAGE = "It heals some health.";
+/** tracking_food_eaten: every bite counts (rsprox recordings). */
+const VARP_FOOD_EATEN = 4518;
+const FOOD_EATEN_ATTRIBUTE = "food:eaten";
 
-const FOOD = new Map([
-  [ItemIds.KEBAB, { heal: 4 }],
-  [ItemIdentifiers.BAGUETTE, { heal: 6 }],
-  [ItemIdentifiers.TRIANGLE_SANDWICH, { heal: 6 }],
-  [ItemIdentifiers.SQUARE_SANDWICH, { heal: 6 }],
-  [ItemIdentifiers.ROLL, { heal: 6 }],
-  [ItemIdentifiers.CHOCOLATE_BAR, { heal: 3 }],
-  [ItemIdentifiers.SPINACH_ROLL, { heal: 2 }],
-  [ItemIdentifiers.STRANGE_FRUIT, { heal: 0, energy: 30, poisonProtection: 18,
-    message: "You eat the fruit. It tastes great, some of your energy is restored!" }],
-  [ItemIdentifiers.MEAT_PIE, { heal: 6, replacementId: ItemIdentifiers.HALF_A_MEAT_PIE }],
-  [ItemIdentifiers.HALF_A_MEAT_PIE, { heal: 6, replacementId: ItemIdentifiers.PIE_DISH }],
-  [ItemIds.CHEESE, { heal: 4 }],
-  [ItemIds.CAKE, { heal: 5, replacementId: ItemIds._2_3_CAKE }],
-  [ItemIds._2_3_CAKE, { heal: 5, replacementId: ItemIds.SLICE_OF_CAKE }],
-  [ItemIds.SLICE_OF_CAKE, { heal: 5 }],
-  [ItemIds.NULL_2422, { heal: 12, verb: "use" }],
-  [ItemIds.JANGERBERRIES, { heal: 2 }],
-  [ItemIds.WORM_CRUNCHIES, { heal: 8, karambwan: true }],
-  [ItemIdentifiers.CHOCCHIP_CRUNCHIES, { heal: 7, karambwan: true }],
-  [ItemIdentifiers.SPICY_CRUNCHIES, { heal: 7, karambwan: true }],
-  [ItemIdentifiers.TOAD_CRUNCHIES, { heal: 8, karambwan: true }],
-  [ItemIdentifiers.WORM_BATTA, { heal: 11, karambwan: true }],
-  [ItemIdentifiers.TOAD_BATTA, { heal: 11, karambwan: true }],
-  [ItemIdentifiers.CHEESE_TOM_BATTA, { heal: 11, karambwan: true }],
-  [ItemIdentifiers.FRUIT_BATTA, { heal: 11, karambwan: true }],
-  [ItemIdentifiers.VEGETABLE_BATTA, { heal: 11, karambwan: true }],
-  [ItemIds.EDIBLE_SEAWEED, { heal: 4 }],
-  [ItemIds.ANCHOVIES, { heal: 1 }],
-  [ItemIds.SHRIMPS, { heal: 3 }],
-  [ItemIdentifiers.COOKED_CHICKEN, { heal: 3 }],
-  [ItemIdentifiers.COOKED_MEAT, { heal: 3 }],
-  [ItemIdentifiers.STEW, { heal: 11, replacementId: ItemIdentifiers.BOWL }],
-  [ItemIdentifiers.CURRY, { heal: 19, replacementId: ItemIdentifiers.BOWL }],
-  [ItemIds.SARDINE, { heal: 4 }],
-  [ItemIds.COD, { heal: 7 }],
-  [ItemIds.TROUT, { heal: 7 }],
-  [ItemIds.PIKE, { heal: 8 }],
-  [ItemIds.SALMON, { heal: 9 }],
-  [ItemIds.TUNA, { heal: 10 }],
-  [ItemIds.LOBSTER, { heal: 12 }],
-  [ItemIds.BASS, { heal: 13 }],
-  [ItemIds.SWORDFISH, { heal: 14 }],
-  [ItemIds.MEAT_PIZZA, { heal: 14 }],
-  [ItemIds.MONKFISH, { heal: 16 }],
-  [ItemIds.SHARK, { heal: 20 }],
-  [ItemIdentifiers.HALIBUT, { heal: 20, karambwan: true }],
-  [ItemIds.SEA_TURTLE, { heal: 21 }],
-  [ItemIds.DARK_CRAB, { heal: 22 }],
-  [ItemIds.MANTA_RAY, { heal: 22 }],
-  [ItemIdentifiers.MARLIN, { heal: 24 }],
-  [ItemIds.COOKED_KARAMBWAN, { heal: 18, karambwan: true }],
-  // The Gauntlet: crystal and corrupted paddlefish combo-eat like karambwan (Wiki).
-  [ItemIdentifiers.PADDLEFISH, { heal: 20 }],
-  [ItemIdentifiers.CRYSTAL_PADDLEFISH, { heal: 16, karambwan: true }],
-  [ItemIdentifiers.CORRUPTED_PADDLEFISH, { heal: 16, karambwan: true }],
-  [ItemIds.ANGLERFISH, { heal: 22, anglerfish: true }],
-  [ItemIdentifiers.BLIGHTED_MANTA_RAY, { heal: 22 }],
-  [ItemIdentifiers.BLIGHTED_ANGLERFISH, { heal: 22, anglerfish: true }],
-  [ItemIdentifiers.BLIGHTED_KARAMBWAN, { heal: 18, karambwan: true }],
-  [ItemIdentifiers.BANANA, { heal: 2 }],
-  [ItemIdentifiers.PEACH, { heal: 8 }],
-  [ItemIdentifiers.BANDAGES, { heal: 12, verb: "use" }],
-  [ItemIds.POTATO, { heal: 1 }],
-  [ItemIds.BAKED_POTATO, { heal: 4 }],
-  [ItemIds.POTATO_WITH_BUTTER, { heal: 14 }],
-  [ItemIds.CHILLI_POTATO, { heal: 14 }],
-  [ItemIds.EGG_POTATO, { heal: 16 }],
-  [ItemIds.POTATO_WITH_CHEESE, { heal: 16 }],
-  [ItemIds.MUSHROOM_POTATO, { heal: 20 }],
-  [ItemIds.TUNA_POTATO, { heal: 20 }],
-  [ItemIdentifiers.MEAT_PIZZA, { heal: 8, replacementId: ItemIdentifiers._1_2_MEAT_PIZZA }],
-  [ItemIdentifiers._1_2_MEAT_PIZZA, { heal: 8 }],
-  [ItemIdentifiers.ANCHOVY_PIZZA, { heal: 9, replacementId: ItemIdentifiers._1_2_ANCHOVY_PIZZA }],
-  [ItemIdentifiers._1_2_ANCHOVY_PIZZA, { heal: 9 }],
-  [ItemIdentifiers.PINEAPPLE_PIZZA, { heal: 11, replacementId: ItemIdentifiers._1_2_PINEAPPLE_PIZZA }],
-  [ItemIdentifiers._1_2_PINEAPPLE_PIZZA, { heal: 11 }],
-  [ItemIdentifiers.APPLE_PIE, { heal: 7, replacementId: ItemIdentifiers.HALF_AN_APPLE_PIE }],
-  [ItemIdentifiers.HALF_AN_APPLE_PIE, { heal: 7, replacementId: ItemIdentifiers.PIE_DISH }],
-  [ItemIdentifiers.ADMIRAL_PIE, { heal: 8, replacementId: ItemIdentifiers.HALF_AN_ADMIRAL_PIE }],
-  [ItemIdentifiers.HALF_AN_ADMIRAL_PIE, { heal: 8, replacementId: ItemIdentifiers.PIE_DISH }],
-  [ItemIdentifiers.WILD_PIE, { heal: 11, replacementId: ItemIdentifiers.HALF_A_WILD_PIE }],
-  [ItemIdentifiers.HALF_A_WILD_PIE, { heal: 11, replacementId: ItemIdentifiers.PIE_DISH }],
-  [ItemIdentifiers.SUMMER_PIE, { heal: 11, replacementId: ItemIdentifiers.HALF_A_SUMMER_PIE }],
-  [ItemIdentifiers.HALF_A_SUMMER_PIE, { heal: 11, replacementId: ItemIdentifiers.PIE_DISH }],
-  [ItemIdentifiers.CHOCOLATE_CAKE, { heal: 5, replacementId: ItemIdentifiers._2_3_CHOCOLATE_CAKE }],
-  [ItemIdentifiers._2_3_CHOCOLATE_CAKE, { heal: 5, replacementId: ItemIdentifiers.CHOCOLATE_SLICE }],
-  [ItemIdentifiers.CHOCOLATE_SLICE, { heal: 5 }],
-  [ItemIdentifiers.STRAWBERRY, { heal: 1, strawberry: true }],
-  [ItemIdentifiers.COOKED_SWEETCORN, { heal: 0, sweetcorn: true }],
-]);
+/** Each eatable name -> its food and which bite it is (0 for the first). */
+const FOODS_BY_NAME = new Map();
+for (const food of DATA.foods) {
+  const names = Array.isArray(food.bites) ? food.bites : [food.name];
+  names.forEach((name, bite) => FOODS_BY_NAME.set(name, { food, bite }));
+}
 
-const FOOD_ITEM_IDS = [...FOOD.keys()];
+let pluginApi;
+let core;
+/** Cache item ids by name, for leftovers and same-name bites; built on first use. */
+let idsByName;
+/** Each player's pending second hunter-meat heal: a newer meat replaces it. */
+const pendingSecondHeals = new WeakMap();
 
+function init(api) {
+  pluginApi = api;
+  core = api.core;
+}
+
+/** An item's name, or undefined for a note, a placeholder or no item at all. */
+function itemName(itemId) {
+  if (!core?.CacheDefinitions.hasItem(itemId)) return undefined;
+  const definition = core.CacheDefinitions.getItem(itemId);
+  return definition && definition.noteTemplate < 0 && definition.placeholderTemplate < 0 ? definition.name : undefined;
+}
+
+/** The food an item is and which bite, or undefined. */
+function foodBite(itemId) {
+  const entry = FOODS_BY_NAME.get(itemName(itemId));
+  if (!entry || typeof entry.food.bites !== "number") return entry;
+  // Bites that share one name: its ids, lowest first, are the bites in order.
+  const bite = idsFor(entry.food.name).indexOf(itemId);
+  return bite < 0 ? undefined : { food: entry.food, bite };
+}
+
+function idsFor(name) {
+  if (!idsByName) {
+    const wanted = new Set(FOODS_BY_NAME.keys());
+    for (const food of DATA.foods) if (food.leaves) wanted.add(food.leaves);
+    idsByName = new Map();
+    const { items } = core.CacheDefinitions.getCounts();
+    for (let id = 0; id < items; id++) {
+      const name = itemName(id);
+      if (!wanted.has(name)) continue;
+      if (!idsByName.has(name)) idsByName.set(name, []);
+      idsByName.get(name).push(id);
+    }
+  }
+  return idsByName.get(name) ?? [];
+}
+
+function isFoodItem(itemId) {
+  return Number.isInteger(itemId) && itemId > 0 && foodBite(itemId) !== undefined;
+}
+
+/** Every item id that is food. */
+function foodItemIds() {
+  return [...FOODS_BY_NAME.keys()].flatMap(idsFor);
+}
+
+/** What the bite leaves in its slot: the next bite, the dish, or nothing. */
+function leftover(food, bite) {
+  const count = Array.isArray(food.bites) ? food.bites.length : food.bites ?? 1;
+  if (bite + 1 < count) {
+    if (Array.isArray(food.bites)) return idsFor(food.bites[bite + 1])[0];
+    return idsFor(food.name)[bite + 1];
+  }
+  return food.leaves ? idsFor(food.leaves)[0] : undefined;
+}
+
+function eatDelay(food, bite) {
+  if (Array.isArray(food.eatDelay)) return food.eatDelay[bite] ?? EAT_DELAY;
+  return food.eatDelay ?? EAT_DELAY;
+}
+
+/** A skill named in the data ("farming"). */
+function skill(name) {
+  return core.Skill[name.toUpperCase()];
+}
+
+/** Wiki: Anglerfish heals by the eater's Hitpoints level, at most 22. */
 function getAnglerfishHeal(currentHp) {
   let c = 2;
   if (currentHp >= 25) c = 4;
   if (currentHp >= 50) c = 6;
   if (currentHp >= 75) c = 8;
   if (currentHp >= 93) c = 13;
-
-  const heal = Math.floor(currentHp / 10 + c);
-  return Math.min(22, heal);
-}
-
-/** Wiki: 1 + 6% of the player's maximum hitpoints, capped at 6. */
-function getStrawberryHeal(maxHp) {
-  return Math.min(6, 1 + Math.floor(maxHp * 0.06));
-}
-
-function canEat(player, itemId) {
-  return pluginApi.emitCanEat(player, itemId) !== false;
+  return Math.min(22, Math.floor(currentHp / 10 + c));
 }
 
 /**
@@ -136,108 +124,199 @@ function canEat(player, itemId) {
  * Hitpoints above the base maximum.
  */
 function canAnglerfishOverheal(player) {
-  if (!Wilderness.isPvpArea(player?.getLocation?.())) {
+  if (!core.Wilderness.isPvpArea(player?.getLocation?.())) {
     return true;
   }
   const combat = player.getCombat?.();
   return combat?.getTarget?.() == null && combat?.getAttacker?.() == null;
 }
 
+/** A heal from the data: a number, a { min, max } roll, or { flat, percent } of Hitpoints level. */
+function healAmount(heal, maxHp, random = Math.random) {
+  if (typeof heal === "number") return heal;
+  if (!heal) return 0;
+  if (heal.min !== undefined) return heal.min + Math.floor(random() * (heal.max - heal.min + 1));
+  return (heal.flat ?? 0) + Math.floor((maxHp * (heal.percent ?? 0)) / 100);
+}
+
+function healBy(player, amount, overheal = 0) {
+  if (!(amount > 0)) return 0;
+  const skills = player.getSkillManager();
+  const current = skills.getCurrentLevel(core.Skill.HITPOINTS);
+  const cap = Math.max(current, skills.getMaxLevel(core.Skill.HITPOINTS) + overheal);
+  const next = Math.min(current + amount, cap);
+  player.setHitpoints(next);
+  return next - current;
+}
+
+function applyStats(player, effect) {
+  for (const [name, amount] of Object.entries(effect.boost ?? {})) boostSkill(player, skill(name), amount, 0);
+  for (const [name, amount] of Object.entries(effect.drain ?? {})) lowerSkillByMax(player, skill(name), amount, 0, 1);
+  for (const [name, amount] of Object.entries(effect.restore ?? {})) restoreSkillToBaseWithFormula(player, skill(name), amount, 0);
+  if (effect.runEnergy) restoreRunEnergy(player, effect.runEnergy);
+  if (effect.curePoison) curePoisonAndVenom(player);
+}
+
+/** Wiki (Kebab): a random skill but Hitpoints, never drained below 1 nor when 2 or lower. */
+function drainRandomSkill(player, amount, random) {
+  const skills = core.Skill.values().filter((s) => s !== core.Skill.HITPOINTS);
+  const target = skills[Math.floor(random() * skills.length)];
+  if (player.getSkillManager().getCurrentLevel(target) <= 2) return undefined;
+  lowerSkillByMax(player, target, amount, 0, 1);
+  return target;
+}
+
+/** One outcome of a food with an effect table (kebabs), by weight. */
+function rollOutcome(outcomes, random) {
+  const total = outcomes.reduce((sum, outcome) => sum + outcome.weight, 0);
+  let roll = random() * total;
+  return outcomes.find((outcome) => (roll -= outcome.weight) < 0) ?? outcomes[outcomes.length - 1];
+}
+
+/** The second heal of a hunter meat, 7 ticks on; eating another one first replaces it. */
+function scheduleSecondHeal(player, then) {
+  const token = {};
+  pendingSecondHeals.set(player, token);
+  core.TaskManager.submit(new core.CountdownTask(player, then.ticks, () => {
+    if (pendingSecondHeals.get(player) !== token || player.getHitpoints() <= 0) return;
+    pendingSecondHeals.delete(player);
+    healBy(player, then.heal);
+    applyStats(player, then);
+  }));
+}
+
+function countBite(player) {
+  const eaten = (player.getAttribute(FOOD_EATEN_ATTRIBUTE) ?? 0) + 1;
+  player.setAttribute(FOOD_EATEN_ATTRIBUTE, eaten);
+  player.getPacketSender().sendConfig(VARP_FOOD_EATEN, eaten);
+}
+
+function sendFoodEaten({ player }) {
+  const eaten = player.getAttribute(FOOD_EATEN_ATTRIBUTE);
+  if (eaten > 0) player.getPacketSender().sendConfig(VARP_FOOD_EATEN, eaten);
+}
+
+/** Waits on the eat or combo timer; refuses where food can't be eaten. True when it may go ahead. */
+function mayEat(player, itemId, food) {
+  if (pluginApi.emitCanEat(player, itemId) === false) {
+    player.sendMessage("You cannot eat here.");
+    return false;
+  }
+  const timers = player.getTimers();
+  if (timers.has(core.TimerKey.STUN)) {
+    player.sendMessage("You're currently stunned!");
+    return false;
+  }
+  if (timers.has(food.combo ? core.TimerKey.KARAMBWAN : core.TimerKey.FOOD)) return false;
+  if (food.wildernessOnly) {
+    const location = player.getLocation();
+    if (core.Wilderness.levelAt(location.getX(), location.getY()) <= 0) {
+      player.sendMessage(`The ${itemName(itemId).toLowerCase()} can be eaten only in the Wilderness.`);
+      return false;
+    }
+  }
+  return true;
+}
+
+function startTimers(player, food, bite) {
+  const timers = player.getTimers();
+  timers.extendOrRegister(core.TimerKey.FOOD, eatDelay(food, bite));
+  player.getCombat().delayAttack(food.combo ? COMBO_ATTACK_DELAY : ATTACK_DELAY);
+  if (food.combo) {
+    timers.registers(core.TimerKey.KARAMBWAN, COMBO_DELAY);
+    timers.registers(core.TimerKey.POTION, COMBO_DELAY);
+  }
+}
+
+/** Heals and applies the food's effects; returns the messages to show after the eat message. */
+function applyFood(player, food, random = Math.random) {
+  const skills = player.getSkillManager();
+  const maxHp = skills.getMaxLevel(core.Skill.HITPOINTS);
+  const after = [];
+  if (food.outcomes) {
+    const outcome = rollOutcome(food.outcomes, random);
+    healBy(player, healAmount(outcome.heal, maxHp, random));
+    applyStats(player, outcome);
+    const drained = outcome.drainRandom ? drainRandomSkill(player, outcome.drainRandom, random) : undefined;
+    if (outcome.message) after.push(outcome.message);
+    if (outcome.drainMessage && (drained || outcome.drain)) {
+      after.push(outcome.drainMessage.replace("{skill}", drained?.getName?.() ?? ""));
+    }
+    return after;
+  }
+  let healed;
+  if (food.special === "anglerfish") {
+    const amount = getAnglerfishHeal(skills.getCurrentLevel(core.Skill.HITPOINTS));
+    healed = healBy(player, amount, canAnglerfishOverheal(player) ? amount : 0);
+  } else {
+    healed = healBy(player, healAmount(food.heal, maxHp, random));
+  }
+  applyStats(player, food);
+  if (food.poisonImmunity) {
+    const immunity = player.getCombat().getPoisonImmunityTimer();
+    if (immunity.secondsRemaining() < food.poisonImmunity) immunity.start(food.poisonImmunity);
+  }
+  if (food.then) scheduleSecondHeal(player, food.then);
+  const healMessage = food.healMessage === undefined ? HEAL_MESSAGE : food.healMessage;
+  if (healed > 0 && healMessage) after.push(healMessage);
+  if (food.afterMessage) after.push(food.afterMessage);
+  return after;
+}
+
+function eatMessage(food, bite, itemId) {
+  if (Array.isArray(food.messages)) return food.messages[bite];
+  return food.message ?? `You eat the ${itemName(itemId).toLowerCase()}.`;
+}
+
+function eat(event) {
+  const { player, itemId, slot, clickType } = event;
+  const found = foodBite(itemId);
+  if (!found || core.CacheDefinitions.getItem(itemId).inventoryActions[clickType - 1] !== EAT_OPTION) return;
+  event.handled = true;
+  const { food, bite } = found;
+  if (food.refuse) {
+    player.sendMessage(food.refuse);
+    return;
+  }
+  const inventory = player.getInventory();
+  if (slot < 0 || slot >= inventory.capacity() || inventory.getItems()[slot]?.getId?.() !== itemId) return;
+  if (!mayEat(player, itemId, food)) return;
+
+  startTimers(player, food, bite);
+  player.getPacketSender().sendInterfaceRemoval();
+  player.getSkillManager().stopSkillable();
+  core.Sounds.sendSound(player, core.Sound.FOOD_EAT);
+  player.performAnimation(new core.Animation(EAT_ANIMATION));
+
+  const message = eatMessage(food, bite, itemId);
+  inventory.deleteAtSlot(slot, 1, false);
+  const next = leftover(food, bite);
+  if (next !== undefined) inventory.setItem(slot, new core.Item(next, 1));
+  inventory.refreshItems();
+
+  const hitpointsBefore = player.getSkillManager().getCurrentLevel(core.Skill.HITPOINTS);
+  const after = applyFood(player, food);
+  player.sendMessage(message);
+  for (const line of after) player.sendMessage(line);
+  countBite(player);
+  const heal = player.getSkillManager().getCurrentLevel(core.Skill.HITPOINTS) - hitpointsBefore;
+  pluginApi.emitCustomEvent("food:eaten", { player, itemId, heal });
+}
+
 module.exports = {
   name: "Food",
-  FOOD,
-  FOOD_ITEM_IDS,
   ATTACK_DELAY,
   COMBO_ATTACK_DELAY,
-  isFoodItem(itemId) {
-    return Number.isInteger(itemId) && FOOD.has(itemId);
+  isFoodItem,
+  foodItemIds,
+  _test: {
+    getAnglerfishHeal, canAnglerfishOverheal, healAmount, rollOutcome, foodBite, leftover, eatDelay, applyFood,
+    FOOD_EATEN_ATTRIBUTE,
   },
-  _test: { getAnglerfishHeal, getStrawberryHeal, canAnglerfishOverheal },
   register(api) {
-    pluginApi = api;
-    api.onItemFirstAction((event) => {
-      const { player, itemId, slot } = event;
-      const food = FOOD.get(itemId);
-      if (!food) {
-        return false;
-      }
-
-      if (!canEat(player, itemId)) {
-        player.sendMessage("You cannot eat here.");
-        return true;
-      }
-
-      const timers = player.getTimers();
-      if (timers.has(TimerKey.STUN)) {
-        player.sendMessage("You're currently stunned!");
-        return true;
-      }
-
-      if (food.karambwan) {
-        if (timers.has(TimerKey.KARAMBWAN)) {
-          return true;
-        }
-      } else if (timers.has(TimerKey.FOOD)) {
-        return true;
-      }
-
-      const inventory = player.getInventory();
-      if (
-        slot < 0 ||
-        slot >= inventory.capacity() ||
-        inventory.getItems()[slot]?.getId?.() !== itemId
-      ) {
-        return true;
-      }
-
-      timers.extendOrRegister(TimerKey.FOOD, 3);
-      player.getCombat().delayAttack(food.karambwan ? COMBO_ATTACK_DELAY : ATTACK_DELAY);
-      if (food.karambwan) {
-        timers.registers(TimerKey.KARAMBWAN, 3);
-        timers.registers(TimerKey.POTION, 3);
-      }
-
-      player.getPacketSender().sendInterfaceRemoval();
-      player.getSkillManager().stopSkillable();
-      Sounds.sendSound(player, Sound.FOOD_EAT);
-      player.performAnimation(EAT_ANIMATION);
-
-      inventory.deleteAtSlot(slot, 1, false);
-      if (food.replacementId) {
-        inventory.setItem(slot, new Item(food.replacementId, 1));
-      }
-      inventory.refreshItems();
-
-      const currentHp = player.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
-      let maxHp = player.getSkillManager().getMaxLevel(Skill.HITPOINTS);
-      let healAmount = food.heal;
-
-      if (food.anglerfish) {
-        healAmount = getAnglerfishHeal(currentHp);
-        if (canAnglerfishOverheal(player)) {
-          maxHp += healAmount;
-        }
-      } else if (food.sweetcorn) {
-        healAmount = Math.floor(maxHp / 10) + 1;
-      } else if (food.strawberry) {
-        healAmount = getStrawberryHeal(maxHp);
-      }
-
-      if (healAmount > 0) player.setHitpoints(Math.max(0, Math.min(currentHp + healAmount, maxHp)));
-      if (food.energy) restoreRunEnergy(player, food.energy);
-      if (food.poisonProtection) {
-        curePoisonAndVenom(player);
-        const immunity = player.getCombat().getPoisonImmunityTimer();
-        if (immunity.secondsRemaining() < food.poisonProtection) immunity.start(food.poisonProtection);
-      }
-
-      const verb = food.verb || "eat";
-      const itemName = ItemDefinition.forId(itemId).getName().toLowerCase();
-      player.sendMessage(food.message ?? `You ${verb} the ${itemName}.`);
-      api.emitCustomEvent("food:eaten", { player, itemId, heal: healAmount });
-      return true;
-    });
-
-    api.log("registered", { foods: FOOD.size });
+    init(api);
+    api.persistAttribute(FOOD_EATEN_ATTRIBUTE);
+    api.onPlayerLogin(sendFoodEaten);
+    api.onItemAction(eat);
   },
 };

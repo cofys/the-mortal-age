@@ -13,6 +13,7 @@ const ClueNests = require("./woodcutting/ClueNests.Woodcutting");
 const InfernalAxe = require("./woodcutting/InfernalAxe.Woodcutting");
 const CrystalAxe = require("./woodcutting/CrystalAxe.Woodcutting");
 const EntTrunk = require("./woodcutting/EntTrunk.Woodcutting");
+const ThickVines = require("./woodcutting/ThickVines.Woodcutting");
 const Shrine = require("./woodcutting/Shrine.Woodcutting");
 const Groves = require("./woodcutting/Groves.Woodcutting");
 const Weather = require("./woodcutting/Weather.Woodcutting");
@@ -1181,6 +1182,7 @@ module.exports = {
     InfernalAxe.attach(api);
     CrystalAxe.attach(api);
     EntTrunk.attach(api, { findBestUsableAxe, calculateCutChance, lumberjackXpMultiplier, maybeDropBirdNest });
+    ThickVines.attach(api, { axesBestFirst: AXES_BEST_FIRST, lumberjackXpMultiplier });
     Shrine.attach(api);
     // Woodcutting depth (./woodcutting/WOODCUTTING-DEPTH.md): attach order is listener order -
     // Groves stamps event.grove/event.drive, Weather stamps event.conditions, then the rest.

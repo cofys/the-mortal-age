@@ -14141,34 +14141,6 @@
           "always": true,
           "rarity_raw": "Always",
           "section": "100%"
-        },
-        {
-          "item_id": 4600,
-          "name": "Willow blackjack",
-          "quantity": [
-            1,
-            1
-          ],
-          "always": true,
-          "rarity_raw": "Always",
-          "section": "100%",
-          "notes": [
-            "Only if the player does not have a willow blackjack in their inventory."
-          ]
-        },
-        {
-          "item_id": 1331,
-          "name": "Adamant scimitar",
-          "quantity": [
-            1,
-            1
-          ],
-          "always": true,
-          "rarity_raw": "Always",
-          "section": "100%",
-          "notes": [
-            "Only if the player already has a willow blackjack in their inventory."
-          ]
         }
       ],
       "tertiary": []

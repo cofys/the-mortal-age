@@ -754,6 +754,26 @@ export class PluginManager {
   }
 
   /** Spawns a plugin NPC (optionally owner-only) and returns it, or null. */
+  /** Equipment-tab click 1 is Remove; clicks 2+ are the worn options (item params 451+). */
+  private static readonly WORN_OPTION_PARAM = 451;
+  private static readonly FIRST_WORN_OPTION_CLICK = 2;
+
+  /**
+   * The option an item click names: a worn option when it came from the equipment tab
+   * (a Slayer helmet's worn Check is its inventory Disassemble's slot), else an inventory one.
+   */
+  private static itemActionOption(definition: any, event: PluginItemActionEvent): string | null {
+    const { Equipment } = require("../game/model/container/impl/Equipment");
+    if (event.interfaceId === Equipment.INVENTORY_INTERFACE_ID) {
+      if (event.option) return event.option;
+      const index = event.clickType - PluginManager.FIRST_WORN_OPTION_CLICK;
+      if (index < 0) return null;
+      const worn = definition.params?.get?.(PluginManager.WORN_OPTION_PARAM + index);
+      return typeof worn === "string" ? worn : null;
+    }
+    return definition.inventoryActions?.[event.clickType - 1] ?? null;
+  }
+
   public static spawnNpc(definition: PluginNpcSpawnDefinition): any {
     const id = Math.trunc(Number(definition?.id));
     if (!Number.isFinite(id) || id < 0) {
@@ -1989,6 +2009,7 @@ export class PluginManager {
       CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
+      CombatEquipment: require(`${combat}/CombatEquipment`).CombatEquipment,
       CombatRange: require(`${combat}/CombatRange`).CombatRange,
       CanAttackResponse: require(`${combat}/CombatFactory`).CanAttackResponse,
       CombatType: require(`${combat}/CombatType`).CombatType,
@@ -2059,7 +2080,9 @@ export class PluginManager {
       ItemOnGround: require("../game/entity/impl/grounditem/ItemOnGround").ItemOnGround,
       GroundItemState: require("../game/entity/impl/grounditem/ItemOnGround").State,
       ItemDefinition: require("../game/definition/ItemDefinition").ItemDefinition,
+      EquipPacketListener: require("../net/packet/impl/EquipPacketListener").EquipPacketListener,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
+      Wilderness: require("../game/content/wilderness/Wilderness").Wilderness,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
       RsmodRouteFinding: require(`${model}/movement/path/RsmodRouteFinding`).RsmodRouteFinding,
       NpcDefinition: require("../game/definition/NpcDefinition").NpcDefinition,
@@ -2082,6 +2105,7 @@ export class PluginManager {
       OptionDialogue: require(`${model}/dialogues/entries/impl/OptionDialogue`).OptionDialogue,
       StatementDialogue: require(`${model}/dialogues/entries/impl/StatementDialogue`).StatementDialogue,
       ItemStatementDialogue: require(`${model}/dialogues/entries/impl/ItemStatementDialogue`).ItemStatementDialogue,
+      DoubleItemStatementDialogue: require(`${model}/dialogues/entries/impl/DoubleItemStatementDialogue`).DoubleItemStatementDialogue,
       ActionDialogue: require(`${model}/dialogues/entries/impl/ActionDialogue`).ActionDialogue,
       EndDialogue: require(`${model}/dialogues/entries/impl/EndDialogue`).EndDialogue,
       CreationMenu: require(`${model}/menu/CreationMenu`).CreationMenu,
@@ -2089,6 +2113,7 @@ export class PluginManager {
       Server: require("../Server").Server,
       PluginManager: require("./PluginManager").PluginManager,
       ShopManager: require("../game/model/container/shop/ShopManager").ShopManager,
+      ShopDefinition: require("../game/definition/ShopDefinition").ShopDefinition,
       MultiChatboxPrompt: require("../game/model/menu/MultiChatboxPrompt").MultiChatboxPrompt,
       dispatchClientMessages: require("../net/NetworkBuilder").dispatchClientMessages,
       connectHeadlessClient: require("../net/NetworkBuilder").connectHeadlessClient,
@@ -2426,18 +2451,19 @@ export class PluginManager {
     };
 
     const registerNpcActions = (
-      name: string | null,
+      names: string | string[] | null,
       actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
     ): void => {
       const handlers = new Map(Object.entries(actions ?? {}).filter(([, action]) => typeof action === "function"));
+      const nameSet = names === null ? null : new Set(Array.isArray(names) ? names : [names]);
       // Name-specific actions are "specific" and run before the generic any-NPC hooks.
-      const hookList = name === null
+      const hookList = names === null
         ? PluginManager.npcAnyInteractionHooks
         : PluginManager.npcInteractionHooks;
       hookList.push({ pluginName, handler: (event) => {
         if (event.handled || !Number.isInteger(event.clickType) || event.clickType < 1 || event.clickType > 5) return;
         const definition = event.definition;
-        if (!definition || (name !== null && definition.getName() !== name)) return;
+        if (!definition || (nameSet !== null && !nameSet.has(definition.getName()))) return;
         const action = handlers.get(definition.getActions()?.[event.clickType - 1]);
         if (action && action(event) !== false) event.handled = true;
       } });
@@ -2712,6 +2738,17 @@ export class PluginManager {
         } else if (typeof handler === "string" && actions) {
           registerNpcActions(handler, actions);
         }
+      },
+      onNpcsInteraction: (
+        names: string[],
+        actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
+      ) => {
+        if (!Array.isArray(names) || !actions) return;
+        const valid = names.filter((name) => typeof name === "string" && name.length > 0);
+        if (valid.length !== names.length) {
+          console.warn(`[plugins] ${pluginName} onNpcsInteraction dropped ${names.length - valid.length} invalid name(s)`);
+        }
+        if (valid.length) registerNpcActions(valid, actions);
       },
       onAnyNpcInteraction: (actions) => registerNpcActions(null, actions),
       onNpcDialogueVariant: (handler) => {
@@ -3411,7 +3448,7 @@ export class PluginManager {
             }
             const definition = CacheDefinitions.getItem(event.itemId);
             if (definition?.name !== handler || event.clickType < 1 || event.clickType > 5) return;
-            const option = definition.inventoryActions[event.clickType - 1];
+            const option = PluginManager.itemActionOption(definition, event);
             const action = namedActions.get(option);
             if (action && action(event) !== false) event.handled = true;
           },

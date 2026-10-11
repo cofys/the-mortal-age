@@ -17,6 +17,9 @@ before(async () => {
   const base = {
     core: PluginManager.getCoreApi(),
     onObjectInteraction: (name, actions) => Object.entries(actions).forEach(([option, handler]) => (handlers[`${name}:${option}`] = handler)),
+    onNpcInteraction: (name, actions) => Object.entries(actions).forEach(([option, handler]) => (handlers[`${name}:${option}`] = handler)),
+    // The mine portal's teleport comes a tick later; here it runs at once.
+    getTaskManager: () => ({ submit: (task) => task.execute() }),
   };
   const api = new Proxy(base, { get: (target, key) => (key in target ? target[key] : () => {}) });
   require("../plugins/skills/Runecrafting.plugin").register(api);
@@ -42,4 +45,41 @@ test("each altar's exit portal leads outside its ruins, with the portal's sound 
     assert.deepEqual(player.log, [`move ${x},${y},0`, "sound 200", "message You step through the portal..."], objectId);
   }
   assert.equal(handlers["Portal:Use"]({ player: visitor(), objectId: 12345 }), false, "other portals fall through");
+});
+
+function miner({ x = 2889, y = 4814, attributes = {} } = {}) {
+  const log = [];
+  const attrs = new Map(Object.entries(attributes));
+  const { Location } = PluginManager.getCoreApi();
+  return {
+    log,
+    getAttribute: (key) => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getLocation: () => new Location(x, y, 0),
+    getMovementQueue: () => ({ reset() {} }),
+    moveTo: (location) => log.push(`move ${location.getX()},${location.getY()},${location.getZ()}`),
+    sendMessage: (text) => log.push(`message ${text}`),
+    performGraphic: (graphic) => log.push(`graphic ${graphic.getId()}`),
+    getPacketSender: () => ({
+      sendSound: (id) => log.push(`sound ${id}`),
+      sendProjectile: (_from, _to, _offset, _speed, id) => log.push(`projectile ${id}`),
+    }),
+  };
+}
+
+test("the Rune Essence mine's portals send the player back to the wizard who sent them", () => {
+  // Aubury's Teleport records where the player stood (Rune Mysteries complete).
+  const visitor = miner({ x: 3253, y: 3402, attributes: { "quest.rune_mysteries.stage": 6 } });
+  assert.equal(handlers["Aubury:Teleport"]({ player: visitor }), true);
+  assert.deepEqual(visitor.getAttribute("runecrafting:essence-mine-return"), [3253, 3402, 0]);
+
+  const player = miner({ attributes: { "runecrafting:essence-mine-return": [2591, 3086, 0] } });
+  assert.equal(handlers["Portal:Use"]({ player, objectId: 34825, location: { x: 2889, y: 4813, z: 0 } }), true);
+  assert.deepEqual(player.log, [
+    "message You step through the portal...", "projectile 109", "graphic 110", "move 2591,3086,0", "sound 200",
+  ], "as captured: message and the portal's Curse, then the teleport and sound");
+
+  const unknown = miner();
+  handlers["Portal:Use"]({ player: unknown, objectId: 34825, location: { x: 2933, y: 4815, z: 0 } });
+  assert.ok(unknown.log.includes("move 3252,3400,0"), "nobody recorded: back beside Aubury");
 });

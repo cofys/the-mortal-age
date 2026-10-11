@@ -213,7 +213,14 @@ module.exports = function registerMerlinsCrystalQuest(api) {
           : "obtaining-the-black-candle-talking-to-the-candle-maker"
       );
     }
-    if (npcId === NpcIdentifiers.ARHEIN) return page("infiltrating-the-keep-talking-to-arhein");
+    if (npcId === NpcIdentifiers.ARHEIN) {
+      // Arhein only runs the crate ride while the player is infiltrating the
+      // keep; outside that (One Small Favour's T.R.A.S.H. hand-ins, etc.) he
+      // belongs to whoever else claims him.
+      return stage >= STAGE_SPOKEN_LANCELOT && stage < STAGE_SPOKEN_MORGAN
+        ? page("infiltrating-the-keep-talking-to-arhein")
+        : null;
+    }
     if (npcId === NpcIdentifiers.THE_LADY_OF_THE_LAKE) {
       return page("searching-for-excalibur-the-lady-of-the-lake");
     }

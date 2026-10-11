@@ -95,7 +95,7 @@ export function handleAuthTickMessage(msg: any): boolean {
         const a = Number(msg.payload?.a) | 0;
         const b = Number(msg.payload?.b) | 0;
         if (arrowType === 1) setHintArrowNpc(a);
-        else if (arrowType === 2) setHintArrowTile(a, b, Number(msg.payload?.c) | 0);
+        else if (arrowType === 2) setHintArrowTile(a, b, Number(msg.payload?.c) | 0, Number(msg.payload?.d) | 0);
         else if (arrowType === 3) setHintArrowPlayer(a);
         else clearHintArrow();
         return true;

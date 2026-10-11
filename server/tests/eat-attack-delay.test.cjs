@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/eat-attack-delay.test.cjs
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
+const { test, before } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
@@ -8,25 +8,30 @@ const { World } = require('../dist/game/World');
 const { Combat } = require('../dist/game/content/combat/Combat');
 const { TimerRepository } = require('../dist/util/timers/TimerRepository');
 const { ItemIds } = require('../dist/util/IdEnums');
-const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { PluginManager } = require('../dist/plugins/PluginManager');
 const Food = require('../plugins/items/Food.plugin');
-
-// The eat message reads the item name; no cache is loaded here.
-ItemDefinition.forId = () => ({ getName: () => 'Food' });
 
 function setCycle(cycle) {
     World.processCycle = cycle;
 }
 
-function registerFood() {
-    let eat = null;
+let handler = null;
+before(async () => {
+    await CachePipeline.initialize();
     Food.register({
-        onItemFirstAction: (handler) => { eat = handler; },
+        core: PluginManager.getCoreApi(),
+        persistAttribute: () => {},
+        onPlayerLogin: () => {},
+        onItemAction: (eat) => { handler = eat; },
         emitCanEat: () => true,
         emitCustomEvent: () => {},
-        log: () => {},
     });
-    return eat;
+});
+
+/** Eats the item in a slot with its Eat option (the first one for these foods). */
+function registerFood() {
+    return (event) => handler({ ...event, clickType: 1 });
 }
 
 function buildPlayer() {
@@ -44,7 +49,10 @@ function buildPlayer() {
         getCombat: () => combat,
         getTimers: () => timers,
         getInventory: () => inventory,
-        getPacketSender: () => ({ sendInterfaceRemoval: () => {}, sendSoundEffect: () => {} }),
+        getPacketSender: () => ({ sendInterfaceRemoval: () => {}, sendSoundEffect: () => {}, sendConfig: () => {} }),
+        getAttribute: () => undefined,
+        setAttribute: () => {},
+        getHitpoints: () => 50,
         getSkillManager: () => ({ stopSkillable: () => {}, getCurrentLevel: () => 50, getMaxLevel: () => 99 }),
         isPlayerBot: () => false,
         performAnimation: () => {},

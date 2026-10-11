@@ -1,6 +1,7 @@
 const { ItemOnGroundManager } = require("../../src/main/typescript/elvarg/game/entity/impl/grounditem/ItemOnGroundManager");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { ItemDefinition } = require("../../src/main/typescript/elvarg/game/definition/ItemDefinition");
+const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wilderness/Wilderness");
 const Food = require("./Food.plugin");
 const Potions = require("./Potions.plugin");
@@ -27,7 +28,15 @@ const bagItems = (bag) => (bag?.getMetaValue?.(BAG_DATA) ?? []).filter((item) =>
 const setBagItems = (bag, items) => bag.setMetaValue(BAG_DATA, items);
 const bagFor = (player) => player.getInventory().getValidItems().find(isBag);
 const itemKey = (item) => `${item.getId()}:${JSON.stringify(item.getMeta?.() ?? null)}`;
-const isSupply = (id) => Food.isFoodItem(id) || Potions.isPotionItem(id);
+const isSupply = (id) => {
+  const base = ItemDefinition.forId(id).unNote();
+  return Food.isFoodItem(base) || Potions.isPotionItem(base);
+};
+// Destroying the bag in the wilderness drops what survives to the floor: un-noted
+// food, potions and vials of water are destroyed outright, while noted items (and
+// everything else) drop where anyone can pick them up.
+const isDestroyedOnDestroy = (id) => !ItemDefinition.forId(id).isNoted()
+  && (isSupply(id) || id === ItemIdentifiers.VIAL_OF_WATER);
 const canUseBag = (player) => Wilderness.isIn(player) || isInsideEnclave(player.getLocation?.());
 const copyItem = (item, amount = item.getAmount()) => ({
   id: item.getId(), amount, meta: item.getMeta?.() ?? null,
@@ -131,9 +140,14 @@ function itemAction(player, item, option) {
   if (action !== "destroy") return false;
   const slot = player.getInventory().getItems().indexOf(item);
   if (slot < 0) return true;
-  if (canUseBag(player)) {
+  // OSRS: destroying the bag in the wilderness drops the surviving contents to
+  // the floor, where everyone can see and pick them up; un-noted food, potions
+  // and vials of water are destroyed instead, and noted items drop. Outside the
+  // wilderness (including inside the Ferox Enclave) every stored item is lost.
+  if (Wilderness.isIn(player)) {
     for (const stored of bagItems(item)) {
-      if (!isSupply(stored.id)) ItemOnGroundManager.registerGlobal(player, new Item(stored.id, stored.amount, stored.meta));
+      if (isDestroyedOnDestroy(stored.id)) continue;
+      ItemOnGroundManager.registerGlobal(player, new Item(stored.id, stored.amount, stored.meta));
     }
   }
   player.getInventory().deleteAtSlot(slot, 1);

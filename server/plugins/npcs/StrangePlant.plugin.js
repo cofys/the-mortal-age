@@ -1,7 +1,7 @@
 "use strict";
 
-const Events = require("./random-events/RandomEvents");
-const Plant = require("./random-events/StrangePlant");
+const Events = require("./random-events/Common.RandomEvents");
+const Plant = require("./random-events/StrangePlant.RandomEvents");
 
 module.exports = {
   name: "StrangePlant",

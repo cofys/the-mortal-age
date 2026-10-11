@@ -176,7 +176,11 @@ export class PacketSender {
   }
 
   sendSong(id: number): this {
-    if (this.player.getSession().sendClientPacket(encodePlaySong(id))) return this;
+    if (this.player.getSession().sendClientPacket(encodePlaySong(id))) {
+      const { PluginManager } = require("../../plugins/PluginManager") as typeof import("../../plugins/PluginManager");
+      PluginManager.emitCustomEvent("audio:play-song", { player: this.player, trackId: id });
+    }
+    return this;
   }
 
   sendJingle(id: number, delayTicks: number): this {
@@ -216,11 +220,6 @@ export class PacketSender {
     if (this.player.getSession().sendClientPacket(encodeChatMessage(
       type === 16 ? "clan" : "channel", message, name
     ))) return this;
-  }
-
-  sendPoisonType(type: number): this {
-    this.player.getSession().write(new PacketBuilder(184).put(type));
-    return this;
   }
 
   getVarp(id: number): number {
@@ -523,11 +522,12 @@ export class PacketSender {
    * compatibility.
    */
   /**
-   * A tile hint. `height` lifts the arrow above the tile (tutorial island), `plane` scopes
-   * it to the target's floor so a client on another level does not draw it; the two are
-   * packed into the hint packet's one spare byte (height in the high 6 bits).
+   * A tile hint, as OSRS sends it: `tilePosition` puts the arrow on the tile's centre (2) or its
+   * west (3), east (4), south (5) or north (6) edge, and `height` is OSRS's height byte (the arrow
+   * sits height * 2 world units up, 128 to a tile: 128 above a door, 160 above a tree). `plane`
+   * scopes it to the target's floor so a client on another level does not draw it.
    */
-  public sendPositionalHint(position: any, _tilePosition = 2, height = 0, plane = 0): this {
+  public sendPositionalHint(position: any, tilePosition = 2, height = 0, plane = 0): this {
     if (
       !position ||
       typeof position.getX !== "function" ||
@@ -537,7 +537,10 @@ export class PacketSender {
     }
     this.player
       .getSession()
-      .sendClientPacket(encodeHintArrow(2, position.getX(), position.getY(), ((height & 0x3f) << 2) | (plane & 0x03)));
+      .sendClientPacket(encodeHintArrow(
+        2, position.getX(), position.getY(), height,
+        (((tilePosition >= 2 && tilePosition <= 6 ? tilePosition : 2) & 0x07) << 2) | (plane & 0x03),
+      ));
     return this;
   }
 

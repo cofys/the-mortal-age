@@ -1,5 +1,5 @@
 import { ClientState } from "../../../game/ClientState";
-import { hintArrow, isHintArrowBlinkOn } from "../../../game/HintArrow";
+import { hintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../../game/HintArrow";
 import type { InputManager } from "../../../game/InputManager";
 import { profiler } from "../../../render/PerformanceProfiler";
 import { packWorldMapCoord } from "../../../rs/map/WorldMapArea";
@@ -43,6 +43,7 @@ import {
     shouldProbeWidgetInteractionShallow,
 } from "./interactionMenuCache";
 import type { CachedClickTarget, WidgetClickMeta } from "./clickTypes";
+import { dropStaleClickTarget } from "./clickTypes";
 import type { GLRenderOpts } from "./glRenderOpts";
 import { drawLine, drawThickLine } from "./drawLines";
 import { renderArcWidget } from "./arcWidget";
@@ -1422,6 +1423,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             }
             if (!shouldProbeInteraction) {
                 // Continue with normal widget rendering; this widget does not participate in UI hit logic.
+                dropStaleClickTarget(clickTargetCache, clicks, w);
             } else {
                 const clickProbeStartMs = profileWidgetRender ? performance.now() : 0;
                 const interaction = getWidgetInteractionSnapshot(
@@ -1688,6 +1690,9 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     if (profileWidgetRender) {
                         clickRegisterMs += performance.now() - clickRegisterStartMs;
                     }
+                } else {
+                    // Nothing to offer any more (an emptied equipment slot): no stale hover text.
+                    dropStaleClickTarget(clickTargetCache, clicks, w);
                 }
             }
         } catch {}
@@ -2735,8 +2740,9 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         } else if (hintArrow.type === 2) {
                             // The minimap marks the target on every floor; only the world
                             // arrow (overlay passes) is scoped to the viewer's plane.
-                            targetFineX = (hintArrow.x << 7) + 64;
-                            targetFineY = (hintArrow.y << 7) + 64;
+                            const [subX, subY] = hintArrowTileOffset(hintArrow.position);
+                            targetFineX = (hintArrow.x << 7) + subX;
+                            targetFineY = (hintArrow.y << 7) + subY;
                         } else if (hintArrow.type === 3) {
                             // Player hint: playerEcs coordinates are already world-fine.
                             const pe = osrsClient.playerEcs;

@@ -1,4 +1,11 @@
-const { restoreRunEnergy, curePoisonAndVenom } = require("./ConsumableEffects");
+const {
+  restoreRunEnergy,
+  curePoisonAndVenom,
+  boostSkill,
+  lowerSkillByCurrent,
+  lowerSkillByMax,
+  restoreSkillToBaseWithFormula,
+} = require("./ConsumableEffects");
 const { TimerKey } = require("../../src/main/typescript/elvarg/util/timers/TimerKey");
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
@@ -81,44 +88,6 @@ function getCurrentLevel(player, skill) {
 
 function setCurrentLevel(player, skill, level) {
   getSkillManager(player).setCurrentLevels(skill, level);
-}
-
-function boostSkill(player, skill, flat, percent) {
-  const max = getMaxLevel(player, skill);
-  const current = getCurrentLevel(player, skill);
-  const boost = Math.floor(max * percent) + flat;
-  const cap = max + boost;
-  if (current < cap) {
-    getSkillManager(player).increaseCurrentLevel(skill, cap - current, cap);
-  }
-}
-
-function lowerSkillByCurrent(player, skill, flat, percent, minimum = 0) {
-  const current = getCurrentLevel(player, skill);
-  const amount = Math.floor(current * percent) + flat;
-  if (amount > 0) {
-    getSkillManager(player).decreaseCurrentLevel(skill, amount, minimum);
-  }
-}
-
-function lowerSkillByMax(player, skill, flat, percent, minimum = 0) {
-  const max = getMaxLevel(player, skill);
-  const amount = Math.floor(max * percent) + flat;
-  if (amount > 0) {
-    getSkillManager(player).decreaseCurrentLevel(skill, amount, minimum);
-  }
-}
-
-function restoreSkillToBaseWithFormula(player, skill, flat, percent) {
-  const max = getMaxLevel(player, skill);
-  const current = getCurrentLevel(player, skill);
-  if (current >= max) {
-    return;
-  }
-  const amount = Math.floor(flat + max * percent);
-  if (amount > 0) {
-    getSkillManager(player).increaseCurrentLevel(skill, amount, max);
-  }
 }
 
 function heal(player, amount, extraCap = 0) {
@@ -1185,6 +1154,34 @@ function resumeTimedEffects({ player }) {
   }
 }
 
+/** The hitpoints orb's "Cure" (orbs:healthbutton). */
+const HEALTH_ORB_CURE_UID = (160 << 16) | 9;
+/** The potions it can drink: those that cure poison or venom. */
+const CURE_POTIONS = new Set([
+  "Antipoison", "Superantipoison", "Antidote+", "Antidote++", "Sanfew serum",
+  "Anti-venom", "Anti-venom+", "Antipoison mix", "Antidote+ mix",
+]);
+
+/**
+ * "Cure" on the hitpoints orb drinks the first such potion in the inventory, as drinking it
+ * does (rsprox captures: the drink's animation, sound and messages); with none, "You haven't
+ * got anything capable of curing your poison.".
+ */
+function cureFromHealthOrb({ player }) {
+  if (!player || (!player.isPoisoned?.() && !player.isVenomed?.())) return;
+  const items = player.getInventory().getItems();
+  for (let slot = 0; slot < items.length; slot++) {
+    const itemId = items[slot]?.getId?.() ?? -1;
+    if (itemId <= 0) continue;
+    const entry = POTION_BY_ITEM_ID.get(itemId);
+    if (entry && CURE_POTIONS.has(entry.potion.name)) {
+      handlePotionDrink(player, itemId, slot);
+      return;
+    }
+  }
+  player.sendMessage("You haven't got anything capable of curing your poison.");
+}
+
 module.exports = {
   name: "Potions",
   isPotionItem(itemId) {
@@ -1195,6 +1192,7 @@ module.exports = {
     applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration, clearPrayerRegeneration,
     processBoostDecay, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
     findPotionEntry: (itemId) => POTION_BY_ITEM_ID.get(itemId) ?? null,
+    cureFromHealthOrb,
   },
   getPotionName(itemId) {
     return POTION_BY_ITEM_ID.get(itemId)?.potion?.name ?? null;
@@ -1211,6 +1209,7 @@ module.exports = {
       const { player, itemId, slot } = event;
       return handlePotionDrink(player, itemId, slot);
     });
+    api.onInterfaceActionButton(HEALTH_ORB_CURE_UID, cureFromHealthOrb);
 
     api.onPlayerProcess(({ player }) => {
       if (player?.isPlayerBot?.()) {

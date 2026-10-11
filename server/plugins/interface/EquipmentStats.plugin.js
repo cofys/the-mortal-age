@@ -7,6 +7,9 @@ const wear = require("../items/lib/item-wear");
 // OpenRune cache names: component.wornitems:equipment and interface.equipment.
 const OPEN_EQUIPMENT_STATS_BUTTON = (387 << 16) | 1;
 const EQUIPMENT_STATS_INTERFACE_ID = 84;
+/** toplevel_sidebutton_switch: OSRS shows the inventory beside the stats, to equip from it. */
+const SIDE_BUTTON_SWITCH_SCRIPT = 915;
+const INVENTORY_TAB = 3;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
 const EQUIPMENT_SLOT_COMPONENTS = [
   Equipment.HEAD_SLOT,
@@ -136,6 +139,7 @@ function open(player) {
     .getPacketSender()
     .sendVarbit(12393, 1)
     .sendSubInterface(MAIN_MODAL_TARGET_UID, EQUIPMENT_STATS_INTERFACE_ID, 0);
+  player.getPacketSender().sendClientScript(SIDE_BUTTON_SWITCH_SCRIPT, INVENTORY_TAB);
   update(player);
   return true;
 }

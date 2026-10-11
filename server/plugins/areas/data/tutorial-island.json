@@ -1,0 +1,1388 @@
+{
+ "_source": "Steps, texts, varps, hint arrows, hint pictures, flashing tabs and highlights: a full Tutorial Island run recorded with RSProx (rev 241, see docs/tutorial-island.md). The 540 text is the OSRS Wiki transcript's (not sent in the capture). Tile arrows carry the captured OSRS 'position' (Center or an edge) and 'height' byte.",
+ "varps": {
+  "progress": 281,
+  "progressOverlay": 406,
+  "interface3": 263,
+  "interface4": 264,
+  "interface6": 266
+ },
+ "varbits": {
+  "flashSide": 3756,
+  "hintArrow": 14192,
+  "allowTextOverlap": 10690,
+  "freeStuffCheck": 9323
+ },
+ "scripts": {
+  "text": 1974,
+  "hint": 2584,
+  "highlightItem": 8461,
+  "clearItemHighlights": 8465,
+  "highlightComponent": 8478,
+  "clearComponentHighlight": 8484,
+  "sideButtonSwitch": 915,
+  "clearAllComponentHighlights": 8486
+ },
+ "interfaces": {
+  "overlay": 614,
+  "overlayHiddenComponents": [
+   1,
+   4
+  ],
+  "text": 263,
+  "chatboxText": 10617399,
+  "experience": 929,
+  "experienceOptions": 4,
+  "appearance": 679
+ },
+ "unlockTabs": {
+  "3": 11,
+  "30": 3,
+  "50": 1,
+  "230": 2,
+  "390": 4,
+  "430": 0,
+  "531": 8,
+  "560": 5,
+  "630": 6
+ },
+ "steps": [
+  {
+   "value": 1,
+   "name": "PAST_EXPERIENCE",
+   "progressOverlay": 0,
+   "text": [
+    "Past Experience",
+    "Before you get started, please use the open interface to select your experience with Old School RuneScape."
+   ]
+  },
+  {
+   "value": 2,
+   "name": "GIELINOR_TALK",
+   "text": [
+    "Getting started",
+    "When you're ready to get started, click on the Gielinor Guide. He is indicated by a flashing yellow arrow."
+   ],
+   "progressOverlay": 0,
+   "arrow": {
+    "npc": 3308
+   }
+  },
+  {
+   "value": 3,
+   "name": "OPEN_SETTINGS",
+   "text": [
+    "Settings menu",
+    "Please click on the flashing spanner icon found at the bottom right of your screen. This will display your settings menu."
+   ],
+   "progressOverlay": 0,
+   "flashTab": 11,
+   "tabOpens": 7
+  },
+  {
+   "value": 7,
+   "name": "SETTINGS_OPENED",
+   "text": [
+    "Settings menu",
+    "On the side panel, you can now see a variety of game settings. You can also click the all settings button to see all available settings. Talk to the Gielinor Guide to continue."
+   ],
+   "progressOverlay": 0,
+   "arrow": {
+    "npc": 3308
+   }
+  },
+  {
+   "value": 10,
+   "name": "GIELINOR_DOOR",
+   "text": [
+    "Moving on",
+    "It's time to meet your first instructor. To continue, all you need to do is click on the door. It's indicated by a flashing yellow arrow. Remember, you can use your arrow keys to rotate the camera."
+   ],
+   "progressOverlay": 0,
+   "arrow": {
+    "tile": [
+     3098,
+     3107
+    ],
+    "height": 128,
+    "position": "West"
+   },
+   "hint": 1
+  },
+  {
+   "value": 20,
+   "name": "SURVIVAL_TALK",
+   "text": null,
+   "progressOverlay": 2,
+   "arrow": {
+    "npc": 8503
+   },
+   "hint": 6
+  },
+  {
+   "value": 30,
+   "name": "OPEN_INVENTORY",
+   "text": [
+    "You've been given an item",
+    "To view the item you've been given, you'll need to open your inventory. To do so, click on the flashing backpack icon to the right hand side of your screen."
+   ],
+   "progressOverlay": 2,
+   "flashTab": 3,
+   "tabOpens": 40
+  },
+  {
+   "value": 40,
+   "name": "FISH",
+   "text": [
+    "Inventory",
+    "This is your inventory. You can view all of your items here, including the net you've just been given. Let's use it to catch some shrimp."
+   ],
+   "progressOverlay": 2,
+   "arrow": {
+    "npc": 3317
+   },
+   "hint": 7
+  },
+  {
+   "value": 50,
+   "name": "OPEN_SKILLS",
+   "text": [
+    "You've gained some experience",
+    "Click on the flashing bar graph icon near the inventory button to see your skills menu."
+   ],
+   "progressOverlay": 2,
+   "flashTab": 1,
+   "tabOpens": 60,
+   "hint": 8,
+   "highlight": [
+    {
+     "item": 2514,
+     "style": 7036,
+     "arg": 100
+    }
+   ]
+  },
+  {
+   "value": 60,
+   "name": "SKILLS_OPENED",
+   "text": [
+    "Skills and Experience",
+    "On this menu you can view your skills. Your skills can be leveled up by earning experience. As you level up your skills, you will earn new unlocks. Speak to the survival expert to continue."
+   ],
+   "progressOverlay": 2,
+   "arrow": {
+    "npc": 8503
+   }
+  },
+  {
+   "value": 70,
+   "name": "CHOP_TREE",
+   "text": [
+    "Woodcutting",
+    "It's time to cook your shrimp. However, you require a fire to do that which means you need some logs. You can cut down trees using your Woodcutting skill, all you need is an axe."
+   ],
+   "progressOverlay": 3,
+   "arrow": {
+    "tile": [
+     3099,
+     3095
+    ],
+    "height": 160,
+    "position": "East"
+   },
+   "hint": 9
+  },
+  {
+   "value": 80,
+   "name": "LIGHT_FIRE",
+   "text": [
+    "Firemaking",
+    "Now that you have some logs, it's time to light a fire. First, click on the tinderbox in your inventory. Then, with the tinderbox highlighted, click on the logs to use the tinderbox on them."
+   ],
+   "progressOverlay": 3,
+   "hint": 5,
+   "highlight": [
+    {
+     "item": 2511,
+     "style": 7034,
+     "arg": 0
+    },
+    {
+     "item": 590,
+     "style": 7034,
+     "arg": 0
+    }
+   ]
+  },
+  {
+   "value": 90,
+   "name": "COOK_SHRIMP",
+   "text": [
+    "Cooking",
+    "Now it's time to get cooking. To do so, click on the shrimp in your inventory. Then, with the shrimp highlighted, click on a fire to cook them. If you look at the top left of the screen, you'll see the instructions that you're giving to your character."
+   ],
+   "progressOverlay": 3,
+   "hint": 10,
+   "highlight": [
+    {
+     "item": 2514,
+     "style": 7034,
+     "arg": 0
+    }
+   ]
+  },
+  {
+   "value": 120,
+   "name": "SURVIVAL_GATE",
+   "text": [
+    "Moving on",
+    "Well done, you've just cooked your first meal! Speak to the survival expert if you want a recap, otherwise you can move on. Click on the gate shown and follow the path. Remember, you can use your arrow keys to rotate the camera."
+   ],
+   "progressOverlay": 3,
+   "arrow": {
+    "tile": [
+     3089,
+     3092
+    ],
+    "height": 65,
+    "position": "East"
+   }
+  },
+  {
+   "value": 130,
+   "name": "CHEF_DOOR",
+   "text": [
+    "Moving on",
+    "Follow the path until you get to the door with the yellow arrow above it. Click on the door to open it. If you can't find it, try moving your camera by clicking and dragging your middle mouse button."
+   ],
+   "progressOverlay": 4,
+   "arrow": {
+    "tile": [
+     3079,
+     3084
+    ],
+    "height": 128,
+    "position": "West"
+   }
+  },
+  {
+   "value": 140,
+   "name": "CHEF_TALK",
+   "text": [
+    "Cooking",
+    "Talk to the chef to learn the more advanced aspects of Cooking such as combining ingredients!"
+   ],
+   "progressOverlay": 4,
+   "arrow": {
+    "npc": 3305
+   }
+  },
+  {
+   "value": 150,
+   "name": "MAKE_DOUGH",
+   "text": [
+    "Making dough",
+    "Dough is the base for many meals. To make dough you must mix flour with water. Talk to the master chef to get some."
+   ],
+   "progressOverlay": 4,
+   "arrow": {
+    "npc": 3305
+   },
+   "withItems": {
+    "items": [
+     2516,
+     1929
+    ],
+    "text": [
+     "Making dough",
+     "This is the base for many meals. To make dough you must mix flour with water. To do so, click on the flour in your inventory. Then, with the flour highlighted, click on the water to combine them into dough."
+    ],
+    "arrow": null,
+    "highlight": [
+     {
+      "item": 2516,
+      "style": 7034,
+      "arg": 0
+     },
+     {
+      "item": 1929,
+      "style": 7034,
+      "arg": 0
+     }
+    ]
+   }
+  },
+  {
+   "value": 160,
+   "name": "BAKE_BREAD",
+   "text": [
+    "Cooking dough",
+    "Now you have made the dough, you can bake it into some bread. To do so, just click on the indicated range."
+   ],
+   "progressOverlay": 4,
+   "arrow": {
+    "tile": [
+     3075,
+     3081
+    ],
+    "height": 65,
+    "position": "East"
+   },
+   "hint": 11
+  },
+  {
+   "value": 170,
+   "name": "CHEF_EXIT",
+   "text": [
+    "Moving on",
+    "Well done! You've baked your first loaf of bread. As you gain experience in Cooking, you will be able to make other things like pies and cakes. You can now use the next door to move on. If you need a recap on anything, talk to the master chef."
+   ],
+   "progressOverlay": 5,
+   "arrow": {
+    "tile": [
+     3072,
+     3090
+    ],
+    "height": 128,
+    "position": "East"
+   }
+  },
+  {
+   "value": 200,
+   "name": "QUEST_DOOR",
+   "text": [
+    "Fancy a run?",
+    "When navigating the world, you can either run or walk. Running is faster but you can't run for long as you'll soon run out of energy. You can use the flashing orb next to the minimap to toggle running. Why not try it as you head to the next section?"
+   ],
+   "progressOverlay": 6,
+   "arrow": {
+    "tile": [
+     3086,
+     3126
+    ],
+    "height": 128,
+    "position": "South"
+   },
+   "hint": 21
+  },
+  {
+   "value": 220,
+   "name": "QUEST_TALK",
+   "text": [
+    "Quests",
+    "It's time to learn about quests! Just talk to the Quest Guide to get started."
+   ],
+   "progressOverlay": 7,
+   "arrow": {
+    "npc": 3312
+   }
+  },
+  {
+   "value": 230,
+   "name": "OPEN_QUESTS",
+   "text": [
+    "Quest journal",
+    "Click on the flashing icon to the left of your inventory."
+   ],
+   "progressOverlay": 7,
+   "flashTab": 2,
+   "tabOpens": 240
+  },
+  {
+   "value": 240,
+   "name": "QUESTS_OPENED",
+   "text": [
+    "Quest journal",
+    "This is your quest journal. It lists every quest in the game. Talk to the quest guide again for an explanation on how it works."
+   ],
+   "progressOverlay": 7,
+   "arrow": {
+    "npc": 3312
+   }
+  },
+  {
+   "value": 250,
+   "name": "QUEST_LADDER",
+   "text": [
+    "Moving on",
+    "It's time to enter some caves. Click on the ladder to go down to the next area."
+   ],
+   "progressOverlay": 7,
+   "arrow": {
+    "tile": [
+     3088,
+     3119
+    ],
+    "height": 5,
+    "position": "Center"
+   }
+  },
+  {
+   "value": 260,
+   "name": "MINING_TALK",
+   "text": [
+    "Mining and Smithing",
+    "Next let's get you a weapon, or more to the point, you can make your first weapon yourself. Don't panic, the mining instructor will help you. Talk to him and he'll tell you all about it."
+   ],
+   "progressOverlay": 8,
+   "arrow": {
+    "npc": 3311
+   }
+  },
+  {
+   "value": 300,
+   "name": "MINE_TIN",
+   "text": [
+    "Mining",
+    "It's quite simple really. To mine a rock, all you need to do is click on it. First up, try mining some tin."
+   ],
+   "progressOverlay": 8,
+   "arrow": {
+    "rocks": "tin",
+    "height": 45
+   },
+   "hint": 12
+  },
+  {
+   "value": 310,
+   "name": "MINE_COPPER",
+   "text": [
+    "Mining",
+    "Now that you have some tin ore, you just need some copper. To mine a rock, all you need to do is click on it."
+   ],
+   "progressOverlay": 8,
+   "arrow": {
+    "rocks": "copper",
+    "height": 45
+   }
+  },
+  {
+   "value": 320,
+   "name": "SMELT",
+   "text": [
+    "Smelting",
+    "You now have some tin ore and some copper ore. You can smelt these into a bronze bar. To do so, just click on the indicated furnace. Try it now."
+   ],
+   "progressOverlay": 9,
+   "arrow": {
+    "tile": [
+     3079,
+     9496
+    ],
+    "height": 128,
+    "position": "Center"
+   },
+   "hint": 13
+  },
+  {
+   "value": 330,
+   "name": "BAR_SMELTED",
+   "text": [
+    "Smelting",
+    "You've made a bronze bar! Speak to the mining instructor and he'll show you how to make it into a weapon."
+   ],
+   "progressOverlay": 9,
+   "arrow": {
+    "npc": 3311
+   }
+  },
+  {
+   "value": 340,
+   "name": "USE_ANVIL",
+   "text": [
+    "Smithing a dagger",
+    "To smith you'll need a hammer and enough metal bars to make the desired item, as well as a handy anvil. To start the process, click on the anvil, or alternatively use the bar on it."
+   ],
+   "progressOverlay": 9,
+   "arrow": {
+    "tile": [
+     3083,
+     9499
+    ],
+    "height": 50,
+    "position": "Center"
+   },
+   "hint": 14
+  },
+  {
+   "value": 350,
+   "name": "SMITH_DAGGER",
+   "text": [
+    "Smithing a dagger",
+    "Now you have the smithing menu open, you will see a list of all the things you can make. Only the dagger can be made at your skill level; this is shown by the white text under it. You'll need to select the dagger to continue."
+   ],
+   "progressOverlay": 9,
+   "arrow": {
+    "tile": [
+     3083,
+     9499
+    ],
+    "height": 50,
+    "position": "Center"
+   },
+   "uiHighlight": [
+    3,
+    1,
+    20447241,
+    -1,
+    7034,
+    0
+   ]
+  },
+  {
+   "value": 360,
+   "name": "MINING_GATE",
+   "text": [
+    "Moving on",
+    "Congratulations, you've made your first weapon. Now it's time to move on. Go through the gates shown by the arrow. Remember, you may need to move the camera to see your surroundings. Speak to the mining instructor for a recap at any time."
+   ],
+   "progressOverlay": 9,
+   "arrow": {
+    "tile": [
+     3094,
+     9502
+    ],
+    "height": 128,
+    "position": "East"
+   }
+  },
+  {
+   "value": 370,
+   "name": "COMBAT_TALK",
+   "text": [
+    "Combat",
+    "In this area you will find out about melee and ranged combat. Speak to the guide and he will tell you all about it."
+   ],
+   "progressOverlay": 10,
+   "arrow": {
+    "npc": 3307
+   }
+  },
+  {
+   "value": 390,
+   "name": "OPEN_EQUIPMENT",
+   "text": [
+    "Equipping items",
+    "You now have access to a new interface. Click on the flashing icon of a man, the one to the right of your backpack icon."
+   ],
+   "progressOverlay": 10,
+   "flashTab": 4,
+   "tabOpens": 400
+  },
+  {
+   "value": 400,
+   "name": "OPEN_EQUIPMENT_STATS",
+   "text": [
+    "Worn inventory",
+    "This is your worn inventory. Here you can see what items you have equipped. In the bottom left corner, you will notice a flashing button with a shield and helmet on it. This button lets you view more details on what you have equipped. Click on it now."
+   ],
+   "progressOverlay": 10
+  },
+  {
+   "value": 405,
+   "name": "EQUIP_DAGGER",
+   "text": [
+    "Equipment stats",
+    "You can see what items you are wearing in the worn inventory to the left of the screen, with their combined statistics on the right. Let's add something. Click your dagger to equip it."
+   ],
+   "progressOverlay": 10,
+   "highlight": [
+    {
+     "item": 1205,
+     "style": 7034,
+     "arg": 0
+    }
+   ]
+  },
+  {
+   "value": 410,
+   "name": "DAGGER_EQUIPPED",
+   "text": [
+    "Equipment stats",
+    "You're now holding your dagger. Clothes, armour, weapons and more are equipped like this. Alternatively, you can click items directly from your inventory to equip them without opening the stats window. Speak to the combat instructor to continue."
+   ],
+   "progressOverlay": 10,
+   "arrow": {
+    "npc": 3307
+   }
+  },
+  {
+   "value": 420,
+   "name": "EQUIP_SWORD_SHIELD",
+   "text": [
+    "Unequipping items",
+    "To unequip an item, go to your worn inventory and click on the item. Alternatively, equipping a new item into the same slot will unequip the old one. Try this out now by swapping your dagger for the sword and shield that the combat instructor gave you."
+   ],
+   "progressOverlay": 10,
+   "highlight": [
+    {
+     "item": 1171,
+     "style": 7034,
+     "arg": 0
+    },
+    {
+     "item": 1277,
+     "style": 7034,
+     "arg": 0
+    }
+   ]
+  },
+  {
+   "value": 430,
+   "name": "OPEN_COMBAT",
+   "text": [
+    "Combat interface",
+    "Click on the flashing crossed swords icon to open the combat interface."
+   ],
+   "progressOverlay": 10,
+   "flashTab": 0,
+   "tabOpens": 440
+  },
+  {
+   "value": 440,
+   "name": "ENTER_RAT_PEN",
+   "text": [
+    "Combat interface",
+    "This is your combat interface. From here, you can select the attack style that you'll use in combat. Using different attack styles will give different types of experience. As well as this, monsters are weak to specific attack styles. Click on the gates to continue."
+   ],
+   "progressOverlay": 11,
+   "arrow": {
+    "tile": [
+     3110,
+     9518
+    ],
+    "height": 128,
+    "position": "East"
+   },
+   "hint": 15
+  },
+  {
+   "value": 450,
+   "name": "ATTACK_RAT",
+   "text": [
+    "Attacking",
+    "It's time to slay some rats! To attack a rat, all you have to do is click on it. This will cause you to walk over and start hitting it."
+   ],
+   "progressOverlay": 11,
+   "arrow": {
+    "npc": 3313
+   }
+  },
+  {
+   "value": 460,
+   "name": "FIGHTING_RAT",
+   "text": [
+    "Sit back and watch",
+    "While you are fighting you will see a bar over your head. The bar shows how much health you have left. Your opponent will have one too. You will continue to attack the rat until it's dead or you do something else."
+   ],
+   "progressOverlay": 11,
+   "arrow": {
+    "npc": 3313
+   }
+  },
+  {
+   "value": 470,
+   "name": "RAT_KILLED",
+   "text": [
+    "Well done, you've made your first kill!",
+    "Pass through the gate and talk to the combat instructor. He will give you your next task."
+   ],
+   "progressOverlay": 11,
+   "arrow": {
+    "npc": 3307
+   }
+  },
+  {
+   "value": 480,
+   "name": "RANGE_RAT",
+   "text": [
+    "Rat ranging",
+    "Before you can use the shortbow and arrows you'll need to equip them by clicking on them. Once equipped with the ranging gear, try killing another rat. You don't need to enter the pen this time. To attack a rat, just click on it."
+   ],
+   "progressOverlay": 12,
+   "arrow": {
+    "npc": 3313
+   },
+   "hint": 16,
+   "highlight": [
+    {
+     "item": 882,
+     "style": 7034,
+     "arg": 0
+    },
+    {
+     "item": 841,
+     "style": 7034,
+     "arg": 0
+    }
+   ]
+  },
+  {
+   "value": 490,
+   "name": "RANGING_RAT",
+   "text": [
+    "Rat ranging",
+    "Before you can use the shortbow and arrows you'll need to equip them by clicking on them. Once equipped with the ranging gear, try killing another rat. You don't need to enter the pen this time. To attack a rat, just click on it."
+   ],
+   "progressOverlay": 12,
+   "arrow": {
+    "npc": 3313
+   }
+  },
+  {
+   "value": 500,
+   "name": "COMBAT_LADDER",
+   "text": [
+    "Moving on",
+    "You have completed the tasks here. To move on, click on the indicated ladder. If you need to go over any of what you learnt here, just talk to the combat instructor and he'll tell you what he can."
+   ],
+   "progressOverlay": 12,
+   "arrow": {
+    "tile": [
+     3111,
+     9526
+    ],
+    "height": 128,
+    "position": "Center"
+   },
+   "hint": 22
+  },
+  {
+   "value": 510,
+   "name": "OPEN_BANK",
+   "text": [
+    "Banking",
+    "This is the Bank of Gielinor, where you can store all your most valued items. To open your bank, just click on the indicated booth."
+   ],
+   "progressOverlay": 14,
+   "arrow": {
+    "tile": [
+     3122,
+     3124
+    ],
+    "height": 128,
+    "position": "Center"
+   }
+  },
+  {
+   "value": 520,
+   "name": "POLL_BOOTH",
+   "text": [
+    "Banking",
+    "This is your bank. You can store things here for safekeeping. To deposit something from your inventory, just click on it. You can withdraw things in the same way. To continue, close the bank and click on the indicated poll booth."
+   ],
+   "progressOverlay": 14,
+   "arrow": {
+    "tile": [
+     3119,
+     3121
+    ],
+    "height": 128,
+    "position": "Center"
+   }
+  },
+  {
+   "value": 525,
+   "name": "BANK_DOOR",
+   "text": [
+    "Moving on",
+    "Polls are run periodically to let the Old School RuneScape community vote on how the game should - or shouldn't - change. When you're ready, move on through the door indicated."
+   ],
+   "progressOverlay": 14,
+   "arrow": {
+    "tile": [
+     3125,
+     3124
+    ],
+    "height": 128,
+    "position": "West"
+   }
+  },
+  {
+   "value": 530,
+   "name": "ACCOUNT_TALK",
+   "text": [
+    "Account Management",
+    "The guide here will tell you all about your account. Just click on him to hear what he's got to say."
+   ],
+   "progressOverlay": 15,
+   "arrow": {
+    "npc": 3310
+   }
+  },
+  {
+   "value": 531,
+   "name": "OPEN_ACCOUNT",
+   "text": [
+    "Account Management",
+    "Click on the flashing icon to open your Account Management menu."
+   ],
+   "progressOverlay": 15,
+   "flashTab": 8,
+   "tabOpens": 532
+  },
+  {
+   "value": 532,
+   "name": "ACCOUNT_OPENED",
+   "text": [
+    "Account Management",
+    "This is your Account Management menu where you can control various aspects of your account. Talk to the Account Guide to learn more."
+   ],
+   "progressOverlay": 15,
+   "arrow": {
+    "npc": 3310
+   }
+  },
+  {
+   "value": 540,
+   "name": "ACCOUNT_DOOR",
+   "text": [
+    "Moving on",
+    "Continue through the next door."
+   ],
+   "progressOverlay": 15,
+   "arrow": {
+    "tile": [
+     3130,
+     3124
+    ],
+    "height": 128,
+    "position": "West"
+   },
+   "hint": 17
+  },
+  {
+   "value": 550,
+   "name": "PRAYER_TALK",
+   "text": null,
+   "progressOverlay": 16,
+   "arrow": {
+    "npc": 3319
+   }
+  },
+  {
+   "value": 560,
+   "name": "OPEN_PRAYER",
+   "text": [
+    "Prayer menu",
+    "Click on the flashing icon to open the Prayer menu."
+   ],
+   "progressOverlay": 16,
+   "flashTab": 5,
+   "tabOpens": 570
+  },
+  {
+   "value": 570,
+   "name": "PRAYER_OPENED",
+   "text": [
+    "Prayer menu",
+    "Talk with Brother Brace and he'll tell you about prayers."
+   ],
+   "progressOverlay": 16,
+   "arrow": {
+    "npc": 3319
+   }
+  },
+  {
+   "value": 610,
+   "name": "PRAYER_DOOR",
+   "text": [
+    "Your final instructor!",
+    "You're almost finished on tutorial island. Pass through the door to find the path leading to your final instructor."
+   ],
+   "progressOverlay": 17,
+   "arrow": {
+    "tile": [
+     3122,
+     3102
+    ],
+    "height": 128,
+    "position": "North"
+   },
+   "hint": 18
+  },
+  {
+   "value": 620,
+   "name": "MAGIC_TALK",
+   "text": [
+    "Your final instructor!",
+    "Follow the path to the wizard's house, where you will be shown how to cast spells. When you get there, just talk with the magic instructor."
+   ],
+   "progressOverlay": 18,
+   "arrow": {
+    "npc": 3309
+   }
+  },
+  {
+   "value": 630,
+   "name": "OPEN_MAGIC",
+   "text": [
+    "Open up your final menu",
+    "Open up the magic interface by clicking on the flashing icon."
+   ],
+   "progressOverlay": 18,
+   "flashTab": 6,
+   "tabOpens": 640
+  },
+  {
+   "value": 640,
+   "name": "MAGIC_OPENED",
+   "text": [
+    "Magic",
+    "This is your magic interface. All of your spells can be found here. The list is currently filtered to only show the spells you have the Magic level for. You can change this in the filter menu. Talk to the instructor to continue."
+   ],
+   "progressOverlay": 18,
+   "arrow": {
+    "npc": 3309
+   }
+  },
+  {
+   "value": 650,
+   "name": "CAST_WIND_STRIKE",
+   "text": [
+    "Magic casting",
+    "You now have some runes. All spells require runes to cast them. Look for the Wind Strike spell in your magic interface. Click on this spell to select it and then click on a chicken to cast it. Talk to the instructor if you need more runes."
+   ],
+   "progressOverlay": 20,
+   "arrow": {
+    "npc": 3316
+   },
+   "hint": 19,
+   "uiHighlight": [
+    3,
+    3,
+    14286859,
+    -1,
+    7034,
+    0
+   ]
+  },
+  {
+   "value": 670,
+   "name": "WIND_STRIKE_CAST",
+   "text": [
+    "To the mainland!",
+    "You're nearly finished with the tutorial. All you need to do now is move on to the mainland. Just speak with the magic instructor to continue."
+   ],
+   "progressOverlay": 20,
+   "arrow": {
+    "npc": 3309
+   },
+   "hint": 20
+  },
+  {
+   "value": 671,
+   "name": "LEAVE_TALK",
+   "text": [
+    "To the mainland!",
+    "You're nearly finished with the tutorial. All you need to do now is move on to the mainland. Just speak with the magic instructor to continue."
+   ],
+   "progressOverlay": 20,
+   "arrow": {
+    "npc": 3309
+   },
+   "hint": 20
+  },
+  {
+   "value": 680,
+   "name": "HOME_TELEPORT",
+   "text": [
+    "To the mainland!",
+    "You're nearly finished with the tutorial. All you need to do now is move on to the mainland. Cast your Home Teleport spell to be taken to Lumbridge."
+   ],
+   "progressOverlay": 20,
+   "hint": 23,
+   "uiHighlight": [
+    3,
+    3,
+    14286854,
+    -1,
+    7034,
+    0
+   ]
+  },
+  {
+   "value": 1000,
+   "name": "COMPLETED",
+   "progressOverlay": 20
+  }
+ ],
+ "actionTexts": {
+  "fishing": "Your character is now attempting to catch some shrimp. Sit back for a moment while [he/she] does all the hard work.",
+  "woodcutting": "Your character is now attempting to cut down the tree. Sit back for a moment while [he/she] does all the hard work.",
+  "firemaking": "Your character is now attempting to light a fire. This should only take a few seconds.",
+  "cooking": "Your character is now attempting to cook some shrimp. This will only take a few seconds.",
+  "baking": "Your character is now attempting to bake some bread. This will only take a few seconds.",
+  "mining": "Your character is now attempting to mine the rock.<br>This should only take a few seconds.",
+  "splash": "Magic casting<br>You cast a spell! Sadly it didn't have any effect this time, but the more you practice, the better you'll get. Let's try again. Click on the spell to select it and then click on a chicken to cast it. Talk to the instructor if you need more runes."
+ },
+ "actions": {
+  "fishing": {
+   "animation": 621,
+   "ticks": 6,
+   "xp": 10,
+   "product": 2514,
+   "message": "You manage to catch some shrimp."
+  },
+  "woodcutting": {
+   "animation": 879,
+   "ticks": 5,
+   "xp": 25,
+   "product": 2511,
+   "message": "You manage to cut some logs."
+  },
+  "firemaking": {
+   "animation": 733,
+   "ticks": 8,
+   "xp": 40,
+   "fire": 26185,
+   "fireTicks": 200,
+   "sound": 2596
+  },
+  "cooking": {
+   "animation": 897,
+   "ticks": 3,
+   "xp": 30,
+   "product": 315,
+   "message": "You manage to cook some shrimp.",
+   "sound": 2577
+  },
+  "dough": {
+   "product": 2307,
+   "message": "You make some dough."
+  },
+  "baking": {
+   "animation": 896,
+   "ticks": 5,
+   "xp": 40,
+   "product": 2309,
+   "message": "You manage to bake some bread.",
+   "sound": 2580
+  },
+  "smelting": {
+   "animation": 899,
+   "ticks": 3,
+   "xp": 6.2,
+   "product": 2349,
+   "sound": 2725
+  },
+  "mining": {
+   "animation": 625,
+   "ticks": 5,
+   "xp": 17.5,
+   "tin": 438,
+   "copper": 436,
+   "sound": 3600
+  }
+ },
+ "messages": {
+  "questComplete": "Congratulations, you've completed a quest: <col=0000ff>Learning the Ropes</col>",
+  "ratAgain": "You've already done that. Perhaps you should move on to learn about ranged combat.",
+  "welcome": "Welcome to Old School RuneScape.",
+  "welcomeLumbridge": "Welcome to Lumbridge! If you need some help, simply talk to the Lumbridge Guide. Look for the question mark icon on your minimap to find him.",
+  "welcomeLumbridgeItem": 22567,
+  "pollBooth": [
+   "Poll booths are found in towns across the world. The Old School RuneScape community is invited to vote on future game updates, to decide whether each update should or shouldn't be released.",
+   "Voting is open to <col=7f0000>members</col> with a <col=7f0000>skill total of 300</col>. To preserve the old-school character of this game, an update must gain <col=7f0000>70%</col> support to be released.",
+   "A flag appears on the booth to let you know when you're invited to vote in a poll."
+  ],
+  "pollBoothItem": 5085
+ },
+ "objects": {
+  "pollBooth": 26815
+ },
+ "experience": {
+  "$comment": "tutorial_player_experience (929): its onLoad script 8558 builds the three answers in slots 1-3 of 929:4.",
+  "1": "new",
+  "2": "returning",
+  "3": "experienced"
+ },
+ "appearanceText": [
+  "Setting your appearance",
+  "Before you get started, you'll need to set the appearance of your character. Please use the open interface to set your appearance."
+ ],
+ "passages": {
+  "$comment": "Tutorial doors and gates, as captured: the player is walked through and the closed leaves are swapped for these open ones for `ticks` ticks (OSRS also puts an inviswall in the doorway meanwhile). Each closed leaf is a wall on side `rotation` of its tile (0 west, 1 north, 2 east, 3 south).",
+  "doors": [
+   {
+    "closed": [
+     {
+      "id": 9398,
+      "tile": [
+       3098,
+       3107
+      ],
+      "rotation": 0
+     }
+    ],
+    "open": [
+     {
+      "id": 1539,
+      "tile": [
+       3097,
+       3107
+      ],
+      "rotation": 1
+     }
+    ],
+    "sound": 62
+   },
+   {
+    "closed": [
+     {
+      "id": 9709,
+      "tile": [
+       3079,
+       3084
+      ],
+      "rotation": 0
+     }
+    ],
+    "open": [
+     {
+      "id": 1539,
+      "tile": [
+       3078,
+       3084
+      ],
+      "rotation": 1
+     }
+    ],
+    "sound": 62
+   },
+   {
+    "closed": [
+     {
+      "id": 9710,
+      "tile": [
+       3072,
+       3090
+      ],
+      "rotation": 2
+     }
+    ],
+    "open": [
+     {
+      "id": 1539,
+      "tile": [
+       3073,
+       3090
+      ],
+      "rotation": 3
+     }
+    ],
+    "sound": 62
+   },
+   {
+    "closed": [
+     {
+      "id": 9716,
+      "tile": [
+       3086,
+       3126
+      ],
+      "rotation": 3
+     }
+    ],
+    "open": [
+     {
+      "id": 1539,
+      "tile": [
+       3086,
+       3125
+      ],
+      "rotation": 0
+     }
+    ],
+    "sound": 62
+   },
+   {
+    "closed": [
+     {
+      "id": 9721,
+      "tile": [
+       3125,
+       3124
+      ],
+      "rotation": 0
+     }
+    ],
+    "open": [
+     {
+      "id": 1539,
+      "tile": [
+       3124,
+       3124
+      ],
+      "rotation": 1
+     }
+    ],
+    "sound": 62
+   },
+   {
+    "closed": [
+     {
+      "id": 9722,
+      "tile": [
+       3130,
+       3124
+      ],
+      "rotation": 0
+     }
+    ],
+    "open": [
+     {
+      "id": 1539,
+      "tile": [
+       3129,
+       3124
+      ],
+      "rotation": 1
+     }
+    ],
+    "sound": 62
+   },
+   {
+    "closed": [
+     {
+      "id": 9723,
+      "tile": [
+       3122,
+       3102
+      ],
+      "rotation": 1
+     }
+    ],
+    "open": [
+     {
+      "id": 1539,
+      "tile": [
+       3122,
+       3103
+      ],
+      "rotation": 2
+     }
+    ],
+    "sound": 62
+   },
+   {
+    "closed": [
+     {
+      "id": 9470,
+      "tile": [
+       3089,
+       3092
+      ],
+      "rotation": 2
+     },
+     {
+      "id": 9708,
+      "tile": [
+       3089,
+       3091
+      ],
+      "rotation": 2
+     }
+    ],
+    "open": [
+     {
+      "id": 1566,
+      "tile": [
+       3090,
+       3092
+      ],
+      "rotation": 1
+     },
+     {
+      "id": 1565,
+      "tile": [
+       3091,
+       3092
+      ],
+      "rotation": 1
+     }
+    ],
+    "sound": 67
+   },
+   {
+    "closed": [
+     {
+      "id": 9718,
+      "tile": [
+       3094,
+       9502
+      ],
+      "rotation": 2
+     },
+     {
+      "id": 9717,
+      "tile": [
+       3094,
+       9503
+      ],
+      "rotation": 2
+     }
+    ],
+    "open": [
+     {
+      "id": 1573,
+      "tile": [
+       3095,
+       9502
+      ],
+      "rotation": 3
+     },
+     {
+      "id": 1573,
+      "tile": [
+       3095,
+       9503
+      ],
+      "rotation": 1
+     }
+    ],
+    "sound": 71
+   },
+   {
+    "closed": [
+     {
+      "id": 9719,
+      "tile": [
+       3111,
+       9518
+      ],
+      "rotation": 0
+     },
+     {
+      "id": 9720,
+      "tile": [
+       3111,
+       9519
+      ],
+      "rotation": 0
+     }
+    ],
+    "open": [
+     {
+      "id": 1573,
+      "tile": [
+       3110,
+       9518
+      ],
+      "rotation": 3
+     },
+     {
+      "id": 1574,
+      "tile": [
+       3110,
+       9519
+      ],
+      "rotation": 1
+     }
+    ],
+    "sound": 71
+   }
+  ],
+  "ticks": 2
+ }
+}

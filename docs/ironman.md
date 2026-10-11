@@ -4,11 +4,19 @@ Ironman, Ultimate Ironman and Hardcore Ironman as **account types**: per player,
 - **Plugin:** `server/plugins/modes/Ironman.plugin.js`, with one unit per area in `server/plugins/modes/ironman/`.
 - **Data:** `server/plugins/modes/data/ironman.json`.
 
-Group Ironman and the Ironman tutor come later.
+Group Ironman comes later.
 
 ## Setting a mode
 
-Admin command (administrator and up):
+**In game**, as captured on Tutorial Island (`server/plugins/modes/ironman/Setup.Ironman.js`):
+- **The Ironman tutor (Paul)** on Tutorial Island: "I'd like to change my Ironman mode." opens the setup interface (`ironman_setup` 890, after varps 263=0, 264=1, 266=1). The mode buttons are None 21, IM 22, UIM 23, HCIM 24 and the group modes 25-27, in the order its script 519 lays them out (modes 0-6). The group modes say they aren't available yet. None asks "Would you like to stop being a <mode>?" instead (ours).
+- **Confirming:** a mode button opens the confirmation (`popupoverlay` 289 in `890:29`, script 4212). The answer comes back as the count dialog: 1 Proceed, 0 Cancel. Proceed sets the mode and `ironman_downgradepermitted` (1776) = 1, then shows "Your Ironman mode has been updated."
+- **The bank PIN:** OSRS also asks for a new bank PIN at this point ("…and your new PIN is now in effect."). This server has no bank PIN, so the confirmation leaves it out. The captured popup text is kept in `ironman.json`.
+- **Already chosen:** "Your mode is already Hardcore Ironman." (captured). Group Ironman answers "Group Ironman isn't available yet." *(ours)*.
+- **Adam in Lumbridge** (311): his transcript's setup only allows downgrades, as the tutor explains (Hardcore or Ultimate to Ironman, Ironman to none). His "Armour" option hands out the mode's helm, platebody and platelegs: "There you go. Wear it with pride." (captured), or "You're not an Ironman. This armour is only for them." (captured).
+- **Other plugins** ask a player's mode with the custom event `ironman:mode` `{ player }`, which fills in `mode` and `label`. They open the setup with `ironman:open-setup` `{ player, upgrades }`.
+
+**Admin command** (administrator and up):
 
 ```
 ::ironman                                          show your mode
@@ -68,7 +76,7 @@ Generic additions for these rules:
 ## Not done yet
 
 - **Group Ironman** (and Hardcore and Unranked Group Ironman).
-- **The Ironman tutor:** choosing a mode on Tutorial Island, and downgrading in Lumbridge.
+- **A bank PIN** when choosing a mode, as OSRS asks for one.
 - **Bonds:** Ironmen may trade bonds and buy them through their own Grand Exchange interface.
 - **Other limits:**
   - entering other players' houses;
@@ -76,4 +84,3 @@ Generic additions for these rules:
   - the group-boss loot exceptions (raids, Wintertodt, Nex…);
   - the Falador Party Room's balloons;
   - the many Ultimate storage limits (seed vault, looting bag on PvP worlds, the POH costume room…).
-- **Ironman armour:** the tutor's line "You're not an Ironman. This armour is only for them." is captured.

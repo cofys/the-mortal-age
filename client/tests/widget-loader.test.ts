@@ -20,7 +20,7 @@ assert.equal(model.modelId, -1);
 
 // Exercise the plugin's actual flag packets against the current cache decoder:
 // using op2 flags on these op1 widgets used to leave only Cancel in the menu.
-const Events = require("../../server/plugins/npcs/random-events/RandomEvents");
+const Events = require("../../server/plugins/npcs/random-events/Common.RandomEvents");
 const { Location } = require("../../server/dist/game/model/Location");
 const manager = new WidgetManager(cache, new WidgetLoader(cache));
 const location = new Location(3222, 3222, 0);

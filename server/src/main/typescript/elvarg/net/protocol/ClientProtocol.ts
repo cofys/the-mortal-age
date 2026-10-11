@@ -1506,16 +1506,19 @@ export function encodeDestination(x: number, y: number): Buffer {
 }
 
 /**
- * Hint arrow (type: 0 clear, 1 npc/a=npcIndex, 2 tile/a=x,b=y,c=height in
- * tiles, 3 player/a=playerIndex). Mirrors the OSRS 6-byte hint-arrow shape so
- * the client can render the native `headicons_hint` sprite above the target.
+ * Hint arrow (type: 0 clear, 1 npc/a=npcIndex, 2 tile, 3 player/a=playerIndex), so the client
+ * can render the native `headicons_hint` sprite above the target. A tile hint is OSRS's: a=x,
+ * b=y, c=height (OSRS's byte: the arrow sits c * 2 world units above the ground, 128 to a tile),
+ * and d packs OSRS's position type (2 centre, 3 west, 4 east, 5 south, 6 north edge of the tile)
+ * in bits 2-4 with the target's floor in bits 0-1, so a client on another floor does not draw it.
  */
-export function encodeHintArrow(type: number, a: number, b: number, c: number): Buffer {
-  const payload = Buffer.alloc(6);
+export function encodeHintArrow(type: number, a: number, b: number, c: number, d = 0): Buffer {
+  const payload = Buffer.alloc(7);
   payload[0] = type & 0xff;
   payload.writeUInt16BE(a & 0xffff, 1);
   payload.writeUInt16BE(b & 0xffff, 3);
   payload[5] = c & 0xff;
+  payload[6] = d & 0xff;
   return encodeServerPacket(ServerPacketId.HINT_ARROW, payload);
 }
 
@@ -1881,6 +1884,7 @@ export function encodeGameframeFlags(root: number = 161): Buffer[] {
 
 // Transient player attribute set from the handshake's clientType byte.
 export const MOBILE_CLIENT_ATTRIBUTE = "mobile-client";
+export const XPDROPS_ENABLED_ATTRIBUTE = "xp-drops:enabled";
 // Mobile clients boot the Stock mobile toplevel (toplevel_osm); the client maps
 // the standard 161 mounts onto it via cache enum 1745.
 export const MOBILE_GAMEFRAME_ROOT = 601;
@@ -1900,9 +1904,9 @@ export function resolveGameframeRoot(
   return STANDARD_GAMEFRAME_ROOTS.has(saved) ? saved : fallback;
 }
 
-export function encodeGameframeBootstrap(playerName: string, root: number = 161): Buffer[] {
+export function encodeGameframeBootstrap(playerName: string, root: number = 161, xpDropsEnabled = false): Buffer[] {
   const mounts = [
-    [96, 162], [9, 163], [33, 160], [7, 122], [6, 651, 5929],
+    [96, 162], [9, 163], [33, 160], ...(xpDropsEnabled ? [[7, 122]] : []), [6, 651, 5929],
     [76, 593], [77, 320], [78, 629], [79, MAIN_INVENTORY_GROUP_ID], [80, 387], [81, 541],
     [82, 218], [83, 7], [84, 109], [85, 429], [86, 182], [87, 116],
     [88, 216], [89, 239],

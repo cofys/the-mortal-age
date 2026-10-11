@@ -8,7 +8,7 @@ import {
     VertexBuffer,
 } from "picogl";
 
-import { hintArrow, isHintArrowBlinkOn } from "../../game/HintArrow";
+import { hintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../game/HintArrow";
 import { IndexType } from "../../rs/cache/IndexType";
 import type { CacheSystem } from "../../rs/cache/CacheSystem";
 import { IndexedSprite } from "../../rs/sprite/IndexedSprite";
@@ -143,10 +143,12 @@ export class TutorialHintOverlay implements Overlay {
             // Tile hints carry their own floor: another floor's target is not drawn here.
             const localPlane = args?.state.playerLevel ?? 0;
             if ((hintArrow.plane | 0) !== localPlane) return;
-            worldX = hintArrow.x + 0.5;
-            worldY = hintArrow.y + 0.5;
+            // As the OSRS client: the tile's centre or edge, `height * 2` world units up.
+            const [subX, subY] = hintArrowTileOffset(hintArrow.position);
+            worldX = hintArrow.x + subX / 128;
+            worldY = hintArrow.y + subY / 128;
             plane = localPlane;
-            heightOffsetTiles = 0.7 + (hintArrow.height | 0);
+            heightOffsetTiles = ((hintArrow.height | 0) * 2) / 128;
         }
 
         // Scene Y points down, so "up" is ground minus the offset.

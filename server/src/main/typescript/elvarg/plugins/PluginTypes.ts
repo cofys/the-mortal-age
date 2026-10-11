@@ -790,6 +790,15 @@ export interface PluginApi {
     npcName: string,
     actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
   ): void;
+  /**
+   * Exact, case-sensitive option matching for a group of NPC names sharing one handler,
+   * e.g. `onNpcsInteraction(["Niles", "Miles", "Giles"], { "Talk-to": talk })`.
+   * Return false to fall through.
+   */
+  onNpcsInteraction(
+    npcNames: string[],
+    actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
+  ): void;
   /** Exact, case-sensitive option matching for any NPC name. Return false to fall through. */
   onAnyNpcInteraction(
     actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
@@ -1168,6 +1177,7 @@ export interface PluginCoreApi {
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
+  CombatEquipment: any;
   CanAttackResponse: any;
   CombatType: any;
   SkullType: any;
@@ -1238,7 +1248,9 @@ export interface PluginCoreApi {
   ItemOnGround: any;
   GroundItemState: any;
   ItemDefinition: any;
+  EquipPacketListener: any;
   CacheDefinitions: any;
+  Wilderness: any;
   PathFinder: any;
   RsmodRouteFinding: any;
   NpcDefinition: any;
@@ -1260,6 +1272,7 @@ export interface PluginCoreApi {
   OptionDialogue: any;
   StatementDialogue: any;
   ItemStatementDialogue: any;
+  DoubleItemStatementDialogue: any;
   ActionDialogue: any;
   EndDialogue: any;
   CreationMenu: any;
@@ -1267,6 +1280,7 @@ export interface PluginCoreApi {
   Server: any;
   PluginManager: any;
   ShopManager: any;
+  ShopDefinition: any;
   MultiChatboxPrompt: any;
   dispatchClientMessages: (player: any, messages: any[]) => boolean;
   connectHeadlessClient: (username: string, password: string) => Promise<{ player?: any; error?: string }>;

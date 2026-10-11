@@ -26,7 +26,10 @@ against live OSRS, never against another private server.
 10. **Behaviour comes from the OSRS Wiki**; the cache wins on ids. Never cite another RSPS as
     justification - if RSPS code is your only source, say so in the PR.
 11. **No new smoke scripts.** Extend an existing one, or say in the PR how you verified.
-12. **Follow the pattern already in the module you touch.** Ask before deviating.
+12. **Follow the pattern already in the module you touch.** When a large plugin splits into
+    unit files, every file ends with the plugin's name (`Gravedigger.RandomEvents.js` under
+    `plugins/npcs/random-events/`, `AbyssalWhip.SpecialAttack.js` under
+    `plugins/combat/specials/`). Ask before deviating.
 13. **No one-offs.** No single-item special cases, override layers or abstractions for one
     value. Edit the canonical data (`data/definitions/items.json`, `shops.json`) instead.
 14. **Attribute keys** are kebab-case and namespaced (`warriors-guild:basement-unlocked`),

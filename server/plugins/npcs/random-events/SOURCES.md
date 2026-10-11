@@ -151,5 +151,77 @@ The scheduler now selects among eight events on members worlds and six on F2P.
 Tests cover growth boundaries, owner checks, exactly-once gifts/fruit, full
 inventory ground visibility/lifetime, dismissal and lifecycle cleanup, F2P
 exclusion, and actual fruit consumption with cooldown, slot and effect checks.
-Live-client appearance remains unverified. Quiz Master and his mystery-box loot
-table, Maze and Mime remain separate future content batches.
+Live-client appearance remains unverified.
+
+## The remaining events
+
+The second batch implements all of the wiki's remaining random events: Beekeeper,
+Capt' Arnav's Chest, Count Check, Drill Demon, Evil Bob (island), Prison Pete,
+Evil twin, Freaky Forester, Gravedigger, Kiss the frog, Maze, Mime, Pillory,
+Pinball, Quiz Master and Surprise Exam. Behaviour comes from the current OSRS
+Wiki pages and transcripts (old-school.runescape.wiki `Random events` and each
+event page), read directly; where a transcript sentence is reproduced, the wiki
+is the source. No new upstream code was copied, so LICENSES.txt is unchanged.
+
+Event control flow reuses the first batch's owner/follower/expiry lifecycle. An
+accepting dialogue starts a **session** (`Teleports.RandomEvents.js`): the return tile is
+remembered, the player is moved to the event area, the invitation NPC is removed
+without a reward, and a `RandomEventArea` per destination ends the session when
+the player leaves by any route (teleport, death, command). Teleports inside a
+session are refused; logging out moves the player back before the save and a
+crash-relog inside an area falls back to Lumbridge. Event areas, scenery and the
+static NPCs (Mime, Sergeant Damien, the forester and pheasants, Evil Bob, the
+servant, Prison Pete, the graves, maze and pinball props, the beehive field, the
+quiz room, the exam classroom and the pillory cages) already ship in the world
+and cache data; each module spawns only its dynamic pieces (signs are the map's
+own posts, swapped between the four exercise ids; balloons, Leo, Molly, Flippa,
+the beekeeper and the event NPCs are owner-scoped).
+
+Where the cache ships the real interface and its components transmit, that
+interface is used: Capt' Arnav's combination lock (26, varbit-free model swaps
+and arrow/confirm ops), the Beekeeper hive (420, part slots drawn with the
+example's raw models and the Confirm button), the Mime emote buttons (188,
+enabled with flags because the cache's onLoad builds their ops), the Pillory
+lock (27, key models, the three key buttons and the lock/flash components), the
+Surprise Exam pattern (103) and cards (559) interfaces, the Prison Pete lever
+panel (273), and the Evil twin claw controls (277). The Maze's reward HUD is
+varp 531, as the cache's script 956 reads. Quiz Master's cache interface (191)
+has no item components, so the three items of "Odd One Out" are shown on a
+server-defined interface (`registerCustomInterface`, group 30012) whose model
+components are set with the macro quiz items 6189-6198; clicks are ordinary
+widget ops.
+
+Rewards follow each wiki page: outfit pieces are granted in the page's order and
+skipped when `Teleports.owns` finds them in inventory, equipment or bank; once
+the set is complete the event pays the fallback (flax/coins for the beekeeper,
+lamps elsewhere). Coins use the genuine item, the Prison Pete/maze/pillory gem
+and rune rewards use the noted cert ids so they stack. Lamps and the Book of
+Knowledge share the existing xpreward interface (10 x and 15 x level). Mystery
+boxes roll 1/256 stale baguette, then the F2P or members prize table; the
+members clue-scroll and rare-drop slots are represented by their common
+outcomes. Deliberate deviations, all noted here: Count Check passes because this
+server has no bank PIN feature and every account is effectively a Jagex account;
+Drill Demon's post-outfit exercise emotes are not modelled (the lamp is paid);
+Beekeeper placement is driven from the chatbox options while interface 420
+mirrors the parts, because the client cannot transmit the cache's drag; Mime
+counts four correct copies without resetting on a mistake, as the wiki does not
+describe a reset; the Evil twin claw position is reported in chat rather than by
+a moving claw model; the King's return from Frogland uses a spawned royal.
+
+`::randevt [id]` now lists all 24 events on members worlds and 22 on F2P (Dr
+Jekyll and the Strange Plant are members-only). The zero-based order is: 0 Genie, 1 Sandwich Lady,
+2 Drunken Dwarf, 3 Rick Turpentine, 4 Certers, 5 Mysterious Old Man, 6 Dr
+Jekyll, 7 Count Check, 8 Kiss the frog, 9 Capt' Arnav, 10 Beekeeper, 11 Quiz
+Master, 12 Drill Demon, 13 Freaky Forester, 14 Gravedigger, 15 Pinball, 16 Evil
+Bob, 17 Prison Pete, 18 Evil twin, 19 Maze, 20 Mime, 21 Pillory, 22 Surprise
+Exam, 23 Strange Plant. F2P omits Jekyll, so its indices shift down by one after
+index 5. The command still bypasses the cooldown and the enabled flag but not
+combat, interface, instance or tutorial eligibility.
+
+Verify after build: `node --test tests/random-events.test.cjs`. The 45 tests
+cover every new event's registration, dialogues, interfaces, mechanisms, reward
+progression, owner checks, wrong-answer paths, expiry and cleanup, plus the
+Mystery box and Book of Knowledge reward paths. From `client/`, `yarn tsx
+tests/widget-loader.test.ts` still checks the first batch's selectors against
+the current cache. Live-client appearance of the new interfaces remains to be
+checked visually.

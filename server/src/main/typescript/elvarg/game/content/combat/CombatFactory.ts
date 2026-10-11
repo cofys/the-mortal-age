@@ -1027,7 +1027,6 @@ export class CombatFactory {
             if (!alreadyPoisoned) {
                 player.sendMessage("You have been poisoned!");
             }
-            player.getPacketSender().sendPoisonType(poisonOrbType);
         }
 
         entity.setVenomed(isVenom);
@@ -1270,7 +1269,8 @@ export class CombatFactory {
         }
     }
 
-    static freeze(character: Mobile, seconds: number) {
+    /** `message` is what a frozen player is told (some bosses send their own, coloured). */
+    static freeze(character: Mobile, seconds: number, message: string = "You have been frozen!") {
         if (character.getTimers().has(TimerKey.FREEZE) || character.getTimers().has(TimerKey.FREEZE_IMMUNITY)) {
             return;
         }
@@ -1285,7 +1285,7 @@ export class CombatFactory {
         character.getMovementQueue().reset();
 
         if (character.isPlayer()) {
-            character.getAsPlayer().sendMessage("You have been frozen!");
+            character.getAsPlayer().sendMessage(message);
             character.getAsPlayer().getPacketSender().sendEffectTimer(seconds, EffectTimer.FREEZE);
         }
     }

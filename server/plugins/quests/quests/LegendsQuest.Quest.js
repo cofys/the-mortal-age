@@ -1042,7 +1042,11 @@ module.exports = function registerLegendsQuest(api) {
       if (stage >= STAGE_STARTED) return "starting-off-talking-to-radimus-again";
       return "starting-off-talking-to-radimus-erkle";
     }
-    if (FORESTER_IDS.has(npcId)) return "mapping-the-jungle-talking-to-a-jungle-forester";
+    if (FORESTER_IDS.has(npcId)) {
+      return stage >= STAGE_STARTED && stage < STAGE_COMPLETE
+        ? "mapping-the-jungle-talking-to-a-jungle-forester"
+        : null;
+    }
     if (npcId === GUJUO_ID) {
       if (stage >= STAGE_GOT_GILDED) return "finishing-up-talking-to-gujuo-again";
       if (stage >= STAGE_REPLACED_TOTEM) return "finishing-up";
