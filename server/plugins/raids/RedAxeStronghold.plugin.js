@@ -679,6 +679,12 @@ function applyKillPolitics(participants) {
           continue;
         }
         grantInfluence(p, "keldagrim", "red-axe-stronghold:warlord");
+        try {
+          // Quest hook: The Red Axe's Answer watches for this.
+          api.emitCustomEvent("red-axe:warlord-slain", { player: p });
+        } catch {
+          // best-effort
+        }
         giveLoot(p, warlordLoot());
         markLooted(p);
         p.sendMessage("[Raids] The Warlord's hoard is yours: chaos runes, adamantite, gold — and the Consortium will remember this. (+Keldagrim influence)");
