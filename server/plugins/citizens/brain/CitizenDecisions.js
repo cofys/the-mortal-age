@@ -106,6 +106,7 @@ const ACT_RC = "citizen_rc";
 const ACT_AGILITY = "citizen_agility";
 const ACT_SLAYER = "citizen_slayer";
 const ACT_PKER = "citizen_pker";
+const ACT_COMBAT_TRAIN = "citizen_combat_train";
 const ACT_HUNT = "citizen_hunt";
 const ACT_FARM = "citizen_farm";
 const ACT_THIEVE = "citizen_thieve";
@@ -184,6 +185,7 @@ const WORK_ACTIVITIES = new Set([
   ACT_AGILITY,
   ACT_SLAYER,
   ACT_PKER,
+  ACT_COMBAT_TRAIN,
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,
@@ -471,6 +473,17 @@ function constructLevel(player) {
     // fall through
   }
   return 1;
+}
+
+/** The citizen's combat level (3 when unreadable — fresh off Tutorial Island). */
+function combatLevel(player) {
+  try {
+    const lvl = player?.getSkillManager?.()?.getCombatLevel?.();
+    if (Number.isFinite(lvl) && lvl >= 3) return Math.floor(lvl);
+  } catch {
+    // fall through
+  }
+  return 3;
 }
 
 /**
@@ -2048,6 +2061,11 @@ function trainInfo(player) {
   }
 }
 
+/** Tournament info for ACT_COMPETE scoring (neutral default: no open brackets). */
+function competeInfo(player) {
+  return { openCount: 0, entered: false, canAfford: false, bestRating: 0 };
+}
+
 function cookoffInfo(player) {
   try {
     const CookOffs = require("../lib/CitizenCookOffs");
@@ -2592,6 +2610,8 @@ function snapshot(player) {
     mood: (needs ? needs.mood : 80) + petMoodBonus(player),
     goal,
     personality,
+    role: (() => { try { return player?.getAttribute?.(ATTR_CITIZEN_ROLE) ?? null; } catch { return null; } })(),
+    combatLevel: combatLevel(player),
     coins: coinCount(player),
     food: foodCount(player),
     freeSlots: freeSlots(player),
@@ -2686,7 +2706,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, role } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2937,6 +2957,30 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (goalType === GOAL_RANK_UP) s += 6;
       else if (goalType === GOAL_SAVE_GOLD) s += 6; // loot
       if ((food ?? 0) < 3) return 4; // no supplies — action would refuse
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s;
+    }
+    case ACT_COMBAT_TRAIN: {
+      // Combat training: grind monsters for Attack/Strength/Defence XP the
+      // way players do — walk to a spot, fight, level up. Brave and
+      // industrious citizens train; guards keep their edge as a matter of
+      // duty. Low-level citizens train hardest (nobody stays level 3
+      // forever); veterans taper off. The hurt, exhausted, and weary stay
+      // home — training while weak is how you die. The action provisions
+      // its own gear and food and picks level-appropriate monsters, so
+      // scoring only shapes who goes, not whether they survive it.
+      const traits = traitSet(personality);
+      let s = 30 + industrious * 10;
+      if (traits.has("brave") || traits.has("aggressive")) s += 14;
+      if (role === "guard") s += 12; // the watch stays sharp
+      if (goalType === GOAL_BOSS_SLAYER) s += 16; // combat goal
+      else if (goalType === GOAL_RANK_UP) s += 8;
+      const lvl = Number.isFinite(combatLevel) ? combatLevel : 3;
+      if (lvl <= 10) s += 12; // level 3s train hardest
+      else if (lvl >= 40) s -= 12; // veterans maintain, not grind
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
@@ -4191,7 +4235,7 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
         (sick > 0 && WORK_ACTIVITIES.has(a.id) ? sick : 0) -
         (jailed > 0 && WORK_ACTIVITIES.has(a.id) ? jailed : 0) -
         (drunkPenalty > 0 && WORK_ACTIVITIES.has(a.id) ? drunkPenalty : 0) +
-        (night?.nightPenalty < 0 && WORK_ACTIVITIES.has(a.id) ? night.nightPenalty : 0),
+        (snap.night?.nightPenalty < 0 && WORK_ACTIVITIES.has(a.id) ? snap.night.nightPenalty : 0),
     }))
     .sort((x, y) => y.score - x.score);
   if (scored.length === 0) {
@@ -4450,6 +4494,7 @@ module.exports = {
   ACT_AGILITY,
   ACT_SLAYER,
   ACT_PKER,
+  ACT_COMBAT_TRAIN,
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,
