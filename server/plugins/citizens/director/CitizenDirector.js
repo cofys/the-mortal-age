@@ -54,6 +54,7 @@ const CitizenFavors = require("../lib/CitizenFavors");
 const ActivityParties = require("../lib/CitizenActivityParties");
 const BossRuns = require("../lib/CitizenBossRuns");
 const CitizenWarfare = require("../lib/CitizenWarfare");
+const CitizenJobs = require("../lib/CitizenJobs");
 const Militia = require("../../kingdoms/Militia.Kingdoms");
 const Battles = require("../../kingdoms/Battles.Kingdoms");
 const CitizenCampaigns = require("../lib/CitizenCampaigns");
@@ -2365,6 +2366,15 @@ class CitizenDirector {
       name: 'battles failed',
       run: () => {
         Battles.tickBattles(this, this.api);
+      },
+    },
+    // Kingdom job board: broke citizens take real work — supply runs
+    // through the quartermaster, soldiering through the militia.
+    // Data tier, zero LLM.
+    {
+      name: 'citizen jobs failed',
+      run: () => {
+        CitizenJobs.tickCitizenJobs(this, nowMs);
       },
     },
     // Expeditionary warfare: citizen armies rally, march to the border,

@@ -218,6 +218,23 @@ function reportOffense(username, kind, opts = {}) {
   const r = recordOf(username);
   r.lastCrimeAt = now;
   markDirty();
+  // The kingdom court posts a real bounty for reported theft/assault
+  // (Jobs/Bounties phase 3) — treasury-escrowed, collectable by contract
+  // hunters. Lazy + fail-safe: citizens must not hard-depend on kingdoms.
+  try {
+    const kindLower = kind.toLowerCase();
+    if ((kindLower === "theft" || kindLower === "assault" || kindLower === "attack") && opts.kingdomId) {
+      const KingdomStore = require("../../kingdoms/KingdomStore");
+      require("../../kingdoms/Bounties.Kingdoms").markWanted(
+        username,
+        opts.kingdomId,
+        kindLower === "attack" ? "assault" : kindLower,
+        KingdomStore
+      );
+    }
+  } catch {
+    // Bounty board unavailable — the crime record above still stands.
+  }
   // The watch's wanted list drives guard arrests. Map to its crime kinds.
   try {
     const Guards = require("./CitizenGuards");

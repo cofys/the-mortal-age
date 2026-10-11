@@ -352,6 +352,23 @@ function tickSiege(defenderKingdomId, store) {
     } catch (error) {
       console.warn("[siege] war-resolution hook failed", error?.message ?? error);
     }
+    // Job board: soldiers at the siege settle their contracts. Siege has
+    // no world handle in this tick, so presence is proven for enlisted
+    // militia citizens; players resolve via battle hooks / their claims
+    // stay open for the next field event.
+    try {
+      const Jobs = require("./Jobs.Kingdoms");
+      Jobs.onWarEventResolved({
+        kind: "siege",
+        attackerId: siege.attackerKingdomId,
+        defenderId: siege.defenderKingdomId,
+        site: Jobs.CAPITAL_TILES[siege.defenderKingdomId] ?? null,
+        store,
+        worldLookup: null,
+      });
+    } catch (error) {
+      console.warn("[siege] jobs hook failed", error?.message ?? error);
+    }
   }
 
   store.save();

@@ -984,7 +984,7 @@ function deliverSupplies(player, kingdomId, itemId, qty) {
   const remaining = order.units - units;
   if (remaining <= 0) {
     clearSupplyOrder(kingdomId);
-    emit("kingdom:supply-delivered", { kingdomId, player, itemId, qty: count, units, payout, filled: true });
+    emit("kingdom:supply-delivered", { kingdomId, player, itemId, qty: count, units, payout, filled: true, donor: usernameOf(player) });
     Store.save();
     return {
       ok: true,
@@ -996,7 +996,7 @@ function deliverSupplies(player, kingdomId, itemId, qty) {
   }
   Store.setFlag(kingdomId, SUPPLY_ORDER_FLAG, { ...order, units: remaining });
   Store.save();
-  emit("kingdom:supply-delivered", { kingdomId, player, itemId, qty: count, units, payout, filled: false });
+  emit("kingdom:supply-delivered", { kingdomId, player, itemId, qty: count, units, payout, filled: false, donor: usernameOf(player) });
   return {
     ok: true,
     message:
@@ -1055,6 +1055,8 @@ function deliverToWarDemand(player, kingdomId, itemId, spec, qty, route) {
   Store.save();
   emit("kingdom:supply-delivered", {
     kingdomId, player, itemId, qty: count, units: credited, payout, filled: false, war: true,
+    // Job-board attribution (Jobs.Kingdoms): who delivered, against which war.
+    warKey: route.warKey, donor: usernameOf(player),
   });
   const catLabel = WarSupply.CATEGORY_LABELS[spec.cat ?? "food"] ?? "supplies";
   const status = WarSupply.supplyStatus(kingdomId, Store).find((d) => d.warKey === route.warKey);

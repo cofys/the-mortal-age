@@ -170,6 +170,7 @@ function hatredTier(effective) {
 function addInfluence(player, kingdomId, amount, reason) {
   if (!player?.setAttribute || !kingdomId) return 0;
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount === 0) return 0;
+  const prevEffective = effectiveInfluence(player, kingdomId);
   const now = Date.now();
   const records = { ...recordsOf(player) };
   const rec = records[kingdomId] ?? blankRecord(now);
@@ -185,6 +186,26 @@ function addInfluence(player, kingdomId, amount, reason) {
   }
   records[kingdomId] = rec;
   player.setAttribute(INFLUENCE_ATTRIBUTE, records);
+  // Enemy of the realm (Jon 2026-10-11): crossing INTO the Enemy tier
+  // (effective standing <= HATRED_ENEMY_AT) makes the court post a
+  // bounty — only on the crossing, so repeat offenses escalate through
+  // later crimes in Bounties.markWanted instead of spamming postings.
+  try {
+    const newEffective = effectiveInfluence(player, kingdomId);
+    if (prevEffective > HATRED_ENEMY_AT && newEffective <= HATRED_ENEMY_AT) {
+      const username = player.getUsername?.();
+      if (username) {
+        require("./Bounties.Kingdoms").markWanted(
+          username,
+          kingdomId,
+          "enemy-of-the-realm",
+          require("./KingdomStore")
+        );
+      }
+    }
+  } catch {
+    // The bounty board must never break an influence change.
+  }
   return rec.points;
 }
 

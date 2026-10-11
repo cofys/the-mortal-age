@@ -1,0 +1,171 @@
+/* The Mortal Age — Job Board overlay.
+ * Same heraldic template as My Kingdom: tall panel, ornate gold frame,
+ * corner brackets, inset rows. One scroll, grouped by kind of work. */
+
+.tma-jobs-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(11, 8, 5, 0.72), rgba(11, 8, 5, 0.9));
+    animation: tma-jobs-fadein 0.35s ease-out;
+}
+
+@keyframes tma-jobs-fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tma-jobs-panel {
+    position: relative;
+    width: min(520px, 94vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+    border: 1px solid #6b5a3a;
+    outline: 3px solid #14100b;
+    box-shadow: 0 0 0 4px #6b5a3a;
+    padding: 28px 24px 18px;
+    color: #d8c9a3;
+    animation: tma-jobs-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes tma-jobs-rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.tma-jobs-panel::before,
+.tma-jobs-panel::after {
+    content: "";
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid #c9a227;
+    pointer-events: none;
+}
+.tma-jobs-panel::before {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+}
+.tma-jobs-panel::after {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+}
+
+.tma-jobs-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #c9a227;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.tma-jobs-title {
+    margin: 0 0 4px;
+    text-align: center;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    color: #e8d48b;
+    text-transform: uppercase;
+}
+
+.tma-jobs-sub {
+    margin: 0 0 12px;
+    text-align: center;
+    font-size: 12px;
+    color: #a08c5f;
+}
+
+.tma-jobs-notice {
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    border: 1px solid #6b5a3a;
+    background: rgba(201, 162, 39, 0.08);
+    font-size: 13px;
+    text-align: center;
+}
+
+.tma-jobs-section h3 {
+    margin: 14px 0 6px;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #c9a227;
+    border-bottom: 1px solid #3a2f1d;
+    padding-bottom: 4px;
+}
+
+.tma-jobs-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid #3a2f1d;
+}
+
+.tma-jobs-row-wanted {
+    border-color: #7a2e2e;
+}
+
+.tma-jobs-row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.tma-jobs-row-title {
+    font-size: 14px;
+    color: #e8d48b;
+}
+
+.tma-jobs-row-detail {
+    font-size: 12px;
+    color: #a08c5f;
+}
+
+.tma-jobs-row-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.tma-jobs-reward {
+    font-size: 12px;
+    color: #d8c9a3;
+    white-space: nowrap;
+}
+
+.tma-jobs-row-actions button {
+    background: linear-gradient(180deg, #3a2f1d, #2a2115);
+    border: 1px solid #6b5a3a;
+    color: #e8d48b;
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+
+.tma-jobs-row-actions button:hover {
+    border-color: #c9a227;
+}
+
+.tma-jobs-empty {
+    text-align: center;
+    font-size: 13px;
+    color: #a08c5f;
+    padding: 12px 0;
+}

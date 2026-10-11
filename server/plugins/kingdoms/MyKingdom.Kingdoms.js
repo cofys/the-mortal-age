@@ -29,6 +29,17 @@ function openPanel(player) {
   }
 }
 
+/** Open the job board (JobsApi's flag) — the crier posts the realm's work. */
+function openJobsPanel(player) {
+  if (!player || player.isPlayerBot?.() === true) return;
+  try {
+    const { JOBS_OPEN_ATTRIBUTE } = require("./JobsApi");
+    player.setAttribute(JOBS_OPEN_ATTRIBUTE, "1");
+  } catch (error) {
+    console.warn("[my-kingdom] jobs open failed", error?.message ?? error);
+  }
+}
+
 /** Talk-to the Town crier: realm panel or his usual news. */
 function talkToCrier(event) {
   const player = event?.player;
@@ -39,6 +50,8 @@ function talkToCrier(event) {
       "The Town crier rings his bell.",
       "Ask about the realm.",
       () => openPanel(player),
+      "Look for work.",
+      () => openJobsPanel(player),
       "Hear his news.",
       () => {
         try {

@@ -335,6 +335,25 @@ function resolveBattle(battle, winnerId, outcome, store, api) {
         `${kingdomName(state, battle.warDefenderId)} ends drawn — the field keeps its dead and gives no victor.`
     );
   }
+  // Job board: soldiers who stood at this field settle their contracts.
+  try {
+    require("./Jobs.Kingdoms").onWarEventResolved({
+      kind: "battle",
+      attackerId: battle.warAttackerId,
+      defenderId: battle.warDefenderId,
+      site: battle.site ?? null,
+      store,
+      worldLookup: (name) => {
+        try {
+          return api?.core?.World?.getPlayerByName?.(name) ?? null;
+        } catch {
+          return null;
+        }
+      },
+    });
+  } catch {
+    // Jobs must never break a battle resolution.
+  }
   console.info("[battles] battle resolved", { id: battle.id, winnerId, outcome });
   return battle;
 }

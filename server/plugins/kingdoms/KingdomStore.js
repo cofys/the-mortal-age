@@ -25,7 +25,17 @@ let state = null;
 let persist = true;
 
 function emptyState() {
-  return { version: STORE_VERSION, kingdoms: {}, wars: [], tension: {}, alliances: [] };
+  return {
+    version: STORE_VERSION,
+    kingdoms: {},
+    wars: [],
+    tension: {},
+    alliances: [],
+    // Job board (Jobs.Kingdoms): { list: [jobRecords], caps: { user: { type: { day: n } } } }
+    jobs: { list: [], caps: {} },
+    // Wanted board (Bounties.Kingdoms): [wantedRecords]
+    wanted: [],
+  };
 }
 
 function load() {
@@ -40,6 +50,9 @@ function load() {
       if (!Array.isArray(state.wars)) state.wars = [];
       // Worlds saved before the diplomacy layer have no alliance registry.
       if (!Array.isArray(state.alliances)) state.alliances = [];
+      // Worlds saved before the job board have no jobs / wanted state.
+      if (!state.jobs || typeof state.jobs !== "object") state.jobs = { list: [], caps: {} };
+      if (!Array.isArray(state.wanted)) state.wanted = [];
     }
   } catch {
     // No save yet, or unreadable: the seed data will fill it at startup.

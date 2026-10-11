@@ -73,6 +73,7 @@ module.exports = {
       "succession:heat-at",
       "succession:grey-met",
       "wartable:open",
+      "jobs:open",
     ]) api.persistAttribute(key);
     loadContentModule("./Seed.Kingdoms")(api);
     loadContentModule("./Areas.Kingdoms")(api);
@@ -106,6 +107,9 @@ module.exports = {
     loadContentModule("./Militia.Kingdoms")(api);
     loadContentModule("./MyKingdom.Kingdoms")(api);
     loadContentModule("./MyKingdomApi")(api);
+    loadContentModule("./Bounties.Kingdoms")(api);
+    loadContentModule("./Jobs.Kingdoms")(api);
+    loadContentModule("./JobsApi")(api);
     loadContentModule("./OfficeDashboardApi")(api);
     loadContentModule("./Siege.Kingdoms")(api);
     loadContentModule("./AiWarfare.Kingdoms")(api);
