@@ -170,10 +170,19 @@ function influenceFor(player, kingdomId) {
   }
 }
 
+function clearDeskSessionOnLogout({ player }) {
+  // A desk session cannot survive logout: if the persisted steward:open flag
+  // is still set at login, the client overlay would pop up immediately.
+  try {
+    player?.removeAttribute?.(STEWARD_OPEN_ATTRIBUTE);
+  } catch {}
+}
+
 function attach(api) {
   console.info("[steward-api] registering steward-status endpoint");
   ContentApiAuth.setPluginApi(api);
   api.persistAttribute(STEWARD_OPEN_ATTRIBUTE);
+  api.onPlayerLogout(clearDeskSessionOnLogout);
   api.registerContentEndpoint("steward-status", (query) => {
     try {
       const action = (query.get("action") || "").trim().toLowerCase();

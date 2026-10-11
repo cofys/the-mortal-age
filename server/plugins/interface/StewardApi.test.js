@@ -85,10 +85,12 @@ const StewardApi = require(path.resolve(IFACE, "StewardApi.js"));
 
 // --- mock plugin api + player ---
 let endpointHandler = null;
+let logoutHandler = null;
 const mockApi = {
   core: { World: { getPlayerByName: () => null } },
   persistAttribute: () => {},
   registerContentEndpoint: (name, handler) => { endpointHandler = handler; },
+  onPlayerLogout: (fn) => { logoutHandler = fn; },
 };
 
 function mockPlayer(username, attrs = {}) {
@@ -97,6 +99,7 @@ function mockPlayer(username, attrs = {}) {
     getUsername: () => username,
     getAttribute: (k) => store[k],
     setAttribute: (k, v) => { store[k] = v; },
+    removeAttribute: (k) => { delete store[k]; },
     sendMessage: () => {},
     isPlayerBot: () => false,
     __store: store,
@@ -311,6 +314,26 @@ function withAuth(player, fn) {
   assert.equal(res.opened, false);
   assert.equal(player.__store["steward:open"], undefined, "no attribute written");
   console.log("ok - action=open stays closed when no court can be named");
+}
+
+// --- logout clears the persisted steward:open flag ---
+{
+  assert(logoutHandler, "logout handler registered");
+  const player = mockPlayer("TestUser", { "kingdom:id": "asgarnia", "steward:open": "asgarnia" });
+  logoutHandler({ player });
+  assert.equal(player.__store["steward:open"], undefined, "steward:open removed on logout");
+  mockApi.core.World.getPlayerByName = () => player;
+  const res = endpointHandler(mockQuery({ player: "TestUser" }));
+  assert.equal(res.open, false, "overlay stays closed after re-login");
+  console.log("ok - logout clears steward:open so the desk does not pop up on login");
+}
+
+// --- logout is safe when the flag was never set ---
+{
+  const player = mockPlayer("TestUser", { "kingdom:id": "asgarnia" });
+  logoutHandler({ player }); // must not throw
+  assert.equal(player.__store["steward:open"], undefined);
+  console.log("ok - logout with no desk session does not error");
 }
 
 console.log("All StewardApi tests passed.");
