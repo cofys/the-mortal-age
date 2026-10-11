@@ -3,16 +3,16 @@
 /**
  * HousingBoons — room boons tick.
  *
- * A claimed housing plot plus real engine rooms makes housing USEFUL, not
+ * A town of residence plus real engine rooms makes housing USEFUL, not
  * just cosmetic. Every ~30s, each real player standing in their OWN house
- * (private area owned by them) with a plot claimed gets:
+ * (private area owned by them) with a residence set gets:
  *   - CHAPEL:   +2 prayer points (up to max) — "You feel blessed."
  *   - WORKSHOP: +20 Crafting XP — "You tinker at your workbench."
  *   - KITCHEN:  +20 Cooking XP — "You practice recipes at your stove."
  *
  * All effects go through the real SkillManager. No LLM, no sim: the rooms
  * are read from the real `construction:house` save, ownership from the
- * private area's owner, plot from the real attribute.
+ * private area's owner, residence from the real attribute.
  *
  * Follows the CitizenDirector Task pattern: a server Task submitted to the
  * TaskManager on plugin attach.
@@ -35,7 +35,7 @@ try {
 }
 
 const HOUSE_ATTRIBUTE = "construction:house";
-const HOUSING_PLOT_ATTRIBUTE = "housing:plot";
+const HOUSING_RESIDENCE_ATTRIBUTE = "housing:residence";
 
 // ~30s at 600ms/tick.
 const BOON_TICK_TICKS = 50;
@@ -62,9 +62,9 @@ function inOwnHouse(player) {
   }
 }
 
-function hasPlot(player) {
+function hasResidence(player) {
   try {
-    return !!player.getAttribute?.(HOUSING_PLOT_ATTRIBUTE);
+    return !!player.getAttribute?.(HOUSING_RESIDENCE_ATTRIBUTE);
   } catch {
     return false;
   }
@@ -110,7 +110,7 @@ function tickHousingBoons(api) {
   players.forEach((p) => {
     try {
       if (!isRealPlayer(p)) return;
-      if (!hasPlot(p)) return;
+      if (!hasResidence(p)) return;
       if (!inOwnHouse(p)) return;
       const save = houseSaveOf(p);
       if (!save) return;
@@ -146,7 +146,7 @@ module.exports = { start, tickHousingBoons };
 module.exports._test = {
   isRealPlayer,
   inOwnHouse,
-  hasPlot,
+  hasResidence,
   applyBoons,
   BOON_TICK_TICKS,
   CHAPEL_PRAYER_RESTORE,

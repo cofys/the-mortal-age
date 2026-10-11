@@ -4,34 +4,42 @@
  * HousingApi — HTTP data layer for the web client's "My House" overlay.
  *
  * The engine already runs full player-owned houses (estate agent, rooms,
- * furniture, portals). This layer ties housing to the kingdom system and
- * makes it visible:
+ * furniture, portals). This layer ties housing to a place and makes it
+ * visible:
  *
- *   - Plot claim: a player with a kingdom claims a housing plot in their
- *     kingdom's capital for 25,000 real coins. The plot unlocks room boons
- *     and citizen visitors; the engine house stays the physical building.
+ *   - Residence: every player has one town of residence
+ *     (housing:residence) — one of the 5 capitals or 8 frontier
+ *     settlements. The first town portal used becomes home; moving costs
+ *     MOVE_COST real coins and the house (rooms, furniture, everything)
+ *     moves with them — no rebuilding.
  *   - Door mode: visitors allowed / closed, written to the real house save.
- *   - Payload: plot status, real rooms + furniture value from the house
+ *   - Payload: residence, real rooms + furniture value from the house
  *     save, active room boons.
  *
  *   GET /api/housing-status?player=<username>
- *     -> { open, plot, house, boons, doorMode }
+ *     -> { open, residence, towns, moveCost, house, boons, doorMode }
  *
- *   ...&action=open | close | claim | doormode&mode=0|1|2
+ *   ...&action=open | close | move&town=<townId> | doormode&mode=0|1|2
  *
- * Attribute keys: housing:open, housing:plot, housing:housewarming,
+ * Attribute keys: housing:open, housing:residence, housing:housewarming,
  * housing:last-praised (kebab-case, namespaced per server/AGENTS.md).
+ *
+ * Retired: the 25,000-coin "capital plot" was metadata with no land
+ * behind it (Jon, 2026-10-10). Holders are grandfathered: the first
+ * payload build migrates housing:plot -> housing:residence using the
+ * plot's kingdom as the town, then deletes the plot attribute.
  */
 
-const Store = require("../kingdoms/KingdomStore");
+const { TOWNS, townById, HOUSING_RESIDENCE_ATTRIBUTE } = require("./HousingPortals");
+const { HOUSING_WARMING_ATTRIBUTE } = require("./HousingPortals");
 const { valueHouse, hasRoom } = require("./lib/house-value");
 
 const HOUSING_OPEN_ATTRIBUTE = "housing:open";
-const HOUSING_PLOT_ATTRIBUTE = "housing:plot";
-const HOUSING_WARMING_ATTRIBUTE = "housing:housewarming";
+const HOUSING_PLOT_ATTRIBUTE = "housing:plot"; // retired; read once for migration only
+const HOUSING_PRAISED_ATTRIBUTE = "housing:last-praised";
 const HOUSE_ATTRIBUTE = "construction:house";
 
-const PLOT_COST = 25000;
+const MOVE_COST = 5000;
 const COINS_ID = 995;
 
 function findPlayer(api, name) {
@@ -43,23 +51,6 @@ function findPlayer(api, name) {
   }
 }
 
-function kingdomIdOf(player) {
-  try {
-    return player.getAttribute("kingdom:id") || null;
-  } catch {
-    return null;
-  }
-}
-
-function kingdomName(id) {
-  try {
-    const k = Store.getKingdom(id);
-    return k ? k.name : String(id);
-  } catch {
-    return String(id);
-  }
-}
-
 function houseSaveOf(player) {
   try {
     return player.getAttribute(HOUSE_ATTRIBUTE) || null;
@@ -68,13 +59,44 @@ function houseSaveOf(player) {
   }
 }
 
-function plotOf(player) {
+function residenceOf(player) {
   try {
-    const raw = player.getAttribute(HOUSING_PLOT_ATTRIBUTE);
-    if (!raw) return null;
-    return typeof raw === "string" ? JSON.parse(raw) : raw;
+    const id = player.getAttribute(HOUSING_RESIDENCE_ATTRIBUTE);
+    return townById(typeof id === "string" ? id : null);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Grandfather the retired capital plot: a holder's plot kingdom becomes
+ * their town of residence, then the plot attribute is deleted. Idempotent.
+ */
+function migrateRetiredPlot(player) {
+  let plot = null;
+  try {
+    const raw = player.getAttribute(HOUSING_PLOT_ATTRIBUTE);
+    if (!raw) return;
+    plot = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    plot = null;
+  }
+  try {
+    player.setAttribute(HOUSING_PLOT_ATTRIBUTE, "");
+  } catch {
+    // best effort; a stale plot must not strand anyone
+  }
+  if (!plot || !plot.kingdomId) return;
+  try {
+    if (player.getAttribute(HOUSING_RESIDENCE_ATTRIBUTE)) return;
+  } catch {
+    return;
+  }
+  if (!townById(plot.kingdomId)) return;
+  try {
+    player.setAttribute(HOUSING_RESIDENCE_ATTRIBUTE, plot.kingdomId);
+  } catch {
+    // ignore
   }
 }
 
@@ -107,9 +129,10 @@ function boonsFor(save) {
 }
 
 function buildPayload(player) {
-  const plot = plotOf(player);
+  migrateRetiredPlot(player);
+  const residence = residenceOf(player);
   const save = houseSaveOf(player);
-  const owned = !!(save && save.owned !== false && plot);
+  const owned = !!(save && save.owned !== false);
   const valuation = save ? valueHouse(save) : null;
   let doorMode = 1;
   try {
@@ -118,15 +141,12 @@ function buildPayload(player) {
     // keep default
   }
   return {
-    plot,
-    plotCost: PLOT_COST,
-    playerKingdom: (() => {
-      const id = kingdomIdOf(player);
-      return id ? { id, name: kingdomName(id) } : null;
-    })(),
+    residence: residence ? { id: residence.id, name: residence.name } : null,
+    towns: TOWNS.map((t) => ({ id: t.id, name: t.name })),
+    moveCost: MOVE_COST,
     house: {
       owned,
-      engineOwned: !!(save && save.owned !== false),
+      engineOwned: owned,
       roomCount: valuation ? valuation.roomCount : 0,
       furnitureCount: valuation ? valuation.furnitureCount : 0,
       value: valuation ? valuation.value : 0,
@@ -138,13 +158,14 @@ function buildPayload(player) {
   };
 }
 
-function claimPlot(player) {
-  const kingdomId = kingdomIdOf(player);
-  if (!kingdomId) {
-    return { ok: false, error: "You must belong to a kingdom to claim a housing plot." };
+function moveResidence(player, townId) {
+  const town = townById(townId);
+  if (!town) {
+    return { ok: false, error: "Unknown town." };
   }
-  if (plotOf(player)) {
-    return { ok: false, error: "You already own a housing plot." };
+  const current = residenceOf(player);
+  if (current && current.id === town.id) {
+    return { ok: false, error: `You already live in ${town.name}.` };
   }
   let coins = 0;
   try {
@@ -152,34 +173,30 @@ function claimPlot(player) {
   } catch {
     return { ok: false, error: "Could not read your inventory." };
   }
-  if (coins < PLOT_COST) {
+  if (coins < MOVE_COST) {
     return {
       ok: false,
-      error: `A housing plot costs ${PLOT_COST.toLocaleString("en-US")} coins.`,
+      error: `Moving residence costs ${MOVE_COST.toLocaleString("en-US")} coins.`,
     };
   }
   try {
-    player.getInventory().delete(COINS_ID, PLOT_COST);
+    player.getInventory().delete(COINS_ID, MOVE_COST);
   } catch {
     return { ok: false, error: "Could not take your coins." };
   }
-  const plot = { kingdomId, kingdomName: kingdomName(kingdomId), claimedAt: Date.now() };
   try {
-    player.setAttribute(HOUSING_PLOT_ATTRIBUTE, JSON.stringify(plot));
-    // Housewarming: the visitor tick picks this up and has capital
-    // citizens congratulate the player.
-    player.setAttribute(HOUSING_WARMING_ATTRIBUTE, "1");
+    player.setAttribute(HOUSING_RESIDENCE_ATTRIBUTE, town.id);
   } catch {
-    // attribute write failed; coins already taken — still report plot
+    // attribute write failed; coins already taken — still report the move
   }
   try {
     player.sendMessage(
-      `You claim a housing plot in ${plot.kingdomName}. Your house is now tied to the realm.`
+      `You move your residence to ${town.name}. Your house and everything in it comes with you.`
     );
   } catch {
     // ignore
   }
-  return { ok: true, plot };
+  return { ok: true, town: { id: town.id, name: town.name } };
 }
 
 function setDoorMode(player, mode) {
@@ -225,9 +242,9 @@ function attach(api) {
     }
     if (!player) return { open: false };
 
-    if (action === "claim") {
-      const result = claimPlot(player);
-      return { open: true, ...buildPayload(player), claim: result };
+    if (action === "move") {
+      const result = moveResidence(player, (query.get("town") || "").trim());
+      return { open: true, ...buildPayload(player), move: result };
     }
     if (action === "doormode") {
       const result = setDoorMode(player, query.get("mode"));
@@ -247,8 +264,8 @@ function attach(api) {
 
 module.exports = attach;
 module.exports.HOUSING_OPEN_ATTRIBUTE = HOUSING_OPEN_ATTRIBUTE;
-module.exports.HOUSING_PLOT_ATTRIBUTE = HOUSING_PLOT_ATTRIBUTE;
+module.exports.HOUSING_RESIDENCE_ATTRIBUTE = HOUSING_RESIDENCE_ATTRIBUTE;
 module.exports.HOUSING_WARMING_ATTRIBUTE = HOUSING_WARMING_ATTRIBUTE;
-module.exports.PLOT_COST = PLOT_COST;
+module.exports.MOVE_COST = MOVE_COST;
 // Test seams (pure logic, no engine).
-module.exports._test = { plotOf, boonsFor, buildPayload, claimPlot, setDoorMode };
+module.exports._test = { residenceOf, boonsFor, buildPayload, moveResidence, setDoorMode, migrateRetiredPlot };

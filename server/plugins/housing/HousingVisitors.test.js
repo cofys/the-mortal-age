@@ -3,8 +3,8 @@
 /**
  * HousingVisitors.test.js — plain-node tests for citizen visitor logic.
  *
- * Verifies: citizen-vs-player detection, capital proximity, room display
- * names, plot parsing, and the warming/admiration line templates.
+ * Verifies: citizen-vs-player detection, town proximity, room display
+ * names, residence resolution, and the warming/admiration line templates.
  */
 
 const visitors = require("./HousingVisitors");
@@ -30,7 +30,7 @@ function fakeMobile(overrides = {}) {
   return {
     isPlayer: () => true,
     isPlayerBot: () => false,
-    getLocation: () => ({ getX: () => 3210, getY: () => 3424 }),
+    getLocation: () => ({ getX: () => 3170, getY: () => 3488 }),
     getUsername: () => "TestPlayer",
     getAttribute: () => null,
     setAttribute: () => {},
@@ -45,9 +45,9 @@ test("citizen detection", () => {
   assert(T.isRealPlayer(fakeMobile()) === true, "human is real");
 });
 
-test("citizensNear finds bots at the capital", () => {
+test("citizensNear finds bots at the town", () => {
   const citizens = [
-    fakeMobile({ isPlayerBot: () => true }), // at Varrock (3210, 3424)
+    fakeMobile({ isPlayerBot: () => true }), // at Varrock portal (3170, 3488)
     fakeMobile({
       isPlayerBot: () => true,
       getLocation: () => ({ getX: () => 1000, getY: () => 1000 }),
@@ -56,7 +56,7 @@ test("citizensNear finds bots at the capital", () => {
   const players = { forEach: (fn) => citizens.forEach(fn) };
   const near = T.citizensNear(players, "misthalin");
   assert(near.length === 1, `one near Varrock, got ${near.length}`);
-  assert(T.citizensNear(players, "nope").length === 0, "unknown capital -> none");
+  assert(T.citizensNear(players, "nope").length === 0, "unknown town -> none");
 });
 
 test("room display names", () => {
@@ -65,22 +65,33 @@ test("room display names", () => {
   assert(T.roomDisplayName("WEIRD_ROOM") === "weird room", "fallback formats");
 });
 
-test("plotOf parses and tolerates", () => {
-  const p = fakeMobile({
-    getAttribute: () => JSON.stringify({ kingdomId: "misthalin" }),
-  });
-  assert(T.plotOf(p).kingdomId === "misthalin", "parses");
-  assert(T.plotOf(fakeMobile()) === null, "missing -> null");
-  assert(
-    T.plotOf(fakeMobile({ getAttribute: () => "{bad" })) === null,
-    "bad json -> null"
-  );
+test("residenceOf resolves town records", () => {
+  const p = fakeMobile({ getAttribute: () => "misthalin" });
+  assert(T.residenceOf(p).name === "Varrock", "resolves");
+  assert(T.residenceOf(fakeMobile()) === null, "missing -> null");
+  assert(T.residenceOf(fakeMobile({ getAttribute: () => "nope" })) === null, "unknown -> null");
 });
 
-test("capitals cover all five kingdoms", () => {
-  for (const k of ["asgarnia", "misthalin", "kandarin", "morytania", "keldagrim"]) {
-    assert(T.CAPITALS[k], `capital for ${k}`);
-    assert(Number.isInteger(T.CAPITALS[k].x), `${k} x`);
+test("town centers cover all thirteen towns", () => {
+  const ids = [
+    "asgarnia",
+    "misthalin",
+    "kandarin",
+    "morytania",
+    "keldagrim",
+    "alkharid",
+    "brimhaven",
+    "lletya",
+    "nardah",
+    "pollnivneach",
+    "rellekka",
+    "shilo",
+    "sophanem",
+  ];
+  assert(ids.length === 13, "thirteen towns");
+  for (const k of ids) {
+    assert(T.TOWN_CENTERS[k], `center for ${k}`);
+    assert(Number.isInteger(T.TOWN_CENTERS[k].x), `${k} x`);
   }
 });
 

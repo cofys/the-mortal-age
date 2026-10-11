@@ -4,7 +4,7 @@
  * HousingBoons.test.js — plain-node tests for the room-boon tick gating.
  *
  * Verifies: real-player detection, own-house detection (area owner),
- * plot gating, and that the tick isolates per-player failures.
+ * residence gating, and that the tick isolates per-player failures.
  * (SkillManager effects can't run in plain node — Skill is null there —
  * so applyBoons is verified to no-op safely.)
  */
@@ -54,11 +54,11 @@ test("own house requires area owner === player", () => {
   assert(T.inOwnHouse(p3) === false, "someone else's house");
 });
 
-test("plot gating", () => {
-  assert(T.hasPlot(fakePlayer()) === false, "no plot");
+test("residence gating", () => {
+  assert(T.hasResidence(fakePlayer()) === false, "no residence");
   assert(
-    T.hasPlot(fakePlayer({ getAttribute: () => '{"kingdomId":"misthalin"}' })) === true,
-    "plot present"
+    T.hasResidence(fakePlayer({ getAttribute: () => "misthalin" })) === true,
+    "residence present"
   );
 });
 
@@ -69,7 +69,7 @@ test("tick iterates world players safely", () => {
       World: {
         players: {
           forEach: (fn) => {
-            // one real player home with plot, one bot, one thrower
+            // one real player home with residence, one bot, one thrower
             fn(fakePlayer());
             fn(fakePlayer({ isPlayerBot: () => true }));
             fn({

@@ -4,18 +4,20 @@
  * HousingVisitors — citizen visitor commentary tick.
  *
  * Citizens can't physically enter a player's private house instance, so
- * visits happen where the town can see them: the kingdom capital. Every
- * ~2 minutes:
+ * visits happen where the town can see them: the player's town of
+ * residence. Every ~2 minutes:
  *
- *   - Housewarming: a player who just claimed a plot (housing:housewarming
- *     flag) gets congratulated by a citizen in their kingdom's capital.
- *   - Admiration: a player with a plot and a house worth 100k+ (tier House
- *     or better) gets admired once per 6 hours — citizens gossip about the
- *     showpiece room, scaled by house tier.
+ *   - Housewarming: a player who just chose a residence
+ *     (housing:housewarming flag) gets congratulated by a citizen in
+ *     their town.
+ *   - Admiration: a player with a residence and a house worth 100k+
+ *     (tier House or better) gets admired once per 6 hours — citizens
+ *     gossip about the showpiece room, scaled by house tier.
  *
  * Lines go through sayPublic + citizenVoice so they sound like the
- * citizen's personality, not a broadcast. All data is real: the plot, the
- * house value (from the real house save), the citizen's location.
+ * citizen's personality, not a broadcast. All data is real: the
+ * residence, the house value (from the real house save), the citizen's
+ * location.
  *
  * No LLM in the tick path — pools are scripted, personality-scaled.
  */
@@ -31,8 +33,8 @@ const { sayPublic } = require("../citizens/chat/CitizenSayPublic");
 const { voiceFor, voiceLine } = require("../citizens/lib/citizenVoice");
 const { ATTR_CITIZEN_PERSONALITY } = require("../citizens/constants");
 
-const HOUSING_PLOT_ATTRIBUTE = "housing:plot";
-const HOUSING_WARMING_ATTRIBUTE = "housing:housewarming";
+const { TOWNS, townById, HOUSING_RESIDENCE_ATTRIBUTE, HOUSING_WARMING_ATTRIBUTE } = require("./HousingPortals");
+
 const HOUSING_PRAISED_ATTRIBUTE = "housing:last-praised";
 const HOUSE_ATTRIBUTE = "construction:house";
 
@@ -45,25 +47,21 @@ const ADMIRE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 // Citizen must be within this many tiles of the capital center.
 const CAPITAL_RADIUS = 45;
 
-// Capital centers (OSRS map coords, documented approximations).
-const CAPITALS = Object.freeze({
-  asgarnia: { x: 2966, y: 3381 }, // Falador
-  misthalin: { x: 3210, y: 3424 }, // Varrock
-  kandarin: { x: 2662, y: 3305 }, // East Ardougne
-  morytania: { x: 3499, y: 3480 }, // Canifis
-  keldagrim: { x: 2860, y: 10180 }, // Keldagrim
-});
+// Town centers (OSRS map coords): the portal tile of each town.
+const TOWN_CENTERS = Object.freeze(
+  Object.fromEntries(TOWNS.map((t) => [t.id, { x: t.x, y: t.y }]))
+);
 
 const WARMING_LINES = Object.freeze([
-  "heard {name} claimed a housing plot! housewarming soon?",
-  "welcome to the neighbourhood, {name}!",
-  "{name} got a plot! wonder what they will build",
-  "another new homeowner in the capital, gz {name}",
+  "heard {name} moved to {town}! housewarming soon?",
+  "welcome to {town}, {name}!",
+  "{name} is a {town} resident now! wonder what they will build",
+  "another new homeowner in {town}, gz {name}",
 ]);
 
 const ADMIRE_LINES = Object.freeze([
   "have you seen {name}'s {room}? absolutely stunning",
-  "{name}'s {room} is the talk of the capital",
+  "{name}'s {room} is the talk of {town}",
   "i walked past {name}'s place yesterday... that {room}!",
   "if you have not seen {name}'s {room}, you are missing out",
 ]);
@@ -102,11 +100,10 @@ function dist(a, b) {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
-function plotOf(player) {
+function residenceOf(player) {
   try {
-    const raw = player.getAttribute?.(HOUSING_PLOT_ATTRIBUTE);
-    if (!raw) return null;
-    return typeof raw === "string" ? JSON.parse(raw) : raw;
+    const id = player.getAttribute?.(HOUSING_RESIDENCE_ATTRIBUTE);
+    return townById(typeof id === "string" ? id : null);
   } catch {
     return null;
   }
@@ -124,9 +121,9 @@ function pick(arr, rng = Math.random) {
   return arr[Math.floor(rng() * arr.length)];
 }
 
-/** Citizens (bots) currently near the capital center. */
-function citizensNear(players, capitalId) {
-  const center = CAPITALS[capitalId];
+/** Citizens (bots) currently near the town center. */
+function citizensNear(players, townId) {
+  const center = TOWN_CENTERS[townId];
   if (!center) return [];
   const out = [];
   players.forEach((p) => {
@@ -193,10 +190,9 @@ function tickHousingVisitors(api) {
   players.forEach((p) => {
     try {
       if (!isRealPlayer(p)) return;
-      const plot = plotOf(p);
-      if (!plot || !plot.kingdomId) return;
-      const capitalId = plot.kingdomId;
-      const nearby = citizensNear(players, capitalId);
+      const town = residenceOf(p);
+      if (!town) return;
+      const nearby = citizensNear(players, town.id);
       if (!nearby.length) return;
       const citizen = pick(nearby);
       const name = playerName(p);
@@ -209,7 +205,7 @@ function tickHousingVisitors(api) {
         // ignore
       }
       if (warming) {
-        citizenSay(citizen, pick(WARMING_LINES), { name });
+        citizenSay(citizen, pick(WARMING_LINES), { name, town: town.name });
         try {
           p.setAttribute(HOUSING_WARMING_ATTRIBUTE, "");
         } catch {
@@ -244,6 +240,7 @@ function tickHousingVisitors(api) {
         name,
         room,
         tier,
+        town: town.name,
       });
       try {
         p.setAttribute(HOUSING_PRAISED_ATTRIBUTE, String(Date.now()));
@@ -283,8 +280,8 @@ module.exports._test = {
   isCitizen,
   citizensNear,
   roomDisplayName,
-  plotOf,
-  CAPITALS,
+  residenceOf,
+  TOWN_CENTERS,
   VISITOR_TICK_TICKS,
   ADMIRE_MIN_VALUE,
   ADMIRE_COOLDOWN_MS,

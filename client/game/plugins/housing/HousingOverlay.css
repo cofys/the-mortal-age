@@ -303,3 +303,13 @@
     color: #f0d080;
     font-weight: bold;
 }
+.tma-housing-select {
+    width: 100%;
+    background: #241c13;
+    border: 1px solid #6b5a3a;
+    border-radius: 2px;
+    color: #e8d5a0;
+    font-size: 13px;
+    padding: 8px 10px;
+    cursor: pointer;
+}

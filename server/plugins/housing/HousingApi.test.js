@@ -3,12 +3,14 @@
 /**
  * HousingApi.test.js — plain-node tests for the housing data layer.
  *
- * Verifies: claim gating (kingdom required, coins required, real coin
- * deduction), door mode writes to the house save, payload shape, and that
- * every failure path returns safely.
+ * Verifies: residence resolution, the 5k move (fee, real coin deduction,
+ * contents preserved because the engine house save is untouched), retired
+ * plot migration (grandfathering), door mode writes to the house save,
+ * payload shape, and that every failure path returns safely.
  */
 
-const path = require("path");
+const api = require("./HousingApi");
+const T = api._test;
 
 let passed = 0;
 let failed = 0;
@@ -25,22 +27,6 @@ function test(name, fn) {
 function assert(cond, msg) {
   if (!cond) throw new Error(msg || "assertion failed");
 }
-
-// --- Stub KingdomStore via require.cache ------------------------------------
-const storePath = require.resolve("../kingdoms/KingdomStore.js");
-require.cache[storePath] = {
-  id: storePath,
-  filename: storePath,
-  loaded: true,
-  exports: {
-    getKingdom: (id) =>
-      id === "misthalin" ? { id: "misthalin", name: "Misthalin" } : null,
-    getKingdoms: () => [{ id: "misthalin", name: "Misthalin" }],
-  },
-};
-
-const api = require("./HousingApi");
-const T = api._test;
 
 function makePlayer(attrs, coins) {
   let coinBalance = coins;
@@ -59,6 +45,7 @@ function makePlayer(attrs, coins) {
       },
     }),
     _coins: () => coinBalance,
+    _attrs: () => attrs,
   };
 }
 
@@ -76,42 +63,77 @@ function houseSave() {
   };
 }
 
-test("claim requires kingdom membership", () => {
-  const p = makePlayer({}, 100000);
-  const r = T.claimPlot(p);
-  assert(r.ok === false, "claim blocked");
-  assert(/kingdom/i.test(r.error), "error mentions kingdom");
+test("residenceOf resolves towns, tolerates missing", () => {
+  const p = makePlayer({ "housing:residence": "alkharid" }, 0);
+  assert(T.residenceOf(p).name === "Al Kharid", "resolves");
+  assert(T.residenceOf(makePlayer({}, 0)) === null, "missing -> null");
+  assert(T.residenceOf(makePlayer({ "housing:residence": "nope" }, 0)) === null, "unknown -> null");
+});
+
+test("move requires 5k coins", () => {
+  const p = makePlayer({ "housing:residence": "misthalin" }, 1000);
+  const r = T.moveResidence(p, "alkharid");
+  assert(r.ok === false, "move blocked");
+  assert(p._coins() === 1000, "no coins taken");
+  assert(p._attrs()["housing:residence"] === "misthalin", "residence unchanged");
+});
+
+test("move takes real coins and switches residence", () => {
+  const save = houseSave();
+  const attrs = { "housing:residence": "misthalin", "construction:house": save };
+  const p = makePlayer(attrs, 8000);
+  const r = T.moveResidence(p, "alkharid");
+  assert(r.ok === true, "move ok");
+  assert(p._coins() === 3000, `coins deducted, got ${p._coins()}`);
+  assert(attrs["housing:residence"] === "alkharid", "residence switched");
+  assert(attrs["construction:house"] === save, "house save untouched — contents move with them");
+  assert(r.town.name === "Al Kharid", "town returned");
+});
+
+test("move rejects unknown towns and same town", () => {
+  const p = makePlayer({ "housing:residence": "misthalin" }, 100000);
+  assert(T.moveResidence(p, "nope").ok === false, "unknown town blocked");
+  assert(T.moveResidence(p, "misthalin").ok === false, "same town blocked");
   assert(p._coins() === 100000, "no coins taken");
 });
 
-test("claim requires 25k coins", () => {
-  const p = makePlayer({ "kingdom:id": "misthalin" }, 1000);
-  const r = T.claimPlot(p);
-  assert(r.ok === false, "claim blocked");
-  assert(p._coins() === 1000, "no coins taken");
+test("move works with no prior residence", () => {
+  const p = makePlayer({}, 6000);
+  const r = T.moveResidence(p, "shilo");
+  assert(r.ok === true, "move ok");
+  assert(p._attrs()["housing:residence"] === "shilo", "residence set");
 });
 
-test("claim takes real coins and writes plot", () => {
-  const attrs = { "kingdom:id": "misthalin" };
-  const p = makePlayer(attrs, 30000);
-  const r = T.claimPlot(p);
-  assert(r.ok === true, "claim ok");
-  assert(p._coins() === 5000, `coins deducted, got ${p._coins()}`);
-  const plot = JSON.parse(attrs["housing:plot"]);
-  assert(plot.kingdomId === "misthalin", "plot kingdom");
-  assert(plot.kingdomName === "Misthalin", "plot kingdom name");
-  assert(attrs["housing:housewarming"] === "1", "housewarming flag set");
-});
-
-test("claim is idempotent", () => {
+test("retired plot migrates to residence and is deleted", () => {
   const attrs = {
-    "kingdom:id": "misthalin",
-    "housing:plot": JSON.stringify({ kingdomId: "misthalin" }),
+    "housing:plot": JSON.stringify({ kingdomId: "misthalin", kingdomName: "Misthalin" }),
   };
-  const p = makePlayer(attrs, 100000);
-  const r = T.claimPlot(p);
-  assert(r.ok === false, "second claim blocked");
-  assert(p._coins() === 100000, "no coins taken twice");
+  const p = makePlayer(attrs, 0);
+  T.migrateRetiredPlot(p);
+  assert(attrs["housing:residence"] === "misthalin", "residence grandfathered");
+  assert(!attrs["housing:plot"], "plot attribute deleted");
+  // Idempotent: second run changes nothing.
+  T.migrateRetiredPlot(p);
+  assert(attrs["housing:residence"] === "misthalin", "still grandfathered");
+});
+
+test("retired plot with bogus kingdom does not strand", () => {
+  const attrs = { "housing:plot": JSON.stringify({ kingdomId: "nope" }) };
+  const p = makePlayer(attrs, 0);
+  T.migrateRetiredPlot(p);
+  assert(!attrs["housing:plot"], "plot deleted");
+  assert(!attrs["housing:residence"], "no bogus residence");
+});
+
+test("buildPayload migrates on read", () => {
+  const attrs = {
+    "housing:plot": JSON.stringify({ kingdomId: "kandarin", kingdomName: "Kandarin" }),
+    "construction:house": houseSave(),
+  };
+  const p = makePlayer(attrs, 0);
+  const payload = T.buildPayload(p);
+  assert(payload.residence && payload.residence.id === "kandarin", "migrated residence in payload");
+  assert(!attrs["housing:plot"], "plot deleted on read");
 });
 
 test("door mode writes to house save", () => {
@@ -146,24 +168,21 @@ test("boons reflect real rooms", () => {
 
 test("payload shape", () => {
   const attrs = {
-    "kingdom:id": "misthalin",
-    "housing:plot": JSON.stringify({ kingdomId: "misthalin", kingdomName: "Misthalin" }),
+    "housing:residence": "misthalin",
     "construction:house": houseSave(),
   };
   const p = makePlayer(attrs, 0);
   const payload = T.buildPayload(p);
-  assert(payload.plot.kingdomId === "misthalin", "plot in payload");
+  assert(payload.residence.id === "misthalin", "residence in payload");
+  assert(payload.residence.name === "Varrock", "residence name");
+  assert(payload.towns.length === 13, `13 towns, got ${payload.towns.length}`);
+  assert(payload.moveCost === 5000, "move cost exposed");
+  assert(!("plot" in payload), "no plot in payload");
+  assert(!("plotCost" in payload), "no plotCost in payload");
   assert(payload.house.roomCount === 2, "room count");
   assert(payload.house.value === 51000, `value ${payload.house.value}`);
   assert(payload.house.tier.key === "cottage", "tier");
   assert(payload.boons.length === 1, "one boon");
-  assert(payload.plotCost === 25000, "plot cost exposed");
-});
-
-test("plotOf handles bad JSON", () => {
-  const p = makePlayer({ "housing:plot": "{broken" }, 0);
-  const payload = T.buildPayload(p);
-  assert(payload.plot === null, "bad json -> null plot, no throw");
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

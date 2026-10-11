@@ -5,10 +5,14 @@ import { fetchContent } from "../../../network/serverConnection/contentApi";
 import { state as connectionState } from "../../../network/serverConnection/state";
 import "./HousingOverlay.css";
 
-interface PlotInfo {
-    kingdomId: string;
-    kingdomName: string;
-    claimedAt: number;
+interface ResidenceInfo {
+    id: string;
+    name: string;
+}
+
+interface TownInfo {
+    id: string;
+    name: string;
 }
 
 interface RoomInfo {
@@ -44,13 +48,13 @@ interface BoonInfo {
 
 interface HousingStatus {
     open: boolean;
-    plot: PlotInfo | null;
-    plotCost: number;
-    playerKingdom: { id: string; name: string } | null;
+    residence: ResidenceInfo | null;
+    towns: TownInfo[];
+    moveCost: number;
     house: HouseInfo;
     boons: BoonInfo[];
     doorMode: number;
-    claim?: { ok: boolean; error?: string };
+    move?: { ok: boolean; error?: string; town?: TownInfo };
     doorModeResult?: { ok: boolean; error?: string };
 }
 
@@ -76,7 +80,7 @@ export function HousingOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
                 `/api/housing-status?player=${encodeURIComponent(username)}`
             )) as HousingStatus;
             setStatus(data);
-            if (data.claim && !data.claim.ok && data.claim.error) setNotice(data.claim.error);
+            if (data.move && !data.move.ok && data.move.error) setNotice(data.move.error);
             if (data.doorModeResult && !data.doorModeResult.ok && data.doorModeResult.error)
                 setNotice(data.doorModeResult.error);
         } catch {
@@ -129,9 +133,16 @@ export function HousingOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
         return () => window.removeEventListener("keydown", onKey);
     }, [handleClose]);
 
+    const [moveTown, setMoveTown] = useState<string>("");
+
     if (!status?.open) return null;
 
-    const { plot, house } = status;
+    const { residence, house } = status;
+    const moveOptions = status.towns.filter((t) => !residence || t.id !== residence.id);
+    const effectiveMoveTown =
+        moveTown && moveOptions.some((t) => t.id === moveTown)
+            ? moveTown
+            : moveOptions[0]?.id ?? "";
 
     return (
         <div className="tma-housing-backdrop" onClick={handleClose}>
@@ -146,36 +157,53 @@ export function HousingOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
                     {notice && <div className="tma-housing-notice">{notice}</div>}
 
                     <div className="tma-housing-section">
-                        <h3 className="tma-housing-section-title">Housing Plot</h3>
+                        <h3 className="tma-housing-section-title">Residence</h3>
                         <div className="tma-housing-inset">
-                            {plot ? (
+                            {residence ? (
                                 <>
                                     <div className="tma-housing-row">
-                                        <span className="tma-housing-label">Kingdom</span>
-                                        <span className="tma-housing-value">{plot.kingdomName}</span>
+                                        <span className="tma-housing-label">Home town</span>
+                                        <span className="tma-housing-value">{residence.name}</span>
                                     </div>
                                     <p className="tma-housing-body">
-                                        Your plot is claimed. Room boons are active while you are
-                                        home, and the capital's citizens will gossip about grand
-                                        houses.
+                                        You are a resident of {residence.name}. Use any
+                                        town's house portal to step inside your house, and
+                                        the townsfolk will know you as one of their own.
+                                    </p>
+                                    <div className="tma-housing-row">
+                                        <span className="tma-housing-label">Move to</span>
+                                        <select
+                                            className="tma-housing-select"
+                                            value={effectiveMoveTown}
+                                            onChange={(e) => setMoveTown(e.target.value)}
+                                        >
+                                            {moveOptions.map((t) => (
+                                                <option key={t.id} value={t.id}>
+                                                    {t.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <button
+                                        className="tma-housing-button"
+                                        onClick={() =>
+                                            effectiveMoveTown &&
+                                            doAction(`move&town=${effectiveMoveTown}`)
+                                        }
+                                    >
+                                        Move residence — {fmtCoins(status.moveCost)} coins
+                                    </button>
+                                    <p className="tma-housing-body">
+                                        Your house and everything in it moves with you. No
+                                        rebuilding.
                                     </p>
                                 </>
                             ) : (
-                                <>
-                                    <p className="tma-housing-body">
-                                        {status.playerKingdom
-                                            ? `Claim a plot in ${status.playerKingdom.name} for ${fmtCoins(status.plotCost)} coins. A plot ties your house to the realm: room boons, citizen visitors, and standing.`
-                                            : `You must belong to a kingdom before you can claim a housing plot.`}
-                                    </p>
-                                    {status.playerKingdom && (
-                                        <button
-                                            className="tma-housing-button"
-                                            onClick={() => doAction("claim")}
-                                        >
-                                            Claim plot — {fmtCoins(status.plotCost)} coins
-                                        </button>
-                                    )}
-                                </>
+                                <p className="tma-housing-body">
+                                    You have no home town yet. Find the house portal in
+                                    any town or city and step through it — the first one
+                                    you use becomes your residence.
+                                </p>
                             )}
                         </div>
                     </div>
@@ -238,7 +266,7 @@ export function HousingOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
                         </div>
                     )}
 
-                    {plot && (
+                    {residence && (
                         <div className="tma-housing-section">
                             <h3 className="tma-housing-section-title">Visitors</h3>
                             <div className="tma-housing-inset">
@@ -264,7 +292,7 @@ export function HousingOverlay({ osrsClient }: { osrsClient: OsrsClient }) {
                                 </div>
                                 <p className="tma-housing-body">
                                     Friends can visit through your house portal while it is
-                                    open. Citizens in your capital will gossip about grand
+                                    open. Citizens in your home town will gossip about grand
                                     houses on their own.
                                 </p>
                             </div>
