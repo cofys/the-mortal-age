@@ -120,6 +120,11 @@ function onRunnerTalk(event) {
   if (!Rep.isRealPlayer(player)) return false;
   if (!isRunner(npc, player)) return false;
   if (quest.getStage(player) !== STAGE_CACHE_SUPPLIED) return false;
+  // Claim the interaction: Actors.Myreque's Man handler runs first (alphabetical
+  // plugin load) and returns false for our owner-only runner, but without
+  // event.handled the engine's default Man Talk-to dialogue would fire after
+  // our quest prompt.
+  event.handled = true;
   player.sendMessage("The runner looks up at you, wild-eyed. \"Please... the patrols are everywhere...\"");
   prompt(player, "The runner", [
     "Get to the tunnel. Now.",
@@ -134,7 +139,7 @@ function onRunnerTalk(event) {
       player.sendMessage("The runner nods shakily and sinks back into the reeds.");
     },
   ]);
-  return undefined; // handled — no other Man hook runs for our runner
+  return undefined; // our runner; event.handled is set above
 }
 
 // --- the fence's offer --------------------------------------------------------------
