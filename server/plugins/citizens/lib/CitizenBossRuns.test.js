@@ -180,3 +180,186 @@ const rng = () => 0.5;
 }
 
 console.log("CitizenBossRuns.test.js: all assertions passed");
+
+// --- real-drop capture: npc-drops:generated interception ---------------------
+
+const { createParty } = require("./CitizenSocialMechanics");
+const { getParty } = require("./CitizenBonds");
+
+function grantBot(name, grants) {
+  const bot = fakeBot(name);
+  bot.getInventory = () => ({
+    adds: (id, qty) => {
+      grants.push({ name, id, qty });
+      return true;
+    },
+  });
+  return bot;
+}
+
+function bossRunParty(leader, members, bossId = "scurrius") {
+  const party = createParty(leader, members.filter((m) => m !== leader));
+  party.bossId = bossId;
+  party.activity = bossId;
+  party.phase = "fight";
+  party.bossSeen = true;
+  return party;
+}
+
+function grantTotals(grants) {
+  const totals = {};
+  for (const g of grants) totals[g.id] = (totals[g.id] ?? 0) + g.qty;
+  return totals;
+}
+
+{
+  // Capture: a party citizen lands the kill → the event is marked handled
+  // (no ground spawn) and the rolled drops are stashed on the party verbatim.
+  const party = bossRunParty("dana", ["dana", "eli", "fay"]);
+  const event = {
+    player: { isPlayerBot: () => true, getUsername: () => "dana" },
+    npcId: 7221,
+    drops: [
+      { itemId: 532, amount: 1 },
+      { itemId: 892, amount: 30 },
+      { itemId: 28798, amount: 1, noted: false },
+    ],
+    handled: false,
+  };
+  BR._handleNpcDropsGenerated(fakeDirector([], {}), event);
+  assert.equal(event.handled, true, "party citizen kill is intercepted");
+  assert.deepEqual(
+    party.capturedDrops,
+    [
+      { id: 532, qty: 1, noted: false },
+      { id: 892, qty: 30, noted: false },
+      { id: 28798, qty: 1, noted: false },
+    ],
+    "captured drops are the engine's actual roll"
+  );
+}
+
+{
+  // No capture: a real player landed the kill — their drops are theirs.
+  bossRunParty("gina", ["gina", "hal"]);
+  const event = {
+    player: { isPlayerBot: () => false, getUsername: () => "gina" },
+    npcId: 7221,
+    drops: [{ itemId: 532, amount: 1 }],
+    handled: false,
+  };
+  BR._handleNpcDropsGenerated(fakeDirector([], {}), event);
+  assert.equal(event.handled, false, "real-player kill is left alone");
+}
+
+{
+  // No capture: the dead NPC is not the party's boss.
+  bossRunParty("ivan", ["ivan", "jo"]);
+  const event = {
+    player: { isPlayerBot: () => true, getUsername: () => "ivan" },
+    npcId: 1234,
+    drops: [{ itemId: 532, amount: 1 }],
+    handled: false,
+  };
+  BR._handleNpcDropsGenerated(fakeDirector([], {}), event);
+  assert.equal(event.handled, false, "unrelated npc death is left alone");
+}
+
+{
+  // No capture: the party never engaged the boss (bossSeen false).
+  const party = bossRunParty("kate", ["kate", "leo"]);
+  party.bossSeen = false;
+  const event = {
+    player: { isPlayerBot: () => true, getUsername: () => "kate" },
+    npcId: 7221,
+    drops: [{ itemId: 532, amount: 1 }],
+    handled: false,
+  };
+  BR._handleNpcDropsGenerated(fakeDirector([], {}), event);
+  assert.equal(event.handled, false, "no capture without engagement");
+}
+
+{
+  // Distribution conserves the roll: every captured unit lands in exactly
+  // one member's inventory — nothing minted, nothing lost.
+  const grants = [];
+  const records = [rec("mia"), rec("noa"), rec("oli")];
+  const bots = {
+    mia: grantBot("mia", grants),
+    noa: grantBot("noa", grants),
+    oli: grantBot("oli", grants),
+  };
+  const director = fakeDirector(records, bots);
+  const party = {
+    id: "loot-party",
+    leader: "mia",
+    members: ["mia", "noa", "oli"],
+    capturedDrops: [
+      { id: 532, qty: 1, noted: false },
+      { id: 892, qty: 31, noted: false },
+      { id: 1163, qty: 1, noted: false },
+    ],
+  };
+  const dealt = BR._distributeCapturedDrops(director, party, SCURRIUS, rng);
+  assert.equal(dealt, true, "distribution dealt the drops");
+  assert.equal(party.capturedDrops, null, "stash cleared after dealing");
+  assert.deepEqual(grantTotals(grants), { 532: 1, 892: 31, 1163: 1 }, "drop totals conserved");
+}
+
+{
+  // Kill flow with capture already stashed: the party is paid the actual
+  // drops (not the fabricated table) and the run ends.
+  const grants = [];
+  const records = [rec("pam"), rec("quinn")];
+  const pamBot = grantBot("pam", grants);
+  const director = fakeDirector(records, { pam: pamBot, quinn: grantBot("quinn", grants) });
+  const party = bossRunParty("pam", ["pam", "quinn"]);
+  party.capturedDrops = [{ id: 532, qty: 2, noted: false }];
+  BR._maintainFight(director, party, SCURRIUS, records[0], pamBot, rng);
+  assert.deepEqual(grantTotals(grants), { 532: 2 }, "kill flow deals the captured drops");
+  assert.equal(getParty("pam"), null, "party disbanded after the kill");
+}
+
+{
+  // Race: the kill is detected before the death event lands → the party
+  // waits in the loot phase and mints nothing; the event then captures
+  // during the loot phase and the loot pass deals the real drops.
+  const grants = [];
+  const records = [rec("rae"), rec("sam")];
+  const raeBot = grantBot("rae", grants);
+  const director = fakeDirector(records, { rae: raeBot, sam: grantBot("sam", grants) });
+  const party = bossRunParty("rae", ["rae", "sam"]);
+  BR._maintainFight(director, party, SCURRIUS, records[0], raeBot, rng);
+  assert.equal(party.phase, "loot", "kill without capture waits in the loot phase");
+  assert.equal(grants.length, 0, "nothing minted while waiting");
+  const event = {
+    player: { isPlayerBot: () => true, getUsername: () => "sam" },
+    npcId: 7221,
+    drops: [{ itemId: 532, amount: 1 }],
+    handled: false,
+  };
+  BR._handleNpcDropsGenerated(director, event);
+  assert.equal(event.handled, true, "late death event still captures in the loot phase");
+  BR._maintainLoot(director, party, SCURRIUS, records[0], rng);
+  assert.deepEqual(grantTotals(grants), { 532: 1 }, "loot phase deals the captured drops");
+  assert.equal(getParty("rae"), null, "party disbanded after loot dealt");
+}
+
+{
+  // Loot phase expiry: no capture ever arrives (the kill was someone
+  // else's) → the party heads home empty-handed; nothing is minted.
+  const grants = [];
+  const records = [rec("tia"), rec("uma")];
+  const director = fakeDirector(records, {
+    tia: grantBot("tia", grants),
+    uma: grantBot("uma", grants),
+  });
+  const party = bossRunParty("tia", ["tia", "uma"]);
+  party.phase = "loot";
+  party.lootWaitUntil = Date.now() - 1;
+  BR._maintainLoot(director, party, SCURRIUS, records[0], rng);
+  assert.equal(grants.length, 0, "no loot minted when the kill was not ours");
+  assert.equal(getParty("tia"), null, "party disbanded after loot timeout");
+}
+
+console.log("CitizenBossRuns.test.js: capture/distribution assertions passed");

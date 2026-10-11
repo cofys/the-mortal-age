@@ -526,6 +526,10 @@ function maintainBossRun(director, party, leader, hour) {
     maintainFight(director, party, boss, leader, leaderBot, rng);
     return;
   }
+  if (party.phase === "loot") {
+    maintainLoot(director, party, boss, leader, rng);
+    return;
+  }
   // Unknown phase — clean up.
   sendHome(director, party, leader, boss);
   endRun(director, party, leader, boss, "called off.");
@@ -600,16 +604,11 @@ function maintainFight(director, party, boss, leader, leaderBot, rng) {
 
   if (!bossNpc) {
     if (party.bossSeen) {
-      // Boss was here and now it's gone — it's dead. Kill sequence.
-      // Note: the engine's NPCDeathTask drops loot on the ground for the
-      // killer; the table split below is the party share (tables verified
-      // against npc-drops.json).
-      const killLine = pickOne(rng, boss.killLines);
-      journalEvent(leader.username, killLine, "combat");
-      shoutIfWatched(director, leader, killLine);
-      splitLoot(director, party, boss, members, rng);
-      sendHome(director, party, leader, boss);
-      endRun(director, party, leader, boss, pickOne(rng, boss.endLines));
+      // Boss was here and now it's gone — it's dead. The engine pays the
+      // kill exactly once (see finishKill): if one of ours landed it, the
+      // real drops were captured for the party to share; if not, they're
+      // the killer's and we mint nothing.
+      finishKill(director, party, boss, leader, rng);
       return;
     }
     // Boss not in range yet (not spawned, or party still arriving) — wait.
@@ -643,6 +642,18 @@ function maintainFight(director, party, boss, leader, leaderBot, rng) {
  * This is the old fake fight, kept only for the unobserved case.
  */
 function maintainFightDataTier(director, party, boss, leader, members, rng) {
+  // Mixed case: the party materialized earlier, fought the REAL boss, and
+  // it died (drops captured) — but nobody is materialized on this pass.
+  // The real kill decides the loot, not the simulated HP ticker.
+  if (Array.isArray(party.capturedDrops) && party.capturedDrops.length) {
+    const killLine = pickOne(rng, boss.killLines);
+    journalEvent(leader.username, killLine, "combat");
+    shoutIfWatched(director, leader, killLine);
+    distributeCapturedDrops(director, party, boss, rng);
+    sendHome(director, party, leader, boss);
+    endRun(director, party, leader, boss, pickOne(rng, boss.endLines));
+    return;
+  }
   // Player members swing too — they're in the fight.
   let playerCount = 0;
   try {
@@ -708,6 +719,198 @@ function splitLoot(director, party, boss, members, rng) {
   }
 }
 
+// --- real-drop capture & split ----------------------------------------------
+//
+// A materialized party fights the boss's real NPC, so the engine pays the
+// kill: NPCDeathTask rolls the boss's table in NpcDrops for the top
+// damager and would spawn the result as ground items. If that top damager
+// is one of the party's citizens, the run — not the ground — owns the
+// payout: handleNpcDropsGenerated captures the rolled drops onto the party
+// and marks the event handled (no ground spawn), and the kill sequence
+// deals those actual drops to the party. Any other killer (a real player,
+// an outsider) keeps the normal engine behaviour untouched, and the party
+// mints nothing. The kill is therefore paid exactly once either way. (The
+// fabricated splitLoot above now serves only the data-tier simulation,
+// where no real NPC exists and no engine roll ever happens.)
+
+const LOOT_WAIT_MS = 90_000; // linger after a kill for the death event to land
+
+/**
+ * Listener for NpcDrops' "npc-drops:generated" (wired in Citizens.plugin.js).
+ * event: { player (killer), npc, npcId, drops: [{itemId, amount, noted}], handled }.
+ */
+function handleNpcDropsGenerated(director, event) {
+  try {
+    if (!event || event.handled) return;
+    const killer = event.player;
+    if (!killer || killer.isPlayerBot?.() !== true) return;
+    const killerName = killer.getUsername?.();
+    if (!killerName) return;
+    const party = getParty(killerName);
+    if (!party || !party.bossSeen) return;
+    if (party.phase !== "fight" && party.phase !== "loot") return;
+    if (Array.isArray(party.capturedDrops) && party.capturedDrops.length) return;
+    const boss = bossById(party.bossId ?? party.activity);
+    if (!boss) return;
+    const id = Number.isInteger(event.npcId) ? event.npcId : npcId(event.npc);
+    if (!(boss.npcIds ?? []).includes(id)) return;
+    if (!Array.isArray(event.drops) || event.drops.length === 0) return;
+    const captured = event.drops
+      .filter((d) => Number.isInteger(d?.itemId) && d.amount > 0)
+      .map((d) => ({ id: d.itemId, qty: d.amount, noted: d.noted === true }));
+    if (!captured.length) return;
+    party.capturedDrops = captured;
+    party.capturedKiller = killerName;
+    event.handled = true; // dealt to the party by the kill sequence — no ground spawn
+  } catch {
+    // Non-fatal: on any doubt the engine drops spawn as usual.
+  }
+}
+
+function itemName(director, id) {
+  try {
+    const name = director?.api?.core?.ItemDefinition?.forId?.(id)?.getName?.();
+    if (name) return name;
+  } catch {
+    // Non-fatal.
+  }
+  return `item ${id}`;
+}
+
+/** The id to hand over for a captured drop (noted variant when it was noted). */
+function giveIdFor(director, drop) {
+  if (!drop.noted) return drop.id;
+  try {
+    const noteId = director?.api?.core?.ItemDefinition?.forId?.(drop.id)?.getNoteId?.() ?? -1;
+    if (noteId >= 0) return noteId;
+  } catch {
+    // Non-fatal.
+  }
+  return drop.id;
+}
+
+function lootShareText(director, got) {
+  return got
+    .map((g) => `${itemName(director, g.id)}${g.qty > 1 ? ` x${g.qty}` : ""}`)
+    .join(", ");
+}
+
+/**
+ * Deal the boss's captured REAL drops across the party: stacks at least as
+ * big as the party are shared evenly; scarcer items go one apiece in
+ * rotation. Citizens receive into their bot inventory; player members into
+ * theirs. Clears party.capturedDrops. Returns true when anything was dealt.
+ */
+function distributeCapturedDrops(director, party, boss, rng) {
+  const drops = party.capturedDrops ?? [];
+  party.capturedDrops = null;
+  if (!drops.length) return false;
+
+  const recipients = [];
+  for (const m of party.members ?? []) {
+    const rec = director.roster.get(normalizeName(m));
+    if (!rec || !director.isOnline(rec)) continue;
+    const bot = director.getBot(rec);
+    if (!bot) continue;
+    recipients.push({ name: m, bot });
+  }
+  let playerNames = [];
+  try {
+    playerNames = require("./CitizenPlayerActivities").playerMembers(director, party);
+  } catch {
+    playerNames = [];
+  }
+  for (const pn of playerNames) recipients.push({ name: pn, bot: null });
+  if (!recipients.length) return false;
+
+  const shares = new Map(recipients.map((r) => [r.name, []]));
+  let cursor = Math.floor(rng() * recipients.length);
+  for (const drop of drops) {
+    const qty = Math.floor(drop.qty ?? 0);
+    if (!drop.id || qty <= 0) continue;
+    if (qty >= recipients.length) {
+      const base = Math.floor(qty / recipients.length);
+      let rem = qty - base * recipients.length;
+      for (const r of recipients) {
+        const n = base + (rem > 0 ? 1 : 0);
+        if (rem > 0) rem--;
+        if (n > 0) shares.get(r.name).push({ id: drop.id, qty: n, noted: drop.noted });
+      }
+    } else {
+      for (let i = 0; i < qty; i++) {
+        const r = recipients[cursor % recipients.length];
+        cursor++;
+        shares.get(r.name).push({ id: drop.id, qty: 1, noted: drop.noted });
+      }
+    }
+  }
+
+  let dealt = false;
+  for (const r of recipients) {
+    const got = shares.get(r.name) ?? [];
+    if (!got.length) continue;
+    dealt = true;
+    if (r.bot) {
+      for (const g of got) {
+        try {
+          r.bot.getInventory?.()?.adds?.(giveIdFor(director, g), g.qty);
+        } catch {
+          // Non-fatal.
+        }
+      }
+      journalEvent(r.name, `Loot from ${boss.label}: ${lootShareText(director, got)}.`, "work");
+    } else {
+      try {
+        const PA = require("./CitizenPlayerActivities");
+        for (const g of got) {
+          PA.givePlayerItem(director, r.name, giveIdFor(director, g), g.qty);
+        }
+        PA.notifyPlayerEntity(
+          PA.isOnlinePlayer(director, r.name),
+          `Your share of the ${boss.label} loot: ${lootShareText(director, got)}.`
+        );
+      } catch {
+        // Non-fatal.
+      }
+    }
+  }
+  return dealt;
+}
+
+/**
+ * The real boss the party was fighting is gone. If our killer's drops were
+ * captured, deal them and head home. Otherwise linger briefly in a loot
+ * phase — the engine's death event can land a few seconds after the corpse
+ * leaves the leader's view — and if nothing was captured, the spoils were
+ * never ours (they're on the ground for whoever landed the kill).
+ */
+function finishKill(director, party, boss, leader, rng) {
+  const killLine = pickOne(rng, boss.killLines);
+  journalEvent(leader.username, killLine, "combat");
+  shoutIfWatched(director, leader, killLine);
+  if (Array.isArray(party.capturedDrops) && party.capturedDrops.length) {
+    distributeCapturedDrops(director, party, boss, rng);
+    sendHome(director, party, leader, boss);
+    endRun(director, party, leader, boss, pickOne(rng, boss.endLines));
+    return;
+  }
+  party.phase = "loot";
+  party.lootWaitUntil = Date.now() + LOOT_WAIT_MS;
+}
+
+function maintainLoot(director, party, boss, leader, rng) {
+  if (Array.isArray(party.capturedDrops) && party.capturedDrops.length) {
+    distributeCapturedDrops(director, party, boss, rng);
+    sendHome(director, party, leader, boss);
+    endRun(director, party, leader, boss, pickOne(rng, boss.endLines));
+    return;
+  }
+  if (Date.now() < (party.lootWaitUntil ?? 0)) return; // death event still in flight
+  journalEvent(leader.username, `The ${boss.label} fell — but the spoils went to another.`, "combat");
+  sendHome(director, party, leader, boss);
+  endRun(director, party, leader, boss, pickOne(rng, boss.endLines));
+}
+
 function sendHome(director, party, leader, boss) {
   // Survivors head back to their kingdom's square (data-tier teleport; the
   // normal brain resumes from town).
@@ -733,6 +936,17 @@ function sendHome(director, party, leader, boss) {
 
 function endRun(director, party, leader, boss, note) {
   const leaderName = leader.username;
+  // Last-chance salvage: a captured real-drop share must never evaporate
+  // just because the run ends through a side door (leader gone, party
+  // collapsed). distributeCapturedDrops clears the stash as it deals, so
+  // the normal kill path (which deals first) makes this a no-op.
+  if (Array.isArray(party.capturedDrops) && party.capturedDrops.length) {
+    try {
+      distributeCapturedDrops(director, party, boss, agentRng(`bossloot:${party.id}`));
+    } catch {
+      // Non-fatal.
+    }
+  }
   // The shared run warms every citizen member toward player members.
   try {
     const { bondAfterActivity } = require("./CitizenPlayerActivities");
@@ -764,10 +978,14 @@ module.exports = {
   bossForKingdom,
   tickBossRuns,
   tryFormBossRun,
+  handleNpcDropsGenerated,
   // Test seams.
   _findBossNpc: findBossNpc,
   _botInCombat: botInCombat,
   _materializedMembers: materializedMembers,
   _maintainFight: maintainFight,
   _maintainFightDataTier: maintainFightDataTier,
+  _maintainLoot: maintainLoot,
+  _distributeCapturedDrops: distributeCapturedDrops,
+  _handleNpcDropsGenerated: handleNpcDropsGenerated,
 };

@@ -68,6 +68,7 @@ const {
   getBaseRegistry,
 } = require("./brain/CitizenActivityRegistry");
 const { initDirector, getDirector } = require("./director/CitizenDirector");
+const BossRuns = require("./lib/CitizenBossRuns");
 const { initMerchantShops } = require("./shop/MerchantShops");
 const { initPlayerShops } = require("./shop/PlayerShops");
 const { initMarketBoard } = require("./shop/MarketBoard.Shops");
@@ -151,6 +152,16 @@ function initCitizens(api) {
   initMerchantShops(api);
   initPlayerShops(api);
   api.log?.("[citizens] director booted", director.status());
+}
+
+function onBossRunDropsGenerated(event) {
+  try {
+    const director = getDirector();
+    if (!director) return;
+    BossRuns.handleNpcDropsGenerated(director, event);
+  } catch {
+    // Non-fatal — the engine drops spawn as usual.
+  }
 }
 
 function onKingdomWarDeclared(event) {
@@ -743,6 +754,10 @@ module.exports = {
     api.onCustomEvent(EVENT_CITIZEN_CHAT_HEARD, onCitizenChatHeard);
     api.onCustomEvent("llm:chat-response", onSocialThreadResponse);
     api.onCustomEvent("kingdom:rumor", onKingdomRumorHeard);
+    // Boss-run loot: when a citizen party's member lands a boss kill,
+    // capture the engine's real drop roll for the party split so the kill
+    // pays out exactly once (CitizenBossRuns.handleNpcDropsGenerated).
+    api.onCustomEvent("npc-drops:generated", onBossRunDropsGenerated);
     api.onCustomEvent("kingdom:patrol-ordered", onKingdomPatrolOrdered);
     api.onCustomEvent("kingdom:wage-day", onKingdomWageDay);
     api.onCustomEvent("arrival:player-arrived", onArrivalPlayerArrived);

@@ -406,6 +406,8 @@ module.exports = {
   acceptActivityInvite,
   isOnlinePlayer,
   playerMembers,
+  givePlayerItem,
+  notifyPlayerEntity,
   grantActivityLootToPlayers,
   grantBossLootToPlayers,
   awardSkillingShare,
