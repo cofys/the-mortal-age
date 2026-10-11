@@ -1,0 +1,94 @@
+/* The Mortal Age — War Council as a sidebar tab.
+ * The content reuses the heraldic tma-wartable-* classes from
+ * WarTableOverlay.css; this file only adapts the wide campaign-map layout
+ * to the narrow rail panel (no modal frame — the rail supplies the header
+ * and close). */
+
+.tma-wartable-sidebar {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 10px 10px;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+}
+
+/* The rail panel itself scrolls; the inner scroll box becomes plain flow. */
+.tma-wartable-sidebar .tma-wartable-body {
+    flex: none;
+    overflow: visible;
+    padding-right: 0;
+}
+
+/* The compass sits above the modal panel; in the rail it flows inline. */
+.tma-wartable-sidebar .tma-wartable-compass {
+    position: static;
+    transform: none;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2px;
+}
+
+.tma-wartable-sidebar .tma-wartable-title {
+    font-size: 17px;
+}
+
+.tma-wartable-sidebar .tma-wartable-subtitle {
+    font-size: 12px;
+}
+
+.tma-wartable-sidebar .tma-wartable-rule {
+    margin: 0 24px 10px;
+}
+
+/* Six table tabs cannot sit in one row of rail — let them wrap. */
+.tma-wartable-sidebar .tma-wartable-tabs {
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.tma-wartable-sidebar .tma-wartable-tab {
+    padding: 6px 9px;
+    font-size: 11px;
+}
+
+/* Wide grids stack into a single column, as on narrow screens. */
+.tma-wartable-sidebar .tma-wartable-overview {
+    grid-template-columns: 1fr;
+}
+
+.tma-wartable-sidebar .tma-wartable-cards {
+    grid-template-columns: 1fr;
+}
+
+.tma-wartable-sidebar .tma-wartable-tension-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+
+.tma-wartable-sidebar .tma-wartable-treasury-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+}
+
+.tma-wartable-sidebar .tma-wartable-treasury-amt {
+    text-align: left;
+}
+
+.tma-wartable-sidebar .tma-wartable-select {
+    max-width: 100%;
+}
+
+.tma-wartable-sidebar .tma-wartable-card-row {
+    flex-wrap: wrap;
+}
+
+.tma-wartable-sidebar .tma-wartable-detail-stats {
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.tma-wartable-sidebar-loading {
+    text-align: center;
+    margin-top: 24px;
+}

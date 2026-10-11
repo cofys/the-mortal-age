@@ -13,6 +13,8 @@ import { StallsPlugin } from "../../../game/plugins/shop/StallsPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
+import { StewardPlugin } from "../../../game/plugins/steward/StewardPlugin";
+import { WarTablePlugin } from "../../../game/plugins/wartable/WarTablePlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
 import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
 import { OpponentInfoPlugin } from "../../../game/plugins/opponentinfo/OpponentInfoPlugin";
@@ -40,6 +42,8 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     MenuSwapperPlugin,
     MyKingdomPlugin,
     StallsPlugin,
+    WarTablePlugin,
+    StewardPlugin,
     NotesPlugin,
     RememberLoginPlugin,
     SplitPrivateChatPlugin,

@@ -1,0 +1,46 @@
+/* The Mortal Age — Steward's Desk as a sidebar tab.
+ * The content reuses the heraldic tma-steward-* classes from
+ * StewardOverlay.css; this file only adapts the desk layout to the narrow
+ * rail panel (no modal frame — the rail supplies the header and close). */
+
+.tma-steward-sidebar {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 10px 10px;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+}
+
+/* The rail panel itself scrolls; the inner scroll box becomes plain flow. */
+.tma-steward-sidebar .tma-steward-scroll {
+    flex: none;
+    overflow: visible;
+    padding-right: 0;
+}
+
+.tma-steward-sidebar .tma-steward-name {
+    font-size: 19px;
+}
+
+.tma-steward-sidebar .tma-steward-header-rule {
+    margin: 0 24px 10px;
+}
+
+.tma-steward-sidebar .tma-steward-confirm-actions {
+    flex-wrap: wrap;
+}
+
+.tma-steward-sidebar-loading {
+    text-align: center;
+    margin-top: 24px;
+}
+
+/* The panel's loading / no-court notes (the overlay has no such state). */
+.tma-steward-sidebar .tma-steward-note {
+    margin: 14px 0 4px;
+    font-size: 12px;
+    line-height: 1.6;
+    font-style: italic;
+    color: #9a8f7d;
+}
