@@ -9,6 +9,7 @@ import { InteractHighlightConfig } from "../../../game/plugins/interacthighlight
 import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight/InteractHighlightPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { MyKingdomPlugin } from "../../../game/plugins/mykingdom/MyKingdomPlugin";
+import { StallsPlugin } from "../../../game/plugins/shop/StallsPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
@@ -38,6 +39,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     TileMarkersPlugin,
     MenuSwapperPlugin,
     MyKingdomPlugin,
+    StallsPlugin,
     NotesPlugin,
     RememberLoginPlugin,
     SplitPrivateChatPlugin,

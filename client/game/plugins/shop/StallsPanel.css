@@ -1,0 +1,47 @@
+/* The Mortal Age — marketplace as a sidebar tab.
+ * The content reuses the heraldic tma-shop-* classes from ShopOverlay.css;
+ * this file only adapts the block layout to the narrow rail panel (no modal
+ * frame — the rail supplies the header and close). */
+
+.tma-shop-sidebar {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 10px 10px;
+    background: linear-gradient(180deg, #1a1410 0%, #14100b 100%);
+}
+
+/* The rail panel itself scrolls; the inner scroll box becomes plain flow. */
+.tma-shop-sidebar .tma-shop-scroll {
+    flex: none;
+    overflow: visible;
+    padding-right: 0;
+}
+
+.tma-shop-sidebar .tma-shop-name {
+    font-size: 19px;
+}
+
+.tma-shop-sidebar .tma-shop-header-rule {
+    margin: 0 24px 10px;
+}
+
+/* Till and Shop Hand stack in the rail instead of sitting side by side. */
+.tma-shop-sidebar .tma-shop-columns {
+    grid-template-columns: 1fr;
+}
+
+/* Manage rows carry up to four controls — they wrap under the ware's name. */
+.tma-shop-sidebar .tma-shop-row {
+    flex-wrap: wrap;
+}
+
+.tma-shop-sidebar .tma-shop-row-main {
+    flex: 1 1 100%;
+}
+
+.tma-shop-sidebar-loading {
+    text-align: center;
+    margin-top: 24px;
+}
