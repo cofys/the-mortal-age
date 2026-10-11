@@ -35,6 +35,11 @@ function emptyState() {
     jobs: { list: [], caps: {} },
     // Wanted board (Bounties.Kingdoms): [wantedRecords]
     wanted: [],
+    // Office holders (Offices.Kingdoms): officeId -> { kind, ref }. The
+    // office registry itself is in-memory only; holders are mirrored here
+    // so a seated holder (above all a player) survives a server restart.
+    // Events writes on assign/vacate; Seed restores at startup.
+    offices: {},
   };
 }
 
@@ -53,6 +58,8 @@ function load() {
       // Worlds saved before the job board have no jobs / wanted state.
       if (!state.jobs || typeof state.jobs !== "object") state.jobs = { list: [], caps: {} };
       if (!Array.isArray(state.wanted)) state.wanted = [];
+      // Worlds saved before office-holder persistence have no holder map.
+      if (!state.offices || typeof state.offices !== "object") state.offices = {};
     }
   } catch {
     // No save yet, or unreadable: the seed data will fill it at startup.
@@ -365,6 +372,23 @@ function adjustAlliance(a, b, { betrayalRiskDelta = 0, strengthDelta = 0 } = {})
   return { ...rec };
 }
 
+/** The persisted office-holder map: officeId -> { kind, ref }. */
+function getOfficeHolders() {
+  return load().offices;
+}
+
+/** Record an office's holder in the persisted map (null clears the seat). */
+function setOfficeHolder(officeId, holder) {
+  if (!officeId) return null;
+  const offices = load().offices;
+  if (holder && typeof holder.ref === "string" && holder.ref.length > 0) {
+    offices[officeId] = { kind: holder.kind, ref: holder.ref };
+  } else {
+    delete offices[officeId];
+  }
+  return offices[officeId] ?? null;
+}
+
 /** For tests: forget the world's kingdoms and keep them in memory only. */
 function resetForTests() {
   state = emptyState();
@@ -400,5 +424,7 @@ module.exports = {
   formAlliance,
   breakAlliance,
   adjustAlliance,
+  getOfficeHolders,
+  setOfficeHolder,
   resetForTests,
 };

@@ -196,6 +196,12 @@ function onRulerChanged(event) {
 function onOfficeAssigned(event) {
   if (!event?.officeId || !event?.kingdomId || !Offices.isValidHolder(event.holder)) return;
   const record = Offices.assignOffice(event.officeId, event.holder);
+  if (record) {
+    // Mirror the seat into the store: the registry is in-memory only, and
+    // a restart must not silently strip a holder (Seed restores from here).
+    Store.setOfficeHolder(event.officeId, event.holder);
+    Store.save();
+  }
   if (!record || event.holder.kind !== "player") return;
   const kingdom = Store.getKingdom(event.kingdomId);
   const kingdomName = kingdom?.name ?? event.kingdomId;
@@ -269,6 +275,9 @@ function onOfficeVacated(event) {
   if (!event?.officeId) return;
   const record = Offices.getOffice(event.officeId);
   const previousHolder = Offices.vacateOffice(event.officeId);
+  // The persisted seat clears with the registry's (see onOfficeAssigned).
+  Store.setOfficeHolder(event.officeId, null);
+  Store.save();
   if (record) {
     pluginApi.emitCustomEvent("kingdom:office-seeks-holder", {
       officeId: event.officeId,

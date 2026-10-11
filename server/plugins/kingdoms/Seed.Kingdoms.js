@@ -121,6 +121,11 @@ function seedKingdoms() {
  * The holder ref is an office identity — the citizens director binds a
  * living citizen to it; a player takes it with ::office claim after the
  * office is vacated. Idempotent: existing holders are never clobbered.
+ *
+ * Restart restore: the registry is in-memory, so a holder seated before
+ * the last restart is restored from the store's persisted holder map
+ * (Events mirrors every assign/vacate there). Only a seat with no
+ * persisted holder falls back to the AI identity.
  */
 function seedOffices() {
   for (const def of GREAT_POWERS) {
@@ -132,10 +137,15 @@ function seedOffices() {
         description: std.description,
       });
       if (record && !record.holder) {
-        Offices.assignOffice(record.officeId, {
-          kind: "ai",
-          ref: `${def.id}:${std.office}`,
-        });
+        const saved = Store.getOfficeHolders()[record.officeId];
+        if (saved && Offices.isValidHolder(saved)) {
+          Offices.assignOffice(record.officeId, { kind: saved.kind, ref: saved.ref });
+        } else {
+          Offices.assignOffice(record.officeId, {
+            kind: "ai",
+            ref: `${def.id}:${std.office}`,
+          });
+        }
       }
     }
   }
