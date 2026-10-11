@@ -199,6 +199,27 @@ function onCitizenChatHeard(event) {
         citizen: citizenUsername,
         speaker: speakerUsername,
       });
+      // Conversation follow-up: a scripted reflex used to be the whole
+      // exchange (player line -> one citizen line -> silence). Sometimes
+      // the citizen now keeps the thread alive with the template topic
+      // machinery (follow-up thought, maybe a second line, maybe a
+      // nearby citizen chiming in). Zero LLM; cooldowns/caps in the
+      // engine keep volume sane.
+      try {
+        if (Math.random() < 0.35) {
+          const { maybePlayerFollowUp } = require("./CitizenConversations");
+          const { getDirector } = require("../director/CitizenDirector");
+          const { normalizeName } = require("../lib/CitizenBonds");
+          const director = getDirector();
+          const record =
+            director?.roster?.get?.(normalizeName(citizenUsername)) ?? null;
+          if (director && record) {
+            maybePlayerFollowUp(director, record, bot, speakerUsername);
+          }
+        }
+      } catch {
+        // Non-fatal — the reflex already answered.
+      }
       return; // Handled — no LLM needed.
     }
   } catch {

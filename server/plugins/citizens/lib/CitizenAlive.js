@@ -15,8 +15,11 @@
  *    animations, emote occasionally, and voice small observations. A citizen
  *    standing at the market should feel present, not frozen.
  *  - SOCIAL AWARENESS: citizens notice each other. When two citizens pass
- *    within a few tiles, they sometimes greet, nod, or exchange a line —
- *    data-tier, zero LLM. The world feels alive even with no players around.
+ *    within a few tiles, they sometimes start a real conversation —
+ *    multi-turn, one topic, human pacing — via chat/CitizenConversations.
+ *    (The old fixed greeting+one-reply script lived here; it was the
+ *    "always exactly 2 messages" tell. The engine owns the shape now.)
+ *    Data-tier, zero LLM. The world feels alive even with no players around.
  *  - IMPERFECTIONS: real players get distracted, change their minds, and
  *    misclick. Citizens do too: mid-walk pauses to look at something,
  *    occasional destination changes, waypoint noise scaled by personality.
@@ -34,6 +37,7 @@ const { brainTickDue } = require("./CitizenTickLod");
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { voiceFor, voiceLine } = require("./citizenVoice");
 const { sayPublic } = require("../chat/CitizenSayPublic");
+const CitizenConversations = require("../chat/CitizenConversations");
 
 
 // --- tuning ------------------------------------------------------------------
@@ -88,15 +92,6 @@ const DISTRACTION_LINES = Object.freeze([
 ]);
 
 // Citizen-to-citizen greetings when passing. Short, warm, human.
-const CITIZEN_GREETINGS = Object.freeze([
-  "Morning!",
-  "Alright?",
-  "How's the day treating you?",
-  "Hey there.",
-  "Good to see you.",
-  "Mind how you go.",
-]);
-
 // --- helpers -------------------------------------------------------------------
 
 function botTile(bot) {
@@ -351,13 +346,23 @@ function tickIdleLife(director, record, bot, nowMs) {
  */
 const lastGreetAt = new Map(); // username -> timestamp
 
+/**
+ * Citizens notice each other. When two citizen bots pass within greeting
+ * radius, they sometimes start a conversation — owned end-to-end by
+ * chat/CitizenConversations (multi-turn, one real-state topic, variable
+ * length, human pacing). This starter keeps the volume gates: per-citizen
+ * start cooldown, sociability-scaled chance, nobody starts a second chat
+ * while already in one, and open feuds/enemies never chat.
+ */
+
 function tickSocialAwareness(director, record, bot, nowMs) {
   const name = record.username;
   if (nowMs - (lastGreetAt.get(name) ?? 0) < SOCIAL_GREET_COOLDOWN_MS) return;
+  if (CitizenConversations.activeConversationFor(name)) return;
 
   const rng = agentRng(`alive:social:${name}:${nowMs >> 13}`);
   const profile = humanizerProfile(record.personality);
-  // Taciturn citizens rarely greet; chatty ones often do.
+  // Taciturn citizens rarely start chats; chatty ones often do.
   const greetChance = SOCIAL_GREET_CHANCE * profile.sociability;
   if (!chance(rng, greetChance)) return;
 
@@ -365,31 +370,31 @@ function tickSocialAwareness(director, record, bot, nowMs) {
   if (others.length === 0) return;
 
   const other = pickOne(rng, others);
-  const otherName = other.getUsername?.() ?? "friend";
-  lastGreetAt.set(name, nowMs);
+  const otherName = other.getUsername?.() ?? null;
+  if (!otherName) return;
+  if (CitizenConversations.activeConversationFor(otherName)) return;
 
+  let otherRecord = null;
   try {
-    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: CITIZEN_GREETINGS }, rng)); }
+    const { normalizeName } = require("./CitizenBonds");
+    otherRecord = director.roster?.get(normalizeName(otherName)) ?? null;
   } catch {
-    // Cosmetic.
+    otherRecord = null;
   }
-  journalEvent(name, `Greeted ${otherName} in passing.`, "social");
+  if (!otherRecord) return;
 
-  // Sometimes the other citizen responds.
-  if (chance(rng, 0.4 * profile.sociability)) {
-    try {
-      const responses = ["Hey!", "Good day!", "Alright, mate.", "You too!"];
-      setTimeout(() => {
-        try {
-          { const _cvp = other.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(other, voiceLine(voiceFor(_cvp), { plain: responses }, rng)); }
-        } catch {
-          // Cosmetic.
-        }
-      }, 1500 + Math.floor(rng() * 2000));
-    } catch {
-      // Non-fatal.
-    }
+  // Open feuds and real enmity silence small talk (mirrors CitizenSocial).
+  try {
+    const { isOpenFeud } = require("./CitizenKinship");
+    if (isOpenFeud(name, otherName) || isOpenFeud(otherName, name)) return;
+  } catch {
+    // Non-fatal.
   }
+
+  lastGreetAt.set(name, nowMs);
+  CitizenConversations.maybeStart(director, record, bot, otherRecord, other, nowMs, {
+    rng,
+  });
 }
 
 // --- imperfections -----------------------------------------------------------------
@@ -660,6 +665,13 @@ function tickAlive(director, nowMs, desync = null) {
     } catch {
       // Non-fatal.
     }
+  }
+  // Conversation housekeeping: prune finished/stale conversations and
+  // expired per-citizen chat cooldowns (bounded by the engine's own caps).
+  try {
+    CitizenConversations.housekeep(nowMs);
+  } catch {
+    // Non-fatal.
   }
   // Prune per-citizen cooldown maps for logged-out citizens (memory hygiene).
   // These maps are keyed by username and would otherwise grow across
