@@ -5,7 +5,8 @@
  * not just their levels:
  *   - Name (display name from character creation)
  *   - Background + origin ("Fisher of Keldagrim")
- *   - Character description (RP flavor text, set via ::desc)
+ *   - Character description (RP flavor text, set from your own sheet —
+ *     right-click "Examine" on yourself)
  *   - Reputation per kingdom (from kingdom:influence), tier-colored
  *   - Deeds (completed quests)
  *   - Allegiance (guild membership and rank)
@@ -243,7 +244,7 @@ function getDescription(player) {
   if (desc && String(desc).trim()) {
     return wrapText(desc, 62).slice(0, 6).join("<br>");
   }
-  return "<col=9a8f7d><i>No description set. Use ::desc to tell your story.</i></col>";
+  return "<col=9a8f7d><i>No description set. Examine yourself to tell your story.</i></col>";
 }
 
 const TIER_COLORS = {
@@ -375,7 +376,9 @@ function closeExamine({ player }) {
 function handlePlayerOption(event) {
   const { player, target, option } = event;
   if (option !== EXAMINE_OPTION_SLOT) return;
-  if (!target || target === player) return;
+  if (!target) return;
+  // Examining yourself opens your own character sheet — that's where you
+  // set your description (no chat commands for players).
   // Don't examine bots via this panel (they have their own interactions)
   event.handled = true;
   openExamine({ player, target });
@@ -386,26 +389,6 @@ function syncExamineOption({ player }) {
   const sender = player?.getPacketSender?.();
   if (!sender) return;
   sender.sendPlayerOption(EXAMINE_OPTION_SLOT, "Examine", false);
-}
-
-function setDescription({ player, parts }) {
-  const text = parts.slice(1).join(" ").trim();
-  if (!text) {
-    const current = player.getAttribute(DESCRIPTION_ATTRIBUTE);
-    player.getPacketSender().sendMessage(
-      current
-        ? `Your current description: "${current}"`
-        : "You have no description set. Use ::desc <text> to set one."
-    );
-    return true;
-  }
-  if (text.length > 200) {
-    player.getPacketSender().sendMessage("Description too long — keep it under 200 characters.");
-    return true;
-  }
-  player.setAttribute(DESCRIPTION_ATTRIBUTE, text);
-  player.getPacketSender().sendMessage("Your character description has been updated.");
-  return true;
 }
 
 const examinedPlayers = new WeakSet();
@@ -425,7 +408,6 @@ function attachPlugin(api) {
   api.registerCustomInterface(buildInterface());
   // Web overlay data layer (see ExamineApi.js).
   require("./ExamineApi").attach(api);
-  api.registerCommand("desc", setDescription, undefined, "Set your character description (::desc <text>)");
   api.persistAttribute(DESCRIPTION_ATTRIBUTE);
   api.onPlayerLogin(onLoginSyncOption);
   api.onPlayerProcess(onLoginSyncOption);

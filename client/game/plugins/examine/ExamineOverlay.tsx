@@ -30,6 +30,7 @@ interface CharacterSheet {
     name: string;
     byline: string | null;
     description: string | null;
+    self: boolean;
     reputation: ReputationEntry[];
     accomplishments: string[];
     accomplishmentCount: number;
@@ -102,6 +103,25 @@ export function ExamineOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.
 
     const sheet = status.sheet;
 
+    // Diegetic description editing: the player writes their description from
+    // their own character sheet (self-examine) — no chat commands.
+    const handleEditDescription = useCallback(async () => {
+        const current = sheet.description ?? "";
+        const next = window.prompt(
+            "Your character description (max 200 characters):",
+            current
+        );
+        if (next === null) return; // cancelled
+        try {
+            await fetchContent(
+                `/api/examine-status?player=${encodeURIComponent(username)}&action=set-description&text=${encodeURIComponent(next.trim())}`
+            );
+        } catch {
+            // The next poll will pick up the saved value anyway.
+        }
+        window.setTimeout(poll, 500);
+    }, [username, sheet.description, poll]);
+
     return (
         <div className="tma-examine-backdrop" onClick={handleClose}>
             <div className="tma-examine-panel" onClick={(e) => e.stopPropagation()}>
@@ -122,8 +142,18 @@ export function ExamineOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.
                                 <p className="tma-examine-description">{sheet.description}</p>
                             ) : (
                                 <p className="tma-examine-empty">
-                                    No description set. Use ::desc to tell your story.
+                                    {sheet.self
+                                        ? "No description set yet — tell your story."
+                                        : "No description set."}
                                 </p>
+                            )}
+                            {sheet.self && (
+                                <button
+                                    className="tma-examine-edit-btn"
+                                    onClick={handleEditDescription}
+                                >
+                                    {sheet.description ? "Edit description" : "Set description"}
+                                </button>
                             )}
                         </div>
                     </section>

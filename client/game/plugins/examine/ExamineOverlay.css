@@ -259,3 +259,20 @@
 .tma-examine-scroll::-webkit-scrollbar-thumb:hover {
     background: #6b5a3a;
 }
+
+.tma-examine-edit-btn {
+    margin-top: 8px;
+    background: transparent;
+    border: 1px solid #6b5a3a;
+    color: #d9b45b;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.tma-examine-edit-btn:hover {
+    border-color: #d9b45b;
+    color: #ffd27f;
+}

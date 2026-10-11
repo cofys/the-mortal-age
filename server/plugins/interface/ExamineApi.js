@@ -14,15 +14,21 @@ const ContentApiAuth = require("./ContentApiAuth");
  *     -> { open: false } | { open: true, sheet: {...} }
  *
  *   ...&action=close — clear the examine:open flag (overlay dismissed)
+ *   ...&action=set-description&text=... — set the viewer's own
+ *     examine:description (auth required); sheet re-opens on self.
  *
  * Sheet shape:
- *   { name, byline, description,
+ *   { name, byline, description, self,
  *     reputation: [{ kingdom, tier, points }],
  *     accomplishments: [name, ...], accomplishmentCount,
  *     guild: { name, rank } | null,
  *     skills: [{ name, level }],
  *     rapport: { standing, hint } | null  (citizens only — how they feel
  *       about the viewer, read from CitizenSocialBonds) }
+ *
+ * `self` is true when the viewer is examining their own sheet; the React
+ * overlay then shows the diegetic "set description" affordance (the old
+ * ::desc chat command was removed — players get buttons/world UI only).
  */
 
 const DISPLAY_NAME_ATTRIBUTE = "character:display-name";
@@ -200,6 +206,13 @@ function sheetFor(api, viewer, target) {
     name,
     byline: bylineBits.join(" ") || null,
     description,
+    // True when the viewer is examining their own sheet — the client
+    // shows the diegetic "set description" affordance in that case.
+    self:
+      !!viewer?.getUsername &&
+      !!target?.getUsername &&
+      String(viewer.getUsername()).toLowerCase() ===
+        String(target.getUsername()).toLowerCase(),
     reputation,
     accomplishments: accomplishments.slice(0, 8),
     accomplishmentCount: accomplishments.length,
@@ -226,10 +239,13 @@ function attach(api) {
     // P0 security fix: the close action requires auth; reads use token if present
     // but examine sheets are public info (visible in-game via right-click).
     const action = (query.get("action") || "").trim().toLowerCase();
-    const player = action === "close"
+    // Writes require auth; reads use token if present but examine sheets
+    // are public info (visible in-game via right-click).
+    const writeAction = action === "close" || action === "set-description";
+    const player = writeAction
       ? ContentApiAuth.requireAuth(query)
       : (ContentApiAuth.requireAuth(query) || findPlayer(api, query.get("player")));
-    if (action === "close" && !player) {
+    if (writeAction && !player) {
       return { open: false, error: "unauthorized" };
     }
 
@@ -240,6 +256,23 @@ function attach(api) {
         console.warn("[examine-api] close failed", e?.message ?? e);
       }
       return { open: false };
+    }
+
+    if (player && action === "set-description") {
+      // Diegetic replacement for the old ::desc command: the player edits
+      // their description from their own character sheet (see self flag).
+      const text = String(query.get("text") ?? "").trim().slice(0, 200);
+      try {
+        player.setAttribute(DESCRIPTION_ATTRIBUTE, text);
+      } catch (e) {
+        console.warn("[examine-api] set-description failed", e?.message ?? e);
+      }
+      // Keep the player's own sheet open so the next poll re-renders fresh.
+      try {
+        player.setAttribute(EXAMINE_OPEN_ATTRIBUTE, player.getUsername());
+      } catch {
+        // ignore
+      }
     }
 
     if (!player) return { open: false };
