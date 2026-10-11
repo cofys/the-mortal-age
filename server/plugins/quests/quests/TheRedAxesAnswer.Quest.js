@@ -194,7 +194,7 @@ function grantReward(player) {
   const path = player.getAttribute(PATH_ATTRIBUTE);
   const skills = player.getSkillManager();
   if (path === "mercy") {
-    skills.addExperiences(api.core.Skill.CONSTITUTION, 5000);
+    skills.addExperiences(api.core.Skill.HITPOINTS, 5000);
     emitRumor("The Consortium answers the Red Axe with restraint — the forges hum on, and the tunnels fall silent.");
     player.sendMessage("[Red Axe] Mercy doesn't earn influence — but the city keeps its workers.");
   } else {
@@ -226,7 +226,7 @@ function registerTheRedAxesAnswer(pluginApi) {
     questPoints: 2,
     xpRewards: [
       { skillId: api.core.Skill.ATTACK.getIndex(), amount: 5000, label: "Attack (crush path)" },
-      { skillId: api.core.Skill.CONSTITUTION.getIndex(), amount: 5000, label: "Constitution (mercy path)" },
+      { skillId: api.core.Skill.HITPOINTS.getIndex(), amount: 5000, label: "Hitpoints (mercy path)" },
     ],
     otherRewards: ["Keldagrim influence (crush path)", "The Consortium's verdict"],
     buildJournal,

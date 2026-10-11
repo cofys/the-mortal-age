@@ -45,7 +45,7 @@ const QUESTS = [
   "SpiritsOfTheElid", "SwanSong", "TaiBwoWannaiTrio", "TailOfTwoCats",
   "TaleOfTheRighteous", "TearsOfGuthix", "TempleOfIkov", "TempleOfTheEye",
   "TheFeud", "TheFinalDawn", "TheFremennikExiles", "TheFremennikIsles",
-  "TheGolem", "TheHeartOfDarkness", "TheRedAxesAnswer", "TheTithesLedgers", "ThroneOfMiscellania", "TouristTrap",
+  "TheEmptyChair", "TheGolem", "TheHeartOfDarkness", "TheRedAxesAnswer", "TheTithesLedgers", "ThroneOfMiscellania", "TouristTrap",
   "TowerOfLife", "TreeGnomeVillage", "TribalTotem", "TrollRomance",
   "TrollStronghold", "TroubledTortugans", "TwilightPromise", "UndergroundPass",
   "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest",
