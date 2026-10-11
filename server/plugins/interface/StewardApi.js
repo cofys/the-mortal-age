@@ -20,6 +20,15 @@ const ContentApiAuth = require("./ContentApiAuth");
  *            fee, feeCarried, cooldownDaysLeft, oathReady, blockers } }
  *
  *   ...&action=close                  — dismiss the overlay (clears steward:open)
+ *   ...&action=open                   — sidebar tab: seat the player at a desk.
+ *                                        A physical desk session (attribute
+ *                                        already set) is left untouched and
+ *                                        reported with opened:false; otherwise
+ *                                        the player's own court is used (their
+ *                                        allegiance, or their naturalization
+ *                                        quest's court) and opened:true is
+ *                                        returned, so the tab knows it owns —
+ *                                        and must clear — the attribute.
  *   ...&action=petition&office=<id>    — petition for an office (Politics.petition;
  *                                        ruling messages go to the player's chatbox)
  *   ...&action=vacate&office=<id>      — resign an office (Commands.vacateOffice)
@@ -174,6 +183,7 @@ function attach(api) {
       // when present but falls back to the player query param.
       const authed =
         action === "close" ||
+        action === "open" ||
         action === "petition" ||
         action === "vacate" ||
         action === "renounce" ||
@@ -189,6 +199,28 @@ function attach(api) {
           player.setAttribute(STEWARD_OPEN_ATTRIBUTE, "");
         } catch {}
         return { open: false };
+      }
+
+      // Sidebar tab: seat the player at a desk (see header). A desk clicked
+      // in-world always wins — the tab only fills an empty attribute, with
+      // the player's own court: their allegiance, or failing that the court
+      // of their naturalization quest.
+      let openedByTab = false;
+      if (action === "open") {
+        const current = String(safeGet(player, STEWARD_OPEN_ATTRIBUTE) || "").trim();
+        if (!current) {
+          let courtId = allegianceFor(player)?.id ?? null;
+          if (!courtId) {
+            try {
+              courtId = Switching.naturalizationProgress(player)?.kingdomId ?? null;
+            } catch {}
+          }
+          if (!courtId) return { open: false, opened: false };
+          try {
+            player.setAttribute(STEWARD_OPEN_ATTRIBUTE, courtId);
+            openedByTab = true;
+          } catch {}
+        }
       }
 
       const desk = deskKingdomFor(player);
@@ -255,6 +287,7 @@ function attach(api) {
 
       return {
         open: true,
+        ...(action === "open" ? { opened: openedByTab } : {}),
         kingdom,
         allegiance: allegianceFor(player),
         offices: officeList(kingdom.id),

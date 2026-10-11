@@ -268,4 +268,49 @@ function withAuth(player, fn) {
   console.log("ok - petition-join and take-oath call through");
 }
 
+// --- action=open seats the player at their own court's desk (sidebar tab) ---
+{
+  const player = mockPlayer("TestUser", { "kingdom:id": "asgarnia" });
+  const res = withAuth(player, () => endpointHandler(mockQuery({ action: "open" })));
+  assert.equal(res.open, true);
+  assert.equal(res.opened, true, "tab opened the desk itself");
+  assert.equal(player.__store["steward:open"], "asgarnia", "attribute set to allegiance");
+  assert.equal(res.kingdom.id, "asgarnia");
+  assert.equal(res.offices.length, 3, "payload carries the court's offices");
+  console.log("ok - action=open seats the player at their own court");
+}
+
+// --- action=open never overrides a physical desk session ---
+{
+  const player = mockPlayer("TestUser", { "kingdom:id": "asgarnia", "steward:open": "misthalin" });
+  const res = withAuth(player, () => endpointHandler(mockQuery({ action: "open" })));
+  assert.equal(res.open, true);
+  assert.equal(res.opened, false, "pre-existing desk session is not the tab's to clear");
+  assert.equal(player.__store["steward:open"], "misthalin", "attribute untouched");
+  assert.equal(res.kingdom.id, "misthalin", "the desk in the room still wins");
+  console.log("ok - action=open leaves a physical desk session untouched");
+}
+
+// --- action=open falls back to the naturalization quest's court ---
+{
+  const player = mockPlayer("TestUser", {
+    "kingdom:naturalization": { kingdomId: "misthalin", startedAt: 123 },
+  });
+  const res = withAuth(player, () => endpointHandler(mockQuery({ action: "open" })));
+  assert.equal(res.open, true);
+  assert.equal(res.opened, true);
+  assert.equal(player.__store["steward:open"], "misthalin", "quest court used");
+  console.log("ok - action=open uses the naturalization court when allegiance-free");
+}
+
+// --- action=open with no court available stays closed ---
+{
+  const player = mockPlayer("TestUser", {});
+  const res = withAuth(player, () => endpointHandler(mockQuery({ action: "open" })));
+  assert.equal(res.open, false);
+  assert.equal(res.opened, false);
+  assert.equal(player.__store["steward:open"], undefined, "no attribute written");
+  console.log("ok - action=open stays closed when no court can be named");
+}
+
 console.log("All StewardApi tests passed.");
