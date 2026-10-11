@@ -120,5 +120,43 @@
     "itemDef": {
       "tradeable": false
     }
+  },
+  {
+    "id": 50005,
+    "baseItemId": 32435,
+    "objType": {
+      "name": "Sealed trade crate",
+      "examine": "A crate of trade goods bound for a distant port.",
+      "inventoryActions": [
+        null,
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "isTradable": true
+    },
+    "itemDef": {
+      "tradeable": true
+    }
+  },
+  {
+    "id": 50006,
+    "baseItemId": 970,
+    "objType": {
+      "name": "Brig blueprint",
+      "examine": "A shipwright's blueprint for building a brig. Take it to a shipwright to build in their drydock.",
+      "inventoryActions": [
+        null,
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "isTradable": true
+    },
+    "itemDef": {
+      "tradeable": true
+    }
   }
 ]

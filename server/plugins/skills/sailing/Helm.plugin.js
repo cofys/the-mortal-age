@@ -27,6 +27,7 @@ const {
   boatType,
 } = require("./sailingContent");
 const { windFor, canTrim, trimSails, isTrimmed } = require("./trim");
+const { reportWind } = require("./SailingWind.plugin");
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
 
@@ -154,6 +155,7 @@ function takeHelm(player, boat) {
   setVarbit(player, VARBIT.SIDEPANEL_HELM_STATUS, HELM_STATUS.NAVIGATING);
   sender.sendInterfaceScript(SCRIPT_HELM_UPDATE, ["", 0, player.getUsername(), 1]);
   player.sendMessage("You take the helm. Click the water to steer.");
+  reportWind(player);
 }
 
 function leaveHelm(player, boat) {
