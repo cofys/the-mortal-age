@@ -16,6 +16,7 @@ const ATTR_CITIZEN_GOAL = "citizens:goal";
 const ATTR_CITIZEN_SEED = "citizens:seed";
 const ATTR_CITIZEN_NEEDS = "citizens:needs";
 const ATTR_CITIZEN_INTENTS = "citizens:intents";
+const ATTR_CITIZEN_SETTLEMENT = "citizens:settlement";
 // Per-merchant stall overrides. Unset means the default bread stall
 // (see the merchant_tend spec in data/citizen-activities.json).
 const ATTR_WARE_ITEM = "citizens:ware-item";
@@ -96,6 +97,7 @@ module.exports = {
   ATTR_CITIZEN_SEED,
   ATTR_CITIZEN_NEEDS,
   ATTR_CITIZEN_INTENTS,
+  ATTR_CITIZEN_SETTLEMENT,
   ATTR_WARE_ITEM,
   ATTR_WARE_PRICE,
   ATTR_MARKET_WARES,

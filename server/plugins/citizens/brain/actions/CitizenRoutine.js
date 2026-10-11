@@ -23,13 +23,14 @@ const {
 const { getReferencePrice } = require("../../../economy/Prices.Economy");
 const { createBankAction } = require("../../../bots/brain/actions/Bank");
 const { createIdleSocialAction } = require("./IdleSocial");
-const { siteTile, workSite, dockSite, kingdomIdOf } = require("../CitizenSites");
+const { siteTile, workSite, dockSite, kingdomIdOf, siteTileBySettlement, workSiteBySettlement } = require("../CitizenSites");
 const { isKingdomAtWar } = require("../../CitizenEvents");
 const {
   ATTR_CITIZEN_PERSONALITY,
   ATTR_CITIZEN_ROLE,
   ATTR_SUPPLIER_MERCHANT,
   ATTR_KINGDOM_ID,
+  ATTR_CITIZEN_SETTLEMENT,
   ROLE_MERCHANT,
 } = require("../../constants");
 const { attemptFeed, sellsFood, addMood } = require("../CitizenNeeds");
@@ -65,6 +66,39 @@ const WORK_FISHING = "fishing";
 const DAY_MINUTES = 24 * 60;
 const RETRY_WORK_MS = 60000;
 const CASTS_PER_HAUL = 4;
+
+/**
+ * Settlement-aware site resolution. Frontier settlement citizens live at
+ * their settlement, not the affiliated capital — their work/market/tavern
+ * are the settlement's anchors. Capital citizens (no settlement attribute)
+ * use the kingdom sites as before.
+ */
+function settlementIdOf(player) {
+  try {
+    const id = player?.getAttribute?.(ATTR_CITIZEN_SETTLEMENT);
+    return typeof id === "string" && id.length > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function siteTileLocal(player, kind) {
+  const sid = settlementIdOf(player);
+  if (sid) {
+    const tile = siteTileBySettlement(sid, kind);
+    if (tile) return tile;
+  }
+  return siteTile(player, kind);
+}
+
+function workSiteLocal(player) {
+  const sid = settlementIdOf(player);
+  if (sid) {
+    const site = workSiteBySettlement(sid);
+    if (site) return site;
+  }
+  return workSite(player);
+}
 // Haul pricing (alignment review finding #5): gatherer drops and fisher
 // catches sell at the living-economy reference price for that item — the
 // same real price table merchant stalls, player shops, and the trade
@@ -536,11 +570,18 @@ function createCitizenRoutineAction(spec, world) {
     world
   );
   let workDelegate = null;
+  // Work delegates are keyed by site config (catalog/tier/option): a single
+  // shared delegate would lock every citizen to the first player's work type.
+  // Settlement citizens (rock) and capital citizens (tree) need different
+  // delegates. The InteractObject action keeps per-player state internally.
+  const workDelegates = new Map();
   let bankDelegate = null;
 
   function delegatesFor(player) {
+    const site = workSiteLocal(player) ?? { catalog: "tree", tier: "normal", option: "Chop down" };
+    const key = `${site.catalog ?? "tree"}|${site.tier ?? "normal"}|${site.option ?? "Chop down"}`;
+    let workDelegate = workDelegates.get(key);
     if (!workDelegate) {
-      const site = workSite(player) ?? { catalog: "tree", tier: "normal", option: "Chop down" };
       workDelegate = createInteractObjectAction(
         {
           catalog: site.catalog ?? "tree",
@@ -551,6 +592,9 @@ function createCitizenRoutineAction(spec, world) {
         },
         world
       );
+      workDelegates.set(key, workDelegate);
+    }
+    if (!bankDelegate) {
       bankDelegate = createBankAction({}, world);
     }
     return { workDelegate, bankDelegate };
@@ -585,6 +629,13 @@ function createCitizenRoutineAction(spec, world) {
     if (state.workKind) {
       return state.workKind;
     }
+    // Settlement citizens work their settlement's site (tree/rock from
+    // settlements.json). No docks in settlements yet — no fishing.
+    const sid = settlementIdOf(player);
+    if (sid) {
+      state.workKind = workSiteLocal(player)?.catalog ?? "tree";
+      return state.workKind;
+    }
     const dock = dockSite(player);
     if (dock && chance(state.rng, 0.4)) {
       state.workKind = WORK_FISHING;
@@ -598,7 +649,7 @@ function createCitizenRoutineAction(spec, world) {
     if (resolveWorkKind(player, state) === WORK_FISHING) {
       return dockSite(player);
     }
-    return workSite(player);
+    return workSiteLocal(player);
   }
 
   /**
@@ -753,7 +804,7 @@ function createCitizenRoutineAction(spec, world) {
   /** Meal break: at the market, eat own bread or buy a loaf from a stall. */
   function mealTick(ctx, state) {
     const { player } = ctx;
-    const market = siteTile(player, "market");
+    const market = siteTileLocal(player, "market");
     if (market && !atTile(player, market, 6)) {
       walkTo(player, market);
       return "running";
@@ -771,7 +822,7 @@ function createCitizenRoutineAction(spec, world) {
    */
   function sellTick(ctx, state) {
     const { player, nowMs } = ctx;
-    const market = siteTile(player, "market");
+    const market = siteTileLocal(player, "market");
     if (market && !atTile(player, market, 6)) {
       walkTo(player, market);
       return "running";
@@ -842,13 +893,13 @@ function createCitizenRoutineAction(spec, world) {
         walkTo(player, tile);
       }
     } else if (kind === KIND_SOCIAL) {
-      const tavern = siteTile(player, "tavern");
+      const tavern = siteTileLocal(player, "tavern");
       if (tavern) {
         walkTo(player, tavern);
       }
     } else if (kind === KIND_MARKET || kind === KIND_MEAL) {
       // Midday market trip, then the meal break right there among the stalls.
-      const market = siteTile(player, "market");
+      const market = siteTileLocal(player, "market");
       if (market) {
         walkTo(player, market);
       }
@@ -899,7 +950,7 @@ function createCitizenRoutineAction(spec, world) {
           return sellTick(ctx, state);
         }
         const { workDelegate, bankDelegate } = delegatesFor(player);
-        const site = workSite(player);
+        const site = workSiteLocal(player);
         if (state.workMode === "bank") {
           const result = bankDelegate.update(ctx);
           if (result === "success") {
@@ -930,7 +981,7 @@ function createCitizenRoutineAction(spec, world) {
           if (gained.length > 0) {
             state.sellMode = { items: gained };
             state.sellGiveUpAt = nowMs + SELL_GIVE_UP_MS;
-            const market = siteTile(player, "market");
+            const market = siteTileLocal(player, "market");
             if (market) {
               walkTo(player, market);
             }
@@ -1003,6 +1054,9 @@ module.exports = {
   _verifiedAdds: verifiedAdds,
   _extendWorkShift: extendWorkShift,
   _phaseFor: phaseFor,
+  _settlementIdOf: settlementIdOf,
+  _siteTileLocal: siteTileLocal,
+  _workSiteLocal: workSiteLocal,
   _KIND_WORK: KIND_WORK,
   _KIND_MARKET: KIND_MARKET,
   _KIND_MEAL: KIND_MEAL,

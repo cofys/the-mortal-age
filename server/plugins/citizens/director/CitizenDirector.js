@@ -354,6 +354,7 @@ const {
   ATTR_CITIZEN_GOAL,
   ATTR_CITIZEN_SEED,
   ATTR_CITIZEN_NEEDS,
+  ATTR_CITIZEN_SETTLEMENT,
   ATTR_PRIME_MERCHANT,
   ATTR_SUPPLIER_MERCHANT,
   ATTR_WARE_ITEM,
@@ -1811,6 +1812,12 @@ class CitizenDirector {
     const rank = ROLE_RANK[record.role] ?? "Subject";
     bot.setAttribute?.(ATTR_KINGDOM_ID, record.kingdomId);
     bot.setAttribute?.(ATTR_KINGDOM_RANK, rank);
+    // Frontier settlement: the brain needs to know which settlement's sites
+    // to use (CitizenRoutine resolves work/market/tavern from the settlement,
+    // not the affiliated capital). Null for capital citizens.
+    if (record.settlementId) {
+      bot.setAttribute?.(ATTR_CITIZEN_SETTLEMENT, record.settlementId);
+    }
     this.api.emitCustomEvent(EVENT_RANK_GRANTED, {
       player: bot,
       kingdomId: record.kingdomId,

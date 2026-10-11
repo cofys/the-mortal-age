@@ -61,6 +61,27 @@ function siteTileBySettlement(settlementId, kind) {
   return siteTileFor(sites, kind);
 }
 
+/**
+ * Work site config for a frontier settlement: x/y/z plus catalog/tier/option
+ * for the InteractObject work delegate. Null when the settlement has no
+ * work site configured.
+ */
+function workSiteBySettlement(settlementId) {
+  const sites = SETTLEMENTS[settlementId];
+  const work = sites?.work;
+  if (!work || !Number.isFinite(work.x) || !Number.isFinite(work.y)) {
+    return null;
+  }
+  return {
+    catalog: work.catalog ?? "tree",
+    tier: work.tier ?? "normal",
+    option: work.option ?? "Chop down",
+    x: work.x,
+    y: work.y,
+    z: work.z ?? 0,
+  };
+}
+
 /** The great power a settlement affiliates with (nearest kingdom). */
 function kingdomIdOfSettlement(settlementId) {
   const sites = SETTLEMENTS[settlementId];
@@ -100,6 +121,7 @@ module.exports = {
   siteTile,
   siteTileByKingdom,
   siteTileBySettlement,
+  workSiteBySettlement,
   patrolCircuit,
   workSite,
   dockSite,
