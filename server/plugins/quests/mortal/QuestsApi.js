@@ -112,34 +112,6 @@ function within(pos, target) {
   return Math.max(dx, dy) <= (target.r || 8);
 }
 
-// TEMP DIAGNOSTIC (remove after south-gate coordinate fix): log once per
-// player+quest+stage when the arrive check fails, so we can see the player's
-// real tile versus the target.
-const arriveDiagLogged = new Set();
-function diagNotArrived(player, quest, stageIndex, pos, target) {
-  if (!player || !quest || !pos || !target) return;
-  let name = "?";
-  try {
-    name = player.getUsername();
-  } catch {
-    return;
-  }
-  // Only sample near the target (~3x radius, floor 24 tiles). buildPayload is
-  // polled every ~2s, so a once-ever log fires while the player is still at the
-  // quest-giver (~60 tiles away) and never records them standing at the gate.
-  const radius = target.r || 8;
-  const dist = Math.max(Math.abs(pos.x - target.x), Math.abs(pos.y - target.y));
-  if (dist > Math.max(radius * 3, 24)) return;
-  const key = `${name}:${quest.id}:${stageIndex}`;
-  if (arriveDiagLogged.has(key)) return;
-  if (arriveDiagLogged.size > 200) arriveDiagLogged.clear();
-  arriveDiagLogged.add(key);
-  console.info(
-    `[quests-api] DIAG not-arrived player=${name} quest=${quest.id} stage=${stageIndex} ` +
-      `pos=(${pos.x},${pos.y},${pos.z}) target=(${target.x},${target.y},r=${target.r || 8})`
-  );
-}
-
 function checkTask(player, stage) {
   const task = stage.task;
   if (!task) return { done: true, has: 0, need: 0 };
@@ -263,7 +235,6 @@ function buildPayload(player) {
 
   const target = resolveArrive(player, stage.arrive);
   const arrived = !target || within(pos, target);
-  if (!arrived && target) diagNotArrived(player, quest, stageIndex, pos, target);
   const taskCheck = checkTask(player, stage);
 
   // Auto-advance item tasks the moment their condition is met.

@@ -122,7 +122,7 @@ const STARTER_QUESTS = [
       },
       {
         objective: "Patrol: reach the south gate",
-        arrive: { x: 2964, y: 3328, r: 8 },
+        arrive: { x: 3007, y: 3328, r: 10 },
         dialogue: {
           speaker: "You",
           title: "",
