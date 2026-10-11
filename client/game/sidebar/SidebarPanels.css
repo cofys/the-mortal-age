@@ -236,3 +236,23 @@
 .rl-sidebar-scrollable::-webkit-scrollbar-thumb:hover {
     background: var(--rl-scroll-thumb-hover);
 }
+
+/* "Open fullscreen" button at the top of the small sidebar panels (My Kingdom,
+   Stalls, War Council, Steward's Desk): the explicit path from the small panel
+   to the fullscreen overlay, replacing the old implicit flag-driving. */
+.tma-expand-fullscreen {
+    align-self: flex-start;
+    margin: 8px 10px 0;
+    padding: 4px 10px;
+    font-family: var(--rl-font-small);
+    font-size: 12px;
+    color: var(--rl-text);
+    background: var(--rl-dark-gray);
+    border: 1px solid var(--rl-medium-gray);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.tma-expand-fullscreen:hover {
+    background: var(--rl-medium-gray);
+}

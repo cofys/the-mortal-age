@@ -86,11 +86,13 @@ const StewardApi = require(path.resolve(IFACE, "StewardApi.js"));
 // --- mock plugin api + player ---
 let endpointHandler = null;
 let logoutHandler = null;
+let loginHandler = null;
 const mockApi = {
   core: { World: { getPlayerByName: () => null } },
   persistAttribute: () => {},
   registerContentEndpoint: (name, handler) => { endpointHandler = handler; },
   onPlayerLogout: (fn) => { logoutHandler = fn; },
+  onPlayerLogin: (fn) => { loginHandler = fn; },
 };
 
 function mockPlayer(username, attrs = {}) {
@@ -334,6 +336,18 @@ function withAuth(player, fn) {
   logoutHandler({ player }); // must not throw
   assert.equal(player.__store["steward:open"], undefined);
   console.log("ok - logout with no desk session does not error");
+}
+
+// --- login clears a stale steward:open left by a killed session (deploy) ---
+{
+  assert(loginHandler, "login handler registered");
+  const player = mockPlayer("TestUser", { "kingdom:id": "asgarnia", "steward:open": "asgarnia" });
+  loginHandler({ player });
+  assert.equal(player.__store["steward:open"], undefined, "steward:open removed on login");
+  mockApi.core.World.getPlayerByName = () => player;
+  const res = endpointHandler(mockQuery({ player: "TestUser" }));
+  assert.equal(res.open, false, "overlay stays closed after login with stale flag");
+  console.log("ok - login clears steward:open so a deploy-killed session cannot pop the desk up");
 }
 
 console.log("All StewardApi tests passed.");

@@ -173,6 +173,9 @@ function influenceFor(player, kingdomId) {
 function clearDeskSessionOnLogout({ player }) {
   // A desk session cannot survive logout: if the persisted steward:open flag
   // is still set at login, the client overlay would pop up immediately.
+  // This also runs on login (below), because deploys kill the server via
+  // gracefulShutdown -> savePlayers WITHOUT firing onPlayerLogout — a stale
+  // flag from a killed session is always garbage and must be cleared.
   try {
     player?.removeAttribute?.(STEWARD_OPEN_ATTRIBUTE);
   } catch {}
@@ -183,6 +186,7 @@ function attach(api) {
   ContentApiAuth.setPluginApi(api);
   api.persistAttribute(STEWARD_OPEN_ATTRIBUTE);
   api.onPlayerLogout(clearDeskSessionOnLogout);
+  api.onPlayerLogin(clearDeskSessionOnLogout);
   api.registerContentEndpoint("steward-status", (query) => {
     try {
       const action = (query.get("action") || "").trim().toLowerCase();

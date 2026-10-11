@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import type { OsrsClient } from "../../OsrsClient";
+import { clearExpand, useExpanded } from "../../sidebar/expandBus";
 import { STALLS_TOOLTIP } from "./StallsPlugin";
 import { ShopView } from "./ShopView";
 import { setShopOpen, useShopStatus } from "./useShop";
@@ -11,7 +12,8 @@ import "./ShopOverlay.css";
  * as the sidebar Stalls tab, shown when the server's `shop:overlay-open`
  * state is set for the player (market board / registrar in the world). While
  * the sidebar's Stalls tab is selected the tab owns the panel, so the overlay
- * stands down instead of rendering the same content twice.
+ * stands down instead of rendering the same content twice — unless the tab's
+ * "Open fullscreen" button was used, which bypasses the stand-down.
  */
 export function ShopOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element | null {
     const controls = useShopStatus(osrsClient);
@@ -24,8 +26,10 @@ export function ShopOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.Ele
         ),
         () => osrsClient.sidebar.getState().selected
     );
+    const expanded = useExpanded(STALLS_TOOLTIP);
 
     const handleClose = useCallback(async () => {
+        clearExpand(STALLS_TOOLTIP);
         reset();
         await setShopOpen(false);
         window.setTimeout(poll, 500);
@@ -39,7 +43,8 @@ export function ShopOverlay({ osrsClient }: { osrsClient: OsrsClient }): JSX.Ele
         return () => window.removeEventListener("keydown", onKey);
     }, [handleClose]);
 
-    if (!status?.open || sidebarSelected === STALLS_TOOLTIP) return null;
+    if ((!status?.open && !expanded) || (sidebarSelected === STALLS_TOOLTIP && !expanded))
+        return null;
 
     return (
         <div className="tma-shop-backdrop" onClick={() => void handleClose()}>

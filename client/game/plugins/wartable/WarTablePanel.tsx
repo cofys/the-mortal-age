@@ -1,16 +1,18 @@
 import { useEffect } from "react";
 
+import { requestExpand } from "../../sidebar/expandBus";
 import { WarTableView } from "./WarTableView";
+import { WAR_COUNCIL_TOOLTIP } from "./WarTablePlugin";
 import { setWarTableOpen, useWarTableStatus } from "./useWarTable";
 import "./WarTableOverlay.css";
 import "./WarTablePanel.css";
 
 /**
  * The sidebar's War Council tab: the same campaign map as the in-world war
- * table overlay, in the rail panel. While selected it drives the server's
- * `wartable:open` flag (the in-world path uses the same flag), so the open
- * state always matches what the player sees; the overlay stands down while
- * this tab is open.
+ * table overlay, in the rail panel. The tab never drives the server's
+ * `wartable:open` flag (that caused the fullscreen flash on select); the
+ * overlay stands down while this tab is selected, and the "Open fullscreen"
+ * button below is the explicit path to the fullscreen overlay.
  */
 export function WarTablePanel(): JSX.Element {
     const {
@@ -29,19 +31,21 @@ export function WarTablePanel(): JSX.Element {
     } = useWarTableStatus();
 
     useEffect(() => {
-        let live = true;
-        void (async () => {
-            await setWarTableOpen(true);
-            if (live) void poll();
-        })();
+        void poll();
         return () => {
-            live = false;
             void setWarTableOpen(false);
         };
     }, [poll]);
 
     return (
         <div className="tma-wartable-sidebar rl-sidebar-scrollable">
+            <button
+                className="tma-expand-fullscreen"
+                onClick={() => requestExpand(WAR_COUNCIL_TOOLTIP)}
+                title="Open the fullscreen war table view"
+            >
+                ⛶ Open fullscreen
+            </button>
             {!status ? (
                 <p className="tma-wartable-note tma-wartable-sidebar-loading">
                     Unrolling the campaign map…
