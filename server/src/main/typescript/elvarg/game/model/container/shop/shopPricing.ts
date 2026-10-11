@@ -33,10 +33,65 @@ export const OVERSTOCK_PRICE_FLOOR = 0.5;
  */
 export const KINGDOM_HOME_BIAS = 0.95;
 export const KINGDOM_FOREIGN_BIAS = 1.08;
+/** Hatred premium: disliked customers pay this on top of the home/foreign bias. */
+export const HATRED_DISLIKED_MULT = 1.1;
+
+// Hatred tier thresholds — must match server/plugins/kingdoms/Influence.Kingdoms.js
+// (HATRED_HATED_AT / HATRED_ENEMY_AT, HATRED_FLOOR, decay rates). That module is
+// the source of truth; this is a read-only mirror for the shop price path so
+// the TS shop code doesn't import the JS plugin layer.
+const HATRED_FLOOR = -150;
+const HATRED_HATED_AT = -25;
+const HATRED_ENEMY_AT = -100;
+const HATRED_DECAY_PER_DAY = 1;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export type HatredTier = "disliked" | "hated" | "enemy" | null;
+
+/**
+ * Hatred tier of a player with a shop's kingdom, read from the raw
+ * kingdom:influence attribute ({ [kingdomId]: { points, lastEarned } }).
+ * Settles idle decay the same way Influence.Kingdoms does: positive decays
+ * toward zero (never into hatred), negative rises toward zero slowly.
+ * Pure — computed on transaction, no per-tick work.
+ */
+export function hatredTierForShop(player: any, shopKingdomId: unknown): HatredTier {
+    if (typeof shopKingdomId !== "string" || shopKingdomId.length === 0) {
+        return null;
+    }
+    let rec: any = null;
+    try {
+        rec = player?.getAttribute?.("kingdom:influence")?.[shopKingdomId] ?? null;
+    } catch {
+        return null;
+    }
+    if (!rec || typeof rec !== "object") {
+        return null;
+    }
+    const points = Number(rec.points ?? 0);
+    if (!(points < 0)) {
+        return null;
+    }
+    const idleDays = Math.floor(
+        Math.max(0, (Date.now() - (Number(rec.lastEarned) || Date.now())) / DAY_MS)
+    );
+    const settled = Math.max(HATRED_FLOOR, Math.min(0, points + idleDays * HATRED_DECAY_PER_DAY));
+    if (!(settled < 0)) {
+        return null;
+    }
+    if (settled <= HATRED_ENEMY_AT) {
+        return "enemy";
+    }
+    if (settled <= HATRED_HATED_AT) {
+        return "hated";
+    }
+    return "disliked";
+}
 
 export function kingdomPriceBias(
     playerKingdomId: unknown,
-    shopKingdomId: unknown
+    shopKingdomId: unknown,
+    hatred: HatredTier = null
 ): number {
     if (
         typeof playerKingdomId !== "string" ||
@@ -46,9 +101,9 @@ export function kingdomPriceBias(
     ) {
         return 1;
     }
-    return playerKingdomId === shopKingdomId
-        ? KINGDOM_HOME_BIAS
-        : KINGDOM_FOREIGN_BIAS;
+    const base =
+        playerKingdomId === shopKingdomId ? KINGDOM_HOME_BIAS : KINGDOM_FOREIGN_BIAS;
+    return hatred === "disliked" ? base * HATRED_DISLIKED_MULT : base;
 }
 
 export function scarcityPriceMultiplier(current: number, max: number): number {

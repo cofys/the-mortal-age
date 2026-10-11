@@ -12,7 +12,7 @@ import { Misc } from "../../../../util/Misc";
 import { ShopIdentifiers } from "../../../../util/ShopIdentifiers";
 import { encodeShopClose, encodeShopOpen } from "../../../../net/protocol/ClientProtocol";
 import { PlayerSave } from "../../../entity/impl/player/persistence/PlayerSave";
-import { scarcityPriceMultiplier, kingdomPriceBias } from "./shopPricing";
+import { scarcityPriceMultiplier, kingdomPriceBias, hatredTierForShop } from "./shopPricing";
 
 export interface ShopItemContainerAction {
     kind: "value" | "buy_sell" | "x";
@@ -573,6 +573,12 @@ export class ShopManager {
         amount: number
     ): void {
         const definition = ItemDefinition.forId(itemId);
+        // Hatred: a hated/enemy customer is refused service outright.
+        const tier = hatredTierForShop(player, shop.definition.getKingdomId());
+        if (tier === "hated" || tier === "enemy") {
+            player.sendMessage("The shopkeeper waves you off — \"We don't serve your kind here.\"");
+            return;
+        }
         const price = this.itemPrice(shop, definition, player);
         if (price <= 0) {
             return;
@@ -880,7 +886,8 @@ export class ShopManager {
         );
         const bias = kingdomPriceBias(
             player?.getAttribute?.("kingdom:id") ?? null,
-            shop.definition.getKingdomId()
+            shop.definition.getKingdomId(),
+            hatredTierForShop(player, shop.definition.getKingdomId())
         );
         return Math.max(1, Math.floor(base * scarcity * bias));
     }

@@ -64,6 +64,9 @@ const SELL_TAX = 0.85; // merchants buy back at 85%, mirroring real shops
 // (no kingdom) pay list. Multiplies with the memory loyalty discount.
 const KINGDOM_HOME_BIAS = 0.95;
 const KINGDOM_FOREIGN_BIAS = 1.08;
+/** Hatred premium: disliked customers pay this on top of the home/foreign bias. */
+const HATRED_DISLIKED_MULT = 1.1;
+const Influence = require("../../kingdoms/Influence.Kingdoms");
 const MAX_ACTION_AMOUNT = 5000;
 const NEARBY_RADIUS = 10;
 
@@ -419,18 +422,33 @@ function seasonalPricing(name) {
  * Kingdom-choice phase 2: kingdom-aligned price bias. Reads the player's
  * raw kingdom:id attribute (NOT kingdomIdOf — that helper falls back to a
  * default kingdom, which would misprice wanderers as home customers).
- * Returns { mult, note } matching the seasonalPricing shape.
+ * Hatred applies on top: disliked customers pay a 10% premium stacking
+ * with the home/foreign bias; hated/enemy customers are refused service.
+ * Returns { mult, note, refused } matching the seasonalPricing shape.
  */
 function kingdomPriceBias(player, merchant) {
   const merchantKingdom = kingdomIdOf(merchant);
   const playerKingdom = player?.getAttribute?.(ATTR_KINGDOM_ID) ?? null;
+  const tier = Influence.hatredTier(Influence.effectiveInfluence(player, merchantKingdom));
+  if (tier === "hated" || tier === "enemy") {
+    return { mult: 1.0, note: "refused service", refused: true };
+  }
+  let bias;
   if (typeof playerKingdom !== "string" || playerKingdom.length === 0) {
-    return { mult: 1.0, note: null }; // wanderer: list price, no bias
+    bias = { mult: 1.0, note: null }; // wanderer: list price, no bias
+  } else if (playerKingdom === merchantKingdom) {
+    bias = { mult: KINGDOM_HOME_BIAS, note: "home discount" };
+  } else {
+    bias = { mult: KINGDOM_FOREIGN_BIAS, note: "foreign price" };
   }
-  if (playerKingdom === merchantKingdom) {
-    return { mult: KINGDOM_HOME_BIAS, note: "home discount" };
+  if (tier === "disliked") {
+    return {
+      mult: bias.mult * HATRED_DISLIKED_MULT,
+      note: [bias.note, "hatred premium"].filter(Boolean).join(" · "),
+      refused: false,
+    };
   }
-  return { mult: KINGDOM_FOREIGN_BIAS, note: "foreign price" };
+  return { ...bias, refused: false };
 }
 
 /** Journal a price move, but only when it actually moved (avoids spam). */
@@ -782,6 +800,16 @@ function buyFromMerchant(api, player, ware, amount) {
   if (!merchant) {
     return;
   }
+  // Hatred: a hated/enemy customer is refused service outright.
+  try {
+    const bias = kingdomPriceBias(player, merchant);
+    if (bias.refused) {
+      player.sendMessage("The merchant waves you off — \"We don't serve your kind here.\"");
+      return;
+    }
+  } catch (error) {
+    // Pricing must never break the sale.
+  }
   const merchantInv = merchant.getInventory();
   const stock = merchantInv?.getAmount?.(ware.id) ?? 0;
   if (stock <= 0) {
@@ -876,6 +904,16 @@ function sellToMerchant(api, player, ware, amount) {
   const merchant = checkStall(api, player, session);
   if (!merchant) {
     return;
+  }
+  // Hatred: a hated/enemy customer is refused service outright.
+  try {
+    const bias = kingdomPriceBias(player, merchant);
+    if (bias.refused) {
+      player.sendMessage("The merchant waves you off — \"We don't serve your kind here.\"");
+      return;
+    }
+  } catch (error) {
+    // Pricing must never break the sale.
   }
   const playerInv = player.getInventory();
   const held = playerInv?.getAmount?.(ware.id) ?? 0;

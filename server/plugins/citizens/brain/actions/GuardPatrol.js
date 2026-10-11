@@ -28,6 +28,14 @@ const {
 const { getMemory } = require("../../lib/CitizenMemory");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
+const Influence = require("../../../kingdoms/Influence.Kingdoms");
+
+// Hatred: lines for confronting hated/enemy players. {name} is filled at speak time.
+const HATRED_HARASS_LINES = Object.freeze([
+  "You. {name}. The court hasn't forgotten what you did — keep walking.",
+  "{name}. We see you. Don't think the street forgets.",
+  "Traitor's shadow. {name} — you'd best not linger here.",
+]);
 
 const ARRIVE_RADIUS = 2;
 const SCAN_RADIUS_TILES = 12;
@@ -100,6 +108,14 @@ const HOME_GREET_LINES = Object.freeze({
   ]),
 });
 
+function pickHatredLine(state, username, player) {
+  const personality = player?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+  return voiceLine(voiceFor(personality), HATRED_HARASS_LINES, state.rng).replaceAll(
+    "{name}",
+    username
+  );
+}
+
 function pickWarnedLine(state, username, player) {
   const personality = player?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
   return voiceLine(voiceFor(personality), WARNED_LINES, state.rng).replaceAll(
@@ -150,6 +166,7 @@ function createGuardPatrolAction(spec, world) {
         nextScanAt: 0,
         nextChallengeAt: 0,
         challengedAt: new Map(), // username -> timestamp
+        assaultAt: new Map(), // username -> timestamp (assault witnessed)
         nextAcknowledgeAt: 0,
         acknowledgedAt: new Map(), // username -> timestamp
         nextGreetAt: 0,
@@ -184,6 +201,88 @@ function createGuardPatrolAction(spec, world) {
     const selfLoc = player.getLocation();
     const atWar = isKingdomAtWar(kingdomId);
     for (const other of locals) {
+      // Hatred: checked before stranger status — an enemy of this kingdom is
+      // attacked on sight, a hated one harassed, even if they hold citizenship.
+      let tier = null;
+      try {
+        tier = Influence.hatredTier(Influence.effectiveInfluence(other, kingdomId));
+      } catch (error) {
+        tier = null;
+      }
+      if (tier === "enemy" || tier === "hated") {
+        const otherLoc = other.getLocation?.();
+        if (!otherLoc) {
+          continue;
+        }
+        const dist = Math.max(
+          Math.abs(selfLoc.getX() - otherLoc.getX()),
+          Math.abs(selfLoc.getY() - otherLoc.getY())
+        );
+        if (dist > scanRadius) {
+          continue;
+        }
+        const username = other.getUsername?.() ?? "?";
+        if (nowMs - (state.challengedAt.get(username) ?? 0) < challengeCooldownMs) {
+          continue;
+        }
+        state.challengedAt.set(username, nowMs);
+        state.nextChallengeAt = nowMs + GLOBAL_CHALLENGE_COOLDOWN_MS;
+        if (tier === "enemy") {
+          try {
+            sayPublic(player, `${pickHatredLine(state, username, player)} Seize them!`);
+          } catch (error) {
+            // Cosmetic; never break the patrol.
+          }
+          try {
+            player.getCombat?.()?.attack?.(other);
+          } catch (error) {
+            // Combat engine decides legality; never break the patrol.
+          }
+          world?.log?.("citizen_guard_hatred_attack", {
+            guard: player.getUsername?.(),
+            target: username,
+            kingdom: kingdomId,
+          });
+        } else {
+          try {
+            sayPublic(player, pickHatredLine(state, username, player));
+          } catch (error) {
+            // Cosmetic; never break the patrol.
+          }
+          world?.log?.("citizen_guard_hatred_harass", {
+            guard: player.getUsername?.(),
+            target: username,
+            kingdom: kingdomId,
+          });
+        }
+        return;
+      }
+      // Assault witnessed: a real player fighting a citizen of this kingdom
+      // earns hatred with the kingdom. Once per cooldown per player.
+      // Checked before stranger status — citizens answer for their own too.
+      try {
+        if (typeof other.isPlayerBot !== "function" || other.isPlayerBot() !== true) {
+          const target = other.getCombat?.()?.getTarget?.() ?? null;
+          const victimKingdom =
+            target?.isPlayerBot?.() === true
+              ? target.getAttribute?.(ATTR_KINGDOM_ID) ?? null
+              : null;
+          if (victimKingdom === kingdomId) {
+            const vUsername = other.getUsername?.() ?? "?";
+            if (nowMs - (state.assaultAt.get(vUsername) ?? 0) >= challengeCooldownMs) {
+              state.assaultAt.set(vUsername, nowMs);
+              Influence.addInfluence(other, kingdomId, -10, "assault");
+              world?.log?.("citizen_guard_assault_witnessed", {
+                guard: player.getUsername?.(),
+                assailant: vUsername,
+                kingdom: kingdomId,
+              });
+            }
+          }
+        }
+      } catch (error) {
+        // Witnessing must never break the patrol.
+      }
       if (!isStranger(player, other)) {
         continue;
       }

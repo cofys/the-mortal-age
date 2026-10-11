@@ -271,6 +271,19 @@ function petition(player, args) {
     player.sendMessage("[Court] One office per subject — you already hold seals in this kingdom.");
     return;
   }
+  // Hatred gate: a hated court will not hear petitions; an enemy of the
+  // realm is barred outright. Service can redeem — the tier is checked live.
+  const tier = Influence.hatredTier(Influence.effectiveInfluence(player, office.kingdomId));
+  if (tier === "hated" || tier === "enemy") {
+    player.sendMessage(
+      `[Court] The court of ${kingdomName(office.kingdomId)} will not hear you — ` +
+        (tier === "enemy"
+          ? "you are declared an enemy of the realm."
+          : "you are hated by the court.") +
+        " Redeem yourself through service before petitioning."
+    );
+    return;
+  }
   const holder = office.holder;
   if (!holder) return petitionVacant(player, username, office);
   if (holder.kind === "player" && holder.ref === username) {

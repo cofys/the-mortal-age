@@ -13,9 +13,18 @@
  *   kingdom:task-completed  kingdom tasks, +25 (hook for future task systems)
  *   tenure                  +1 per day of membership, capped at +30
  *
- * Decay: raw points fall by INFLUENCE_DECAY_PER_DAY per idle day (linear,
- * floored at zero), settled lazily on read and on earn. Tenure bonus does
- * not decay — long service is remembered even when the coffers are quiet.
+ * Hatred: influence can go negative (to HATRED_FLOOR). Negative influence is
+ * earned through addInfluence with a reason ("oathbreaking", "assault",
+ * "theft", "war-treason") and carries consequence tiers (see hatredTier):
+ * disliked (< 0), hated (<= -25), enemy (<= -100). Negative influence decays
+ * toward zero slowly (HATRED_DECAY_PER_DAY); positive service while negative
+ * earns at half rate — redemption is harder than the fall.
+ *
+ * Decay: raw points fall by INFLUENCE_DECAY_PER_DAY per idle day (linear),
+ * settled lazily on read and on earn. Positive decay floors at zero —
+ * idleness never makes you hated. Negative decay rises toward zero.
+ * Tenure bonus does not decay — long service is remembered even when the
+ * coffers are quiet, and it softens hatred (the court remembers).
  *
  * Storage: one persisted player attribute, kingdom:influence, shaped
  *   { [kingdomId]: { points, firstEarned, lastEarned } }
@@ -40,6 +49,27 @@ const INFLUENCE_PER_COIN = 1 / 100;
 const TENURE_BONUS_PER_DAY = 1;
 const TENURE_BONUS_CAP = 30;
 const INFLUENCE_DECAY_PER_DAY = 2;
+
+/** Hatred floor: influence can sink this low, no further. */
+const HATRED_FLOOR = -150;
+/** Negative influence decays toward zero this much per idle day (slower than positive decay). */
+const HATRED_DECAY_PER_DAY = 1;
+/** While negative, positive service earns at this rate — redemption is harder than the fall. */
+const HATRED_EARN_RATE = 0.5;
+
+/** Hatred tier thresholds, checked against effective influence. */
+const HATRED_HATED_AT = -25;
+const HATRED_ENEMY_AT = -100;
+
+/** Oathbreaking: the influence hit taken with the abandoned kingdom. */
+const OATHBREAK_HIT = -75;
+/** Word spreads: per-other-kingdom chance of also losing influence. */
+const OATHBREAK_SPREAD_CHANCE = 0.4;
+/** Word spreads: the influence hit each hearing kingdom takes. */
+const OATHBREAK_SPREAD_HIT = -15;
+
+/** Reasons that earn negative influence. */
+const NEGATIVE_REASONS = Object.freeze(["oathbreaking", "assault", "theft", "war-treason"]);
 
 /** Influence needed to petition for a vacant office. */
 const PETITION_THRESHOLD = 100;
@@ -83,10 +113,21 @@ function recordFor(player, kingdomId) {
   return rec && typeof rec === "object" ? rec : null;
 }
 
-/** Raw points after settling idle decay, never negative. Decay accrues per whole idle day. */
+/**
+ * Raw points after settling idle decay. Positive points decay toward zero
+ * (idleness never makes you hated); negative points rise toward zero slowly.
+ * Floored at HATRED_FLOOR. Decay accrues per whole idle day.
+ */
 function decayedPoints(rec, now) {
   const idleDays = Math.floor(Math.max(0, (now - (rec.lastEarned ?? now)) / DAY_MS));
-  return Math.max(0, (rec.points ?? 0) - idleDays * INFLUENCE_DECAY_PER_DAY);
+  const points = rec.points ?? 0;
+  if (points > 0) {
+    return Math.max(0, points - idleDays * INFLUENCE_DECAY_PER_DAY);
+  }
+  if (points < 0) {
+    return Math.min(0, points + idleDays * HATRED_DECAY_PER_DAY);
+  }
+  return 0;
 }
 
 /** Tenure bonus: +1 per day since first service, capped. Never decays. */
@@ -97,7 +138,8 @@ function tenureBonus(rec, now) {
 
 /**
  * Effective influence: what the court weighs. Decayed points plus the
- * tenure bonus, floored at zero.
+ * tenure bonus. Can go negative — the court remembers both service and
+ * betrayal, and long service softens hatred.
  */
 function effectiveInfluence(player, kingdomId) {
   const rec = recordFor(player, kingdomId);
@@ -107,19 +149,67 @@ function effectiveInfluence(player, kingdomId) {
 }
 
 /**
- * Add influence, settling decay first so idleness is honestly priced.
- * Returns the new raw point total.
+ * Hatred tier for an effective influence value: "disliked" (< 0),
+ * "hated" (<= -25), "enemy" (<= -100), or null when neutral-or-better.
+ * Pure — pass effectiveInfluence(player, kingdomId).
  */
-function addInfluence(player, kingdomId, amount) {
-  if (!player?.setAttribute || !kingdomId || !(amount > 0)) return 0;
+function hatredTier(effective) {
+  if (!(effective < 0)) return null;
+  if (effective <= HATRED_ENEMY_AT) return "enemy";
+  if (effective <= HATRED_HATED_AT) return "hated";
+  return "disliked";
+}
+
+/**
+ * Add influence, settling decay first so idleness is honestly priced.
+ * Amount may be negative (hatred): floored at HATRED_FLOOR. Positive
+ * service while negative earns at HATRED_EARN_RATE. Reason is recorded
+ * on the record when negative ("oathbreaking", "assault", "theft",
+ * "war-treason"). Returns the new raw point total.
+ */
+function addInfluence(player, kingdomId, amount, reason) {
+  if (!player?.setAttribute || !kingdomId) return 0;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount === 0) return 0;
   const now = Date.now();
   const records = { ...recordsOf(player) };
   const rec = records[kingdomId] ?? blankRecord(now);
-  rec.points = decayedPoints(rec, now) + amount;
+  const settled = decayedPoints(rec, now);
+  let delta = amount;
+  if (settled < 0 && amount > 0) {
+    delta = amount * HATRED_EARN_RATE;
+  }
+  rec.points = Math.max(HATRED_FLOOR, settled + delta);
   rec.lastEarned = now;
+  if (amount < 0 && typeof reason === "string" && reason.length > 0) {
+    rec.lastReason = reason;
+  }
   records[kingdomId] = rec;
   player.setAttribute(INFLUENCE_ATTRIBUTE, records);
   return rec.points;
+}
+
+/**
+ * Break an oath to a kingdom: the oathbreaker takes OATHBREAK_HIT with the
+ * abandoned kingdom, and word spreads — each other kingdom has
+ * OATHBREAK_SPREAD_CHANCE to also take OATHBREAK_SPREAD_HIT ("other
+ * kingdoms hear about your oathbreaking"). otherKingdomIds is injected so
+ * this stays pure and testable (pass KingdomStore.getKingdoms() ids minus
+ * the old one). rng is injectable for tests; defaults to Math.random.
+ * Returns { oldKingdomId, oldPoints, spreadTo } or null on bad args.
+ */
+function breakOath(player, oldKingdomId, otherKingdomIds, rng) {
+  if (!player?.setAttribute || !oldKingdomId) return null;
+  const roll = typeof rng === "function" ? rng : Math.random;
+  const oldPoints = addInfluence(player, oldKingdomId, OATHBREAK_HIT, "oathbreaking");
+  const spreadTo = [];
+  for (const kid of Array.isArray(otherKingdomIds) ? otherKingdomIds : []) {
+    if (kid === oldKingdomId) continue;
+    if (roll() < OATHBREAK_SPREAD_CHANCE) {
+      addInfluence(player, kid, OATHBREAK_SPREAD_HIT, "oathbreaking");
+      spreadTo.push(kid);
+    }
+  }
+  return { oldKingdomId, oldPoints, spreadTo };
 }
 
 /**
@@ -269,6 +359,17 @@ module.exports.INFLUENCE_PER_PROMOTION = INFLUENCE_PER_PROMOTION;
 module.exports.INFLUENCE_PER_TASK = INFLUENCE_PER_TASK;
 module.exports.INFLUENCE_PER_COIN = INFLUENCE_PER_COIN;
 module.exports.INFLUENCE_DECAY_PER_DAY = INFLUENCE_DECAY_PER_DAY;
+module.exports.HATRED_FLOOR = HATRED_FLOOR;
+module.exports.HATRED_DECAY_PER_DAY = HATRED_DECAY_PER_DAY;
+module.exports.HATRED_EARN_RATE = HATRED_EARN_RATE;
+module.exports.HATRED_HATED_AT = HATRED_HATED_AT;
+module.exports.HATRED_ENEMY_AT = HATRED_ENEMY_AT;
+module.exports.OATHBREAK_HIT = OATHBREAK_HIT;
+module.exports.OATHBREAK_SPREAD_CHANCE = OATHBREAK_SPREAD_CHANCE;
+module.exports.OATHBREAK_SPREAD_HIT = OATHBREAK_SPREAD_HIT;
+module.exports.NEGATIVE_REASONS = NEGATIVE_REASONS;
+module.exports.hatredTier = hatredTier;
+module.exports.breakOath = breakOath;
 module.exports.PETITION_THRESHOLD = PETITION_THRESHOLD;
 module.exports.CHALLENGE_THRESHOLD = CHALLENGE_THRESHOLD;
 module.exports.CHALLENGE_COOLDOWN_MS = CHALLENGE_COOLDOWN_MS;
