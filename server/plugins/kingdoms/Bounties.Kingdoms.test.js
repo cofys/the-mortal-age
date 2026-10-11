@@ -100,6 +100,37 @@ describe("Bounties posting and escalation", () => {
   });
 });
 
+describe("Bounties amountOverride (bank robbery)", () => {
+  beforeEach(() => seed(2000000));
+
+  it("posts the override amount instead of the per-crime default", () => {
+    // 100k + 25% of a 400k take.
+    const rec = Bounties.markWanted("Robber", A, "bank-robbery", Store, 200000);
+    assert.ok(rec);
+    assert.equal(rec.amount, 200000);
+    assert.equal(rec.crime, "bank-robbery");
+    assert.equal(Store.getKingdom(A).treasury, 2000000 - 200000);
+  });
+
+  it("caps the override at MAX_AMOUNT", () => {
+    const rec = Bounties.markWanted("Robber", A, "bank-robbery", Store, 5000000);
+    assert.ok(rec);
+    assert.equal(rec.amount, Bounties.BOUNTY_CONFIG.MAX_AMOUNT);
+  });
+
+  it("escalates an existing record by the override", () => {
+    Bounties.markWanted("Robber", A, "theft", Store);
+    const rec = Bounties.markWanted("Robber", A, "bank-robbery", Store, 200000);
+    assert.equal(rec.crimes, 2);
+    assert.equal(rec.amount, Bounties.BOUNTY_CONFIG.PER_CRIME.theft + 200000);
+  });
+
+  it("a four-arg call still uses the per-crime default (backwards compatible)", () => {
+    const rec = Bounties.markWanted("Thief", A, "theft", Store);
+    assert.equal(rec.amount, Bounties.BOUNTY_CONFIG.PER_CRIME.theft);
+  });
+});
+
 describe("Bounties decay (gradual, refunding)", () => {
   beforeEach(() => seed());
 
