@@ -70,10 +70,18 @@ const CRITICAL_HP = 30;
 const CRITICAL_ENERGY = 10;
 
 // Non-critical re-decision needs the winner to beat the current activity by
-// this margin, or citizens thrash between close options.
-const SWITCH_MARGIN = 15;
+// this margin, or citizens thrash between close options. Set just above
+// personality-level score noise (~7) so genuinely better options can win
+// without letting near-ties flip-flop.
+const SWITCH_MARGIN = 8;
 // Minimum gap between non-critical interrupts for one citizen.
 const INTERRUPT_COOLDOWN_MS = 90 * 1000;
+// Macro re-decide: every this many decision gates, an anchored citizen takes
+// the registry's honest pick (epsilon-greedy + variety guard) with no margin
+// requirement, so healthy citizens still change course on their own. ~10
+// gates at the 25-45s cadence is roughly every 4-7 minutes.
+const MACRO_EVERY = 10;
+const macroCounts = new Map();
 // Per-citizen decision cadence: 25-45s, hash-staggered so the population
 // doesn't decide in lockstep.
 const DECISION_MIN_MS = 25 * 1000;
@@ -4280,6 +4288,24 @@ function interruptTarget(player, brain, nowMs) {
   if (bestScore > currentScore + SWITCH_MARGIN) {
     return { activity: best, reason: "better" };
   }
+  // Periodic macro re-decide for anchored citizens: every MACRO_EVERY-th
+  // decision gate, take the registry's honest pick (epsilon-greedy + variety
+  // guard) instead of demanding the margin. doInterrupt's 90s cooldown still
+  // paces the actual switches, so this can't thrash.
+  if (username) {
+    const macroCount = (macroCounts.get(username) ?? 0) + 1;
+    macroCounts.set(username, macroCount);
+    if (macroCount % MACRO_EVERY === 0) {
+      try {
+        const macro = pick(player, candidates, nowMs);
+        if (macro && macro.id !== currentId) {
+          return { activity: macro, reason: "macro" };
+        }
+      } catch {
+        // A bad macro pick never blocks the margin path.
+      }
+    }
+  }
   return null;
 }
 
@@ -4405,6 +4431,7 @@ function resetForTests() {
   nextDecisionAt.clear();
   directedPick.clear();
   lastInterruptAt.clear();
+  macroCounts.clear();
   lastPruneAt = 0;
 }
 

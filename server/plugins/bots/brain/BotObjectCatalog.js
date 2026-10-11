@@ -98,16 +98,29 @@ function matchEntry(kind, tier) {
     return entries;
   }
   const wanted = normalize(tier);
-  const match = entries.find((entry) => {
-    const name = normalize(entry.name);
-    return (
-      name === wanted ||
-      name === `${wanted} tree` ||
-      name === `${wanted} rocks` ||
-      name.startsWith(`${wanted} `)
+  const nameMatches = (name) =>
+    name === wanted ||
+    name === `${wanted} tree` ||
+    name === `${wanted} rocks` ||
+    name.startsWith(`${wanted} `);
+  const match = entries.find((entry) => nameMatches(normalize(entry.name)));
+  if (match) {
+    return [match];
+  }
+  // Tier fallback: some sites name a specific object variant (Morytania's
+  // work tier "dead" for the swamp's dead trees), which lives in an entry's
+  // objectNames rather than the entry name. Return a narrowed entry so
+  // resolution yields only the matched variant's objects, not the whole
+  // entry's (the normal-tree entry also covers live trees and evergreens).
+  for (const entry of entries) {
+    const hit = (entry.objectNames ?? []).find((objectName) =>
+      nameMatches(normalize(objectName))
     );
-  });
-  return match ? [match] : [];
+    if (hit) {
+      return [{ name: hit, objectNames: [hit], ids: entry.ids }];
+    }
+  }
+  return [];
 }
 
 function resolveEntryIds(entry) {

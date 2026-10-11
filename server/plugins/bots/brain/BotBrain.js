@@ -324,16 +324,39 @@ class BotBrain {
   }
 
   /** Dispatches the bot's pending movement request (ditch crossings and doors included). */
-  dispatchMovement() {
+  dispatchMovement(nowMs = Date.now()) {
     const player = this.player;
     if (!player || player.getForceMovement?.() != null) {
       return;
     }
-    if (player.getMovementQueue?.()?.size?.() > 0) {
-      return;
+    const queue = player.getMovementQueue?.();
+    if (queue?.size?.() > 0) {
+      // Blocked-checkpoint recovery: the engine retains a checkpoint when a
+      // step is rejected for a route-visible reason (shut door, new wall) and
+      // the queue then pins the brain forever (early return above), while the
+      // brain-level request is long gone. Reset the engine queue so a stale
+      // checkpoint can't strand the citizen; the live request re-dispatches
+      // around it below when still present. Entity-only blockage keeps the
+      // queue — the blocker moving resumes the original path.
+      if (queue.isStepBlocked?.() && queue.wasRouteInvalidated?.()) {
+        try {
+          queue.invalidateDestinationFlagCache?.();
+        } catch {
+          // A bad reset never breaks the tick.
+        }
+      } else {
+        return;
+      }
     }
     const request = peekMovementRequest(player);
     if (!request) {
+      return;
+    }
+    // Honor the navigator's no-path backoff: re-dispatching before
+    // nextDispatchAtMs just churns failed route searches while the citizen
+    // stands in place.
+    const nextDispatchAtMs = Number(request.nextDispatchAtMs ?? 0);
+    if (Number.isFinite(nextDispatchAtMs) && nextDispatchAtMs > nowMs) {
       return;
     }
     if (maybeOpenDoor({ player, state: this.state ?? null, world: this.world, request })) {
@@ -412,7 +435,7 @@ class BotBrain {
       console.log(`[DIAG-CITIZEN] brain ticking for ${username}`);
     }
     this.lastTickAt = nowMs;
-    this.dispatchMovement();
+    this.dispatchMovement(nowMs);
     // Support runs before the activity action: boosts, defensive/retreat,
     // then eating.
     const support = this.world?.supportTick?.({
@@ -495,6 +518,14 @@ class BotBrain {
               y: loc?.getY?.() ?? null,
             });
             this.stopAction(action, ctx);
+            // A stalled frame may be pinned on a retained engine checkpoint
+            // (a blocked step the action can't see). Clear the engine queue so
+            // the replacement activity doesn't inherit the same wall.
+            try {
+              this.player?.getMovementQueue?.()?.invalidateDestinationFlagCache?.();
+            } catch {
+              // Queue reset never blocks the fail path.
+            }
             frame.state = FRAME_STATE.FAILED;
           }
         }

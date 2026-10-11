@@ -228,6 +228,41 @@ function doCatchAttempt(ctx) {
 }
 
 /**
+ * One real catch attempt for a routine-phase fisher (not a skilling session).
+ * Uses the same spot-gated catch machinery as tickCitizenFishing and the same
+ * per-citizen cadence. Returns true when an attempt was made (hit or miss),
+ * false when skipped (no spot, no room, pacing). The Skill enum comes from the
+ * caller's brain-world core so this module stays director-free.
+ */
+function attemptDockCatch(bot, site, overrides = {}) {
+  const nowMs = overrides.nowMs ?? Date.now();
+  const Fishing = overrides.fishing ?? fishingPlugin();
+  if (!Fishing?.rollCatch || !Fishing?.getSpotTool || !Fishing?.TOOLS) {
+    return false;
+  }
+  const Skill = overrides.skill;
+  if (!Skill?.FISHING) {
+    return false;
+  }
+  const key = normalizeName(bot?.getUsername?.() ?? "?");
+  if (nowMs < (nextCatchAt.get(key) ?? 0)) {
+    return false;
+  }
+  nextCatchAt.set(
+    key,
+    nowMs + CATCH_MIN_MS + Math.random() * (CATCH_MAX_MS - CATCH_MIN_MS)
+  );
+  const record = { username: bot?.getUsername?.() ?? "?" };
+  const session = { site, items: 0, xp: 0 };
+  try {
+    doCatchAttempt({ director: null, record, bot, session, Fishing, Skill, nowMs });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Director tick entry. LOD-gated: only materialized citizens (isOnline +
  * getBot) in arrived fishing sessions can land real catches.
  */
@@ -268,6 +303,7 @@ function tickCitizenFishing(director, overrides = {}) {
 
 module.exports = {
   tickCitizenFishing,
+  attemptDockCatch,
   // exposed for tests
   _resetForTests() {
     nextCatchAt.clear();
