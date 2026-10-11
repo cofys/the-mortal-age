@@ -357,3 +357,110 @@ describe("Areas.Kingdoms wiring", () => {
     ]);
   });
 });
+
+describe("guard exception (the watch)", () => {
+  beforeEach(seed);
+
+  function mockGuard(kingdomId, loc) {
+    const g = mockSubject(kingdomId, loc, { bot: true, name: "Watchman" });
+    g.setAttribute("citizens:role", "guard");
+    return g;
+  }
+
+  function withInfluence(player, kingdomId, points) {
+    const now = Date.now();
+    player.setAttribute("kingdom:influence", {
+      [kingdomId]: { points, firstEarned: now, lastEarned: now },
+    });
+    return player;
+  }
+
+  it("a guard may seize a wartime enemy inside a town — the carve-out binds everyone but the watch", () => {
+    declareWar();
+    const guard = mockGuard(A, TOWN_A);
+    const enemy = mockSubject(M, TOWN_A);
+    assert.equal(WartimePvp.wartimeCanAttack(guard, enemy, A), true);
+    // The enemy's own swing in the same town is still refused.
+    assert.equal(WartimePvp.wartimeCanAttack(enemy, guard, A), false);
+    // A fellow subject may not join in: player-initiated town PvP stays off.
+    assert.equal(
+      WartimePvp.wartimeCanAttack(mockSubject(A, TOWN_A), enemy, A),
+      false
+    );
+  });
+
+  it("the exception is the guard's own ground only", () => {
+    declareWar();
+    const guard = mockGuard(A, TOWN_M);
+    const enemy = mockSubject(M, TOWN_M);
+    // Judged from Misthalin's area, an Asgarnian watchman has no
+    // authority: the town carve-out answers, as for any other pair.
+    assert.equal(WartimePvp.wartimeCanAttack(guard, enemy, M), false);
+    // On open enemy ground the ordinary wartime rule allows the pair —
+    // the exception is not what carries it there.
+    assert.equal(
+      WartimePvp.wartimeCanAttack(mockGuard(A, FIELD_M), mockSubject(M, FIELD_M), M),
+      true
+    );
+  });
+
+  it("peacetime, the watch seizes nobody for a war that is not on", () => {
+    const guard = mockGuard(A, TOWN_A);
+    assert.equal(WartimePvp.wartimeCanAttack(guard, mockSubject(M, TOWN_A), A), null);
+    assert.equal(
+      WartimePvp.wartimeCanAttack(mockGuard(A, FIELD_A), mockSubject(M, FIELD_A), A),
+      null
+    );
+  });
+
+  it("the watch leaves neutrals, fellows and the kingdomless alone in town", () => {
+    declareWar();
+    const guard = mockGuard(A, TOWN_A);
+    assert.equal(WartimePvp.wartimeCanAttack(guard, mockSubject(K, TOWN_A), A), null);
+    assert.equal(WartimePvp.wartimeCanAttack(guard, mockSubject(A, TOWN_A), A), null);
+    assert.equal(WartimePvp.wartimeCanAttack(guard, mockSubject(null, TOWN_A), A), null);
+  });
+
+  it("hatred: the standing seize order lands — enemy tier, in town, in peacetime", () => {
+    const guard = mockGuard(A, TOWN_A);
+    // The court's own subject turned enemy of the realm.
+    const traitor = withInfluence(mockSubject(A, TOWN_A), A, -120);
+    // A kingdomless exile the court has marked enemy.
+    const exile = withInfluence(mockSubject(null, TOWN_A), A, -120);
+    assert.equal(WartimePvp.wartimeCanAttack(guard, traitor, A), true);
+    assert.equal(WartimePvp.wartimeCanAttack(guard, exile, A), true);
+    // Hated is harassed, never seized: no exception.
+    const hated = withInfluence(mockSubject(M, TOWN_A), A, -50);
+    assert.equal(WartimePvp.wartimeCanAttack(guard, hated, A), null);
+  });
+
+  it("only the watch gets the exception — not other citizens, not a player wearing the word", () => {
+    declareWar();
+    const merchant = mockSubject(A, TOWN_A, { bot: true });
+    merchant.setAttribute("citizens:role", "merchant");
+    assert.equal(WartimePvp.wartimeCanAttack(merchant, mockSubject(M, TOWN_A), A), false);
+    const impostor = mockSubject(A, TOWN_A); // real players are never the watch
+    impostor.setAttribute("citizens:role", "guard");
+    assert.equal(WartimePvp.wartimeCanAttack(impostor, mockSubject(M, TOWN_A), A), false);
+  });
+
+  it("war-end disarms the watch the same call", () => {
+    declareWar();
+    const guard = mockGuard(A, TOWN_A);
+    const enemy = mockSubject(M, TOWN_A);
+    assert.equal(WartimePvp.wartimeCanAttack(guard, enemy, A), true);
+    Store.endWar(A, M, "treaty");
+    assert.equal(WartimePvp.wartimeCanAttack(guard, enemy, A), null);
+  });
+
+  it("guardCanAttack speaks only for guards of the ground being judged", () => {
+    declareWar();
+    const guard = mockGuard(A, TOWN_A);
+    const enemy = mockSubject(M, TOWN_A);
+    assert.equal(WartimePvp.guardCanAttack(guard, enemy, A), true);
+    assert.equal(WartimePvp.guardCanAttack(guard, enemy, M), null);
+    assert.equal(WartimePvp.isGuardCitizen(guard), true);
+    assert.equal(WartimePvp.isGuardCitizen(mockSubject(A, TOWN_A, { bot: true })), false);
+    assert.equal(WartimePvp.isGuardCitizen(mockNpc(TOWN_A)), false);
+  });
+});

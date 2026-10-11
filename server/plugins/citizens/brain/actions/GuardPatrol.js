@@ -6,7 +6,10 @@
  * timing, and challenges strangers: players who don't share its kingdom:id.
  *
  * War alert (kingdom:war-declared, tracked in CitizenEvents) shortens the
- * circuit pace and sharpens the challenge lines. Per-bot state lives in the
+ * circuit pace and sharpens the challenge lines. In wartime the watch
+ * goes further: enemy subjects are seized on sight (see isWarEnemyTarget;
+ * the canAttack exception that lets those swings land lives in
+ * WartimePvp.Kingdoms, the rule's one home). Per-bot state lives in the
  * shared action-state map; the action instance itself is stateless.
  */
 
@@ -35,6 +38,16 @@ const HATRED_HARASS_LINES = Object.freeze([
   "You. {name}. The court hasn't forgotten what you did — keep walking.",
   "{name}. We see you. Don't think the street forgets.",
   "Traitor's shadow. {name} — you'd best not linger here.",
+]);
+
+// Wartime: lines for seizing an enemy subject on sight (Jon, 2026-10-11 —
+// the watch attacks enemy subjects for the war alone, towns included).
+// {name} is filled at speak time.
+const WAR_SEIZE_LINES = Object.freeze([
+  "You — {name}! Enemy colours on our streets. Seize them!",
+  "{name}! We're at war — did you think the watch would wave you through?",
+  "There's one! {name} — enemy subject. Take them!",
+  "Hold, {name}! Your crown's at war with ours. You're ours now.",
 ]);
 
 const ARRIVE_RADIUS = 2;
@@ -124,6 +137,42 @@ function pickWarnedLine(state, username, player) {
   );
 }
 
+function pickWarSeizeLine(state, username) {
+  return WAR_SEIZE_LINES[
+    Math.floor(state.rng() * WAR_SEIZE_LINES.length)
+  ].replaceAll("{name}", username);
+}
+
+/**
+ * Wartime aggression (Jon, 2026-10-11): a subject of a kingdom at war
+ * with the guard's own is seized on sight — the war alone is reason
+ * enough, no personal hatred needed, and town walls are no shelter from
+ * the watch. The war state is the real one, read through WartimePvp
+ * (the rule's one home); anything unreadable fails safe to peace,
+ * matching this file's style. The guard must be on its own ground: a
+ * different kingdom's territory under its boots means the watch has
+ * strayed, and the watch does not start fights abroad. Unknown ground
+ * (no territory-table match) is the beat's own streets — the patrol
+ * circuit is cut from the guard's kingdom sites either way — and the
+ * engine-side exception in WartimePvp remains the hard legal gate.
+ */
+function isWarEnemyTarget(guard, other, kingdomId) {
+  try {
+    const theirs = other?.getAttribute?.(ATTR_KINGDOM_ID);
+    if (!theirs || theirs === kingdomId) {
+      return false;
+    }
+    const WartimePvp = require("../../../kingdoms/WartimePvp.Kingdoms");
+    if (!WartimePvp.atWar(kingdomId, theirs)) {
+      return false;
+    }
+    const ground = WartimePvp.territoryAt(guard);
+    return !ground || ground === kingdomId;
+  } catch {
+    return false;
+  }
+}
+
 function distanceTo(player, tile) {
   const loc = player.getLocation();
   return Math.max(
@@ -209,7 +258,14 @@ function createGuardPatrolAction(spec, world) {
       } catch (error) {
         tier = null;
       }
-      if (tier === "enemy" || tier === "hated") {
+      // Wartime: an enemy subject is seized for the war alone, personal
+      // record clean or not. It outranks a mere "hated" harass — the
+      // watch attacks the enemy in wartime; it does not trade words.
+      const warEnemy =
+        atWar && tier !== "enemy"
+          ? isWarEnemyTarget(player, other, kingdomId)
+          : false;
+      if (tier === "enemy" || tier === "hated" || warEnemy) {
         const otherLoc = other.getLocation?.();
         if (!otherLoc) {
           continue;
@@ -227,9 +283,14 @@ function createGuardPatrolAction(spec, world) {
         }
         state.challengedAt.set(username, nowMs);
         state.nextChallengeAt = nowMs + GLOBAL_CHALLENGE_COOLDOWN_MS;
-        if (tier === "enemy") {
+        if (tier === "enemy" || warEnemy) {
           try {
-            sayPublic(player, `${pickHatredLine(state, username, player)} Seize them!`);
+            sayPublic(
+              player,
+              tier === "enemy"
+                ? `${pickHatredLine(state, username, player)} Seize them!`
+                : pickWarSeizeLine(state, username)
+            );
           } catch (error) {
             // Cosmetic; never break the patrol.
           }
@@ -238,11 +299,20 @@ function createGuardPatrolAction(spec, world) {
           } catch (error) {
             // Combat engine decides legality; never break the patrol.
           }
-          world?.log?.("citizen_guard_hatred_attack", {
-            guard: player.getUsername?.(),
-            target: username,
-            kingdom: kingdomId,
-          });
+          if (tier === "enemy") {
+            world?.log?.("citizen_guard_hatred_attack", {
+              guard: player.getUsername?.(),
+              target: username,
+              kingdom: kingdomId,
+            });
+          } else {
+            world?.log?.("citizen_guard_war_attack", {
+              guard: player.getUsername?.(),
+              target: username,
+              kingdom: kingdomId,
+              enemyKingdom: other.getAttribute?.(ATTR_KINGDOM_ID) ?? null,
+            });
+          }
         } else {
           try {
             sayPublic(player, pickHatredLine(state, username, player));

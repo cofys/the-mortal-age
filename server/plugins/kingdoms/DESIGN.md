@@ -316,8 +316,13 @@ they're the seam future LLM hooks (AI citizens, court agents) will read.
   the `canAttack` wartime PvP law is LIVE (WartimePvp.Kingdoms.js — enemy
   subjects fight on either belligerent's territory during an active war,
   capitals and frontier towns carved out as safe zones, lawful war kills
-  excluded from the assault bounty/hatred hooks); Morytania guard
-  aggression and Keldagrim company checkpoints remain stubbed to `null`.
+  excluded from the assault bounty/hatred hooks); the watch exception
+  is LIVE too (Jon, 2026-10-11: town safe zones bind everyone except
+  the town's own guards — GuardPatrol seizes enemy subjects on sight in
+  wartime, towns included, and the standing hatred seize order at enemy
+  tier now lands through the same exception in WartimePvp.Kingdoms).
+  Morytania guard aggression and Keldagrim company checkpoints remain
+  stubbed to `null`.
 - **Tax collection** — the treasury has a door but no foot traffic. Shop taxes,
   market tolls, and war levies need emitters in the economy/skilling content.
 - **Courts and AI rulers** — `tagCourtier` is ready; spawning kings, generals

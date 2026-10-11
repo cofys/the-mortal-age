@@ -18,6 +18,14 @@
  *     is lawful war, not a crime — no hatred, no bounty, no goodwill hit.
  *   - Tests.
  *
+ * One exception (Jon, 2026-10-11): the watch. A town safe zone blocks
+ * player-initiated PvP only — it does not protect an enemy subject from
+ * an on-duty guard of the town's own kingdom. guardCanAttack() below is
+ * that exception, and it also carries the standing hatred seize order
+ * (enemy tier), which could never land before: the engine default for
+ * player pairs refuses every swing an Area does not affirmatively
+ * allow, and this rule never spoke for guards.
+ *
  * The war state is the real one: KingdomStore.getActiveWars() (the same
  * records WarResolution resolves). When a war ends — resolution, treaty,
  * expiry — the records stop being active and every answer here flips
@@ -154,6 +162,71 @@ function territoryAt(mobileOrLocation) {
   return null;
 }
 
+// --- the watch exception ---------------------------------------------------------
+
+// The citizen role attribute the director stamps at spawn (citizens'
+// constants: ATTR_CITIZEN_ROLE / ROLE_GUARD). A citizen carrying the
+// guard role is the watch — its assigned activity is the GuardPatrol
+// beat. Real players never carry a citizen role.
+const CITIZEN_ROLE_ATTRIBUTE = "citizens:role";
+const GUARD_ROLE = "guard";
+
+/** Is this actor an on-duty guard citizen? */
+function isGuardCitizen(mobile) {
+  try {
+    return (
+      mobile?.isPlayerBot?.() === true &&
+      mobile?.getAttribute?.(CITIZEN_ROLE_ATTRIBUTE) === GUARD_ROLE
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** The target's hatred tier with a kingdom, or null when unreadable/neutral. */
+function hatredTierOf(player, kingdomId) {
+  try {
+    const Influence = require("./Influence.Kingdoms");
+    return Influence.hatredTier(Influence.effectiveInfluence(player, kingdomId));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The watch exception to the matrix below, judged from the territory
+ * being asked (territoryId must be the guard's own kingdom — the watch
+ * does its work on its own ground). An on-duty guard citizen of that
+ * kingdom may engage:
+ *
+ *   (a) a subject of a kingdom at war with it — the war alone makes the
+ *       target fair game for the watch, town safe zone or not. The town
+ *       carve-out still refuses the target's own attacks: safe zones
+ *       bind everyone except the watch doing its job.
+ *   (b) a personal enemy of the court (hatred tier "enemy") — the
+ *       standing seize-on-sight order GuardPatrol has always issued.
+ *       Before this exception those swings were always refused by the
+ *       engine's player-pair default outside the Wilderness: the rule
+ *       never spoke for guards, so the order was shouted and fizzled.
+ *
+ * Returns true only when the exception applies; null (no opinion) in
+ * every other case, so the normal matrix still judges the pair.
+ */
+function guardCanAttack(attacker, target, territoryId) {
+  if (!territoryId || !isGuardCitizen(attacker)) return null;
+  if (kingdomOfActor(attacker) !== territoryId) return null;
+  const targetKingdom = kingdomOfActor(target);
+  if (
+    targetKingdom &&
+    targetKingdom !== territoryId &&
+    findWar(territoryId, targetKingdom)
+  ) {
+    return true;
+  }
+  if (hatredTierOf(target, territoryId) === "enemy") return true;
+  return null;
+}
+
 // --- the rule ------------------------------------------------------------------
 
 /**
@@ -163,6 +236,7 @@ function territoryAt(mobileOrLocation) {
  * ground, and "no opinion" everywhere else):
  *
  *   - either side not a player actor (NPCs are not subjects)  -> null
+ *   - the watch exception (guardCanAttack) applies           -> true
  *   - either side kingdomless, or same kingdom                -> null
  *   - no active war between the two kingdoms                  -> null
  *   - territory is neither side's kingdom                     -> null
@@ -175,6 +249,14 @@ function territoryAt(mobileOrLocation) {
 function wartimeCanAttack(attacker, target, territoryId) {
   if (attacker?.isPlayer?.() !== true || target?.isPlayer?.() !== true) {
     return null;
+  }
+  // The watch exception is judged before the matrix: a guard's lawful
+  // targets include pairs the matrix would never join — a wartime enemy
+  // standing inside the town safe zone, a same-kingdom traitor at enemy
+  // tier. Anything the exception does not affirmatively allow falls
+  // through to the matrix unchanged.
+  if (guardCanAttack(attacker, target, territoryId) === true) {
+    return true;
   }
   const attackerKingdom = kingdomOfActor(attacker);
   const targetKingdom = kingdomOfActor(target);
@@ -282,6 +364,8 @@ module.exports = {
   atWar,
   townSafeAt,
   territoryAt,
+  isGuardCitizen,
+  guardCanAttack,
   wartimeCanAttack,
   isLawfulWarFight,
   isHotGround,
