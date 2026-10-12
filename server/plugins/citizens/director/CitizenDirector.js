@@ -404,8 +404,13 @@ const PROXIMITY_TICK_TICKS = 17; // ~10s at 600ms/tick: fast spawn/despawn for r
 // Hard cap on concurrent materialized (~3MB) Player objects. Without this,
 // one player walking into a dense area (thousands of citizens) materializes
 // them all and OOMs the box. Spawns are nearest-first, so the citizens a
-// player can actually see always win. 150 x ~3MB ≈ 450MB worst case.
-const CITIZEN_MAX_MATERIALIZED = 150;
+// player can actually see always win.
+//
+// Perf-tuned 2026-10-12: 150 materialized citizens overran the 600ms tick
+// budget (~1400ms ticks, brains starved, citizens frozen). 60 x ~9ms/tick
+// ≈ 540ms worst case — fits the budget. Fewer citizens, but all of them
+// actually think and move, instead of 150 statues.
+const CITIZEN_MAX_MATERIALIZED = 60;
 
 // role -> rank granted through the kingdoms plugin's hierarchy.
 const ROLE_RANK = Object.freeze({
