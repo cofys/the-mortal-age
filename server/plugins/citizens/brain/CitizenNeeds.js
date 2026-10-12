@@ -208,10 +208,9 @@ function titheDebtFromLedger(username) {
   try {
     const KingdomStore = require("../../kingdoms/KingdomStore");
     const flags = KingdomStore.getKingdom?.(BLOOD_TITHE_KINGDOM_ID)?.flags ?? {};
-    return Math.max(
-      0,
-      Math.floor(Number(flags[BLOOD_TITHE_DEBT_FLAG_PREFIX + username] ?? 0))
-    );
+    // The engine keys debt flags by lowercased username — match it exactly.
+    const key = BLOOD_TITHE_DEBT_FLAG_PREFIX + String(username).toLowerCase();
+    return Math.max(0, Math.floor(Number(flags[key] ?? 0)));
   } catch (error) {
     return 0;
   }

@@ -52,7 +52,11 @@ function debtOf(username) {
   try {
     const KingdomStore = require("../../../kingdoms/KingdomStore");
     const flags = KingdomStore.getKingdom?.("morytania")?.flags ?? {};
-    return Math.max(0, Math.floor(Number(flags[DEBT_FLAG_PREFIX + username] ?? 0)));
+    // The engine keys debt flags by lowercased username — match it exactly.
+    return Math.max(
+      0,
+      Math.floor(Number(flags[DEBT_FLAG_PREFIX + String(username).toLowerCase()] ?? 0))
+    );
   } catch {
     return 0;
   }

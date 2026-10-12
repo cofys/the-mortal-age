@@ -44,6 +44,7 @@ const TITHE_CYCLE_MS = 24 * 60 * 60 * 1000; // daily
 const ROUND_CHECK_MS = 60 * 60 * 1000; // hourly poll; round itself is throttled daily
 
 const FLAG_LAST_AT = "morytania:blood-tithe:last-at";
+const FLAG_ROUND_ACTIVE = "morytania:blood-tithe:round-active";
 const FLAG_PATROL_FUND = "morytania:blood-tithe:patrol-fund";
 const FLAG_BURN_APPLIED_AT = "morytania:blood-tithe:burn-applied-at";
 const DEBT_FLAG = (username) => `morytania:blood-tithe:debt:${String(username).toLowerCase()}`;
@@ -333,7 +334,16 @@ function runTitheRound(api, store, opts) {
   // Records burned? Wipe outstanding debt before collecting.
   checkRecordsBurned(store, opts);
 
+  // Mark the round live so the citizen layer (tithe_collection_duty scoring)
+  // reads real engine state, not a guess. Cleared below even on error.
+  try {
+    Store.setFlag(KINGDOM_ID, FLAG_ROUND_ACTIVE, true);
+    Store.save();
+  } catch {
+    // cosmetic
+  }
   const rounds = { collected: 0, refused: 0, wanted: 0, defianceAwarded: new Set() };
+  try {
   for (const player of onlinePlayers(api)) {
     if (!isTarget(player)) continue;
     const username = usernameOf(player);
@@ -358,6 +368,13 @@ function runTitheRound(api, store, opts) {
       }
     }
     void taken;
+  }
+  } finally {
+    try {
+      Store.setFlag(KINGDOM_ID, FLAG_ROUND_ACTIVE, false);
+    } catch {
+      // cosmetic
+    }
   }
   Store.setFlag(KINGDOM_ID, FLAG_LAST_AT, now);
   Store.save();
@@ -476,3 +493,4 @@ module.exports.TITHE_PCT = TITHE_PCT;
 module.exports.TITHE_CAP = TITHE_CAP;
 module.exports.PATROL_SHARE = PATROL_SHARE;
 module.exports.TITHE_CYCLE_MS = TITHE_CYCLE_MS;
+module.exports.FLAG_ROUND_ACTIVE = FLAG_ROUND_ACTIVE;

@@ -70,7 +70,11 @@ function titheFlags() {
 
 function debtOf(username, flags) {
   if (!username) return 0;
-  return Math.max(0, Math.floor(Number(flags[DEBT_FLAG_PREFIX + username] ?? 0)));
+  // The engine keys debt flags by lowercased username — match it exactly.
+  return Math.max(
+    0,
+    Math.floor(Number(flags[DEBT_FLAG_PREFIX + String(username).toLowerCase()] ?? 0))
+  );
 }
 
 function distanceTo(player, tile) {

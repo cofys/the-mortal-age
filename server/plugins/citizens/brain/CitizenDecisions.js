@@ -2336,10 +2336,11 @@ function titheInfo(player) {
       flags["morytania:blood-tithe:round-active"] === true ||
       flags["morytania:blood-tithe:round"] === true;
     if (info.morytanian && username) {
-      const ledgerDebt = Math.max(
-        0,
-        Math.round(Number(flags[`morytania:blood-tithe:debt:${username}`] ?? 0))
-      );
+      // The engine keys debt flags by lowercased username — match it exactly.
+      const ledgerKey = `morytania:blood-tithe:debt:${String(
+        username
+      ).toLowerCase()}`;
+      const ledgerDebt = Math.max(0, Math.round(Number(flags[ledgerKey] ?? 0)));
       if (ledgerDebt > info.bloodDebt) {
         info.bloodDebt = ledgerDebt;
       }
