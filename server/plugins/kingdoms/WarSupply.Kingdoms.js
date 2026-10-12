@@ -425,10 +425,15 @@ function routeDelivery(kingdomId, cat, store) {
 }
 
 /**
- * Credit delivered units to a demand's category stock (capped at quota).
+ * Credit supply units to a war demand (capped at quota — nothing
+ * overfills). originKingdomId tags WHO supplied the units on the category
+ * record (c.origins); intra-kingdom today (origin = kingdomId), and the
+ * field is what a future inter-kingdom export flow reads to attribute
+ * foreign stock. Additive only — existing callers pass nothing and get
+ * the old behavior plus the tag.
  * @returns units actually credited
  */
-function addStock(kingdomId, warKey, cat, units, store) {
+function addStock(kingdomId, warKey, cat, units, store, originKingdomId) {
   const s = store ?? Store;
   const map = supplyMapOf(kingdomId, s);
   const rec = map?.[warKey];
@@ -438,6 +443,11 @@ function addStock(kingdomId, warKey, cat, units, store) {
   const credited = Math.min(room, Math.max(0, Math.floor(units)));
   if (credited > 0) {
     c.stock += credited;
+    const origin = originKingdomId ?? kingdomId;
+    if (origin) {
+      if (!c.origins || typeof c.origins !== "object") c.origins = {};
+      c.origins[origin] = (c.origins[origin] ?? 0) + credited;
+    }
     rec.morale = recomputeMoraleValue(rec.categories);
     saveSupplyMap(kingdomId, map, s);
   }
@@ -497,6 +507,9 @@ function supplyStatus(kingdomId, store) {
           quota: c.quota,
           stock: c.stock,
           pct: Math.max(0, Math.min(100, pct)),
+          // Per-kingdom supply-unit attribution (phase 4 resource flows):
+          // what an inter-kingdom export flow will read.
+          origins: c.origins && typeof c.origins === "object" ? { ...c.origins } : {},
         };
       }),
     };

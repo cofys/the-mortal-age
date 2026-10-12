@@ -338,6 +338,8 @@ const CitizenObservatoryGuilds = require("../lib/CitizenObservatoryGuilds");
 const { tickCivilLife } = require("../lib/CitizenCivilLife");
 const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
+const { tickSurplusSales } = require("../economy/CitizenSurplusSales");
+const { tickWarContributions } = require("../economy/CitizenWarContributions");
 const { configuredSpread } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
 const CitizenBonds = require("../lib/CitizenBonds");
@@ -2638,6 +2640,22 @@ class CitizenDirector {
       name: 'shoppers failed',
       run: () => {
         tickShoppers(this, hour);
+      },
+    },
+    // Phase 4 resource flows: wartime surplus goes to the quartermaster
+    // first (treasury pays real coins, war stock grows origin-tagged);
+    // then banked surplus trades peer-to-peer at reference prices.
+    // Data tier, zero LLM. Each tick is internally capped.
+    {
+      name: 'war contributions failed',
+      run: () => {
+        tickWarContributions(this, hour);
+      },
+    },
+    {
+      name: 'surplus sales failed',
+      run: () => {
+        tickSurplusSales(this, hour);
       },
     },
     // Citizen "alive" layer: stuck detection & recovery, idle life

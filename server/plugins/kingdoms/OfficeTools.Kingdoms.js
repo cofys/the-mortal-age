@@ -936,8 +936,10 @@ function sealsLines(player) {
  * item's category, the war effort takes the delivery first (credited
  * against the demand quota, capped so nothing overfills). Otherwise the
  * quartermaster's standing supply order takes it, as before.
+ * originKingdomId (optional) tags the credited war stock with the
+ * supplying kingdom for future inter-kingdom export attribution.
  */
-function deliverSupplies(player, kingdomId, itemId, qty) {
+function deliverSupplies(player, kingdomId, itemId, qty, originKingdomId) {
   const fail = (message) => ({ ok: false, message });
   const spec = SUPPLY_ITEMS[itemId] ?? WarSupply.WAR_SUPPLY_ITEMS[itemId];
   if (!spec) return fail("The quartermaster buys provisions, arrows, runes and war materials - nothing else.");
@@ -946,7 +948,7 @@ function deliverSupplies(player, kingdomId, itemId, qty) {
   }
   const route = WarSupply.routeDelivery(kingdomId, spec.cat ?? "food", Store);
   if (route) {
-    return deliverToWarDemand(player, kingdomId, itemId, spec, qty, route);
+    return deliverToWarDemand(player, kingdomId, itemId, spec, qty, route, originKingdomId);
   }
   const order = getSupplyOrder(kingdomId);
   if (!order) return fail("The quartermaster seeks no supplies just now.");
@@ -1026,7 +1028,7 @@ function influenceForDelivery(units) {
  * stock (capped at quota), the treasury pays, the supplier gains
  * influence, and the army's morale recomputes.
  */
-function deliverToWarDemand(player, kingdomId, itemId, spec, qty, route) {
+function deliverToWarDemand(player, kingdomId, itemId, spec, qty, route, originKingdomId) {
   const fail = (message) => ({ ok: false, message });
   const inventory = player.getInventory?.();
   const have = inventory?.getAmount?.(itemId) ?? 0;
@@ -1045,7 +1047,7 @@ function deliverToWarDemand(player, kingdomId, itemId, spec, qty, route) {
   inventory.delete(itemId, count);
   inventory.refreshItems?.();
   inventory.adds(COINS_ID, payout);
-  const credited = WarSupply.addStock(kingdomId, route.warKey, spec.cat ?? "food", units, Store);
+  const credited = WarSupply.addStock(kingdomId, route.warKey, spec.cat ?? "food", units, Store, originKingdomId);
   const influence = influenceForDelivery(units);
   try {
     Influence.addInfluence(player, kingdomId, influence);
