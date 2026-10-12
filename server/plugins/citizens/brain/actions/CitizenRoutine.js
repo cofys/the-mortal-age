@@ -23,7 +23,7 @@ const {
 const { getReferencePrice } = require("../../../economy/Prices.Economy");
 const { createBankAction } = require("../../../bots/brain/actions/Bank");
 const { createIdleSocialAction } = require("./IdleSocial");
-const { siteTile, workSite, dockSite, kingdomIdOf, siteTileBySettlement, workSiteBySettlement } = require("../CitizenSites");
+const { siteTile, workSite, dockSite, kingdomIdOf, siteTileBySettlement, workSiteBySettlement, siteTileByTown, workSiteByTown, fishingBiasByTown } = require("../CitizenSites");
 const { isKingdomAtWar } = require("../../CitizenEvents");
 const {
   ATTR_CITIZEN_PERSONALITY,
@@ -31,6 +31,7 @@ const {
   ATTR_SUPPLIER_MERCHANT,
   ATTR_KINGDOM_ID,
   ATTR_CITIZEN_SETTLEMENT,
+  ATTR_CITIZEN_TOWN,
   ATTR_CITIZEN_WORK_KIND,
   ROLE_MERCHANT,
 } = require("../../constants");
@@ -69,10 +70,11 @@ const RETRY_WORK_MS = 60000;
 const CASTS_PER_HAUL = 4;
 
 /**
- * Settlement-aware site resolution. Frontier settlement citizens live at
- * their settlement, not the affiliated capital — their work/market/tavern
- * are the settlement's anchors. Capital citizens (no settlement attribute)
- * use the kingdom sites as before.
+ * Town + settlement-aware site resolution. Smaller-town citizens live at
+ * their town, not the affiliated capital — their work/market/tavern are
+ * the town's anchors. Frontier settlement citizens use the settlement's.
+ * Capital citizens (no town/settlement attribute) use the kingdom sites
+ * as before.
  */
 function settlementIdOf(player) {
   try {
@@ -83,7 +85,21 @@ function settlementIdOf(player) {
   }
 }
 
+function townIdOf(player) {
+  try {
+    const id = player?.getAttribute?.(ATTR_CITIZEN_TOWN);
+    return typeof id === "string" && id.length > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 function siteTileLocal(player, kind) {
+  const tid = townIdOf(player);
+  if (tid) {
+    const tile = siteTileByTown(tid, kind);
+    if (tile) return tile;
+  }
   const sid = settlementIdOf(player);
   if (sid) {
     const tile = siteTileBySettlement(sid, kind);
@@ -93,6 +109,11 @@ function siteTileLocal(player, kind) {
 }
 
 function workSiteLocal(player) {
+  const tid = townIdOf(player);
+  if (tid) {
+    const site = workSiteByTown(tid);
+    if (site) return site;
+  }
   const sid = settlementIdOf(player);
   if (sid) {
     const site = workSiteBySettlement(sid);
@@ -637,6 +658,24 @@ function createCitizenRoutineAction(spec, world) {
     if (anchored === WORK_FISHING || anchored === "tree" || anchored === "rock") {
       state.workKind = anchored;
       return state.workKind;
+    }
+    // Town citizens work their town's nodes: the town's fishing bias sends
+    // fishers to the town dock; everyone else works the town's gather
+    // site. Towns without a gather site (Blast Furnace district) fall
+    // through to the kingdom branch so they still have a living.
+    const tid = townIdOf(player);
+    if (tid) {
+      const townDock = siteTileByTown(tid, "dock");
+      const bias = fishingBiasByTown(tid);
+      if (townDock && bias > 0 && chance(state.rng, bias)) {
+        state.workKind = WORK_FISHING;
+        return state.workKind;
+      }
+      const townWork = workSiteByTown(tid);
+      if (townWork) {
+        state.workKind = townWork.catalog;
+        return state.workKind;
+      }
     }
     // Settlement citizens work their settlement's site (tree/rock from
     // settlements.json). No docks in settlements yet — no fishing.

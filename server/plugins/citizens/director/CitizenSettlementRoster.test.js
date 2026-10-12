@@ -9,7 +9,8 @@
  * affiliate with the nearest great power for kingdom mechanics.
  *
  * This test drives the REAL boot() with the engine boundary stubbed and pins:
- *   1. Total roster = 100 capital citizens + 400 settlement citizens.
+ *   1. Total roster = 100 capital citizens + 400 settlement citizens
+ *      + 150 smaller-town citizens (Phase 2).
  *   2. Every settlement citizen has a settlementId, a valid nearest-kingdom
  *      kingdomId, and a home within ~15 tiles of the settlement anchor.
  *   3. Capital citizens are unaffected (no settlementId).
@@ -111,12 +112,12 @@ describe("settlement roster", () => {
     buildMs = Date.now() - t0;
   });
 
-  it("builds 500 citizens: 100 capitals + 400 settlements", () => {
-    assert.equal(director.roster.size, 500);
+  it("builds 650 citizens: 100 capitals + 400 settlements + 150 towns", () => {
+    assert.equal(director.roster.size, 650);
   });
 
   it("builds fast", () => {
-    assert.ok(buildMs < 5000, `roster build took ${buildMs}ms`);
+    assert.ok(buildMs < 8000, `roster build took ${buildMs}ms`);
   });
 
   it("covers all 8 settlements", () => {
@@ -154,8 +155,9 @@ describe("settlement roster", () => {
   it("capital citizens are unaffected", () => {
     let capitals = 0;
     for (const record of director.roster.values()) {
-      if (!record.settlementId) {
+      if (!record.settlementId && !record.townId) {
         capitals += 1;
+        assert.equal(record.townId ?? null, null);
         assert.ok(KINGDOM_IDS.includes(record.kingdomId));
       }
     }
@@ -168,6 +170,6 @@ describe("settlement roster", () => {
       assert.ok(!names.has(key), `duplicate roster key: ${key}`);
       names.add(key);
     }
-    assert.equal(names.size, 500);
+    assert.equal(names.size, 650);
   });
 });

@@ -17,6 +17,11 @@ const ATTR_CITIZEN_SEED = "citizens:seed";
 const ATTR_CITIZEN_NEEDS = "citizens:needs";
 const ATTR_CITIZEN_INTENTS = "citizens:intents";
 const ATTR_CITIZEN_SETTLEMENT = "citizens:settlement";
+// Smaller town (or Keldagrim city district) from data/towns.json, stamped on
+// the bot at spawn. Town citizens live at their town, not the capital — their
+// work/market/tavern/bank resolve from the town's anchors (see
+// brain/CitizenSites.js). Null for capital and settlement citizens.
+const ATTR_CITIZEN_TOWN = "citizens:town";
 // Director-assigned work anchor kind ('fishing' | 'tree' | 'rock'),
 // stamped on the bot at spawn so the routine works where the director
 // spawned them (see lib/CitizenAnchor.js).
@@ -102,6 +107,7 @@ module.exports = {
   ATTR_CITIZEN_NEEDS,
   ATTR_CITIZEN_INTENTS,
   ATTR_CITIZEN_SETTLEMENT,
+  ATTR_CITIZEN_TOWN,
   ATTR_CITIZEN_WORK_KIND,
   ATTR_WARE_ITEM,
   ATTR_WARE_PRICE,

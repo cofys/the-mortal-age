@@ -4,9 +4,9 @@
  * CitizenAnchor — director-side activity anchors.
  *
  * A roster record's data-tier position: where an offline citizen "is".
- * Commoners anchor at their work site (their settlement's work tile, their
- * kingdom's work tile, or the dock for fishers); every other role anchors
- * at home. The director measures spawn proximity against record.position
+ * Commoners anchor at their work site (their town's work tile, their
+ * settlement's work tile, their kingdom's work tile, or the dock for
+ * fishers); every other role anchors at home. The director measures spawn proximity against record.position
  * and spawnCitizen materializes the bot there — so a player walking up to
  * a mining camp finds the miners actually there, instead of everyone
  * spawning at home regardless of where their living is.
@@ -24,6 +24,9 @@ const {
   siteTileByKingdom,
   workSiteByKingdom,
   workSiteBySettlement,
+  siteTileByTown,
+  workSiteByTown,
+  fishingBiasByTown,
 } = require("../brain/CitizenSites");
 const {
   ACT_MINE,
@@ -56,7 +59,29 @@ function anchorFor(record) {
   }
   let tile = null;
   let workKind = null;
-  if (record.settlementId) {
+  if (record.townId) {
+    // Smaller-town citizens work their town's nodes: the town's fishing
+    // bias (seeded per citizen, mirroring the routine's roll) sends
+    // fishers to the town dock; everyone else works the town's gather
+    // site. Towns without a gather site (Blast Furnace district) anchor
+    // at home — no fictional work tiles.
+    const dock = siteTileByTown(record.townId, "dock");
+    const bias = fishingBiasByTown(record.townId);
+    if (dock && bias > 0) {
+      const rng = agentRng(`anchor:${record.username}:${record.seed ?? 0}`);
+      if (rng() < bias) {
+        tile = dock;
+        workKind = "fishing";
+      }
+    }
+    if (!tile) {
+      const work = workSiteByTown(record.townId);
+      if (work && isGatherKind(work.catalog)) {
+        tile = { x: work.x, y: work.y, z: work.z ?? 0 };
+        workKind = work.catalog;
+      }
+    }
+  } else if (record.settlementId) {
     // Frontier settlement citizens work their settlement's site.
     // No docks in settlements yet — no fishing.
     const site = workSiteBySettlement(record.settlementId);

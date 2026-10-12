@@ -345,7 +345,7 @@ const CitizenSocialBonds = require("../lib/CitizenSocialBonds");
 const CitizenKinship = require("../lib/CitizenKinship");
 const CitizenWeddings = require("../lib/CitizenWeddings");
 const { normalizeName } = require("../lib/CitizenBonds");
-const { siteTileByKingdom, siteTileBySettlement, kingdomIdOfSettlement, KINGDOM_IDS, SETTLEMENT_IDS } = require("../brain/CitizenSites");
+const { siteTileByKingdom, siteTileBySettlement, kingdomIdOfSettlement, KINGDOM_IDS, SETTLEMENT_IDS, siteTileByTown, kingdomIdOfTown, TOWN_IDS } = require("../brain/CitizenSites");
 const {
   ensureNeeds,
   needsSnapshot,
@@ -364,6 +364,7 @@ const {
   ATTR_CITIZEN_SEED,
   ATTR_CITIZEN_NEEDS,
   ATTR_CITIZEN_SETTLEMENT,
+  ATTR_CITIZEN_TOWN,
   ATTR_CITIZEN_WORK_KIND,
   ATTR_PRIME_MERCHANT,
   ATTR_SUPPLIER_MERCHANT,
@@ -459,6 +460,51 @@ function defaultSettlementPlan() {
     shilo: mix(30),
     nardah: mix(30),
     lletya: mix(30),
+  };
+}
+
+/**
+ * Smaller-town + Keldagrim district populations (Phase 2, 2026-10-12):
+ * citizens live in their kingdom's smaller towns, not just the capitals
+ * and frontier settlements. Roles skew commoner-heavy — these are working
+ * towns. Totals weight town character and size: fishing towns get the most
+ * fishers' neighbors, big market towns get courts of a sort, the besieged
+ * refugee village stays small. 150 citizens across 12 towns + 4 districts.
+ */
+function defaultTownPlan() {
+  const mix = (total) => {
+    const guard = Math.max(1, Math.round(total * 0.08));
+    const merchant = Math.max(1, Math.round(total * 0.14));
+    const courtier = total >= 12 ? 1 : 0;
+    return {
+      [ROLE_GUARD]: guard,
+      [ROLE_MERCHANT]: merchant,
+      [ROLE_COMMONER]: Math.max(1, total - guard - merchant - courtier),
+      [ROLE_COURTIER]: courtier,
+    };
+  };
+  return {
+    // Kandarin: the woodshop + coast
+    catherby: mix(14), // fishing town (bias 0.7): fishers + net-menders
+    "seers-village": mix(14), // yew woodcutters + flax
+    yanille: mix(12), // walled market town
+    // Asgarnia: the breadbasket + coast
+    "port-sarim": mix(10), // fishing port (bias 0.75)
+    rimmington: mix(8), // farming/market village
+    burthorpe: mix(8), // military/training village
+    taverley: mix(8), // druidic village, oak woodcutters
+    // Misthalin: the merchant
+    lumbridge: mix(10), // beginner town, mixed fishers/gatherers
+    draynor: mix(10), // market village, willows + fishing
+    // Morytania: the apothecary
+    canifis: mix(12), // werewolf village / slayer hub
+    "port-phasmatys": mix(10), // undead port (ecto economy)
+    "burgh-de-rott": mix(6), // besieged refugee village, fishes for food
+    // Keldagrim: city districts (no satellite towns exist)
+    "keldagrim-palace": mix(6),
+    "keldagrim-market": mix(8),
+    "keldagrim-blastfurnace": mix(8), // smelters/smiths, home-anchored
+    "keldagrim-minescamp": mix(6), // coal miners
   };
 }
 
@@ -685,13 +731,29 @@ class CitizenDirector {
         }
       }
     }
+    // Smaller towns + Keldagrim districts: citizens anchored to the town's
+    // own sites, living in their kingdom's smaller towns.
+    const townPlan = defaultTownPlan();
+    for (const [townId, roles] of Object.entries(townPlan)) {
+      if (!TOWN_IDS.includes(townId)) {
+        this.log("unknown town in town plan, skipped", { townId });
+        continue;
+      }
+      const kingdomId = kingdomIdOfTown(townId);
+      for (const [role, count] of Object.entries(roles ?? {})) {
+        const wanted = Math.max(0, Math.floor(Number(count) || 0));
+        for (let index = 0; index < wanted; index += 1) {
+          this.addCitizen(kingdomId, role, null, townId);
+        }
+      }
+    }
     this.log("roster built", { citizens: this.roster.size });
     this.startTask();
   }
 
-  addCitizen(kingdomId, role, settlementId = null) {
+  addCitizen(kingdomId, role, settlementId = null, townId = null) {
     const rng = agentRng(
-      `director:${kingdomId}:${role}:${settlementId ?? "capital"}:${this.roster.size}`
+      `director:${kingdomId}:${role}:${settlementId ?? "capital"}:${townId ?? "notown"}:${this.roster.size}`
     );
     // Usernames are the personality names (deduplicated); bots are people.
     const personality = generatePersonality(`seed-${this.roster.size}`, {
@@ -701,9 +763,9 @@ class CitizenDirector {
     });
     const username = personality.name;
     // Citizens live near the market or square of their kingdom's capital —
-    // or of their frontier settlement, when they have one. Commoners split
-    // between market and square so towns feel populated in multiple areas,
-    // not just clustered at one spot.
+    // or of their frontier settlement / smaller town, when they have one.
+    // Commoners split between market and square so towns feel populated in
+    // multiple areas, not just clustered at one spot.
     const useSquare = role === "commoner" && rng() < 0.4;
     let anchorKind = useSquare ? "square" : "market";
     // Keldagrim has two populated anchors (city center + entrance plaza);
@@ -711,15 +773,20 @@ class CitizenDirector {
     if (
       useSquare &&
       !settlementId &&
+      !townId &&
       kingdomId === "keldagrim" &&
       siteTileByKingdom(kingdomId, "square2") &&
       rng() < 0.5
     ) {
       anchorKind = "square2";
     }
-    const anchor = settlementId
-      ? siteTileBySettlement(settlementId, anchorKind)
-      : siteTileByKingdom(kingdomId, anchorKind);
+    const anchor = townId
+      ? // Towns without a market entry (Keldagrim districts) fall back to
+        // the square — homes must land in-town, never at the 3200,3200 default.
+        (siteTileByTown(townId, anchorKind) ?? siteTileByTown(townId, "square"))
+      : settlementId
+        ? siteTileBySettlement(settlementId, anchorKind)
+        : siteTileByKingdom(kingdomId, anchorKind);
     const resolvedAnchor = anchor ?? { x: 3200, y: 3200, z: 0 };
     const home = this.findWalkableHome(resolvedAnchor, rng);
     home.z = resolvedAnchor.z ?? 0;
@@ -746,6 +813,7 @@ class CitizenDirector {
       personality,
       kingdomId,
       settlementId,
+      townId,
       role,
       merchantKind,
       home,
@@ -1859,6 +1927,12 @@ class CitizenDirector {
     // not the affiliated capital). Null for capital citizens.
     if (record.settlementId) {
       bot.setAttribute?.(ATTR_CITIZEN_SETTLEMENT, record.settlementId);
+    }
+    // Smaller town / Keldagrim district: same idea — the brain resolves
+    // work/market/tavern/bank/dock from the town's anchors (see
+    // brain/CitizenSites.js townIdOf). Null for capital/settlement citizens.
+    if (record.townId) {
+      bot.setAttribute?.(ATTR_CITIZEN_TOWN, record.townId);
     }
     this.api.emitCustomEvent(EVENT_RANK_GRANTED, {
       player: bot,
