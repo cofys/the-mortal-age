@@ -191,18 +191,30 @@ function playAnim(director, bot, animId) {
   }
 }
 
+/**
+ * Turn a citizen to face a tile. Citizens are full Player objects, so the
+ * real engine API is Mobile.setPositionToFaceCoordinates — it flags
+ * FACE_POSITION and the sync packet carries the facing to nearby clients
+ * (verified: PlayerSession faceDirection from the flagged positionToFace).
+ * The old bot.face?.(x, y) call was a silent no-op: Player has no `face`
+ * method (only NPC.faceTile exists), so every idle look-around, newcomer
+ * glance, and conversation face silently did nothing. This is the shared
+ * helper — chat layers (CitizenSocial, CitizenConversations) use it via
+ * lazy require to avoid a load cycle.
+ * @returns {boolean} true when a facing update was issued
+ */
 function faceToward(bot, targetTile) {
   try {
     const my = botTile(bot);
     if (!my || !targetTile) return false;
-    // Face by setting the direction — the engine derives facing from
-    // movement or explicit face commands. We use a 1-tile step-and-stop
-    // which naturally turns the model without visible movement.
     const dx = Math.sign(targetTile.x - my.x);
     const dy = Math.sign(targetTile.y - my.y);
     if (dx === 0 && dy === 0) return false;
-    bot.face?.(targetTile.x, targetTile.y);
-    return true;
+    if (typeof bot?.setPositionToFaceCoordinates === "function") {
+      bot.setPositionToFaceCoordinates(targetTile.x, targetTile.y, targetTile.z ?? my.z ?? 0);
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -647,10 +659,31 @@ function tickImperfections(director, record, bot, nowMs) {
   const watched = realPlayersNear(bot).length > 0;
 
   // Distraction: walking citizen pauses to look at something.
-  // More likely for daydreamers, less for the dutiful.
+  // More likely for daydreamers, less for the dutiful. The pause turns
+  // into a pause-and-scan: the citizen stops AND turns toward whatever
+  // caught their eye, which reads as looking around instead of a pathing
+  // hiccup. (The client only honors facing when standing — a glance
+  // issued mid-walk is invisible, so the turn happens with the stop.)
   if (moving && chance(rng, DISTRACT_CHANCE * (profile.pauseRate / 0.1))) {
     try {
       bot.getMovementQueue?.()?.clear?.();
+      try {
+        const myTile = botTile(bot);
+        if (myTile) {
+          const pois = [];
+          for (const other of citizenBotsNear(director, bot, MICRO_POI_RADIUS)) {
+            const t = botTile(other);
+            if (t) pois.push(t);
+          }
+          for (const p of realPlayersNear(bot)) {
+            const t = botTile(p);
+            if (t) pois.push(t);
+          }
+          faceToward(bot, pickFaceTarget(rng, myTile, pois));
+        }
+      } catch {
+        // A failed glance never blocks the pause.
+      }
       if (watched && chance(rng, 0.5)) {
         { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: DISTRACTION_LINES }, rng)); }
       }
@@ -940,6 +973,7 @@ module.exports = {
   movementStyleFor,
   styleWalkTarget,
   shouldPauseMidWalk,
+  faceToward,
   // exposed for tests
   _positionHistory: positionHistory,
   _tickStuckDetection: tickStuckDetection,

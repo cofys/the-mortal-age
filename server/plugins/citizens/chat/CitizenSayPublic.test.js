@@ -13,6 +13,7 @@ const {
   pickLineAvoidingRepeat,
   normalizeRepeatLine,
   repeatGuardStats,
+  applyVoiceStyle,
   CHAT_MAX_LEN,
   CHATBOX_MIN_GAP_MS,
   MAX_CHUNKS,
@@ -514,3 +515,79 @@ run("repeat guard: area + citizen stores are capped", () => {
 });
 
 console.log("ALL REPEAT-GUARD TESTS DONE");
+
+// --- Voice backstop: per-citizen voice signature at the sayPublic choke point ---
+
+function makeVoicedCitizen({ username = "Gruff", locals = [], personality } = {}) {
+  const forced = [];
+  const base = makeCitizen({ username, locals });
+  base.player.getAttribute = (k) =>
+    k === "citizens:personality" ? personality : undefined;
+  return base;
+}
+
+run("voice backstop: terse voice strips exclamation marks", () => {
+  const c = makeVoicedCitizen({
+    personality: { traits: ["gruff"], speechStyle: "short clipped sentences" },
+  });
+  assert.equal(applyVoiceStyle(c.player, "Hey there!"), "hey there.");
+});
+
+run("voice backstop: street-slang voice lowercases", () => {
+  const c = makeVoicedCitizen({
+    personality: { traits: [], speechStyle: "rough street slang" },
+  });
+  assert.equal(applyVoiceStyle(c.player, "Selling Lobsters!"), "selling lobsters!");
+});
+
+run("voice backstop: plain voice leaves the line alone", () => {
+  const c = makeVoicedCitizen({
+    personality: { traits: ["dutiful"], speechStyle: "careful formal phrasing" },
+  });
+  assert.equal(applyVoiceStyle(c.player, "Hey there!"), "Hey there!");
+});
+
+run("voice backstop: missing personality degrades to unchanged", () => {
+  const c = makeCitizen({ locals: [] }); // no citizens:personality attribute
+  assert.equal(applyVoiceStyle(c.player, "Hey there!"), "Hey there!");
+  assert.equal(applyVoiceStyle(null, "Hey there!"), "Hey there!");
+});
+
+run("voice backstop: idempotent over voiceLine-styled lines", () => {
+  const c = makeVoicedCitizen({
+    personality: { traits: ["gruff"], speechStyle: "short clipped sentences" },
+  });
+  // Already styled by a pick-time voiceLine: second application is a no-op.
+  assert.equal(applyVoiceStyle(c.player, "hey."), "hey.");
+});
+
+run("voice backstop: sayPublic speaks the voiced line, not the raw one", () => {
+  const r = makeRecipient();
+  const c = makeVoicedCitizen({
+    locals: [r],
+    personality: { traits: ["gruff"], speechStyle: "short clipped sentences" },
+  });
+  const ok = sayPublic(c.player, "Morning!");
+  assert.equal(ok, true);
+  assert.deepEqual(c.forced, ["morning."]);
+  assert.equal(r.sent.length, 1);
+  assert.equal(r.sent[0].message, "morning.");
+});
+
+run("voice backstop: voiced lines land in the repeat memory as spoken", () => {
+  const r = makeRecipient();
+  const c = makeVoicedCitizen({
+    locals: [r],
+    personality: { traits: ["gruff"], speechStyle: "short clipped sentences" },
+  });
+  sayPublic(c.player, "Morning!");
+  // "morning." (styled) is recent — the raw "Morning!" form re-rolls.
+  let calls = 0;
+  const line = pickLineAvoidingRepeat(c.player, () => {
+    calls++;
+    return calls === 1 ? "Morning!" : "fresh";
+  });
+  assert.equal(line, "fresh");
+});
+
+console.log("ALL VOICE-BACKSTOP TESTS DONE");

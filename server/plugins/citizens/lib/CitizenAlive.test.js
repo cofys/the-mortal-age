@@ -45,6 +45,7 @@ const {
   microDriftIntervalMs,
   microFaceIntervalMs,
   pickFaceTarget,
+  faceToward,
   MICRO_DRIFT_MIN_MS,
   MICRO_DRIFT_MAX_MS,
   MICRO_FACE_MIN_MS,
@@ -77,7 +78,11 @@ function fakeBot(overrides = {}) {
     isPlayerBot: () => true,
     forceChat: () => {},
     performAnimation: () => {},
-    face: () => {},
+    face: () => {}, // legacy no-op: Player bots have no `face` method
+    setPositionToFaceCoordinates: function (x, y, z) {
+      this._faced = this._faced ?? [];
+      this._faced.push({ x, y, z });
+    },
     _loc: loc,
     ...overrides,
   };
@@ -500,5 +505,77 @@ describe("_tickIdleMicrobehaviors — drift and facing", () => {
     } finally {
       Bonds.clearFollow("test_citizen");
     }
+  });
+});
+
+describe("faceToward — real engine facing (2026-10-11: bot.face was a no-op)", () => {
+  function facedBot() {
+    const b = fakeBot();
+    const faced = [];
+    b.setPositionToFaceCoordinates = (x, y, z) => {
+      faced.push({ x, y, z });
+    };
+    b._faced = faced;
+    return b;
+  }
+
+  it("issues setPositionToFaceCoordinates toward the target tile", () => {
+    const b = facedBot();
+    const ok = faceToward(b, { x: 3205, y: 3200, z: 0 });
+    assert.equal(ok, true);
+    assert.deepEqual(b._faced, [{ x: 3205, y: 3200, z: 0 }]);
+  });
+
+  it("does nothing when the target is the current tile", () => {
+    const b = facedBot();
+    const ok = faceToward(b, { x: 3200, y: 3200, z: 0 });
+    assert.equal(ok, false);
+    assert.equal(b._faced.length, 0);
+  });
+
+  it("returns false when the bot lacks the engine facing API", () => {
+    const b = fakeBot();
+    delete b.setPositionToFaceCoordinates; // legacy/no-engine bot shape
+    assert.equal(faceToward(b, { x: 3205, y: 3200 }), false);
+  });
+
+  it("returns false on null target", () => {
+    const b = facedBot();
+    assert.equal(faceToward(b, null), false);
+    assert.equal(b._faced.length, 0);
+  });
+});
+
+describe("tickImperfections — pause-and-scan distraction", () => {
+  // Find a timestamp whose seeded rng fires the distraction branch
+  // (first rng draw of tickImperfections). Deterministic, not flaky.
+  function distractionNowMs() {
+    const { agentRng } = require("./humanizer");
+    for (let t = 1; t < 100000; t += 997) {
+      const rng = agentRng(`alive:imperfect:test_citizen:${t >> 13}`);
+      if (rng() < 0.06) return t;
+    }
+    throw new Error("no distraction timestamp found");
+  }
+
+  it("distraction stops the walk AND turns toward something (pause-and-scan)", () => {
+    const faced = [];
+    let cleared = false;
+    const b = fakeBot({
+      getMovementQueue: () => ({
+        size: () => 3,
+        clear: () => {
+          cleared = true;
+        },
+      }),
+      setPositionToFaceCoordinates: (x, y, z) => {
+        faced.push({ x, y, z });
+      },
+      getLocalPlayers: () => [], // unwatched: no speech, pure movement
+    });
+    const nowMs = distractionNowMs();
+    assert.doesNotThrow(() => _tickImperfections(fakeDirector(), fakeRecord(), b, nowMs));
+    assert.equal(cleared, true, "movement queue cleared on distraction");
+    assert.ok(faced.length >= 1, "citizen turns to look at something while paused");
   });
 });
