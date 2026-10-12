@@ -2347,6 +2347,68 @@
           }
         }
       ]
+    },
+    {
+      "id": "safetynet_wander",
+      "mode": "citizen_safetynet",
+      "repeat": true,
+      "capacity": 1000,
+      "failureCooldownSeconds": 5,
+      "requires": [
+        {
+          "citizen": {
+            "safetyNet": true
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenExplore"
+        }
+      ],
+      "_note": "SAFETY NET: no role requirement. Guarantees every citizen always has candidates."
+    },
+    {
+      "id": "safetynet_socialize",
+      "mode": "citizen_safetynet",
+      "repeat": true,
+      "capacity": 1000,
+      "failureCooldownSeconds": 5,
+      "requires": [
+        {
+          "citizen": {
+            "safetyNet": true
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "idleSocial",
+          "chatterMinMs": 30000,
+          "chatterMaxMs": 120000
+        }
+      ],
+      "_note": "SAFETY NET: no role requirement. Falls back to kingdom tavern anchor."
+    },
+    {
+      "id": "safetynet_rest",
+      "mode": "citizen_safetynet",
+      "repeat": true,
+      "capacity": 1000,
+      "failureCooldownSeconds": 5,
+      "requires": [
+        {
+          "citizen": {
+            "safetyNet": true
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenRest"
+        }
+      ],
+      "_note": "SAFETY NET: no role requirement. Walks home and recovers."
     }
   ]
 }

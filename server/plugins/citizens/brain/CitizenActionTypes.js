@@ -96,26 +96,40 @@ const { createRefugeeFlightAction } = require("./actions/RefugeeFlight");
 const { createCaravanWalkAction } = require("./actions/CaravanWalk");
 const { createTitheCollectionAction } = require("./actions/TitheCollection");
 const { createPayBloodTitheAction } = require("./actions/PayBloodTithe");
-const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE } = require("../constants");
+const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE, ATTR_CITIZEN_SEED } = require("../constants");
 
 let registered = false;
 
 /**
- * Condition: { citizen: { roles?: string[], kingdoms?: string[] } }.
+ * Condition: { citizen: { roles?: string[], kingdoms?: string[], safetyNet?: boolean } }.
  * True only for bots carrying the citizens:* attributes — base bots
  * (wilderness roamers, skillers) never match, so they never pick citizen
  * activities out of the shared registry.
+ *
+ * safetyNet: when true, the role check is bypassed. The player is verified
+ * as a citizen via ATTR_CITIZEN_SEED (set for every citizen at spawn, never
+ * for base bots). Safety-net activities guarantee a citizen NEVER has zero
+ * candidates, even if their role attribute is missing or invalid.
  */
 function createCitizenCondition(config) {
   const roles = Array.isArray(config?.roles) ? config.roles : null;
   const kingdoms = Array.isArray(config?.kingdoms) ? config.kingdoms : null;
-  const id = `citizen:${(roles ?? []).join("+") || "*"}:${(kingdoms ?? []).join("+") || "*"}`;
+  const safetyNet = config?.safetyNet === true;
+  const id = safetyNet
+    ? `citizen:safetynet:${(kingdoms ?? []).join("+") || "*"}`
+    : `citizen:${(roles ?? []).join("+") || "*"}:${(kingdoms ?? []).join("+") || "*"}`;
   return {
     id,
     check(ctx) {
       const player = ctx?.player;
       if (!player) {
         return false;
+      }
+      if (safetyNet) {
+        // Safety net: any citizen bot qualifies, regardless of role.
+        // Verified via seed attribute (citizens only, never base bots).
+        const seed = player.getAttribute?.(ATTR_CITIZEN_SEED);
+        return seed !== undefined && seed !== null;
       }
       const role = player.getAttribute?.(ATTR_CITIZEN_ROLE);
       if (typeof role !== "string" || role.length === 0) {

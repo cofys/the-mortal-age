@@ -352,6 +352,7 @@ const {
   ROLE_COMMONER,
   ROLE_COURTIER,
   ROLE_REFUGEE,
+  ROLES,
   ROLE_ACTIVITY,
   ACTIVITY_TAVERN_SOCIAL,
   ACTIVITY_LEISURE_STROLL,
@@ -2310,6 +2311,17 @@ class CitizenDirector {
       kingdomId: record.kingdomId,
       rank,
     });
+
+    // Role validation: every citizen MUST have a valid role, or the brain
+    // gets zero activity candidates (all 84 role-gated activities filter out)
+    // and the citizen stands idle forever. Default to commoner (77 activities).
+    if (!ROLES.includes(record.role)) {
+      this.log("citizen role missing/invalid, defaulting to commoner", {
+        citizen: record.username,
+        role: record.role,
+      });
+      record.role = ROLE_COMMONER;
+    }
 
     bot.setAttribute?.(ATTR_CITIZEN_ROLE, record.role);
     bot.setAttribute?.(ATTR_CITIZEN_PERSONALITY, record.personality);
