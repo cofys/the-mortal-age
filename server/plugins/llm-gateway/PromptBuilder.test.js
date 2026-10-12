@@ -11,8 +11,8 @@ const {
   MAX_CARD_CHARS,
 } = require("./PromptBuilder");
 
-test("MAX_OUTPUT_TOKENS allows ~2 sentences of substance (32)", () => {
-  assert.equal(MAX_OUTPUT_TOKENS, 32);
+test("MAX_OUTPUT_TOKENS fits one chat line (20)", () => {
+  assert.equal(MAX_OUTPUT_TOKENS, 20);
 });
 
 test("WORLD_GROUNDING demands specificity, not generic greetings", () => {
@@ -22,9 +22,8 @@ test("WORLD_GROUNDING demands specificity, not generic greetings", () => {
   assert.match(WORLD_GROUNDING, /never start your message with your own name/i);
 });
 
-test("WORLD_GROUNDING does not impose a character limit", () => {
-  assert.doesNotMatch(WORLD_GROUNDING, /60 characters/);
-  assert.doesNotMatch(WORLD_GROUNDING, /under \d+ characters/i);
+test("WORLD_GROUNDING demands brevity for single-chunk messages", () => {
+  assert.match(WORLD_GROUNDING, /under 80 characters/i);
 });
 
 test("buildPrompt uses MAX_OUTPUT_TOKENS", () => {
@@ -35,8 +34,8 @@ test("buildPrompt uses MAX_OUTPUT_TOKENS", () => {
     message: "hello",
     citizenName: "Test Citizen",
   });
-  assert.equal(prompt.maxTokens, 32);
-  assert.equal(prompt.outputTokens, 32);
+  assert.equal(prompt.maxTokens, 20);
+  assert.equal(prompt.outputTokens, 20);
 });
 
 test("buildPrompt includes specificity instructions in system", () => {
@@ -57,7 +56,7 @@ test("buildSpeakPrompt uses MAX_OUTPUT_TOKENS", () => {
     toKind: "player",
     citizenName: "Test Citizen",
   });
-  assert.equal(prompt.maxTokens, 32);
+  assert.equal(prompt.maxTokens, 20);
 });
 
 test("personality card still clamped", () => {
@@ -70,5 +69,5 @@ test("personality card still clamped", () => {
     citizenName: "Test",
   });
   // Card should be clamped to MAX_CARD_CHARS (480)
-  assert.ok(prompt.system.length < 1000 + 500);
+  assert.ok(prompt.system.length < 1000 + 600);
 });

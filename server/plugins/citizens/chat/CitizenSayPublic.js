@@ -42,10 +42,10 @@
  *
  * Long utterances: instead of truncating mid-sentence at 80 chars, the text
  * is split into ≤80-char chunks at word boundaries and sent as follow-up
- * messages (like a real player typing a second line), capped at MAX_CHUNKS.
- * Continuations are spaced CHUNK_GAP_MS apart and are part of the same
- * utterance — they don't re-claim the throttle, but they refresh it so a new
- * message can't interleave mid-utterance.
+ * messages, capped at MAX_CHUNKS. Continuations go out ~800ms apart (fast
+ * enough that other speakers can't interleave mid-utterance) and are part
+ * of the same utterance — they don't re-claim the throttle, but they refresh
+ * it so a new message can't interleave mid-utterance.
  *
  * REPETITION GUARD (anti-repeat chatter): template pools are shared
  * server-wide, so without memory the same citizen repeats a line minutes
@@ -69,7 +69,10 @@
 const CHAT_MAX_LEN = 80; // matches ChatPacketListener.handleText slice(0, 80)
 const CHATBOX_MIN_GAP_MS = 8000;
 const MAX_CHUNKS = 3; // 240 chars max per utterance; longer means upstream is wrong
-const CHUNK_GAP_MS = CHATBOX_MIN_GAP_MS; // continuations read as typed follow-ups
+// Continuations go out quickly: long gaps let other speakers' messages
+// interleave between a single utterance's chunks, making conversations
+// unreadable. Template messages should fit in one chunk; this is a fallback.
+const CHUNK_GAP_MS = 800;
 
 const { voiceFor, styleLine } = require("../lib/citizenVoice");
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");

@@ -109,22 +109,22 @@ test("WORLD_GROUNDING drops the 60-char limit", () => {
   assert.ok(!WORLD_GROUNDING.toLowerCase().includes("under 60"), "still has under-60");
 });
 
-test("WORLD_GROUNDING allows 1-2 sentences and bans name-first", () => {
-  assert.ok(WORLD_GROUNDING.includes("1-2 short sentences"), "missing 1-2 sentences");
+test("WORLD_GROUNDING demands one short sentence and bans name-first", () => {
+  assert.ok(WORLD_GROUNDING.includes("one short sentence"), "missing one-sentence rule");
   assert.ok(
     WORLD_GROUNDING.toLowerCase().includes("never start your message with your own name"),
     "missing name-first ban"
   );
 });
 
-test("buildSpeakPrompt strings drop Under-60", () => {
+test("buildSpeakPrompt strings demand one short sentence", () => {
   const card = "A cheerful fisher.";
   const forPlayer = buildSpeakPrompt({ card, toName: "Liam", toKind: "player", citizenName: "Ora Nettle" });
   const forCitizen = buildSpeakPrompt({ card, toName: "Bob", toRole: "miner", citizenName: "Ora Nettle" });
   for (const p of [forPlayer, forCitizen]) {
     assert.ok(!p.user.includes("60 characters"), `user still has 60 chars: ${p.user}`);
     assert.ok(!p.system.includes("60 characters"), "system still has 60 chars");
-    assert.ok(p.user.includes("1-2 short sentences"), `missing 1-2: ${p.user}`);
+    assert.ok(p.user.includes("One short sentence"), `missing one-sentence: ${p.user}`);
   }
 });
 

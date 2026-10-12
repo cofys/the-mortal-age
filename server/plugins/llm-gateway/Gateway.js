@@ -150,11 +150,11 @@ class Gateway {
     }
 
     // Collapse paragraph breaks / stray whitespace: one clean message, no
-    // orphan lines in the chatbox. Hard cap at 160 chars (2x the 80-char
-    // public-chat line): a citizen never sends more than a real player could
-    // type in two messages. Mouth.js paces the chunks with natural pauses.
+    // orphan lines in the chatbox. Hard cap at 80 chars (one public-chat
+    // line): multi-chunk utterances interleave with other speakers' messages
+    // in the chatbox, so generation must fit in a single chunk.
     const reply = result.text
-      .slice(0, 160)
+      .slice(0, 80)
       .replace(/\s+/g, " ")
       .trim();
     await this.memory.pushExchange(citizenUsername, requesterUsername, text, reply);
@@ -223,7 +223,7 @@ class Gateway {
     if (!result.ok || !result.text) return; // silent on failure/quota
 
     const reply = result.text
-      .slice(0, 160)
+      .slice(0, 80)
       .replace(/\s+/g, " ")
       .trim();
     await this.memory.pushExchange(citizenUsername, toUsername, "(opener)", reply);

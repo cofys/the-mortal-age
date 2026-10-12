@@ -20,11 +20,12 @@ const PUBLIC_CHAT_MAX_CHARS = 60;
 // CitizenSayPublic only requires lib/citizenVoice + constants — no cycle.
 const { stripSelfNamePrefix } = require("../citizens/chat/CitizenSayPublic");
 
-// Pacing between multi-line replies: a real player types one message, sends
-// it, pauses, then types the next. Citizens do the same. Without this, a
-// 2-line reply arrives as an instant burst that feels robotic.
-const INTER_CHUNK_MIN_MS = 2000;
-const INTER_CHUNK_MAX_MS = 5000;
+// Pacing between multi-line replies: chunks go out back-to-back with only a
+// brief pause. Long delays let other speakers' messages interleave between a
+// single utterance's chunks, making conversations unreadable. Generation is
+// now capped at 80 chars (one chunk), so this is a rare fallback, not the norm.
+const INTER_CHUNK_MIN_MS = 400;
+const INTER_CHUNK_MAX_MS = 800;
 
 const MOUTH_ENABLED = (process.env.LLM_GATEWAY_MOUTH ?? "1") === "1";
 
