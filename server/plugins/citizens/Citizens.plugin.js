@@ -76,7 +76,7 @@ const { initMarketRegistrar } = require("./shop/MarketRegistrar.Shops");
 const attachWarRefugees = require("./WarRefugees");
 const { onPlayerLevelUpNotice, onCitizenLevelUpNotice, onPlayerDeathNotice } = require("./StreetNotices");
 const { onCitizenDeath } = require("./lib/CitizenDeathRespawn");
-const { onNpcKillWitnessed } = require("./StreetSpectacle");
+const { onNpcKillWitnessed, onPlayerDropWitnessed } = require("./StreetSpectacle");
 const { onLogoutFarewell } = require("./StreetFarewells");
 const { onIdleSeen, clearIdleOnLogout } = require("./StreetIdle");
 const { onGiftGiven } = require("./CitizenGifts");
@@ -629,6 +629,11 @@ function onKillWitnessed(event) {
   onMilitiaKillSeen(event);
 }
 
+/** A player rolled a notable drop in view of the street: the street gzs. */
+function onDropWitnessed(event) {
+  onPlayerDropWitnessed(event);
+}
+
 /**
  * A militia citizen killed an enemy: record it for the war tally.
  * Militia kills feed siege power (every 10 kills = +1 power).
@@ -760,6 +765,8 @@ module.exports = {
     // capture the engine's real drop roll for the party split so the kill
     // pays out exactly once (CitizenBossRuns.handleNpcDropsGenerated).
     api.onCustomEvent("npc-drops:generated", onBossRunDropsGenerated);
+    // A player's drop roll contained a collection-log item: the street gzs.
+    api.onCustomEvent("npc-drops:roll", onDropWitnessed);
     api.onCustomEvent("kingdom:patrol-ordered", onKingdomPatrolOrdered);
     api.onCustomEvent("kingdom:wage-day", onKingdomWageDay);
     api.onCustomEvent("arrival:player-arrived", onArrivalPlayerArrived);

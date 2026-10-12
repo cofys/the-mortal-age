@@ -58,6 +58,12 @@ const IDLE_OBSERVE_CHANCE = 0.12; // per tick: voice a small observation
 const SOCIAL_GREET_RADIUS = 4; // tiles: citizens this close may greet
 const SOCIAL_GREET_CHANCE = 0.15; // per eligible pair per tick
 const SOCIAL_GREET_COOLDOWN_MS = 5 * 60 * 1000; // per citizen
+// Player-directed initiation: occasionally a citizen hails a nearby REAL
+// player instead of chatting with another citizen (rare, gated).
+const PLAYER_HAIL_RADIUS = 10; // tiles: players this close may be hailed
+const PLAYER_HAIL_CHANCE = 0.06; // per eligible citizen per tick, sociability-scaled
+const PLAYER_HAIL_PLAYER_COOLDOWN_MS = 20 * 60 * 1000; // a player is hailed at most every 20 min
+const lastHailedPlayerAt = new Map(); // player name -> timestamp
 const DISTRACT_CHANCE = 0.06; // per tick: walking citizen gets distracted
 const CHANGE_MIND_CHANCE = 0.03; // per tick: abandon destination, pick new one
 
@@ -539,6 +545,43 @@ const lastGreetAt = new Map(); // username -> timestamp
  * while already in one, and open feuds/enemies never chat.
  */
 
+/**
+ * A citizen occasionally hails a nearby REAL player — real players call
+ * out to people standing near them, not just to other NPCs. Heavily
+ * gated: the player-side cooldown lives here, the citizen-side cooldown
+ * and conversation caps live in the engine. Returns true when a hail
+ * started (the caller should stop for this tick).
+ */
+function maybeHailPlayer(director, record, bot, nowMs) {
+  try {
+    const myTile = botTile(bot);
+    if (!myTile) return false;
+    for (const p of bot.getLocalPlayers?.() ?? []) {
+      if (p === bot || !isRealPlayer(p)) continue;
+      const name = p.getUsername?.();
+      if (!name) continue;
+      if (nowMs - (lastHailedPlayerAt.get(name) ?? 0) < PLAYER_HAIL_PLAYER_COOLDOWN_MS) continue;
+      const pt = botTile(p);
+      if (!pt || chebyshev(myTile, pt) > PLAYER_HAIL_RADIUS) continue;
+      // Don't hail someone mid-fight — StreetActivity already comments
+      // on fights; an opener there would be odd.
+      try {
+        if (p.inCombat?.() === true) continue;
+      } catch {
+        // Unknown is hail-able.
+      }
+      const conv = CitizenConversations.maybePlayerInitiate(director, record, bot, name, p, nowMs);
+      if (conv) {
+        lastHailedPlayerAt.set(name, nowMs);
+        return true;
+      }
+    }
+  } catch {
+    // Non-fatal.
+  }
+  return false;
+}
+
 function tickSocialAwareness(director, record, bot, nowMs) {
   const name = record.username;
   if (nowMs - (lastGreetAt.get(name) ?? 0) < SOCIAL_GREET_COOLDOWN_MS) return;
@@ -549,6 +592,15 @@ function tickSocialAwareness(director, record, bot, nowMs) {
   // Taciturn citizens rarely start chats; chatty ones often do.
   const greetChance = SOCIAL_GREET_CHANCE * profile.sociability;
   if (!chance(rng, greetChance)) return;
+
+  // Player-directed initiation rolls first: even in a crowded square,
+  // citizens sometimes hail the actual player standing near them.
+  if (chance(rng, PLAYER_HAIL_CHANCE * profile.sociability)) {
+    if (maybeHailPlayer(director, record, bot, nowMs)) {
+      lastGreetAt.set(name, nowMs);
+      return;
+    }
+  }
 
   const others = citizenBotsNear(director, bot, SOCIAL_GREET_RADIUS);
   if (others.length === 0) return;

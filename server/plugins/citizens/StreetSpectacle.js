@@ -55,7 +55,12 @@ function pruneSpectacleCooldowns(nowMs) {
   if (nowMs - lastSpectaclePruneAt < 3600 * 1000) return;
   lastSpectaclePruneAt = nowMs;
   const cutoff = nowMs - 24 * 3600 * 1000;
-  for (const m of [lastSpectacleByCitizen, lastSpectacledKiller]) {
+  for (const m of [
+    lastSpectacleByCitizen,
+    lastSpectacledKiller,
+    lastDropByCitizen,
+    lastDroppedPlayer,
+  ]) {
     for (const [k, at] of m) {
       if (at < cutoff) m.delete(k);
     }
@@ -313,11 +318,131 @@ function onNpcKillWitnessed(event, nowMs = Date.now()) {
   }
 }
 
+// --- "Gz on the drop" -------------------------------------------------------
+// The npc-drops:roll custom event fires when the engine rolls a player's
+// drop table (NpcDrops.dropFor). A collection-log item in the roll is a
+// genuine "gz" moment — real players call those out on the street. Same
+// rung pattern as the kill reaction (radius, cooldowns,
+// personality-scaled chance, sayPublic + citizenVoice, memory/journal).
+// The "notable" call uses real engine state (ClogData.isLogged), never a
+// vibe about what looks rare.
+
+const DROP_RADIUS = 10; // tiles — close enough to see the kill
+const DROP_CITIZEN_COOLDOWN_MS = 30 * 60 * 1000; // a citizen gzs a drop at most every 30 min
+const DROP_PLAYER_COOLDOWN_MS = 15 * 60 * 1000; // one player's drops get a gz at most every 15 min
+const DROP_CHANCE = 0.65; // per eligible moment, personality-scaled
+
+const lastDropByCitizen = new Map(); // username -> timestamp
+const lastDroppedPlayer = new Map(); // player name -> timestamp
+
+const DROP_LINES = {
+  warm: [
+    "Gz on the drop, {name}! That {foe} paid out!",
+    "Oh, nice one — gz, {name}!",
+    "The {foe} gave up something good, eh {name}? Gz!",
+  ],
+  neutral: [
+    "Gz, {name}. A proper drop.",
+    "That {foe} was worth the effort, then.",
+    "Nice. Gz on the drop.",
+  ],
+  wry: [
+    "Show-off. (Gz on the drop, {name}.)",
+    "A {foe} and a fat drop. Some people have all the luck.",
+    "Gz. Try not to spend it all in one place, {name}.",
+  ],
+};
+
+/** Pure: first collection-log drop in the roll, or null. Unit-tested. */
+function pickNotableDrop(drops, isLoggedFn) {
+  for (const drop of drops ?? []) {
+    const itemId = Number(drop?.itemId ?? drop?.id);
+    if (!Number.isInteger(itemId)) continue;
+    try {
+      if (isLoggedFn(itemId)) return drop;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function clogIsLogged(itemId) {
+  try {
+    return require("../collectionlog/ClogData").isLogged(itemId) === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A player's drop roll contained a collection-log item where the street
+ * could see: one nearby citizen calls out "gz". Data tier; the moment
+ * warms memory and the journal like the kill reaction.
+ */
+function onPlayerDropWitnessed(event, nowMs = Date.now()) {
+  const { player, npc, drops } = event ?? {};
+  if (!player || !isRealPlayer(player)) return;
+  if (!pickNotableDrop(drops, clogIsLogged)) return;
+  pruneSpectacleCooldowns(nowMs);
+
+  const foe = npc ? npcName(npc) : "beast";
+  const playerName = player.getUsername?.() ?? "traveller";
+  if (nowMs - (lastDroppedPlayer.get(playerName) ?? 0) < DROP_PLAYER_COOLDOWN_MS) return;
+
+  const candidates = nearbyCitizens(npc, player, nowMs).filter(({ record }) => {
+    const username = record.username;
+    if (nowMs - (lastDropByCitizen.get(username) ?? 0) < DROP_CITIZEN_COOLDOWN_MS) return false;
+    let sociability = 1;
+    try {
+      sociability = humanizerProfile(record.personality).sociability ?? 1;
+    } catch {
+      sociability = 1;
+    }
+    return chance(Math.random, DROP_CHANCE * sociability);
+  });
+  if (candidates.length === 0) return;
+
+  const { record, bot } = pick(candidates);
+  const username = record.username;
+  lastDropByCitizen.set(username, nowMs);
+  lastDroppedPlayer.set(playerName, nowMs);
+
+  const line = fillLine(
+    pick(DROP_LINES[warmthOf(record.personality)] ?? DROP_LINES.neutral),
+    { name: playerName, foe }
+  );
+  try {
+    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line.slice(0, 120)] })); }
+  } catch {
+    // A silent citizen.
+  }
+
+  try {
+    const memory = getMemory();
+    memory.recordMeeting(username, playerName);
+    memory.recordTone(username, playerName, 1);
+  } catch {
+    // Memory must never break the gz.
+  }
+  try {
+    getJournal().log(username, "social", `Called out gz on ${playerName}'s drop from a ${foe}.`, {
+      with: playerName,
+      data: { foe, kind: "drop-gz" },
+    });
+  } catch {
+    // The journal must never break the gz.
+  }
+}
+
 module.exports = {
   onNpcKillWitnessed,
+  onPlayerDropWitnessed,
   // Pure helpers for the unit test.
   tierOf,
   voiceOf,
   fillLine,
+  pickNotableDrop,
   KILL_LINES,
+  DROP_LINES,
 };
