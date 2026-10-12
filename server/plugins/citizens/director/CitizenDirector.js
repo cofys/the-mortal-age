@@ -108,7 +108,6 @@ const { tickActors } = require("../lib/CitizenActors");
 const { tickPainters } = require("../lib/CitizenPainters");
 const { tickSculptors } = require("../lib/CitizenSculptors");
 const { tickArchitects } = require("../lib/CitizenArchitects");
-const { tickDraftfolk } = require("../lib/CitizenArchitects2");
 const { tickEngineers } = require("../lib/CitizenEngineers");
 const { tickClockmakers } = require("../lib/CitizenClockmakers");
 const { tickGlassblowers } = require("../lib/CitizenGlassblowers");
@@ -120,20 +119,11 @@ const CitizenBankers = require("../lib/CitizenBankers");
 const CitizenInnkeepers = require("../lib/CitizenInnkeepers");
 const CitizenStablehands = require("../lib/CitizenStablehands");
 const CitizenLibrarians = require("../lib/CitizenLibrarians");
-const { tickBookfolk } = require("../lib/CitizenLibrarians2");
-const { tickEngineerfolk } = require("../lib/CitizenEngineers2");
-const { tickMentorfolk } = require("../lib/CitizenMentors2");
-const { tickHistorianfolk } = require("../lib/CitizenHistorians2");
-const { tickJusticefolk } = require("../lib/CitizenJudges2");
-const { tickEnvoyfolk } = require("../lib/CitizenDiplomats2");
-const { tickClerkfolk } = require("../lib/CitizenOffices2");
-const { tickPamphleteers } = require("../lib/CitizenNewspaper2");
 const CitizenPriests = require("../lib/CitizenPriests");
 const CitizenTaxCollectors = require("../lib/CitizenTaxCollectors");
 const CitizenMessengers = require("../lib/CitizenMessengers");
 const { tickMessengers2 } = require("../lib/CitizenMessengers2");
 const CitizenCartographers = require("../lib/CitizenCartographers");
-const { tickMapfolk } = require("../lib/CitizenCartographers2");
 const CitizenCompanions = require("../lib/CitizenCompanions");
 const CitizenGuildInvites = require("../lib/CitizenGuildInvites");
 const CitizenApprentices = require("../lib/CitizenApprentices");
@@ -159,31 +149,7 @@ const { tickHistorians } = require("../lib/CitizenHistorians");
 const { tickMenders } = require("../lib/CitizenMenders");
 const { tickCouriers } = require("../lib/CitizenCouriers");
 const { tickScribes } = require("../lib/CitizenScribes");
-const { tickEducators } = require("../lib/CitizenTeachers2");
-const { tickCaregivers } = require("../lib/CitizenHealers2");
-const { tickWatchmen } = require("../lib/CitizenWatchmen2");
 const { tickFisherfolk } = require("../lib/CitizenFishers2");
-const { tickMinerfolk } = require("../lib/CitizenMiners2");
-const { tickHuntfolk } = require("../lib/CitizenHunters2");
-const { tickCookfolk } = require("../lib/CitizenCooks2");
-const { tickSewfolk } = require("../lib/CitizenTailors2");
-const { tickSmithfolk } = require("../lib/CitizenBlacksmiths2");
-const { tickBrewfolk } = require("../lib/CitizenAlchemists2");
-const { tickGemfolk } = require("../lib/CitizenJewelers2");
-const { tickDockfolk } = require("../lib/CitizenSailors2");
-const { tickGuardfolk } = require("../lib/CitizenGuards2");
-const { tickHostfolk } = require("../lib/CitizenInnkeepers2");
-const { tickSongfolk } = require("../lib/CitizenBards2");
-const { tickFarmfolk } = require("../lib/CitizenFarmers2");
-const { tickMoneyfolk } = require("../lib/CitizenBankers2");
-const { tickErrandfolk } = require("../lib/CitizenCouriers2");
-const { tickHerbfolk } = require("../lib/CitizenHerbalists2");
-const { tickGlassfolk } = require("../lib/CitizenGlassblowers2");
-const { tickWoodfolk } = require("../lib/CitizenArtisans2");
-const { tickLaborfolk } = require("../lib/CitizenBuilders2");
-const { tickTimefolk } = require("../lib/CitizenClockmakers2");
-const { tickHawker } = require("../lib/CitizenHawkers2");
-const { tickStallfolk } = require("../lib/CitizenMarketStalls2");
 const { tickFishingTournaments } = require("../lib/CitizenFishingTournaments");
 const { tickNewspaper, tickCrier } = require("../lib/CitizenNewspaper");
 const { tickMortality, tickFuneralRites, saveIfDirty: saveFuneralsIfDirty } = require("../lib/CitizenFunerals");
@@ -704,6 +670,12 @@ class CitizenDirector {
     this.registry = registry;
     this.world = registry?.world ?? {};
     this.roster = new Map(); // username -> record
+    // Perf: kingdom index for O(1) same-kingdom lookups (replaces O(n) roster scans).
+    // kingdomId -> Set of normalized usernames. Updated on roster add/remove.
+    this.rosterByKingdom = new Map();
+    // Perf: profession index for O(1) profession-targeted ticks (replaces 33×
+    // full roster scans). profession -> Set of normalized usernames.
+    this.rosterByProfession = new Map();
     this.usedNames = new Set();
     this.taskStarted = false;
     // Timing desync: monotonically increasing proximity-tick counter. Each
@@ -962,9 +934,113 @@ class CitizenDirector {
     // Roster keys are normalized (lowercase): every lib module looks citizens
     // up via normalizeName, and mixed-case keys silently missed. The record
     // keeps the raw display username.
-    this.roster.set(normalizeName(username), record);
+    const normKey = normalizeName(username);
+    this.roster.set(normKey, record);
+    this._indexRosterAdd(normKey, record);
     ensureNeeds(username); // needs survive logout; the director ticks them offline too
     return record;
+  }
+
+  /**
+   * Perf: maintain the kingdom index on roster add.
+   * @param {string} normUsername - normalized roster key
+   * @param {object} record - citizen record
+   */
+  _indexRosterAdd(normUsername, record) {
+    const kid = record?.kingdomId;
+    if (kid) {
+      let set = this.rosterByKingdom.get(kid);
+      if (!set) {
+        set = new Set();
+        this.rosterByKingdom.set(kid, set);
+      }
+      set.add(normUsername);
+    }
+    // Profession index: deterministic from username, computed once at add.
+    try {
+      const { primaryProfessionFor } = require("../lib/CitizenPrimaryProfession");
+      const prof = primaryProfessionFor(record?.username ?? normUsername);
+      if (prof) {
+        let pset = this.rosterByProfession.get(prof);
+        if (!pset) {
+          pset = new Set();
+          this.rosterByProfession.set(prof, pset);
+        }
+        pset.add(normUsername);
+        // Store on record for direct access (avoids re-hash).
+        record.primaryProfession = prof;
+      }
+    } catch {
+      // Index is best-effort; ticks fall back to full scan if missing.
+    }
+  }
+
+  /**
+   * Perf: maintain the kingdom index on roster remove.
+   * @param {string} normUsername - normalized roster key
+   * @param {object} record - citizen record (may be undefined if already removed)
+   */
+  _indexRosterRemove(normUsername, record) {
+    const kid = record?.kingdomId;
+    if (kid) {
+      const set = this.rosterByKingdom.get(kid);
+      if (set) {
+        set.delete(normUsername);
+        if (set.size === 0) this.rosterByKingdom.delete(kid);
+      }
+    }
+    const prof = record?.primaryProfession;
+    if (prof) {
+      const pset = this.rosterByProfession.get(prof);
+      if (pset) {
+        pset.delete(normUsername);
+        if (pset.size === 0) this.rosterByProfession.delete(prof);
+      }
+    }
+  }
+
+  /**
+   * Perf: O(1) random same-kingdom citizen, excluding one username.
+   * Replaces O(n) roster scans (was 19M iterations/60s at 3k citizens).
+   * @param {string} kingdomId
+   * @param {string} excludeNormUsername - normalized username to exclude
+   * @param {Function} rng - random function returning [0,1)
+   * @returns {object|null} citizen record or null
+   */
+  randomCitizenInKingdom(kingdomId, excludeNormUsername, rng) {
+    const set = this.rosterByKingdom.get(kingdomId);
+    if (!set || set.size === 0) return null;
+    if (set.size === 1 && set.has(excludeNormUsername)) return null;
+    // Convert to array once (kingdom subsets are small); rejection-sample the exclusion.
+    const arr = [...set];
+    for (let tries = 0; tries < 10; tries++) {
+      const name = arr[Math.floor(rng() * arr.length)];
+      if (name !== excludeNormUsername) {
+        return this.roster.get(name) ?? null;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Perf: iterate citizens of a specific profession without full roster scan.
+   * Yields records; falls back to filtered full scan if index is unavailable.
+   * @param {string} profession - e.g. "fisher", "miner", "cook"
+   * @returns {Iterable<object>} citizen records
+   */
+  *citizensByProfession(profession) {
+    const set = this.rosterByProfession.get(profession);
+    if (set) {
+      for (const name of set) {
+        const rec = this.roster.get(name);
+        if (rec) yield rec;
+      }
+      return;
+    }
+    // Fallback: full scan filtered by profession (index not yet built).
+    for (const rec of this.roster.values()) {
+      if (rec?.primaryProfession === profession) yield rec;
+    }
   }
 
   /**
@@ -1039,7 +1115,9 @@ class CitizenDirector {
     record.position = { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 };
     record.workKind = null;
     record.anchorActivityId = null;
-    this.roster.set(normalizeName(username), record);
+    const normKey2 = normalizeName(username);
+    this.roster.set(normKey2, record);
+    this._indexRosterAdd(normKey2, record);
     ensureNeeds(username);
     this.log("named citizen added", { citizen: username, role, kingdom: kingdomId });
     return record;
@@ -2317,6 +2395,7 @@ class CitizenDirector {
     } catch {
       // Non-fatal.
     }
+    this._indexRosterRemove(key, record);
     this.roster.delete(key);
     this.usedNames.delete(username);
     try {

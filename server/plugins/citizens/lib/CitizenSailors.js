@@ -397,7 +397,7 @@ function tickSailors(director, nowMs, desync) {
   void desync;
   pruneCooldowns(nowMs);
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("sailor")) {
       try {
         // 1. Only commoners sail (cheapest gates first).
         if (!record || record.role !== "commoner") continue;
@@ -426,7 +426,7 @@ function tickSailors(director, nowMs, desync) {
 
     // Passage offers: captains only, tighter radius. The booking dialogue
     // is the LLM tier; the journaled voyage is its source of truth.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("sailor")) {
       try {
         if (!record || record.role !== "commoner") continue;
         if (sailorTypeFor(record.username) !== SAILOR_CAPTAIN) continue;
@@ -445,7 +445,7 @@ function tickSailors(director, nowMs, desync) {
 
     // Ship arrivals: captains whose ships are in port today announce the
     // return — the crowd moment that draws a gathering on the quay.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("sailor")) {
       try {
         if (!record || record.role !== "commoner") continue;
         if (sailorTypeFor(record.username) !== SAILOR_CAPTAIN) continue;

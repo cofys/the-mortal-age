@@ -464,7 +464,7 @@ function tickSmiths(director, nowMs, desync) {
   pruneCooldowns(nowMs);
   try {
     // Pass 1: visible forge work — hammering, smelting, shaping.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("blacksmith")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = smithTypeFor(record.username);
@@ -487,7 +487,7 @@ function tickSmiths(director, nowMs, desync) {
 
     // Pass 2: wares hawking — tighter radius, own cooldown. Smiths announce
     // today's wares; bladesmiths with masterworks unveil them instead.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("blacksmith")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = smithTypeFor(record.username);
@@ -507,7 +507,7 @@ function tickSmiths(director, nowMs, desync) {
 
     // Pass 3: commission offers — weaponsmiths and bladesmiths take custom
     // work; armorsmiths and farriers sell ready-made.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("blacksmith")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = smithTypeFor(record.username);

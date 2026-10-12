@@ -319,7 +319,7 @@ function tickMiners(director, nowMs, desync) {
   void desync;
   pruneCooldowns(nowMs);
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("miner")) {
       try {
         // 1. Only commoners mine (cheapest gates first).
         if (!record || record.role !== "commoner") continue;
@@ -348,7 +348,7 @@ function tickMiners(director, nowMs, desync) {
 
     // Rich-vein callouts: tighter radius, own cooldown. This is how players
     // learn a contested seam has opened.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("miner")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = minerTypeFor(record.username);
@@ -370,7 +370,7 @@ function tickMiners(director, nowMs, desync) {
     // Hazard warnings: rare, atmospheric. Cave-ins and gas from the hazards
     // module, as scripted lines — never actual damage (that's the skill's
     // job). Prospectors are the ones who smell trouble first.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("miner")) {
       try {
         if (!record || record.role !== "commoner") continue;
         if (minerTypeFor(record.username) !== MINER_PROSPECTOR) continue;

@@ -115,6 +115,15 @@ function fill(template, vars) {
 }
 
 function randomOther(rng, director, record) {
+  // Perf: O(1) via the director's kingdom index (was O(n) full roster scan,
+  // ~19M iterations/60s at 3k citizens). Falls back to scan if index is missing.
+  if (typeof director.randomCitizenInKingdom === "function") {
+    return director.randomCitizenInKingdom(
+      record.kingdomId,
+      normalizeName(record.username),
+      rng
+    );
+  }
   const candidates = [];
   for (const other of director.roster.values()) {
     if (other.username === record.username) continue;

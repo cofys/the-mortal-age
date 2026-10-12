@@ -415,7 +415,7 @@ function maybeLessonOffer(director, record, citizen, nowMs) {
 function tickHerbalists(director, nowMs, desync) {
   pruneCooldowns(nowMs);
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("herbalist")) {
       try {
         // 1. Cheapest gates first: cooldown, then herbalist eligibility.
         const last = lastFiredByCitizen.get(record.username) || 0;

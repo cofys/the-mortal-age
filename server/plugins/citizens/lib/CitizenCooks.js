@@ -455,7 +455,7 @@ function tickCooks(director, nowMs, desync) {
   void desync;
   pruneCooldowns(nowMs);
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("cook")) {
       try {
         // 1. Only commoners cook (cheapest gates first).
         if (!record || record.role !== "commoner") continue;
@@ -484,7 +484,7 @@ function tickCooks(director, nowMs, desync) {
 
     // Fresh-food hawking: tighter radius, own cooldown. Players learn who
     // has the day's meal.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("cook")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = cookTypeFor(record.username);
@@ -504,7 +504,7 @@ function tickCooks(director, nowMs, desync) {
 
     // Recipe lesson offers: tavern keepers, bakers and chefs teach;
     // street vendors are too busy slinging food.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("cook")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = cookTypeFor(record.username);

@@ -382,7 +382,7 @@ function journalEvent(citizenName, text) {
 function tickFarmers(director, nowMs) {
   pruneCooldowns(nowMs);
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("farmer")) {
       try {
         // 1. Only commoners farm (cheapest gates first).
         if (!record || record.role !== "commoner") continue;
@@ -410,7 +410,7 @@ function tickFarmers(director, nowMs) {
     }
 
     // Produce pitching is a separate, tighter-radius pass.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("farmer")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = farmerTypeFor(record.username);

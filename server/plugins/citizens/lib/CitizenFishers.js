@@ -377,8 +377,11 @@ function materializedBot(director, record) {
 function tickFishers(director, nowMs, desync) {
   void desync;
   pruneCooldowns(nowMs);
+  // Perf: weather/season are identical for all citizens — compute once, not 3k×.
+  const weather = weatherFor(nowMs);
+  const season = seasonFor(new Date(nowMs).getUTCMonth());
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("fisher")) {
       try {
         // 1. Only commoners fish (cheapest gates first).
         if (!record || record.role !== "commoner") continue;
@@ -386,8 +389,6 @@ function tickFishers(director, nowMs, desync) {
         if (!type) continue;
 
         // 2. Weather gate: storms and off-season send fishers ashore.
-        const weather = weatherFor(nowMs);
-        const season = seasonFor(new Date(nowMs).getUTCMonth());
         if (!canFish(type, weather, season)) continue;
 
         // 3. Cooldown gate — O(1), skips almost everyone.
@@ -412,13 +413,11 @@ function tickFishers(director, nowMs, desync) {
 
     // Fresh-catch hawking: tighter radius, own cooldown. Players learn who
     // has the day's catch.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("fisher")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = fisherTypeFor(record.username);
         if (!type) continue;
-        const weather = weatherFor(nowMs);
-        const season = seasonFor(new Date(nowMs).getUTCMonth());
         if (!canFish(type, weather, season)) continue;
         const last = lastHawkByCitizen.get(record.username) || 0;
         if (nowMs - last < HAWK_COOLDOWN_MS) continue;
@@ -435,8 +434,8 @@ function tickFishers(director, nowMs, desync) {
 
     // Storm warnings: when it's storming, fishers on shore warn of the sea
     // instead of working it. Deep-sea fishers read the weather first.
-    if (weatherFor(nowMs) === "storm") {
-      for (const record of director.roster?.values?.() ?? []) {
+    if (weather === "storm") {
+      for (const record of director.citizensByProfession("fisher")) {
         try {
           if (!record || record.role !== "commoner") continue;
           if (fisherTypeFor(record.username) !== FISHER_DEEPSEA) continue;

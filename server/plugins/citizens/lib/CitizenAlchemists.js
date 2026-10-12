@@ -447,7 +447,7 @@ function tickAlchemists(director, nowMs, desync) {
   void desync;
   pruneCooldowns(nowMs);
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("alchemist")) {
       try {
         // 1. Only commoners alchemise (cheapest gates first).
         if (!record || record.role !== "commoner") continue;
@@ -474,7 +474,7 @@ function tickAlchemists(director, nowMs, desync) {
     }
 
     // Remedy hawking: apothecaries only, tighter radius, own cooldown.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("alchemist")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = alchemistTypeFor(record.username);
@@ -493,7 +493,7 @@ function tickAlchemists(director, nowMs, desync) {
 
     // Recipe lesson offers: brewers and apothecaries teach; transmuters
     // guard their secrets and scholars only lecture their notebooks.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("alchemist")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = alchemistTypeFor(record.username);

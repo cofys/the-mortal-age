@@ -501,25 +501,6 @@ function sendChunk(citizen, chunk, from, username, nowMs) {
   return sent > 0;
 }
 
-/** Overhead-only fallback for all chunks, in turn (throttled path). */
-function sendOverheadChunks(citizen, chunks) {
-  try {
-    citizen.forceChat?.(chunks[0]);
-  } catch {
-    return;
-  }
-  for (let i = 1; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    scheduleChunk(() => {
-      try {
-        citizen.forceChat?.(chunk);
-      } catch {
-        // Citizen gone — nothing more to show.
-      }
-    }, i * CHUNK_GAP_MS);
-  }
-}
-
 /**
  * Speak like a player: overhead text + chat-box line for nearby real players.
  * Long utterances are split into ≤80-char chunks at word boundaries and sent
@@ -561,16 +542,16 @@ function sayPublic(citizen, text, opts = {}) {
   // count too, so a template never echoes something just said).
   recordCommittedLine(citizen, voiced, nowMs);
 
-  // Chat-box throttle: tighter than overhead. When throttled, speech falls
-  // back to overhead-only rather than being dropped — the line still shows,
-  // it just doesn't hit the box.
+  // Chat-box throttle: when throttled, the citizen stays silent entirely.
+  // Previously overhead was sent without chatbox, which confused players
+  // (bubbles visible but chatbox empty). Now throttled = no visible speech,
+  // keeping overhead and chatbox in sync.
   const username = usernameOf(citizen);
   const throttled =
     !opts.bypassThrottle &&
     !!username &&
     nowMs - (lastChatBoxAt.get(username) ?? 0) < CHATBOX_MIN_GAP_MS;
   if (throttled) {
-    sendOverheadChunks(citizen, chunks);
     return false;
   }
 

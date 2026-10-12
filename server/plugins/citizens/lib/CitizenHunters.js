@@ -366,7 +366,7 @@ function tickHunters(director, nowMs, desync) {
   void desync;
   pruneCooldowns(nowMs);
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("hunter")) {
       try {
         // 1. Only commoners hunt (cheapest gates first).
         if (!record || record.role !== "commoner") continue;
@@ -395,7 +395,7 @@ function tickHunters(director, nowMs, desync) {
 
     // Meat/hide hawking: tighter radius, own cooldown. Players learn who
     // has the day's hunt.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("hunter")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = hunterTypeFor(record.username);
@@ -416,7 +416,7 @@ function tickHunters(director, nowMs, desync) {
     // Danger warnings: in high-danger ground, hunters warn of the beasts
     // instead of just working. Trackers and beastmasters read the signs
     // first.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("hunter")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = hunterTypeFor(record.username);

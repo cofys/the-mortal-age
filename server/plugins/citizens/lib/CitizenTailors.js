@@ -491,7 +491,7 @@ function tickTailors(director, nowMs, desync) {
   void desync;
   pruneCooldowns(nowMs);
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("tailor")) {
       try {
         // 1. Only commoners tailor (cheapest gates first).
         if (!record || record.role !== "commoner") continue;
@@ -520,7 +520,7 @@ function tickTailors(director, nowMs, desync) {
 
     // Garment hawking: tighter radius, own cooldown. Players learn who
     // has the season's style.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("tailor")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = tailorTypeFor(record.username);
@@ -540,7 +540,7 @@ function tickTailors(director, nowMs, desync) {
 
     // Commission offers: clothiers and embroiderers take custom work;
     // weavers and armorers sell bolts and padding by the piece.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("tailor")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = tailorTypeFor(record.username);

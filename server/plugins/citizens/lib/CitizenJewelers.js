@@ -552,7 +552,7 @@ function tickJewelers(director, nowMs, desync) {
   void desync;
   pruneCooldowns(nowMs);
   try {
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("jeweler")) {
       try {
         // 1. Only commoners jewelcraft (cheapest gates first).
         if (!record || record.role !== "commoner") continue;
@@ -581,7 +581,7 @@ function tickJewelers(director, nowMs, desync) {
 
     // Wares hawking: tighter radius, own cooldown. Players learn who has
     // the fresh-cut stones and goldwork.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("jeweler")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = jewelerTypeFor(record.username);
@@ -601,7 +601,7 @@ function tickJewelers(director, nowMs, desync) {
 
     // Commission offers: goldsmiths and gem cutters take custom work;
     // appraisers value stones; traders buy and sell.
-    for (const record of director.roster?.values?.() ?? []) {
+    for (const record of director.citizensByProfession("jeweler")) {
       try {
         if (!record || record.role !== "commoner") continue;
         const type = jewelerTypeFor(record.username);
