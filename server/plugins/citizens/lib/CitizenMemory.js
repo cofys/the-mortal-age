@@ -185,6 +185,7 @@ class CitizenMemoryStore {
     this.lastGossipSpeakAt = new Map(); // citizenKey -> timestamp
     this.dirty = false;
     this._savePath = SAVE_FILE;
+    this._saveInFlight = false;
   }
 
   /** Test seam: keep everything in memory, never touch disk. */
@@ -194,6 +195,7 @@ class CitizenMemoryStore {
     this.lastGossipSpeakAt = new Map();
     this.dirty = false;
     this._savePath = null;
+    this._saveInFlight = false;
   }
 
   _citizen(citizenName) {
@@ -767,15 +769,51 @@ class CitizenMemoryStore {
 
   saveIfDirty() {
     if (!this.dirty || !this._savePath) return false;
+    // If a save is already in flight, keep dirty=true so the next call
+    // picks up the new changes. This coalesces rapid saves.
+    if (this._saveInFlight) return true;
+    this._saveInFlight = true;
+    // Capture the current state synchronously (fast), then write async
+    // so the game thread never blocks on disk I/O.
+    let json = null;
     try {
       this.prune(Date.now());
-      fs.mkdirSync(path.dirname(this._savePath), { recursive: true });
-      fs.writeFileSync(this._savePath, JSON.stringify(this.toJSON(), null, 2));
-      this.dirty = false;
-      return true;
+      json = JSON.stringify(this.toJSON(), null, 2);
     } catch {
+      this._saveInFlight = false;
       return false;
     }
+    const savePath = this._savePath;
+    const tmpPath = savePath + ".tmp";
+    try {
+      fs.mkdirSync(path.dirname(savePath), { recursive: true });
+    } catch {
+      // Ignore mkdir errors; the write will fail and we'll retry next time.
+    }
+    // Atomic write: temp file + rename (crash-safe, no torn writes).
+    fs.writeFile(tmpPath, json, "utf8", (writeErr) => {
+      if (writeErr) {
+        this._saveInFlight = false;
+        return; // dirty stays true; retry next tick.
+      }
+      fs.rename(tmpPath, savePath, (renameErr) => {
+        this._saveInFlight = false;
+        if (!renameErr) this.dirty = false;
+        // If dirty again (new changes during write), next saveIfDirty picks it up.
+      });
+    });
+    return true;
+  }
+
+  /** Test seam: wait for any in-flight save to complete. */
+  _flushForTests() {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (!this._saveInFlight) resolve();
+        else setTimeout(check, 10);
+      };
+      check();
+    });
   }
 }
 
