@@ -120,7 +120,7 @@ function randomOther(rng, director, record) {
   if (typeof director.randomCitizenInKingdom === "function") {
     return director.randomCitizenInKingdom(
       record.kingdomId,
-      normalizeName(record.username),
+      String(record.username ?? "").trim().toLowerCase(),
       rng
     );
   }
