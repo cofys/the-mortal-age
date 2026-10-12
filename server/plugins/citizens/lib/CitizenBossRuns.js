@@ -2,6 +2,7 @@
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { voiceFor, voiceLine } = require("./citizenVoice");
 const { sayPublic } = require("../chat/CitizenSayPublic");
+const Prayer = require("../brain/actions/CitizenPrayer");
 
 
 /**
@@ -620,11 +621,24 @@ function maintainFight(director, party, boss, leader, leaderBot, rng) {
   // has no target (event, not per-tick spam).
   party.bossSeen = true;
   for (const { bot } of mats) {
-    if (botInCombat(bot)) continue;
+    if (botInCombat(bot)) {
+      // Already swinging: keep prayers right for the boss's attack style.
+      try {
+        Prayer.maintainCombatPrayer(bot, bossNpc);
+      } catch {
+        // Prayer never breaks the fight.
+      }
+      continue;
+    }
     try {
       bot.getCombat?.()?.attack?.(bossNpc);
     } catch {
       // Non-fatal.
+    }
+    try {
+      Prayer.maintainCombatPrayer(bot, bossNpc);
+    } catch {
+      // Prayer never breaks the fight.
     }
   }
 
@@ -924,6 +938,8 @@ function sendHome(director, party, leader, boss) {
     const bot = director.getBot(rec);
     if (!bot) continue;
     try { bot.moveTo?.(homeLoc); } catch { /* non-fatal */ }
+    // Fight's over: drop combat prayers.
+    try { Prayer.releaseCombatPrayers(bot); } catch { /* non-fatal */ }
   }
   // Player members head home with the party.
   try {

@@ -326,6 +326,29 @@
       ]
     },
     {
+      "actions": [
+        {
+          "type": "citizenPrayer"
+        }
+      ],
+      "capacity": 24,
+      "failureCooldownSeconds": 10,
+      "id": "citizen_prayer",
+      "mode": "citizen_routine",
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner",
+              "merchant",
+              "guard",
+              "courtier"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "citizen_mine",
       "mode": "citizen_mine",
       "repeat": true,

@@ -538,6 +538,57 @@ run("no kingdom on the snap scores neutrally (backwards compatible)", () => {
   assert.equal(mine, 44, `no-kingdom mine should score the bare 44, got ${mine}`);
 });
 
+// --- prayer hinge scoring --------------------------------------------------------
+
+run("empty prayer bar scores the prayer hinge high", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    prayer: { points: 5, max: 50, bones: 0 },
+  };
+  const s = scoreActivity("citizen_prayer", base);
+  assert.ok(s > 40, `empty bar should score high, got ${s}`);
+});
+
+run("bones in the pack score the prayer hinge (bury them)", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    prayer: { points: 50, max: 50, bones: 6 },
+  };
+  const s = scoreActivity("citizen_prayer", base);
+  assert.ok(s >= 30, `bones should score the hinge, got ${s}`);
+});
+
+run("full bar and no bones: prayer hinge stays quiet", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    prayer: { points: 50, max: 50, bones: 0 },
+  };
+  assert.ok(scoreActivity("citizen_prayer", base) < 12, "quiet when nothing to do");
+});
+
+run("prayer 1 citizens never pray", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    prayer: { points: 0, max: 1, bones: 5 },
+  };
+  assert.equal(scoreActivity("citizen_prayer", base), 2, "prayer 1: nothing to do");
+});
+
+run("devout citizens detour for prayer more eagerly", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null,
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    prayer: { points: 20, max: 50, bones: 0 },
+  };
+  const devout = scoreActivity("citizen_prayer", { ...base, personality: { traits: ["devout"] } });
+  const plain = scoreActivity("citizen_prayer", { ...base, personality: { traits: [] } });
+  assert.ok(devout > plain, `devout ${devout} should beat plain ${plain}`);
+});
+
 // --- thresholds ---------------------------------------------------------------
 
 run("threshold constants match CitizenNeeds", () => {

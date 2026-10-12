@@ -54,6 +54,7 @@ const {
   approachObject,
 } = require("../../../bots/behaviours/navigation/BotNavigation");
 const { agentRng } = require("../../lib/humanizer");
+const Prayer = require("./CitizenPrayer");
 
 // If a hunt takes this long, the monsters moved on — re-decide.
 const GIVE_UP_MS = 10 * 60 * 1000;
@@ -366,8 +367,18 @@ function createCitizenSlayerAction(spec, world) {
       // Wilderness task: citizens don't hunt where they'd get PKed.
       if (isWildernessTask(task, Data)) return "success";
 
-      // Already fighting a task NPC: wait it out.
-      if (inTaskCombat(bot, task, username, Tasks)) return "running";
+      // Already fighting a task NPC: pray like a player, wait it out.
+      if (inTaskCombat(bot, task, username, Tasks)) {
+        try {
+          Prayer.maintainCombatPrayer(bot);
+        } catch {
+          // Prayer never breaks the hunt.
+        }
+        return "running";
+      }
+
+      // Stock prayer potions before the hunt (once per task; never stalls).
+      if (!Prayer.tickSupplies(state, bot, world, ctx)) return "running";
 
       // Find something to hunt.
       const target = findTaskTarget(bot, task, username, Tasks);
@@ -399,6 +410,11 @@ function createCitizenSlayerAction(spec, world) {
     stop(ctx) {
       try {
         clearMovementRequest(ctx?.player);
+      } catch {
+        // non-fatal
+      }
+      try {
+        Prayer.releaseCombatPrayers(ctx?.player);
       } catch {
         // non-fatal
       }

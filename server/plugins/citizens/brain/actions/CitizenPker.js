@@ -45,6 +45,7 @@ const { hashSeed, agentRng, personalSpot } = require("../../lib/humanizer");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
+const Prayer = require("./CitizenPrayer");
 const {
   eat,
   hpPercent,
@@ -301,7 +302,7 @@ function targetIdOf(p) {
   }
 }
 
-function tickPker(action, bot) {
+function tickPker(action, bot, ctx = null, world = null) {
   const Wild = wildernessPlugin();
   if (!Wild) return "failed";
 
@@ -328,6 +329,8 @@ function tickPker(action, bot) {
 
   // Bring food or don't go: no supplies, no PK trip.
   if (breadCount(bot) < MIN_FOOD) return "success";
+  // Bring prayer potions or don't go (once per trip; never stalls).
+  if (ctx && !Prayer.tickSupplies(state, bot, world, ctx)) return "running";
   // Won't risk the bank: bank first, PK later.
   if (carryingTooMuch(bot)) return "success";
 
@@ -391,11 +394,22 @@ function tickPker(action, bot) {
       sayGg(bot);
       state.engagedId = null;
       try {
+        Prayer.releaseCombatPrayers(bot);
+      } catch {
+        // non-fatal
+      }
+      try {
         bot.getCombat?.()?.reset?.();
       } catch {
         // non-fatal
       }
     } else {
+      // Mid-fight: overheads vs their style, DPS when worth it, sip potions.
+      try {
+        Prayer.maintainCombatPrayer(bot, combatTarget);
+      } catch {
+        // Prayer never breaks the hunt.
+      }
       return "running";
     }
   }
@@ -447,6 +461,12 @@ function tickPker(action, bot) {
   } catch {
     return "success";
   }
+  // Engaged: protect from their style, protect item while skulled.
+  try {
+    Prayer.maintainCombatPrayer(bot, target);
+  } catch {
+    // Prayer never breaks the hunt.
+  }
   return "running";
 }
 
@@ -458,7 +478,7 @@ function createCitizenPkerAction(spec, world) {
       const bot = ctx?.player;
       if (!bot || bot?.isPlayerBot?.() !== true) return "failed";
       try {
-        return tickPker(action, bot);
+        return tickPker(action, bot, ctx, world);
       } catch {
         return "success"; // a broken hunt re-decides, never stalls
       }
@@ -467,6 +487,11 @@ function createCitizenPkerAction(spec, world) {
     stop(ctx) {
       try {
         clearMovementRequest(ctx?.player);
+      } catch {
+        // non-fatal
+      }
+      try {
+        Prayer.releaseCombatPrayers(ctx?.player);
       } catch {
         // non-fatal
       }

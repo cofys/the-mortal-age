@@ -34,6 +34,7 @@ const { isKingdomAtWar } = require("../../CitizenEvents");
 const { kingdomIdOf } = require("../CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
 const { agentRng, chance } = require("../../lib/humanizer");
+const Prayer = require("./CitizenPrayer");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
 
@@ -283,6 +284,11 @@ function createCitizenMilitiaAction(spec, world) {
         // Non-fatal.
       }
       try {
+        Prayer.releaseCombatPrayers(ctx?.player);
+      } catch {
+        // Non-fatal.
+      }
+      try {
         ctx?.player?.getCombat?.()?.reset?.();
       } catch {
         // Non-fatal.
@@ -296,6 +302,8 @@ function createCitizenMilitiaAction(spec, world) {
   };
 
   function doMuster(ctx, state, bot, kingdomId, side, orders) {
+    // Stock prayer potions at muster (once per deployment; never stalls).
+    if (!Prayer.tickSupplies(state, bot, world, ctx)) return "running";
     const capital = capitalOf(kingdomId);
     if (!capital) return "success";
     const muster = {
@@ -373,11 +381,16 @@ function createCitizenMilitiaAction(spec, world) {
   }
 
   function doFight(ctx, state, bot, kingdomId, side, orders) {
-    // Keep fighting current enemy.
+    // Keep fighting current enemy — prayers up like a real soldier.
     if (inCombatWithEnemy(bot, kingdomId)) {
       // Battle cry occasionally mid-fight.
       if (chance(state.rng, 0.05)) {
         sayCry(bot, state, BATTLE_CRIES, kingdomId);
+      }
+      try {
+        Prayer.maintainCombatPrayer(bot);
+      } catch {
+        // Prayer never breaks the fight.
       }
       return "running";
     }
@@ -409,6 +422,11 @@ function createCitizenMilitiaAction(spec, world) {
       bot.getCombat?.()?.attack?.(enemy);
     } catch {
       return "success";
+    }
+    try {
+      Prayer.maintainCombatPrayer(bot, enemy);
+    } catch {
+      // Prayer never breaks the fight.
     }
     return "running";
   }

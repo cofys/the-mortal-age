@@ -99,6 +99,7 @@ const ACT_ROUTINE = "citizen_routine";
 const ACT_MEAL = "citizen_meal";
 const ACT_REST = "citizen_rest";
 const ACT_BANK = "citizen_bank";
+const ACT_PRAYER = "citizen_prayer";
 const ACT_LIGHT_FIRE = "citizen_light_fire";
 const ACT_SMELT = "citizen_smelt";
 const ACT_CRAFT = "citizen_craft";
@@ -503,6 +504,35 @@ function combatLevel(player) {
     // fall through
   }
   return 3;
+}
+
+/**
+ * Prayer state for the citizen_prayer hinge: current/max prayer points and
+ * buryable bones in the pack. Bone counting reuses the prayer brain's
+ * engine table (lazy-required: 0 bones when the engine is unreachable).
+ */
+function prayerInfo(player) {
+  const info = { points: 1, max: 1, bones: 0 };
+  try {
+    const Skill = require("../../../src/main/typescript/elvarg/game/model/Skill")
+      .Skill;
+    const mgr = player?.getSkillManager?.();
+    if (mgr && Skill && typeof mgr.getCurrentLevel === "function") {
+      const points = mgr.getCurrentLevel(Skill.PRAYER);
+      const max = mgr.getMaxLevel(Skill.PRAYER);
+      if (Number.isFinite(points)) info.points = Math.max(0, points);
+      if (Number.isFinite(max) && max > 0) info.max = max;
+    }
+  } catch {
+    // prayer unreadable — hinge stays quiet
+  }
+  try {
+    const Prayer = require("./actions/CitizenPrayer");
+    info.bones = Prayer.boneCount(player) ?? 0;
+  } catch {
+    // engine unreachable in plain-node tests — no bones
+  }
+  return info;
 }
 
 /**
@@ -2716,6 +2746,7 @@ function snapshot(player) {
     role: (() => { try { return player?.getAttribute?.(ATTR_CITIZEN_ROLE) ?? null; } catch { return null; } })(),
     kingdomId: (() => { try { return player?.getAttribute?.(ATTR_KINGDOM_ID) ?? null; } catch { return null; } })(),
     combatLevel: combatLevel(player),
+    prayer: prayerInfo(player),
     coins: coinCount(player),
     food: foodCount(player),
     freeSlots: freeSlots(player),
@@ -2812,7 +2843,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, role, tithe, caravan } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, prayer, role, tithe, caravan } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -2863,6 +2894,24 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (freeSlots <= 6) s = 40;
       if (goalType === GOAL_MASTER_TRADE || goalType === GOAL_SAVE_GOLD) s += 10;
       if (criticalHp || exhausted) s -= 40;
+      return s;
+    }
+    case ACT_PRAYER: {
+      // The prayer hinge: bones are XP on the floor, and an empty bar
+      // means the next fight goes in naked. Prayer 1-9 has nothing to do.
+      const max = prayer?.max ?? 1;
+      if (max < 10) return 2;
+      const bones = prayer?.bones ?? 0;
+      const deficit = max - (prayer?.points ?? max);
+      let s = 6;
+      if (bones > 0) s += 18 + Math.min(bones, 12); // bury them where we stand
+      if (deficit > max * 0.5) s += 45; // bar's empty — altar trip
+      else if (deficit > 0) s += 12;
+      const traits = new Set(personality?.traits ?? []);
+      if (traits.has("devout")) s += 12; // the devout detour gladly
+      if (traits.has("greedy")) s -= 6; // the gods can wait
+      if (criticalHp || exhausted) s -= 40; // hurt first, pray later
+      else if (hurt || weary) s -= 20;
       return s;
     }
     case ACT_LIGHT_FIRE: {
@@ -4735,6 +4784,7 @@ ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_STAGEGUILD, ACT_SPORTSGUILD, ACT_COOKGUILD, ACT_WEAVERGUILD, ACT_MUSICGUILD, ACT_ARTGUILD, ACT_LIBGUILD, ACT_OBSGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MEAL,
   ACT_REST,
   ACT_BANK,
+  ACT_PRAYER,
   ACT_SOCIAL,
   CRITICAL_HP,
   CRITICAL_ENERGY,
