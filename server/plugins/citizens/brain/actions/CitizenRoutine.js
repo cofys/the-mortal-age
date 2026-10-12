@@ -61,6 +61,9 @@ const KIND_HOME = "home";
 const KIND_WORK = "work";
 const KIND_MARKET = "market";
 const KIND_MEAL = "meal";
+
+// Bump to force day-plan rebuild on deploy (old plans have SOCIAL phase).
+const PLAN_VERSION = 2;
 // KIND_EVENING replaced KIND_SOCIAL (Jon 2026-10-12): no more 5-hour tavern
 // block. Evenings are personality-varied — work late, home early, or a brief
 // tavern beer break — and socializing happens ambiently wherever citizens are.
@@ -1111,8 +1114,9 @@ function createCitizenRoutineAction(spec, world) {
 
   function ensurePlan(state) {
     const today = dayStamp();
-    if (state.day !== today) {
+    if (state.day !== today || state.planVersion !== PLAN_VERSION) {
       state.day = today;
+      state.planVersion = PLAN_VERSION;
       state.plan = buildDayPlan(state.rng);
       state.phaseKind = null; // force phase re-entry
       state.bendsToday = 0; // fresh day, fresh bends
