@@ -22,12 +22,13 @@ function stub(rel, exports) {
 // --- stubs ---
 const moveToCalls = [];
 const setAttrCalls = [];
+let openAttrValue = "";
 
 const adminPlayer = {
   getUsername: () => "Jon",
   getRights: () => ({ isAdmin: () => true }),
-  setAttribute: (k, v) => setAttrCalls.push([k, v]),
-  getAttribute: () => "",
+  setAttribute: (k, v) => { setAttrCalls.push([k, v]); if (k === "adminworldmap:open") openAttrValue = v; },
+  getAttribute: (k) => (k === "adminworldmap:open" ? openAttrValue : ""),
   moveTo: (loc) => moveToCalls.push(loc),
 };
 const normalPlayer = {
@@ -104,7 +105,15 @@ assert.equal(r.open, false, "no token closes");
 r = endpointHandler(query({ token: "user-token", action: "status" }));
 assert.equal(r.open, false, "non-admin closes");
 
-// 3. Admin status -> citizen rows
+// 3. Admin status with the open attribute unset -> open:false (closed overlay
+// must never reopen from polling).
+r = endpointHandler(query({ token: "admin-token", action: "status" }));
+assert.equal(r.open, false, "status without open attribute stays closed");
+
+// 3b. action=open sets the attribute; status then reports open:true.
+r = endpointHandler(query({ token: "admin-token", action: "open" }));
+assert.equal(r.open, true, "open action opens");
+assert.equal(openAttrValue, "1", "open attribute set");
 r = endpointHandler(query({ token: "admin-token", action: "status" }));
 assert.equal(r.open, true, "admin opens");
 assert.ok(Array.isArray(r.citizens), "citizens array");
@@ -152,4 +161,22 @@ assert.ok(r.ok, "spawn ok: " + JSON.stringify(r));
 r = endpointHandler(query({ token: "admin-token", action: "spawn" }));
 assert.ok(r.error, "spawn needs coords");
 
-console.log("AdminWorldMapApi.test.js: all 9 checks passed");
+// 10. Lightweight state check reflects the attribute without payload.
+r = endpointHandler(query({ token: "admin-token", action: "state" }));
+assert.equal(r.open, true, "state open while attribute set");
+assert.ok(!("citizens" in r), "state carries no citizen payload");
+
+// 11. action=close clears the attribute; status/state then report closed.
+r = endpointHandler(query({ token: "admin-token", action: "close" }));
+assert.equal(r.open, false, "close reports closed");
+assert.equal(openAttrValue, "", "open attribute cleared");
+r = endpointHandler(query({ token: "admin-token", action: "status" }));
+assert.equal(r.open, false, "status closed after close");
+r = endpointHandler(query({ token: "admin-token", action: "state" }));
+assert.equal(r.open, false, "state closed after close");
+
+// 12. Mutating actions report the real open state (no reopen from a teleport).
+r = endpointHandler(query({ token: "admin-token", action: "teleport", target: "Test Citizen" }));
+assert.equal(r.open, false, "teleport does not reopen a closed overlay");
+
+console.log("AdminWorldMapApi.test.js: all 12 checks passed");

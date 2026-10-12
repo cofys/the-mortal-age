@@ -13,7 +13,14 @@
  *     -> { open: false } | { open: true, ...status }
  *   ...&action=open            — set the adminworldmap:open attribute
  *   ...&action=close           — clear it
- *   ...&action=status          — full map snapshot (polled by the overlay)
+ *   ...&action=status          — full map snapshot (polled by the overlay
+ *                                while open). `open` reflects the attribute:
+ *                                false after close, so a closed overlay never
+ *                                reopens from polling.
+ *   ...&action=state           — lightweight { open } check, polled while the
+ *                                overlay is closed so it can open on
+ *                                ::worldmap / sidebar-button without pulling
+ *                                the full citizen payload every 2s.
  *   ...&action=teleport&target=<username>        — teleport viewer to citizen
  *   ...&action=set-activity&target=<u>&activity=<id>
  *   ...&action=toggle-brain&target=<username>    — pause/resume citizen brain
@@ -75,6 +82,20 @@ function isAdmin(player) {
 
 function norm(name) {
   return String(name ?? "").trim().toLowerCase();
+}
+
+/**
+ * Whether the admin map is currently open for this player, per the
+ * adminworldmap:open attribute. The overlay renders only when this is true;
+ * every action response reports it, so a closed overlay can never reopen
+ * from a stale poll.
+ */
+function isOpenAttr(player) {
+  try {
+    return String(player.getAttribute?.(OPEN_ATTRIBUTE) || "").trim() === "1";
+  } catch {
+    return false;
+  }
 }
 
 /** Compact citizen row for the map. Never throws. */
@@ -154,32 +175,35 @@ function handleAction(api, player, query) {
     return { open: false };
   }
   if (action === "status") {
-    return { open: true, ...buildStatus() };
+    return { open: isOpenAttr(player), ...buildStatus() };
+  }
+  if (action === "state") {
+    return { open: isOpenAttr(player) };
   }
 
   // Mutating admin actions below.
   if (action === "teleport") {
     const target = norm(query.get("target"));
     const record = director?.roster?.get(target);
-    if (!record) return { open: true, error: "Citizen not found: " + query.get("target") };
+    if (!record) return { open: isOpenAttr(player), error: "Citizen not found: " + query.get("target") };
     const pos = record.position || record.home;
-    if (!pos) return { open: true, error: "No position for " + record.username };
+    if (!pos) return { open: isOpenAttr(player), error: "No position for " + record.username };
     try {
       const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
       player.moveTo(new Location(Math.round(pos.x), Math.round(pos.y), Math.round(pos.z || 0)));
-      return { open: true, ok: "Teleported to " + record.username };
+      return { open: isOpenAttr(player), ok: "Teleported to " + record.username };
     } catch (e) {
-      return { open: true, error: "Teleport failed: " + e.message };
+      return { open: isOpenAttr(player), error: "Teleport failed: " + e.message };
     }
   }
 
   if (action === "toggle-brain") {
     const target = norm(query.get("target"));
     const record = director?.roster?.get(target);
-    if (!record) return { open: true, error: "Citizen not found: " + query.get("target") };
+    if (!record) return { open: isOpenAttr(player), error: "Citizen not found: " + query.get("target") };
     record.brainPaused = !record.brainPaused;
     return {
-      open: true,
+      open: isOpenAttr(player),
       ok: record.username + " brain " + (record.brainPaused ? "paused" : "resumed"),
       brainPaused: record.brainPaused ? 1 : 0,
     };
@@ -189,11 +213,11 @@ function handleAction(api, player, query) {
     const target = norm(query.get("target"));
     const activityId = String(query.get("activity") || "").trim();
     const record = director?.roster?.get(target);
-    if (!record) return { open: true, error: "Citizen not found: " + query.get("target") };
-    if (!activityId) return { open: true, error: "No activity id given" };
+    if (!record) return { open: isOpenAttr(player), error: "Citizen not found: " + query.get("target") };
+    if (!activityId) return { open: isOpenAttr(player), error: "No activity id given" };
     record.currentActivityId = activityId;
     record.anchorActivityId = activityId;
-    return { open: true, ok: record.username + " activity set to " + activityId };
+    return { open: isOpenAttr(player), ok: record.username + " activity set to " + activityId };
   }
 
   if (action === "spawn") {
@@ -201,17 +225,17 @@ function handleAction(api, player, query) {
     const y = parseInt(query.get("y"), 10);
     const z = parseInt(query.get("z") || "0", 10);
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      return { open: true, error: "spawn needs ?x=<x>&y=<y>" };
+      return { open: isOpenAttr(player), error: "spawn needs ?x=<x>&y=<y>" };
     }
     try {
       const added = director?.debugSpawnCitizen?.({ x, y, z });
-      return { open: true, ok: added ? "Spawned " + added : "Spawn requested" };
+      return { open: isOpenAttr(player), ok: added ? "Spawned " + added : "Spawn requested" };
     } catch (e) {
-      return { open: true, error: "Spawn failed: " + e.message };
+      return { open: isOpenAttr(player), error: "Spawn failed: " + e.message };
     }
   }
 
-  return { open: true, ...buildStatus() };
+  return { open: isOpenAttr(player), ...buildStatus() };
 }
 
 function attach(api) {

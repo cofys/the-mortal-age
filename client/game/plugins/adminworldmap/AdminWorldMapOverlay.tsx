@@ -61,6 +61,10 @@ export function AdminWorldMapOverlay({ osrsClient }: { osrsClient: OsrsClient })
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const statusRef = useRef<MapStatus | null>(null);
     const selectedRef = useRef<CitizenDot | null>(null);
+    // Set when Jon closes the overlay (X or ESC). While set, a server-side
+    // open:true is ignored until the server state has cycled back to closed,
+    // so a close in flight can never be undone by a stale poll.
+    const dismissedRef = useRef(false);
     const filterRef = useRef({ cat: filterCat, kingdom: filterKingdom, search });
     const username = connectionState.sessionUsername;
 
@@ -79,18 +83,42 @@ export function AdminWorldMapOverlay({ osrsClient }: { osrsClient: OsrsClient })
         }
     }, [username]);
 
+    // Polling is split by open state:
+    // - Overlay open: full status every 2s (data refresh). The server reports
+    //   the real open attribute, so an externally-cleared attribute closes us.
+    // - Overlay closed: lightweight action=state every 2s. A closed overlay
+    //   only opens on an explicit user action (::worldmap / sidebar button),
+    //   which flips the server attribute; it never reopens from data polling.
     const poll = useCallback(async () => {
         if (!username || osrsClient.isOnLoginScreen()) { setStatus(null); return; }
-        const data = await apiCall("&action=status");
-        if (data) {
-            statusRef.current = data;
-            setStatus(data);
-            // Keep selection fresh
-            const sel = selectedRef.current;
-            if (sel && data.citizens) {
-                const fresh = data.citizens.find((c) => c.n === sel.n);
-                if (fresh) setSelected(fresh);
+        const isOpen = statusRef.current?.open === true;
+        if (isOpen) {
+            const data = await apiCall("&action=status");
+            if (data) {
+                statusRef.current = data;
+                setStatus(data);
+                if (!data.open) dismissedRef.current = false;
+                // Keep selection fresh
+                const sel = selectedRef.current;
+                if (sel && data.citizens) {
+                    const fresh = data.citizens.find((c) => c.n === sel.n);
+                    if (fresh) setSelected(fresh);
+                }
             }
+            return;
+        }
+        const state = await apiCall("&action=state");
+        if (!state) return;
+        if (!state.open) {
+            // Server is closed: a future explicit open may show the overlay.
+            dismissedRef.current = false;
+            return;
+        }
+        if (dismissedRef.current) return;
+        const full = await apiCall("&action=status");
+        if (full && full.open !== false) {
+            statusRef.current = full;
+            setStatus(full);
         }
     }, [username, osrsClient, apiCall]);
 
@@ -113,10 +141,30 @@ export function AdminWorldMapOverlay({ osrsClient }: { osrsClient: OsrsClient })
     }, [apiCall, showFlash, poll]);
 
     const handleClose = useCallback(async () => {
+        // Dismiss first so a poll already in flight can't reopen us; the
+        // server attribute clear lands via action=close right after.
+        dismissedRef.current = true;
         setStatus(null);
         statusRef.current = null;
-        await apiCall("&action=close");
+        try {
+            await apiCall("&action=close");
+        } catch {
+            // The closed-state poll will retry the close implicitly: with the
+            // attribute still set it would reopen, but dismissedRef blocks it
+            // until the server cycles closed.
+        }
     }, [apiCall]);
+
+    // ESC closes the overlay too.
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && statusRef.current?.open) {
+                void handleClose();
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [handleClose]);
 
     // ---- Canvas rendering ----
     useEffect(() => {
