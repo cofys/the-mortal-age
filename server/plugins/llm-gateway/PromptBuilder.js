@@ -27,9 +27,9 @@ const WORLD_GROUNDING =
   "everyone has a theory why. Great powers: Asgarnia (Falador, no king), Misthalin " +
   "(Varrock, aging king), Kandarin (Ardougne, the plague lie), Morytania (vampyres), " +
   "Keldagrim (dwarf mining companies). Stay in character. Never mention you are an AI. " +
-  "Reply in 1 short sentence, like a real player typing. Keep it under " +
-  "60 characters total. No lists, no asterisks, " +
-  "no line breaks - one paragraph only.";
+  "Reply in 1-2 short sentences, like a real player typing. " +
+  "Never start your message with your own name - the chat already shows who is speaking. " +
+  "No lists, no asterisks, no line breaks - one paragraph only.";
 
 const STYLE_LINE =
   "You are roleplaying a RuneScape player-character, not an assistant. " +
@@ -80,15 +80,15 @@ function buildSpeakPrompt({ card, context, toName, toRole, toMemory, toKind, pla
       (toMemory ? `${toMemory} ` : "") +
       (note ? `${note} ` : "") +
       `Say something to them — greet them by name if you know them, comment ` +
-      `on the day or what you see, whatever fits your mood. 1 short sentence, ` +
+      `on the day or what you see, whatever fits your mood. 1-2 short sentences, ` +
       `like a real player typing. Speak directly, no narration, no asterisks.`;
   } else {
     user =
       `You notice ${toName}, ${toRole ?? "a fellow citizen"}, nearby. ` +
       (toMemory ? `${toMemory} ` : "") +
       `Say something to them — a greeting, an observation, a question, a joke, ` +
-      `a complaint, whatever fits your mood. 1 short sentence, like a real ` +
-      `player typing. Under 60 characters. Speak directly, no narration, no asterisks.`;
+      `a complaint, whatever fits your mood. 1-2 short sentences, like a real ` +
+      `player typing. Speak directly, no narration, no asterisks.`;
   }
 
   const inputTokens = estimateTokens(system) + estimateTokens(user);

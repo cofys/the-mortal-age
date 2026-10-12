@@ -15,6 +15,11 @@
 
 const PUBLIC_CHAT_MAX_CHARS = 60;
 
+// Shared with the template chat path: strip a leading self-name prefix
+// ("Ora Nettle: ...") that the LLM adds when roleplaying with name tags.
+// CitizenSayPublic only requires lib/citizenVoice + constants — no cycle.
+const { stripSelfNamePrefix } = require("../citizens/chat/CitizenSayPublic");
+
 // Pacing between multi-line replies: a real player types one message, sends
 // it, pauses, then types the next. Citizens do the same. Without this, a
 // 2-line reply arrives as an instant burst that feels robotic.
@@ -47,12 +52,30 @@ function recipientsFor(bot, World) {
   return recipients;
 }
 
+function displayNameOf(bot) {
+  try {
+    const name = bot?.getAttribute?.("character:display-name");
+    if (typeof name === "string" && name.trim().length > 0) return name.trim();
+  } catch {
+    // fall through
+  }
+  try {
+    return bot?.getUsername?.() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function speakPublic(api, bot, text) {
   const World = api.core.World;
   // Defense in depth: no line breaks, one flowing message (chunking below
   // handles the 80-char OSRS limit).
   const clean = String(text ?? "").replace(/\s+/g, " ").trim();
-  const lines = chunk(clean, PUBLIC_CHAT_MAX_CHARS);
+  // The LLM roleplays with name tags ("Ora Nettle: ...") — strip the
+  // self-name prefix before chunking, or the chat box reads doubled.
+  const stripped = stripSelfNamePrefix(clean, displayNameOf(bot));
+  if (!stripped) return;
+  const lines = chunk(stripped, PUBLIC_CHAT_MAX_CHARS);
   if (lines.length === 0) return;
 
   // First line goes out now (the TypingScheduler already applied a human
@@ -96,7 +119,9 @@ function speakPublicLine(api, bot, line) {
 
 function speakPrivate(api, bot, requester, text) {
   const Misc = api.core.Misc;
-  const clean = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, 160); // PM cap, like the client
+  const stripped = stripSelfNamePrefix(String(text ?? ""), displayNameOf(bot));
+  const clean = stripped.replace(/\s+/g, " ").trim().slice(0, 160); // PM cap, like the client
+  if (!clean) return;
   const packed = Misc.textPack(clean);
   requester.getPacketSender().sendPrivateMessage(bot, packed, packed.length);
 }
