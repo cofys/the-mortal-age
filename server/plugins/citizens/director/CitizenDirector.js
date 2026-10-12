@@ -366,7 +366,8 @@ const DIRECTOR_TICK_TICKS = 100; // ~60s at 600ms/tick
 const FEATURE_TICK_BUDGET_MS = 70;
 
 // --- Proximity-based citizen lifecycle (memory optimization, 2026-10-07) ---
-// Citizens are full Player objects (~3MB each). When no real player is near,
+// Citizens are full Player objects (~2KB each, ~4.8MB total active cost
+// including brain state). When no real player is near,
 // the Player object is despawned — the citizen lives on as a roster record
 // (data tier: journal, needs, kinship, crafting all run on the record).
 // The Player rematerializes when a real player approaches.
@@ -374,7 +375,8 @@ const FEATURE_TICK_BUDGET_MS = 70;
 const CITIZEN_SPAWN_RADIUS = 50; // tiles from the citizen's data-tier position (their real whereabouts, synced from live movement): spawn when a real player is this close
 const CITIZEN_DESPAWN_RADIUS = 75; // tiles from current pos: despawn when no real player within this
 const PROXIMITY_TICK_TICKS = 17; // ~10s at 600ms/tick: fast spawn/despawn for responsiveness
-// Hard cap on concurrent materialized (~3MB) Player objects. Without this,
+// Hard cap on concurrent materialized citizens (~4.8MB total active cost
+// each, Player object itself ~2KB). Without this,
 // one player walking into a dense area (thousands of citizens) materializes
 // them all and OOMs the box. Spawns are nearest-first, so the citizens a
 // player can actually see always win.
@@ -1332,7 +1334,8 @@ class CitizenDirector {
    * Fast tick (~10s): reconcile each citizen's materialized Player against
    * real-player proximity. Spawn when a human approaches, despawn when the
    * area is empty. The data tier (journal, needs, kinship, crafting) runs on
-   * the roster record regardless — this only controls the ~3MB Player object.
+   * the roster record regardless — this only controls the materialized Player
+   * (~2KB object; ~4.8MB total active cost per citizen including brain state).
    */
   tickProximity() {
     // Timing desync: stagger the visible-life AI so the whole population
@@ -1359,7 +1362,7 @@ class CitizenDirector {
     // check. Spawn candidates are collected first, then materialized
     // nearest-first under CITIZEN_MAX_MATERIALIZED. Without the cap, a
     // player entering a dense area with thousands of citizens would spawn
-    // thousands of ~3MB Player objects and OOM the box.
+    // thousands of materialized citizens (~4.8MB active cost each) and OOM the box.
     const spawnCandidates = [];
     let materializedCount = 0;
     for (const record of this.roster.values()) {
