@@ -139,10 +139,21 @@ function randomOther(rng, director, record) {
  * `online` = whether the bot is currently spawned (offline = quieter life).
  */
 function backgroundStep(record, director, online) {
-  const rng = agentRng(`bg:${record.username}:${Math.floor(Date.now() / 3600000)}`);
+  // Perf (#5): the hour-bucket seed only changes hourly, but agentRng
+  // re-hashed every username every 60s tick. Cache the RNG per citizen,
+  // keyed by hour bucket.
+  const hourBucket = Math.floor(Date.now() / 3600000);
+  let rng = record._bgRng;
+  if (!rng || record._bgRngHour !== hourBucket) {
+    rng = agentRng(`bg:${record.username}:${hourBucket}`);
+    record._bgRng = rng;
+    record._bgRngHour = hourBucket;
+  }
   const journal = getJournal();
   const memory = getMemory();
-  const traits = new Set(record.personality?.traits ?? []);
+  // Perf (#6): only 2 trait membership checks — array .includes instead of
+  // allocating a Set per citizen per tick.
+  const traits = record.personality?.traits ?? [];
 
   // Emotional gravity: feelings fade every tick unless refreshed.
   try {
@@ -160,8 +171,8 @@ function backgroundStep(record, director, online) {
   }
 
   // Online: 0-2 events per tick, weighted by personality.
-  const chatty = traits.has("chatty") ? 1.6 : 1;
-  const gruff = traits.has("gruff") ? 0.5 : 1;
+  const chatty = traits.includes("chatty") ? 1.6 : 1;
+  const gruff = traits.includes("gruff") ? 0.5 : 1;
 
   // Work event (most common — they're living their job).
   if (chance(rng, 0.45)) {

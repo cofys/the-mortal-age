@@ -35,6 +35,13 @@ const {
 const { attachBrain } = require("../../bots/brain/attachBrain");
 const { startActivity } = require("../../bots/brain/BrainActivities");
 const { getActiveBotRuntime } = require("../../bots/runtime/BotRuntimeRegistry");
+// Perf (#11): hoisted out of the tickProximity hot path (was require() per 10s tick).
+const {
+  peekMovementRequest,
+  dispatchMovementRequest,
+  requestMovement,
+  clearMovementRequest,
+} = require("../../bots/behaviours/navigation/BotNavigation");
 const { ATTR_SKIP_PERSISTENCE } = require("../../bots/runtime/BotPersistenceConstants");
 const { agentRng, noisyTile } = require("../lib/humanizer");
 const { generatePersonality } = require("../lib/personalities");
@@ -664,6 +671,33 @@ function desiredPhase(record, hour) {
       return { online: false, activityId: null };
   }
 }
+
+/**
+ * Perf (#10): partial selection of the K smallest-dist spawn candidates.
+ * Bounded insertion is O(n*K); the K winners then get a small sort for
+ * nearest-first order. Avoids the full O(n log n) sort when only the
+ * nearest K (the spawn budget) are ever materialized.
+ */
+function selectNearestK(candidates, k) {
+  if (k <= 0) return [];
+  if (candidates.length <= k) {
+    return candidates.slice().sort((a, b) => a.dist - b.dist);
+  }
+  const top = [];
+  for (const c of candidates) {
+    if (top.length < k) {
+      top.push(c);
+      continue;
+    }
+    let maxIdx = 0;
+    for (let i = 1; i < top.length; i++) {
+      if (top[i].dist > top[maxIdx].dist) maxIdx = i;
+    }
+    if (c.dist < top[maxIdx].dist) top[maxIdx] = c;
+  }
+  return top.sort((a, b) => a.dist - b.dist);
+}
+
 class CitizenDirector {
   constructor({ api, registry }) {
     this.api = api;
@@ -1044,6 +1078,42 @@ class CitizenDirector {
   }
 
   /**
+   * Perf (#4): shared iteration helpers for hot-tick paths. `fn(record)` —
+   * return false to break early. Prefer these over raw roster.values()
+   * scans in tick code.
+   */
+  forEachOnline(fn) {
+    for (const record of this.roster.values()) {
+      if (!this.isOnline(record)) continue;
+      if (fn(record) === false) break;
+    }
+  }
+
+  forEachByRole(role, fn) {
+    for (const record of this.roster.values()) {
+      if (record?.role !== role) continue;
+      if (fn(record) === false) break;
+    }
+  }
+
+  forEachByKingdom(kingdomId, fn) {
+    const set = this.rosterByKingdom.get(kingdomId);
+    if (set) {
+      for (const name of set) {
+        const record = this.roster.get(name);
+        if (!record) continue;
+        if (fn(record) === false) break;
+      }
+      return;
+    }
+    // Fallback: full scan filtered by kingdom (index not yet built).
+    for (const record of this.roster.values()) {
+      if (record?.kingdomId !== kingdomId) continue;
+      if (fn(record) === false) break;
+    }
+  }
+
+  /**
    * A bespoke citizen: fixed name, fixed personality, fixed schedule. The
    * record has exactly the shape addCitizen builds, so the tick (spawn,
    * logout, activity switching, goals) treats them like anyone else. The
@@ -1269,81 +1339,35 @@ class CitizenDirector {
     // LOD bands must update on the fast tick, not just the slow 60s tick.
     // Otherwise citizens stay "asleep" for up to a minute after a player
     // arrives, appearing frozen. This is cheap distance math.
-    // Movement safety net (fast tick): if citizen brains aren't ticking
-    // (attachBrain failure), the director handles movement directly so
-    // citizens visibly move. Dispatches queued requests and wanders idle
-    // citizens (15% per tick, 3-5 tiles).
-    try {
-      const nav = require("../../bots/behaviours/navigation/BotNavigation");
-      const { peekMovementRequest, dispatchMovementRequest, requestMovement, clearMovementRequest } = nav;
-      for (const record of this.roster.values()) {
-        if (!this.isOnline(record)) continue;
-        const bot = this.getBot(record);
-        if (!bot) continue;
-        // Position sync (Jon 2026-10-12): the data-tier position emerges
-        // from where the citizen actually is. Sync from live location so
-        // despawn/respawn preserves their real whereabouts — no anchors.
-        try {
-          const loc = bot.getLocation?.();
-          if (loc && typeof loc.getX === "function") {
-            record.position = {
-              x: loc.getX(),
-              y: loc.getY(),
-              z: loc.getZ?.() ?? 0,
-            };
-          }
-        } catch {}
-        if (bot.getMovementQueue?.()?.size?.() > 0) continue;
-        const req = peekMovementRequest(bot);
-        if (req) {
-          try {
-            const result = dispatchMovementRequest(bot, req);
-            if (result?.hasRoute === true) clearMovementRequest(bot);
-          } catch {}
-          continue;
-        }
-        if (Math.random() < 0.15) {
-          try {
-            const loc = bot.getLocation?.();
-            if (!loc) continue;
-            const dx = Math.floor(Math.random() * 11) - 5;
-            const dy = Math.floor(Math.random() * 11) - 5;
-            if (dx === 0 && dy === 0) continue;
-            requestMovement(bot, loc.getX() + dx, loc.getY() + dy, {
-              reason: "director_wander",
-              basicPather: true,
-              z: loc.getZ?.() ?? 0,
-            });
-            const req2 = peekMovementRequest(bot);
-            if (req2) {
-              const r2 = dispatchMovementRequest(bot, req2);
-              if (r2?.hasRoute === true) clearMovementRequest(bot);
-            }
-          } catch {}
-        }
-      }
-    } catch (error) {
-      this.log("director movement failed", { error: String(error?.message ?? error) });
-    }
-    try {
-      tickLodBands(this, Date.now());
-    } catch (error) {
-      this.log("tick-lod-proximity failed", { error: String(error?.message ?? error) });
-    }
-    // Spawn candidates are collected first, then materialized nearest-first
-    // under CITIZEN_MAX_MATERIALIZED. Without the cap, a player entering a
-    // dense area with thousands of citizens would spawn thousands of ~3MB
-    // Player objects and OOM the box.
+    // Perf (#4/#12): ONE pass over the roster per proximity tick (was two
+    // full scans). Online citizens get position sync + the movement safety
+    // net + the despawn check; offline citizens get the spawn-candidate
+    // check. Spawn candidates are collected first, then materialized
+    // nearest-first under CITIZEN_MAX_MATERIALIZED. Without the cap, a
+    // player entering a dense area with thousands of citizens would spawn
+    // thousands of ~3MB Player objects and OOM the box.
     const spawnCandidates = [];
     let materializedCount = 0;
     for (const record of this.roster.values()) {
       try {
+        const online = this.isOnline(record);
+        if (online) {
+          // Movement safety net (fast tick): if citizen brains aren't
+          // ticking (attachBrain failure), the director handles movement
+          // directly so citizens visibly move. Dispatches queued requests
+          // and wanders idle citizens (15% per tick, 3-5 tiles). Runs for
+          // every materialized citizen regardless of schedule phase.
+          try {
+            this._proximityMovementTick(record);
+          } catch (error) {
+            this.log("director movement failed", { error: String(error?.message ?? error) });
+          }
+        }
         const phase = desiredPhase(record, hour);
         // Asleep or off-schedule: the slow tick handles logout.
         if (!phase.online) {
           continue;
         }
-        const online = this.isOnline(record);
         if (!online) {
           // Spawn check: use the data-tier position (the citizen's real
           // whereabouts, synced from live movement) — the citizen has no
@@ -1362,35 +1386,7 @@ class CitizenDirector {
           continue;
         }
         materializedCount += 1;
-        // Despawn check: use the bot's CURRENT position (it may have
-        // wandered/patrolled away from home).
-        const bot = this.getBot(record);
-        let bx = record.home?.x ?? 3200;
-        let by = record.home?.y ?? 3200;
-        let bz = record.home?.z ?? 0;
-        try {
-          const loc = bot?.getLocation?.();
-          if (loc) {
-            bx = loc.getX?.() ?? loc.x ?? bx;
-            by = loc.getY?.() ?? loc.y ?? by;
-            bz = loc.getZ?.() ?? loc.z ?? bz;
-          }
-        } catch {
-          // Fall back to home.
-        }
-        if (
-          !this.anyRealPlayerNear(bx, by, bz, CITIZEN_DESPAWN_RADIUS, positions)
-        ) {
-          this.logoutCitizen(record);
-          this.log("citizen despawned (no players near)", {
-            citizen: record.username,
-          });
-        } else {
-          // A real player is close enough to keep this citizen materialized.
-          // Stamp it so the brain LOD treats them as observed even if the
-          // LOD's own session scan misses the player (web-client sessions).
-          this.markHumanNearby(record);
-        }
+        this._proximityDespawnCheck(record, positions);
       } catch (error) {
         this.log("proximity check failed", {
           citizen: record.username,
@@ -1398,11 +1394,21 @@ class CitizenDirector {
         });
       }
     }
+    try {
+      tickLodBands(this, Date.now());
+    } catch (error) {
+      this.log("tick-lod-proximity failed", { error: String(error?.message ?? error) });
+    }
     // Nearest-first materialization under the global cap: the citizens a
     // player can actually see always win the spawn budget.
     if (spawnCandidates.length > 0) {
-      spawnCandidates.sort((a, b) => a.dist - b.dist);
-      for (const { record } of spawnCandidates) {
+      // Perf (#10): partial selection of the nearest K (the remaining spawn
+      // budget) instead of a full O(n log n) sort of every candidate.
+      const nearest = selectNearestK(
+        spawnCandidates,
+        CITIZEN_MAX_MATERIALIZED - materializedCount
+      );
+      for (const { record } of nearest) {
         if (materializedCount >= CITIZEN_MAX_MATERIALIZED) {
           break;
         }
@@ -2043,6 +2049,100 @@ class CitizenDirector {
       CitizenScholars.tickLectures(this, Date.now(), desync);
     } catch (error) {
       this.log("scholars (proximity) failed", { error: String(error?.message ?? error) });
+    }
+  }
+
+  /**
+   * Movement safety net + live position sync for one online citizen.
+   * Extracted from tickProximity for the single-pass loop (#12).
+   * Perf (#7): position sync mutates record.position in place — no
+   * per-tick {x,y,z} allocation (created once when missing).
+   */
+  _proximityMovementTick(record) {
+    const bot = this.getBot(record);
+    if (!bot) return;
+    // Position sync (Jon 2026-10-12): the data-tier position emerges
+    // from where the citizen actually is. Sync from live location so
+    // despawn/respawn preserves their real whereabouts — no anchors.
+    try {
+      const loc = bot.getLocation?.();
+      if (loc && typeof loc.getX === "function") {
+        const x = loc.getX();
+        const y = loc.getY();
+        const z = loc.getZ?.() ?? 0;
+        if (record.position) {
+          record.position.x = x;
+          record.position.y = y;
+          record.position.z = z;
+        } else {
+          record.position = { x, y, z };
+        }
+      }
+    } catch {}
+    if (bot.getMovementQueue?.()?.size?.() > 0) return;
+    const req = peekMovementRequest(bot);
+    if (req) {
+      try {
+        const result = dispatchMovementRequest(bot, req);
+        if (result?.hasRoute === true) clearMovementRequest(bot);
+      } catch {}
+      return;
+    }
+    if (Math.random() < 0.15) {
+      try {
+        const loc = bot.getLocation?.();
+        if (!loc) return;
+        const dx = Math.floor(Math.random() * 11) - 5;
+        const dy = Math.floor(Math.random() * 11) - 5;
+        if (dx === 0 && dy === 0) return;
+        requestMovement(bot, loc.getX() + dx, loc.getY() + dy, {
+          reason: "director_wander",
+          basicPather: true,
+          z: loc.getZ?.() ?? 0,
+        });
+        const req2 = peekMovementRequest(bot);
+        if (req2) {
+          const r2 = dispatchMovementRequest(bot, req2);
+          if (r2?.hasRoute === true) clearMovementRequest(bot);
+        }
+      } catch {}
+    }
+  }
+
+  /**
+   * Despawn check for one online citizen: logout when no real player is
+   * near, else stamp humanNearby so the brain LOD treats them as observed.
+   * Extracted from tickProximity for the single-pass loop (#12).
+   */
+  _proximityDespawnCheck(record, positions) {
+    // Despawn check: use the bot's CURRENT position (it may have
+    // wandered/patrolled away from home).
+    const bot = this.getBot(record);
+    let bx = record.home?.x ?? 3200;
+    let by = record.home?.y ?? 3200;
+    let bz = record.home?.z ?? 0;
+    try {
+      const loc = bot?.getLocation?.();
+      if (loc) {
+        bx = loc.getX?.() ?? loc.x ?? bx;
+        by = loc.getY?.() ?? loc.y ?? by;
+        bz = loc.getZ?.() ?? loc.z ?? bz;
+      }
+    } catch {
+      // Fall back to home.
+    }
+    if (
+      !this.anyRealPlayerNear(bx, by, bz, CITIZEN_DESPAWN_RADIUS, positions)
+    ) {
+      this.logoutCitizen(record);
+      this.log("citizen despawned (no players near)", {
+        citizen: record.username,
+      });
+    } else {
+      // A real player is close enough to keep this citizen materialized.
+      // Stamp it so the brain LOD treats them as observed even if the
+      // LOD's own session scan misses the player (web-client sessions).
+      this.markHumanNearby(record);
     }
   }
 

@@ -81,6 +81,14 @@ function makeDirector(entries) {
     roster,
     isOnline: () => true,
     getBot: (record) => bots.get(record.username) ?? null,
+    // Mirrors the real director's forEachOnline contract (fn returning
+    // false stops the scan).
+    forEachOnline(fn) {
+      for (const record of roster.values()) {
+        if (!this.isOnline(record)) continue;
+        if (fn(record) === false) break;
+      }
+    },
   };
 }
 

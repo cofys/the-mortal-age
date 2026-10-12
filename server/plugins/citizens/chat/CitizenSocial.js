@@ -149,14 +149,15 @@ function maybeSocialize(director, nowMs = Date.now()) {
 
   const rng = agentRng(`social:${Math.floor(nowMs / 60000)}`);
   const eligible = [];
-  for (const record of director.roster.values()) {
-    if (!SOCIAL_ACTIVITIES.has(record.currentActivityId)) continue;
-    if (!director.isOnline(record)) continue;
-    if (nowMs - (lastStartedAt.get(record.username) ?? 0) < STARTER_COOLDOWN_MS) continue;
-    if (!chance(rng, TICK_CHANCE)) continue;
+  // Perf (#4): shared online-only iteration (was a full roster scan with an
+  // inline isOnline gate). Return false stops the scan once we have enough.
+  director.forEachOnline((record) => {
+    if (!SOCIAL_ACTIVITIES.has(record.currentActivityId)) return;
+    if (nowMs - (lastStartedAt.get(record.username) ?? 0) < STARTER_COOLDOWN_MS) return;
+    if (!chance(rng, TICK_CHANCE)) return;
     eligible.push(record);
-    if (eligible.length >= 3) break; // a few starters per tick, max
-  }
+    if (eligible.length >= 3) return false; // a few starters per tick, max
+  });
 
   for (const record of eligible) {
     if (threads.size >= MAX_THREADS) break;
@@ -335,10 +336,11 @@ function maybeGreetPlayer(director, nowMs = Date.now()) {
   let greets = 0;
   const greetedThisTick = new Set(); // citizens already engaged — the notice/activity passes skip them
 
-  for (const record of director.roster.values()) {
-    if (greets >= MAX_GREETS_PER_TICK) break;
-    if (!director.isOnline(record)) continue;
-    if (nowMs - (lastGreetAt.get(record.username) ?? 0) < GREET_CITIZEN_COOLDOWN_MS) continue;
+  // Perf (#4): shared online-only iteration (was a full roster scan with an
+  // inline isOnline gate). Return false stops the scan at the greet cap.
+  director.forEachOnline((record) => {
+    if (greets >= MAX_GREETS_PER_TICK) return false;
+    if (nowMs - (lastGreetAt.get(record.username) ?? 0) < GREET_CITIZEN_COOLDOWN_MS) return;
 
     // Personality gates initiation: the bold greet, the nervous don't.
     let sociability = 1;
@@ -347,10 +349,10 @@ function maybeGreetPlayer(director, nowMs = Date.now()) {
     } catch {
       sociability = 1;
     }
-    if (!chance(rng, GREET_TICK_CHANCE * sociability)) continue;
+    if (!chance(rng, GREET_TICK_CHANCE * sociability)) return;
 
     const bot = director.getBot(record);
-    if (!bot) continue;
+    if (!bot) return;
 
     // Nearest real player in talking range.
     let target = null;
@@ -366,9 +368,9 @@ function maybeGreetPlayer(director, nowMs = Date.now()) {
         break;
       }
     } catch {
-      continue;
+      return;
     }
-    if (!target) continue;
+    if (!target) return;
 
     const playerName = target.getUsername();
     lastGreetAt.set(record.username, nowMs);
@@ -396,7 +398,7 @@ function maybeGreetPlayer(director, nowMs = Date.now()) {
       player: playerName,
     });
     greetedThisTick.add(record.username);
-  }
+  });
 
   // The rest of the social-reactivity pass rides this tick slot (the
   // director calls maybeGreetPlayer on the slow tick; the director and
@@ -444,12 +446,13 @@ function maybeNoticePlayer(director, nowMs = Date.now(), excludedUsernames = new
   pruneGreetCooldowns(nowMs);
   const rng = agentRng(`notice:${Math.floor(nowMs / 60000)}`);
 
-  for (const record of director.roster.values()) {
-    if (excludedUsernames.has(record.username)) continue;
-    if (!director.isOnline(record)) continue;
+  // Perf (#4): shared online-only iteration (was a full roster scan with an
+  // inline isOnline gate).
+  director.forEachOnline((record) => {
+    if (excludedUsernames.has(record.username)) return;
     const bot = director.getBot(record);
-    if (!bot) continue;
-    if (citizenOccupied(record, bot)) continue;
+    if (!bot) return;
+    if (citizenOccupied(record, bot)) return;
 
     // Nearest newcomer: a real player in radius the citizen hasn't
     // noticed recently. Busy players (mid-skill, mid-fight) get the
@@ -472,9 +475,9 @@ function maybeNoticePlayer(director, nowMs = Date.now(), excludedUsernames = new
         break;
       }
     } catch {
-      continue;
+      return;
     }
-    if (!target) continue;
+    if (!target) return;
 
     // Personality gates the glance: the bold turn to look, the nervous
     // mostly don't — but everyone notices sometimes.
@@ -484,7 +487,7 @@ function maybeNoticePlayer(director, nowMs = Date.now(), excludedUsernames = new
     } catch {
       sociability = 1;
     }
-    if (!chance(rng, NOTICE_TICK_CHANCE * (0.4 + 0.6 * sociability))) continue;
+    if (!chance(rng, NOTICE_TICK_CHANCE * (0.4 + 0.6 * sociability))) return;
 
     try {
       // Lazy require: CitizenAlive owns the canonical faceToward (real
@@ -506,7 +509,7 @@ function maybeNoticePlayer(director, nowMs = Date.now(), excludedUsernames = new
       citizen: record.username,
       player: targetName,
     });
-  }
+  });
 }
 
 /** Clear greet/notice cooldowns (tests). */
