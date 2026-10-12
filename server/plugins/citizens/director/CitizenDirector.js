@@ -1386,15 +1386,28 @@ class CitizenDirector {
           }
           continue;
         }
-        // Online (materialized): ALWAYS run the despawn check, even when the
-        // citizen's phase is off-schedule (asleep). The check stamps
-        // humanNearbyAt when a real player is near — the brain LOD needs that
-        // stamp refreshed every proximity tick, or the brain starves to 1/10th
-        // speed while the citizen is visibly standing next to Jon. Sleep
-        // logout itself is handled by the slow tick; this only controls the
-        // stamp + the no-player-near despawn.
+        // Online (materialized): run the despawn check. For phase-online
+        // citizens this is the full check (live position + logout when no
+        // player is near). For off-schedule (asleep) citizens we use a cheap
+        // stamp-only path: the b20b838b fix needs humanNearbyAt refreshed so
+        // brains don't starve, but we don't need the live engine position —
+        // record.position is synced every tick by _proximityMovementTick.
+        // This avoids getBot().getLocation() engine calls for asleep citizens.
+        // Sleep logout itself is handled by the slow tick.
         materializedCount += 1;
-        this._proximityDespawnCheck(record, positions);
+        if (!phase.online) {
+          const at = record.position ??
+            record.home ?? { x: 3200, y: 3200, z: 0 };
+          if (
+            this.anyRealPlayerNear(
+              at.x, at.y, at.z ?? 0, CITIZEN_DESPAWN_RADIUS, positions
+            )
+          ) {
+            this.markHumanNearby(record);
+          }
+        } else {
+          this._proximityDespawnCheck(record, positions);
+        }
       } catch (error) {
         this.log("proximity check failed", {
           citizen: record.username,
