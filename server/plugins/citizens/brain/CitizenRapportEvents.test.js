@@ -117,9 +117,18 @@ function makeDirector(names, { offline = [], botsByName = {} } = {}) {
   }
   return {
     roster,
+    isOnline: (record) => !offline.includes(record.username),
     getBot: (record) => {
       if (offline.includes(record.username)) return null;
       return botsByName[record.username] ?? null;
+    },
+    // Mirrors the real director's forEachOnline contract (fn returning
+    // false stops the scan).
+    forEachOnline(fn) {
+      for (const record of roster.values()) {
+        if (offline.includes(record.username)) continue;
+        if (fn(record) === false) break;
+      }
     },
   };
 }

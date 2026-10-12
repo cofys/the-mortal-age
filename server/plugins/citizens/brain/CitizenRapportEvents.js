@@ -58,19 +58,22 @@ function tickProximityRapport(director, nowMs = Date.now()) {
   if (!director?.roster) return 0;
   pruneAccruals(nowMs);
   let accrued = 0;
-  for (const record of director.roster.values()) {
+  // Perf (#4): shared online-only iteration (was a full roster scan with a
+  // getBot null gate). The !bot guard stays — isOnline and spawned can
+  // briefly disagree at despawn boundaries.
+  director.forEachOnline((record) => {
     let bot = null;
     try {
       bot = director.getBot?.(record) ?? null;
     } catch {
-      continue; // one bad record never breaks the tick
+      return; // one bad record never breaks the tick
     }
-    if (!bot) continue; // offline or not spawned
+    if (!bot) return; // offline or not spawned
     let locals;
     try {
       locals = bot.getLocalPlayers?.() ?? [];
     } catch {
-      continue; // one bad bot never breaks the tick
+      return; // one bad bot never breaks the tick
     }
     for (const local of locals) {
       try {
@@ -96,7 +99,7 @@ function tickProximityRapport(director, nowMs = Date.now()) {
         // One bad local never breaks the tick.
       }
     }
-  }
+  });
   return accrued;
 }
 
