@@ -16,6 +16,15 @@
  * overhead + chat box. Citizens are full Player objects (getIndex,
  * getLocalPlayers, getPacketSender all real), so this works.
  *
+ * VOICE BACKSTOP (2026-10-11): every citizen has a seeded voice profile
+ * (lib/citizenVoice: register, lowercase, exclaim) derived from their
+ * personality — but not every call site wires the pick through voiceLine.
+ * This is the one choke point all speech funnels through, so sayPublic
+ * applies the speaker's voice signature (case/punctuation) to the line
+ * before it speaks. Pick-time styling via voiceLine is idempotent, so
+ * already-wired call sites are unaffected; unwired ones now sound like
+ * their speaker instead of the pool's default voice.
+ *
  * LOOP GUARD (verified by code reading, not just asserted):
  * sayPublic sends packets DIRECTLY via recipient.getPacketSender().sendPublicChat.
  * It never calls PluginManager.emitSocialPacket, which is the ONLY entry to the
@@ -61,6 +70,9 @@ const CHAT_MAX_LEN = 80; // matches ChatPacketListener.handleText slice(0, 80)
 const CHATBOX_MIN_GAP_MS = 8000;
 const MAX_CHUNKS = 3; // 240 chars max per utterance; longer means upstream is wrong
 const CHUNK_GAP_MS = CHATBOX_MIN_GAP_MS; // continuations read as typed follow-ups
+
+const { voiceFor, styleLine } = require("../lib/citizenVoice");
+const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 
 /** username -> timestamp of last chat-box send (memory-leak plug below). */
 const lastChatBoxAt = new Map();
@@ -309,6 +321,25 @@ function repeatGuardStats() {
   };
 }
 
+/**
+ * Voice backstop: apply the speaker's own voice signature (case/punctuation
+ * per lib/citizenVoice) to a line about to speak. Call sites that already
+ * picked through voiceLine get this transform twice — styleLine is
+ * idempotent, so that's a no-op. Call sites that picked a raw template line
+ * get the speaker's signature applied here instead of the pool's default.
+ * A missing/broken personality attribute degrades to the line unchanged:
+ * speech must never break on a voice lookup.
+ */
+function applyVoiceStyle(citizen, line) {
+  try {
+    const personality = citizen?.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+    const styled = styleLine(voiceFor(personality), String(line ?? ""));
+    return styled.length > 0 ? styled : String(line ?? "");
+  } catch {
+    return String(line ?? "");
+  }
+}
+
 function isRealPlayer(player) {
   if (!player) return false;
   try {
@@ -514,8 +545,13 @@ function sayPublic(citizen, text, opts = {}) {
   const line = stripSelfNamePrefix(clean, from);
   if (!line) return false;
 
+  // Voice backstop: the line speaks in the citizen's own voice, whichever
+  // call site picked it. Applied before chunking so every chunk carries it.
+  const voiced = applyVoiceStyle(citizen, line);
+  if (!voiced) return false;
+
   // Split before any length cap: no more mid-sentence truncation.
-  const chunks = splitChunks(line, CHAT_MAX_LEN).slice(0, MAX_CHUNKS);
+  const chunks = splitChunks(voiced, CHAT_MAX_LEN).slice(0, MAX_CHUNKS);
 
   const nowMs = Date.now();
   pruneThrottle(nowMs);
@@ -523,7 +559,7 @@ function sayPublic(citizen, text, opts = {}) {
   // Feed the repetition guard: every spoken line lands in the per-citizen
   // and per-area memories, whichever module picked it (or none — LLM lines
   // count too, so a template never echoes something just said).
-  recordCommittedLine(citizen, line, nowMs);
+  recordCommittedLine(citizen, voiced, nowMs);
 
   // Chat-box throttle: tighter than overhead. When throttled, speech falls
   // back to overhead-only rather than being dropped — the line still shows,
@@ -572,6 +608,7 @@ module.exports = {
   pickLineAvoidingRepeat,
   normalizeRepeatLine,
   repeatGuardStats,
+  applyVoiceStyle,
   CHAT_MAX_LEN,
   CHATBOX_MIN_GAP_MS,
   MAX_CHUNKS,
