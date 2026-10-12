@@ -251,7 +251,7 @@ function buildPayload(player) {
   // treats a truthy choices value as "render choice buttons instead of the
   // Continue button", and [] is truthy in JS. An empty array here used to
   // strand players on the last dialogue line with no way to advance.
-  const choiceList = (stage.dialogue.choices || []).map((c) => ({ text: substitute(c.text, vars) }));
+  const choiceList = ((stage.dialogue && stage.dialogue.choices) || []).map((c) => ({ text: substitute(c.text, vars) }));
   const dialogue = arrived && stage.dialogue
     ? {
         speaker: substitute(stage.dialogue.speaker, vars),
