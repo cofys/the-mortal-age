@@ -1174,9 +1174,15 @@ class CitizenDirector {
     // every proximity tick, so ~1/spread of citizens are due per tick.
     // The systems keep their own tick loops — desync just gates them.
     this.aiTickCount += 1;
+    const positions = this.realPlayerPositions();
+    // Fast path: no real players online means no spawns, no online citizens,
+    // nothing to do. Skips the 3111-record iteration entirely. (Scale-3000
+    // perf: the full scan is O(roster) and must not run when idle.)
+    if (positions.length === 0) {
+      return;
+    }
     const desync = { tick: this.aiTickCount, spread: this.desyncSpread() };
     const hour = hourNow();
-    const positions = this.realPlayerPositions();
     // LOD bands must update on the fast tick, not just the slow 60s tick.
     // Otherwise citizens stay "asleep" for up to a minute after a player
     // arrives, appearing frozen. This is cheap distance math.
