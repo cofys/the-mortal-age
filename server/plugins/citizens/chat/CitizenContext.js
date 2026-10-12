@@ -180,6 +180,39 @@ function buildContext(citizenUsername, speakerUsername) {
   const goalText = goalWords(goal);
   if (goalText) parts.push(`Right now you are ${goalText}.`);
 
+  // Skill levels: what they're good at shapes what they talk about.
+  // "just hit 87 woodcutting" is only possible if the LLM knows the number.
+  // Token-lean: top 3 skills only, only when above level 10.
+  try {
+    const skills = bot?.getSkills?.();
+    if (skills?.getLevel) {
+      const names = [
+        "attack", "strength", "defence", "hitpoints", "ranged", "prayer",
+        "magic", "cooking", "woodcutting", "fletching", "fishing", "firemaking",
+        "crafting", "smithing", "mining", "herblore", "agility", "thieving",
+        "slayer", "farming", "runecrafting", "hunter", "construction", "sailing",
+      ];
+      const levels = [];
+      for (const n of names) {
+        try {
+          const lv = skills.getLevel(n);
+          if (typeof lv === "number" && lv >= 10) levels.push([n, lv]);
+        } catch {
+          // Skip skills the bot doesn't have.
+        }
+      }
+      levels.sort((a, b) => b[1] - a[1]);
+      const top = levels.slice(0, 3);
+      if (top.length > 0) {
+        parts.push(
+          `Your best skills: ${top.map(([n, lv]) => `${n} ${lv}`).join(", ")}.`
+        );
+      }
+    }
+  } catch {
+    // Skills must never break the chat path.
+  }
+
   // How they feel about THIS speaker — the relationship colors everything.
   // Opinion line carries the WHY (moments, grudges); the moment line adds
   // specific recall. The LLM speaks from these.
@@ -273,6 +306,25 @@ function buildContext(citizenUsername, speakerUsername) {
     if (lately) parts.push(`Lately: ${lately}`);
   } catch {
     // Journal must never break the chat path.
+  }
+
+  // Market: bread price movement. Everyone buys bread; a notable swing is
+  // something real to complain or brag about. Same signal the template
+  // chatter uses (CitizenConversations priceContext).
+  try {
+    const Prices = require("../../economy/Prices.Economy");
+    const { BREAD_ID } = require("../brain/CitizenNeeds");
+    const base = Prices.getBaseline(BREAD_ID);
+    const ref = Prices.getReferencePrice(BREAD_ID, Date.now());
+    if (base && ref) {
+      const ratio = ref / base;
+      if (ratio >= 1.12)
+        parts.push(`Bread costs ${Math.round((ratio - 1) * 100)}% more than usual right now — everyone is grumbling.`);
+      else if (ratio <= 0.89)
+        parts.push(`Bread is ${Math.round((1 - ratio) * 100)}% cheaper than usual — a small mercy.`);
+    }
+  } catch {
+    // Prices must never break the chat path.
   }
 
   return parts.join(" ");

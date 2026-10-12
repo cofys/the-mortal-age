@@ -2,32 +2,36 @@
 //
 // Budget: kept lean for free-tier request/token budgets.
 //   - INPUT hard cap: 2000 tokens (history is truncated oldest-first to fit).
-//   - OUTPUT cap: 40 tokens (~160 chars = 2x the 80-char public-chat line).
-//     Citizens talk like real players: short. Mouth.js paces multi-line
+//   - OUTPUT cap: 32 tokens (~128 chars = ~2 short sentences). Citizens talk
+//     like real players: short, but with substance. Mouth.js paces multi-line
 //     replies with natural pauses between lines.
-// Token estimate: chars / 4 (rough, English-heavy, errs on the safe side).
 // Token estimate: chars / 4 (rough, English-heavy, errs on the safe side).
 //
 // Typical call math (see DESIGN.md):
-//   world grounding ~160 + card ~120 + notes ~150 + history ~300
-//   + current line ~100 + output 60 + overhead ~30  =>  ~920 tokens/call.
+//   world grounding ~200 + card ~120 + notes ~150 + history ~300
+//   + current line ~100 + output 32 + overhead ~30  =>  ~930 tokens/call.
 
 const TOKEN_CHARS = 4;
 const estimateTokens = (text) => Math.ceil(String(text ?? "").length / TOKEN_CHARS);
 
 const INPUT_BUDGET_TOKENS = 2000;
-const MAX_OUTPUT_TOKENS = 15;
+const MAX_OUTPUT_TOKENS = 32;
 const MAX_CARD_CHARS = 480; // short personality cards, not long system prompts
 const MAX_NOTES_IN_PROMPT = 5;
 const MAX_HISTORY_EXCHANGES = 6;
 
-// Fixed world grounding every citizen shares. Short on purpose.
+// Fixed world grounding every citizen shares. Short on purpose, but demands
+// specificity: generic greetings are the NPC tell. Real players talk about
+// what they're doing, what they want, and what's happening.
 const WORLD_GROUNDING =
   "You are a citizen of Gielinor, 'the Mortal Age': the gods have gone silent and " +
   "everyone has a theory why. Great powers: Asgarnia (Falador, no king), Misthalin " +
   "(Varrock, aging king), Kandarin (Ardougne, the plague lie), Morytania (vampyres), " +
   "Keldagrim (dwarf mining companies). Stay in character. Never mention you are an AI. " +
   "Reply in 1-2 short sentences, like a real player typing. " +
+  "Be specific: mention what you're doing, what you're working toward, or what's " +
+  "happening around you. Have opinions — real players complain, brag, and gossip. " +
+  "Never give a generic greeting; if you wouldn't say it to a friend, don't say it. " +
   "Never start your message with your own name - the chat already shows who is speaking. " +
   "No lists, no asterisks, no line breaks - one paragraph only.";
 
@@ -74,21 +78,26 @@ function buildSpeakPrompt({ card, context, toName, toRole, toMemory, toKind, pla
   if (toKind === "player") {
     // A citizen notices a REAL player nearby and speaks first: a greeting,
     // a comment, a reaction. This is what makes the world feel alive.
+    // Anchor it in what they're actually doing — that's what real players
+    // talk about, not generic hellos.
     const note = String(playerNote ?? "").trim();
     user =
       `You notice ${toName}, a real traveler, nearby. ` +
       (toMemory ? `${toMemory} ` : "") +
       (note ? `${note} ` : "") +
-      `Say something to them — greet them by name if you know them, comment ` +
-      `on the day or what you see, whatever fits your mood. 1-2 short sentences, ` +
-      `like a real player typing. Speak directly, no narration, no asterisks.`;
+      `Say something to them grounded in your current moment — what you're ` +
+      `doing, working toward, or noticing. Mention it specifically, like ` +
+      `"almost 70 fishing" or "these yews are packed today". Have an opinion ` +
+      `or ask them something real. 1-2 short sentences, like a real player ` +
+      `typing. Speak directly, no narration, no asterisks.`;
   } else {
     user =
       `You notice ${toName}, ${toRole ?? "a fellow citizen"}, nearby. ` +
       (toMemory ? `${toMemory} ` : "") +
-      `Say something to them — a greeting, an observation, a question, a joke, ` +
-      `a complaint, whatever fits your mood. 1-2 short sentences, like a real ` +
-      `player typing. Speak directly, no narration, no asterisks.`;
+      `Say something grounded in your current moment — what you're doing, ` +
+      `working toward, or noticing. Be specific, have an opinion, or share ` +
+      `a bit of gossip. 1-2 short sentences, like a real player typing. ` +
+      `Speak directly, no narration, no asterisks.`;
   }
 
   const inputTokens = estimateTokens(system) + estimateTokens(user);
