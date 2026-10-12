@@ -338,6 +338,69 @@ class BotBehaviorTask extends Task {
     return bestChebyshevDistance;
   }
 
+  /**
+   * Direct real-player proximity check without the session filter.
+   * Mirrors the citizen director's realPlayerPositions(): iterates
+   * World.players, skips bots, does NOT require isPlayerSessionConnected
+   * (which misses web-client sessions). Used as a fallback in
+   * resolveEntryStride when the director's humanNearbyAt stamp is stale.
+   * Returns the nearest Chebyshev distance, or Infinity if none found.
+   */
+  findNearestRealPlayerDistanceDirect(player, maxDistanceTiles) {
+    if (!player || !this.World) {
+      return Number.POSITIVE_INFINITY;
+    }
+    const snapshot = this.getLocationSnapshot(player);
+    if (!snapshot) {
+      return Number.POSITIVE_INFINITY;
+    }
+    const searchDistance = Number.isFinite(maxDistanceTiles)
+      ? Math.max(0, maxDistanceTiles)
+      : this.lodConfig.nearDistanceTiles;
+    let best = Number.POSITIVE_INFINITY;
+    try {
+      const players = this.World.getPlayers?.();
+      if (!players || typeof players.forEach !== "function") {
+        return best;
+      }
+      players.forEach((candidate) => {
+        try {
+          if (!candidate || candidate.isPlayerBot?.() === true) {
+            return;
+          }
+          if (candidate === player) {
+            return;
+          }
+          const loc = candidate.getLocation?.();
+          if (!loc) {
+            return;
+          }
+          const cx = loc.getX?.() ?? loc.x;
+          const cy = loc.getY?.() ?? loc.y;
+          const cz = loc.getZ?.() ?? loc.z ?? 0;
+          if (!Number.isFinite(cx) || !Number.isFinite(cy)) {
+            return;
+          }
+          if (cz !== snapshot.z) {
+            return;
+          }
+          const dist = Math.max(
+            Math.abs(cx - snapshot.x),
+            Math.abs(cy - snapshot.y)
+          );
+          if (dist < best) {
+            best = dist;
+          }
+        } catch {
+          // Skip unreadable players.
+        }
+      });
+    } catch {
+      // World not ready.
+    }
+    return best;
+  }
+
   resolveEntryStride(entry, nowMs) {
     if (!this.lodConfig.enabled) {
       return this.idleEntryStride;
@@ -356,6 +419,22 @@ class BotBehaviorTask extends Task {
     const humanNearbyAt = Number(entry?.state?.humanNearbyAt ?? 0);
     if (humanNearbyAt > 0 && nowMs - humanNearbyAt < 60000) {
       return this.lodConfig.nearStride;
+    }
+    // Fallback (Jon 2026-10-12): if the director's stamp is stale or was
+    // never written, check directly whether a real player is physically
+    // near. The LOD session scan (isPlayerSessionConnected) can miss
+    // web-client sessions, and the stamp chain has multiple handoffs that
+    // can silently break. A direct position check against World.players
+    // (bots filtered, no session filter — mirroring the director's
+    // realPlayerPositions) is the ground truth.
+    if (entry?.player) {
+      const directDist = this.findNearestRealPlayerDistanceDirect(
+        entry.player,
+        this.lodConfig.nearDistanceTiles
+      );
+      if (directDist <= this.lodConfig.nearDistanceTiles) {
+        return this.lodConfig.nearStride;
+      }
     }
     if (!entry?.player || this._humanObserverCount === 0) {
       return farStrideFor(entry);
