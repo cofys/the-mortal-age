@@ -167,6 +167,7 @@ const INCOME_SOURCES = [
   "promotion", // promotion tax taken from a player's purse
   "task", // kingdom-task tax taken from a player's purse
   "donation", // ::donate from a player's purse
+  "tithe", // Morytania blood tithe taken from a player's purse
   "war-demand", // honored war demand: ally treasury -> this treasury
   "plunder", // seized war chest (player-funded) after a crushed founding
 ];

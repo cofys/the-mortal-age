@@ -108,6 +108,7 @@ module.exports = {
     loadContentModule("./MyKingdom.Kingdoms")(api);
     loadContentModule("./MyKingdomApi")(api);
     loadContentModule("./Bounties.Kingdoms")(api);
+    loadContentModule("./BloodTithe.Kingdoms")(api);
     loadContentModule("./Jobs.Kingdoms")(api);
     loadContentModule("./JobsApi")(api);
     loadContentModule("./OfficeDashboardApi")(api);
