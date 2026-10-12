@@ -61,9 +61,85 @@ const KIND_HOME = "home";
 const KIND_WORK = "work";
 const KIND_MARKET = "market";
 const KIND_MEAL = "meal";
-const KIND_SOCIAL = "social";
+// KIND_EVENING replaced KIND_SOCIAL (Jon 2026-10-12): no more 5-hour tavern
+// block. Evenings are personality-varied — work late, home early, or a brief
+// tavern beer break — and socializing happens ambiently wherever citizens are.
+const KIND_EVENING = "evening";
 
 const WORK_FISHING = "fishing";
+
+// Evening styles, resolved once per citizen per day (seeded): no two
+// citizens have identical evenings.
+const EVENING_WORK_LATE = "workLate";
+const EVENING_HOME_EARLY = "homeEarly";
+const EVENING_TAVERN_BREAK = "tavernBreak";
+
+// Work tools: citizens arrive at the work site with the tool for their
+// trade. Without these the skill plugins refuse silently ("You don't have
+// an axe") and the citizen stands at the tree/rock doing nothing — the
+// 2026-10-12 standing bug. Bronze is the honest starter set.
+const BRONZE_AXE_ID = 1351;
+const BRONZE_PICKAXE_ID = 1265;
+const SMALL_NET_ID = 303;
+// Tavern beer break (Jon 2026-10-12): walk to the tavern, trade the
+// barkeeper for a beer, drink it, chat a minute or two, back to work.
+const BEER_ID = 1917;
+const BEER_PRICE = 2; // coins, the standard tavern price
+const BEER_BREAK_MAX_MS = 20 * 60 * 1000; // never longer than 20 minutes
+const BEER_CHAT_MIN_MS = 60 * 1000; // chat 1-2 minutes, per Jon
+const BEER_CHAT_MAX_MS = 2 * 60 * 1000;
+// Animations (engine ids): 829 = drink (Potions.plugin.js), 621 = small-net
+// fishing (Fishing.plugin.js ANIM.NET).
+const DRINK_ANIM_ID = 829;
+const FISH_NET_ANIM_ID = 621;
+
+// Lazy engine Animation (CitizenPrayer pattern): cosmetic only, never blocks.
+let AnimationClass = null;
+let animationTried = false;
+function getAnimationClass() {
+  if (AnimationClass || animationTried) return AnimationClass;
+  animationTried = true;
+  try {
+    AnimationClass =
+      require("../../../../src/main/typescript/elvarg/game/model/Animation").Animation;
+  } catch {
+    AnimationClass = null;
+  }
+  return AnimationClass;
+}
+function playAnim(player, animId) {
+  try {
+    const Anim = getAnimationClass();
+    if (Anim && player?.performAnimation) {
+      player.performAnimation(new Anim(animId));
+    }
+  } catch {
+    // Cosmetic only.
+  }
+}
+
+/**
+ * The 2026-10-12 standing-bug fix: the Woodcutting and Mining plugins
+ * silently refuse ("You don't have an axe/pickaxe") when the citizen has
+ * no tool, so the work delegate clicks forever and the citizen stands at
+ * the tree/rock doing nothing visible. Ensure the trade's starter tool is
+ * in the pack before the shift starts. Self-healing: re-granted if lost.
+ */
+function ensureWorkTool(player, workKind) {
+  let toolId = null;
+  if (workKind === "tree") toolId = BRONZE_AXE_ID;
+  else if (workKind === "rock") toolId = BRONZE_PICKAXE_ID;
+  else if (workKind === WORK_FISHING) toolId = SMALL_NET_ID;
+  if (!toolId) return;
+  try {
+    const inventory = player.getInventory?.();
+    if (!inventory) return;
+    if ((inventory.getAmount?.(toolId) ?? 0) > 0) return;
+    inventory.adds(toolId, 1);
+  } catch {
+    // A tool-less shift stalls; the retry loop covers it.
+  }
+}
 
 const DAY_MINUTES = 24 * 60;
 const RETRY_WORK_MS = 60000;
@@ -182,15 +258,16 @@ function dayOfYear(date) {
 
 /**
  * Build today's phase plan. Seeded per citizen per day so the routine varies
- * without drifting: offsets shift boundaries, some days swap the shifts,
- * rare days are "days off" (tavern all day — everyone needs one).
- */
-/**
- * Build today's phase plan. Seeded per citizen per day so the routine varies
  * without drifting. Boundaries share one jittered value each (then forced
  * monotonic) so adjacent phases always meet — no gaps, no overlaps.
  * Some days are "late days" (the whole day slides ~90 min — a lie-in),
- * rare days are "days off" (tavern all day — everyone needs one).
+ * rare days are "days off" (a slow day: market, a tavern beer break, home —
+ * everyone needs one).
+ *
+ * Jon 2026-10-12: the old 17:00-22:00 SOCIAL block is gone. Evenings are
+ * personality-varied (work late / home early / tavern beer break) and
+ * socializing happens ambiently wherever citizens are, not parked at the
+ * tavern for five hours.
  */
 function buildDayPlan(rng) {
   const offset = () => Math.round((rng() - 0.5) * 90); // ±45 min
@@ -209,12 +286,14 @@ function buildDayPlan(rng) {
     { kind: KIND_MARKET, start: b11, end: b12 },
     { kind: KIND_MEAL, start: b12, end: b13 },
     { kind: KIND_WORK, start: b13, end: b17 },
-    { kind: KIND_SOCIAL, start: b17, end: b22 },
+    { kind: KIND_EVENING, start: b17, end: b22 },
     { kind: KIND_HOME, start: b22, end: DAY_MINUTES },
   ];
   if (dayOff) {
+    // Day off: the work legs become evening legs (beer break + home),
+    // so a day off is genuinely restful, not a tavern marathon.
     return plan.map((phase) =>
-      phase.kind === KIND_WORK ? { ...phase, kind: KIND_SOCIAL } : phase
+      phase.kind === KIND_WORK ? { ...phase, kind: KIND_EVENING } : phase
     );
   }
   return plan;
@@ -291,7 +370,7 @@ function extendWorkShift(plan, upcomingPhase, extendMin) {
  *
  * - KIND_MARKET with an active work intent (and no social pull): the midday
  *   browse becomes work. A grinding player skips the stalls.
- * - Leaving KIND_WORK for KIND_SOCIAL with an unfinished work intent:
+ * - Leaving KIND_WORK for KIND_EVENING with an unfinished work intent:
  *   near-done (>=70%) grinds 45 more minutes to finish; fresh grinds (<50%)
  *   work an hour late. The evening just starts later.
  * - KIND_MEAL is never bent: eating stays HP-driven, lunch stays lunch.
@@ -320,7 +399,7 @@ function bendLeg(player, state, phase) {
       return KIND_WORK;
     }
     // Stretch the afternoon shift into the evening.
-    if (state.phaseKind === KIND_WORK && phase.kind === KIND_SOCIAL) {
+    if (state.phaseKind === KIND_WORK && phase.kind === KIND_EVENING) {
       const ratios = intents.map(intentRatio);
       const best = Math.max(...ratios);
       const worst = Math.min(...ratios);
@@ -583,10 +662,8 @@ function journalWork(player, text) {
 
 function createCitizenRoutineAction(spec, world) {
   // Internal delegates, created once so their per-player state stays keyed.
-  const socialDelegate = createIdleSocialAction(
-    { anchorKind: "tavern", chatterMinMs: 120000, chatterMaxMs: 420000 },
-    world
-  );
+  // (The tavern socialDelegate was removed with KIND_SOCIAL, Jon 2026-10-12:
+  // beer breaks handle tavern time now.)
   const marketDelegate = createIdleSocialAction(
     { anchorKind: "market", chatterMinMs: 180000, chatterMaxMs: 480000 },
     world
@@ -638,8 +715,219 @@ function createCitizenRoutineAction(spec, world) {
         nextCastAt: 0,
         casts: 0,
         bendsToday: 0, // goal-threading: how many times intents bent today's plan
+        eveningStyle: null, // resolved on first evening: workLate | homeEarly | tavernBreak
+        beerBreak: null, // active beer-break state machine, or null
+        beerBreakDoneDay: -1, // dayStamp of the last beer break (max one per day)
+        nextWorkChatAt: 0, // ambient chatter while working (Jon 2026-10-12)
       };
     });
+  }
+
+  /**
+   * Resolve this citizen's evening style: seeded per citizen per day, weighted
+   * by personality. Industrious citizens work late; homebodies head home;
+   * social ones take the tavern beer break. No two citizens share an evening.
+   */
+  function resolveEveningStyle(player, state) {
+    if (state.eveningStyle) return state.eveningStyle;
+    const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+    const industrious = Number(personality.industrious ?? personality.conscientiousness ?? 0.5);
+    const social = Number(personality.social ?? personality.extraversion ?? 0.5);
+    const roll = state.rng();
+    // Weighted: industrious -> work late, social -> tavern, else home early.
+    if (roll < 0.25 + industrious * 0.25) {
+      state.eveningStyle = EVENING_WORK_LATE;
+    } else if (roll < 0.55 + social * 0.2) {
+      state.eveningStyle = EVENING_TAVERN_BREAK;
+    } else {
+      state.eveningStyle = EVENING_HOME_EARLY;
+    }
+    return state.eveningStyle;
+  }
+
+  const BEER_LINES = Object.freeze([
+    "Ale's decent tonight.",
+    "Long day. This one's earned.",
+    "You working tomorrow?",
+    "Heard the strangest rumour about the river...",
+    "My back's killing me. Getting old.",
+    "Another round? I'm buying. Well — almost.",
+  ]);
+
+  const WORK_LINES = Object.freeze([
+    "Nice day for it.",
+    "This one's stubborn.",
+    "Steady pace wins the shift.",
+    "Nearly got a full pack.",
+    "The kingdom needs every bit of this.",
+  ]);
+
+  function sayBeerLine(player, state) {
+    try {
+      const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+      sayPublic(player, voiceLine(voiceFor(personality), BEER_LINES, state.rng));
+    } catch {
+      // Cosmetic only.
+    }
+  }
+
+  function sayWorkLine(player, state) {
+    try {
+      const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+      sayPublic(player, voiceLine(voiceFor(personality), WORK_LINES, state.rng));
+    } catch {
+      // Cosmetic only.
+    }
+  }
+
+  /**
+   * Start a tavern beer break (Jon 2026-10-12): walk to the tavern, trade
+   * the barkeeper for a beer, drink it, chat a minute or two, then back to
+   * what they were doing. Max 20 minutes, once per day. An interrupt, not
+   * a phase — the caller resumes its own work afterwards.
+   */
+  function startBeerBreak(ctx, state, returnTile) {
+    const { player, nowMs } = ctx;
+    const tavern = siteTileLocal(player, "tavern");
+    if (!tavern) return false;
+    state.beerBreak = {
+      stage: "toTavern",
+      startedAt: nowMs,
+      endsAt: nowMs + BEER_BREAK_MAX_MS,
+      chatUntil: 0,
+      drinkAt: 0,
+      saidSecond: false,
+      returnTile: returnTile ?? null,
+    };
+    state.beerBreakDoneDay = dayStamp();
+    walkTo(player, tavern);
+    return true;
+  }
+
+  /**
+   * Buy a beer from the barkeeper. Real trade semantics: coins leave, beer
+   * arrives (verified, with rollback). The coins pay for the beer whether
+   * or not a barkeeper NPC is standing there — the tavern always serves.
+   */
+  function buyBeer(player) {
+    try {
+      const inventory = player.getInventory?.();
+      if (!inventory) return false;
+      const coins = inventory.getAmount?.(COINS_ID) ?? 0;
+      if (coins < BEER_PRICE) return false; // broke — skip the beer
+      inventory.deleteNumber(COINS_ID, BEER_PRICE);
+      if (!verifiedAdds(inventory, BEER_ID, 1)) {
+        // Roll back the coins if the beer didn't land.
+        try { inventory.adds(COINS_ID, BEER_PRICE); } catch { /* best effort */ }
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function drinkBeer(player) {
+    try {
+      const inventory = player.getInventory?.();
+      if ((inventory?.getAmount?.(BEER_ID) ?? 0) > 0) {
+        inventory.deleteNumber(BEER_ID, 1);
+      }
+      playAnim(player, DRINK_ANIM_ID);
+    } catch {
+      // Cosmetic only.
+    }
+  }
+
+  /**
+   * Advance the beer-break state machine. Returns true while the break is
+   * active (caller should return "running"), false when it's done and the
+   * caller should resume its own work.
+   */
+  function beerBreakTick(ctx, state) {
+    const { player, nowMs } = ctx;
+    const br = state.beerBreak;
+    if (!br) return false;
+    // Hard cap: never longer than 20 minutes, then back to work.
+    if (nowMs >= br.endsAt) {
+      state.beerBreak = null;
+      return false;
+    }
+    if (player.getForceMovement?.() != null) return true;
+    if (player.getMovementQueue?.()?.size?.() > 0) return true;
+
+    const tavern = siteTileLocal(player, "tavern");
+    if (br.stage === "toTavern") {
+      if (tavern && !atTile(player, tavern, 4)) {
+        walkTo(player, tavern);
+        return true;
+      }
+      br.stage = "buy";
+      return true;
+    }
+    if (br.stage === "buy") {
+      if (buyBeer(player)) {
+        br.stage = "drink";
+        br.drinkAt = nowMs + 3000; // a beat to "receive" the beer
+      } else {
+        // Couldn't buy (broke, or pack full) — chat anyway, then leave.
+        br.stage = "chat";
+        br.chatUntil = nowMs + BEER_CHAT_MIN_MS;
+        sayBeerLine(player, state);
+      }
+      return true;
+    }
+    if (br.stage === "drink") {
+      if (nowMs < br.drinkAt) return true;
+      drinkBeer(player);
+      br.stage = "chat";
+      // 1-2 minutes of chat, per Jon — seeded per citizen.
+      br.chatUntil =
+        nowMs + BEER_CHAT_MIN_MS + Math.floor(state.rng() * (BEER_CHAT_MAX_MS - BEER_CHAT_MIN_MS));
+      sayBeerLine(player, state);
+      return true;
+    }
+    if (br.stage === "chat") {
+      if (nowMs >= br.chatUntil) {
+        br.stage = "return";
+        return true;
+      }
+      if (!br.saidSecond && nowMs >= br.chatUntil - BEER_CHAT_MIN_MS / 2) {
+        br.saidSecond = true;
+        if (chance(state.rng, 0.6)) sayBeerLine(player, state);
+      }
+      return true;
+    }
+    if (br.stage === "return") {
+      const dest = br.returnTile;
+      if (dest && !atTile(player, dest, 6)) {
+        walkTo(player, dest);
+        return true;
+      }
+      state.beerBreak = null;
+      return false;
+    }
+    state.beerBreak = null;
+    return false;
+  }
+
+  /**
+   * Should this citizen take a beer break right now? Seeded, max once per
+   * day, weighted toward social personalities. Only during active work
+   * (not when banking, selling, or already on a break). The dice are rolled
+   * once per work-phase entry, not every tick.
+   */
+  function maybeBeerBreak(ctx, state) {
+    if (state.beerBreak) return false;
+    if (state.beerBreakDoneDay === dayStamp()) return false;
+    if (state.beerBreakRolled) return false; // already rolled this phase
+    state.beerBreakRolled = true;
+    const personality = ctx.player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+    const social = Number(personality.social ?? personality.extraversion ?? 0.5);
+    // ~35% of days for an average citizen, more for social ones.
+    if (!chance(state.rng, 0.2 + social * 0.3)) return false;
+    const site = workSiteLocal(ctx.player);
+    return startBeerBreak(ctx, state, site);
   }
 
   /**
@@ -723,6 +1011,9 @@ function createCitizenRoutineAction(spec, world) {
     state.nextCastAt =
       nowMs + logNormalJitter(state.rng, 45000, state.human.tempoSigma);
     state.casts += 1;
+    // Visible casting animation (Jon 2026-10-12): the fisher visibly works
+    // the water, not just stands at the dock.
+    playAnim(player, FISH_NET_ANIM_ID);
     if (chance(state.rng, 0.5 * state.human.chatRate)) {
       try {
         const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
@@ -931,19 +1222,37 @@ function createCitizenRoutineAction(spec, world) {
     state.lingerUntil = 0;
     state.sellMode = null;
     state.sellGiveUpAt = 0;
+    // A phase change cancels any in-progress beer break (it resumes via
+    // the new phase's own logic) and re-arms the per-phase break roll.
+    state.beerBreak = null;
+    state.beerBreakRolled = false;
     const { player } = ctx;
     if (kind === KIND_WORK) {
       // Snapshot the inventory: the shift's output is whatever appears
       // on top of this. Tools carried in are excluded by construction.
       state.invSnapshot = snapshotInventory(player);
+      // The 2026-10-12 standing-bug fix: no tool, no visible work.
+      ensureWorkTool(player, resolveWorkKind(player, state));
       const tile = workTileFor(player, state);
       if (tile) {
         walkTo(player, tile);
       }
-    } else if (kind === KIND_SOCIAL) {
-      const tavern = siteTileLocal(player, "tavern");
-      if (tavern) {
-        walkTo(player, tavern);
+    } else if (kind === KIND_EVENING) {
+      // Evenings are personality-varied (Jon 2026-10-12): the style was
+      // resolved when the phase was entered; walk to the starting point.
+      const style = resolveEveningStyle(player, state);
+      if (style === EVENING_WORK_LATE) {
+        state.invSnapshot = snapshotInventory(player);
+        ensureWorkTool(player, resolveWorkKind(player, state));
+        const tile = workTileFor(player, state);
+        if (tile) walkTo(player, tile);
+      } else if (style === EVENING_TAVERN_BREAK) {
+        // The beer break runs inside the evening tick; start walking now.
+        const tavern = siteTileLocal(player, "tavern");
+        if (tavern) walkTo(player, tavern);
+      } else {
+        const home = ctx.state?.home;
+        if (home) walkTo(player, home);
       }
     } else if (kind === KIND_MARKET || kind === KIND_MEAL) {
       // Midday market trip, then the meal break right there among the stalls.
@@ -957,6 +1266,148 @@ function createCitizenRoutineAction(spec, world) {
         walkTo(player, home);
       }
     }
+  }
+
+  /**
+   * The evening leg (Jon 2026-10-12): no more five-hour tavern stand.
+   * - workLate: keep working like a WORK phase, then drift home at ~20:00.
+   * - homeEarly: home for the evening.
+   * - tavernBreak: one beer break at the tavern, then home.
+   * Socializing happens ambiently wherever citizens are, not here.
+   */
+  function eveningTick(ctx, state) {
+    const { player, nowMs } = ctx;
+    const style = resolveEveningStyle(player, state);
+    // An in-progress beer break always runs to completion first.
+    if (state.beerBreak) {
+      if (beerBreakTick(ctx, state)) return "running";
+      // Break done — fall through to the style's default.
+    }
+    if (style === EVENING_WORK_LATE) {
+      // Work until ~20:00, then head home. Reuse the work leg.
+      if (minutesNow() >= 20 * 60) {
+        const home = ctx.state?.home;
+        if (home && !atTile(player, home, 4)) {
+          walkTo(player, home);
+          return "running";
+        }
+        if (nowMs < state.lingerUntil) return "running";
+        state.lingerUntil = nowMs + logNormalJitter(state.rng, 90000, state.human.tempoSigma);
+        return "running";
+      }
+      return workLegTick(ctx, state);
+    }
+    if (style === EVENING_TAVERN_BREAK) {
+      // One beer break per day; after it's done, home for the night.
+      // The break's returnTile is null — the evening ends at home anyway.
+      if (state.beerBreakDoneDay !== dayStamp()) {
+        if (startBeerBreak(ctx, state, null)) return "running";
+      }
+      const home = ctx.state?.home;
+      if (home && !atTile(player, home, 4)) {
+        walkTo(player, home);
+        return "running";
+      }
+      if (nowMs < state.lingerUntil) return "running";
+      state.lingerUntil = nowMs + logNormalJitter(state.rng, 90000, state.human.tempoSigma);
+      return "running";
+    }
+    // homeEarly: home for the evening.
+    const home = ctx.state?.home;
+    if (home && !atTile(player, home, 4)) {
+      walkTo(player, home);
+      return "running";
+    }
+    if (nowMs < state.lingerUntil) return "running";
+    state.lingerUntil = nowMs + logNormalJitter(state.rng, 90000, state.human.tempoSigma);
+    return "running";
+  }
+
+  /**
+   * The work leg, shared by the WORK phase and the workLate evening style.
+   * Includes the beer-break interrupt (Jon 2026-10-12) and ambient chatter
+   * while working — citizens socialize wherever they are, not at a tavern.
+   */
+  function workLegTick(ctx, state) {
+    const { player, nowMs } = ctx;
+    // Beer break interrupt: a citizen already on one runs it to completion.
+    if (state.beerBreak) {
+      if (beerBreakTick(ctx, state)) return "running";
+      // Break finished — fall through and resume work.
+    } else if (!state.sellMode && state.workMode === "work") {
+      // Mid-shift beer break: seeded, once per day, social personalities.
+      // Not while banking or mid-sale — only during the actual grind.
+      maybeBeerBreak(ctx, state);
+      if (state.beerBreak) {
+        if (beerBreakTick(ctx, state)) return "running";
+      }
+    }
+    // Ambient chatter while working (Jon 2026-10-12): they talk where they
+    // are — at the tree, the rock, the dock — not just at the tavern.
+    if (nowMs >= state.nextWorkChatAt) {
+      state.nextWorkChatAt =
+        nowMs + logNormalJitter(state.rng, 180000, state.human.tempoSigma);
+      if (chance(state.rng, 0.5 * state.human.chatRate)) {
+        sayWorkLine(player, state);
+      }
+    }
+    if (resolveWorkKind(player, state) === WORK_FISHING) {
+      return fishWorkTick(ctx, state);
+    }
+    // Mid-shift sale: the supplier buys the shift's output at the market.
+    if (state.sellMode) {
+      return sellTick(ctx, state);
+    }
+    const { workDelegate, bankDelegate } = delegatesFor(player);
+    const site = workSiteLocal(player);
+    if (state.workMode === "bank") {
+      const result = bankDelegate.update(ctx);
+      if (result === "success") {
+        bankDelegate.stop?.(ctx);
+        state.workMode = "work";
+        // Real output banked — the director's master_trade goal samples this.
+        const bucket = (ctx.state.citizens ??= {});
+        bucket.workCyclesBanked = (bucket.workCyclesBanked ?? 0) + 1;
+      } else if (result === "failed") {
+        bankDelegate.stop?.(ctx);
+        state.workMode = "work"; // try work again; inventory may have room
+      }
+      return "running";
+    }
+    if (nowMs < state.workRetryAt) {
+      return "running";
+    }
+    if (site && !atTile(player, site, 12)) {
+      walkTo(player, site);
+      return "running";
+    }
+    const result = workDelegate.update(ctx);
+    if (result === "success") {
+      workDelegate.stop?.(ctx);
+      // Inventory full: sell the shift's output to the supplier first,
+      // then bank whatever is left (coins included).
+      const gained = gainedSince(player, state.invSnapshot);
+      if (gained.length > 0) {
+        state.sellMode = { items: gained };
+        state.sellGiveUpAt = nowMs + SELL_GIVE_UP_MS;
+        const market = siteTileLocal(player, "market");
+        if (market) {
+          walkTo(player, market);
+        }
+      } else {
+        state.workMode = "bank";
+      }
+    } else if (result === "failed") {
+      workDelegate.stop?.(ctx);
+      // No reachable resource right now — wait a beat, don't spin.
+      state.workRetryAt =
+        nowMs + logNormalJitter(state.rng, RETRY_WORK_MS, state.human.tempoSigma);
+      world?.log?.("citizen_routine_work_stalled", {
+        citizen: player.getUsername?.(),
+        kingdom: kingdomIdOf(player),
+      });
+    }
+    return "running";
   }
 
   const action = {
@@ -990,63 +1441,11 @@ function createCitizenRoutineAction(spec, world) {
       }
 
       if (state.phaseKind === KIND_WORK) {
-        if (resolveWorkKind(player, state) === WORK_FISHING) {
-          return fishWorkTick(ctx, state);
-        }
-        // Mid-shift sale: the supplier buys the shift's output at the market.
-        if (state.sellMode) {
-          return sellTick(ctx, state);
-        }
-        const { workDelegate, bankDelegate } = delegatesFor(player);
-        const site = workSiteLocal(player);
-        if (state.workMode === "bank") {
-          const result = bankDelegate.update(ctx);
-          if (result === "success") {
-            bankDelegate.stop?.(ctx);
-            state.workMode = "work";
-            // Real output banked — the director's master_trade goal samples this.
-            const bucket = (ctx.state.citizens ??= {});
-            bucket.workCyclesBanked = (bucket.workCyclesBanked ?? 0) + 1;
-          } else if (result === "failed") {
-            bankDelegate.stop?.(ctx);
-            state.workMode = "work"; // try work again; inventory may have room
-          }
-          return "running";
-        }
-        if (nowMs < state.workRetryAt) {
-          return "running";
-        }
-        if (site && !atTile(player, site, 12)) {
-          walkTo(player, site);
-          return "running";
-        }
-        const result = workDelegate.update(ctx);
-        if (result === "success") {
-          workDelegate.stop?.(ctx);
-          // Inventory full: sell the shift's output to the supplier first,
-          // then bank whatever is left (coins included).
-          const gained = gainedSince(player, state.invSnapshot);
-          if (gained.length > 0) {
-            state.sellMode = { items: gained };
-            state.sellGiveUpAt = nowMs + SELL_GIVE_UP_MS;
-            const market = siteTileLocal(player, "market");
-            if (market) {
-              walkTo(player, market);
-            }
-          } else {
-            state.workMode = "bank";
-          }
-        } else if (result === "failed") {
-          workDelegate.stop?.(ctx);
-          // No reachable resource right now — wait a beat, don't spin.
-          state.workRetryAt =
-            nowMs + logNormalJitter(state.rng, RETRY_WORK_MS, state.human.tempoSigma);
-          world?.log?.("citizen_routine_work_stalled", {
-            citizen: player.getUsername?.(),
-            kingdom: kingdomIdOf(player),
-          });
-        }
-        return "running";
+        return workLegTick(ctx, state);
+      }
+
+      if (state.phaseKind === KIND_EVENING) {
+        return eveningTick(ctx, state);
       }
 
       if (state.phaseKind === KIND_MARKET) {
@@ -1056,11 +1455,6 @@ function createCitizenRoutineAction(spec, world) {
 
       if (state.phaseKind === KIND_MEAL) {
         return mealTick(ctx, state);
-      }
-
-      if (state.phaseKind === KIND_SOCIAL) {
-        // Delegate the tavern evening to the social action.
-        return socialDelegate.update(ctx);
       }
 
       // Home: linger with human timing, occasionally step out for air.
@@ -1108,6 +1502,6 @@ module.exports = {
   _KIND_WORK: KIND_WORK,
   _KIND_MARKET: KIND_MARKET,
   _KIND_MEAL: KIND_MEAL,
-  _KIND_SOCIAL: KIND_SOCIAL,
+  _KIND_EVENING: KIND_EVENING,
   _KIND_HOME: KIND_HOME,
 };

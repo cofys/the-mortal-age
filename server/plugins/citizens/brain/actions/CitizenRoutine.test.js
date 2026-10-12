@@ -50,7 +50,7 @@ const {
   _KIND_WORK: KIND_WORK,
   _KIND_MARKET: KIND_MARKET,
   _KIND_MEAL: KIND_MEAL,
-  _KIND_SOCIAL: KIND_SOCIAL,
+  _KIND_EVENING: KIND_EVENING,
   _KIND_HOME: KIND_HOME,
 } = require("./CitizenRoutine");
 
@@ -153,7 +153,7 @@ function testNearDoneExtendsWork() {
   const player = mockPlayer("almost_done");
   seedSession("almost_done", [earnIntent(1600, 2000)]); // 80%
   const plan = buildDayPlan(steadyRng);
-  const social = phaseByKind(plan, KIND_SOCIAL);
+  const social = phaseByKind(plan, KIND_EVENING);
   const workEndBefore = phaseByKind(plan, KIND_WORK, 1).end;
   const state = freshState(plan, KIND_WORK);
   const kind = bendLeg(player, state, social);
@@ -168,7 +168,7 @@ function testFreshGrindWorksLate() {
   const player = mockPlayer("fresh_grind");
   seedSession("fresh_grind", [xpIntent(200, 1500)]); // ~13%
   const plan = buildDayPlan(steadyRng);
-  const social = phaseByKind(plan, KIND_SOCIAL);
+  const social = phaseByKind(plan, KIND_EVENING);
   const workEndBefore = phaseByKind(plan, KIND_WORK, 1).end;
   const state = freshState(plan, KIND_WORK);
   const kind = bendLeg(player, state, social);
@@ -182,11 +182,11 @@ function testSteadyProgressNoBend() {
   const player = mockPlayer("steady");
   seedSession("steady", [earnIntent(1200, 2000)]); // 60%: the dead zone
   const plan = buildDayPlan(steadyRng);
-  const social = phaseByKind(plan, KIND_SOCIAL);
+  const social = phaseByKind(plan, KIND_EVENING);
   const state = freshState(plan, KIND_WORK);
   const before = JSON.stringify(plan);
   const kind = bendLeg(player, state, social);
-  assert.equal(kind, KIND_SOCIAL, "steady progress follows the plan");
+  assert.equal(kind, KIND_EVENING, "steady progress follows the plan");
   assert.equal(state.bendsToday, 0);
   assert.equal(JSON.stringify(plan), before, "plan untouched");
 }
@@ -223,14 +223,14 @@ function testDayOffUntouched() {
   // Hand-built day-off plan: no work legs at all.
   const plan = [
     { kind: KIND_HOME, start: 0, end: 390 },
-    { kind: KIND_SOCIAL, start: 390, end: 660 },
+    { kind: KIND_EVENING, start: 390, end: 660 },
     { kind: KIND_MARKET, start: 660, end: 720 },
     { kind: KIND_MEAL, start: 720, end: 780 },
-    { kind: KIND_SOCIAL, start: 780, end: 1320 },
+    { kind: KIND_EVENING, start: 780, end: 1320 },
     { kind: KIND_HOME, start: 1320, end: 1440 },
   ];
   const market = phaseByKind(plan, KIND_MARKET);
-  const state = freshState(plan, KIND_SOCIAL);
+  const state = freshState(plan, KIND_EVENING);
   const kind = bendLeg(player, state, market);
   assert.equal(kind, KIND_MARKET, "day off is not bent into work");
   assert.equal(state.bendsToday, 0);
@@ -257,7 +257,7 @@ function testExtendClampedToNextLeg() {
   reset();
   const plan = [
     { kind: KIND_WORK, start: 780, end: 1020 },
-    { kind: KIND_SOCIAL, start: 1020, end: 1080 }, // short 60-min leg
+    { kind: KIND_EVENING, start: 1020, end: 1080 }, // short 60-min leg
     { kind: KIND_HOME, start: 1080, end: 1440 },
   ];
   const social = plan[1];
