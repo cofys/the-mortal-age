@@ -501,6 +501,60 @@ function onSocialThreadResponse(payload) {
   onSocialChatResponse(payload);
 }
 
+/**
+ * ::citizens — admin diagnostic: what are citizens doing RIGHT NOW?
+ * Jon (2026-10-12): needs immediate visibility into brain activity without
+ * the worldmap overlay. Outputs to chatbox:
+ * - Total materialized citizens
+ * - Breakdown by current activity
+ * - For idle: avg/max seconds since brain last ticked
+ */
+function onCitizensDiagCommand({ player }) {
+  const director = getDirector();
+  if (!director?.roster) {
+    player.sendMessage("Citizen director is not running.");
+    return true;
+  }
+  const now = Date.now();
+  let materialized = 0;
+  const byActivity = {};
+  const idleStaleSecs = [];
+  for (const record of director.roster.values()) {
+    let bot = null;
+    try {
+      bot = director.getBot?.(record);
+    } catch {
+      bot = null;
+    }
+    if (!bot) continue;
+    materialized++;
+    const activity = record.currentActivityId || "none";
+    byActivity[activity] = (byActivity[activity] ?? 0) + 1;
+    // Track staleness for idle/standing citizens
+    const act = String(activity).toLowerCase();
+    if (act === "none" || act.includes("idle") || act.includes("stand") || act.includes("rest")) {
+      const lastTick = record.lastTickAt || 0;
+      const staleSec = lastTick > 0 ? Math.round((now - lastTick) / 1000) : -1;
+      if (staleSec >= 0) idleStaleSecs.push(staleSec);
+    }
+  }
+  player.sendMessage(`Citizens materialized: ${materialized}/${director.roster.size}`);
+  const breakdown = Object.entries(byActivity)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([act, n]) => `${act}: ${n}`)
+    .join(", ");
+  player.sendMessage(`Activities: ${breakdown || "none"}`);
+  if (idleStaleSecs.length > 0) {
+    const avg = Math.round(idleStaleSecs.reduce((a, b) => a + b, 0) / idleStaleSecs.length);
+    const max = Math.max(...idleStaleSecs);
+    player.sendMessage(`Idle brains (n=${idleStaleSecs.length}): last tick avg ${avg}s ago, max ${max}s ago`);
+  } else {
+    player.sendMessage("No idle citizens detected.");
+  }
+  return true;
+}
+
 function onCitizenCommand({ player, parts }) {
   const director = getDirector();
   const sub = (parts[1] ?? "status").toLowerCase();
@@ -840,6 +894,12 @@ module.exports = {
       onCitizenCommand,
       PlayerRights.ADMINISTRATOR,
       "Manage AI citizens: ::citizen [status|spawn]"
+    );
+    api.registerCommand(
+      "citizens",
+      onCitizensDiagCommand,
+      PlayerRights.ADMINISTRATOR,
+      "Diagnostic: what citizens are doing right now"
     );
     api.registerCommand(
       "insurance",
