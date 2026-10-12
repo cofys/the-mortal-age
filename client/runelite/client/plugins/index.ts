@@ -24,6 +24,7 @@ import {
 } from "../../../game/plugins/statustimer/StatusTimerPlugin";
 import { TileMarkersConfig } from "../../../game/plugins/tilemarkers/TileMarkersConfig";
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
+import { AdminWorldMapPlugin } from "../../../game/plugins/adminworldmap/AdminWorldMapPlugin";
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
@@ -55,6 +56,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     WeatherPlugin,
     StatusBarsPlugin,
     OpponentInfoPlugin,
+    AdminWorldMapPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */
