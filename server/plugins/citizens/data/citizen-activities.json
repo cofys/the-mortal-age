@@ -2301,6 +2301,29 @@
           ]
         }
       ]
+    },
+    {
+      "actions": [
+        {
+          "type": "caravanWalk"
+        }
+      ],
+      "capacity": 32,
+      "slotCapacity": 6,
+      "failureCooldownSeconds": 10,
+      "id": "citizen_caravan",
+      "mode": "citizen_guard",
+      "repeat": true,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "merchant",
+              "guard"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

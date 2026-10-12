@@ -131,6 +131,11 @@ function atWar(a, b, wars) {
  * TOWN_SAFE_RADIUS_* around the town square, all building floors above a
  * surface town included (underground areas use offset y bands, so a
  * same-x/y tile below ground is never matched by accident).
+ *
+ * Jon's ruling (2026-10-12): the 16 smaller towns from the world-population
+ * rebuild are DELIBERATELY excluded — they stay exposed in wartime, their
+ * citizens attackable by enemy subjects. Do not extend this list without
+ * Jon's explicit approval.
  */
 function townSafeAt(mobileOrLocation) {
   const p = locOf(mobileOrLocation);

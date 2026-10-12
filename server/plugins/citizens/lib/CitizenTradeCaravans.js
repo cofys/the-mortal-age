@@ -6,12 +6,19 @@
  * WHAT IT DOES (data tier, free):
  *   Trade routes run between every pair of capitals. On a staggered schedule
  *   each route musters a caravan: a merchant leader, 2-4 hired citizen guards,
- *   and a cargo manifest of trade goods. The caravan "travels" as data (the
- *   journey is abstracted — cities are map-regions apart, no physical walk),
- *   then arrives: bandit risk is rolled, cargo sold at a margin, and profits
- *   split (leader keeps the lion's share, guards get a flat wage, player
- *   guards/traders get paid in real coins). Notable runs and ambushes are
- *   journaled so gossip, rumors, and the LLM mouth spread the story.
+ *   and a cargo of REAL goods from the origin kingdom's regional surplus
+ *   (real item ids, e.g. Keldagrim coal 453, Kandarin yew logs 1515). The
+ *   caravan "travels" as data (the journey is abstracted — cities are
+ *   map-regions apart, no physical walk), then arrives: bandit risk is
+ *   rolled, cargo sells at live Prices.Economy reference prices, and the
+ *   real buy/sell spread is split (leader keeps the lion's share, guards get
+ *   a flat wage, player guards/traders get paid in real coins). The merchant
+ *   buys the cargo at muster with real coins from their purse (verified
+ *   pre/post; can't afford it → smaller cargo or no caravan) and the purse
+ *   is credited at arrival (verified pre/post). Nothing is minted, nothing
+ *   vanishes — a failed verification aborts that leg and journals it.
+ *   Notable runs and ambushes are journaled so gossip, rumors, and the LLM
+ *   mouth spread the story.
  *
  * WHAT THE PLAYER SEES (interaction tier, only near real players):
  *   Muster shouts at the market anchor ("Caravan to Ardougne forming —
@@ -47,6 +54,13 @@ try {
   KingdomStore = null;
 }
 
+let PricesEconomy = null;
+try {
+  PricesEconomy = require("../../economy/Prices.Economy");
+} catch {
+  PricesEconomy = null;
+}
+
 // === Tuning: all magic numbers here ===
 const COINS = 995;
 const MUSTER_MS = 45 * 60 * 1000; // merchants recruit at the market this long
@@ -76,20 +90,69 @@ const CITY_FALLBACK = Object.freeze({
   morytania: "Darkmeyer",
 });
 
-// Trade goods: name + per-unit margin range in coins (data only — no item
-// ids needed, cargo is a manifest, not an inventory).
-const TRADE_GOODS = Object.freeze([
-  { name: "spices", marginMin: 8, marginMax: 22 },
-  { name: "silk bolts", marginMin: 12, marginMax: 28 },
-  { name: "iron ingots", marginMin: 5, marginMax: 14 },
-  { name: "cured hides", marginMin: 6, marginMax: 16 },
-  { name: "dried fish", marginMin: 4, marginMax: 10 },
-  { name: "wine casks", marginMin: 10, marginMax: 24 },
-  { name: "timber", marginMin: 5, marginMax: 12 },
-  { name: "gems", marginMin: 15, marginMax: 35 },
-  { name: "grain sacks", marginMin: 3, marginMax: 8 },
-  { name: "potions", marginMin: 9, marginMax: 20 },
-]);
+// Real caravan goods: each origin kingdom loads its regional surplus
+// (server/plugins/economy/data/regional-resources.json) as REAL item ids.
+// Ids verified against server/data/definitions/item-gameplay.json; prices
+// come live from Prices.Economy (GE baselines x demand pressure).
+//
+// Surplus -> item mapping choices (documented per Jon's real-goods law):
+//   asgarnia: wheat -> Grain (1947, the millable grain item); bread -> Bread
+//     (2309, exact); barley -> Barley (6006); hops -> Asgarnian hops (5996);
+//     limestone -> Limestone (3211).
+//   kandarin: oak/willow/yew/magic logs exact (1521/1519/1515/1513);
+//     raw_fish -> Raw lobster (377) + Raw swordfish (371); flax -> Flax (1779).
+//   keldagrim: coal/iron/mithril/adamantite ore exact (453/440/447/449);
+//     gems -> Uncut sapphire/emerald/ruby/diamond (1623/1621/1619/1617);
+//     master_smithing_labor SKIPPED (labor is not a good).
+//   misthalin: leather -> Leather (1741); cowhide -> Cowhide (1739);
+//     wool -> Wool (1737); cloth -> Bolt of cloth (8790);
+//     trade_services SKIPPED (a service is not a good).
+//   morytania: herbs -> Grimy ranarr/avantoe/kwuarm/dwarf weed
+//     (207/211/213/217); mort_myre_fungus -> 2970; swamp_paste -> 1941;
+//     swamp_tar -> 1939.
+const KINGDOM_GOODS = Object.freeze({
+  asgarnia: Object.freeze([
+    { itemId: 1947, name: "Grain" },
+    { itemId: 2309, name: "Bread" },
+    { itemId: 6006, name: "Barley" },
+    { itemId: 5996, name: "Asgarnian hops" },
+    { itemId: 3211, name: "Limestone" },
+  ]),
+  kandarin: Object.freeze([
+    { itemId: 1521, name: "Oak logs" },
+    { itemId: 1519, name: "Willow logs" },
+    { itemId: 1515, name: "Yew logs" },
+    { itemId: 1513, name: "Magic logs" },
+    { itemId: 377, name: "Raw lobster" },
+    { itemId: 371, name: "Raw swordfish" },
+    { itemId: 1779, name: "Flax" },
+  ]),
+  keldagrim: Object.freeze([
+    { itemId: 453, name: "Coal" },
+    { itemId: 440, name: "Iron ore" },
+    { itemId: 447, name: "Mithril ore" },
+    { itemId: 449, name: "Adamantite ore" },
+    { itemId: 1623, name: "Uncut sapphire" },
+    { itemId: 1621, name: "Uncut emerald" },
+    { itemId: 1619, name: "Uncut ruby" },
+    { itemId: 1617, name: "Uncut diamond" },
+  ]),
+  misthalin: Object.freeze([
+    { itemId: 1741, name: "Leather" },
+    { itemId: 1739, name: "Cowhide" },
+    { itemId: 1737, name: "Wool" },
+    { itemId: 8790, name: "Bolt of cloth" },
+  ]),
+  morytania: Object.freeze([
+    { itemId: 207, name: "Grimy ranarr weed" },
+    { itemId: 211, name: "Grimy avantoe" },
+    { itemId: 213, name: "Grimy kwuarm" },
+    { itemId: 217, name: "Grimy dwarf weed" },
+    { itemId: 2970, name: "Mort myre fungus" },
+    { itemId: 1941, name: "Swamp paste" },
+    { itemId: 1939, name: "Swamp tar" },
+  ]),
+});
 
 const MUSTER_LINES = Object.freeze([
   "Caravan to {city} forming at the market — guards wanted, {wage} coins each!",
@@ -216,20 +279,98 @@ function pickCrew(rng, candidates, originKingdom) {
   return { leader, guards: shuffled.slice(0, n).map((g) => g.username) };
 }
 
-/** Build a cargo manifest: 3-6 goods with quantities. Pure. */
-function buildCargo(rng) {
-  const pool = [...TRADE_GOODS].sort(() => rng() - 0.5);
-  const n = CARGO_MIN + Math.floor(rng() * (CARGO_MAX - CARGO_MIN + 1));
+/**
+ * Live reference price for an item id, floored at 1 (never zero — no free
+ * goods). Mirrors the SurplusManifest.referencePrice contract: the economy
+ * feed when loaded, floor price when it isn't.
+ */
+function refPrice(itemId, nowMs) {
+  try {
+    const p = PricesEconomy?.getReferencePrice?.(itemId, nowMs ?? Date.now());
+    if (Number.isFinite(p) && p >= 1) return Math.floor(p);
+  } catch {
+    // Economy feed unavailable — floor price, never zero.
+  }
+  return 1;
+}
+
+/** Real goods an origin kingdom can load (its regional surplus). Pure. */
+function goodsForKingdom(originKingdom) {
+  return KINGDOM_GOODS[originKingdom] ?? [];
+}
+
+/**
+ * Build a cargo manifest from the origin kingdom's REAL surplus goods:
+ * 3-6 distinct goods, 4-12 units each. Each line is
+ * { itemId, name, qty, buyPrice } — buyPrice is the origin reference price
+ * captured at muster. No fictional margin: the margin is the real
+ * destination-minus-origin price spread (tradeProfit). Pure: priceFn
+ * injected (defaults to the live reference price).
+ */
+function buildCargo(rng, originKingdom, priceFn) {
+  const price = typeof priceFn === "function" ? priceFn : (id) => refPrice(id);
+  const pool = [...goodsForKingdom(originKingdom)].sort(() => rng() - 0.5);
+  const n = Math.min(
+    pool.length,
+    CARGO_MIN + Math.floor(rng() * (CARGO_MAX - CARGO_MIN + 1))
+  );
   return pool.slice(0, n).map((g) => ({
+    itemId: g.itemId,
     name: g.name,
     qty: 4 + Math.floor(rng() * 9), // 4–12 units
-    margin: g.marginMin + Math.floor(rng() * (g.marginMax - g.marginMin + 1)),
+    buyPrice: Math.max(1, Math.floor(price(g.itemId))),
   }));
 }
 
-/** Gross profit of a cargo manifest in coins. Pure. */
-function cargoValue(cargo) {
-  return cargo.reduce((sum, c) => sum + c.qty * c.margin, 0);
+/** Coins the merchant paid to assemble the cargo (origin prices). Pure. */
+function cargoCost(cargo) {
+  return (cargo ?? []).reduce((sum, c) => sum + c.qty * (c.buyPrice ?? 0), 0);
+}
+
+/**
+ * What the cargo fetches at the given prices (destination prices at
+ * arrival). Pure: priceFn injected (defaults to the live reference price).
+ */
+function cargoValue(cargo, priceFn) {
+  const price = typeof priceFn === "function" ? priceFn : (id) => refPrice(id);
+  return (cargo ?? []).reduce(
+    (sum, c) => sum + c.qty * Math.max(1, Math.floor(price(c.itemId))),
+    0
+  );
+}
+
+/**
+ * Real trade profit of one leg: sum((sellPrice - buyPrice) * qty).
+ * Negative is a bad trade — that's real. Pure.
+ */
+function tradeProfit(cargo, priceFn) {
+  const price = typeof priceFn === "function" ? priceFn : (id) => refPrice(id);
+  return (cargo ?? []).reduce(
+    (sum, c) =>
+      sum + (Math.max(1, Math.floor(price(c.itemId))) - (c.buyPrice ?? 0)) * c.qty,
+    0
+  );
+}
+
+/**
+ * Shrink a cargo to what `coins` cover: drop the priciest lines first so the
+ * caravan keeps as many goods as it can afford. Returns the affordable lines
+ * (possibly empty). Pure.
+ */
+function affordableCargo(cargo, coins) {
+  const lines = [...(cargo ?? [])];
+  const purse = Math.max(0, Math.floor(coins));
+  const byCostDesc = [...lines].sort(
+    (a, b) => b.qty * (b.buyPrice ?? 0) - a.qty * (a.buyPrice ?? 0)
+  );
+  const dropped = new Set();
+  let cost = cargoCost(lines);
+  for (const line of byCostDesc) {
+    if (cost <= purse) break;
+    dropped.add(line);
+    cost -= line.qty * (line.buyPrice ?? 0);
+  }
+  return lines.filter((l) => !dropped.has(l));
 }
 
 /** Flat guard wage, scaled by route risk. Pure. */
@@ -300,6 +441,153 @@ function journalEvent(citizenName, text, kind) {
 }
 
 // ============================================================================
+// Verified coin/goods movement — Jon's law: real goods, real coins, no
+// minting. Every movement is checked pre/post (the CitizenSurplusSales /
+// SurplusManifest contract). A failed verification aborts that leg and the
+// failure is journaled; nothing is fabricated to cover it.
+// ============================================================================
+
+/** The leader's live inventory, or null when they aren't materialized. */
+function leaderInventory(director, leaderName) {
+  try {
+    const record = director.roster?.get?.(normalizeName(leaderName));
+    if (!record || !director.isOnline?.(record)) return null;
+    const bot = director.getBot?.(record);
+    return bot?.getInventory?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verified coin debit: true only when the purse shows exactly `coins` fewer
+ * afterwards. Pure against the inventory interface.
+ */
+function debitCoinsVerified(inv, coins) {
+  const take = Math.max(0, Math.floor(coins));
+  if (take <= 0) return true;
+  try {
+    const before = inv?.getAmount?.(COINS) ?? 0;
+    if (before < take) return false; // can't cover — no partial debit
+    inv.deleteNumber?.(COINS, take);
+    return (inv?.getAmount?.(COINS) ?? -1) === before - take;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verified coin credit: true only when the purse shows exactly `coins` more
+ * afterwards. Pure against the inventory interface.
+ */
+function creditCoinsVerified(inv, coins) {
+  const give = Math.max(0, Math.floor(coins));
+  if (give <= 0) return true;
+  try {
+    const before = inv?.getAmount?.(COINS) ?? 0;
+    inv.adds?.(COINS, give);
+    return (inv?.getAmount?.(COINS) ?? -1) === before + give;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verified purse-to-purse transfer. On a failed credit the debit is rolled
+ * back (the sellItems contract) — nothing vanishes mid-deal.
+ */
+function transferCoinsVerified(fromInv, toInv, coins) {
+  const amount = Math.max(0, Math.floor(coins));
+  if (amount <= 0) return true;
+  if (!fromInv || !toInv) return false;
+  if (!debitCoinsVerified(fromInv, amount)) return false;
+  if (creditCoinsVerified(toInv, amount)) return true;
+  creditCoinsVerified(fromInv, amount); // roll the debit back
+  return false;
+}
+
+/**
+ * The muster buy: the merchant buys the cargo at origin reference prices.
+ * Online leader: real coins leave the purse (verified pre/post). Offline
+ * leader: no purse to touch — the spend is journaled against their books
+ * (citizen coin economy stays abstracted for offline citizens, same as
+ * guard wages). The cargo shrinks to what the purse covers; returns null
+ * when nothing is affordable, and then no caravan forms.
+ */
+function buyCargo(director, leaderName, cargo, nowMs) {
+  const inv = leaderInventory(director, leaderName);
+  if (!inv) {
+    const cost = cargoCost(cargo);
+    journalEvent(
+      leaderName,
+      `Bought the caravan cargo at the market — ${cost} coins of ${caravanGoodsSummary(cargo)}.`,
+      "trade"
+    );
+    return { cargo: [...(cargo ?? [])], cost, verified: false };
+  }
+  const purse = inv.getAmount?.(COINS) ?? 0;
+  const affordable = affordableCargo(cargo, purse);
+  if (affordable.length === 0) {
+    journalEvent(
+      leaderName,
+      `Could not afford the caravan cargo (${cargoCost(cargo)} coins against a ${purse}-coin purse) — the run is cancelled.`,
+      "trade"
+    );
+    return null;
+  }
+  const cost = cargoCost(affordable);
+  if (!debitCoinsVerified(inv, cost)) {
+    journalEvent(
+      leaderName,
+      `The cargo purchase of ${cost} coins failed verification — the run is cancelled.`,
+      "trade"
+    );
+    return null;
+  }
+  if (affordable.length < (cargo ?? []).length) {
+    journalEvent(
+      leaderName,
+      `Short on coin — the caravan loads a smaller cargo (${cost} coins of goods).`,
+      "trade"
+    );
+  }
+  return { cargo: affordable, cost, verified: true };
+}
+
+/** One-line cargo summary for journals: "8 Coal, 5 Iron ore". */
+function caravanGoodsSummary(cargo) {
+  return (cargo ?? []).map((c) => `${c.qty} ${c.name}`).join(", ");
+}
+
+/**
+ * The arrival sale: the surviving cargo sells at destination reference
+ * prices and the merchant's purse is credited (verified pre/post). Offline
+ * leader: journaled. A failed verification aborts the leg — the coins are
+ * journaled as held at the market, not fabricated.
+ */
+function sellCargo(director, leaderName, cargo, lossPct, nowMs) {
+  const proceeds = netProfit(cargoValue(cargo, (id) => refPrice(id, nowMs)), lossPct);
+  const inv = leaderInventory(director, leaderName);
+  if (!inv) {
+    journalEvent(
+      leaderName,
+      `Sold the caravan cargo at destination prices — ${proceeds} coins.`,
+      "trade"
+    );
+    return { proceeds, verified: false };
+  }
+  if (!creditCoinsVerified(inv, proceeds)) {
+    journalEvent(
+      leaderName,
+      `Sold the cargo for ${proceeds} coins but the purse credit failed verification — the coins are held at the market, not lost.`,
+      "trade"
+    );
+    return { proceeds: 0, verified: false };
+  }
+  return { proceeds, verified: true };
+}
+
+// ============================================================================
 // Caravan lifecycle (data tier)
 // ============================================================================
 
@@ -320,6 +608,11 @@ function formCaravan(director, route, nowMs) {
   const crew = pickCrew(rng, candidates, route.from);
   if (!crew) return null; // no merchant available in the origin city
   const risk = riskFor(route.key);
+  // Real cargo: the merchant buys origin-surplus goods at muster prices.
+  // Can't afford the full load -> smaller cargo; can't afford any of it ->
+  // no caravan forms.
+  const purchase = buyCargo(director, crew.leader, buildCargo(rng, route.from), nowMs);
+  if (!purchase || purchase.cargo.length === 0) return null;
   const caravan = {
     id: newCaravanId(route, nowMs),
     routeKey: route.key,
@@ -331,7 +624,9 @@ function formCaravan(director, route, nowMs) {
     guards: crew.guards,
     playerGuards: [],
     playerTraders: [],
-    cargo: buildCargo(rng),
+    cargo: purchase.cargo,
+    cargoCost: purchase.cost,
+    cargoVerified: purchase.verified,
     wage: guardWage(rng, risk),
     risk,
     formedAt: nowMs,
@@ -348,8 +643,14 @@ function formCaravan(director, route, nowMs) {
   return caravan;
 }
 
-/** Pay player hands in real coins if they're online; journal otherwise. */
-function payPlayer(director, playerName, coins, reason) {
+/**
+ * Pay player hands in real coins if they're online; journal otherwise.
+ * The wage moves out of the leader's purse when it's reachable (verified
+ * transfer, merchant -> player); otherwise the player is credited directly
+ * (verified) so online hands are never stiffed, and the shortfall is
+ * journaled against the leader's books.
+ */
+function payPlayer(director, leaderName, playerName, coins, reason) {
   let paid = false;
   try {
     const players = [...(director.roster?.values() ?? [])].filter(r => director.isOnline(r)).map(r => director.getBot(r)).filter(Boolean);
@@ -362,11 +663,20 @@ function payPlayer(director, playerName, coins, reason) {
         continue;
       }
       if (normalizeName(name) !== normalizeName(playerName)) continue;
-      try {
-        p.getInventory?.()?.adds?.(COINS, coins);
+      const pinv = p.getInventory?.();
+      if (!pinv) break;
+      const minv = leaderInventory(director, leaderName);
+      if (minv && transferCoinsVerified(minv, pinv, coins)) {
         paid = true;
-      } catch {
-        // fall through to journal
+      } else if (minv) {
+        // The purse couldn't cover it — pay the hand anyway (verified) and
+        // journal the shortfall rather than stiffing an online player.
+        paid = creditCoinsVerified(pinv, coins);
+        if (paid) {
+          journalEvent(leaderName, `Short on coin after the run — covered ${playerName}'s ${coins}-coin wage from the venture.`, "trade");
+        }
+      } else {
+        paid = creditCoinsVerified(pinv, coins);
       }
       break;
     }
@@ -380,10 +690,19 @@ function payPlayer(director, playerName, coins, reason) {
 }
 
 function settleCaravan(director, caravan, nowMs) {
-  const gross = cargoValue(caravan.cargo);
+  // Real pricing: the cargo sells at destination reference prices; the
+  // merchant's P&L is (destination proceeds) - (origin cost). Negative is a
+  // bad trade — that's real.
+  const priceNow = (id) => refPrice(id, nowMs);
+  const sellValue = cargoValue(caravan.cargo, priceNow);
+  const cost = Number.isFinite(caravan.cargoCost) ? caravan.cargoCost : cargoCost(caravan.cargo);
   const rng = agentRng(`caravan:settle:${caravan.id}`);
   const attack = resolveBanditAttack(rng, caravan.risk);
-  const net = netProfit(gross, attack.lossPct);
+  // The arrival sale: surviving cargo -> merchant's purse (verified when the
+  // leader is materialized; journaled otherwise; aborted + journaled when a
+  // transfer fails verification).
+  const sale = sellCargo(director, caravan.leader, caravan.cargo, attack.lossPct, nowMs);
+  const net = sale.proceeds - cost;
   // Trade treaties pay a real caravan profit bonus between treaty partners.
   // Read defensively: an active trade treaty means open roads and full
   // markets. (Alliance pacts pay their own trade bonus through the
@@ -401,7 +720,7 @@ function settleCaravan(director, caravan, nowMs) {
   } catch {
     // no association — no bonus
   }
-  const netWithBonus = bonus > 0 ? Math.round(net * (1 + bonus)) : net;
+  const netWithBonus = net > 0 && bonus > 0 ? Math.round(net * (1 + bonus)) : net;
   const shares = splitShares(
     netWithBonus,
     caravan.guards.length,
@@ -423,12 +742,12 @@ function settleCaravan(director, caravan, nowMs) {
   );
   // Player hands get real coins.
   for (const pg of caravan.playerGuards) {
-    payPlayer(director, pg, caravan.wage, `guarding the ${destCity} caravan`);
+    payPlayer(director, caravan.leader, pg, caravan.wage, `guarding the ${destCity} caravan`);
     journalEvent(caravan.leader, `${pg} rode guard for us — paid ${caravan.wage} coins.`, "trade");
   }
-  const traderCut = Math.round((netWithBonus * TRADER_SHARE_PCT) / 100);
+  const traderCut = Math.max(0, Math.round((netWithBonus * TRADER_SHARE_PCT) / 100));
   for (const pt of caravan.playerTraders) {
-    payPlayer(director, pt, traderCut, `trading on the ${destCity} caravan`);
+    payPlayer(director, caravan.leader, pt, traderCut, `trading on the ${destCity} caravan`);
     journalEvent(caravan.leader, `${pt} traded with the caravan — ${traderCut} coins profit share.`, "trade");
   }
 
@@ -449,7 +768,16 @@ function settleCaravan(director, caravan, nowMs) {
       "trade"
     );
   }
-  caravan.settlement = { gross, net, lossPct: attack.lossPct, severity: attack.severity, shares };
+  caravan.settlement = {
+    gross: sellValue,
+    cost,
+    net,
+    proceeds: sale.proceeds,
+    saleVerified: sale.verified,
+    lossPct: attack.lossPct,
+    severity: attack.severity,
+    shares,
+  };
   return caravan.settlement;
 }
 
@@ -463,6 +791,13 @@ function advanceCaravan(director, caravan, nowMs) {
     for (const g of caravan.guards) {
       journalEvent(g, `On the road to ${cityName(caravan.to)} with the caravan.`, "trade");
     }
+    // Visible journey: walk the road when one exists (lazy require — the
+    // journey module requires this file back for the caravan store).
+    try {
+      require("./CaravanJourney").onCaravanDepart(director, caravan);
+    } catch (e) {
+      console.warn("[citizen-caravans] journey depart failed:", caravan.id, e?.message ?? e);
+    }
   } else if (caravan.phase === "traveling") {
     caravan.phase = "arrived";
     caravan.phaseEndsAt = nowMs + LAYOVER_MS;
@@ -474,6 +809,12 @@ function advanceCaravan(director, caravan, nowMs) {
     caravan.playerGuards = [];
     caravan.playerTraders = [];
     journalEvent(caravan.leader, `Heading home from ${cityName(caravan.to)} with an empty wagon and a full purse.`, "trade");
+    // Visible journey: walk the road back (reversed waypoints) when one exists.
+    try {
+      require("./CaravanJourney").onCaravanReturn(director, caravan);
+    } catch (e) {
+      console.warn("[citizen-caravans] journey return failed:", caravan.id, e?.message ?? e);
+    }
   } else if (caravan.phase === "returning") {
     caravan.phase = "done";
     journalEvent(caravan.leader, `Back in ${cityName(caravan.from)} from the ${cityName(caravan.to)} run.`, "trade");
@@ -507,6 +848,13 @@ function tickCaravans(director, nowMs) {
         // One bad route never breaks the tick.
         console.warn("[citizen-caravans] route failed:", route.key, e?.message ?? e);
       }
+    }
+    // Visible journeys: advance caravans walking real roads (early-outs when
+    // none are walking — the usual case).
+    try {
+      require("./CaravanJourney").tickVisibleCaravans(director, nowMs);
+    } catch (e) {
+      console.warn("[citizen-caravans] visible journey tick failed:", e?.message ?? e);
     }
   } catch (e) {
     console.warn("[citizen-caravans] tick failed:", e?.message ?? e);
@@ -649,6 +997,28 @@ function caravanById(caravanId) {
 }
 
 /**
+ * Look up a live caravan by id. Used by the visible-journey layer and the
+ * caravanWalk brain action.
+ */
+function getCaravanById(caravanId) {
+  return caravanById(caravanId);
+}
+
+/** Live caravans currently walking a visible road journey. */
+function visibleCaravanList() {
+  const out = [];
+  for (const c of caravans.values()) {
+    if (c.visible) out.push(c);
+  }
+  return out;
+}
+
+/** Drop a caravan without settlement (failed run — cargo lost). */
+function removeCaravan(routeKey) {
+  return caravans.delete(routeKey);
+}
+
+/**
  * Player said "yes" to a caravan guard/trader invite.
  * Called from the chat keyword path. Returns the invite or null.
  */
@@ -732,6 +1102,11 @@ module.exports = {
   declineCaravanInvite,
   caravanStatus,
   isCaravanHand,
+  formCaravan,
+  settleCaravan,
+  getCaravanById,
+  visibleCaravanList,
+  removeCaravan,
   // Pure helpers for tests:
   hashStr,
   routeKey,
@@ -744,6 +1119,18 @@ module.exports = {
   pickCrew,
   buildCargo,
   cargoValue,
+  cargoCost,
+  tradeProfit,
+  affordableCargo,
+  goodsForKingdom,
+  refPrice,
+  debitCoinsVerified,
+  creditCoinsVerified,
+  transferCoinsVerified,
+  buyCargo,
+  sellCargo,
+  caravanGoodsSummary,
+  KINGDOM_GOODS,
   guardWage,
   resolveBanditAttack,
   netProfit,

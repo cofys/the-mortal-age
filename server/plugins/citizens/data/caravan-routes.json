@@ -1,0 +1,719 @@
+{
+  "_note": "Overland caravan routes between kingdom capitals. waypoints are [x,y,z] following real roads (1:1 with OSRS tiles), spaced 20-40 tiles apart for the 24-tile movement segmentation. dangerSegments lists waypoint-leg indexes (leg i runs from waypoints[i] to waypoints[i+1]) with bandit/wilderness risk. Endpoints are the capital market/square anchors from data/sites.json. abstracted:true routes have no walkable path (Keldagrim is underground) and must be travelled off-screen.",
+  "routes": [
+    {
+      "key": "asgarnia->misthalin",
+      "from": "asgarnia",
+      "to": "misthalin",
+      "waypoints": [
+        [
+          2965,
+          3378,
+          0
+        ],
+        [
+          2995,
+          3378,
+          0
+        ],
+        [
+          3015,
+          3395,
+          0
+        ],
+        [
+          3040,
+          3415,
+          0
+        ],
+        [
+          3065,
+          3430,
+          0
+        ],
+        [
+          3090,
+          3430,
+          0
+        ],
+        [
+          3120,
+          3425,
+          0
+        ],
+        [
+          3150,
+          3425,
+          0
+        ],
+        [
+          3180,
+          3425,
+          0
+        ],
+        [
+          3200,
+          3428,
+          0
+        ],
+        [
+          3213,
+          3430,
+          0
+        ]
+      ],
+      "dangerSegments": [
+        3,
+        4
+      ],
+      "abstracted": false,
+      "note": "Falador square -> Varrock square along the north-east road through Barbarian Village."
+    },
+    {
+      "key": "misthalin->asgarnia",
+      "from": "misthalin",
+      "to": "asgarnia",
+      "waypoints": [
+        [
+          3213,
+          3430,
+          0
+        ],
+        [
+          3200,
+          3428,
+          0
+        ],
+        [
+          3180,
+          3425,
+          0
+        ],
+        [
+          3150,
+          3425,
+          0
+        ],
+        [
+          3120,
+          3425,
+          0
+        ],
+        [
+          3090,
+          3430,
+          0
+        ],
+        [
+          3065,
+          3430,
+          0
+        ],
+        [
+          3040,
+          3415,
+          0
+        ],
+        [
+          3015,
+          3395,
+          0
+        ],
+        [
+          2995,
+          3378,
+          0
+        ],
+        [
+          2965,
+          3378,
+          0
+        ]
+      ],
+      "dangerSegments": [
+        5,
+        6
+      ],
+      "abstracted": false,
+      "note": "Reverse of asgarnia->misthalin."
+    },
+    {
+      "key": "misthalin->morytania",
+      "from": "misthalin",
+      "to": "morytania",
+      "waypoints": [
+        [
+          3213,
+          3430,
+          0
+        ],
+        [
+          3250,
+          3435,
+          0
+        ],
+        [
+          3285,
+          3440,
+          0
+        ],
+        [
+          3315,
+          3450,
+          0
+        ],
+        [
+          3345,
+          3462,
+          0
+        ],
+        [
+          3375,
+          3475,
+          0
+        ],
+        [
+          3405,
+          3485,
+          0
+        ],
+        [
+          3435,
+          3485,
+          0
+        ],
+        [
+          3468,
+          3485,
+          0
+        ],
+        [
+          3505,
+          3485,
+          0
+        ],
+        [
+          3515,
+          3450,
+          0
+        ],
+        [
+          3510,
+          3415,
+          0
+        ],
+        [
+          3505,
+          3380,
+          0
+        ],
+        [
+          3500,
+          3345,
+          0
+        ],
+        [
+          3495,
+          3310,
+          0
+        ],
+        [
+          3492,
+          3275,
+          0
+        ],
+        [
+          3495,
+          3240,
+          0
+        ],
+        [
+          3495,
+          3205,
+          0
+        ],
+        [
+          3520,
+          3220,
+          0
+        ],
+        [
+          3545,
+          3240,
+          0
+        ],
+        [
+          3565,
+          3270,
+          0
+        ],
+        [
+          3580,
+          3295,
+          0
+        ],
+        [
+          3595,
+          3320,
+          0
+        ],
+        [
+          3602,
+          3342,
+          0
+        ],
+        [
+          3605,
+          3362,
+          0
+        ]
+      ],
+      "dangerSegments": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "abstracted": false,
+      "note": "Varrock square -> Meiyerditch square. East road to Paterdomus, through the Salve gate to Canifis, south along the Mort Myre swamp trail to Burgh de Rott, then the tunnel approach to Darkmeyer/Meiyerditch. Endpoints are the kingdom capital anchors from sites.json (capital is Meiyerditch, not Canifis). Every leg from the Salve gate onward is werewolf/vampyre territory."
+    },
+    {
+      "key": "morytania->misthalin",
+      "from": "morytania",
+      "to": "misthalin",
+      "waypoints": [
+        [
+          3605,
+          3362,
+          0
+        ],
+        [
+          3602,
+          3342,
+          0
+        ],
+        [
+          3595,
+          3320,
+          0
+        ],
+        [
+          3580,
+          3295,
+          0
+        ],
+        [
+          3565,
+          3270,
+          0
+        ],
+        [
+          3545,
+          3240,
+          0
+        ],
+        [
+          3520,
+          3220,
+          0
+        ],
+        [
+          3495,
+          3205,
+          0
+        ],
+        [
+          3495,
+          3240,
+          0
+        ],
+        [
+          3492,
+          3275,
+          0
+        ],
+        [
+          3495,
+          3310,
+          0
+        ],
+        [
+          3500,
+          3345,
+          0
+        ],
+        [
+          3505,
+          3380,
+          0
+        ],
+        [
+          3510,
+          3415,
+          0
+        ],
+        [
+          3515,
+          3450,
+          0
+        ],
+        [
+          3505,
+          3485,
+          0
+        ],
+        [
+          3468,
+          3485,
+          0
+        ],
+        [
+          3435,
+          3485,
+          0
+        ],
+        [
+          3405,
+          3485,
+          0
+        ],
+        [
+          3375,
+          3475,
+          0
+        ],
+        [
+          3345,
+          3462,
+          0
+        ],
+        [
+          3315,
+          3450,
+          0
+        ],
+        [
+          3285,
+          3440,
+          0
+        ],
+        [
+          3250,
+          3435,
+          0
+        ],
+        [
+          3213,
+          3430,
+          0
+        ]
+      ],
+      "dangerSegments": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "abstracted": false,
+      "note": "Reverse of misthalin->morytania."
+    },
+    {
+      "key": "asgarnia->kandarin",
+      "from": "asgarnia",
+      "to": "kandarin",
+      "waypoints": [
+        [
+          2965,
+          3378,
+          0
+        ],
+        [
+          2965,
+          3345,
+          0
+        ],
+        [
+          2960,
+          3310,
+          0
+        ],
+        [
+          2950,
+          3280,
+          0
+        ],
+        [
+          2940,
+          3250,
+          0
+        ],
+        [
+          2945,
+          3225,
+          0
+        ],
+        [
+          2920,
+          3225,
+          0
+        ],
+        [
+          2890,
+          3235,
+          0
+        ],
+        [
+          2860,
+          3245,
+          0
+        ],
+        [
+          2830,
+          3255,
+          0
+        ],
+        [
+          2800,
+          3265,
+          0
+        ],
+        [
+          2770,
+          3275,
+          0
+        ],
+        [
+          2740,
+          3282,
+          0
+        ],
+        [
+          2710,
+          3288,
+          0
+        ],
+        [
+          2685,
+          3290,
+          0
+        ],
+        [
+          2658,
+          3295,
+          0
+        ]
+      ],
+      "dangerSegments": [
+        2,
+        3,
+        4,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "abstracted": false,
+      "note": "Falador square -> East Ardougne square. South road through the dark-wizard woods to Rimmington, then cross-country west through the forest to East Ardougne's east side. Legs 7-13 follow no marked road but are walkable terrain; the long cross-country stretch is bandit country."
+    },
+    {
+      "key": "kandarin->asgarnia",
+      "from": "kandarin",
+      "to": "asgarnia",
+      "waypoints": [
+        [
+          2658,
+          3295,
+          0
+        ],
+        [
+          2685,
+          3290,
+          0
+        ],
+        [
+          2710,
+          3288,
+          0
+        ],
+        [
+          2740,
+          3282,
+          0
+        ],
+        [
+          2770,
+          3275,
+          0
+        ],
+        [
+          2800,
+          3265,
+          0
+        ],
+        [
+          2830,
+          3255,
+          0
+        ],
+        [
+          2860,
+          3245,
+          0
+        ],
+        [
+          2890,
+          3235,
+          0
+        ],
+        [
+          2920,
+          3225,
+          0
+        ],
+        [
+          2945,
+          3225,
+          0
+        ],
+        [
+          2940,
+          3250,
+          0
+        ],
+        [
+          2950,
+          3280,
+          0
+        ],
+        [
+          2960,
+          3310,
+          0
+        ],
+        [
+          2965,
+          3345,
+          0
+        ],
+        [
+          2965,
+          3378,
+          0
+        ]
+      ],
+      "dangerSegments": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        10,
+        11,
+        12
+      ],
+      "abstracted": false,
+      "note": "Reverse of asgarnia->kandarin."
+    },
+    {
+      "key": "keldagrim->asgarnia",
+      "from": "keldagrim",
+      "to": "asgarnia",
+      "waypoints": [],
+      "dangerSegments": [],
+      "abstracted": true,
+      "note": "Keldagrim is underground (capital anchors at z=0 on a separate surface plane, y~10200). No walkable overland route exists; caravans to/from Keldagrim are abstracted (off-screen travel), not walked waypoint-by-waypoint."
+    },
+    {
+      "key": "keldagrim->misthalin",
+      "from": "keldagrim",
+      "to": "misthalin",
+      "waypoints": [],
+      "dangerSegments": [],
+      "abstracted": true,
+      "note": "Keldagrim is underground (capital anchors at z=0 on a separate surface plane, y~10200). No walkable overland route exists; caravans to/from Keldagrim are abstracted (off-screen travel), not walked waypoint-by-waypoint."
+    },
+    {
+      "key": "keldagrim->kandarin",
+      "from": "keldagrim",
+      "to": "kandarin",
+      "waypoints": [],
+      "dangerSegments": [],
+      "abstracted": true,
+      "note": "Keldagrim is underground (capital anchors at z=0 on a separate surface plane, y~10200). No walkable overland route exists; caravans to/from Keldagrim are abstracted (off-screen travel), not walked waypoint-by-waypoint."
+    },
+    {
+      "key": "keldagrim->morytania",
+      "from": "keldagrim",
+      "to": "morytania",
+      "waypoints": [],
+      "dangerSegments": [],
+      "abstracted": true,
+      "note": "Keldagrim is underground (capital anchors at z=0 on a separate surface plane, y~10200). No walkable overland route exists; caravans to/from Keldagrim are abstracted (off-screen travel), not walked waypoint-by-waypoint."
+    },
+    {
+      "key": "asgarnia->keldagrim",
+      "from": "asgarnia",
+      "to": "keldagrim",
+      "waypoints": [],
+      "dangerSegments": [],
+      "abstracted": true,
+      "note": "Keldagrim is underground (capital anchors at z=0 on a separate surface plane, y~10200). No walkable overland route exists; caravans to/from Keldagrim are abstracted (off-screen travel), not walked waypoint-by-waypoint."
+    },
+    {
+      "key": "misthalin->keldagrim",
+      "from": "misthalin",
+      "to": "keldagrim",
+      "waypoints": [],
+      "dangerSegments": [],
+      "abstracted": true,
+      "note": "Keldagrim is underground (capital anchors at z=0 on a separate surface plane, y~10200). No walkable overland route exists; caravans to/from Keldagrim are abstracted (off-screen travel), not walked waypoint-by-waypoint."
+    },
+    {
+      "key": "kandarin->keldagrim",
+      "from": "kandarin",
+      "to": "keldagrim",
+      "waypoints": [],
+      "dangerSegments": [],
+      "abstracted": true,
+      "note": "Keldagrim is underground (capital anchors at z=0 on a separate surface plane, y~10200). No walkable overland route exists; caravans to/from Keldagrim are abstracted (off-screen travel), not walked waypoint-by-waypoint."
+    },
+    {
+      "key": "morytania->keldagrim",
+      "from": "morytania",
+      "to": "keldagrim",
+      "waypoints": [],
+      "dangerSegments": [],
+      "abstracted": true,
+      "note": "Keldagrim is underground (capital anchors at z=0 on a separate surface plane, y~10200). No walkable overland route exists; caravans to/from Keldagrim are abstracted (off-screen travel), not walked waypoint-by-waypoint."
+    }
+  ]
+}

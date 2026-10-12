@@ -368,6 +368,7 @@ const {
   ATTR_CITIZEN_SETTLEMENT,
   ATTR_CITIZEN_TOWN,
   ATTR_CITIZEN_WORK_KIND,
+  ATTR_CARAVAN_DUTY,
   ATTR_PRIME_MERCHANT,
   ATTR_SUPPLIER_MERCHANT,
   ATTR_WARE_ITEM,
@@ -1949,6 +1950,12 @@ class CitizenDirector {
     const needs = ensureNeeds(record.username);
     if (needs) {
       bot.setAttribute?.(ATTR_CITIZEN_NEEDS, needsSnapshot(needs));
+    }
+
+    // Caravan duty: crew who materialize mid-journey spawn already on duty
+    // so the decision layer walks them with the caravan (lib/CaravanJourney).
+    if (record.caravanDuty) {
+      bot.setAttribute?.(ATTR_CARAVAN_DUTY, record.caravanDuty);
     }
 
     // Merchant specialization: the prime runs the fully-real sword stall,

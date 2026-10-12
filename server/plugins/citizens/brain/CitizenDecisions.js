@@ -49,6 +49,7 @@ const {
   ATTR_CITIZEN_PERSONALITY,
   ATTR_CITIZEN_GOAL,
   ATTR_KINGDOM_ID,
+  ATTR_CARAVAN_DUTY,
 } = require("../constants");
 const {
   GOAL_SAVE_GOLD,
@@ -179,6 +180,9 @@ const ACT_WILD_GATHER = "citizen_wild_gather";
 // bloodDebt. Both are SCORED, never critical-interrupts.
 const ACT_TITHE_DUTY = "tithe_collection_duty";
 const ACT_PAY_TITHE = "pay_blood_tithe";
+// Caravan duty: a merchant/guard walking a visible trade caravan
+// (lib/CaravanJourney). Scored at 95 while the caravan:duty attribute is set.
+const ACT_CARAVAN = "citizen_caravan";
 // Work activities — the ones sickness keeps citizens away from. Meal,
 // rest, bank, and social are NOT work: a sick citizen still eats, rests,
 // banks, and complains to friends about feeling awful.
@@ -214,6 +218,7 @@ ACT_COMPETE,
   ACT_FISH,
   ACT_WILD_GATHER,
   ACT_TITHE_DUTY, // the collector's round is work — sickness keeps them home
+  ACT_CARAVAN, // walking the caravan road is work too
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
 // re-decision. Short activities (meal/rest/bank) complete on their own.
@@ -227,6 +232,7 @@ const ANCHOR_ACTIVITIES = new Set([
   "leisure_stroll",
   "refugee_flight",
   ACT_TITHE_DUTY, // the round is a long duty, re-decidable like guard_patrol
+  ACT_CARAVAN, // the road walk is a long duty, re-decidable like guard_patrol
   ACT_MINE,
   ACT_CHOP,
   ACT_FISH,
@@ -2363,6 +2369,23 @@ function titheInfo(player) {
 }
 
 /**
+ * Caravan duty: the id of the trade caravan this citizen is walking with,
+ * from the caravan:duty attribute (stamped by lib/CaravanJourney at depart,
+ * cleared at arrival). Real engine state — the attribute is only ever set
+ * while a visible journey is live.
+ */
+function caravanInfo(player) {
+  const info = { duty: null };
+  try {
+    const d = player?.getAttribute?.(ATTR_CARAVAN_DUTY);
+    if (typeof d === "string" && d.length > 0) info.duty = d;
+  } catch {
+    // Attributes unreadable — score with defaults.
+  }
+  return info;
+}
+
+/**
  * Herb materials the citizen could work right now (inventory, else bank).
  * Counts inputs of recipes whose partner item (vial/secondary) is also
  * available in the same place — cleaning needs nothing, mixing needs
@@ -2714,6 +2737,7 @@ function snapshot(player) {
     jailed: jailPenalty(player),
     notoriety: notorietyOf(player),
     tithe: titheInfo(player),
+    caravan: caravanInfo(player),
     reputation: reputationOf(player),
     travel: travelInfo(player),
     entertain: entertainInfo(player),
@@ -2788,7 +2812,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, role, tithe } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, role, tithe, caravan } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -4210,6 +4234,19 @@ case ACT_COMPETE: {
       else if (weary) s -= 20;
       return s;
     }
+    case ACT_CARAVAN: {
+      // Caravan duty: the citizen is walking a visible trade caravan — this
+      // IS the job while the caravan:duty attribute is set (stamped at
+      // depart by lib/CaravanJourney, cleared when the road ends). It
+      // overrides normal activities; critical needs still beat the duty.
+      const c = caravan ?? {};
+      if (!c.duty) return 4;
+      let s = 95;
+      if (criticalHp || exhausted) s -= 70; // critical needs beat duty
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      return s;
+    }
     case "courtier_attend":
     case "leisure_stroll": {
       let s = 40 + sociable * 15;
@@ -4668,6 +4705,7 @@ module.exports = {
   ACT_WILD_GATHER,
   ACT_TITHE_DUTY,
   ACT_PAY_TITHE,
+  ACT_CARAVAN,
   ACT_LIGHT_FIRE,
   ACT_SMELT,
   ACT_CRAFT,
