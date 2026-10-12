@@ -449,6 +449,95 @@ run("rest completes when rested", () => {
   assert.equal(result, "success", "rested citizen finishes the rest break");
 });
 
+// --- kingdom resource profiles (phase 3) -----------------------------------------
+// Jon's directive: "some kingdoms naturally have more of something" — the
+// citizen's kingdom shapes WHAT work they pick, at tie-breaker scale.
+
+run("keldagrim citizen scores mining above woodcutting, all else equal", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    logs: 20, herbs: 5, seeds: 5, rawFood: 20,
+  };
+  const mine = scoreActivity("citizen_mine", { ...base, kingdomId: "keldagrim" });
+  const chop = scoreActivity("citizen_chop", { ...base, kingdomId: "keldagrim" });
+  assert.ok(mine > chop, `keldagrim mine ${mine} should beat chop ${chop}`);
+  // The profile's own contribution: +8 mining (surplus), -4 chop (deficit).
+  assert.equal(mine - scoreActivity("citizen_mine", base), 8, "keldagrim mine bonus");
+  assert.equal(chop - scoreActivity("citizen_chop", base), -4, "keldagrim chop penalty");
+});
+
+run("kandarin citizen scores woodcutting above mining, all else equal", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    logs: 20, herbs: 5, seeds: 5, rawFood: 20,
+  };
+  const chop = scoreActivity("citizen_chop", { ...base, kingdomId: "kandarin" });
+  const mine = scoreActivity("citizen_mine", { ...base, kingdomId: "kandarin" });
+  assert.ok(chop > mine, `kandarin chop ${chop} should beat mine ${mine}`);
+  // The profile's own contribution: +8 chop (surplus), -4 mine (deficit).
+  assert.equal(chop - scoreActivity("citizen_chop", base), 8, "kandarin chop bonus");
+  assert.equal(mine - scoreActivity("citizen_mine", base), -4, "kandarin mine penalty");
+});
+
+run("morytania citizen scores herb gathering above mining, all else equal", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    logs: 20, herbs: 5, seeds: 5, rawFood: 20, kingdomId: "morytania",
+  };
+  const herb = scoreActivity("citizen_herb", base);
+  const mine = scoreActivity("citizen_mine", base);
+  assert.ok(herb > mine, `morytania herb ${herb} should beat mine ${mine}`);
+});
+
+run("asgarnia citizen scores farming above woodcutting, all else equal", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    logs: 20, herbs: 5, seeds: 5, rawFood: 20, kingdomId: "asgarnia",
+  };
+  const farm = scoreActivity("citizen_farm", base);
+  const chop = scoreActivity("citizen_chop", base);
+  assert.ok(farm > chop, `asgarnia farm ${farm} should beat chop ${chop}`);
+  // Asgarnia also has a limestone surplus: mining is honest work there too.
+  const mine = scoreActivity("citizen_mine", base);
+  assert.ok(mine > chop, `asgarnia mine ${mine} should beat chop ${chop} (limestone surplus)`);
+});
+
+run("deficit work is a nudge, not a lock: kandarin citizen can still mine", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    logs: 20, herbs: 5, seeds: 5, rawFood: 20, kingdomId: "kandarin",
+  };
+  const mine = scoreActivity("citizen_mine", base);
+  assert.ok(mine > 20, `kandarin mine ${mine} must stay viable work, not forbidden`);
+});
+
+run("kingdom profile bonus is smaller than critical-need penalties", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    logs: 20, herbs: 5, seeds: 5, rawFood: 20,
+  };
+  const kelda = scoreActivity("citizen_mine", { ...base, kingdomId: "keldagrim" });
+  const kanda = scoreActivity("citizen_mine", { ...base, kingdomId: "kandarin" });
+  const gap = kelda - kanda;
+  assert.ok(gap > 0 && gap <= 20, `kingdom gap ${gap} must be tie-breaker scale`);
+});
+
+run("no kingdom on the snap scores neutrally (backwards compatible)", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12,
+    logs: 20, herbs: 5, seeds: 5, rawFood: 20,
+  };
+  const mine = scoreActivity("citizen_mine", base);
+  assert.equal(mine, 44, `no-kingdom mine should score the bare 44, got ${mine}`);
+});
+
 // --- thresholds ---------------------------------------------------------------
 
 run("threshold constants match CitizenNeeds", () => {

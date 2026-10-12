@@ -60,6 +60,7 @@ const {
 const { hashSeed, agentRng } = require("../lib/humanizer");
 const { tickIntents, intentBonusFor } = require("./CitizenIntents");
 const SlotCapacity = require("./CitizenSlotCapacity");
+const { profileWorkBonus } = require("./CitizenResourceProfile");
 
 const COINS_ID = 995;
 const INVENTORY_SIZE = 28;
@@ -3108,6 +3109,9 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
+      // Kingdom resource profile (phase 3): farm what the kingdom is rich
+      // in. Tie-breaker scale — personality and needs still dominate.
+      s += profileWorkBonus(snap.kingdomId, ACT_FARM);
       return s;
     }
     case ACT_THIEVE: {
@@ -4123,6 +4127,9 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
+      // Kingdom resource profile (phase 3): gather what the kingdom is rich
+      // in. Tie-breaker scale — personality and needs still dominate.
+      s += profileWorkBonus(snap.kingdomId, ACT_HERB);
       return s;
     }
     case ACT_SOCIAL: {
@@ -4228,6 +4235,9 @@ case ACT_COMPETE: {
       if (weary) s -= 50;
       if (hurt) s -= 25;
       if (freeSlots <= 2) s += 8; // full: bank hinge handles it
+      // Kingdom resource profile (phase 3): mine what the kingdom is rich
+      // in. Tie-breaker scale — personality and needs still dominate.
+      s += profileWorkBonus(snap.kingdomId, ACT_MINE);
       return s;
     }
     case ACT_CHOP: {
@@ -4247,6 +4257,9 @@ case ACT_COMPETE: {
       if (weary) s -= 50;
       if (hurt) s -= 25;
       if (freeSlots <= 2) s += 8; // full: bank hinge handles it
+      // Kingdom resource profile (phase 3): chop what the kingdom is rich
+      // in. Tie-breaker scale — personality and needs still dominate.
+      s += profileWorkBonus(snap.kingdomId, ACT_CHOP);
       return s;
     }
     case ACT_FISH: {
@@ -4275,6 +4288,9 @@ case ACT_COMPETE: {
       if (weary) s -= 50;
       if (hurt) s -= 25;
       if (freeSlots <= 2) s += 8; // full: bank hinge handles it
+      // Kingdom resource profile (phase 3): fish where the kingdom is rich
+      // in fish. Tie-breaker scale — personality and needs still dominate.
+      s += profileWorkBonus(snap.kingdomId, ACT_FISH);
       return s;
     }
     case ACT_WILD_GATHER: {
