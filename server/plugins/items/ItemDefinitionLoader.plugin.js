@@ -30,6 +30,8 @@ const getEquipmentType = () =>
 const getWeaponInterfaces = () =>
   requireGameModule(path.join("game", "content", "combat", "WeaponInterfaces"))
     .WeaponInterfaces;
+const getItemIdentifiers = () =>
+  requireGameModule(path.join("util", "ItemIdentifiers")).ItemIdentifiers;
 const { CacheDefinitions } = requireGameModule("game/cache/CacheDefinitions");
 const { encodeContentData } = requireGameModule("net/protocol/ClientProtocol");
 
