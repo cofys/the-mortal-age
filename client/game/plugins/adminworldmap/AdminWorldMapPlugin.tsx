@@ -3,9 +3,9 @@ import { NavigationButton } from "@runelite/client/ui/NavigationButton";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 import { inject } from "@runelite/client/plugins/PluginInjector";
 
-import { subscribeHandshake } from "../../network/ServerConnection";
-import { fetchContent } from "../../network/serverConnection/contentApi";
-import { state as connectionState } from "../../network/serverConnection/state";
+import { subscribeHandshake } from "../../../network/ServerConnection";
+import { fetchContent } from "../../../network/serverConnection/contentApi";
+import { state as connectionState } from "../../../network/serverConnection/state";
 
 /**
  * Sidebar tab tooltip. Kept as a const so other UI can reference it.
