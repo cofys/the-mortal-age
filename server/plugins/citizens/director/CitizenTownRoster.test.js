@@ -110,7 +110,7 @@ installStubs();
 
 // REAL modules under test.
 const { CitizenDirector } = require("./CitizenDirector");
-const { anchorFor } = require("../lib/CitizenAnchor");
+// anchorFor import removed (Jon 2026-10-12): anchor model dropped.
 const {
   TOWN_IDS,
   KINGDOM_IDS,
@@ -141,9 +141,10 @@ describe("town roster", () => {
     townRecords = [...director.roster.values()].filter((r) => r.townId);
   });
 
-  it("builds 150 town citizens on top of the 650 roster", () => {
-    assert.equal(director.roster.size, 650);
-    assert.equal(townRecords.length, 150);
+  it("builds 150 base town citizens; scale-3000 expansion adds 1040 more", () => {
+    assert.equal(director.roster.size, 3110);
+    // Base town plan: 150. Expansion: 16 towns × 65 = 1040. Total town citizens: 1190.
+    assert.equal(townRecords.length, 1190);
   });
 
   it("builds fast", () => {
@@ -185,94 +186,12 @@ describe("town roster", () => {
     }
   });
 
-  it("town commoners anchor at their town's work nodes (data-tier position)", () => {
-    for (const record of townRecords) {
-      if (record.role !== ROLE_COMMONER) continue;
-      const work = workSiteByTown(record.townId);
-      const dock = siteTileByTown(record.townId, "dock");
-      if (record.workKind === "fishing") {
-        assert.ok(dock, `${record.townId} fisher without a dock`);
-        assert.deepEqual(record.position, {
-          x: dock.x,
-          y: dock.y,
-          z: dock.z ?? 0,
-        });
-      } else if (work) {
-        assert.deepEqual(record.position, {
-          x: work.x,
-          y: work.y,
-          z: work.z ?? 0,
-        });
-        assert.equal(record.workKind, work.catalog);
-      } else {
-        // No gather site (Blast Furnace district): anchors at home.
-        assert.deepEqual(record.position, {
-          x: record.home.x,
-          y: record.home.y,
-          z: record.home.z ?? 0,
-        });
-        assert.equal(record.workKind ?? null, null);
-      }
-    }
-  });
+  // Anchor tests removed (Jon 2026-10-12): anchor model dropped.
+  // Citizens are free-roaming sandbox agents; position starts at home and
+  // emerges from movement. The utility layer drives work, not anchors.
 
-  it("town character drives the work mix: fishing towns fish", () => {
-    const fishers = (townId) =>
-      townRecords.filter(
-        (r) => r.townId === townId && r.role === ROLE_COMMONER && r.workKind === "fishing"
-      ).length;
-    const commoners = (townId) =>
-      townRecords.filter((r) => r.townId === townId && r.role === ROLE_COMMONER)
-        .length;
-    // Catherby (bias 0.7) and Port Sarim (bias 0.75) are fishing towns.
-    assert.ok(
-      fishers("catherby") >= Math.floor(commoners("catherby") * 0.4),
-      `catherby fishers: ${fishers("catherby")}/${commoners("catherby")}`
-    );
-    assert.ok(
-      fishers("port-sarim") >= Math.floor(commoners("port-sarim") * 0.4),
-      `port-sarim fishers: ${fishers("port-sarim")}/${commoners("port-sarim")}`
-    );
-    // Seers' Village has no dock: every commoner cuts yews.
-    assert.equal(fishers("seers-village"), 0);
-    assert.ok(
-      townRecords.every(
-        (r) =>
-          r.townId !== "seers-village" ||
-          r.role !== ROLE_COMMONER ||
-          r.workKind === "tree"
-      )
-    );
-    // Mine camp: every commoner mines.
-    assert.ok(
-      townRecords.every(
-        (r) =>
-          r.townId !== "keldagrim-minescamp" ||
-          r.role !== ROLE_COMMONER ||
-          r.workKind === "rock"
-      )
-    );
-  });
-
-  it("anchorFor agrees with the roster records", () => {
-    for (const record of townRecords) {
-      const again = anchorFor(record);
-      const expected = record.workKind
-        ? { x: record.position.x, y: record.position.y, z: record.position.z }
-        : null;
-      if (expected) {
-        assert.ok(again, `anchorFor lost the anchor for ${record.username}`);
-        assert.deepEqual(
-          { x: again.x, y: again.y, z: again.z },
-          expected,
-          `anchor drift for ${record.username}`
-        );
-        assert.equal(again.workKind, record.workKind);
-      } else {
-        assert.equal(again, null, `unexpected anchor for ${record.username}`);
-      }
-    }
-  });
+  // anchorFor test removed (Jon 2026-10-12): anchor model dropped.
+  // Citizens are free-roaming sandbox agents; position emerges from movement.
 
   it("bankless towns resolve a real bank through the fallback chain", () => {
     const capitalBank = (kingdomId) => siteTileByKingdom(kingdomId, "bank");
@@ -326,7 +245,8 @@ describe("town roster", () => {
     const settlements = [...director.roster.values()].filter(
       (r) => r.settlementId
     );
-    assert.equal(settlements.length, 400);
+    // Base: 400. Scale-3000 expansion: 8 settlements × 90 = 720. Total: 1120.
+    assert.equal(settlements.length, 1120);
     assert.deepEqual(
       [...new Set(settlements.map((r) => r.settlementId))].sort(),
       [...SETTLEMENT_IDS].sort()

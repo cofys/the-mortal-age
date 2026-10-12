@@ -47,9 +47,9 @@ const { registerCitizenForChat, unregisterCitizenForChat } = require("../chat/Ci
 const { getMemory } = require("../lib/CitizenMemory");
 const { getJournal } = require("../lib/CitizenJournal");
 const { dropNeeds } = require("../brain/CitizenNeeds");
-const { anchorFor } = require("../lib/CitizenAnchor");
+// anchorFor removed (Jon 2026-10-12): no anchor model. Citizens are
+// free-roaming sandbox agents; position emerges from goals and movement.
 const {
-  queueDirectedPick,
   CRITICAL_HP,
   CRITICAL_ENERGY,
 } = require("../brain/CitizenDecisions");
@@ -398,7 +398,7 @@ const FEATURE_TICK_BUDGET_MS = 70;
 // (data tier: journal, needs, kinship, crafting all run on the record).
 // The Player rematerializes when a real player approaches.
 // Hysteresis (spawn < despawn) prevents thrash at the boundary.
-const CITIZEN_SPAWN_RADIUS = 50; // tiles from the citizen's data-tier position (activity anchor, else home): spawn when a real player is this close
+const CITIZEN_SPAWN_RADIUS = 50; // tiles from the citizen's data-tier position (their real whereabouts, synced from live movement): spawn when a real player is this close
 const CITIZEN_DESPAWN_RADIUS = 75; // tiles from current pos: despawn when no real player within this
 const PROXIMITY_TICK_TICKS = 17; // ~10s at 600ms/tick: fast spawn/despawn for responsiveness
 // Hard cap on concurrent materialized (~3MB) Player objects. Without this,
@@ -508,6 +508,85 @@ function defaultTownPlan() {
     "keldagrim-market": mix(8),
     "keldagrim-blastfurnace": mix(8), // smelters/smiths, home-anchored
     "keldagrim-minescamp": mix(6), // coal miners
+  };
+}
+
+/**
+ * Scale-up expansion (2026-10-12, Jon: "upwards of 3k players").
+ * Appends ~2460 citizens AFTER the base plans (capitals/settlements/towns)
+ * so the existing 651 keep their seeds, names, and journals. Distribution
+ * follows the kingdom resource profiles: capitals are the densest hubs,
+ * frontier settlements are working towns, smaller towns get character-matched
+ * populations. Role mix stays commoner-heavy (the workers).
+ *
+ * Totals: capitals +700, settlements +720, towns +1040 = +2460.
+ * Roster: 651 → ~3111.
+ */
+function defaultExpansionPlan() {
+  const capitalMix = (total) => ({
+    [ROLE_GUARD]: Math.max(4, Math.round(total * 0.08)),
+    [ROLE_MERCHANT]: Math.max(3, Math.round(total * 0.14)),
+    [ROLE_COMMONER]: Math.max(10, Math.round(total * 0.72)),
+    [ROLE_COURTIER]: Math.max(2, Math.round(total * 0.06)),
+  });
+  const settlementMix = (total) => ({
+    [ROLE_GUARD]: Math.max(2, Math.round(total * 0.08)),
+    [ROLE_MERCHANT]: Math.max(2, Math.round(total * 0.14)),
+    [ROLE_COMMONER]: Math.max(4, Math.round(total * 0.72)),
+    [ROLE_COURTIER]: Math.max(1, Math.round(total * 0.06)),
+  });
+  const townMix = (total) => {
+    const guard = Math.max(1, Math.round(total * 0.08));
+    const merchant = Math.max(1, Math.round(total * 0.14));
+    const courtier = total >= 12 ? 1 : 0;
+    return {
+      [ROLE_GUARD]: guard,
+      [ROLE_MERCHANT]: merchant,
+      [ROLE_COMMONER]: Math.max(1, total - guard - merchant - courtier),
+      [ROLE_COURTIER]: courtier,
+    };
+  };
+  // Kingdom IDs come from CitizenSites; the expansion mirrors the base plan's
+  // kingdom set (capitals for each great power).
+  const capitals = {};
+  for (const kingdomId of ["keldagrim", "kandarin", "asgarnia", "misthalin", "morytania"]) {
+    capitals[kingdomId] = capitalMix(140);
+  }
+  return {
+    capitals,
+    settlements: {
+      brimhaven: settlementMix(90),
+      sophanem: settlementMix(90),
+      pollnivneach: settlementMix(90),
+      rellekka: settlementMix(90),
+      alkharid: settlementMix(90),
+      shilo: settlementMix(90),
+      nardah: settlementMix(90),
+      lletya: settlementMix(90),
+    },
+    towns: {
+      // Kandarin
+      catherby: townMix(65),
+      "seers-village": townMix(65),
+      yanille: townMix(65),
+      // Asgarnia
+      "port-sarim": townMix(65),
+      rimmington: townMix(65),
+      burthorpe: townMix(65),
+      taverley: townMix(65),
+      // Misthalin
+      lumbridge: townMix(65),
+      draynor: townMix(65),
+      // Morytania
+      canifis: townMix(65),
+      "port-phasmatys": townMix(65),
+      "burgh-de-rott": townMix(65),
+      // Keldagrim districts
+      "keldagrim-palace": townMix(65),
+      "keldagrim-market": townMix(65),
+      "keldagrim-blastfurnace": townMix(65),
+      "keldagrim-minescamp": townMix(65),
+    },
   };
 }
 
@@ -739,9 +818,44 @@ class CitizenDirector {
     const townPlan = defaultTownPlan();
     for (const [townId, roles] of Object.entries(townPlan)) {
       if (!TOWN_IDS.includes(townId)) {
-        this.log("unknown town in town plan, skipped", { townId });
+        this.log("unknown town in town plan, skipped", {
+          townId,
+        });
         continue;
       }
+      const kingdomId = kingdomIdOfTown(townId);
+      for (const [role, count] of Object.entries(roles ?? {})) {
+        const wanted = Math.max(0, Math.floor(Number(count) || 0));
+        for (let index = 0; index < wanted; index += 1) {
+          this.addCitizen(kingdomId, role, null, townId);
+        }
+      }
+    }
+    // Scale-up expansion (2026-10-12, Jon: "upwards of 3k players"): appends
+    // ~2460 citizens AFTER the base plans so the existing 651 keep their
+    // seeds/names/journals. Runs last; new citizens get roster.size 651+.
+    const expansion = defaultExpansionPlan();
+    for (const [kingdomId, roles] of Object.entries(expansion.capitals)) {
+      if (!KINGDOM_IDS.includes(kingdomId)) continue;
+      for (const [role, count] of Object.entries(roles ?? {})) {
+        const wanted = Math.max(0, Math.floor(Number(count) || 0));
+        for (let index = 0; index < wanted; index += 1) {
+          this.addCitizen(kingdomId, role);
+        }
+      }
+    }
+    for (const [settlementId, roles] of Object.entries(expansion.settlements)) {
+      if (!SETTLEMENT_IDS.includes(settlementId)) continue;
+      const kingdomId = kingdomIdOfSettlement(settlementId);
+      for (const [role, count] of Object.entries(roles ?? {})) {
+        const wanted = Math.max(0, Math.floor(Number(count) || 0));
+        for (let index = 0; index < wanted; index += 1) {
+          this.addCitizen(kingdomId, role, settlementId);
+        }
+      }
+    }
+    for (const [townId, roles] of Object.entries(expansion.towns)) {
+      if (!TOWN_IDS.includes(townId)) continue;
       const kingdomId = kingdomIdOfTown(townId);
       for (const [role, count] of Object.entries(roles ?? {})) {
         const wanted = Math.max(0, Math.floor(Number(count) || 0));
@@ -833,15 +947,13 @@ class CitizenDirector {
       currentActivityId: null,
       lastTickAt: Date.now(),
     };
-    // Data-tier position: the tile this citizen is "at" while offline.
-    // Commoners anchor at their work site (see lib/CitizenAnchor); spawn
-    // proximity and spawnCitizen use it instead of home.
-    const workAnchor = anchorFor(record);
-    record.position = workAnchor
-      ? { x: workAnchor.x, y: workAnchor.y, z: workAnchor.z }
-      : { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 };
-    record.workKind = workAnchor?.workKind ?? null;
-    record.anchorActivityId = workAnchor?.activityId ?? null;
+    // Data-tier position: where the citizen IS right now. Starts at home;
+    // the brain syncs it to the live location during materialization, so
+    // position emerges from goals and movement — not from assigned anchors.
+    // (Jon 2026-10-12: citizens are players in a sandbox, not anchored NPCs.)
+    record.position = { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 };
+    record.workKind = null;
+    record.anchorActivityId = null;
     // Roster keys are normalized (lowercase): every lib module looks citizens
     // up via normalizeName, and mixed-case keys silently missed. The record
     // keeps the raw display username.
@@ -916,12 +1028,12 @@ class CitizenDirector {
       lastTickAt: Date.now(),
       named: true,
     };
-    const workAnchor = anchorFor(record);
-    record.position = workAnchor
-      ? { x: workAnchor.x, y: workAnchor.y, z: workAnchor.z }
-      : { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 };
-    record.workKind = workAnchor?.workKind ?? null;
-    record.anchorActivityId = workAnchor?.activityId ?? null;
+    // Anchor model dropped (Jon 2026-10-12): position starts at home and
+    // emerges from movement. workKind/anchorActivityId are null — the
+    // utility layer decides what the citizen does, not an assigned anchor.
+    record.position = { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 };
+    record.workKind = null;
+    record.anchorActivityId = null;
     this.roster.set(normalizeName(username), record);
     ensureNeeds(username);
     this.log("named citizen added", { citizen: username, role, kingdom: kingdomId });
@@ -1079,6 +1191,19 @@ class CitizenDirector {
         if (!this.isOnline(record)) continue;
         const bot = this.getBot(record);
         if (!bot) continue;
+        // Position sync (Jon 2026-10-12): the data-tier position emerges
+        // from where the citizen actually is. Sync from live location so
+        // despawn/respawn preserves their real whereabouts — no anchors.
+        try {
+          const loc = bot.getLocation?.();
+          if (loc && typeof loc.getX === "function") {
+            record.position = {
+              x: loc.getX(),
+              y: loc.getY(),
+              z: loc.getZ?.() ?? 0,
+            };
+          }
+        } catch {}
         if (bot.getMovementQueue?.()?.size?.() > 0) continue;
         const req = peekMovementRequest(bot);
         if (req) {
@@ -1131,9 +1256,9 @@ class CitizenDirector {
         }
         const online = this.isOnline(record);
         if (!online) {
-          // Spawn check: use the data-tier position (activity anchor when
-          // the citizen has one, else home) — the citizen has no live
-          // position yet.
+          // Spawn check: use the data-tier position (the citizen's real
+          // whereabouts, synced from live movement) — the citizen has no
+          // live position yet.
           const at = record.position ??
             record.home ?? { x: 3200, y: 3200, z: 0 };
           const dist = this.nearestRealPlayerDist(
@@ -2072,32 +2197,13 @@ class CitizenDirector {
       }
     }
 
-    // The brain's work shift adopts the director's anchor kind (stamped
-    // here), so the citizen works where they spawned instead of rolling a
-    // different living and walking off.
-    if (record.workKind) {
-      try {
-        bot.setAttribute?.(ATTR_CITIZEN_WORK_KIND, record.workKind);
-      } catch {
-        // The stamp never blocks spawn.
-      }
-    }
+    // Work-kind stamp removed (Jon 2026-10-12): no anchors. The brain's
+    // utility layer decides what the citizen does based on their goals.
     // Activity-anchored spawn kick: queue a one-shot directed pick for the
     // anchored activity, consumed by the registry picker on the first
     // re-decide (same map the interrupt path uses — no new system).
-    // Skipped when the citizen spawns hurt/exhausted: critical needs win.
-    if (
-      record.anchorActivityId &&
-      needs &&
-      needs.hp > CRITICAL_HP &&
-      needs.energy > CRITICAL_ENERGY
-    ) {
-      try {
-        queueDirectedPick(record.username, record.anchorActivityId);
-      } catch {
-        // The kick never blocks spawn; the brain re-decides on its own.
-      }
-    }
+    // Anchor spawn kick removed (Jon 2026-10-12): no directed picks.
+    // The brain's utility layer decides on the first re-decide.
 
     // The LLM mouth learns who this person is (llm-gateway contract).
     const kingdom = KingdomStore.getKingdom(record.kingdomId);

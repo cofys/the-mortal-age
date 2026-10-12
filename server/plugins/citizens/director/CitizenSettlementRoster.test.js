@@ -112,8 +112,8 @@ describe("settlement roster", () => {
     buildMs = Date.now() - t0;
   });
 
-  it("builds 650 citizens: 100 capitals + 400 settlements + 150 towns", () => {
-    assert.equal(director.roster.size, 650);
+  it("builds 3110 citizens: 650 base (100 capitals + 400 settlements + 150 towns) + 2460 scale-3000 expansion", () => {
+    assert.equal(director.roster.size, 3110);
   });
 
   it("builds fast", () => {
@@ -129,7 +129,8 @@ describe("settlement roster", () => {
     }
     assert.deepEqual(Object.keys(counts).sort(), [...SETTLEMENT_IDS].sort());
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    assert.equal(total, 400);
+    // Base: 400. Scale-3000 expansion: 8 × 90 = 720. Total: 1120.
+    assert.equal(total, 1120);
   });
 
   it("settlement citizens affiliate with the nearest great power", () => {
@@ -161,7 +162,8 @@ describe("settlement roster", () => {
         assert.ok(KINGDOM_IDS.includes(record.kingdomId));
       }
     }
-    assert.equal(capitals, 100);
+    // Base: 100. Scale-3000 expansion: 5 × 140 = 700. Total: 800.
+    assert.equal(capitals, 800);
   });
 
   it("usernames are unique across the whole roster", () => {
@@ -170,6 +172,6 @@ describe("settlement roster", () => {
       assert.ok(!names.has(key), `duplicate roster key: ${key}`);
       names.add(key);
     }
-    assert.equal(names.size, 650);
+    assert.equal(names.size, 3110);
   });
 });
