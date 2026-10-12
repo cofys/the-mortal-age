@@ -6,9 +6,13 @@ const {
   sayPublic,
   displayNameOf,
   isRealPlayer,
+  stripSelfNamePrefix,
+  splitChunks,
+  setChunkScheduler,
   resetForTests,
   CHAT_MAX_LEN,
   CHATBOX_MIN_GAP_MS,
+  MAX_CHUNKS,
 } = require("./CitizenSayPublic");
 
 function makeRecipient({ username = "Cofy", index = 7, canReceive = true } = {}) {
@@ -199,3 +203,171 @@ run("loop guard: no social-packet emission possible", () => {
 });
 
 console.log("ALL CITIZENSAYPUBLIC TESTS DONE");
+
+// --- Self-name prefix stripping (Jon's "Nessa Knot: Nessa Knot: ..." bug) ---
+
+run("name strip: full name with colon stripped", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r], displayName: "Nessa Knot" });
+  assert.equal(sayPublic(c.player, "Nessa Knot: Funny how a guard attacked"), true);
+  assert.equal(r.sent[0].message, "Funny how a guard attacked");
+  assert.deepEqual(c.forced, ["Funny how a guard attacked"]);
+});
+
+run("name strip: full name without colon untouched", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r], displayName: "Nessa Knot" });
+  sayPublic(c.player, "Nessa Knot walked by earlier");
+  assert.equal(r.sent[0].message, "Nessa Knot walked by earlier");
+});
+
+run("name strip: first name with colon stripped", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r], displayName: "Nessa Knot" });
+  sayPublic(c.player, "Nessa: hello there");
+  assert.equal(r.sent[0].message, "hello there");
+});
+
+run("name strip: plain message untouched", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r], displayName: "Nessa Knot" });
+  sayPublic(c.player, "hello there");
+  assert.equal(r.sent[0].message, "hello there");
+});
+
+run("name strip: nothing left after strip drops the message", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r], displayName: "Nessa Knot" });
+  assert.equal(sayPublic(c.player, "Nessa Knot:"), false);
+  assert.equal(r.sent.length, 0);
+  assert.equal(c.forced.length, 0);
+});
+
+run("name strip: case-insensitive", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r], displayName: "Nessa Knot" });
+  sayPublic(c.player, "nessa knot: hi");
+  assert.equal(r.sent[0].message, "hi");
+});
+
+run("name strip: regex chars in name escaped", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r], displayName: "Al (the) Great" });
+  sayPublic(c.player, "Al (the) Great: hi");
+  assert.equal(r.sent[0].message, "hi");
+});
+
+run("name strip: unit-level stripSelfNamePrefix", () => {
+  assert.equal(stripSelfNamePrefix("Nessa Knot: hi", "Nessa Knot"), "hi");
+  assert.equal(stripSelfNamePrefix("Nessa: hi", "Nessa Knot"), "hi");
+  assert.equal(stripSelfNamePrefix("Nessa Knot hi", "Nessa Knot"), "Nessa Knot hi");
+  assert.equal(stripSelfNamePrefix("hi", "Nessa Knot"), "hi");
+  assert.equal(stripSelfNamePrefix("Nessa Knot:", "Nessa Knot"), "");
+  assert.equal(stripSelfNamePrefix("nessa knot :  hi", "Nessa Knot"), "hi");
+});
+
+// --- Multi-chunk follow-ups (Jon's "cut off sentences" bug) ---
+
+run("chunking: long message splits at word boundaries, never mid-word", () => {
+  setChunkScheduler((fn) => fn()); // continuations run immediately
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r] });
+  const words = [];
+  for (let i = 0; i < 40; i++) words.push("word" + i);
+  const text = words.join(" "); // ~270 chars
+  assert.equal(sayPublic(c.player, text), true);
+  assert.ok(r.sent.length >= 3, `expected >=3 chunks, got ${r.sent.length}`);
+  for (const s of r.sent) {
+    assert.ok(s.message.length <= CHAT_MAX_LEN, `chunk too long: ${s.message.length}`);
+  }
+  const joined = r.sent.map((s) => s.message).join(" ");
+  const normalized = text.replace(/\s+/g, " ");
+  assert.ok(
+    normalized.startsWith(joined),
+    "chunks rejoin to a word-boundary prefix of the original"
+  );
+  assert.ok(normalized.startsWith(r.sent.map((s) => s.message).join(" ").slice(0, 40)));
+  assert.deepEqual(
+    c.forced,
+    r.sent.map((s) => s.message),
+    "overhead shows each chunk in turn"
+  );
+});
+
+run("chunking: single 200-char word hard-splits at 80", () => {
+  setChunkScheduler((fn) => fn());
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r] });
+  sayPublic(c.player, "x".repeat(200));
+  assert.equal(r.sent.length, 3);
+  assert.equal(r.sent[0].message.length, CHAT_MAX_LEN);
+  assert.equal(r.sent[1].message.length, CHAT_MAX_LEN);
+  assert.equal(r.sent.map((s) => s.message).join("").length, 200);
+});
+
+run("chunking: capped at MAX_CHUNKS, remainder dropped", () => {
+  setChunkScheduler((fn) => fn());
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r] });
+  sayPublic(c.player, "lorem ipsum ".repeat(60)); // 720 chars
+  assert.equal(r.sent.length, MAX_CHUNKS);
+  assert.equal(r.sent.length, 3);
+});
+
+run("chunking: continuations refresh throttle, new message can't interleave", () => {
+  setChunkScheduler((fn) => fn());
+  const r = makeRecipient();
+  const c = makeCitizen({ username: "Chunky", locals: [r] });
+  const text = "alpha ".repeat(30); // ~180 chars -> 3 chunks
+  assert.equal(sayPublic(c.player, text), true);
+  const boxLines = r.sent.length;
+  assert.ok(boxLines >= 2, `expected multi-chunk, got ${boxLines}`);
+  // A brand-new utterance immediately after must be throttled (box quiet).
+  assert.equal(sayPublic(c.player, "brand new line"), false);
+  assert.equal(
+    r.sent.length,
+    boxLines,
+    "throttled follow-up must not reach the chat box"
+  );
+});
+
+run("chunking: throttled utterance still shows all chunks as overhead", () => {
+  setChunkScheduler((fn) => fn());
+  const r = makeRecipient();
+  const c = makeCitizen({ username: "Slow", locals: [r] });
+  sayPublic(c.player, "first");
+  const forcedBefore = c.forced.length;
+  const text = "beta ".repeat(30);
+  assert.equal(sayPublic(c.player, text), false); // throttled
+  assert.equal(r.sent.length, 1, "box stays quiet while throttled");
+  assert.ok(
+    c.forced.length > forcedBefore + 1,
+    "all chunks still show as overhead in turn"
+  );
+});
+
+run("chunking: name strip composes with chunking", () => {
+  setChunkScheduler((fn) => fn());
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r], displayName: "Nessa Knot" });
+  const text = "Nessa Knot: " + "gamma ".repeat(30);
+  sayPublic(c.player, text);
+  assert.ok(!r.sent[0].message.startsWith("Nessa"), "first chunk has no name prefix");
+  const joined = r.sent.map((s) => s.message).join(" ");
+  assert.ok(!joined.includes("Nessa Knot:"), "no chunk carries the name prefix");
+});
+
+run("chunking: splitChunks unit cases", () => {
+  assert.deepEqual(splitChunks("short", 80), ["short"]);
+  assert.deepEqual(splitChunks("a b c", 3), ["a b", "c"]);
+  const chunks = splitChunks("one two three four five", 9);
+  assert.ok(chunks.every((c) => c.length <= 9), JSON.stringify(chunks));
+  assert.equal(chunks.join(" "), "one two three four five");
+  assert.deepEqual(splitChunks("x".repeat(200), 80), [
+    "x".repeat(80),
+    "x".repeat(80),
+    "x".repeat(40),
+  ]);
+});
+
+console.log("ALL NAME-STRIP + CHUNKING TESTS DONE");
