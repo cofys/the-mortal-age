@@ -48,9 +48,9 @@ const TICK_CHANCE = 0.10; // per eligible citizen per ~60s tick
 // player is actually there to hear it. Quota-safe: long cooldowns, few per
 // tick, lite tier.
 const GREET_RADIUS = 10; // tiles — close enough to actually talk to
-const GREET_TICK_CHANCE = 0.06; // per eligible citizen per ~60s tick
+const GREET_TICK_CHANCE = 0.12; // per eligible citizen per ~60s tick (raised 2026-10-11: Jon walks through 20 citizens and hears nothing)
 const GREET_CITIZEN_COOLDOWN_MS = 20 * 60 * 1000; // a citizen greets at most every 20 min
-const GREET_PLAYER_COOLDOWN_MS = 5 * 60 * 1000; // a player is greeted at most every 5 min
+const GREET_PLAYER_COOLDOWN_MS = 2 * 60 * 1000; // a player is greeted at most every 2 min (was 5: the per-player throttle, not the per-citizen one, was the binding constraint)
 const MAX_GREETS_PER_TICK = 2;
 const lastGreetAt = new Map(); // citizen username -> timestamp
 
@@ -64,8 +64,24 @@ function pruneGreetCooldowns(nowMs) {
   for (const [k, at] of lastGreetAt) {
     if (at < cutoff) lastGreetAt.delete(k);
   }
+  for (const [k, at] of lastNoticedAt) {
+    if (at < cutoff) lastNoticedAt.delete(k);
+  }
 }
 const lastGreetedPlayerAt = new Map(); // player name -> timestamp
+
+// --- cheap acknowledgment: citizens NOTICE newcomers --------------------------
+// The greet pass above speaks (LLM) to a player at most every 2 minutes.
+// This pass is cheaper than speech: when a real player enters a citizen's
+// radius and no greeting fires, the citizen turns to FACE them. Facing is
+// visible and free — real players turn to look at newcomers. Gated to
+// idle-ish citizens (not fighting, not mid-conversation); a ~2 min per
+// citizen-per-player cooldown keeps a loiterer from being stared at forever.
+// Data tier, zero LLM.
+const NOTICE_RADIUS = 8; // tiles — close enough to notice a face
+const NOTICE_TICK_CHANCE = 0.7; // per newly-arrived player per tick
+const NOTICE_COOLDOWN_MS = 2 * 60 * 1000; // a citizen notices a player at most every 2 min
+const lastNoticedAt = new Map(); // `${citizen}:${player}` -> timestamp
 
 let pluginApi = null;
 const threads = new Map(); // threadId -> { a, b, turn, maxTurns, startedAt }
@@ -317,6 +333,7 @@ function maybeGreetPlayer(director, nowMs = Date.now()) {
   pruneGreetCooldowns(nowMs);
   const rng = agentRng(`greet:${Math.floor(nowMs / 60000)}`);
   let greets = 0;
+  const greetedThisTick = new Set(); // citizens already engaged — the notice/activity passes skip them
 
   for (const record of director.roster.values()) {
     if (greets >= MAX_GREETS_PER_TICK) break;
@@ -378,12 +395,133 @@ function maybeGreetPlayer(director, nowMs = Date.now()) {
       citizen: record.username,
       player: playerName,
     });
+    greetedThisTick.add(record.username);
   }
+
+  // The rest of the social-reactivity pass rides this tick slot (the
+  // director calls maybeGreetPlayer on the slow tick; the director and
+  // plugin wiring are sibling-owned, so everything chains from here):
+  //   1. cheap acknowledgment — citizens who didn't greet still NOTICE
+  //      newcomers by turning to face them;
+  //   2. activity reactions — the street notices what players are DOING.
+  maybeNoticePlayer(director, nowMs, greetedThisTick);
+  try {
+    require("../StreetActivity").tickActivityReactions(director, nowMs, greetedThisTick);
+  } catch {
+    // Activity reactions must never break greetings.
+  }
+}
+
+/** The citizen is doing something a glance would interrupt. */
+function citizenOccupied(record, bot) {
+  try {
+    if (bot.inCombat?.() === true) return true;
+  } catch {
+    // Fall through to the conversation check.
+  }
+  try {
+    // Lazy require: CitizenConversations must finish loading before we
+    // ask it anything (same pattern as CitizenHeardReactions).
+    const { activeConversationFor } = require("./CitizenConversations");
+    if (activeConversationFor(record.username) != null) return true;
+  } catch {
+    // Unknown is free — a missed glance beats a broken tick.
+  }
+  return false;
+}
+
+/**
+ * Cheap acknowledgment: citizens notice newcomers. For each idle-ish
+ * citizen, find real players in radius the citizen hasn't noticed in the
+ * last ~2 minutes and turn to face them — the visible "I see you" that
+ * real players give strangers. No LLM, no chat line: facing is free.
+ *
+ * excludedUsernames: citizens that greeted this tick (they're already
+ * engaged — a glance on top would read as robotic).
+ */
+function maybeNoticePlayer(director, nowMs = Date.now(), excludedUsernames = new Set()) {
+  if (!director) return;
+  pruneGreetCooldowns(nowMs);
+  const rng = agentRng(`notice:${Math.floor(nowMs / 60000)}`);
+
+  for (const record of director.roster.values()) {
+    if (excludedUsernames.has(record.username)) continue;
+    if (!director.isOnline(record)) continue;
+    const bot = director.getBot(record);
+    if (!bot) continue;
+    if (citizenOccupied(record, bot)) continue;
+
+    // Nearest newcomer: a real player in radius the citizen hasn't
+    // noticed recently. Busy players (mid-skill, mid-fight) get the
+    // glance too — a look is not an interruption, and the greet pass
+    // already skips them.
+    let target = null;
+    let targetName = null;
+    let targetKey = null;
+    try {
+      for (const local of bot.getLocalPlayers?.() ?? []) {
+        if (local === bot || !isRealPlayer(local)) continue;
+        if (!withinTiles(bot, local, NOTICE_RADIUS)) continue;
+        const name = local.getUsername?.();
+        if (!name) continue;
+        const key = `${record.username}:${name}`;
+        if (nowMs - (lastNoticedAt.get(key) ?? 0) < NOTICE_COOLDOWN_MS) continue;
+        target = local;
+        targetName = name;
+        targetKey = key;
+        break;
+      }
+    } catch {
+      continue;
+    }
+    if (!target) continue;
+
+    // Personality gates the glance: the bold turn to look, the nervous
+    // mostly don't — but everyone notices sometimes.
+    let sociability = 1;
+    try {
+      sociability = humanizerProfile(record.personality).sociability ?? 1;
+    } catch {
+      sociability = 1;
+    }
+    if (!chance(rng, NOTICE_TICK_CHANCE * (0.4 + 0.6 * sociability))) continue;
+
+    try {
+      const tile = target.getLocation?.();
+      if (tile && bot.face) bot.face(tile.getX(), tile.getY());
+    } catch {
+      // Cosmetic.
+    }
+    lastNoticedAt.set(targetKey, nowMs);
+    pluginApi?.log?.("[citizens] noticed player", {
+      citizen: record.username,
+      player: targetName,
+    });
+  }
+}
+
+/** Clear greet/notice cooldowns (tests). */
+function resetForTests() {
+  lastGreetAt.clear();
+  lastGreetedPlayerAt.clear();
+  lastNoticedAt.clear();
 }
 
 module.exports = {
   initCitizenSocial,
   maybeSocialize,
   maybeGreetPlayer,
+  maybeNoticePlayer,
   onSocialChatResponse,
+  // Test seams.
+  resetForTests,
+  _lastGreetAt: lastGreetAt,
+  _lastNoticedAt: lastNoticedAt,
+  // Tuned values, pinned by the test so a future edit can't silently
+  // re-quieten the streets.
+  _GREET_TICK_CHANCE: GREET_TICK_CHANCE,
+  _GREET_PLAYER_COOLDOWN_MS: GREET_PLAYER_COOLDOWN_MS,
+  _GREET_CITIZEN_COOLDOWN_MS: GREET_CITIZEN_COOLDOWN_MS,
+  _NOTICE_RADIUS: NOTICE_RADIUS,
+  _NOTICE_COOLDOWN_MS: NOTICE_COOLDOWN_MS,
 };
