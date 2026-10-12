@@ -312,7 +312,7 @@ function openTradeWith(bot, partnerContainer) {
   assert.equal(offerBox.getAmount(SWORD), 0, "personal gear protected");
 }
 
-// --- haggle: fair offer -> accept back ---------------------------------------------------
+// --- accept-back: fair offer -> accept back ---------------------------------------------------
 {
   const bot = mockBot({
     attrs: { [WARE_ITEM]: BREAD, [WARE_PRICE]: 12 },
@@ -326,27 +326,28 @@ function openTradeWith(bot, partnerContainer) {
   assert.deepEqual(bot._trading._calls[0], ["acceptTrade"], "fair price accepted");
 }
 
-// --- haggle: low offer -> refuse with a line, no accept-back ------------------------------
+// --- accept-back: low offer -> still accepts (2026-10-12: haggle block removed) ---------------
+// The citizen ALWAYS accepts back on screen 2, like a normal player. The
+// haggle gate that refused low offers wedged trades and Jon reported
+// "they can't trade because of the confirmation screen."
 {
   const bot = mockBot({
     attrs: { [WARE_ITEM]: BREAD, [WARE_PRICE]: 12 },
     invEntries: [{ id: BREAD, amount: 20, stackable: true }],
   });
   attachTradingInteraction(bot);
-  // 100 < 192 x 0.8 = 153.6 -> haggle
+  // 100 < 192 x 0.8 = 153.6 -> previously haggled; now accepts anyway
   openTradeWith(bot, mockContainer([{ id: COINS, amount: 100, stackable: true }]));
   bot._trading._calls.length = 0;
-  const saidBefore = bot.said.length;
   bot.getTradingInteraction().acceptTrade();
-  assert.equal(bot._trading._calls.length, 0, "no accept-back on a low offer");
-  const haggle = bot.said.slice(saidBefore).join(" ");
-  assert.ok(
-    haggle.includes("192") || haggle.includes("54"),
-    `haggle restates the ask or the shortfall, got: ${haggle}`
+  assert.deepEqual(
+    bot._trading._calls[0],
+    ["acceptTrade"],
+    "low offer still accepts back — trades must complete"
   );
 }
 
-// --- haggle: nothing offered -> "offer something" line --------------------------------------
+// --- accept-back: nothing offered -> still accepts --------------------------------------
 {
   const bot = mockBot({
     attrs: { [WARE_ITEM]: BREAD, [WARE_PRICE]: 12 },
@@ -356,12 +357,10 @@ function openTradeWith(bot, partnerContainer) {
   openTradeWith(bot, mockContainer());
   bot._trading._calls.length = 0;
   bot.getTradingInteraction().acceptTrade();
-  assert.equal(bot._trading._calls.length, 0, "no accept-back on an empty offer");
-  assert.ok(
-    ["offer something", "aren't free", "not free", "need something", "nothin'"].some(
-      (s) => bot.said.join(" ").toLowerCase().includes(s)
-    ),
-    "told to offer something"
+  assert.deepEqual(
+    bot._trading._calls[0],
+    ["acceptTrade"],
+    "empty offer still accepts back — trades must complete"
   );
 }
 

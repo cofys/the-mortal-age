@@ -56,7 +56,9 @@ const {
 
 const GROUP_ID = 30010;
 const OVERLAY_HOST_UID = (161 << 16) | 34;
-const TRADE_OPTION_SLOT = 7; // 1 attack, 2 trade req, 3 follow, 4 duel, 5 recruit, 6 forfeit
+// Slot 7 "Trade" player option REMOVED (2026-10-12): it appeared on every
+// citizen but only worked on merchants. Merchant shops are now reached via
+// the single "Trade with" (OPPLAYER2) option through onTradeRequestMerchant.
 const COINS = 995;
 const SELL_TAX = 0.85; // merchants buy back at 85%, mirroring real shops
 // Kingdom-choice phase 2: merchants favor their own kingdom. Home-kingdom
@@ -92,7 +94,6 @@ const OP_FLAGS = FLAG_OP1 | FLAG_OP2 | FLAG_OP3;
 let pluginApi = null;
 /** viewer player -> { merchant, wares: [{ id, name, price }] } */
 const sessions = new Map();
-const tradeOptionSent = new WeakSet();
 
 function isMerchantCitizen(player) {
   return (
@@ -1042,36 +1043,9 @@ function onStallButton(event) {
   return true;
 }
 
-function onTradePlayerOption(event) {
-  const api = pluginApi;
-  if (!api || !event || event.option !== TRADE_OPTION_SLOT || event.handled) {
-    return;
-  }
-  const { player, target } = event;
-  if (player?.isPlayerBot?.() === true) {
-    return;
-  }
-  if (!isMerchantCitizen(target)) {
-    return; // Not ours — leave the option alone for other plugins.
-  }
-  event.handled = true;
-  openStall(api, player, target);
-}
-
-function syncTradeOption(player) {
-  if (!player || player.isPlayerBot?.() === true) {
-    return;
-  }
-  if (tradeOptionSent.has(player)) {
-    return;
-  }
-  try {
-    player.getPacketSender()?.sendPlayerOption(TRADE_OPTION_SLOT, "Trade", false);
-    tradeOptionSent.add(player);
-  } catch (error) {
-    // Retry next tick.
-  }
-}
+// onTradePlayerOption and syncTradeOption REMOVED (2026-10-12): the slot-7
+// "Trade" option duplicated "Trade with" (OPPLAYER2). Merchant shops are
+// now reached via onTradeRequestMerchant (see initMerchantShops).
 
 function onInterfaceClose(event) {
   if (event?.player && sessions.has(event.player)) {
@@ -1110,8 +1084,7 @@ function stallButtonIds() {
 function initMerchantShops(api) {
   pluginApi = api;
   api.registerCustomInterface(buildStallInterface());
-  api.onPlayerProcess(({ player }) => syncTradeOption(player));
-  api.onPlayerOption(onTradePlayerOption);
+  api.onTradeRequest(onTradeRequestMerchant);
   api.onInterfaceActionButton(stallButtonIds(), onStallButton);
   api.onCustomEvent("interface:close", onInterfaceClose);
   api.onPlayerLogout(onPlayerLogoutEvent);
@@ -1119,14 +1092,34 @@ function initMerchantShops(api) {
   api.log?.("[citizens] merchant stalls ready");
 }
 
+/**
+ * Intercept trade requests to merchant citizens: open the shop instead of
+ * a player-to-player trade. The global "Trade with" (OPPLAYER2) option is
+ * the single trade entry point; merchants get their stall, everyone else
+ * gets the normal trade flow via CitizenTrading.
+ */
+function onTradeRequestMerchant(event) {
+  const api = pluginApi;
+  if (!api || !event || event.handled) return;
+  const { player, target } = event;
+  if (!target || !isMerchantCitizen(target)) return;
+  if (player?.isPlayerBot?.() === true) return;
+  event.handled = true;
+  try {
+    openStall(api, player, target);
+  } catch (error) {
+    api.log?.("[citizens] merchant stall open failed", error?.message ?? error);
+  }
+}
+
 module.exports = {
   initMerchantShops,
   // Exported for tests / review.
   GROUP_ID,
-  TRADE_OPTION_SLOT,
   marketStallWares,
   priceWithMarketStack,
   kingdomPriceBias,
   KINGDOM_HOME_BIAS,
   KINGDOM_FOREIGN_BIAS,
+  isMerchantCitizen,
 };

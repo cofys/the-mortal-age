@@ -510,67 +510,22 @@ function createTradingInteraction(bot) {
     },
 
     /**
-     * Accept-back gate. The engine calls this when Jon accepts (screen one
-     * and the confirm screen). When the citizen offered goods, Jon's side
-     * has to cover the ask: at 80%+ we accept back and the trade completes;
-     * below that the citizen says so and does NOT accept — the trade stalls
-     * until Jon offers more or declines. Gifts (citizen offered nothing)
-     * keep the old accept-back behavior.
+     * Accept-back. The engine calls this when Jon accepts (screen one
+     * and the confirm screen). The citizen ALWAYS accepts back — like a
+     * normal player would. The haggle gate that blocked trades when Jon
+     * didn't meet the asking price was removed 2026-10-12: it wedged the
+     * trade on screen 2 and Jon reported "they can't trade because of the
+     * confirmation screen." Trades must complete.
+     *
+     * The auto-offer in addItemsToTrade is now informational only: the
+     * citizen shows what they have and names a price, but never blocks.
+     * If Jon wants the goods, he offers fair value; the citizen accepts
+     * regardless — same as any player trade.
      */
     acceptTrade() {
-      const acceptBack = () => {
-        try {
-          bot.getTrading().acceptTrade();
-        } catch { /* trade may have closed — safe to ignore */ }
-      };
       try {
-        const offer = trade.offer;
-        if (offer && offer.askingPrice > 0) {
-          let paid = 0;
-          try {
-            const partner = bot.getTrading().getInteract();
-            paid = containerValue(partner?.getTrading?.()?.getContainer?.());
-          } catch {
-            // Couldn't read Jon's offer — fail open to the old behavior.
-            acceptBack();
-            return;
-          }
-          if (paid >= offer.askingPrice * HAGGLE_TOLERANCE) {
-            acceptBack();
-            return;
-          }
-          // Not enough — haggle instead of giving goods away.
-          const now = Date.now();
-          if (now - trade.haggleSaidAt > HAGGLE_SPEECH_COOLDOWN_MS) {
-            trade.haggleSaidAt = now;
-            const voice = voiceOf(bot);
-            if (paid <= 0) {
-              sayPublic(bot, voiceLine(voice, TRADE_HAGGLE_EMPTY_LINES));
-            } else {
-              const short = Math.max(
-                1,
-                Math.ceil(offer.askingPrice * HAGGLE_TOLERANCE - paid)
-              );
-              sayPublic(
-                bot,
-                fill(voiceLine(voice, TRADE_HAGGLE_LINES), {
-                  price: offer.askingPrice,
-                  short,
-                })
-              );
-            }
-          }
-          journalEvent(
-            citizenName,
-            `Held out for ${offer.askingPrice} coins (offered ${paid}).`,
-            "economy"
-          );
-          return; // do NOT accept back — Jon can offer more or decline
-        }
-        acceptBack();
-      } catch {
-        acceptBack(); // fail open: a broken gate must never wedge trades
-      }
+        bot.getTrading().acceptTrade();
+      } catch { /* trade may have closed — safe to ignore */ }
     },
 
     /**

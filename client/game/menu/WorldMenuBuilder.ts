@@ -82,7 +82,6 @@ export interface MenuActionCallbacks {
         mapY: number;
         tile?: { tileX: number; tileY: number };
     }) => void;
-    onFollowPlayer: (serverId: number) => void;
     onTradePlayer: (serverId: number) => void;
     closeMenu: () => void;
 }
@@ -565,16 +564,10 @@ export function buildPlayerMenuEntries(
         });
     }
 
-    // Follow player
-    actions.push({
-        option: "Follow",
-        targetId: serverId,
-        targetType: MenuTargetType.PLAYER,
-        targetName: targetName,
-        targetLevel: level,
-        actionIndex: 2, // OPPLAYER3 - Follow
-        onClick: () => callbacks.onFollowPlayer(serverId),
-    });
+    // Follow is handled server-side via the "Follow me" player option
+    // (CitizenFollowOption.js, slot 8). The old hardcoded OPPLAYER3 "Follow"
+    // was removed 2026-10-12: it made the PLAYER follow the target
+    // (backwards) and duplicated "Follow me".
 
     // Trade with player
     actions.push({
