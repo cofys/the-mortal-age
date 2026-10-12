@@ -1364,11 +1364,12 @@ class CitizenDirector {
           }
         }
         const phase = desiredPhase(record, hour);
-        // Asleep or off-schedule: the slow tick handles logout.
-        if (!phase.online) {
-          continue;
-        }
         if (!online) {
+          // Asleep or off-schedule: the slow tick handles logout; the fast
+          // tick only spawns citizens whose phase is online.
+          if (!phase.online) {
+            continue;
+          }
           // Spawn check: use the data-tier position (the citizen's real
           // whereabouts, synced from live movement) — the citizen has no
           // live position yet.
@@ -1385,6 +1386,13 @@ class CitizenDirector {
           }
           continue;
         }
+        // Online (materialized): ALWAYS run the despawn check, even when the
+        // citizen's phase is off-schedule (asleep). The check stamps
+        // humanNearbyAt when a real player is near — the brain LOD needs that
+        // stamp refreshed every proximity tick, or the brain starves to 1/10th
+        // speed while the citizen is visibly standing next to Jon. Sleep
+        // logout itself is handled by the slow tick; this only controls the
+        // stamp + the no-player-near despawn.
         materializedCount += 1;
         this._proximityDespawnCheck(record, positions);
       } catch (error) {

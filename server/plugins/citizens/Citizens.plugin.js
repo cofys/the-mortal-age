@@ -61,7 +61,7 @@ const { registerCitizenActionTypes } = require("./brain/CitizenActionTypes");
 const { initCitizenDecisions } = require("./brain/CitizenDecisions");
 const { ATTR_CITIZEN_PERSONALITY } = require("./constants");
 const { voiceFor, voiceLine } = require("./lib/citizenVoice");
-const { sayPublic } = require("./chat/CitizenSayPublic");
+const { sayPublic, setNearbyResolver } = require("./chat/CitizenSayPublic");
 
 const {
   registerCitizenActivities,
@@ -130,8 +130,57 @@ function citizensEnabled() {
 
 let pluginApi = null;
 
+/**
+ * Wire the World-aware asymmetric chat recipient resolver into
+ * CitizenSayPublic. The citizen's own getLocalPlayers() is symmetric and can
+ * be empty/stale for bots — overhead bubbles render (forceChat is direct)
+ * but no chat-box packet reaches a real player the citizen doesn't list.
+ * This mirrors ChatPacketListener.handleText: start from the speaker's local
+ * list, then add real players from the spatial bucket index whose own local
+ * list includes the speaker (they render the citizen even when the citizen
+ * can't render them).
+ */
+function initCitizenChatResolver(api) {
+  try {
+    const World = api?.core?.World;
+    if (!World || typeof World.getNearbyPlayersForUpdate !== "function") {
+      return;
+    }
+    setNearbyResolver((citizen) => {
+      const seen = new Set();
+      const out = [];
+      const push = (p) => {
+        if (!p || seen.has(p)) return;
+        seen.add(p);
+        out.push(p);
+      };
+      try {
+        for (const p of citizen.getLocalPlayers?.() ?? []) push(p);
+      } catch {
+        // Fall through to the bucket lookup.
+      }
+      try {
+        for (const p of World.getNearbyPlayersForUpdate(citizen) ?? []) {
+          if (seen.has(p)) continue;
+          try {
+            if (p.getLocalPlayers?.().includes(citizen)) push(p);
+          } catch {
+            // Skip unreadable players.
+          }
+        }
+      } catch {
+        // Bucket lookup failing doesn't break the symmetric path.
+      }
+      return out;
+    });
+  } catch {
+    // Resolver wiring is best-effort; the symmetric default still works.
+  }
+}
+
 function initCitizens(api) {
   pluginApi = api;
+  initCitizenChatResolver(api);
   initCitizenChat(api);
   initCitizenSocial(api);
   initCitizenMemory();

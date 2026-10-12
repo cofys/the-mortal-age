@@ -441,6 +441,38 @@ function setChunkScheduler(fn) {
 }
 
 /**
+ * Nearby-player resolver: returns the candidate chat-box recipients for a
+ * speaking citizen. Default is the citizen's own local player list
+ * (symmetric). The plugin injects a World-aware resolver at register time
+ * that also covers the asymmetric case — real players whose own local list
+ * includes the citizen even when the citizen's list doesn't include them
+ * (mirrors ChatPacketListener.handleText's getNearbyPlayersForUpdate
+ * fallback). Without it, overhead bubbles render but the chat box stays
+ * empty for players the citizen's stale/empty local list misses.
+ */
+let nearbyResolver = (citizen) => {
+  try {
+    return citizen.getLocalPlayers?.() ?? [];
+  } catch {
+    return [];
+  }
+};
+
+/** Test seam / plugin wiring: replace the nearby-player resolver. */
+function setNearbyResolver(fn) {
+  if (typeof fn === "function") nearbyResolver = fn;
+}
+
+function resolveNearbyPlayers(citizen) {
+  try {
+    const out = nearbyResolver(citizen);
+    return Array.isArray(out) ? out : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Deliver one chunk: overhead for everyone nearby + chat-box line for nearby
  * real players. Refreshes the sender's chat-box throttle timestamp so a new
  * utterance can't interleave with a multi-chunk one in flight.
@@ -463,14 +495,13 @@ function sendChunk(citizen, chunk, from, username, nowMs) {
   // Recipients: nearby real players only. Citizens have no client session,
   // so sending to them is pointless; isRealPlayer excludes them (and the
   // speaker, who is a bot). Dedup by index like the real path does.
+  // Uses the injected nearby resolver (World-aware asymmetric lookup when
+  // the plugin wires it), not just the citizen's own local list — the
+  // citizen's list can be empty/stale for bots, which is why overhead
+  // showed but chat boxes stayed empty.
   const seen = new Set();
   let sent = 0;
-  let locals = [];
-  try {
-    locals = citizen.getLocalPlayers?.() ?? [];
-  } catch {
-    locals = [];
-  }
+  const locals = resolveNearbyPlayers(citizen);
   for (const recipient of locals) {
     if (!isRealPlayer(recipient)) continue;
     let idx = -1;
@@ -576,6 +607,13 @@ function resetForTests() {
   pendingPicks.length = 0;
   lastRepeatPruneAt = 0;
   chunkScheduler = (fn, ms) => setTimeout(fn, ms);
+  nearbyResolver = (citizen) => {
+    try {
+      return citizen.getLocalPlayers?.() ?? [];
+    } catch {
+      return [];
+    }
+  };
 }
 
 module.exports = {
@@ -585,6 +623,7 @@ module.exports = {
   stripSelfNamePrefix,
   splitChunks,
   setChunkScheduler,
+  setNearbyResolver,
   resetForTests,
   pickLineAvoidingRepeat,
   normalizeRepeatLine,
