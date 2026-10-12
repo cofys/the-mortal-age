@@ -587,7 +587,11 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                             onClick: () => {
                                 try {
                                     host.osrsClient.playerInteractionSystem.beginFollow(sid | 0);
-                                    if (isServerConnected()) sendInteractFollow(sid | 0, "follow");
+                                    if (isServerConnected()) {
+                                        // OPPLAYER3 — the engine's follow (player follows target).
+                                        sendPlayerOption(sid | 0, 3);
+                                        sendInteractFollow(sid | 0, "follow");
+                                    }
                                 } catch {}
                             },
                         });
@@ -607,7 +611,11 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                             onClick: () => {
                                 try {
                                     host.osrsClient.playerInteractionSystem.beginTrade(sid | 0);
-                                    if (isServerConnected()) sendInteractFollow(sid | 0, "trade");
+                                    if (isServerConnected()) {
+                                        // OPPLAYER2 — the engine's trade request.
+                                        sendPlayerOption(sid | 0, 2);
+                                        sendInteractFollow(sid | 0, "trade");
+                                    }
                                 } catch {}
                             },
                         });

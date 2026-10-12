@@ -92,6 +92,7 @@ const { tipGlassblower } = require("./lib/CitizenGlassblowers");
 const { tipPotter } = require("./lib/CitizenPotters");
 const { tipBusker } = require("./lib/CitizenBards2");
 const { initPartyPlay } = require("./lib/CitizenPartyPlay");
+const { initFollowOption } = require("./lib/CitizenFollowOption");
 const { onMentorLevelUpNotice } = require("./lib/CitizenMentors");
 const {
   getMemory,
@@ -736,6 +737,7 @@ module.exports = {
   register(api) {
     initCitizens(api);
     initPartyPlay(api);
+    initFollowOption(api);
     attachWarRefugees(api);
     // Treaty ratifications emit kingdom:alliance-formed through the plugin
     // api — the kingdoms layer persists the pact (complement, not duplicate).

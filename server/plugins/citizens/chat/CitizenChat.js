@@ -696,17 +696,26 @@ function handleSocialKeyword(citizenUsername, speakerUsername, text) {
   }
 
   // "follow me" / "come with me" — player asks citizen to follow.
+  // Every outcome gets visible feedback — never silence.
   if (/\b(follow me|come with me|walk with me|stay with me)\b/.test(said)) {
-    if (SocialMechanics.requestFollow(citizenUsername, speakerUsername)) {
+    const result = SocialMechanics.requestFollow(citizenUsername, speakerUsername);
+    if (result.ok) {
       notifyCitizenSpoke(citizenUsername, speakerUsername, "follow_start");
+    } else if (result.reason === "enemy") {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "follow_refuse_enemy");
+    } else {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "follow_refuse");
     }
     return true;
   }
 
   // "stop following" / "stay here" — player dismisses the follower.
+  // Every outcome gets visible feedback — never silence.
   if (/\b(stop following|stay here|wait here|stop follow)\b/.test(said)) {
     if (SocialMechanics.requestStopFollow(citizenUsername, speakerUsername)) {
       notifyCitizenSpoke(citizenUsername, speakerUsername, "follow_stop");
+    } else {
+      notifyCitizenSpoke(citizenUsername, speakerUsername, "follow_not_following");
     }
     return true;
   }
@@ -2617,6 +2626,9 @@ function notifyCitizenSpoke(citizenUsername, speakerUsername, kind, extra) {
       activity_invite: `${display}: We've got company — ${speakerUsername}'s coming with us!`,
       follow_start: `${display}: Right behind you.`,
       follow_stop: `${display}: I'll wait here then.`,
+      follow_refuse: `${display}: Sorry — I don't follow strangers. Get to know me first.`,
+      follow_refuse_enemy: `${display}: Not a chance. Stay away from me.`,
+      follow_not_following: `${display}: I'm not following you.`,
       favor_accept: `${display}: Deal — bring what I asked and I'll make it worth your while.`,
       favor_decline: `${display}: Ah, that's a shame. Never mind then.`,
       favor_done: `${display}: Much appreciated, truly.`,

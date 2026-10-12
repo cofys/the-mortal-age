@@ -447,16 +447,49 @@ function tickFollow(record, getBot) {
   } catch { /* non-fatal */ }
 }
 
-/** Player says "follow me" — citizen starts following the player. */
-function requestFollow(citizenName, playerName) {
-  if (isEnemy(citizenName, playerName)) return false;
-  // Only friends or party members get followed.
+/** Player says "follow me" — citizen starts following the player.
+ * Returns { ok, reason } so callers can give visible feedback — a silent
+ * false is never acceptable (Jon must always see a response).
+ * Reasons: 'enemy' | 'friend' | 'party' | 'willing' | 'refused' | 'already'.
+ */
+function requestFollow(citizenName, playerName, opts = {}) {
+  if (isEnemy(citizenName, playerName)) return { ok: false, reason: "enemy" };
   const party = getParty(citizenName);
   const inParty = party && (party.members ?? []).map(normalizeName).includes(normalizeName(playerName));
-  if (!isFriend(citizenName, playerName) && !inParty) return false;
+  const already = getFollow(citizenName);
+  if (already && normalizeName(already.target) === normalizeName(playerName)) {
+    return { ok: true, reason: "already" };
+  }
+  if (isFriend(citizenName, playerName) || inParty) {
+    setFollow(citizenName, playerName, "follow_me");
+    journalEvent(citizenName, `Started following ${playerName}.`, "social");
+    return { ok: true, reason: inParty && !isFriend(citizenName, playerName) ? "party" : "friend" };
+  }
+  // Strangers: personality-based willingness. Most citizens are open to it;
+  // suspicious/hostile ones refuse with feedback (never silence).
+  const traits = opts.personality?.traits ?? getCitizenTraits(citizenName);
+  const wary = traits.some((t) =>
+    ["suspicious", "hostile", "paranoid", "xenophobic"].includes(String(t).toLowerCase())
+  );
+  if (wary) {
+    journalEvent(citizenName, `Refused to follow ${playerName} (wary of strangers).`, "social");
+    return { ok: false, reason: "refused" };
+  }
   setFollow(citizenName, playerName, "follow_me");
   journalEvent(citizenName, `Started following ${playerName}.`, "social");
-  return true;
+  return { ok: true, reason: "willing" };
+}
+
+/** Best-effort personality traits for the willingness check. */
+function getCitizenTraits(citizenName) {
+  try {
+    const { getDirector } = require("../director/CitizenDirector");
+    const director = getDirector?.();
+    const record = director?.roster?.get?.(normalizeName(citizenName));
+    return record?.personality?.traits ?? [];
+  } catch {
+    return [];
+  }
 }
 
 /** Player says "stop following" — citizen stops. */

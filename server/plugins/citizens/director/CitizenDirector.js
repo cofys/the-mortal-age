@@ -65,6 +65,7 @@ const CitizenActivityChatter = require("../chat/CitizenActivityChatter");
 const CitizenWarChatter = require("../chat/CitizenWarChatter");
 const CitizenGoalChatter = require("../chat/CitizenGoalChatter");
 const PartyPlay = require("../lib/CitizenPartyPlay");
+const CitizenTrading = require("../lib/CitizenTrading");
 const CitizenOffices = require("../lib/CitizenOffices");
 const CitizenDailyRoutines = require("../lib/CitizenDailyRoutines");
 const CitizenAlive = require("../lib/CitizenAlive");
@@ -1795,6 +1796,17 @@ class CitizenDirector {
     }
     bot.setPlayerBot?.(true);
     bot.setAttribute?.(ATTR_SKIP_PERSISTENCE, true);
+
+    // Trade wiring: the engine's trade flow calls getTradingInteraction() on
+    // the receiving side. Without this, trade requests to citizens die silently.
+    try {
+      CitizenTrading.attachTradingInteraction(bot);
+    } catch (error) {
+      this.log("trading attach failed", {
+        citizen: record.username,
+        error: String(error?.message ?? error),
+      });
+    }
 
     // Persistent death-respawn: the engine's PlayerDeathTask revives dead
     // bots and teleports them to bot.__botResolveRespawnLocation() when set.
