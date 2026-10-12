@@ -1333,11 +1333,12 @@ function pickTurnLine(conv, participant, stage) {
 /** Face the person you're talking to, like a person would. */
 function faceAddressee(conv, bot, addressee) {
   try {
-    const myTile = botTile(bot);
+    // Lazy require: CitizenAlive owns the canonical faceToward (real
+    // engine facing API). Top-level would be a load cycle
+    // (CitizenAlive requires this module).
+    const { faceToward } = require("../lib/CitizenAlive");
     const theirTile = addressee ? botTile(resolveBot(conv, addressee)) : null;
-    if (myTile && theirTile && (theirTile.x !== myTile.x || theirTile.y !== myTile.y)) {
-      bot.face?.(theirTile.x, theirTile.y);
-    }
+    if (theirTile) faceToward(bot, theirTile);
   } catch {
     /* cosmetic */
   }

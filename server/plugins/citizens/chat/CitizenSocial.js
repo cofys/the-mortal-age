@@ -487,8 +487,17 @@ function maybeNoticePlayer(director, nowMs = Date.now(), excludedUsernames = new
     if (!chance(rng, NOTICE_TICK_CHANCE * (0.4 + 0.6 * sociability))) continue;
 
     try {
+      // Lazy require: CitizenAlive owns the canonical faceToward (real
+      // engine facing API). Top-level would risk a load cycle.
+      const { faceToward } = require("../lib/CitizenAlive");
       const tile = target.getLocation?.();
-      if (tile && bot.face) bot.face(tile.getX(), tile.getY());
+      if (tile) {
+        faceToward(bot, {
+          x: tile.getX(),
+          y: tile.getY(),
+          z: tile.getZ?.() ?? 0,
+        });
+      }
     } catch {
       // Cosmetic.
     }

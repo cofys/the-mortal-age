@@ -61,7 +61,10 @@ function makeCitizenBot(name, { x = 0, y = 0, inCombat = false, locals = [] } = 
     busy: () => false,
     getLocalPlayers: () => [bot, ...bot._locals],
     getLocation: () => makeTile(x, y),
-    face: (fx, fy) => faced.push([fx, fy]),
+    // Real engine facing API (Mobile.setPositionToFaceCoordinates).
+    // The legacy `face(x, y)` never existed on Player bots — it was a
+    // silent no-op, which is why this test now drives the real method.
+    setPositionToFaceCoordinates: (fx, fy) => faced.push([fx, fy]),
     getAttribute: () => ({}),
   };
   return bot;
