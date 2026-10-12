@@ -355,6 +355,7 @@ import {
 import { resolveWidgetIdentifiers } from "./widgets/widgetActionPayload";
 import { RenderDataWorkerPool } from "./worker/RenderDataWorkerPool";
 import { WorldMapController, type WorldMapRenderedIcon } from "./worldMap/WorldMapController";
+import type { WorldMapCitizenDot } from "./worldMap/WorldMapTypes";
 import { WorldViewManager } from "./worldview/WorldViewManager";
 
 const DEVICE_OPTION_INTERFACE_SCALING = 27;
@@ -3880,6 +3881,10 @@ export class OsrsClient {
 
     setRenderedWorldMapIcons(icons: WorldMapRenderedIcon[]): void {
         this.worldMap.setRenderedWorldMapIcons(icons);
+    }
+
+    setRenderedCitizenDots(dots: WorldMapCitizenDot[]): void {
+        this.worldMap.setRenderedCitizenDots(dots);
     }
 
     getWorldMapMenuEntriesAt(screenX: number, screenY: number): SimpleMenuEntry[] {

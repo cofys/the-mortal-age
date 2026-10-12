@@ -49,6 +49,18 @@ import { drawLine, drawThickLine } from "./drawLines";
 import { renderArcWidget } from "./arcWidget";
 import { drawScrollBar } from "./scrollbarDraw";
 import { drawWorldMapLabelGL, getWorldMapFlashTexture } from "./worldMapLabels";
+import {
+    WORLD_MAP_CITIZEN_CAT_HEX,
+    type WorldMapCitizenDot,
+} from "../../../game/worldMap/WorldMapTypes";
+
+/** Hex palette -> GL [r,g,b,a]. Precomputed once; order matches server category indexes. */
+function hexToRgba(hex: string): [number, number, number, number] {
+    const n = parseInt(hex.slice(1), 16);
+    return [((n >>> 16) & 0xff) / 255, ((n >>> 8) & 0xff) / 255, (n & 0xff) / 255, 1];
+}
+const WORLD_MAP_CITIZEN_CAT_COLORS: Array<[number, number, number, number]> =
+    WORLD_MAP_CITIZEN_CAT_HEX.map(hexToRgba);
 import { scaleLogicalPixels } from "./scaleLogicalPixels";
 import { ps } from "./profilingState";
 import { FONT_VERDANA_11, FONT_VERDANA_13, FONT_VERDANA_15 } from "../../../ui/fonts";
@@ -2194,16 +2206,49 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         });
                     }
                 }
-                const playerDots: number[][] = worldMapRenderHost?.worldMapPlayers ?? [];
+                const playerDots: any[][] = worldMapRenderHost?.worldMapPlayers ?? [];
                 const dotSize = Math.max(2, 3 * renderScale);
-                for (const [dotX, dotY, dotPlane, isBot] of playerDots) {
+                // Citizen dots (kind === 2) are recorded for right-click admin
+                // actions; the controller hit-tests them in getWorldMapMenuEntriesAt.
+                const citizenDots: WorldMapCitizenDot[] = [];
+                for (const row of playerDots) {
+                    const dotX = row[0];
+                    const dotY = row[1];
+                    const dotPlane = row[2];
+                    const kind = (row[3] | 0) as number;
                     const displayPos = currentArea.position(dotPlane, dotX, dotY);
                     if (!displayPos) continue;
                     const dot = projectDisplayToScreen(displayPos.x + 0.5, displayPos.y + 0.5);
                     if (dot.x < x || dot.y < y || dot.x > x + width || dot.y > y + height) continue;
+                    if (kind === 2) {
+                        // Citizen: [x, y, plane, 2, categoryIndex, username, online01, brainPaused01]
+                        const cat = Math.max(0, Math.min(WORLD_MAP_CITIZEN_CAT_COLORS.length - 1, (row[4] | 0)));
+                        const name = String(row[5] ?? "?");
+                        const online = (row[6] | 0) === 1;
+                        const size = online ? dotSize * 1.6 : dotSize;
+                        glr.drawRect(
+                            dot.x - size / 2,
+                            dot.y - size / 2,
+                            size,
+                            size,
+                            WORLD_MAP_CITIZEN_CAT_COLORS[cat],
+                        );
+                        const hit = Math.max(7, size / 2 + 3);
+                        citizenDots.push({
+                            name,
+                            category: cat,
+                            x0: dot.x - hit,
+                            y0: dot.y - hit,
+                            x1: dot.x + hit,
+                            y1: dot.y + hit,
+                        });
+                        continue;
+                    }
+                    const isBot = kind === 1;
                     glr.drawRect(dot.x - dotSize / 2, dot.y - dotSize / 2, dotSize, dotSize,
                         isBot ? [1, 1, 1, 1] : [1, 1, 0, 1]);
                 }
+                osrsClient?.setRenderedCitizenDots?.(citizenDots);
                 for (const labelDraw of worldMapLabelDraws) {
                     if (labelDraw.font && !/<(?!br\s*\/?\s*>)/i.test(labelDraw.text)) {
                         drawWorldMapLabelGL(

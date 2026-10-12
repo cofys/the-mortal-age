@@ -2,9 +2,13 @@ import { Opcodes as Cs2Opcodes } from "../../rs/cs2/Opcodes";
 import type { Script as Cs2Script } from "../../rs/cs2/Script";
 import { MenuOpcode } from "../../ui/menu/MenuState";
 import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
+import { fetchContent } from "../../network/serverConnection/contentApi";
+import { state as connectionState } from "../../network/serverConnection/state";
 import {
+    WORLD_MAP_CITIZEN_CAT_LABELS,
     WORLD_MAP_ELEMENT_TOOLTIP_CLEAR_SCRIPT_ID,
     WORLD_MAP_ELEMENT_TOOLTIP_SCRIPT_ID,
+    type WorldMapCitizenDot,
     type WorldMapRenderedIcon,
     type WorldMapStateHolder,
 } from "./WorldMapTypes";
@@ -162,6 +166,8 @@ export function getWorldMapMenuEntriesAt(
     screenX: number,
     screenY: number,
 ): SimpleMenuEntry[] {
+    const citizenEntries = getCitizenMenuEntriesAt(state, screenX | 0, screenY | 0);
+    if (citizenEntries.length > 0) return citizenEntries;
     const icons = getWorldMapIconsAt(state, screenX | 0, screenY | 0);
     const opcodes = [
         MenuOpcode.WorldMap1,
@@ -203,11 +209,63 @@ export function getWorldMapMenuEntriesAt(
     return [];
 }
 
+/**
+ * Right-click menu for citizen dots on the world map (admin). The dots are
+ * recorded by the map renderer each frame; entries call the admin-worldmap
+ * content API (session-token authed, admin-gated server-side).
+ */
+function getCitizenMenuEntriesAt(
+    state: WorldMapStateHolder,
+    screenX: number,
+    screenY: number,
+): SimpleMenuEntry[] {
+    const dots = state.renderedCitizenDots;
+    if (!dots || dots.length === 0) return [];
+    const x = screenX | 0;
+    const y = screenY | 0;
+    let hit: WorldMapCitizenDot | undefined;
+    for (let i = dots.length - 1; i >= 0; i--) {
+        const d = dots[i];
+        if (x >= d.x0 && x <= d.x1 && y >= d.y0 && y <= d.y1) {
+            hit = d;
+            break;
+        }
+    }
+    if (!hit) return [];
+    const username = connectionState.sessionUsername;
+    if (!username) return [];
+    const target = encodeURIComponent(hit.name);
+    const call = (params: string): void => {
+        fetchContent(
+            `/api/admin-worldmap?player=${encodeURIComponent(username)}${params}`,
+        ).catch(() => {
+            /* server gates non-admins; failures are silent on the map */
+        });
+    };
+    const label = WORLD_MAP_CITIZEN_CAT_LABELS[hit.category] ?? "Other";
+    return [
+        {
+            option: "Teleport to",
+            target: `${hit.name} (${label})`,
+            opcode: MenuOpcode.WorldMap1,
+            onClick: () => call(`&action=teleport&target=${target}`),
+        },
+        {
+            option: "Pause/Resume brain",
+            target: hit.name,
+            opcode: MenuOpcode.WorldMap2,
+            onClick: () => call(`&action=toggle-brain&target=${target}`),
+        },
+        { option: "Cancel", opcode: MenuOpcode.Cancel },
+    ];
+}
+
 export function clearWorldMapRenderCaches(
     state: WorldMapStateHolder,
     clearHostRenderCaches: () => void,
 ): void {
     clearHostRenderCaches();
     state.renderedWorldMapIcons = [];
+    state.renderedCitizenDots = [];
     state.hoveredWorldMapIcons.clear();
 }

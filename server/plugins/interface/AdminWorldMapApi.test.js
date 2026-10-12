@@ -3,8 +3,8 @@
 /**
  * AdminWorldMapApi.test.js — admin world map API contracts.
  *
- * Verifies: admin-only access, citizen row shape, teleport/toggle-brain/
- * set-activity/spawn actions, and that failures return { open:false }.
+ * Verifies: admin-only access, citizen-layer toggle, teleport/toggle-brain/
+ * set-activity/spawn actions.
  *
  * Run: node server/plugins/interface/AdminWorldMapApi.test.js
  */
@@ -21,14 +21,13 @@ function stub(rel, exports) {
 
 // --- stubs ---
 const moveToCalls = [];
-const setAttrCalls = [];
-let openAttrValue = "";
+const attrs = new Map();
 
 const adminPlayer = {
   getUsername: () => "Jon",
   getRights: () => ({ isAdmin: () => true }),
-  setAttribute: (k, v) => { setAttrCalls.push([k, v]); if (k === "adminworldmap:open") openAttrValue = v; },
-  getAttribute: (k) => (k === "adminworldmap:open" ? openAttrValue : ""),
+  setAttribute: (k, v) => { attrs.set(k, v); },
+  getAttribute: (k) => attrs.get(k) ?? "",
   moveTo: (loc) => moveToCalls.push(loc),
 };
 const normalPlayer = {
@@ -89,55 +88,48 @@ const fakeApi = {
   registerContentEndpoint: (name, handler) => { endpointHandler = handler; },
 };
 
-require("./AdminWorldMapApi").attach(fakeApi);
+const apiModule = require("./AdminWorldMapApi");
+apiModule.attach(fakeApi);
 assert.ok(endpointHandler, "endpoint registered");
+assert.equal(apiModule.CITIZEN_LAYER_ATTRIBUTE, "worldmap:citizen-layer", "layer attribute exported");
 
 function query(params) {
   const m = new Map(Object.entries(params));
   return { get: (k) => (m.has(k) ? m.get(k) : null) };
 }
 
-// 1. No token -> closed
+// 1. No token -> admin-only error
 let r = endpointHandler(query({}));
-assert.equal(r.open, false, "no token closes");
+assert.ok(r.error, "no token rejected");
 
-// 2. Non-admin token -> closed
-r = endpointHandler(query({ token: "user-token", action: "status" }));
-assert.equal(r.open, false, "non-admin closes");
+// 2. Non-admin token -> rejected
+r = endpointHandler(query({ token: "user-token", action: "layer-state" }));
+assert.ok(r.error, "non-admin rejected");
 
-// 3. Admin status with the open attribute unset -> open:false (closed overlay
-// must never reopen from polling).
-r = endpointHandler(query({ token: "admin-token", action: "status" }));
-assert.equal(r.open, false, "status without open attribute stays closed");
+// 3. Layer defaults ON
+r = endpointHandler(query({ token: "admin-token", action: "layer-state" }));
+assert.equal(r.layer, 1, "layer defaults on");
 
-// 3b. action=open sets the attribute; status then reports open:true.
-r = endpointHandler(query({ token: "admin-token", action: "open" }));
-assert.equal(r.open, true, "open action opens");
-assert.equal(openAttrValue, "1", "open attribute set");
-r = endpointHandler(query({ token: "admin-token", action: "status" }));
-assert.equal(r.open, true, "admin opens");
-assert.ok(Array.isArray(r.citizens), "citizens array");
-assert.equal(r.citizens.length, 1, "one citizen");
-const row = r.citizens[0];
-assert.equal(row.n, "Test Citizen");
-assert.equal(row.x, 3200);
-assert.equal(row.a, "citizen_fish");
-assert.equal(row.k, "misthalin");
-assert.equal(row.o, 0);
-assert.equal(row.b, 0);
-assert.ok(r.stats && r.stats.roster === 1, "stats");
+// 4. Toggle layer off and on
+r = endpointHandler(query({ token: "admin-token", action: "layer", enabled: "0" }));
+assert.equal(r.layer, 0, "layer off");
+assert.ok(r.ok, "layer off ok");
+r = endpointHandler(query({ token: "admin-token", action: "layer-state" }));
+assert.equal(r.layer, 0, "layer stays off");
+r = endpointHandler(query({ token: "admin-token", action: "layer", enabled: "1" }));
+assert.equal(r.layer, 1, "layer on");
 
-// 4. Teleport
+// 5. Teleport
 r = endpointHandler(query({ token: "admin-token", action: "teleport", target: "Test Citizen" }));
 assert.ok(r.ok && r.ok.includes("Test Citizen"), "teleport ok: " + JSON.stringify(r));
 assert.equal(moveToCalls.length, 1, "moveTo called");
 assert.equal(moveToCalls[0].x, 3200, "teleport x");
 
-// 5. Teleport unknown citizen
+// 6. Teleport unknown citizen
 r = endpointHandler(query({ token: "admin-token", action: "teleport", target: "Nobody" }));
 assert.ok(r.error, "unknown citizen errors");
 
-// 6. Toggle brain
+// 7. Toggle brain
 assert.equal(citizenRecord.brainPaused, false);
 r = endpointHandler(query({ token: "admin-token", action: "toggle-brain", target: "Test Citizen" }));
 assert.equal(citizenRecord.brainPaused, true, "brain paused");
@@ -145,7 +137,7 @@ assert.ok(r.ok.includes("paused"));
 r = endpointHandler(query({ token: "admin-token", action: "toggle-brain", target: "Test Citizen" }));
 assert.equal(citizenRecord.brainPaused, false, "brain resumed");
 
-// 7. Set activity
+// 8. Set activity
 r = endpointHandler(query({
   token: "admin-token", action: "set-activity",
   target: "Test Citizen", activity: "citizen_mine",
@@ -153,30 +145,12 @@ r = endpointHandler(query({
 assert.equal(citizenRecord.currentActivityId, "citizen_mine", "activity set");
 assert.ok(r.ok);
 
-// 8. Spawn
+// 9. Spawn
 r = endpointHandler(query({ token: "admin-token", action: "spawn", x: "3000", y: "3000" }));
 assert.ok(r.ok, "spawn ok: " + JSON.stringify(r));
 
-// 9. Spawn without coords
+// 10. Spawn without coords
 r = endpointHandler(query({ token: "admin-token", action: "spawn" }));
 assert.ok(r.error, "spawn needs coords");
 
-// 10. Lightweight state check reflects the attribute without payload.
-r = endpointHandler(query({ token: "admin-token", action: "state" }));
-assert.equal(r.open, true, "state open while attribute set");
-assert.ok(!("citizens" in r), "state carries no citizen payload");
-
-// 11. action=close clears the attribute; status/state then report closed.
-r = endpointHandler(query({ token: "admin-token", action: "close" }));
-assert.equal(r.open, false, "close reports closed");
-assert.equal(openAttrValue, "", "open attribute cleared");
-r = endpointHandler(query({ token: "admin-token", action: "status" }));
-assert.equal(r.open, false, "status closed after close");
-r = endpointHandler(query({ token: "admin-token", action: "state" }));
-assert.equal(r.open, false, "state closed after close");
-
-// 12. Mutating actions report the real open state (no reopen from a teleport).
-r = endpointHandler(query({ token: "admin-token", action: "teleport", target: "Test Citizen" }));
-assert.equal(r.open, false, "teleport does not reopen a closed overlay");
-
-console.log("AdminWorldMapApi.test.js: all 12 checks passed");
+console.log("AdminWorldMapApi.test.js: all 10 checks passed");

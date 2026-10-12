@@ -35,7 +35,7 @@ import {
     updateWorldMapIconHover as updateIconHover,
     type WorldMapIconDeps,
 } from "./WorldMapIconInteraction";
-import type { WorldMapImageTile, WorldMapRenderedIcon, WorldMapRetainTile } from "./WorldMapTypes";
+import type { WorldMapImageTile, WorldMapRenderedIcon, WorldMapRetainTile, WorldMapCitizenDot } from "./WorldMapTypes";
 
 export type WorldMapControllerDeps = {
     getCacheSystem: () => CacheSystem;
@@ -84,6 +84,7 @@ export class WorldMapController {
     worldMapImageRepaintQueued: boolean = false;
     worldMapWidgetUid: number = -1;
     renderedWorldMapIcons: WorldMapRenderedIcon[] = [];
+    renderedCitizenDots: WorldMapCitizenDot[] = [];
     hoveredWorldMapIcons: Map<string, WorldMapRenderedIcon> = new Map();
 
     private readonly iconDeps: WorldMapIconDeps;
@@ -165,6 +166,10 @@ export class WorldMapController {
 
     setRenderedWorldMapIcons(icons: WorldMapRenderedIcon[]): void {
         this.renderedWorldMapIcons = Array.isArray(icons) ? icons : [];
+    }
+
+    setRenderedCitizenDots(dots: WorldMapCitizenDot[]): void {
+        this.renderedCitizenDots = Array.isArray(dots) ? dots : [];
     }
 
     updateWorldMapIconHover(screenX: number, screenY: number): void {

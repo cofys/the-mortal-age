@@ -7,36 +7,34 @@ import { subscribeHandshake } from "../../../network/ServerConnection";
 import { fetchContent } from "../../../network/serverConnection/contentApi";
 import { state as connectionState } from "../../../network/serverConnection/state";
 
-/**
- * Sidebar tab tooltip. Kept as a const so other UI can reference it.
- */
-export const ADMIN_WORLD_MAP_TOOLTIP = "World Map (Admin)";
-
-function WorldMapIcon({ label }: { label: string }): JSX.Element {
+function WorldMapIcon({ label, on }: { label: string; on: boolean }): JSX.Element {
     return (
         <svg className="rl-sidebar-icon-svg" viewBox="0 0 24 24" role="img" aria-label={label}>
-            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="9" fill={on ? "currentColor" : "none"} opacity={on ? 0.35 : 1} />
             <path d="M3.5 9.5h17M3.5 14.5h17M12 3.5c-4.5 4.2-4.5 12.8 0 17M12 3.5c4.5 4.2 4.5 12.8 0 17" />
         </svg>
     );
 }
 
 /**
- * Admin World Map sidebar button (Jon, 2026-10-12): "admin map/menu is not on
- * my sidebar?" — the map was previously only reachable via ::worldmap.
+ * Citizen layer toggle for the game's world map (Jon, 2026-10-12):
+ * "Why didn't you just use the map already in the game, and add an overlay
+ * to it?"
+ *
+ * The old full-screen admin overlay is gone. Citizen dots now render on the
+ * game's own world map (streamed by WorldMapPlayers.plugin.js); right-click a
+ * dot for Teleport / Pause brain. This sidebar button toggles the citizen
+ * layer on/off per admin (server attribute worldmap:citizen-layer, default
+ * on). Open the world map itself with the game's map button or ::worldmap.
  *
  * Admin-only: the button is added/removed reactively based on the handshake's
- * isAdmin flag. The server endpoint is the authority (it returns {open:false}
- * for non-admins), so this is defense-in-depth, not the security boundary.
- *
- * Clicking the button calls action=open on the admin-worldmap endpoint, which
- * sets the adminworldmap:open attribute — the AdminWorldMapOverlay polls for
- * it and renders. No sidebar panel; the overlay is full-screen.
+ * isAdmin flag. The server endpoint is the authority, so this is
+ * defense-in-depth, not the security boundary.
  */
 export class AdminWorldMapPlugin extends Plugin {
     static descriptor: PluginDescriptor = {
         name: "Admin World Map",
-        description: "Live admin world map: all citizens, teleport tools.",
+        description: "Citizen layer toggle for the world map.",
         tags: ["admin", "map", "citizens"],
         configKey: "adminworldmapplugin",
     };
@@ -44,6 +42,7 @@ export class AdminWorldMapPlugin extends Plugin {
     private readonly clientToolbar = inject(ClientToolbar);
     private navButton?: NavigationButton;
     private unsubscribeHandshake?: () => void;
+    private layerOn = true;
 
     protected async startUp(): Promise<void> {
         this.unsubscribeHandshake = subscribeHandshake(({ chatIcons, isAdmin }) => {
@@ -52,7 +51,7 @@ export class AdminWorldMapPlugin extends Plugin {
                     ? isAdmin
                     : Array.isArray(chatIcons) && chatIcons.includes(1);
             if (admin) {
-                this.addButton();
+                void this.refreshLayerState().then(() => this.addButton());
             } else {
                 this.removeButton();
             }
@@ -65,13 +64,22 @@ export class AdminWorldMapPlugin extends Plugin {
         this.removeButton();
     }
 
+    private tooltip(): string {
+        return this.layerOn
+            ? "Citizen map layer: ON — click to hide"
+            : "Citizen map layer: OFF — click to show";
+    }
+
     private addButton(): void {
-        if (this.navButton) return;
+        this.removeButton();
+        const on = this.layerOn;
         this.navButton = NavigationButton.builder()
-            .tooltip(ADMIN_WORLD_MAP_TOOLTIP)
-            .icon(WorldMapIcon)
+            .tooltip(this.tooltip())
+            .icon(({ label }: { label: string }) => (
+                <WorldMapIcon label={label} on={on} />
+            ))
             .priority(2)
-            .onClick(() => void this.openMap())
+            .onClick(() => void this.toggleLayer())
             .build();
         this.clientToolbar.addNavigation(this.navButton);
     }
@@ -81,15 +89,33 @@ export class AdminWorldMapPlugin extends Plugin {
         this.navButton = undefined;
     }
 
-    private async openMap(): Promise<void> {
+    private async apiCall(params: string): Promise<any> {
         const username = connectionState.sessionUsername;
-        if (!username) return;
+        if (!username) return null;
         try {
-            await fetchContent(
-                `/api/admin-worldmap?player=${encodeURIComponent(username)}&action=open`,
+            return await fetchContent(
+                `/api/admin-worldmap?player=${encodeURIComponent(username)}${params}`,
             );
         } catch {
-            // Overlay poll will retry; server gates non-admins anyway.
+            return null;
         }
+    }
+
+    private async refreshLayerState(): Promise<void> {
+        const data = await this.apiCall("&action=layer-state");
+        if (data && typeof data.layer !== "undefined") {
+            this.layerOn = (data.layer | 0) === 1;
+        }
+    }
+
+    private async toggleLayer(): Promise<void> {
+        const data = await this.apiCall(`&action=layer&enabled=${this.layerOn ? "0" : "1"}`);
+        if (data && typeof data.layer !== "undefined") {
+            this.layerOn = (data.layer | 0) === 1;
+        } else {
+            this.layerOn = !this.layerOn;
+        }
+        // Rebuild so the tooltip/icon reflect the new state.
+        this.addButton();
     }
 }

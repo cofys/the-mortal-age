@@ -25,6 +25,45 @@ export type WorldMapRenderedIcon = {
     y1: number;
 };
 
+/**
+ * A citizen dot hit target on the world map, recorded by the map renderer
+ * (renderWidgetTree.ts) so right-clicks can offer admin actions. Screen-space
+ * bounds; name is the citizen username.
+ */
+export type WorldMapCitizenDot = {
+    name: string;
+    category: number;
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+};
+
+/**
+ * Citizen activity-category palette for world map dots. Order MUST match the
+ * server category indexes in WorldMapPlayers.plugin.js
+ * (skilling, idle, social, travel, combat, work, other).
+ */
+export const WORLD_MAP_CITIZEN_CAT_HEX = [
+    "#4caf50", // skilling
+    "#8a8a8a", // idle
+    "#42a5f5", // social
+    "#ffeb3b", // travel
+    "#f44336", // combat
+    "#ff9800", // work
+    "#ba68c8", // other
+] as const;
+
+export const WORLD_MAP_CITIZEN_CAT_LABELS = [
+    "Skilling",
+    "Idle",
+    "Socializing",
+    "Traveling",
+    "Combat",
+    "Working",
+    "Other",
+] as const;
+
 export type WorldMapImageTile = {
     key: string;
     pixels?: Uint8Array;
@@ -54,6 +93,7 @@ export type WorldMapStateHolder = {
     pendingWorldMapDragDisplayX: number | undefined;
     pendingWorldMapDragDisplayY: number | undefined;
     renderedWorldMapIcons: WorldMapRenderedIcon[];
+    renderedCitizenDots: WorldMapCitizenDot[];
     hoveredWorldMapIcons: Map<string, WorldMapRenderedIcon>;
     worldMapImageTiles: Map<number, WorldMapImageTile>;
     worldMapImageAccess: Map<number, number>;
