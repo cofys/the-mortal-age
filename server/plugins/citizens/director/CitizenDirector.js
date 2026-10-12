@@ -314,7 +314,7 @@ const CitizenCivilLaw = require("../lib/CitizenCivilLaw");
 const { tickShoppers } = require("../shop/CitizenShoppers");
 const { tickSurplusSales } = require("../economy/CitizenSurplusSales");
 const { tickWarContributions } = require("../economy/CitizenWarContributions");
-const { configuredSpread } = require("../lib/CitizenTimingDesync");
+const { configuredSpread, slotFor } = require("../lib/CitizenTimingDesync");
 const { tickLodBands } = require("../lib/CitizenTickLod");
 const CitizenBonds = require("../lib/CitizenBonds");
 const CitizenSocialBonds = require("../lib/CitizenSocialBonds");
@@ -1376,7 +1376,7 @@ class CitizenDirector {
           // and wanders idle citizens (15% per tick, 3-5 tiles). Runs for
           // every materialized citizen regardless of schedule phase.
           try {
-            this._proximityMovementTick(record);
+            this._proximityMovementTick(record, this.aiTickCount);
           } catch (error) {
             this.log("director movement failed", { error: String(error?.message ?? error) });
           }
@@ -2097,12 +2097,13 @@ class CitizenDirector {
    * Perf (#7): position sync mutates record.position in place — no
    * per-tick {x,y,z} allocation (created once when missing).
    */
-  _proximityMovementTick(record) {
+  _proximityMovementTick(record, desyncTick = null) {
     const bot = this.getBot(record);
     if (!bot) return;
     // Position sync (Jon 2026-10-12): the data-tier position emerges
     // from where the citizen actually is. Sync from live location so
     // despawn/respawn preserves their real whereabouts — no anchors.
+    // This is cheap (one getLocation) and runs every tick for all online.
     try {
       const loc = bot.getLocation?.();
       if (loc && typeof loc.getX === "function") {
@@ -2126,6 +2127,20 @@ class CitizenDirector {
         if (result?.hasRoute === true) clearMovementRequest(bot);
       } catch {}
       return;
+    }
+    // Random wandering is the expensive part (pathfinding). Desync-gate it
+    // so only ~1/spread of citizens wander per tick instead of all 60.
+    // Without this, 60 citizens x pathfinding = 1500ms tick overrun.
+    const spread = this.desyncSpread();
+    if (desyncTick != null && spread > 1) {
+      const username = record?.username ?? record?.name ?? "";
+      let slot = 0;
+      try {
+        slot = slotFor(username, spread) ?? 0;
+      } catch {}
+      if ((Math.floor(Number(desyncTick)) + slot) % spread !== 0) {
+        return;
+      }
     }
     if (Math.random() < 0.15) {
       try {
