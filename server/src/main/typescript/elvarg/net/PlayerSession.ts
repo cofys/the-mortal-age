@@ -355,6 +355,7 @@ export class PlayerSession {
           bars: npc.getHeadbars?.().length ? npc.getHeadbars() : undefined,
           faceTile: npc.getFaceTile?.() ?? undefined,
           crawl: npc.isCrawling?.() || undefined,
+          modelCustomisation: npc.getModelCustomisationForUpdate?.() ?? undefined,
         };
       })
     );

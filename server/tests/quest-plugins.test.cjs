@@ -173,3 +173,39 @@ test('Current Affairs and Prying Times start gates require every registered prer
   assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'PSw89b' }), false,
     'an available task slot clears the full-ledger condition');
 });
+
+test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
+  const { api: base } = mockApi();
+  const objects = new Map();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (name, actions) => objects.set(name, actions)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/PriestInPeril.Quest')(api);
+  const pass = objects.get('Holy barrier')?.['Pass-through'];
+  assert.equal(typeof pass, 'function');
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const moves = [];
+  const messages = [];
+  let stage = 0;
+  const player = {
+    getAttribute: () => stage,
+    moveTo: (location) => moves.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage: (text) => messages.push(text),
+  };
+  for (stage of [0, 10, 50, quest.completionValue - 1]) {
+    assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
+    assert.deepEqual(moves, [], 'unfinished quests cannot cross');
+    assert.match(messages.at(-1), /complete Priest in Peril/);
+  }
+  for (stage of [quest.completionValue, quest.completionValue + 1]) {
+    assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
+    assert.deepEqual(moves.at(-1), [3423, 3485, 0]);
+    assert.equal(messages.at(-1), 'You pass through the holy barrier.');
+  }
+  const before = [moves.length, messages.length];
+  assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER_2 }), false,
+    'the Hallowed Sepulchre barrier is handled by its own content');
+  assert.deepEqual([moves.length, messages.length], before);
+});

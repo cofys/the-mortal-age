@@ -86,6 +86,7 @@ const DESTINATIONS = {
     teleport("Zulrah", location(2196, 3056), TeleportType.NORMAL),
     teleport("Doom of Mokhaiotl", location(1311, 9531, 1), TeleportType.NORMAL),
     teleport("Vorkath", location(2272, 4052), TeleportType.NORMAL),
+    teleport("Araxxor", location(3658, 9816), TeleportType.NORMAL),
   ],
   [TAB.MINIGAMES]: [
     teleport("Barrows", location(3565, 3315), TeleportType.NORMAL),

@@ -299,6 +299,12 @@ function collectionLogCount(request) {
   if (request.category === "Kalphite Queen") request.count = Math.max(0, Number(request.player.getAttribute(KILL_COUNT_ATTRIBUTE)) || 0);
 }
 
+/** Combat Achievements at login: the kill count kept here (plugins/combatachievements/). */
+function combatAchievementsKillCount({ player, counts }) {
+  const kills = Math.max(0, Number(player.getAttribute(KILL_COUNT_ATTRIBUTE)) || 0);
+  if (kills > 0) counts["Kalphite Queen"] = kills;
+}
+
 module.exports = {
   name: "KalphiteQueen",
   members: true,
@@ -306,6 +312,7 @@ module.exports = {
     pluginApi = api;
     TaskManager = api.getTaskManager();
     api.onCustomEvent("collection-log:category-count", collectionLogCount);
+    api.onCustomEvent("combat-achievements:kill-count", combatAchievementsKillCount);
     ItemOnGroundManager = api.getItemOnGroundManager();
     World = api.getWorld();
     configureAggression();

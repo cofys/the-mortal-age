@@ -1,0 +1,42 @@
+{
+  "guilds": {
+    "misthalin": {
+      "kingdomId": "misthalin",
+      "hallTile": {
+        "x": 3206,
+        "y": 3200,
+        "z": 0
+      },
+      "foundedAt": 1791780198428,
+      "treasury": 0,
+      "reinsuranceFund": 0,
+      "pool": {
+        "status": "sound",
+        "flags": 0,
+        "lastReviewAt": 0,
+        "lastVerdict": null,
+        "certifiedUntil": 0
+      }
+    }
+  },
+  "members": {
+    "alice": {
+      "username": "alice",
+      "kingdomId": "misthalin",
+      "rank": "agent",
+      "joinedAt": 1791780198428,
+      "duesPaidUntil": 1792384998428,
+      "missedDues": 0,
+      "suspended": false,
+      "suspendUntil": 0,
+      "trainingCredits": 0,
+      "reviewsConducted": 0,
+      "expelled": false
+    }
+  },
+  "reviews": {},
+  "reinsuranceClaims": {},
+  "cases": {},
+  "classes": {},
+  "nextId": 1
+}

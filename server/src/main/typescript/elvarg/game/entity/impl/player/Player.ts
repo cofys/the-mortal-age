@@ -820,6 +820,9 @@ export class Player extends Mobile {
     }
 
     public setInterfaceId(interfaceId: number): this {
+        if (this.interfaceId >= 0 && interfaceId >= 0 && this.interfaceId !== interfaceId) {
+            PluginManager.emitCustomEvent("interface:closed", { player: this, interfaceId: this.interfaceId });
+        }
         this.interfaceId = interfaceId;
         return this;
     }

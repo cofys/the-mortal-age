@@ -30,6 +30,16 @@ function itemId(name) {
   return Number.isInteger(id) ? id : null;
 }
 
+// The fletching knife does everything a knife does, and held or worn it cuts logs
+// 1 tick faster after the first item (https://oldschool.runescape.wiki/w/Fletching_knife).
+const KNIFE_IDS = [itemId("KNIFE"), itemId("FLETCHING_KNIFE")];
+
+function fletchingKnifeBonus(player, recipe) {
+  const id = KNIFE_IDS[1];
+  return recipe.fletchingKnifeBonus &&
+    (player.getInventory().contains(id) || player.getEquipment().contains(id)) ? 1 : 0;
+}
+
 function buildRecipe(config) {
   const outputId = itemId(config.output);
   if (!Number.isInteger(outputId)) {
@@ -44,6 +54,7 @@ function buildRecipe(config) {
     }
     requirements.push({
       id: reqItemId,
+      ids: reqItemId === KNIFE_IDS[0] ? KNIFE_IDS : [reqItemId],
       amount: Number.isInteger(req.amount) && req.amount > 0 ? req.amount : 1,
       consume: req.consume !== false,
     });
@@ -59,6 +70,7 @@ function buildRecipe(config) {
     level: config.level,
     xp: config.xp,
     intervalTicks: config.intervalTicks,
+    fletchingKnifeBonus: config.fletchingKnifeBonus === true,
     animation:
       Number.isInteger(config.animationId) && config.animationId >= 0
         ? new Animation(config.animationId)
@@ -124,6 +136,7 @@ const LOG_RECIPE_DEFINITIONS = [
     level: entry.level,
     xp: entry.xp,
     intervalTicks: TICKS_CUT_LOGS,
+    fletchingKnifeBonus: true,
     animationId: 1248,
     requirements: [
       { item: "KNIFE", amount: 1, consume: false },
@@ -593,9 +606,13 @@ function stopFletchingSession(activeSessions, player, resetAnimation = true) {
   }
 }
 
+function heldAmount(inventory, req) {
+  return req.ids.reduce((total, id) => total + inventory.getAmount(id), 0);
+}
+
 function hasRequirements(inventory, recipe) {
   for (const req of recipe.requirements) {
-    if (inventory.getAmount(req.id) < req.amount) {
+    if (heldAmount(inventory, req) < req.amount) {
       return false;
     }
   }
@@ -606,7 +623,7 @@ function maxCraftable(inventory, recipe) {
   let max = Number.MAX_SAFE_INTEGER;
   for (const req of recipe.requirements) {
     if (!req.consume) {
-      if (inventory.getAmount(req.id) <= 0) {
+      if (heldAmount(inventory, req) <= 0) {
         return 0;
       }
       continue;
@@ -756,7 +773,7 @@ class FletchingTask extends Task {
         continue;
       }
 
-      session.nextActionTick = this.cycle + session.interval;
+      session.nextActionTick = this.cycle + session.interval - fletchingKnifeBonus(player, session.recipe);
 
       if (!performFletchingAction(player, session.recipe)) {
         stopFletchingSession(this.activeSessions, player);
@@ -868,9 +885,8 @@ module.exports = {
     api.onItemOnItem((event) => {
       const { player, usedItemId, usedWithItemId } = event;
 
-      const knifeId = itemId("KNIFE");
-      if (usedItemId === knifeId || usedWithItemId === knifeId) {
-        const logId = usedItemId === knifeId ? usedWithItemId : usedItemId;
+      if (KNIFE_IDS.includes(usedItemId) || KNIFE_IDS.includes(usedWithItemId)) {
+        const logId = KNIFE_IDS.includes(usedItemId) ? usedWithItemId : usedItemId;
         const recipes = resolveKnifeOnLogsRecipe(logId);
         if (!recipes) {
           return;

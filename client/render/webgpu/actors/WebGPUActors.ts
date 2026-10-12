@@ -9,6 +9,7 @@ import { getMapSquareId } from "../../../rs/map/MapFileIndex";
 import type { SdMapData } from "../../loader/SdMapData";
 import { MAX_TEXTURES, RENDER_CONSTANTS } from "../../render/constants";
 import { GPU_SHADER_STAGE, SCENE_DEPTH_FORMAT } from "../bindings";
+import { resolveWebGPURenderDistance } from "../frameConfig";
 import type { WebGPUMapSquare } from "../WebGPUMapSquare";
 import type { WebGPURenderer } from "../WebGPURenderer";
 import type { WorldResources } from "../WorldResources";
@@ -253,6 +254,7 @@ export class WebGPUActors {
         const KINDS: { kind: ActorKind; stride: number; cullMode: GPUCullMode }[] = [
             { kind: "npc", stride: 16, cullMode: "back" },
             { kind: "gfx", stride: 12, cullMode: "none" },
+            { kind: "projectile", stride: 12, cullMode: "none" },
             { kind: "player", stride: 16, cullMode: "back" },
         ];
         const createPipelines = (alpha: boolean, mode: Mode): Map<ActorKind, GPURenderPipeline> => {
@@ -887,6 +889,7 @@ export class WebGPUActors {
                 dataIndex,
                 subX,
                 subY,
+                "projectile",
             );
         }
     }
@@ -973,11 +976,12 @@ export class WebGPUActors {
         dataIndex: number,
         subX: number,
         subY: number,
+        kind: "gfx" | "projectile" = "gfx",
     ): void {
         const cache = this.gfx?.cache;
         if (!cache) return;
         const opaqueGeometry = cache.ensureFrameGeometry(spotId, frameIdx, false, frameCycle);
-        if (opaqueGeometry && this.pipelines.get("gfx")?.[0]) {
+        if (opaqueGeometry && this.pipelines.get(kind)?.[0]) {
             const gpu = this.geometry?.getOrCreate(
                 `s:${spotId}|${frameIdx}|${frameCycle}|o`,
                 opaqueGeometry.vertices,
@@ -985,7 +989,7 @@ export class WebGPUActors {
             );
             if (gpu) {
                 state.opaque.push({
-                    pipeline: this.pipelines.get("gfx")![0],
+                    pipeline: this.pipelines.get(kind)![0],
                     geometry: gpu,
                     entry: this.actorEntry(
                         state,
@@ -1001,7 +1005,7 @@ export class WebGPUActors {
             }
         }
         const alphaGeometry = cache.ensureFrameGeometry(spotId, frameIdx, true, frameCycle);
-        if (alphaGeometry && this.pipelines.get("gfx")?.[1]) {
+        if (alphaGeometry && this.pipelines.get(kind)?.[1]) {
             const gpu = this.geometry?.getOrCreate(
                 `s:${spotId}|${frameIdx}|${frameCycle}|a`,
                 alphaGeometry.vertices,
@@ -1009,7 +1013,7 @@ export class WebGPUActors {
             );
             if (gpu) {
                 state.alpha.push({
-                    pipeline: this.pipelines.get("gfx")![1],
+                    pipeline: this.pipelines.get(kind)![1],
                     geometry: gpu,
                     entry: this.actorEntry(
                         state,
@@ -1063,9 +1067,7 @@ export class WebGPUActors {
     }
 
     private resolveRenderDistanceTiles(): number {
-        const client = this.renderer.osrsClient;
-        const base = Math.max(0, Math.min(90, client.renderDistance | 0));
-        return Math.max(25, base);
+        return resolveWebGPURenderDistance(this.renderer);
     }
 
     /** Port of draw2.ts getMapZoneDistanceFromPoint / isMapWithinRenderDistance. */

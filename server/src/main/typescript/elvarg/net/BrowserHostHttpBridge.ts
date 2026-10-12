@@ -13,6 +13,10 @@ addEventListener("message", function connect(event) {
   let closed = false;
   let sendTail = Promise.resolve();
   let contentRequests = 0;
+  // The host pauses polling while its peer drains slowly, so unsent frames stay
+  // queued on the server, where outbound backpressure can see them.
+  let paused;
+  let resumePoll;
   const fetchContent = async (request) => {
     const { id, path } = request;
     if (!Number.isSafeInteger(id) || typeof path !== "string" || path.length > 2048 ||
@@ -53,7 +57,7 @@ addEventListener("message", function connect(event) {
     if (data.byteLength) port.postMessage({ type: "message", data }, [data]);
   };
   const poll = async () => {
-    while (!closed) await pollOnce();
+    while (!closed) await (paused || pollOnce());
   };
   port.onmessage = (event) => {
     if (closed) return;
@@ -67,6 +71,11 @@ addEventListener("message", function connect(event) {
         if (!response.ok) throw new Error("WebContainer HTTP send failed: " + response.status);
         port.postMessage({ type: "sent", bytes });
       }).catch(fail);
+    } else if (event.data?.type === "pause") {
+      if (!paused) paused = new Promise((resolve) => { resumePoll = resolve; });
+    } else if (event.data?.type === "resume") {
+      paused = undefined;
+      resumePoll?.();
     } else if (event.data?.type === "close") {
       closed = true;
       fetch("/browser-host/session/" + sessionId, { method: "DELETE", keepalive: true })

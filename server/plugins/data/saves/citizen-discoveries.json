@@ -1,0 +1,17 @@
+{
+  "discoveries": {
+    "disc-1": {
+      "id": "disc-1",
+      "type": "dungeon_entrance",
+      "x": 3200,
+      "y": 3200,
+      "z": 0,
+      "discoverer": "Alice",
+      "name": "cave",
+      "foundAt": 1791780176357,
+      "claimedBy": null,
+      "mappedBy": null,
+      "tradeRouteAdopted": false
+    }
+  }
+}

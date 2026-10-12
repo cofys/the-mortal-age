@@ -27,6 +27,7 @@ import { AnimationFrames } from "../AnimationFrames";
 import { DrawRange, NULL_DRAW_RANGE, newDrawRange } from "../DrawRange";
 import { ModelHashBuffer, getModelHash } from "../buffer/ModelHashBuffer";
 import { buildActorNormals } from "../buffer/ActorNormals";
+import { HD_OBJECT_LIGHTS_BY_ID } from "../../game/plugins/hd/hdObjectLightData";
 import {
     ContourGroundType,
     DrawCommand,
@@ -655,7 +656,8 @@ function addSceneModels(
     const groupedModels = new Map<string, SceneModel[]>();
     for (const sceneModel of sceneModels) {
         const model = sceneModel.model;
-        const hash = `${getModelHash(modelHashBuf, model)}:${Number(!!sceneModel.doubleSided)}:${Math.floor(sceneModel.sceneX / 1024)}:${Math.floor(sceneModel.sceneZ / 1024)}`;
+        const lightId = HD_OBJECT_LIGHTS_BY_ID[sceneModel.interactId] ? sceneModel.interactId : -1;
+        const hash = `${getModelHash(modelHashBuf, model)}:${lightId}:${Number(!!sceneModel.doubleSided)}:${Math.floor(sceneModel.sceneX / 1024)}:${Math.floor(sceneModel.sceneZ / 1024)}`;
         const locs = groupedModels.get(hash);
         if (locs) {
             locs.push(sceneModel);
@@ -721,7 +723,7 @@ function addSceneModels(
             createModelGroups(modelGroupMap, instancedModels, false);
         } else if (opaqueFaces.length > 0) {
             const indexOffset = sceneBuf.indexByteOffset();
-            sceneBuf.addModel(model, opaqueFaces, undefined, true, undefined, doubleSided);
+            sceneBuf.addModel(model, opaqueFaces, undefined, true, undefined, doubleSided, sceneModels[0].interactId);
             const elementCount = (sceneBuf.indexByteOffset() - indexOffset) / 4;
 
             // Group instanced models by level AND planeCullLevel to keep CPU plane-culling accurate per draw range
@@ -774,7 +776,7 @@ function addSceneModels(
             createModelGroups(modelGroupMap, instancedModels, true);
         } else if (transparentFaces.length > 0) {
             const indexOffset = sceneBuf.indexByteOffset();
-            sceneBuf.addModel(model, transparentFaces, undefined, true, undefined, doubleSided);
+            sceneBuf.addModel(model, transparentFaces, undefined, true, undefined, doubleSided, sceneModels[0].interactId);
             const elementCount = (sceneBuf.indexByteOffset() - indexOffset) / 4;
 
             // Group instanced models by level AND planeCullLevel for transparent path as well
@@ -920,8 +922,8 @@ function addLocAnimationFrames(
             i,
         );
         if (model) {
-            frames[i] = sceneBuf.addModelAnimFrame(model, false, undefined, doubleSided);
-            framesAlpha[i] = sceneBuf.addModelAnimFrame(model, true, undefined, doubleSided);
+            frames[i] = sceneBuf.addModelAnimFrame(model, false, undefined, doubleSided, locType.id);
+            framesAlpha[i] = sceneBuf.addModelAnimFrame(model, true, undefined, doubleSided, locType.id);
             if (framesAlpha[i][1] > 0) {
                 alphaFrameCount++;
             }

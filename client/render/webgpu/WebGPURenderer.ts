@@ -13,6 +13,7 @@ import type {
 import { OsrsRendererType, WEBGPU } from "../../game/GameRenderers";
 import type { IProjectileManager } from "../../game/interfaces/IProjectileManager";
 import type { Ray } from "../../game/math/Raycast";
+import type { Frustum } from "../../game/Frustum";
 import type { OsrsClient } from "../../game/OsrsClient";
 import type { PlayerSpotAnimationEvent } from "../../game/sync/PlayerSyncTypes";
 import { flushPackets } from "../../network/packet";
@@ -25,7 +26,7 @@ import { SdMapLoaderInput } from "../loader/SdMapLoaderInput";
 import type { WorldEntityAnimator } from "../WorldEntityAnimator";
 import { pickSeaPoint, projectDeckToWorld, updateWorldEntityMotion } from "../render/worldEntityMotion";
 import { getServerTickPhaseNow } from "../../network/serverConnection/timing";
-import { WebGPUMapSquare } from "./WebGPUMapSquare";
+import { WebGPUMapSquare, type SceneryDrawContext } from "./WebGPUMapSquare";
 import { resolveFogRange } from "../RenderDistancePolicy";
 import { WorldResources } from "./WorldResources";
 import { WebGPUActors } from "./actors/WebGPUActors";
@@ -45,7 +46,7 @@ import {
 import { environmentAt } from "../render/environment";
 import { GPU_TEXTURE_USAGE, SCENE_DEPTH_FORMAT, SCENE_GROUP, WORLD_TEXTURES_GROUP } from "./bindings";
 import { getControlledPlayerEcsIndex, updateFollowCamera } from "./camera";
-import { computeWebGPURoofPlaneLimit, resolveWebGPURenderDistance } from "./frameConfig";
+import { computeWebGPURoofPlaneLimit, resolveWebGPULodDistance, resolveWebGPURenderDistance } from "./frameConfig";
 import { WebGPUOverlays } from "./overlays/WebGPUOverlays";
 import { LocUpdates, type LocReloadGroup } from "./locUpdates";
 import { getClientCycle } from "../../network/ServerConnection";
@@ -76,9 +77,9 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     format!: GPUTextureFormat;
 
     private world?: WorldResources;
-    /** This frame's visible maps and roof limit, for drawSceneDepth during beforeScene. */
-    private frameVisibleMaps: readonly WebGPUMapSquare[] = [];
+    /** This frame's roof limit and culling inputs, reused by scene and shadow draws. */
     private frameRoofPlaneLimit = 3;
+    private frameScenery?: SceneryDrawContext;
     private depthTexture?: GPUTexture;
     private depthView?: GPUTextureView;
     private depthWidth: number = 0;
@@ -632,10 +633,12 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
                 this.osrsClient.camera.getPosZ(),
                 this.osrsClient.camera,
                 this.stats.frameCount,
-                this.osrsClient.mapRadius,
+                Math.max(this.osrsClient.mapRadius, Math.ceil((resolveWebGPURenderDistance(this) + 32) / 64)),
                 -1,
                 -1,
-                this.osrsClient.expandedMapLoading | 0,
+                Math.max(this.osrsClient.expandedMapLoading | 0,
+                    this.osrsClient.hdPlugin?.isEnabled() ? Math.ceil((resolveWebGPURenderDistance(this) - 25) / 8) : 0),
+                resolveWebGPURenderDistance(this),
             );
             this.updateSkyColor();
             for (const map of this.mapManager.visibleMaps) {
@@ -671,8 +674,19 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         const encoder = this.device.createCommandEncoder();
         const visible = loggedIn ? this.mapManager.visibleMaps : [];
         const roofPlaneLimit = loggedIn ? computeWebGPURoofPlaneLimit(this) : 3;
-        this.frameVisibleMaps = visible;
         this.frameRoofPlaneLimit = roofPlaneLimit;
+        const camera = this.osrsClient.camera;
+        const bounds = this.mapManager.getGridTileBounds();
+        const tileX = bounds ? Math.max(bounds.minX, Math.min(bounds.maxX - 1, Math.floor(camera.getPosX())))
+            : Math.floor(camera.getPosX());
+        const tileZ = bounds ? Math.max(bounds.minY, Math.min(bounds.maxY - 1, Math.floor(camera.getPosZ())))
+            : Math.floor(camera.getPosZ());
+        this.frameScenery = {
+            tileX, tileZ,
+            distance: world.sceneData[60] + Math.max(Math.abs(tileX - this.playerPosUni[0]),
+                Math.abs(tileZ - this.playerPosUni[1])),
+            lodDistance: resolveWebGPULodDistance(this), camera: camera.frustum,
+        };
 
         // The extension's own passes (117 HD: uniforms, lights, shadow map) go in the same
         // encoder, before the scene pass that samples them.
@@ -726,13 +740,13 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         if (loggedIn) {
             for (let i = 0; i < visible.length; i++) {
                 if (visible[i].canRender(this.stats.frameCount)) {
-                    visible[i].drawOpaque(pass, roofPlaneLimit);
+                    visible[i].drawOpaque(pass, roofPlaneLimit, this.frameScenery);
                 }
             }
             this.actors?.drawOpaque(pass);
             for (let i = visible.length - 1; i >= 0; i--) {
                 if (visible[i].canRender(this.stats.frameCount)) {
-                    visible[i].drawAlpha(pass, roofPlaneLimit);
+                    visible[i].drawAlpha(pass, roofPlaneLimit, this.frameScenery);
                 }
             }
             this.actors?.drawAlpha(pass);
@@ -766,22 +780,34 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     }
 
     /**
-     * Draws this frame's world and actors with the scene extension's depth pipelines into
-     * `pass` (a depth-only pass the extension began), in the WebGL drawActors order: world
-     * opaque, world alpha, actors. A no-op without a depth shader.
+     * Draws full-detail loaded scenery into the extension's cached world-shadow target.
      */
-    drawSceneDepth(pass: GPURenderPassEncoder): void {
+    drawWorldDepth(pass: GPURenderPassEncoder, shadow: Frustum): void {
+        const world = this.world;
+        if (!world?.depthTextureBindGroup || !this.frameScenery) return;
+        pass.setBindGroup(SCENE_GROUP, world.sceneBindGroup);
+        pass.setBindGroup(WORLD_TEXTURES_GROUP, world.depthTextureBindGroup);
+        const visibility = { ...this.frameScenery, shadow };
+        const cycle = getClientCycle() | 0;
+        // Loaded off-screen geometry can still cast into the light's view.
+        for (const map of this.mapManager.mapSquares.values()) {
+            if (map.canRender(this.stats.frameCount)) {
+                map.updateAnimatedLocs(this.osrsClient.seqFrameLoader, cycle);
+                map.drawDepth(pass, this.frameRoofPlaneLimit, visibility);
+            }
+        }
+    }
+
+    drawActorDepth(pass: GPURenderPassEncoder): void {
         const world = this.world;
         if (!world?.depthTextureBindGroup) return;
         pass.setBindGroup(SCENE_GROUP, world.sceneBindGroup);
         pass.setBindGroup(WORLD_TEXTURES_GROUP, world.depthTextureBindGroup);
-        const visible = this.frameVisibleMaps;
-        for (let i = 0; i < visible.length; i++) {
-            if (visible[i].canRender(this.stats.frameCount)) {
-                visible[i].drawDepth(pass, this.frameRoofPlaneLimit);
-            }
-        }
         this.actors?.drawDepth(pass);
+    }
+
+    getRoofPlaneLimit(): number {
+        return this.frameRoofPlaneLimit;
     }
 
     hasPendingMapStreamingWork(): boolean {

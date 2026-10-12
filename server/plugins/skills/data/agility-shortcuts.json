@@ -3698,6 +3698,28 @@
           {"anim":-1}
         ]
       }
+    },
+    {
+      "name": "Araxxor lair web tunnel (in)",
+      "object": 54161,
+      "level": 1,
+      "render": "LONG_CRAWL",
+      "steps": [
+        {"sound":2454},
+        {"walk":[[3647,9815]]}
+      ],
+      "note": "The squeeze-through into Araxxor's lair (OSRS Wiki); crawl movement and ends ours"
+    },
+    {
+      "name": "Araxxor lair web tunnel (out)",
+      "object": 54274,
+      "level": 1,
+      "render": "LONG_CRAWL",
+      "steps": [
+        {"sound":2454},
+        {"walk":[[3658,9815]]}
+      ],
+      "note": "The squeeze-through out of Araxxor's lair (OSRS Wiki); crawl movement and ends ours"
     }
   ]
 }

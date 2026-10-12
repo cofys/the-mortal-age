@@ -1,7 +1,9 @@
 import type { MapSquare } from "../../game/MapManager";
+import type { Frustum } from "../../game/Frustum";
 import { getMapSquareId } from "../../rs/map/MapFileIndex";
 import { Scene } from "../../rs/scene/Scene";
 import type { DrawRange } from "../DrawRange";
+import { sceneryRangeVisible } from "../SceneryVisibility";
 import { LocAnimated } from "../loc/LocAnimated";
 import type { SeqFrameLoader } from "../../rs/model/seq/SeqFrameLoader";
 import type { SeqTypeLoader } from "../../rs/config/seqtype/SeqTypeLoader";
@@ -27,7 +29,10 @@ const MAP_UNIFORM_USED_BYTES = 96;
 const MAP_UNIFORM_TRANSFORM_OFFSET = 92;
 const WORLD_ENTITY_ENABLED = new Uint32Array([1]);
 
+type BatchKind = "opaque" | "alpha" | "opaqueLod" | "alphaLod";
+
 type MapDrawBatch = {
+    lod: boolean;
     vertexBuffer: GPUBuffer;
     indexBuffer: GPUBuffer;
     ranges: DrawRange[];
@@ -48,6 +53,8 @@ const GROUP_ORDER: GeometryGroupKind[] = ["scene", "door", "loc"];
 type GeometryGroup = {
     opaque?: MapDrawBatch;
     alpha?: MapDrawBatch;
+    opaqueLod?: MapDrawBatch;
+    alphaLod?: MapDrawBatch;
     buffers: GPUBuffer[];
     textures: GPUTexture[];
     /** This group's MapUniforms buffer (one entry per range) and its entry count. */
@@ -64,7 +71,22 @@ type GeometryInput = {
     alphaModelInfo: Uint16Array;
     alphaRanges: DrawRange[];
     alphaPlanes: Uint8Array | undefined;
+    opaqueLodModelInfo: Uint16Array;
+    opaqueLodRanges: DrawRange[];
+    opaqueLodPlanes: Uint8Array | undefined;
+    alphaLodModelInfo: Uint16Array;
+    alphaLodRanges: DrawRange[];
+    alphaLodPlanes: Uint8Array | undefined;
 };
+
+export interface SceneryDrawContext {
+    tileX: number;
+    tileZ: number;
+    distance: number;
+    lodDistance: number;
+    camera: Frustum;
+    shadow?: Frustum;
+}
 
 type PendingGeometry = {
     vertexBuffer: GPUBuffer;
@@ -224,6 +246,30 @@ function createGroundMaterialTexture(
     return texture;
 }
 
+function createMapTextureBindGroup(
+    device: GPUDevice, resources: WorldResources, modelInfo: GPUTexture,
+    heightMapTexture: GPUTexture, waterMaskTexture: GPUTexture, groundMaterialTexture: GPUTexture,
+): GPUBindGroup {
+    return device.createBindGroup({
+        layout: resources.mapTexturesLayout,
+        entries: [
+            { binding: MAP_TEXTURE_BINDINGS.modelInfo, resource: modelInfo.createView() },
+            {
+                binding: MAP_TEXTURE_BINDINGS.heightMap,
+                resource: heightMapTexture.createView({ dimension: "2d-array" }),
+            },
+            {
+                binding: MAP_TEXTURE_BINDINGS.waterMask,
+                resource: waterMaskTexture.createView({ dimension: "2d-array" }),
+            },
+            {
+                binding: MAP_TEXTURE_BINDINGS.groundMaterial,
+                resource: groundMaterialTexture.createView({ dimension: "2d-array" }),
+            },
+        ],
+    });
+}
+
 function createPendingGeometry(
     device: GPUDevice,
     resources: WorldResources,
@@ -248,33 +294,14 @@ function createPendingGeometry(
     const opaqueTexture = createModelInfoTexture(device, input.opaqueModelInfo);
     const alphaTexture = createModelInfoTexture(device, input.alphaModelInfo);
 
-    const createBindGroup = (modelInfo: GPUTexture): GPUBindGroup =>
-        device.createBindGroup({
-            layout: resources.mapTexturesLayout,
-            entries: [
-                { binding: MAP_TEXTURE_BINDINGS.modelInfo, resource: modelInfo.createView() },
-                {
-                    binding: MAP_TEXTURE_BINDINGS.heightMap,
-                    resource: heightMapTexture.createView({ dimension: "2d-array" }),
-                },
-                {
-                    binding: MAP_TEXTURE_BINDINGS.waterMask,
-                    resource: waterMaskTexture.createView({ dimension: "2d-array" }),
-                },
-                {
-                    binding: MAP_TEXTURE_BINDINGS.groundMaterial,
-                    resource: groundMaterialTexture.createView({ dimension: "2d-array" }),
-                },
-            ],
-        });
 
     return {
         vertexBuffer,
         indexBuffer,
         opaqueTexture,
         alphaTexture,
-        opaqueBindGroup: createBindGroup(opaqueTexture),
-        alphaBindGroup: createBindGroup(alphaTexture),
+        opaqueBindGroup: createMapTextureBindGroup(device, resources, opaqueTexture, heightMapTexture, waterMaskTexture, groundMaterialTexture),
+        alphaBindGroup: createMapTextureBindGroup(device, resources, alphaTexture, heightMapTexture, waterMaskTexture, groundMaterialTexture),
         opaqueRanges: input.opaqueRanges,
         opaquePlanes: input.opaquePlanes,
         alphaRanges: input.alphaRanges,
@@ -340,7 +367,8 @@ export class WebGPUMapSquare implements MapSquare {
     /** Animated locs: each swaps its draw range in the loc batch for its current frame. */
     locsAnimated: LocAnimated[] = [];
     /** The loc geometry's draw ranges (shared with the loc batches), which animations rewrite. */
-    private locRanges?: { opaque: DrawRange[]; alpha: DrawRange[] };
+    private locRanges?: { opaque: DrawRange[]; alpha: DrawRange[]; opaqueLod: DrawRange[]; alphaLod: DrawRange[] };
+    private worldEntity = false;
 
     private locIdsAtLocalBuffer: number[] = [];
     private locTypeRotsAtLocalBuffer: number[] = [];
@@ -459,6 +487,12 @@ export class WebGPUMapSquare implements MapSquare {
                 alphaModelInfo: mapData.modelTextureDataAlpha,
                 alphaRanges: mapData.drawRangesAlpha,
                 alphaPlanes: mapData.drawRangesAlphaPlanes,
+                opaqueLodModelInfo: mapData.modelTextureDataLod,
+                opaqueLodRanges: mapData.drawRangesLod,
+                opaqueLodPlanes: mapData.drawRangesLodPlanes,
+                alphaLodModelInfo: mapData.modelTextureDataLodAlpha,
+                alphaLodRanges: mapData.drawRangesLodAlpha,
+                alphaLodPlanes: mapData.drawRangesLodAlphaPlanes,
             };
         }
         if (kind === "door") {
@@ -471,6 +505,12 @@ export class WebGPUMapSquare implements MapSquare {
                 alphaModelInfo: mapData.doorModelTextureDataAlpha,
                 alphaRanges: mapData.doorDrawRangesAlpha,
                 alphaPlanes: mapData.doorDrawRangesAlphaPlanes,
+                opaqueLodModelInfo: mapData.doorModelTextureDataLod,
+                opaqueLodRanges: mapData.doorDrawRangesLod,
+                opaqueLodPlanes: mapData.doorDrawRangesLodPlanes,
+                alphaLodModelInfo: mapData.doorModelTextureDataLodAlpha,
+                alphaLodRanges: mapData.doorDrawRangesLodAlpha,
+                alphaLodPlanes: mapData.doorDrawRangesLodAlphaPlanes,
             };
         }
         const loc = mapData.loc;
@@ -484,6 +524,12 @@ export class WebGPUMapSquare implements MapSquare {
             alphaModelInfo: loc.modelTextureDataAlpha,
             alphaRanges: loc.drawRangesAlpha,
             alphaPlanes: loc.drawRangesAlphaPlanes,
+            opaqueLodModelInfo: loc.modelTextureDataLod,
+            opaqueLodRanges: loc.drawRangesLod,
+            opaqueLodPlanes: loc.drawRangesLodPlanes,
+            alphaLodModelInfo: loc.modelTextureDataLodAlpha,
+            alphaLodRanges: loc.drawRangesLodAlpha,
+            alphaLodPlanes: loc.drawRangesLodAlphaPlanes,
         };
     }
 
@@ -503,22 +549,42 @@ export class WebGPUMapSquare implements MapSquare {
               )
             : undefined;
         if (geometry) {
-            const entries = geometry.opaqueRanges.length + geometry.alphaRanges.length;
             const group: GeometryGroup = {
                 buffers: [geometry.vertexBuffer, geometry.indexBuffer],
                 textures: [geometry.opaqueTexture, geometry.alphaTexture],
             };
+            const batches: { key: BatchKind; ranges: DrawRange[]; planes: Uint8Array | undefined;
+                bindGroup: GPUBindGroup; lod: boolean }[] = [
+                { key: "opaque", ranges: geometry.opaqueRanges, planes: geometry.opaquePlanes,
+                    bindGroup: geometry.opaqueBindGroup, lod: false },
+                { key: "alpha", ranges: geometry.alphaRanges, planes: geometry.alphaPlanes,
+                    bindGroup: geometry.alphaBindGroup, lod: false },
+            ];
+            for (const alpha of [false, true]) {
+                const ranges = (alpha ? input!.alphaLodRanges : input!.opaqueLodRanges) ?? [];
+                if (ranges.length === 0) continue;
+                const texture = createModelInfoTexture(this.device,
+                    alpha ? input!.alphaLodModelInfo : input!.opaqueLodModelInfo);
+                group.textures.push(texture);
+                batches.push({
+                    key: alpha ? "alphaLod" : "opaqueLod", ranges,
+                    planes: alpha ? input!.alphaLodPlanes : input!.opaqueLodPlanes,
+                    bindGroup: createMapTextureBindGroup(this.device, this.resources, texture,
+                        this.heightMapTexture, this.waterMaskTexture, this.groundMaterialTexture),
+                    lod: true,
+                });
+            }
+            const entries = batches.reduce((sum, batch) => sum + batch.ranges.length, 0);
             if (entries > 0) {
-                // Each pass's entries start at its own base; u_drawId is the index within it.
                 const arrayBuffer = new ArrayBuffer(entries * MAP_UNIFORM_STRIDE);
                 const floats = new Float32Array(arrayBuffer);
                 const view = new DataView(arrayBuffer);
                 let entry = 0;
-                for (let i = 0; i < geometry.opaqueRanges.length; i++) {
-                    writeMapUniform(floats, view, entry++, i, this.renderPosX, this.renderPosY, this.timeLoaded, this.borderSize);
-                }
-                for (let i = 0; i < geometry.alphaRanges.length; i++) {
-                    writeMapUniform(floats, view, entry++, i, this.renderPosX, this.renderPosY, this.timeLoaded, this.borderSize);
+                for (const batch of batches) {
+                    for (let i = 0; i < batch.ranges.length; i++) {
+                        writeMapUniform(floats, view, entry++, i, this.renderPosX,
+                            this.renderPosY, this.timeLoaded, this.borderSize);
+                    }
                 }
                 const uniformBuffer = this.device.createBuffer({
                     size: arrayBuffer.byteLength,
@@ -530,39 +596,27 @@ export class WebGPUMapSquare implements MapSquare {
                 group.uniformEntries = entries;
                 const uniformsBindGroup = this.device.createBindGroup({
                     layout: this.resources.mapUniformsLayout,
-                    entries: [
-                        {
-                            binding: 0,
-                            resource: { buffer: uniformBuffer, offset: 0, size: MAP_UNIFORM_USED_BYTES },
-                        },
-                    ],
+                    entries: [{ binding: 0,
+                        resource: { buffer: uniformBuffer, offset: 0, size: MAP_UNIFORM_USED_BYTES } }],
                 });
-                if (geometry.opaqueRanges.length > 0) {
-                    group.opaque = {
-                        vertexBuffer: geometry.vertexBuffer,
-                        indexBuffer: geometry.indexBuffer,
-                        ranges: geometry.opaqueRanges,
-                        planes: geometry.opaquePlanes,
-                        bindGroup: geometry.opaqueBindGroup,
-                        uniformsBindGroup,
-                        uniformBase: 0,
-                    };
-                }
-                if (geometry.alphaRanges.length > 0) {
-                    group.alpha = {
-                        vertexBuffer: geometry.vertexBuffer,
-                        indexBuffer: geometry.indexBuffer,
-                        ranges: geometry.alphaRanges,
-                        planes: geometry.alphaPlanes,
-                        bindGroup: geometry.alphaBindGroup,
-                        uniformsBindGroup,
-                        uniformBase: geometry.opaqueRanges.length,
-                    };
+                entry = 0;
+                for (const batch of batches) {
+                    if (batch.ranges.length > 0) {
+                        group[batch.key] = {
+                            vertexBuffer: geometry.vertexBuffer, indexBuffer: geometry.indexBuffer,
+                            ranges: batch.ranges, planes: batch.planes, bindGroup: batch.bindGroup,
+                            uniformsBindGroup, uniformBase: entry, lod: batch.lod,
+                        };
+                    }
+                    entry += batch.ranges.length;
                 }
             }
             this.groups.set(kind, group);
             if (kind === "loc" && mapData.loc) {
-                this.locRanges = { opaque: mapData.loc.drawRanges, alpha: mapData.loc.drawRangesAlpha };
+                this.locRanges = {
+                    opaque: mapData.loc.drawRanges, alpha: mapData.loc.drawRangesAlpha,
+                    opaqueLod: mapData.loc.drawRangesLod, alphaLod: mapData.loc.drawRangesLodAlpha,
+                };
             }
         }
         this.opaqueBatches.length = 0;
@@ -570,7 +624,9 @@ export class WebGPUMapSquare implements MapSquare {
         for (const k of GROUP_ORDER) {
             const group = this.groups.get(k);
             if (group?.opaque) this.opaqueBatches.push(group.opaque);
+            if (group?.opaqueLod) this.opaqueBatches.push(group.opaqueLod);
             if (group?.alpha) this.alphaBatches.push(group.alpha);
+            if (group?.alphaLod) this.alphaBatches.push(group.alphaLod);
         }
     }
 
@@ -637,8 +693,18 @@ export class WebGPUMapSquare implements MapSquare {
             loc.update(seqFrameLoader, cycle);
             for (const alpha of [false, true]) {
                 const frame = (alpha ? loc.anim.framesAlpha : loc.anim.frames)?.[loc.frame | 0];
-                const index = loc.getDrawRangeIndex(alpha, false, false);
-                if (frame && index !== -1) (alpha ? ranges.alpha : ranges.opaque)[index] = frame;
+                for (const lod of [false, true]) {
+                    const index = loc.getDrawRangeIndex(alpha, false, lod);
+                    const target = lod ? (alpha ? ranges.alphaLod : ranges.opaqueLod)
+                        : (alpha ? ranges.alpha : ranges.opaque);
+                    const range = index !== -1 ? target?.[index] : undefined;
+                    // Frames are shared; retain each loc's own chunk identity for exclusive LOD.
+                    if (frame && range) {
+                        range[0] = frame[0];
+                        range[1] = frame[1];
+                        range[2] = frame[2];
+                    }
+                }
             }
         }
     }
@@ -800,6 +866,7 @@ export class WebGPUMapSquare implements MapSquare {
      */
     setWorldEntityTransform(transform: Float32Array | undefined): void {
         if (!transform) return;
+        this.worldEntity = true;
         for (const group of this.groups.values()) {
             const buffer = group.uniformBuffer;
             const entries = group.uniformEntries ?? 0;
@@ -822,21 +889,21 @@ export class WebGPUMapSquare implements MapSquare {
         }
     }
 
-    drawOpaque(pass: GPURenderPassEncoder, roofPlaneLimit: number): void {
-        this.drawBatches(pass, this.opaqueBatches, roofPlaneLimit, false);
+    drawOpaque(pass: GPURenderPassEncoder, roofPlaneLimit: number, visibility: SceneryDrawContext): void {
+        this.drawBatches(pass, this.opaqueBatches, roofPlaneLimit, false, visibility);
     }
 
-    drawAlpha(pass: GPURenderPassEncoder, roofPlaneLimit: number): void {
-        this.drawBatches(pass, this.alphaBatches, roofPlaneLimit, true);
+    drawAlpha(pass: GPURenderPassEncoder, roofPlaneLimit: number, visibility: SceneryDrawContext): void {
+        this.drawBatches(pass, this.alphaBatches, roofPlaneLimit, true, visibility);
     }
 
     /**
      * Scene-extension depth pass: opaque then alpha ranges, the WebGL draw order of
      * renderOpaquePass()/renderTransparentPass(), with the extension's depth pipelines.
      */
-    drawDepth(pass: GPURenderPassEncoder, roofPlaneLimit: number): void {
-        this.drawBatches(pass, this.opaqueBatches, roofPlaneLimit, false, true);
-        this.drawBatches(pass, this.alphaBatches, roofPlaneLimit, true, true);
+    drawDepth(pass: GPURenderPassEncoder, roofPlaneLimit: number, visibility: SceneryDrawContext): void {
+        this.drawBatches(pass, this.opaqueBatches, roofPlaneLimit, false, visibility, true);
+        this.drawBatches(pass, this.alphaBatches, roofPlaneLimit, true, visibility, true);
     }
 
     delete(): void {
@@ -853,6 +920,7 @@ export class WebGPUMapSquare implements MapSquare {
         batches: MapDrawBatch[],
         roofPlaneLimit: number,
         alpha: boolean,
+        visibility: SceneryDrawContext,
         depth: boolean = false,
     ): void {
         if (batches.length === 0) return;
@@ -874,22 +942,40 @@ export class WebGPUMapSquare implements MapSquare {
         const cullPlanes = roofPlaneLimit < 3;
         const cullLimit = roofPlaneLimit | 0;
 
+        const baseX = this.getRenderBaseTileX(), baseZ = this.getRenderBaseTileY();
         for (const batch of batches) {
+            if (batch.lod && (depth || this.worldEntity)) continue;
             pass.setBindGroup(MAP_TEXTURES_GROUP, batch.bindGroup);
             pass.setVertexBuffer(0, batch.vertexBuffer);
             pass.setIndexBuffer(batch.indexBuffer, "uint32");
 
             const planes = batch.planes;
-            for (let i = 0; i < batch.ranges.length; i++) {
+            const visible = (i: number): boolean => {
                 const range = batch.ranges[i];
-                if (!range) continue;
-                const elements = range[1] | 0;
+                return !!range && range[1] > 0 && range[2] > 0 &&
+                    !(cullPlanes && planes && i < planes.length && planes[i] > cullLimit) &&
+                    (this.worldEntity || sceneryRangeVisible(range, baseX, baseZ,
+                        visibility.tileX, visibility.tileZ, visibility.distance, visibility.lodDistance,
+                        batch.lod, visibility.camera, visibility.shadow));
+            };
+            for (let i = 0; i < batch.ranges.length; i++) {
+                if (!visible(i)) continue;
+                const range = batch.ranges[i];
+                let elements = range[1] | 0;
                 const instances = range[2] | 0;
-                if (elements <= 0 || instances <= 0) continue;
-                if (cullPlanes && planes && i < planes.length && planes[i] > cullLimit) continue;
-
+                const first = i;
+                // Identical terrain instance data can share the first range's drawId, as on WebGL.
+                if (range.batchKey !== undefined && instances === 1) {
+                    while (i + 1 < batch.ranges.length) {
+                        const next = batch.ranges[i + 1];
+                        if (!next || next.batchKey !== range.batchKey || next[2] !== 1 ||
+                            next[0] !== range[0] + elements * DRAW_RANGE_INDEX_BYTES || !visible(i + 1)) break;
+                        elements += next[1];
+                        i++;
+                    }
+                }
                 pass.setBindGroup(MAP_UNIFORMS_GROUP, batch.uniformsBindGroup, [
-                    (batch.uniformBase + i) * MAP_UNIFORM_STRIDE,
+                    (batch.uniformBase + first) * MAP_UNIFORM_STRIDE,
                 ]);
                 pass.drawIndexed(
                     elements,

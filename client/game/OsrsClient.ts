@@ -320,6 +320,7 @@ import {
 } from "./state";
 import { initPlayerSyncHuffman } from "./sync/HuffmanProvider";
 import { NpcUpdateDecoder } from "./sync/NpcUpdateDecoder";
+import { baseNpcTypeId, registerNpcModelOverride } from "../custom/npcs/NpcModelOverrideRegistry";
 import { applyNpcExactMove } from "./sync/NpcExactMove";
 import { applyNpcFaceTile } from "./sync/NpcFaceTile";
 import { PlayerSyncManager } from "./sync/PlayerSyncManager";
@@ -440,6 +441,11 @@ const SCRIPT_CHATBOX_SEARCH = 750;
 const SCRIPT_CHATBOX_SEARCH_CLOSE = 138;
 
 // Use shared OSRS rotation scale
+
+/** logout:world_switcher (182:3). */
+const LOGOUT_WORLD_SWITCHER_UID = (182 << 16) | 3;
+/** The logout tab's stone (stone10) in the modern, classic and fixed layouts (rsprox captures). */
+const LOGOUT_STONE_UIDS = new Set([(161 << 16) | 46, (164 << 16) | 34, (548 << 16) | 51]);
 
 export class OsrsClient {
     private static readonly CLIENT_TICK_MS = 20;
@@ -1002,6 +1008,8 @@ export class OsrsClient {
     private readonly npcInstances: NpcInstanceFlushController;
     /** Overhead icons the server set on NPCs, by server index (they override the type's own). */
     readonly npcHeadIcons = new Map<number, Array<{ archiveId: number; spriteId: number }>>();
+    /** Server NPC id -> synthetic render type id for its model customisation (enrage legs). */
+    private readonly npcModelOverrides = new Map<number, number>();
 
     private resolveChatPlayerNameForScript(_scriptId: number): string {
         let baseName = this.localPlayerName ?? "";
@@ -2905,9 +2913,12 @@ export class OsrsClient {
                     }
                     const intArgs: number[] = [];
                     const stringArgs: string[] = [];
+                    const longArgs: bigint[] = [];
                     for (const arg of args) {
                         if (typeof arg === "number") {
                             intArgs.push(arg | 0);
+                        } else if (typeof arg === "bigint") {
+                            longArgs.push(arg);
                         } else if (typeof arg === "string") {
                             stringArgs.push(arg);
                         }
@@ -2915,7 +2926,7 @@ export class OsrsClient {
 
                     // A negative id carries only vars and inventories, with no script to run.
                     const script = scriptId >= 0 ? this.cs2Vm.context.loadScript(scriptId) : null;
-                    if (script) this.cs2Vm.run(script, intArgs, stringArgs);
+                    if (script) this.cs2Vm.run(script, intArgs, stringArgs, undefined, longArgs);
                 }
             } else if ((payload as any)?.action === "set_varbits") {
                 // Server-initiated varbit sync without running a script
@@ -3876,7 +3887,11 @@ export class OsrsClient {
     }
 
     handleWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
-        if ((event.widget?.uid | 0) === ((182 << 16) | 3)) {
+        const uid = event.widget?.uid | 0;
+        // The logout tab's "World Switcher" button, and the same option on the logout tab's
+        // stone (stone10 of each layout), open the server list.
+        const worldSwitcherOption = (event.option ?? "").replace(/<[^>]*>/g, "").trim() === "World Switcher";
+        if (uid === LOGOUT_WORLD_SWITCHER_UID || (worldSwitcherOption && LOGOUT_STONE_UIDS.has(uid))) {
             this.processLoginAction({ type: "open_server_list" });
             return;
         }
@@ -7662,6 +7677,10 @@ export class OsrsClient {
             }
         }
 
+        if (Array.isArray(block.modelCustomisation)) {
+            this.applyNpcModelCustomisation(serverId, block.modelCustomisation);
+        }
+
         if (block.say && ecsId !== undefined) {
             this.npcEcs.setOverheadText(ecsId, block.say, 100);
         }
@@ -7695,6 +7714,38 @@ export class OsrsClient {
         }
     }
 
+    /**
+     * A server model customisation for one NPC: register the overrides under a synthetic
+     * type id and re-point the NPC's render instance at it (or back at the cache type on a
+     * reset). The square reload rebuilds the geometry with the new models.
+     */
+    private applyNpcModelCustomisation(
+        serverId: number,
+        entries: Array<{ slot: number; modelId: number }>,
+    ): void {
+        const sid = serverId | 0;
+        const key = `sid:${sid}`;
+        const instance = this.npcInstances.instanceMap.get(key);
+        console.info("[npc-models] customisation for", sid, "entries", entries.length, "instance?", !!instance);
+        if (!instance) return;
+        const baseId = baseNpcTypeId(instance.typeId);
+        if (entries.length === 0) {
+            this.npcModelOverrides.delete(sid);
+            delete instance.modelOverride;
+        } else {
+            const syntheticId = registerNpcModelOverride(baseId, entries);
+            this.npcModelOverrides.set(sid, syntheticId);
+            // The worker is another thread: the override rides the instance to it.
+            instance.modelOverride = { baseId, models: entries.map((entry) => ({ slot: entry.slot | 0, modelId: entry.modelId | 0 })) };
+        }
+        const nextTypeId = this.npcModelOverrides.get(sid) ?? baseId;
+        if ((instance.typeId | 0) !== (nextTypeId | 0)) {
+            instance.typeId = nextTypeId | 0;
+            this.npcInstances.markMapPendingReload(this.getNpcInstanceRenderMapId(instance));
+            this.npcInstances.scheduleFlush();
+        }
+    }
+
     private upsertNpcInstanceFromBinary(
         serverId: number,
         typeId: number,
@@ -7713,9 +7764,16 @@ export class OsrsClient {
                     : undefined
                 : prev?.worldViewId;
         const owner = this.npcOwnerMap(worldTileX, worldTileY);
+        // A model override only rides its own base type: a transformation (the corpse) drops it.
+        const override = this.npcModelOverrides.get(sid);
+        if (override !== undefined && baseNpcTypeId(override) !== (typeId | 0)) {
+            this.npcModelOverrides.delete(sid);
+            if (prev) delete (prev as { modelOverride?: unknown }).modelOverride;
+        }
+        const renderTypeId = override !== undefined && baseNpcTypeId(override) === (typeId | 0) ? override : typeId | 0;
         const nextInstance: NpcInstance = {
             serverId: sid,
-            typeId: typeId | 0,
+            typeId: renderTypeId,
             x: worldTileX | 0,
             y: worldTileY | 0,
             level: level | 0,
@@ -7760,6 +7818,7 @@ export class OsrsClient {
         // Keep OSRS-style global NPC index array in sync for menuAction packet gates.
         ClientState.npcs[sid] = null;
         this.npcHeadIcons.delete(sid);
+        this.npcModelOverrides.delete(sid);
         try {
             (this.renderer as any)?.clearNpcHealthBars?.(sid);
         } catch {}

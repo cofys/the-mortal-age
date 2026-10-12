@@ -36,24 +36,19 @@ function canClimbEntrance(questStage, hasRope, roped) {
   return { ok: true, tiesRope: true };
 }
 
+/**
+ * A boss door: enough essence is spent first, else an ecumenical key melts into it (Wiki: the
+ * essence takes priority over the key).
+ */
 function canOpenBossDoor(input) {
-  if (!input.hasGodItem) {
-    return {
-      ok: false,
-      reason: "You need to wear an item aligned to that god to pass this door.",
-    };
+  const required = input.required ?? REQUIRED_KILL_COUNT;
+  if (input.killCount >= required) {
+    return { ok: true, spendsEssence: required };
   }
   if (input.hasKey) {
     return { ok: true, consumesKey: true };
   }
-  const required = input.required ?? REQUIRED_KILL_COUNT;
-  if (input.killCount < required) {
-    return {
-      ok: false,
-      reason: `You need ${required} essence from that god's followers to enter.`,
-    };
-  }
-  return { ok: true };
+  return { ok: false, required };
 }
 
 module.exports = {

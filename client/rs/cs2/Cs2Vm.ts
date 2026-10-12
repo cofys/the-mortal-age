@@ -1213,6 +1213,7 @@ export class Cs2Vm {
         intArgs?: number[],
         objectArgs?: any[],
         maxOpcount: number = Cs2Vm.MAX_OPCOUNT,
+        longArgs?: bigint[],
     ): void {
         // For non-event top-level runs (no active widget context),
         // clear any previous event context so opcodes don't see stale event_* values.
@@ -1232,7 +1233,7 @@ export class Cs2Vm {
         this.context.widgetManager.beginBatch();
 
         try {
-            this.executeInternal(script, intArgs, objectArgs);
+            this.executeInternal(script, intArgs, objectArgs, longArgs);
         } finally {
             this.isExecuting = false;
             // PERF: Process batched invalidations
@@ -1405,7 +1406,7 @@ export class Cs2Vm {
     }
 
     /** Execute a script - internal method that supports nesting */
-    private executeInternal(script: Script, intArgs?: number[], objectArgs?: any[]): void {
+    private executeInternal(script: Script, intArgs?: number[], objectArgs?: any[], longArgs?: bigint[]): void {
         this.traceScriptEnter(script);
         const rootScript = script;
         const prevLocalStrings = this.currentLocalStrings;
@@ -1479,6 +1480,7 @@ export class Cs2Vm {
         let pc = 0;
         let { localInts, localStrings, localLongs } = allocateFrameLocals(currentScript);
         loadArgsIntoLocals(localInts, localStrings, intArgs, objectArgs);
+        if (longArgs) localLongs.set(longArgs);
 
         this.currentScriptId = currentScript.id;
         this.currentLocalStrings = localStrings;

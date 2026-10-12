@@ -736,8 +736,10 @@ export class ClientConnection {
           continue;
         case "examine_object":
           if (this.player) {
+            // A multi-loc's text can be recorded under the variant this player sees.
             const definition = ObjectDefinition.forId(packet.id);
-            this.player.sendMessage(definition?.getExamine() ?? "It's nothing special.");
+            const seen = ObjectDefinition.examineText(packet.id) === null ? ObjectDefinition.forPlayer(packet.id, this.player) : null;
+            this.player.sendMessage((seen && ObjectDefinition.examineText(seen.id) ? seen : definition)?.getExamine() ?? "It's nothing special.");
           }
           continue;
         case "appearance":

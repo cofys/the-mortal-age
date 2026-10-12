@@ -1,0 +1,43 @@
+{
+  "guilds": {
+    "misthalin": {
+      "kingdomId": "misthalin",
+      "hallTile": {
+        "x": 3204,
+        "y": 3200,
+        "z": 0
+      },
+      "foundedAt": 1791780123979,
+      "treasury": 77,
+      "insuranceFund": 13,
+      "branch": {
+        "status": "sound",
+        "flags": 0,
+        "lastAuditAt": 0,
+        "lastVerdict": null,
+        "certifiedUntil": 0
+      }
+    }
+  },
+  "members": {
+    "alice": {
+      "username": "alice",
+      "kingdomId": "misthalin",
+      "rank": "clerk",
+      "joinedAt": 1791780123979,
+      "duesPaidUntil": 1792384923979,
+      "missedDues": 0,
+      "suspended": false,
+      "suspendUntil": 0,
+      "trainingCredits": 0,
+      "auditsConducted": 0,
+      "expelled": false
+    }
+  },
+  "audits": {},
+  "claims": {},
+  "cases": {},
+  "classes": {},
+  "coverage": {},
+  "nextId": 1
+}

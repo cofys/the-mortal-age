@@ -1,0 +1,42 @@
+{
+  "chefs": {},
+  "dishes": [
+    {
+      "id": "dish-1791741995962-5",
+      "type": "seafood_platter",
+      "name": "seafood platter",
+      "chef": "Gordon",
+      "quality": 9,
+      "heal": 20,
+      "value": 204,
+      "createdAt": 1791741995962,
+      "servings": 10
+    }
+  ],
+  "restaurants": {
+    "varrock": {
+      "name": "The Golden Ladle",
+      "menu": [
+        "dish-1791741995962-5"
+      ],
+      "openedAt": 1791741995962
+    }
+  },
+  "reviews": [],
+  "competitions": [
+    {
+      "id": "comp-1791741995962",
+      "kingdomId": "varrock",
+      "scheduledAt": 1791741995962,
+      "resolvedAt": 0,
+      "winner": null,
+      "runnerUp": null,
+      "entries": [
+        "dish-1791741995962-5"
+      ]
+    }
+  ],
+  "lastCompetition": {
+    "varrock": 1791741995962
+  }
+}

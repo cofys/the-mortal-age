@@ -990,6 +990,8 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 const argType = reader.readByte();
                 if (argType === 0) {
                     args.push(reader.readString());
+                } else if (argType === 2) {
+                    args.push(reader.readLong());
                 } else {
                     args.push(reader.readInt());
                 }
