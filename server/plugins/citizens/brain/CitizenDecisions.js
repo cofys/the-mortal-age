@@ -170,6 +170,7 @@ const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
 const ACT_CHOP = "citizen_chop";
+const ACT_FISH = "citizen_fish";
 const ACT_WILD_GATHER = "citizen_wild_gather";
 // Blood tithe (Morytania): tithe_collection_duty is the collector's round
 // (utility-scored like guard_patrol, duty while the engine round runs);
@@ -209,6 +210,7 @@ const WORK_ACTIVITIES = new Set([
 ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_STAGEGUILD, ACT_SPORTSGUILD, ACT_COOKGUILD, ACT_WEAVERGUILD, ACT_MUSICGUILD, ACT_ARTGUILD, ACT_LIBGUILD, ACT_OBSGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
   ACT_CHOP,
+  ACT_FISH,
   ACT_WILD_GATHER,
   ACT_TITHE_DUTY, // the collector's round is work — sickness keeps them home
 ]);
@@ -226,6 +228,7 @@ const ANCHOR_ACTIVITIES = new Set([
   ACT_TITHE_DUTY, // the round is a long duty, re-decidable like guard_patrol
   ACT_MINE,
   ACT_CHOP,
+  ACT_FISH,
   ACT_FARM,
 ]);
 
@@ -2687,6 +2690,7 @@ function snapshot(player) {
     goal,
     personality,
     role: (() => { try { return player?.getAttribute?.(ATTR_CITIZEN_ROLE) ?? null; } catch { return null; } })(),
+    kingdomId: (() => { try { return player?.getAttribute?.(ATTR_KINGDOM_ID) ?? null; } catch { return null; } })(),
     combatLevel: combatLevel(player),
     coins: coinCount(player),
     food: foodCount(player),
@@ -4245,6 +4249,34 @@ case ACT_COMPETE: {
       if (freeSlots <= 2) s += 8; // full: bank hinge handles it
       return s;
     }
+    case ACT_FISH: {
+      // Fishing: nets at the dock, real fish for the cook fire and the
+      // market. Citizens low on raw fish fish more. Coastal kingdoms (a
+      // real dock anchor in sites.json) get the water bonus; landlocked
+      // citizens barely consider it. Like chop, it's work — the weary and
+      // hurt stay away.
+      let s = 37;
+      if (goalType === GOAL_MASTER_TRADE) s += 15;
+      else if (goalType === GOAL_SAVE_GOLD) s += 11;
+      s += urgent * 6;
+      s += industrious * 12;
+      if (coins < 60) s += 17;
+      else if (coins < 250) s += 5;
+      // Low on raw fish? The cook fire needs feeding.
+      if (rawFood < 5) s += 12;
+      else if (rawFood < 15) s += 6;
+      try {
+        const { siteTileByKingdom } = require("./CitizenSites");
+        if (siteTileByKingdom(snap.kingdomId, "dock")) s += 10;
+        else s -= 20;
+      } catch {
+        // Sites unreadable — score neutrally.
+      }
+      if (weary) s -= 50;
+      if (hurt) s -= 25;
+      if (freeSlots <= 2) s += 8; // full: bank hinge handles it
+      return s;
+    }
     case ACT_WILD_GATHER: {
       // Wilderness gathering: rich rocks and timber for the brave — the
       // wild pays +25% XP and the brave take the PK risk for it. Cautious,
@@ -4616,6 +4648,7 @@ module.exports = {
   ACT_ROUTINE,
   ACT_MINE,
   ACT_CHOP,
+  ACT_FISH,
   ACT_WILD_GATHER,
   ACT_TITHE_DUTY,
   ACT_PAY_TITHE,

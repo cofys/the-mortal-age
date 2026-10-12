@@ -28,7 +28,7 @@ const {
 const {
   ACT_MINE,
   ACT_CHOP,
-  ACT_ROUTINE,
+  ACT_FISH,
 } = require("../brain/CitizenDecisions");
 const { agentRng } = require("./humanizer");
 
@@ -36,10 +36,9 @@ const { agentRng } = require("./humanizer");
 function activityIdForWorkKind(workKind) {
   if (workKind === "rock") return ACT_MINE;
   if (workKind === "tree") return ACT_CHOP;
-  // Fishers work their shift inside the daily routine — there is no
-  // decision-layer fish activity, so the kick re-enters the routine and
-  // the routine's fisher shift takes them to the dock they spawned at.
-  if (workKind === "fishing") return ACT_ROUTINE;
+  // Fishers kick straight into the decision-layer fish activity (real
+  // fishing-spot NPCs, real catches/XP via the Fishing plugin).
+  if (workKind === "fishing") return ACT_FISH;
   return null;
 }
 

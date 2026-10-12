@@ -396,6 +396,40 @@
       ]
     },
     {
+      "id": "citizen_fish",
+      "mode": "citizen_fish",
+      "repeat": true,
+      "capacity": 32,
+      "slotCapacity": 4,
+      "failureCooldownSeconds": 10,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "ensureItem",
+          "item": "SMALL_FISHING_NET",
+          "amount": 1
+        },
+        {
+          "type": "fish",
+          "tool": "NET",
+          "until": {
+            "inventoryFull": true
+          }
+        },
+        {
+          "type": "citizenBank"
+        }
+      ]
+    },
+    {
       "id": "citizen_wild_gather",
       "mode": "citizen_wild_gather",
       "repeat": true,
