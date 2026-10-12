@@ -30,6 +30,55 @@
     {
       "actions": [
         {
+          "scanIntervalMs": 8000,
+          "scanRadius": 12,
+          "type": "titheCollection",
+          "waypointRadius": 3
+        }
+      ],
+      "capacity": 64,
+      "slotCapacity": 4,
+      "failureCooldownSeconds": 10,
+      "id": "tithe_collection_duty",
+      "mode": "citizen_guard",
+      "repeat": true,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "guard"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "actions": [
+        {
+          "type": "payBloodTithe"
+        }
+      ],
+      "capacity": 32,
+      "slotCapacity": 4,
+      "failureCooldownSeconds": 10,
+      "id": "pay_blood_tithe",
+      "mode": "citizen_social",
+      "repeat": true,
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "commoner",
+              "merchant",
+              "courtier"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "actions": [
+        {
           "adIntervalMaxMs": 420000,
           "adIntervalMinMs": 180000,
           "pricePerWare": 12,

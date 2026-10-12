@@ -92,6 +92,8 @@ const { createCitizenTeamPlayAction } = require("./actions/CitizenTeamPlay");
 const { createCitizenResearchAction } = require("./actions/CitizenResearch");
 const { createIdleSocialAction } = require("./actions/IdleSocial");
 const { createRefugeeFlightAction } = require("./actions/RefugeeFlight");
+const { createTitheCollectionAction } = require("./actions/TitheCollection");
+const { createPayBloodTitheAction } = require("./actions/PayBloodTithe");
 const { ATTR_KINGDOM_ID, ATTR_CITIZEN_ROLE } = require("../constants");
 
 let registered = false;
@@ -224,6 +226,8 @@ registerBotActionType("citizenCompete", createCitizenCompeteAction);
   registerBotActionType("citizenResearch", createCitizenResearchAction);
   registerBotActionType("idleSocial", createIdleSocialAction);
   registerBotActionType("refugeeFlight", createRefugeeFlightAction);
+  registerBotActionType("titheCollection", createTitheCollectionAction);
+  registerBotActionType("payBloodTithe", createPayBloodTitheAction);
   registerBotConditionKind("citizen", createCitizenCondition);
 }
 

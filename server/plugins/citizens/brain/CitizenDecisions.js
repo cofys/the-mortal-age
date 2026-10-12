@@ -48,6 +48,7 @@ const {
   ATTR_CITIZEN_ROLE,
   ATTR_CITIZEN_PERSONALITY,
   ATTR_CITIZEN_GOAL,
+  ATTR_KINGDOM_ID,
 } = require("../constants");
 const {
   GOAL_SAVE_GOLD,
@@ -170,6 +171,12 @@ const ACT_SOCIAL = "tavern_social";
 const ACT_MINE = "citizen_mine";
 const ACT_CHOP = "citizen_chop";
 const ACT_WILD_GATHER = "citizen_wild_gather";
+// Blood tithe (Morytania): tithe_collection_duty is the collector's round
+// (utility-scored like guard_patrol, duty while the engine round runs);
+// pay_blood_tithe is the debtor's trip to Sarev's tithe office to clear
+// bloodDebt. Both are SCORED, never critical-interrupts.
+const ACT_TITHE_DUTY = "tithe_collection_duty";
+const ACT_PAY_TITHE = "pay_blood_tithe";
 // Work activities — the ones sickness keeps citizens away from. Meal,
 // rest, bank, and social are NOT work: a sick citizen still eats, rests,
 // banks, and complains to friends about feeling awful.
@@ -203,6 +210,7 @@ ACT_COMPETE,
   ACT_DIPLOMAT, ACT_EXPLORE, ACT_LAWYER, ACT_INVENT, ACT_PHILOSOPHIZE, ACT_SURGEON, ACT_CONSTRUCT, ACT_TEAMPLAY, ACT_SCIENCE, ACT_ENGINEER, ACT_OBSERVE, ACT_CHART, ACT_MAPGUILD, ACT_REPORT, ACT_PRESSGUILD, ACT_BANKGUILD, ACT_BANKERWORK, ACT_INSURERWORK, ACT_INSUREGUILD, ACT_LAWGUILD, ACT_DIPLOCORPS, ACT_SPYGUILD, ACT_TRADEGUILD, ACT_DIGGUILD, ACT_STAGEGUILD, ACT_SPORTSGUILD, ACT_COOKGUILD, ACT_WEAVERGUILD, ACT_MUSICGUILD, ACT_ARTGUILD, ACT_LIBGUILD, ACT_OBSGUILD, ACT_SPY, ACT_DIG, ACT_STAGE, ACT_RUNWAY, ACT_TRAIN, ACT_COOKOFF, ACT_FESTIVAL, ACT_CURATE, ACT_LIBRARIAN, ACT_DOCENT, ACT_MINE,
   ACT_CHOP,
   ACT_WILD_GATHER,
+  ACT_TITHE_DUTY, // the collector's round is work — sickness keeps them home
 ]);
 // Repeat:true "anchor" activities — the only ones eligible for hysteresis
 // re-decision. Short activities (meal/rest/bank) complete on their own.
@@ -215,6 +223,7 @@ const ANCHOR_ACTIVITIES = new Set([
   "courtier_attend",
   "leisure_stroll",
   "refugee_flight",
+  ACT_TITHE_DUTY, // the round is a long duty, re-decidable like guard_patrol
   ACT_MINE,
   ACT_CHOP,
   ACT_FARM,
@@ -2283,6 +2292,72 @@ function reputationOf(player) {
 }
 
 /**
+ * Blood tithe picture for the scorer: debt (coins owed to Lowerniel's
+ * court), whether this citizen is a collector on the round, and whether
+ * the engine round is currently live. All reads go to the REAL engine
+ * ledger (KingdomStore flags written by the BloodTithe worker) — never the
+ * hash-derived weekly rounds in lib/CitizenTaxCollectors, which is left
+ * as-is and is not a source of truth here.
+ *
+ * jitter: a small stable per-citizen weight (-10..+10) from the username
+ * hash. Compliance is per-citizen AND per-moment (epsilon-greedy in pick()
+ * supplies the moment noise); there is no fixed EVASION_CHANCE-style const
+ * anywhere in this path.
+ */
+function titheInfo(player) {
+  const info = {
+    kingdomId: null,
+    morytanian: false,
+    bloodDebt: 0,
+    isCollector: false,
+    roundActive: false,
+    jitter: 0,
+  };
+  const username = usernameOf(player);
+  try {
+    const needs = needsFor(player);
+    info.bloodDebt = Math.max(0, Math.round(needs?.bloodDebt ?? 0));
+  } catch {
+    // Needs unreadable — fall back to the ledger read below.
+  }
+  try {
+    info.kingdomId = player?.getAttribute?.(ATTR_KINGDOM_ID) ?? null;
+    info.morytanian = info.kingdomId === "morytania";
+    const role = player?.getAttribute?.(ATTR_CITIZEN_ROLE) ?? null;
+    info.isCollector =
+      info.morytanian && (role === "guard" || role === "tithe_collector");
+  } catch {
+    // Attributes unreadable — score with defaults.
+  }
+  try {
+    const KingdomStore = require("../../kingdoms/KingdomStore");
+    const flags = KingdomStore.getKingdom?.("morytania")?.flags ?? {};
+    info.roundActive =
+      flags["morytania:blood-tithe:round-active"] === true ||
+      flags["morytania:blood-tithe:round"] === true;
+    if (info.morytanian && username) {
+      const ledgerDebt = Math.max(
+        0,
+        Math.round(Number(flags[`morytania:blood-tithe:debt:${username}`] ?? 0))
+      );
+      if (ledgerDebt > info.bloodDebt) {
+        info.bloodDebt = ledgerDebt;
+      }
+    }
+  } catch {
+    // Ledger unreadable — needs value stands.
+  }
+  try {
+    if (username) {
+      info.jitter = (hashSeed(`tithe:${username}`) % 21) - 10;
+    }
+  } catch {
+    info.jitter = 0;
+  }
+  return info;
+}
+
+/**
  * Herb materials the citizen could work right now (inventory, else bank).
  * Counts inputs of recipes whose partner item (vial/secondary) is also
  * available in the same place — cleaning needs nothing, mixing needs
@@ -2632,6 +2707,7 @@ function snapshot(player) {
     sick: sickPenalty(player),
     jailed: jailPenalty(player),
     notoriety: notorietyOf(player),
+    tithe: titheInfo(player),
     reputation: reputationOf(player),
     travel: travelInfo(player),
     entertain: entertainInfo(player),
@@ -2706,7 +2782,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, role } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, role, tithe } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -4081,6 +4157,47 @@ case ACT_COMPETE: {
       else if (weary) s -= 30;
       return s;
     }
+    case ACT_TITHE_DUTY: {
+      // Blood tithe collection duty: Morytanian guards/collectors walk the
+      // round and call debtors to account. Scored like guard_patrol — this
+      // IS the job when the engine round is live (the round flag is real
+      // engine state, not a hash). Critical needs still beat the duty.
+      const t = tithe ?? {};
+      if (!t.morytanian || !t.isCollector) return 4;
+      let s = 52 + industrious * 10;
+      if (t.roundActive) s += 12; // the round is on — the duty is real
+      if (goalType === GOAL_RANK_UP || goalType === GOAL_BOSS_SLAYER) s += 8;
+      if (goalType === GOAL_SAVE_GOLD) s += 8;
+      if (goalType === GOAL_MAKE_FRIENDS) s -= 10;
+      if (coins < 60) s += 12;
+      if (criticalHp || exhausted) s -= 70; // critical needs beat duty
+      else if (hurt) s -= 20;
+      else if (weary) s -= 30;
+      return s;
+    }
+    case ACT_PAY_TITHE: {
+      // Pay the blood tithe: travel to Sarev's tithe office and clear the
+      // debt. A utility calculation, not a script — weigh what is owed
+      // against what the purse holds and how the citizen feels about
+      // defying the regime. Compliance is per-citizen (jitter) and
+      // per-moment (epsilon-greedy in pick() picks it up naturally); a
+      // citizen who can't afford it scores earning higher instead.
+      const t = tithe ?? {};
+      const debt = t.bloodDebt ?? 0;
+      if (!t.morytanian || debt <= 0) return 4;
+      let s = 34 + Math.min(26, Math.round(debt / 80)); // bigger debts itch more
+      if (coins >= debt * 1.5) s += 18; // paying is easy money
+      else if (coins >= debt) s += 8; // affordable
+      else s -= 32; // can't pay yet — the earn loop wins over this
+      const traits = traitSet(personality);
+      if (traits.has("obedient") || traits.has("dutiful") || traits.has("loyal") || traits.has("cautious")) s += 10;
+      if (traits.has("defiant") || traits.has("rebellious") || traits.has("reckless")) s -= 14;
+      s += t.jitter ?? 0; // per-citizen noise: some always dodge, some never
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 25;
+      else if (weary) s -= 20;
+      return s;
+    }
     case "courtier_attend":
     case "leisure_stroll": {
       let s = 40 + sociable * 15;
@@ -4484,6 +4601,8 @@ module.exports = {
   ACT_MINE,
   ACT_CHOP,
   ACT_WILD_GATHER,
+  ACT_TITHE_DUTY,
+  ACT_PAY_TITHE,
   ACT_LIGHT_FIRE,
   ACT_SMELT,
   ACT_CRAFT,
@@ -4525,6 +4644,7 @@ ACT_COMPETE,
   snapshot,
   industriousness,
   sociabilityOf,
+  titheInfo,
   resetForTests,
   // Test seams (not part of the public contract):
   _interruptTarget: interruptTarget,

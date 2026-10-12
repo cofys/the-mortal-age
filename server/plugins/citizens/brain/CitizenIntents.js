@@ -631,7 +631,7 @@ function intentBonusFor(activityId, player) {
       case INTENT_EARN_COINS:
         if (activityId === ACT_ROUTINE) bonus += 25;
         else if (activityId === "merchant_tend" || activityId === "prime_merchant") bonus += 25;
-        else if (activityId === "guard_patrol") bonus += 10;
+        else if (activityId === "guard_patrol" || activityId === "tithe_collection_duty") bonus += 10;
         break;
       case INTENT_GAIN_XP:
         if (activityId === ACT_ROUTINE) bonus += 25;

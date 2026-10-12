@@ -33,9 +33,18 @@
  * says so out loud.
  */
 
-const { ATTR_CITIZEN_NEEDS, ATTR_WARE_ITEM, ATTR_CITIZEN_PERSONALITY } = require("../constants");
+const { ATTR_CITIZEN_NEEDS, ATTR_WARE_ITEM, ATTR_CITIZEN_PERSONALITY, ATTR_KINGDOM_ID } = require("../constants");
 const { voiceFor, voiceLine } = require("../lib/citizenVoice");
 const { sayPublic } = require("../chat/CitizenSayPublic");
+
+// Blood tithe ledger keys in the Morytania kingdom flags (KingdomStore).
+// The engine worker (BloodTithe.Kingdoms) owns these; this module only reads
+// the real ledger — never hashes, never invents amounts.
+const BLOOD_TITHE_KINGDOM_ID = "morytania";
+const BLOOD_TITHE_DEBT_FLAG_PREFIX = "morytania:blood-tithe:debt:";
+const BLOOD_TITHE_ROUND_ACTIVE_FLAG = "morytania:blood-tithe:round-active";
+// Cap so a corrupt ledger value can't wedge scoring arithmetic.
+const BLOOD_DEBT_CAP = 2000000;
 
 const BREAD_ID = 2309; // ItemIds.BREAD
 const BRONZE_SWORD_ID = 1277; // ItemIds.BRONZE_SWORD
@@ -134,6 +143,10 @@ function ensureNeeds(playerOrName) {
       hp: NEED_MAX,
       energy: NEED_MAX,
       mood: 80,
+      // Blood tithe owed to Morytania's court (coins). 0 = clear. Refreshed
+      // from the real engine ledger in tickBloodDebt — scored, never a
+      // critical interrupt.
+      bloodDebt: 0,
       lastTickMs: Date.now(),
       lastLineAt: {},
       lastFeedAt: 0,
@@ -162,6 +175,10 @@ function clampNeeds(needs) {
   needs.hp = Math.min(NEED_MAX, Math.max(0, needs.hp));
   needs.energy = Math.min(NEED_MAX, Math.max(0, needs.energy));
   needs.mood = Math.min(NEED_MAX, Math.max(0, needs.mood));
+  needs.bloodDebt = Math.min(
+    BLOOD_DEBT_CAP,
+    Math.max(0, Math.floor(needs.bloodDebt ?? 0))
+  );
   return needs;
 }
 
@@ -170,7 +187,53 @@ function needsSnapshot(needs) {
     hp: Math.round(needs.hp),
     energy: Math.round(needs.energy),
     mood: Math.round(needs.mood),
+    bloodDebt: Math.round(needs.bloodDebt ?? 0),
   };
+}
+
+/**
+ * Refresh a Morytania subject's bloodDebt need from the real engine ledger
+ * (KingdomStore flag morytania:blood-tithe:debt:<username>, written by the
+ * BloodTithe engine worker). Read-only: the ledger is the source of truth,
+ * so a paid debt (flag cleared to 0 by the engine) decays this need to 0
+ * on the next tick. Non-subjects never owe: their need stays 0.
+ *
+ * Never touches the hash-derived weekly rounds in lib/CitizenTaxCollectors —
+ * that system is left as-is and is NOT a source of truth here.
+ */
+function titheDebtFromLedger(username) {
+  if (!username) {
+    return 0;
+  }
+  try {
+    const KingdomStore = require("../../kingdoms/KingdomStore");
+    const flags = KingdomStore.getKingdom?.(BLOOD_TITHE_KINGDOM_ID)?.flags ?? {};
+    return Math.max(
+      0,
+      Math.floor(Number(flags[BLOOD_TITHE_DEBT_FLAG_PREFIX + username] ?? 0))
+    );
+  } catch (error) {
+    return 0;
+  }
+}
+
+function tickBloodDebt(username, player) {
+  const needs = ensureNeeds(username);
+  if (!needs) {
+    return null;
+  }
+  let debt = 0;
+  try {
+    const kingdomId = player?.getAttribute?.(ATTR_KINGDOM_ID) ?? null;
+    if (kingdomId === BLOOD_TITHE_KINGDOM_ID) {
+      debt = titheDebtFromLedger(username);
+    }
+  } catch (error) {
+    // Ledger unreadable — keep the last known value.
+    debt = needs.bloodDebt ?? 0;
+  }
+  needs.bloodDebt = Math.min(BLOOD_DEBT_CAP, Math.max(0, debt));
+  return needs;
 }
 
 /** Current hitpoints as a 0-100 percent of max. */
@@ -274,6 +337,14 @@ function tickNeeds(username, player, nowMs) {
     needs.mood += OFFLINE_MOOD_RECOVERY_PER_HOUR * elapsedH;
   }
   clampNeeds(needs);
+  // Blood tithe ledger: refreshed every needs tick so the scorer's debt
+  // picture matches the engine. Scored, never a critical interrupt.
+  try {
+    tickBloodDebt(username, player);
+    clampNeeds(needs);
+  } catch (error) {
+    // Ledger refresh never breaks the needs tick.
+  }
   if (player) {
     if (needs.hp < HURT_AT) {
       say(player, "hurt", HURT_LINES);
@@ -425,11 +496,16 @@ module.exports = {
   HURT_AT,
   WEARY_AT,
   GRUMPY_AT,
+  BLOOD_TITHE_KINGDOM_ID,
+  BLOOD_TITHE_DEBT_FLAG_PREFIX,
+  BLOOD_TITHE_ROUND_ACTIVE_FLAG,
   ensureNeeds,
   needsFor,
   dropNeeds,
   needsSnapshot,
   tickNeeds,
+  tickBloodDebt,
+  titheDebtFromLedger,
   hpPercent,
   eat,
   buyFood,
