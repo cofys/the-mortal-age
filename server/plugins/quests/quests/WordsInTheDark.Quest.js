@@ -279,7 +279,7 @@ function grantReward(player) {
 // --- wiring -------------------------------------------------------------------------------
 
 function handleLogin({ player }) {
-  refreshQuestList(player);
+  handleLogin.refresh(player);
   if (quest.getStage(player) === STAGE_CACHE_SUPPLIED) spawnRunner(player);
   else despawnRunner(player);
 }
