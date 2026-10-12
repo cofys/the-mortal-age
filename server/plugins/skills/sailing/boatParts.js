@@ -62,6 +62,13 @@ function partStats(boat, part) {
   return stats >= 0 ? CacheDefinitions.getDbRow(stats) : undefined;
 }
 
+/** The boat's current and maximum hull HP. A boat never damaged reads as full. */
+function boatHull(boat) {
+  const max = Math.max(1, boatStats(boat).hitpoints);
+  const current = boat.hitpoints > 0 ? Math.min(boat.hitpoints, max) : max;
+  return { current, max };
+}
+
 /** The boat's stats from its parts: HP is the hull's plus the keel's, and so on. */
 function boatStats(boat) {
   const hull = partStats(boat, "hull");
@@ -165,6 +172,7 @@ module.exports = {
   TYPE_RECOVERY_FEE,
   partOptions,
   boatStats,
+  boatHull,
   partTiers,
   recoveryFee,
   specFor,

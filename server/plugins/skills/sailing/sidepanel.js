@@ -11,7 +11,7 @@ const {
   SCRIPT_SIDEPANEL_INIT,
   SCRIPT_SIDEBUTTON_SWITCH,
 } = require("./sailingContent");
-const { boatStats, partTiers } = require("./boatParts");
+const { boatStats, boatHull, partTiers } = require("./boatParts");
 const { facilitiesOf } = require("./boatFacilities");
 
 /** Hotspots 0-10 from 19156 (SIDEPANEL_FACILITY_HOTSPOT0); a sloop's 11 and 12 at 20185-20186. */
@@ -79,6 +79,8 @@ function describeBoat(type, owned) {
   for (const [stat, varbits] of Object.entries(STAT_VARBITS)) {
     for (const varbit of varbits) values[varbit] = stats[stat] ?? 0;
   }
+  // Battle damage: the HP bar shows the current hull, not the maximum.
+  values[VARBIT.SIDEPANEL_BOAT_HP] = boatHull(owned).current;
   return values;
 }
 
