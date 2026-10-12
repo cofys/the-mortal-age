@@ -13,7 +13,12 @@
  *    silent movement failures, unreachable destinations, pathing deadlocks.
  *  - IDLE LIFE: stationary citizens turn to face nearby players, play idle
  *    animations, emote occasionally, and voice small observations. A citizen
- *    standing at the market should feel present, not frozen.
+ *    standing at the market should feel present, not frozen. On top of
+ *    that, idle MICRO-BEHAVIORS: citizens with truly nothing to do
+ *    (no brain activity, no conversation, not following, not fighting,
+ *    not trading) shift position within ~3 tiles of their anchor every
+ *    45-90s and turn to face nearby points of interest every 20-40s —
+ *    the fidget real players have and statues don't.
  *  - SOCIAL AWARENESS: citizens notice each other. When two citizens pass
  *    within a few tiles, they sometimes start a real conversation —
  *    multi-turn, one topic, human pacing — via chat/CitizenConversations.
@@ -31,13 +36,14 @@
  * Wiring: CitizenDirector.tickProximity() calls tickAlive(this, nowMs, desync) once per fast tick.
  */
 
-const { agentRng, chance, logNormalJitter, humanizerProfile } = require("./humanizer");
+const { agentRng, chance, logNormalJitter, humanizerProfile, noisyTile } = require("./humanizer");
 const { getJournal } = require("./CitizenJournal");
 const { brainTickDue } = require("./CitizenTickLod");
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { voiceFor, voiceLine } = require("./citizenVoice");
 const { sayPublic } = require("../chat/CitizenSayPublic");
 const CitizenConversations = require("../chat/CitizenConversations");
+const { getFollow } = require("./CitizenBonds");
 
 
 // --- tuning ------------------------------------------------------------------
@@ -47,8 +53,8 @@ const STUCK_CHECK_TILES = 2; // moved less than this = didn't move
 const IDLE_FACE_CHANCE = 0.3; // per tick: turn to face a nearby player
 const IDLE_EMOTE_CHANCE = 0.08; // per tick: play an idle emote/animation
 const IDLE_OBSERVE_CHANCE = 0.12; // per tick: voice a small observation
-const IDLE_WANDER_CHANCE = 0.15; // per tick: take a few steps (stretch legs)
-const IDLE_WANDER_RADIUS = 5; // tiles: how far a wander goes
+// Idle micro-behaviors (drift + facing) live below with their own
+// per-citizen cooldowns; see MICRO_* tuning.
 const SOCIAL_GREET_RADIUS = 4; // tiles: citizens this close may greet
 const SOCIAL_GREET_CHANCE = 0.15; // per eligible pair per tick
 const SOCIAL_GREET_COOLDOWN_MS = 5 * 60 * 1000; // per citizen
@@ -317,24 +323,202 @@ function tickIdleLife(director, record, bot, nowMs) {
     const emotes = [EMOTES.wave, EMOTES.cheer, EMOTES.shrug];
     playAnim(director, bot, pickOne(rng, emotes));
   }
+}
 
-  // Stretch legs: stationary citizens occasionally wander a few tiles.
-  // This is the most visible "alive" signal — a citizen who never moves
-  // reads as a statue. Don't wander if the brain has them doing something
-  // stationary on purpose (merchant tending stall).
-  const activityId = record.currentActivityId ?? "";
-  const rootedOk =
-    activityId.includes("merchant") || activityId.includes("prime_merchant");
-  if (!rootedOk && chance(rng, IDLE_WANDER_CHANCE)) {
-    const tile = botTile(bot);
-    if (tile) {
-      const nx = tile.x + Math.floor(rng() * (IDLE_WANDER_RADIUS * 2 + 1)) - IDLE_WANDER_RADIUS;
-      const ny = tile.y + Math.floor(rng() * (IDLE_WANDER_RADIUS * 2 + 1)) - IDLE_WANDER_RADIUS;
-      if (nx !== tile.x || ny !== tile.y) {
-        requestMovement(bot, nx, ny, tile.z, "citizen_alive_wander");
+// --- idle micro-behaviors ---------------------------------------------------------
+
+/**
+ * Idle micro-behaviors — position drift + facing changes for citizens with
+ * nothing to do. "Stand frozen for 30 minutes" is the canonical NPC tell;
+ * real players fidget: they shift their weight, turn to look at things,
+ * take a few steps, check their inventory.
+ *
+ * This is strictly idle-time behavior, never a decision-layer change:
+ * - It NEVER fires when the citizen has an active brain activity, is in
+ *   conversation, is following someone, is in combat, or is trading.
+ * - It NEVER fights CitizenDecisions: the brain's frame state is checked
+ *   every tick, so the moment the brain picks an activity the
+ *   micro-behavior yields (state is dropped, anchor re-set next idle spell).
+ *
+ * Zero LLM. Real engine movement APIs via BotNavigation (same as the
+ * follow/activity movement). Targets use humanizer noisyTile (uniform
+ * disc-offset) so drifting citizens don't stack on one tile.
+ */
+
+const MICRO_DRIFT_MIN_MS = 45 * 1000; // drift every 45-90s, personality-scaled
+const MICRO_DRIFT_MAX_MS = 90 * 1000;
+const MICRO_FACE_MIN_MS = 20 * 1000; // face changes every 20-40s
+const MICRO_FACE_MAX_MS = 40 * 1000;
+const MICRO_DRIFT_RADIUS = 3; // tiles from the idle anchor
+const MICRO_POI_RADIUS = 8; // tiles: nearby citizens/players worth looking at
+
+const microState = new Map(); // username -> { anchor, driftAt, faceAt }
+
+/**
+ * True when the citizen's brain has an active activity frame. Mirrors the
+ * "idle brain" concept in CitizenDecisions.interruptTarget: no frames, or
+ * a top frame with no behaviour id, means the decision layer hasn't given
+ * them anything to do — that's when micro-behaviors are allowed.
+ */
+function brainHasActiveActivity(director, username) {
+  try {
+    const entry = director?.runtime?.()?.entriesByUsername?.get(username);
+    const frames = entry?.brain?.frames ?? [];
+    const top = frames[frames.length - 1];
+    return frames.length > 0 && !!top?.behaviour?.id;
+  } catch {
+    return false;
+  }
+}
+
+/** Mirrors BotBehaviorTask.isInCombat: target, attacker, or combat-follow. */
+function botInCombat(bot) {
+  try {
+    const combat = bot.getCombat?.();
+    return !!(
+      combat?.getTarget?.() ||
+      combat?.getAttacker?.() ||
+      bot.getCombatFollowing?.()
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** A trade window is open on the bot. */
+function botTrading(bot) {
+  try {
+    return !!bot.getTrading?.()?.getState?.()?.isTrading?.();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Strict idle gate. Micro-behaviors must never interrupt: an active
+ * activity, a conversation, following, combat, or trading. Pure-ish —
+ * reads live state, no side effects. Exported for tests.
+ */
+function isMicroIdle(director, record, bot) {
+  const name = record.username;
+  if (isMoving(bot)) return false;
+  if (brainHasActiveActivity(director, name)) return false;
+  try {
+    if (CitizenConversations.activeConversationFor(name)) return false;
+  } catch {
+    // Non-fatal.
+  }
+  try {
+    if (getFollow(name)) return false;
+  } catch {
+    // Non-fatal.
+  }
+  if (botInCombat(bot)) return false;
+  if (botTrading(bot)) return false;
+  return true;
+}
+
+/**
+ * Pure: next position-drift delay. Restless (fidgety) citizens drift more
+ * often; methodical ones rarely do. Unit-tested.
+ */
+function microDriftIntervalMs(profile, rng) {
+  const random = typeof rng === "function" ? rng : Math.random;
+  const tempo = profile?.tempoSigma ?? 0.7;
+  const scale = 0.7 / Math.max(0.2, tempo); // fidgety 1.0 -> 0.7x, methodical 0.45 -> ~1.56x
+  const base =
+    MICRO_DRIFT_MIN_MS + random() * (MICRO_DRIFT_MAX_MS - MICRO_DRIFT_MIN_MS);
+  return Math.round(base * scale);
+}
+
+/** Pure: next facing-change delay, 20-40s. Unit-tested. */
+function microFaceIntervalMs(rng) {
+  const random = typeof rng === "function" ? rng : Math.random;
+  return Math.round(
+    MICRO_FACE_MIN_MS + random() * (MICRO_FACE_MAX_MS - MICRO_FACE_MIN_MS)
+  );
+}
+
+/**
+ * Pure: pick where to face. Half the time a nearby point of interest
+ * (another citizen, a player walking by); otherwise a random nearby
+ * direction (1-2 tiles out). Unit-tested.
+ */
+function pickFaceTarget(rng, myTile, poiTiles) {
+  const random = typeof rng === "function" ? rng : Math.random;
+  if (Array.isArray(poiTiles) && poiTiles.length > 0 && random() < 0.5) {
+    return poiTiles[Math.floor(random() * poiTiles.length)];
+  }
+  const angle = random() * 2 * Math.PI;
+  const dist = 1 + Math.floor(random() * 2);
+  return {
+    x: myTile.x + Math.round(Math.cos(angle) * dist),
+    y: myTile.y + Math.round(Math.sin(angle) * dist),
+    z: myTile.z,
+  };
+}
+
+/**
+ * The micro-behavior tick. Runs inside the existing alive tick (no new
+ * tick system). Returns { drifted, faced } for tests; callers ignore it.
+ */
+function tickIdleMicrobehaviors(director, record, bot, nowMs) {
+  const name = record.username;
+  let st = microState.get(name);
+  if (!isMicroIdle(director, record, bot)) {
+    // Yield immediately: the brain picked an activity or the citizen got
+    // busy. Drop the anchor so the next idle spell re-anchors from scratch.
+    if (st) microState.delete(name);
+    return { drifted: null, faced: false };
+  }
+  const tile = botTile(bot);
+  if (!tile) return { drifted: null, faced: false };
+  if (!st) {
+    st = { anchor: null, driftAt: 0, faceAt: 0 };
+    microState.set(name, st);
+  }
+  // If something else moved the citizen far off-anchor (safety-net
+  // wander, a shove), their idle spot is here now — re-anchor instead of
+  // dragging them back.
+  if (!st.anchor || chebyshev(tile, st.anchor) > MICRO_DRIFT_RADIUS) {
+    st.anchor = { x: tile.x, y: tile.y, z: tile.z };
+  }
+  const rng = agentRng(`alive:micro:${name}:${nowMs >> 14}`);
+  const profile = humanizerProfile(record.personality);
+  const out = { drifted: null, faced: false };
+
+  // Position drift: shift weight / reposition within ~3 tiles of the
+  // anchor, never pacing off somewhere. noisyTile is the humanizer
+  // disc-offset — uniform on the disc, so drift targets spread instead
+  // of stacking on the anchor tile.
+  if (nowMs >= st.driftAt) {
+    st.driftAt = nowMs + microDriftIntervalMs(profile, rng);
+    const target = noisyTile(st.anchor.x, st.anchor.y, MICRO_DRIFT_RADIUS, rng);
+    if (target.x !== tile.x || target.y !== tile.y) {
+      if (requestMovement(bot, target.x, target.y, tile.z, "citizen_idle_drift")) {
+        out.drifted = target;
       }
     }
   }
+
+  // Facing changes: turn toward a nearby citizen, a player walking by, or
+  // a random direction. Highly visible, costs nothing.
+  if (nowMs >= st.faceAt) {
+    st.faceAt = nowMs + microFaceIntervalMs(rng);
+    const pois = [];
+    for (const other of citizenBotsNear(director, bot, MICRO_POI_RADIUS)) {
+      const t = botTile(other);
+      if (t) pois.push(t);
+    }
+    for (const p of realPlayersNear(bot)) {
+      const t = botTile(p);
+      if (t) pois.push(t);
+    }
+    if (faceToward(bot, pickFaceTarget(rng, tile, pois))) {
+      out.faced = true;
+    }
+  }
+  return out;
 }
 
 // --- social awareness ------------------------------------------------------------
@@ -650,6 +834,14 @@ function tickAlive(director, nowMs, desync = null) {
     } catch {
       // Non-fatal.
     }
+    // Idle micro-behaviors: anchored position drift + facing changes for
+    // citizens with nothing to do. Strict idle gate inside — yields the
+    // moment the brain picks an activity.
+    try {
+      tickIdleMicrobehaviors(director, record, bot, nowMs);
+    } catch {
+      // Non-fatal.
+    }
     try {
       tickSocialAwareness(director, record, bot, nowMs);
     } catch {
@@ -681,7 +873,7 @@ function tickAlive(director, nowMs, desync = null) {
     for (const record of director.roster.values()) {
       if (director.isOnline(record)) onlineNames.add(record.username);
     }
-    for (const map of [positionHistory, lastGreetAt, lastEmoteReactAt]) {
+    for (const map of [positionHistory, lastGreetAt, lastEmoteReactAt, microState]) {
       for (const name of [...map.keys()]) {
         if (!onlineNames.has(name)) map.delete(name);
       }
@@ -703,5 +895,16 @@ module.exports = {
   _tickSocialAwareness: tickSocialAwareness,
   _tickImperfections: tickImperfections,
   _tickEmoteReactions: tickEmoteReactions,
+  _tickIdleMicrobehaviors: tickIdleMicrobehaviors,
+  _isMicroIdle: isMicroIdle,
+  _microState: microState,
+  microDriftIntervalMs,
+  microFaceIntervalMs,
+  pickFaceTarget,
+  MICRO_DRIFT_MIN_MS,
+  MICRO_DRIFT_MAX_MS,
+  MICRO_FACE_MIN_MS,
+  MICRO_FACE_MAX_MS,
+  MICRO_DRIFT_RADIUS,
   _playAnim: playAnim,
 };
