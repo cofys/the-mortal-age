@@ -324,6 +324,8 @@ function clearBands() {
  * web-client sessions.
  */
 function brainTickDue(director, record, tickCount) {
+  // Admin tool: paused brains never tick (see AdminWorldMapApi toggle-brain).
+  if (record?.brainPaused) return false;
   const band = bandOf(record);
   if (!isKnownBand(band)) return true;
   if (band === BAND_ASLEEP) return false;

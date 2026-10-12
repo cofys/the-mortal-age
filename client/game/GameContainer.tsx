@@ -23,6 +23,7 @@ import { JobBoardOverlay } from "./plugins/jobs/JobBoardOverlay";
 import { OfficeOverlay } from "./plugins/office/OfficeOverlay";
 import { HousingOverlay } from "./plugins/housing/HousingOverlay";
 import { ExamineOverlay } from "./plugins/examine/ExamineOverlay";
+import { AdminWorldMapOverlay } from "./plugins/adminworldmap/AdminWorldMapOverlay";
 import { OnboardingOverlay } from "./plugins/onboarding/OnboardingOverlay";
 import { ShopOverlay } from "./plugins/shop/ShopOverlay";
 import { StewardOverlay } from "./plugins/steward/StewardOverlay";
@@ -402,6 +403,8 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                         <HousingOverlay osrsClient={osrsClient} />
 
                         <ExamineOverlay osrsClient={osrsClient} />
+
+                        <AdminWorldMapOverlay osrsClient={osrsClient} />
 
                         <OnboardingOverlay osrsClient={osrsClient} />
 

@@ -976,6 +976,20 @@ class CitizenDirector {
   }
 
   /**
+   * Admin tool: spawn a citizen at an explicit world position (used by the
+   * admin world map). Spawns as a misthalin commoner; the admin can then
+   * reposition or repurpose them.
+   */
+  debugSpawnCitizen({ x, y, z = 0 }) {
+    const record = this.addCitizen("misthalin", "commoner");
+    if (record && Number.isFinite(x) && Number.isFinite(y)) {
+      record.home = { x: Math.round(x), y: Math.round(y), z: Math.round(z) };
+      record.position = { x: Math.round(x), y: Math.round(y), z: Math.round(z) };
+    }
+    return record?.username || null;
+  }
+
+  /**
    * Perf: maintain the kingdom index on roster add.
    * @param {string} normUsername - normalized roster key
    * @param {object} record - citizen record
