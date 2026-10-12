@@ -4471,6 +4471,21 @@ function interruptTarget(player, brain, nowMs) {
   return null;
 }
 
+/**
+ * Spawn-time kick: queue a one-shot directed pick for a freshly
+ * materialized citizen (e.g. the citizen's anchored activity). Consumed
+ * once by pick() — the same map the interrupt path uses, no new system.
+ * Stale entries are pruned hourly, so a citizen that never re-decides
+ * simply loses the kick.
+ */
+function queueDirectedPick(username, activityId) {
+  if (!username || typeof activityId !== "string" || activityId.length === 0) {
+    return false;
+  }
+  directedPick.set(username, activityId);
+  return true;
+}
+
 function doInterrupt(player, brain, target, nowMs, critical) {
   const username = usernameOf(player);
   const frames = brain?.frames ?? [];
@@ -4641,6 +4656,7 @@ ACT_COMPETE,
   initCitizenDecisions,
   decisionTick,
   pick,
+  queueDirectedPick,
   scoreActivity,
   snapshot,
   industriousness,

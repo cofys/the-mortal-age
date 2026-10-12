@@ -31,6 +31,7 @@ const {
   ATTR_SUPPLIER_MERCHANT,
   ATTR_KINGDOM_ID,
   ATTR_CITIZEN_SETTLEMENT,
+  ATTR_CITIZEN_WORK_KIND,
   ROLE_MERCHANT,
 } = require("../../constants");
 const { attemptFeed, sellsFood, addMood } = require("../CitizenNeeds");
@@ -627,6 +628,14 @@ function createCitizenRoutineAction(spec, world) {
    */
   function resolveWorkKind(player, state) {
     if (state.workKind) {
+      return state.workKind;
+    }
+    // Director-assigned anchor (stamped at spawn from the roster record):
+    // adopt it so the brain works where the director spawned them instead
+    // of rolling a different living and walking off.
+    const anchored = player.getAttribute?.(ATTR_CITIZEN_WORK_KIND);
+    if (anchored === WORK_FISHING || anchored === "tree" || anchored === "rock") {
+      state.workKind = anchored;
       return state.workKind;
     }
     // Settlement citizens work their settlement's site (tree/rock from

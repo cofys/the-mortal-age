@@ -47,6 +47,12 @@ const { registerCitizenForChat, unregisterCitizenForChat } = require("../chat/Ci
 const { getMemory } = require("../lib/CitizenMemory");
 const { getJournal } = require("../lib/CitizenJournal");
 const { dropNeeds } = require("../brain/CitizenNeeds");
+const { anchorFor } = require("../lib/CitizenAnchor");
+const {
+  queueDirectedPick,
+  CRITICAL_HP,
+  CRITICAL_ENERGY,
+} = require("../brain/CitizenDecisions");
 const { backgroundStep } = require("../lib/CitizenBackground");
 const { maybeSocialize, maybeGreetPlayer } = require("../chat/CitizenSocial");
 const SocialMechanics = require("../lib/CitizenSocialMechanics");
@@ -358,6 +364,7 @@ const {
   ATTR_CITIZEN_SEED,
   ATTR_CITIZEN_NEEDS,
   ATTR_CITIZEN_SETTLEMENT,
+  ATTR_CITIZEN_WORK_KIND,
   ATTR_PRIME_MERCHANT,
   ATTR_SUPPLIER_MERCHANT,
   ATTR_WARE_ITEM,
@@ -387,7 +394,7 @@ const FEATURE_TICK_BUDGET_MS = 70;
 // (data tier: journal, needs, kinship, crafting all run on the record).
 // The Player rematerializes when a real player approaches.
 // Hysteresis (spawn < despawn) prevents thrash at the boundary.
-const CITIZEN_SPAWN_RADIUS = 50; // tiles from home: spawn when a real player is this close
+const CITIZEN_SPAWN_RADIUS = 50; // tiles from the citizen's data-tier position (activity anchor, else home): spawn when a real player is this close
 const CITIZEN_DESPAWN_RADIUS = 75; // tiles from current pos: despawn when no real player within this
 const PROXIMITY_TICK_TICKS = 17; // ~10s at 600ms/tick: fast spawn/despawn for responsiveness
 // Hard cap on concurrent materialized (~3MB) Player objects. Without this,
@@ -755,6 +762,15 @@ class CitizenDirector {
       currentActivityId: null,
       lastTickAt: Date.now(),
     };
+    // Data-tier position: the tile this citizen is "at" while offline.
+    // Commoners anchor at their work site (see lib/CitizenAnchor); spawn
+    // proximity and spawnCitizen use it instead of home.
+    const workAnchor = anchorFor(record);
+    record.position = workAnchor
+      ? { x: workAnchor.x, y: workAnchor.y, z: workAnchor.z }
+      : { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 };
+    record.workKind = workAnchor?.workKind ?? null;
+    record.anchorActivityId = workAnchor?.activityId ?? null;
     // Roster keys are normalized (lowercase): every lib module looks citizens
     // up via normalizeName, and mixed-case keys silently missed. The record
     // keeps the raw display username.
@@ -829,6 +845,12 @@ class CitizenDirector {
       lastTickAt: Date.now(),
       named: true,
     };
+    const workAnchor = anchorFor(record);
+    record.position = workAnchor
+      ? { x: workAnchor.x, y: workAnchor.y, z: workAnchor.z }
+      : { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 };
+    record.workKind = workAnchor?.workKind ?? null;
+    record.anchorActivityId = workAnchor?.activityId ?? null;
     this.roster.set(normalizeName(username), record);
     ensureNeeds(username);
     this.log("named citizen added", { citizen: username, role, kingdom: kingdomId });
@@ -1038,12 +1060,15 @@ class CitizenDirector {
         }
         const online = this.isOnline(record);
         if (!online) {
-          // Spawn check: use home (the citizen has no live position yet).
-          const home = record.home ?? { x: 3200, y: 3200, z: 0 };
+          // Spawn check: use the data-tier position (activity anchor when
+          // the citizen has one, else home) — the citizen has no live
+          // position yet.
+          const at = record.position ??
+            record.home ?? { x: 3200, y: 3200, z: 0 };
           const dist = this.nearestRealPlayerDist(
-            home.x,
-            home.y,
-            home.z ?? 0,
+            at.x,
+            at.y,
+            at.z ?? 0,
             positions
           );
           if (dist !== null && dist <= CITIZEN_SPAWN_RADIUS) {
@@ -1784,7 +1809,10 @@ class CitizenDirector {
       this.log("no bot runtime yet, deferring spawn", { citizen: record.username });
       return false;
     }
-    const spawn = new Location(record.home.x, record.home.y, record.home.z ?? 0);
+    // Activity-anchored spawn: materialize at the data-tier position
+    // (work anchor when the citizen has one), not always at home.
+    const spawnTile = record.position ?? record.home;
+    const spawn = new Location(spawnTile.x, spawnTile.y, spawnTile.z ?? 0);
     const bot = createBotPlayer(record.username, spawn, {
       api: this.api,
       loadPersistence: false,
@@ -1883,7 +1911,7 @@ class CitizenDirector {
     }
 
     const state = createInitialState(
-      { x: record.home.x, y: record.home.y, z: record.home.z ?? 0 },
+      { x: spawnTile.x, y: spawnTile.y, z: spawnTile.z ?? 0 },
       { ROAMING: "roaming" }
     );
     state.citizens = { director: true, workCyclesBanked: 0 };
@@ -1961,6 +1989,33 @@ class CitizenDirector {
       }
     }
 
+    // The brain's work shift adopts the director's anchor kind (stamped
+    // here), so the citizen works where they spawned instead of rolling a
+    // different living and walking off.
+    if (record.workKind) {
+      try {
+        bot.setAttribute?.(ATTR_CITIZEN_WORK_KIND, record.workKind);
+      } catch {
+        // The stamp never blocks spawn.
+      }
+    }
+    // Activity-anchored spawn kick: queue a one-shot directed pick for the
+    // anchored activity, consumed by the registry picker on the first
+    // re-decide (same map the interrupt path uses — no new system).
+    // Skipped when the citizen spawns hurt/exhausted: critical needs win.
+    if (
+      record.anchorActivityId &&
+      needs &&
+      needs.hp > CRITICAL_HP &&
+      needs.energy > CRITICAL_ENERGY
+    ) {
+      try {
+        queueDirectedPick(record.username, record.anchorActivityId);
+      } catch {
+        // The kick never blocks spawn; the brain re-decides on its own.
+      }
+    }
+
     // The LLM mouth learns who this person is (llm-gateway contract).
     const kingdom = KingdomStore.getKingdom(record.kingdomId);
     registerCitizenForChat(
@@ -1977,6 +2032,8 @@ class CitizenDirector {
       role: record.role,
       kingdom: record.kingdomId,
       activity: record.currentActivityId,
+      workKind: record.workKind ?? null,
+      anchorKick: record.anchorActivityId ?? null,
     });
     return true;
   }

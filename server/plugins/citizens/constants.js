@@ -17,6 +17,10 @@ const ATTR_CITIZEN_SEED = "citizens:seed";
 const ATTR_CITIZEN_NEEDS = "citizens:needs";
 const ATTR_CITIZEN_INTENTS = "citizens:intents";
 const ATTR_CITIZEN_SETTLEMENT = "citizens:settlement";
+// Director-assigned work anchor kind ('fishing' | 'tree' | 'rock'),
+// stamped on the bot at spawn so the routine works where the director
+// spawned them (see lib/CitizenAnchor.js).
+const ATTR_CITIZEN_WORK_KIND = "citizens:work-kind";
 // Per-merchant stall overrides. Unset means the default bread stall
 // (see the merchant_tend spec in data/citizen-activities.json).
 const ATTR_WARE_ITEM = "citizens:ware-item";
@@ -98,6 +102,7 @@ module.exports = {
   ATTR_CITIZEN_NEEDS,
   ATTR_CITIZEN_INTENTS,
   ATTR_CITIZEN_SETTLEMENT,
+  ATTR_CITIZEN_WORK_KIND,
   ATTR_WARE_ITEM,
   ATTR_WARE_PRICE,
   ATTR_MARKET_WARES,
