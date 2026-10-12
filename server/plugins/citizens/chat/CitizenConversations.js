@@ -72,6 +72,14 @@ const JOIN_CHANCE_LINGERING = 0.2;
 const JOIN_CHANCE_PASSING = 0.07;
 const BOSS_JOURNAL_RECENT_MS = 24 * 3600 * 1000; // a journaled boss run stays "recent" this long
 
+// Player-directed initiation: a citizen occasionally OPENS a conversation
+// with a nearby real player (the "player" kind already exists for
+// continuations; initiation was citizen<->citizen only). Rare and heavily
+// gated — one hail at a time, long cooldowns both sides.
+const PLAYER_INITIATE_CITIZEN_COOLDOWN_MS = 15 * 60 * 1000; // a citizen hails a player at most every 15 min
+const PLAYER_INITIATE_PLAYER_COOLDOWN_MS = 20 * 60 * 1000; // a real player is hailed at most every 20 min
+const PLAYER_INITIATE_NO_REPLY_MS = 90 * 1000; // opener lingers this long for a reply
+
 // Planned exchange lengths, drawn at conversation start. Contexts:
 // "passing" (either party is on the move) skews short; "lingering"
 // (both standing together) allows real conversations.
@@ -102,11 +110,15 @@ let nextConvId = 1;
 const conversations = new Map(); // id -> conv
 const byParticipant = new Map(); // username -> conv id
 const cooldownUntil = new Map(); // username -> ms timestamp
+const lastInitiateByCitizen = new Map(); // username -> timestamp (player hails)
+const lastInitiatedPlayer = new Map(); // player name -> timestamp (player hails)
 
 function _resetForTests() {
   conversations.clear();
   byParticipant.clear();
   cooldownUntil.clear();
+  lastInitiateByCitizen.clear();
+  lastInitiatedPlayer.clear();
   nextConvId = 1;
 }
 
@@ -1428,6 +1440,9 @@ function finishConversation(conv, reason) {
     }
   }
   const citizens = conv.participants.filter((p) => !p.isPlayer);
+  // No exchange happened (a player never answered an initiation, or the
+  // opener couldn't land): nothing truthful to journal.
+  if (conv.turn === 0) return;
   for (const p of citizens) {
     const others = conv.participants
       .filter((o) => o.username !== p.username)
@@ -1738,6 +1753,126 @@ function maybePlayerFollowUp(director, record, bot, playerName, opts = {}) {
 }
 
 /**
+ * A citizen OPENS a conversation with a nearby real player — the initiation
+ * side of the "player" conversation kind (which previously only existed
+ * for continuations after the player spoke first). The citizen's opener is
+ * directed at the player with the normal topic machinery, real
+ * relationship state, and voice pools.
+ *
+ * If the player answers, CitizenChat's continuePlayerConversation picks
+ * the thread up on the same topic like any other "player" thread. If the
+ * player never answers, the opener is left to hang and the thread closes
+ * quietly after PLAYER_INITIATE_NO_REPLY_MS — nobody stands there
+ * waiting, and the post-chat cooldown keeps volume sane.
+ *
+ * opts (test seams): { rng, say, schedule, now, deps, forceTopic, topicVars, onLine }
+ */
+function maybePlayerInitiate(director, record, bot, playerName, playerBot, nowMs = Date.now(), opts = {}) {
+  try {
+    if (!director || !record?.username || !playerName || !bot) return null;
+    if (conversations.size >= MAX_ACTIVE) return null;
+    if (activeConversationFor(record.username)) return null;
+    const now = typeof opts.now === "function" ? opts.now() : nowMs ?? Date.now();
+    if ((cooldownUntil.get(record.username) ?? 0) > now) return null;
+    if (now - (lastInitiateByCitizen.get(record.username) ?? 0) < PLAYER_INITIATE_CITIZEN_COOLDOWN_MS) {
+      return null;
+    }
+    if (now - (lastInitiatedPlayer.get(playerName) ?? 0) < PLAYER_INITIATE_PLAYER_COOLDOWN_MS) {
+      return null;
+    }
+    const rng = opts.rng ?? Math.random;
+    const sources = { ...defaultSources(), ...(opts.deps ?? {}) };
+    const pseudoPartner = {
+      username: playerName,
+      personality: null,
+      kingdomId: record.kingdomId,
+    };
+    const tier = closenessTier(record.username, playerName, sources);
+    if (tier === "hostile") return null;
+
+    const topic =
+      opts.forceTopic && TOPIC_POOLS[opts.forceTopic]
+        ? {
+            id: opts.forceTopic,
+            label: TOPIC_POOLS[opts.forceTopic].label,
+            vars: { ...(opts.topicVars ?? {}) },
+            pools: TOPIC_POOLS[opts.forceTopic],
+          }
+        : pickTopic({
+            sources,
+            aRecord: record,
+            aBot: bot,
+            bRecord: pseudoPartner,
+            tier,
+            context: "lingering",
+            rng,
+          });
+
+    const conv = {
+      id: nextConvId++,
+      kind: "player",
+      director,
+      sources,
+      rng,
+      say: opts.say ?? ((b, text) => sayPublic(b, text)),
+      schedule: opts.schedule ?? defaultSchedule,
+      now: typeof opts.now === "function" ? opts.now : () => Date.now(),
+      onLine: opts.onLine ?? null,
+      context: "lingering",
+      tier,
+      topic,
+      participants: [
+        { username: record.username, record },
+        { username: playerName, record: pseudoPartner, isPlayer: true },
+      ],
+      turn: 0,
+      plannedTurns: 1, // opener only — the player either answers or it dies
+      nextIdx: 0,
+      lastSpeakerIdx: -1,
+      startedAt: now,
+      lastAt: now,
+      state: "active",
+      endReason: null,
+      history: [],
+      playerLinesSpoken: 0,
+      chimedIn: false,
+      turnToken: 0,
+      initiated: true, // citizen opened it; the player never spoke first
+    };
+    conversations.set(conv.id, conv);
+    byParticipant.set(record.username, conv.id);
+    lastInitiateByCitizen.set(record.username, now);
+    lastInitiatedPlayer.set(playerName, now);
+    rememberMeeting(record.username, playerName);
+
+    // Face the player, like a person would when calling out to them.
+    try {
+      const tile = playerBot?.getLocation?.();
+      if (tile && bot.face) bot.face(tile.getX(), tile.getY());
+    } catch {
+      // Cosmetic.
+    }
+    speakLine(conv, conv.participants[0], "opener");
+    if (conv.turn === 0) {
+      // The opener couldn't land (no usable line) — nothing was said.
+      finishConversation(conv, "no-reply");
+      return conv;
+    }
+    // The opener hangs in the air briefly. If the player answers, the
+    // "player"-kind machinery extends plannedTurns and continues it;
+    // otherwise the thread closes quietly.
+    conv.schedule(() => {
+      if (conv.state === "active" && conv.plannedTurns === 1) {
+        finishConversation(conv, "no-reply");
+      }
+    }, PLAYER_INITIATE_NO_REPLY_MS);
+    return conv;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Schedule a player-thread turn. Token-guarded: each player continuation
  * bumps conv.turnToken, so a turn scheduled against an older line becomes
  * a no-op instead of double-speaking over the new reply.
@@ -1888,11 +2023,19 @@ function housekeep(nowMs) {
   for (const [name, until] of [...cooldownUntil.entries()]) {
     if (now > until + 60 * 60 * 1000) cooldownUntil.delete(name);
   }
+  // Player-hail cooldowns: prune entries older than a day.
+  const dayAgo = now - 24 * 60 * 60 * 1000;
+  for (const m of [lastInitiateByCitizen, lastInitiatedPlayer]) {
+    for (const [name, at] of [...m.entries()]) {
+      if (at < dayAgo) m.delete(name);
+    }
+  }
 }
 
 module.exports = {
   maybeStart,
   maybePlayerFollowUp,
+  maybePlayerInitiate,
   continuePlayerConversation,
   housekeep,
   activeConversationFor,

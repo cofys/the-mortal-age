@@ -1003,6 +1003,216 @@ describe("player continuations", () => {
   });
 });
 
+// --- player initiation ---------------------------------------------------------
+
+describe("player initiation", () => {
+  beforeEach(() => Engine._resetForTests());
+
+  const fakePlayerBot = {
+    getLocation: () => ({ getX: () => 102, getY: () => 100 }),
+  };
+
+  // Cooldown math is (now - lastAt < cooldown) with "never" stored as 0,
+  // so the clock must start at a realistic wall-clock time — the shared
+  // makeHarness() starts at 1e6 ms (16.7 min), inside the 20-min player
+  // cooldown, which would decline every first hail. Same shape as
+  // makeHarness, realistic start.
+  function freshHarness(startAt = Date.now()) {
+    const timers = [];
+    const delays = [];
+    let now = startAt;
+    return {
+      delays,
+      get now() {
+        return now;
+      },
+      schedule(fn, delay) {
+        delays.push(delay);
+        timers.push({ at: now + delay, fn });
+        timers.sort((a, b) => a.at - b.at);
+        return timers.length;
+      },
+      nowFn: () => now,
+      pump(maxSteps = 500) {
+        let steps = 0;
+        while (timers.length && steps < maxSteps) {
+          const t = timers.shift();
+          now = Math.max(now, t.at);
+          t.fn();
+          steps++;
+        }
+      },
+    };
+  }
+
+  function initiateOpts(harness, extra = {}) {
+    return {
+      rng: mulberry32(91),
+      say: extra.say ?? (() => {}),
+      schedule: harness.schedule,
+      now: harness.nowFn,
+      deps: neutralDeps(),
+      forceTopic: "greeting",
+      ...extra,
+    };
+  }
+
+  it("a citizen can open a player-directed conversation", () => {
+    const world = makeWorld();
+    const { record, bot } = world.add("Alice", 100, 100);
+    const harness = freshHarness();
+    const lines = [];
+    const conv = Engine.maybePlayerInitiate(
+      world.director,
+      record,
+      bot,
+      "Jon",
+      fakePlayerBot,
+      harness.now,
+      initiateOpts(harness, { say: (b, text) => lines.push({ speaker: b.username, text }) })
+    );
+    assert.ok(conv, "initiation should be created");
+    assert.equal(conv.kind, "player");
+    assert.equal(conv.participants.length, 2);
+    assert.ok(conv.participants[1].isPlayer, "second participant is the player");
+    assert.equal(lines.length, 1, "the opener is spoken once");
+    assert.equal(lines[0].speaker, "Alice");
+    assert.ok(!/\{\w+\}/.test(lines[0].text), `unrendered token in opener: ${lines[0].text}`);
+  });
+
+  it("the opener is just one line; a silent player closes the thread quietly", () => {
+    const world = makeWorld();
+    const { record, bot } = world.add("Alice", 100, 100);
+    const harness = freshHarness();
+    const conv = Engine.maybePlayerInitiate(
+      world.director,
+      record,
+      bot,
+      "Jon",
+      fakePlayerBot,
+      harness.now,
+      initiateOpts(harness)
+    );
+    assert.ok(conv);
+    assert.equal(conv.plannedTurns, 1, "opener only — no unprompted follow-ups");
+    // The no-reply timer fires at ~90s; pump past it.
+    harness.pump(500);
+    assert.equal(conv.state, "done");
+    assert.equal(conv.endReason, "no-reply");
+  });
+
+  it("a replying player continues the thread on the same topic", () => {
+    const world = makeWorld();
+    const { record, bot } = world.add("Alice", 100, 100);
+    const harness = freshHarness();
+    const lines = [];
+    const conv = Engine.maybePlayerInitiate(
+      world.director,
+      record,
+      bot,
+      "Jon",
+      fakePlayerBot,
+      harness.now,
+      initiateOpts(harness, { say: (b, text) => lines.push(text) })
+    );
+    assert.ok(conv);
+    const continued = Engine.continuePlayerConversation("Alice", "Jon", "hey!", bot);
+    assert.equal(continued, true, "the player's answer should continue the thread");
+    harness.pump(500);
+    assert.ok(
+      lines.length >= 2,
+      `expected opener + reply, got ${lines.length}`
+    );
+  });
+
+  it("cooldowns: one player isn't hailed twice in a row; a second player is", () => {
+    const world = makeWorld();
+    const { record, bot } = world.add("Alice", 100, 100);
+    const harness = freshHarness();
+    const first = Engine.maybePlayerInitiate(
+      world.director,
+      record,
+      bot,
+      "Jon",
+      fakePlayerBot,
+      harness.now,
+      initiateOpts(harness)
+    );
+    assert.ok(first);
+    // The same citizen can't immediately hail another player either.
+    const second = Engine.maybePlayerInitiate(
+      world.director,
+      record,
+      bot,
+      "NotJon",
+      fakePlayerBot,
+      harness.now,
+      initiateOpts(harness)
+    );
+    assert.equal(second, null, "citizen cooldown should block a second hail");
+    harness.pump(500);
+    // Even a DIFFERENT citizen can't re-hail Jon within the player cooldown.
+    const { record: bobRecord, bot: bobBot } = world.add("Bob", 105, 100);
+    const third = Engine.maybePlayerInitiate(
+      world.director,
+      bobRecord,
+      bobBot,
+      "Jon",
+      fakePlayerBot,
+      harness.now,
+      initiateOpts(harness)
+    );
+    assert.equal(third, null, "player cooldown should block re-hailing Jon");
+  });
+
+  it("refuses hostile pairs", () => {
+    const world = makeWorld();
+    const { record, bot } = world.add("Alice", 100, 100);
+    const harness = freshHarness();
+    const conv = Engine.maybePlayerInitiate(
+      world.director,
+      record,
+      bot,
+      "Jon",
+      fakePlayerBot,
+      harness.now,
+      initiateOpts(harness, { deps: neutralDeps({ isEnemy: () => true }) })
+    );
+    assert.equal(conv, null, "hostile initiation should be refused");
+  });
+
+  it("respects the global conversation cap", () => {
+    const world = makeWorld();
+    const harness = freshHarness();
+    // MAX_ACTIVE is 20; fill it with forced follow-ups.
+    const worlds = [];
+    for (let i = 0; i < Engine.MAX_ACTIVE; i++) {
+      const w = makeWorld();
+      const { record, bot } = w.add(`Cit${i}`, 100 + i, 100);
+      const c = Engine.maybePlayerFollowUp(w.director, record, bot, `Player${i}`, {
+        ...initiateOpts(harness),
+        force: true,
+      });
+      assert.ok(c);
+      worlds.push(w);
+    }
+    void worlds;
+    void world;
+    const w2 = makeWorld();
+    const { record, bot } = w2.add("Alice", 100, 100);
+    const conv = Engine.maybePlayerInitiate(
+      w2.director,
+      record,
+      bot,
+      "Jon",
+      fakePlayerBot,
+      harness.now,
+      initiateOpts(harness)
+    );
+    assert.equal(conv, null, "initiation should be refused at the global cap");
+  });
+});
+
 // --- closeness -------------------------------------------------------------------
 
 describe("closenessTier", () => {
