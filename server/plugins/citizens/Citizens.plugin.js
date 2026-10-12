@@ -898,7 +898,7 @@ module.exports = {
     api.registerCommand(
       "citizens",
       onCitizensDiagCommand,
-      PlayerRights.ADMINISTRATOR,
+      PlayerRights.NONE,
       "Diagnostic: what citizens are doing right now"
     );
     api.registerCommand(
