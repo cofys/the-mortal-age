@@ -38,6 +38,22 @@
  * utterance — they don't re-claim the throttle, but they refresh it so a new
  * message can't interleave mid-utterance.
  *
+ * REPETITION GUARD (anti-repeat chatter): template pools are shared
+ * server-wide, so without memory the same citizen repeats a line minutes
+ * apart and a crowd chants "Morning!" in unison. Two memories, both fed by
+ * every sayPublic call (the one choke point all speech funnels through):
+ *   1. per-citizen: the last REPEAT_SELF_KEEP normalized lines per speaker;
+ *   2. per-area: normalized lines said within REPEAT_AREA_TILES (chebyshev)
+ *      in the last REPEAT_AREA_MS.
+ * pickLineAvoidingRepeat(citizen, pickFn) wraps a template pick: it re-rolls
+ * the pick up to REPEAT_RETRIES times while the rendered line matches either
+ * memory, then accepts the last candidate anyway — repetition beats muteness.
+ * The accepted pick is recorded as PENDING immediately, so a second citizen
+ * picking in the same tick (or a typing-delayed reaction firing seconds
+ * later) sees it before sayPublic commits it. Pending entries expire after
+ * REPEAT_PENDING_MS; sayPublic converts a citizen's pending entry into a
+ * committed one when the line actually speaks.
+ *
  * Zero LLM. Pure packet math. Tick-safe (every engine read wrapped).
  */
 
@@ -57,6 +73,240 @@ function pruneThrottle(nowMs) {
   for (const [k, at] of lastChatBoxAt) {
     if (at < cutoff) lastChatBoxAt.delete(k);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Repetition guard — per-citizen + per-area recent-line memory.
+// ---------------------------------------------------------------------------
+
+const REPEAT_SELF_KEEP = 8; // normalized lines remembered per citizen
+const REPEAT_AREA_TILES = 15; // chebyshev radius counting as "nearby"
+const REPEAT_AREA_MS = 10 * 60 * 1000; // area memory window
+const REPEAT_PENDING_MS = 30 * 1000; // accepted-pick reservation window
+const REPEAT_RETRIES = 3; // re-roll attempts before accepting a repeat
+const REPEAT_MAX_AREA = 2000; // cap on committed area entries
+const REPEAT_MAX_PENDING = 500; // cap on pending pick reservations
+const REPEAT_MAX_CITIZENS = 2000; // cap on per-citizen memory entries
+
+/** username -> [{ key, at }] newest last (committed speech only). */
+const recentSelfLines = new Map();
+/** [{ key, x, y, at }] committed speech with a known tile. */
+const recentAreaLines = [];
+/** [{ username, key, x, y, at }] accepted-but-not-yet-spoken picks. */
+const pendingPicks = [];
+let lastRepeatPruneAt = 0;
+
+/**
+ * Normalize a line for repeat comparison: lowercase, the speaker's own name
+ * tokens removed ("Nessa Knot: Morning!" and "Morning!" are the same line),
+ * punctuation stripped, whitespace collapsed. Only the speaker's own name is
+ * stripped — a line addressed to someone else ("hey Harold!") genuinely reads
+ * differently from one addressed to Marta.
+ */
+function normalizeRepeatLine(text, displayName) {
+  let out = String(text ?? "").toLowerCase();
+  const full = String(displayName ?? "").trim().toLowerCase();
+  if (full) {
+    const tokens = new Set([full]);
+    for (const w of full.split(/\s+/)) {
+      // Tokens under 3 chars would eat real words ("Al" in "also").
+      if (w.length >= 3) tokens.add(w);
+    }
+    for (const t of tokens) {
+      out = out.replace(new RegExp("\\b" + escapeRegExp(t) + "\\b", "g"), " ");
+    }
+  }
+  return out.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Defensive tile read (same shape as the botTile helpers elsewhere). */
+function tileOf(citizen) {
+  try {
+    const loc = citizen?.getLocation?.() ?? citizen?.location ?? null;
+    if (!loc) return null;
+    const x = typeof loc.getX === "function" ? loc.getX() : loc.x;
+    const y = typeof loc.getY === "function" ? loc.getY() : loc.y;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  } catch {
+    return null;
+  }
+}
+
+function chebyshevTiles(a, b) {
+  if (!a || b == null || b.x == null || b.y == null) return Infinity;
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+/**
+ * True when this normalized line is "recent": said by this citizen before,
+ * reserved by a pick not yet spoken (own or a nearby citizen's), or said by
+ * anyone within REPEAT_AREA_TILES in the last REPEAT_AREA_MS.
+ */
+function isRecentLine(username, key, tile, nowMs) {
+  if (!key) return false;
+  if (username) {
+    const arr = recentSelfLines.get(username);
+    if (arr) {
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (arr[i].key === key) return true;
+      }
+    }
+  }
+  for (const p of pendingPicks) {
+    if (p.key !== key || nowMs - p.at > REPEAT_PENDING_MS) continue;
+    if (username && p.username === username) return true;
+    if (tile && chebyshevTiles(tile, p) <= REPEAT_AREA_TILES) return true;
+  }
+  if (tile) {
+    for (let i = recentAreaLines.length - 1; i >= 0; i--) {
+      const e = recentAreaLines[i];
+      if (e.key !== key || nowMs - e.at > REPEAT_AREA_MS) continue;
+      if (chebyshevTiles(tile, e) <= REPEAT_AREA_TILES) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Commit a spoken line to both memories. Called by sayPublic for EVERY line
+ * that speaks — whichever module picked it (or none: LLM lines count too, so
+ * a template never echoes something just said). Supersedes the pick-time
+ * pending reservation for the same citizen+line.
+ */
+function recordCommittedLine(citizen, text, nowMs) {
+  const username = usernameOf(citizen);
+  const key = normalizeRepeatLine(text, displayNameOf(citizen));
+  if (!key) return;
+  const tile = tileOf(citizen);
+  for (let i = pendingPicks.length - 1; i >= 0; i--) {
+    const p = pendingPicks[i];
+    if (p.username === username && p.key === key) pendingPicks.splice(i, 1);
+  }
+  if (username) {
+    const isNew = !recentSelfLines.has(username);
+    let arr = recentSelfLines.get(username);
+    if (!arr) {
+      arr = [];
+      recentSelfLines.set(username, arr);
+    }
+    const last = arr[arr.length - 1];
+    if (last && last.key === key) last.at = nowMs;
+    else {
+      arr.push({ key, at: nowMs });
+      while (arr.length > REPEAT_SELF_KEEP) arr.shift();
+    }
+    // Eager backstop cap (the hourly prune below only expires entries).
+    // A new key lands last in insertion order, so evicting the oldest key
+    // never evicts the citizen just recorded.
+    if (isNew && recentSelfLines.size > REPEAT_MAX_CITIZENS) {
+      recentSelfLines.delete(recentSelfLines.keys().next().value);
+    }
+  }
+  if (tile) {
+    recentAreaLines.push({ key, x: tile.x, y: tile.y, at: nowMs });
+    if (recentAreaLines.length > REPEAT_MAX_AREA) {
+      recentAreaLines.splice(0, recentAreaLines.length - REPEAT_MAX_AREA);
+    }
+  }
+  pruneRepeatGuard(nowMs);
+}
+
+function pruneRepeatGuard(nowMs) {
+  if (nowMs - lastRepeatPruneAt < 3600 * 1000) return;
+  lastRepeatPruneAt = nowMs;
+  for (let i = recentAreaLines.length - 1; i >= 0; i--) {
+    if (nowMs - recentAreaLines[i].at > REPEAT_AREA_MS) recentAreaLines.splice(i, 1);
+  }
+  for (let i = pendingPicks.length - 1; i >= 0; i--) {
+    if (nowMs - pendingPicks[i].at > REPEAT_PENDING_MS) pendingPicks.splice(i, 1);
+  }
+  const selfCutoff = nowMs - 24 * 3600 * 1000;
+  for (const [user, arr] of recentSelfLines) {
+    const last = arr[arr.length - 1];
+    if (!last || nowMs - last.at > selfCutoff) recentSelfLines.delete(user);
+  }
+  let over = recentSelfLines.size - REPEAT_MAX_CITIZENS;
+  if (over > 0) {
+    for (const user of recentSelfLines.keys()) {
+      recentSelfLines.delete(user);
+      if (--over <= 0) break;
+    }
+  }
+}
+
+/**
+ * Pick a template line with repetition avoidance. Renders pickFn() up to
+ * REPEAT_RETRIES+1 times, re-rolling while the rendered line matches the
+ * citizen's or the area's recent speech. When every retry hits a recent
+ * line, the last candidate is returned anyway — repetition beats muteness.
+ * A null/empty pick passes straight through (pool miss: the caller, not the
+ * guard, decides the silence).
+ *
+ * The accepted pick is recorded as PENDING immediately, so a second citizen
+ * picking in the same tick — or a typing-delayed reaction firing seconds
+ * later — sees it before sayPublic commits it.
+ *
+ * @param {object|null} citizen - the speaking citizen's Player object
+ * @param {function} pickFn - () => rendered line (or null)
+ * @param {object} [opts] - { retries?: number }
+ * @returns {string|null} the accepted line
+ */
+function pickLineAvoidingRepeat(citizen, pickFn, opts = {}) {
+  if (typeof pickFn !== "function") return null;
+  if (!citizen) {
+    try {
+      return pickFn();
+    } catch {
+      return null;
+    }
+  }
+  const retries = Number.isFinite(opts.retries)
+    ? Math.max(0, opts.retries | 0)
+    : REPEAT_RETRIES;
+  const username = usernameOf(citizen);
+  const displayName = displayNameOf(citizen);
+  const tile = tileOf(citizen);
+  const nowMs = Date.now();
+  let line = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let candidate = null;
+    try {
+      candidate = pickFn();
+    } catch {
+      candidate = null;
+    }
+    if (!candidate) return candidate;
+    line = candidate;
+    if (!isRecentLine(username, normalizeRepeatLine(candidate, displayName), tile, nowMs)) {
+      break;
+    }
+  }
+  if (username) {
+    const key = normalizeRepeatLine(line, displayName);
+    if (key) {
+      pendingPicks.push({
+        username,
+        key,
+        x: tile ? tile.x : null,
+        y: tile ? tile.y : null,
+        at: nowMs,
+      });
+      if (pendingPicks.length > REPEAT_MAX_PENDING) {
+        pendingPicks.splice(0, pendingPicks.length - REPEAT_MAX_PENDING);
+      }
+    }
+  }
+  return line;
+}
+
+/** Test seam: repeat-guard store sizes (caps/prune assertions). */
+function repeatGuardStats() {
+  return {
+    citizens: recentSelfLines.size,
+    area: recentAreaLines.length,
+    pending: pendingPicks.length,
+  };
 }
 
 function isRealPlayer(player) {
@@ -270,6 +520,11 @@ function sayPublic(citizen, text, opts = {}) {
   const nowMs = Date.now();
   pruneThrottle(nowMs);
 
+  // Feed the repetition guard: every spoken line lands in the per-citizen
+  // and per-area memories, whichever module picked it (or none — LLM lines
+  // count too, so a template never echoes something just said).
+  recordCommittedLine(citizen, line, nowMs);
+
   // Chat-box throttle: tighter than overhead. When throttled, speech falls
   // back to overhead-only rather than being dropped — the line still shows,
   // it just doesn't hit the box.
@@ -295,10 +550,14 @@ function sayPublic(citizen, text, opts = {}) {
   return sentFirst;
 }
 
-/** Test seam: clear throttle state and reset the chunk scheduler. */
+/** Test seam: clear throttle + repeat-guard state, reset the chunk scheduler. */
 function resetForTests() {
   lastChatBoxAt.clear();
   lastPruneAt = 0;
+  recentSelfLines.clear();
+  recentAreaLines.length = 0;
+  pendingPicks.length = 0;
+  lastRepeatPruneAt = 0;
   chunkScheduler = (fn, ms) => setTimeout(fn, ms);
 }
 
@@ -310,7 +569,14 @@ module.exports = {
   splitChunks,
   setChunkScheduler,
   resetForTests,
+  pickLineAvoidingRepeat,
+  normalizeRepeatLine,
+  repeatGuardStats,
   CHAT_MAX_LEN,
   CHATBOX_MIN_GAP_MS,
   MAX_CHUNKS,
+  REPEAT_SELF_KEEP,
+  REPEAT_AREA_TILES,
+  REPEAT_AREA_MS,
+  REPEAT_RETRIES,
 };

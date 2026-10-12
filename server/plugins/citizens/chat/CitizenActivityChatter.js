@@ -34,7 +34,7 @@
  * chat-box throttle is the backstop.
  */
 
-const { sayPublic } = require("./CitizenSayPublic");
+const { sayPublic, pickLineAvoidingRepeat } = require("./CitizenSayPublic");
 const { voiceFor, voiceLine } = require("../lib/citizenVoice");
 const { normalizeName } = require("../lib/CitizenBonds");
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
@@ -435,7 +435,10 @@ function tickActivityChatter(director, overrides = {}) {
         try {
           const intents = activeIntentsFor(bot);
           if (intents.length > 0 && Math.random() < chatterChance(personality)) {
-            const line = pickGoalLine(intents, personality);
+            // Anti-repeat: re-roll the template pick against recent speech.
+            const line = pickLineAvoidingRepeat(bot, () =>
+              pickGoalLine(intents, personality)
+            );
             if (line) sayPublic(bot, line);
           }
         } catch {
@@ -453,7 +456,10 @@ function tickActivityChatter(director, overrides = {}) {
       if (Math.random() >= chatterChance(personality)) continue;
 
       const levelInfo = Skill ? skillLevelInfo(bot, skillId, Skill) : null;
-      const line = pickSkillLine(skillId, levelInfo, personality);
+      // Anti-repeat: re-roll the template pick against recent speech.
+      const line = pickLineAvoidingRepeat(bot, () =>
+        pickSkillLine(skillId, levelInfo, personality)
+      );
       if (line) {
         try {
           sayPublic(bot, line);

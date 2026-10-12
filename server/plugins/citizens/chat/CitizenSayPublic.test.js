@@ -10,9 +10,14 @@ const {
   splitChunks,
   setChunkScheduler,
   resetForTests,
+  pickLineAvoidingRepeat,
+  normalizeRepeatLine,
+  repeatGuardStats,
   CHAT_MAX_LEN,
   CHATBOX_MIN_GAP_MS,
   MAX_CHUNKS,
+  REPEAT_SELF_KEEP,
+  REPEAT_RETRIES,
 } = require("./CitizenSayPublic");
 
 function makeRecipient({ username = "Cofy", index = 7, canReceive = true } = {}) {
@@ -371,3 +376,141 @@ run("chunking: splitChunks unit cases", () => {
 });
 
 console.log("ALL NAME-STRIP + CHUNKING TESTS DONE");
+
+// --- Repetition guard: anti-repeat chatter (Jon's "socializing seems shit") ---
+
+function withTile(c, x, y) {
+  c.player.getLocation = () => ({ getX: () => x, getY: () => y });
+  return c;
+}
+
+run("repeat guard: normalize lowercases, strips own name + punctuation", () => {
+  assert.equal(normalizeRepeatLine("Morning!", "Nessa Knot"), "morning");
+  assert.equal(normalizeRepeatLine("Nessa Knot: Morning!", "Nessa Knot"), "morning");
+  assert.equal(normalizeRepeatLine("MORNING!!", "Nessa Knot"), "morning");
+  assert.equal(normalizeRepeatLine("  Alright?  ", "Nessa Knot"), "alright");
+  // Someone else's name is kept: "hey Harold!" is not "hey Marta!".
+  assert.equal(normalizeRepeatLine("hey Harold!", "Nessa Knot"), "hey harold");
+  // No display name: only case/punctuation folding.
+  assert.equal(normalizeRepeatLine("Morning!", null), "morning");
+  // Short name tokens don't eat real words.
+  assert.equal(normalizeRepeatLine("also here", "Al Bo"), "also here");
+});
+
+run("repeat guard: same citizen re-rolls a recently said line", () => {
+  const r = makeRecipient();
+  const c = withTile(makeCitizen({ username: "Repeater", locals: [r] }), 100, 100);
+  assert.equal(sayPublic(c.player, "Morning!"), true);
+  const pool = ["Morning!", "Alright?"];
+  let i = 0;
+  const line = pickLineAvoidingRepeat(c.player, () => pool[i++ % pool.length]);
+  assert.equal(line, "Alright?");
+});
+
+run("repeat guard: all retries recent -> last candidate allowed, never silent", () => {
+  const r = makeRecipient();
+  const c = withTile(makeCitizen({ username: "Stuck", locals: [r] }), 100, 100);
+  sayPublic(c.player, "Morning!");
+  let calls = 0;
+  const line = pickLineAvoidingRepeat(c.player, () => {
+    calls++;
+    return "Morning!";
+  });
+  assert.equal(line, "Morning!"); // repetition beats muteness
+  assert.equal(calls, REPEAT_RETRIES + 1); // initial pick + re-rolls
+});
+
+run("repeat guard: nearby citizen's line re-rolls, far citizen's doesn't", () => {
+  const r = makeRecipient();
+  const a = withTile(makeCitizen({ username: "Ann", locals: [r] }), 0, 0);
+  const b = withTile(makeCitizen({ username: "Bob", locals: [r] }), 10, 0); // within 15
+  const c = withTile(makeCitizen({ username: "Cat", locals: [r] }), 100, 100); // far
+  sayPublic(a.player, "Morning!");
+  const pool = ["Morning!", "Alright?"];
+  let i = 0;
+  assert.equal(
+    pickLineAvoidingRepeat(b.player, () => pool[i++ % pool.length]),
+    "Alright?"
+  );
+  let j = 0;
+  assert.equal(
+    pickLineAvoidingRepeat(c.player, () => pool[j++ % pool.length]),
+    "Morning!"
+  );
+});
+
+run("repeat guard: pending pick blocks a second citizen before sayPublic fires", () => {
+  const a = withTile(makeCitizen({ username: "Abe", locals: [] }), 0, 0);
+  const b = withTile(makeCitizen({ username: "Bea", locals: [] }), 5, 0);
+  // Abe picks "Morning!" but hasn't spoken yet (typing delay) — Bea picking
+  // in the same tick must see the reservation and re-roll.
+  assert.equal(pickLineAvoidingRepeat(a.player, () => "Morning!"), "Morning!");
+  const pool = ["Morning!", "Alright?"];
+  let i = 0;
+  assert.equal(
+    pickLineAvoidingRepeat(b.player, () => pool[i++ % pool.length]),
+    "Alright?"
+  );
+  // When Abe's line actually speaks, the reservation commits (not duplicated).
+  const before = repeatGuardStats();
+  sayPublic(a.player, "Morning!");
+  const after = repeatGuardStats();
+  assert.equal(after.pending, before.pending - 1);
+  assert.equal(after.area, before.area + 1);
+});
+
+run("repeat guard: three citizens picking in one tick don't chant in unison", () => {
+  const pool = ["Morning!", "Alright?", "Hey there."];
+  const citizens = [0, 1, 2].map((n) =>
+    withTile(makeCitizen({ username: "crowd" + n, locals: [] }), n * 3, 0)
+  );
+  const said = citizens.map((c) => {
+    let n = 0;
+    return pickLineAvoidingRepeat(c.player, () => pool[n++ % pool.length]);
+  });
+  const uniq = new Set(said.map((l) => normalizeRepeatLine(l, null)));
+  assert.equal(uniq.size, 3, `expected 3 distinct lines, got ${JSON.stringify(said)}`);
+});
+
+run("repeat guard: per-citizen memory keeps only the last 8 lines", () => {
+  const c = withTile(makeCitizen({ username: "Long", locals: [] }), 0, 0);
+  for (let i = 0; i < 10; i++) sayPublic(c.player, "line " + i);
+  withTile(c, 999, 999); // moved away: the area memory no longer in play
+  // "line 0" fell out of the window — no longer recent, picked immediately.
+  let calls = 0;
+  const line = pickLineAvoidingRepeat(c.player, () => {
+    calls++;
+    return calls === 1 ? "line 0" : "line 9";
+  });
+  assert.equal(line, "line 0");
+  assert.equal(calls, 1);
+  assert.equal(REPEAT_SELF_KEEP, 8);
+  // "line 9" is still inside the window — re-rolls once to a fresh line.
+  let calls2 = 0;
+  const line2 = pickLineAvoidingRepeat(c.player, () => {
+    calls2++;
+    return calls2 === 1 ? "line 9" : "fresh line";
+  });
+  assert.equal(line2, "fresh line");
+  assert.equal(calls2, 2);
+});
+
+run("repeat guard: null citizen skips the guard, pool miss stays null", () => {
+  assert.equal(pickLineAvoidingRepeat(null, () => "hi"), "hi");
+  const c = makeCitizen({ locals: [] });
+  assert.equal(pickLineAvoidingRepeat(c.player, () => null), null);
+  assert.equal(pickLineAvoidingRepeat(c.player, () => ""), "");
+});
+
+run("repeat guard: area + citizen stores are capped", () => {
+  const r = makeRecipient();
+  for (let i = 0; i < 2100; i++) {
+    const c = withTile(makeCitizen({ username: "cap" + i, locals: [r] }), i, i);
+    sayPublic(c.player, "line " + i);
+  }
+  const s = repeatGuardStats();
+  assert.ok(s.area <= 2000, `area capped, got ${s.area}`);
+  assert.ok(s.citizens <= 2000, `citizens capped, got ${s.citizens}`);
+});
+
+console.log("ALL REPEAT-GUARD TESTS DONE");

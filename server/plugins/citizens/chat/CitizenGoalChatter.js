@@ -55,7 +55,7 @@
 const path = require("path");
 const fs = require("fs");
 
-const { sayPublic } = require("./CitizenSayPublic");
+const { sayPublic, pickLineAvoidingRepeat } = require("./CitizenSayPublic");
 const { voiceFor, voiceLine } = require("../lib/citizenVoice");
 const { bandOf, BAND_NEAR, BAND_MID } = require("../lib/CitizenTickLod");
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
@@ -399,10 +399,13 @@ function tickBossGoalChatter(director, overrides = {}) {
         if (nowMs < (nextPartyChatterAt.get(partyId) ?? 0)) continue;
         nextPartyChatterAt.set(partyId, nowMs + BOSS_PLAN_MIN_MS);
         const n = Math.max(members.length, 1);
-        const line = fillTemplate(voiceLine(voice, BOSS_PLAN_LINES, rng), {
-          boss: bossLabel,
-          n: String(n),
-        });
+        // Anti-repeat: re-roll the template pick against recent speech.
+        const line = pickLineAvoidingRepeat(bot, () =>
+          fillTemplate(voiceLine(voice, BOSS_PLAN_LINES, rng), {
+            boss: bossLabel,
+            n: String(n),
+          })
+        );
         if (line) {
           try { say(bot, line); } catch { /* cosmetic */ }
           try { journal?.log(leader.username, "social", line); } catch { /* best-effort */ }
@@ -418,10 +421,12 @@ function tickBossGoalChatter(director, overrides = {}) {
             const compPersonality = personalityOf(compBot);
             if (rng() < chatterChance(compPersonality)) {
               const compVoice = voiceFor(compPersonality);
-              const compLine = fillTemplate(voiceLine(compVoice, BOSS_CHIME_LINES, rng), {
-                boss: bossLabel,
-                leader: displayNameOfRecord(leader, leader.username) ?? leader.username,
-              });
+              const compLine = pickLineAvoidingRepeat(compBot, () =>
+                fillTemplate(voiceLine(compVoice, BOSS_CHIME_LINES, rng), {
+                  boss: bossLabel,
+                  leader: displayNameOfRecord(leader, leader.username) ?? leader.username,
+                })
+              );
               if (compLine) {
                 try { say(compBot, compLine); } catch { /* cosmetic */ }
                 try { journal?.log(comp.username, "social", compLine); } catch { /* best-effort */ }
@@ -434,7 +439,9 @@ function tickBossGoalChatter(director, overrides = {}) {
         nextPartyChatterAt.set(partyId, nowMs + BOSS_FIGHT_MIN_MS);
         const seen = !!party.bossSeen;
         const pool = seen ? BOSS_FIGHT_SEEN_LINES : BOSS_FIGHT_UNSEEN_LINES;
-        const line = fillTemplate(voiceLine(voice, pool, rng), { boss: bossLabel });
+        const line = pickLineAvoidingRepeat(bot, () =>
+          fillTemplate(voiceLine(voice, pool, rng), { boss: bossLabel })
+        );
         if (line) {
           try { say(bot, line); } catch { /* cosmetic */ }
           try { journal?.log(leader.username, "combat", line); } catch { /* best-effort */ }
@@ -574,7 +581,9 @@ function tickFriendGoalChatter(director, overrides = {}) {
           else if (inv.kind === INVITE_PARTY || inv.kind === INVITE_BOSS || inv.kind === INVITE_ACTIVITY)
             pool = PARTY_INVITE_LINES;
           if (!pool) continue; // unknown invite kind -> silence, never invent
-          line = fillTemplate(voiceLine(voice, pool, rng), { from });
+          line = pickLineAvoidingRepeat(bot, () =>
+            fillTemplate(voiceLine(voice, pool, rng), { from })
+          );
           markInviteId = inv.id;
           break;
         }
@@ -595,7 +604,9 @@ function tickFriendGoalChatter(director, overrides = {}) {
             const friendName = friendRecord
               ? (displayNameOfRecord(friendRecord, f) ?? f)
               : f;
-            line = fillTemplate(voiceLine(voice, FRIEND_NEW_LINES, rng), { friend: friendName });
+            line = pickLineAvoidingRepeat(bot, () =>
+              fillTemplate(voiceLine(voice, FRIEND_NEW_LINES, rng), { friend: friendName })
+            );
             markFriendKey = fkey;
             break;
           }
@@ -631,10 +642,12 @@ function tickFriendGoalChatter(director, overrides = {}) {
                 } catch {
                   // keep generic
                 }
-                line = fillTemplate(voiceLine(voice, RUN_WITH_FRIEND_LINES, rng), {
-                  friend: friendName,
-                  what,
-                });
+                line = pickLineAvoidingRepeat(bot, () =>
+                  fillTemplate(voiceLine(voice, RUN_WITH_FRIEND_LINES, rng), {
+                    friend: friendName,
+                    what,
+                  })
+                );
                 markPartyId = pid;
               }
             }

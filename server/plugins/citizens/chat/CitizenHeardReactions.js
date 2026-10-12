@@ -39,7 +39,7 @@
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { humanizerProfile } = require("../lib/humanizer");
 const { voiceFor, voiceLine } = require("../lib/citizenVoice");
-const { sayPublic } = require("./CitizenSayPublic");
+const { sayPublic, pickLineAvoidingRepeat } = require("./CitizenSayPublic");
 
 // Per-citizen throttle: username -> timestamp of last scripted reaction.
 const lastReactionAt = new Map();
@@ -210,7 +210,8 @@ function reactionChance(personality) {
  */
 function speakShun(citizenUsername, personality, bot, nowMs) {
   const voice = voiceFor(personality);
-  const line = voiceLine(voice, voicePool("shun"));
+  // Anti-repeat: re-roll the template pick against recent speech.
+  const line = pickLineAvoidingRepeat(bot, () => voiceLine(voice, voicePool("shun")));
   // Snappy, but not instant: even a cold shoulder needs a beat.
   const delay = Math.round(800 + Math.random() * 1200);
   scheduleReaction(() => {
@@ -311,17 +312,21 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
 
   // Pick line through the shared voice module (terse variants for
   // gruff/taciturn, lowercase/punctuation styling per voice profile).
+  // Anti-repeat: re-roll the template pick against recent speech.
   const voice = voiceFor(personality);
-  let line;
-  if (key === "greetFriend") {
-    const first = String(speakerUsername ?? "").trim().split(" ")[0] || "you";
-    line = voiceLine(voice, {
-      plain: [`hey ${first}!`, `${first}!! good to see you`, `hey ${first}, how's it going`],
-      terse: [`hey ${first}.`, `${first}.`, `oh. ${first}.`],
-    });
-  } else {
-    line = voiceLine(voice, voicePool(key));
-  }
+  const greetFirst = String(speakerUsername ?? "").trim().split(" ")[0] || "you";
+  const line = pickLineAvoidingRepeat(bot, () =>
+    key === "greetFriend"
+      ? voiceLine(voice, {
+          plain: [
+            `hey ${greetFirst}!`,
+            `${greetFirst}!! good to see you`,
+            `hey ${greetFirst}, how's it going`,
+          ],
+          terse: [`hey ${greetFirst}.`, `${greetFirst}.`, `oh. ${greetFirst}.`],
+        })
+      : voiceLine(voice, voicePool(key))
+  );
 
   // Speak like a player: overhead + chat box (not NPC-style overhead-only).
   // Scheduled with a typing delay — the reply used to fire in the same

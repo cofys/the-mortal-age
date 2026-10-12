@@ -50,7 +50,7 @@
  * conversation dying after exactly one reply.
  */
 
-const { sayPublic } = require("./CitizenSayPublic");
+const { sayPublic, pickLineAvoidingRepeat } = require("./CitizenSayPublic");
 const { voiceFor, voiceLine } = require("../lib/citizenVoice");
 const { humanizerProfile } = require("../lib/humanizer");
 
@@ -1306,9 +1306,16 @@ function pickTurnLine(conv, participant, stage) {
         : FLAVOR_CHANCE;
     if (flavorPool && conv.rng() < threshold) pools = flavorPool;
   }
-  const line = pickLine(voice, pools, vars, conv.rng);
-  if (!line) return null;
-  return { line: render(line, vars), addressee };
+  // Anti-repeat: re-roll the template pick while the RENDERED line (names
+  // filled) matches this citizen's or the area's recent speech. A pool miss
+  // still returns null — the caller, not the guard, decides that silence.
+  const speakerBot = resolveBot(conv, participant);
+  const raw = pickLineAvoidingRepeat(speakerBot, () => {
+    const picked = pickLine(voice, pools, vars, conv.rng);
+    return picked ? render(picked, vars) : null;
+  });
+  if (!raw) return null;
+  return { line: raw, addressee };
 }
 
 /** Face the person you're talking to, like a person would. */
