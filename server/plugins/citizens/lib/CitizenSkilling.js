@@ -249,6 +249,22 @@ const skillStore = {
   getLevel(name, skillId) {
     return levelForXp(this.getXp(name, skillId));
   },
+
+  /**
+   * Set XP absolutely (not additive). Used by CitizenXpSync.persistSkillsToStore
+   * to write the engine SkillManager's authoritative values back to the data
+   * tier on dematerialize. Marks dirty so it persists.
+   */
+  setXp(name, skillId, xp) {
+    const key = normalizeName(name);
+    let entry = this.xp.get(key);
+    if (!entry) {
+      entry = {};
+      this.xp.set(key, entry);
+    }
+    entry[skillId] = Math.max(0, Math.floor(xp));
+    this.dirty = true;
+  },
 };
 
 skillStore.load();
@@ -443,7 +459,31 @@ function grantXpWithCelebration(director, record, skillId, amount) {
     // Guild records are garnish; the base XP always lands.
   }
   const boosted = bonus > 0 ? Math.max(1, Math.round(amount * (1 + bonus))) : amount;
-  const { leveled, level } = skillStore.addXp(record.username, skillId, boosted);
+  // Single source of truth (Jon 2026-10-12): the engine SkillManager owns XP
+  // while materialized; skillStore is the persistence snapshot. Route through
+  // CitizenXpSync so materialized citizens grant via the engine.
+  let leveled = false;
+  let level = 1;
+  try {
+    const XpSync = require("./CitizenXpSync");
+    const Skill = director?.api?.core?.Skill;
+    const result = XpSync.grantXp(
+      director,
+      record.username,
+      skillId,
+      boosted,
+      Skill,
+      skillStore,
+      levelForXp
+    );
+    leveled = result.leveled;
+    level = result.level;
+  } catch {
+    // Fallback: direct store write (never lose XP).
+    const result = skillStore.addXp(record.username, skillId, boosted);
+    leveled = result.leveled;
+    level = result.level;
+  }
   if (leveled) {
     const line = `Reached level ${level} ${def.label}!`;
     journalEvent(record.username, line, "work");

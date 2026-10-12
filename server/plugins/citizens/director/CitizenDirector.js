@@ -73,6 +73,7 @@ const Battles = require("../../kingdoms/Battles.Kingdoms");
 const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
+const CitizenXpSync = require("../lib/CitizenXpSync");
 const CitizenFishing = require("../brain/actions/CitizenFishing");
 const CitizenActivityChatter = require("../chat/CitizenActivityChatter");
 const CitizenWarChatter = require("../chat/CitizenWarChatter");
@@ -2349,6 +2350,20 @@ class CitizenDirector {
       { x: spawnTile.x, y: spawnTile.y, z: spawnTile.z ?? 0 },
       { ROAMING: "roaming" }
     );
+    // XP unification (Jon 2026-10-12): SkillManager is the source of truth.
+    // Hydrate the engine from the data-tier snapshot BEFORE the brain attaches,
+    // so the first brain tick sees the persisted XP. One-time; the engine owns
+    // XP from here until logoutCitizen persists it back.
+    try {
+      CitizenXpSync.hydrateSkillsFromStore(
+        bot,
+        record.username,
+        this.api.core?.Skill,
+        CitizenSkilling.skillStore
+      );
+    } catch {
+      // Non-fatal: bot spawns with default stats.
+    }
     state.citizens = { director: true, workCyclesBanked: 0 };
     // LOD marker: the bot brain throttles citizens harder than other bots
     // when no real player is near (see BotBehaviorTask.resolveEntryStride).
@@ -2468,6 +2483,20 @@ class CitizenDirector {
       record.online = false;
       record.currentActivityId = null;
       return;
+    }
+    // XP unification (Jon 2026-10-12): SkillManager is the source of truth.
+    // Persist the engine's authoritative XP back to the data-tier snapshot
+    // BEFORE logout destroys the Player object. The background sim uses these
+    // values until the citizen materializes again.
+    try {
+      CitizenXpSync.persistSkillsToStore(
+        bot,
+        record.username,
+        this.api.core?.Skill,
+        CitizenSkilling.skillStore
+      );
+    } catch {
+      // Non-fatal: stale store data is better than a failed logout.
     }
     try {
       bot.getForcedLogoutTimer?.().start?.(0);
