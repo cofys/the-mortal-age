@@ -3060,6 +3060,22 @@ class CitizenDirector {
       if (phase.activityId && phase.activityId !== record.currentActivityId) {
         this.switchActivity(record, phase.activityId);
       }
+      // Sync the roster's activity label from the brain's live frame. The
+      // brain's utility picker (CitizenDecisions.pick) selects activities
+      // autonomously; without this sync the monitor/chat/social layers see
+      // the spawn-time activity forever (e.g. safetynet_wander while the
+      // citizen is actually chopping). Runs after the phase check so the
+      // phase system still drives scheduling.
+      try {
+        const entry = this.runtime()?.entriesByUsername?.get(record.username);
+        const frames = entry?.brain?.frames ?? [];
+        const liveId = frames[frames.length - 1]?.behaviour?.id ?? null;
+        if (liveId && liveId !== record.currentActivityId) {
+          record.currentActivityId = liveId;
+        }
+      } catch {
+        // Never break the tick.
+      }
       // Keep the kingdom attributes fresh (cheap, idempotent).
       if (bot.getAttribute?.(ATTR_KINGDOM_ID) !== record.kingdomId) {
         bot.setAttribute?.(ATTR_KINGDOM_ID, record.kingdomId);

@@ -169,7 +169,9 @@ function createCitizenExploreAction(spec, world) {
         try {
           const market = siteTile(player, "market") ?? { x: 3200, y: 3200, z: 0 };
           // Destack: claim a distinct slot at the market anchor so returning
-          // citizens don't pile on the exact tile. Falls back to the anchor.
+          // citizens don't pile on the exact tile. When slots are exhausted
+          // the claim returns null — fall back to a per-citizen personalSpot
+          // spread around the anchor, never the exact tile.
           let home = null;
           try {
             const claim = SlotCapacity.claimSlot(
@@ -184,9 +186,23 @@ function createCitizenExploreAction(spec, world) {
               home = { x: claim.x, y: claim.y, z: market.z ?? 0 };
             }
           } catch {
-            // Claim failure degrades to the anchor — never a break.
+            // Claim failure degrades to personalSpot — never a break.
           }
-          state.homeTile = home ?? market;
+          if (!home) {
+            try {
+              const spread = personalSpot(
+                player.getUsername?.() ?? "unknown",
+                Math.round(market.x),
+                Math.round(market.y),
+                2,
+                8
+              );
+              home = { x: spread.x, y: spread.y, z: market.z ?? 0 };
+            } catch {
+              home = market;
+            }
+          }
+          state.homeTile = home;
         } catch {
           state.homeTile = { x: 3200, y: 3200, z: 0 };
         }
