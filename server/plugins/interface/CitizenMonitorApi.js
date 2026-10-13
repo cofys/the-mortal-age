@@ -24,7 +24,7 @@
  * This is a debug endpoint; do not expose the game port publicly.
  */
 
-const { getDirector } = require("../citizens/director/CitizenDirector");
+const { getDirector, CitizenDirector } = require("../citizens/director/CitizenDirector");
 
 // username -> { x, y, z, lastMoveAt }. Module-level so it persists across polls.
 const lastSeen = new Map();
@@ -64,6 +64,25 @@ function getLivePosition(director, record) {
 }
 
 function handleMonitor(query) {
+  // DEBUG: Fake player control for autonomous testing (no real player needed).
+  // ?fakePlayer=x,y,z - simulate a player at coordinates
+  // ?clearFakePlayer=1 - remove the simulated player
+  try {
+    if (query && query.fakePlayer) {
+      const parts = String(query.fakePlayer).split(",").map(Number);
+      if (parts.length >= 2 && parts.slice(0, 2).every(Number.isFinite)) {
+        CitizenDirector.setDebugFakePlayer(parts[0], parts[1], parts[2] ?? 0);
+        return { ok: true, fakePlayer: { x: parts[0], y: parts[1], z: parts[2] ?? 0 } };
+      }
+      return { ok: false, error: "Invalid fakePlayer format. Use ?fakePlayer=x,y,z" };
+    }
+    if (query && query.clearFakePlayer) {
+      CitizenDirector.clearDebugFakePlayers();
+      return { ok: true, cleared: true };
+    }
+  } catch (e) {
+    return { ok: false, error: "fake player control failed: " + (e && e.message ? e.message : String(e)) };
+  }
   const director = getDirector?.();
   const roster = director?.roster;
   const now = Date.now();
@@ -128,12 +147,15 @@ function handleMonitor(query) {
   // Sort: most recently moved first, so Frank sees activity at the top.
   citizens.sort((a, b) => b.lastMoveAt - a.lastMoveAt);
 
+  let fakePlayers = [];
+  try { fakePlayers = CitizenDirector.getDebugFakePlayers(); } catch {}
   return {
     timestamp: now,
     total,
     materialized,
     count: citizens.length,
     citizens,
+    debugFakePlayers: fakePlayers,
   };
 }
 

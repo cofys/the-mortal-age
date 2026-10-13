@@ -374,7 +374,11 @@ const FEATURE_TICK_BUDGET_MS = 70;
 // (data tier: journal, needs, kinship, crafting all run on the record).
 // The Player rematerializes when a real player approaches.
 // Hysteresis (spawn < despawn) prevents thrash at the boundary.
-const CITIZEN_SPAWN_RADIUS = 50; // tiles from the citizen's data-tier position (their real whereabouts, synced from live movement): spawn when a real player is this close
+const CITIZEN_SPAWN_RADIUS = 50;
+// DEBUG-ONLY: Fake player positions for autonomous testing without a real player.
+// Set via the citizen-monitor API (?fakePlayer=x,y,z). Never enabled by default.
+// These simulate a real player's presence for proximity materialization.
+const debugFakePositions = []; // tiles from the citizen's data-tier position (their real whereabouts, synced from live movement): spawn when a real player is this close
 const CITIZEN_DESPAWN_RADIUS = 75; // tiles from current pos: despawn when no real player within this
 const PROXIMITY_TICK_TICKS = 17; // ~10s at 600ms/tick: fast spawn/despawn for responsiveness
 // Hard cap on concurrent materialized citizens (~4.8MB total active cost
@@ -1262,6 +1266,10 @@ class CitizenDirector {
    */
   realPlayerPositions() {
     const out = [];
+    // DEBUG: Include fake player positions for autonomous testing.
+    for (const fp of debugFakePositions) {
+      out.push({ x: fp.x, y: fp.y, z: fp.z ?? 0 });
+    }
     try {
       const World = this.api.core?.World;
       const players = World?.players;
@@ -1339,6 +1347,26 @@ class CitizenDirector {
    * the roster record regardless — this only controls the materialized Player
    * (~2KB object; ~4.8MB total active cost per citizen including brain state).
    */
+  /**
+   * DEBUG-ONLY: Set a fake player position for autonomous testing.
+   * Simulates a real player at (x, y, z) for proximity materialization.
+   * Call with no args to clear. Never enabled in production.
+   */
+  static setDebugFakePlayer(x, y, z) {
+    debugFakePositions.length = 0;
+    if (x != null && y != null) {
+      debugFakePositions.push({ x: Number(x), y: Number(y), z: Number(z ?? 0) });
+    }
+  }
+
+  static clearDebugFakePlayers() {
+    debugFakePositions.length = 0;
+  }
+
+  static getDebugFakePlayers() {
+    return debugFakePositions.map(p => ({ ...p }));
+  }
+
   tickProximity() {
     // Timing desync: stagger the visible-life AI so the whole population
     // doesn't act in one synchronized wave. Each citizen's slot comes from
@@ -2406,6 +2434,10 @@ class CitizenDirector {
     runtime.entriesByUsername.set(record.username, entry);
     runtime.botStatesByName.set(record.username, state);
     runtime.playerBotUsernames.add(record.username);
+    // ROOT CAUSE FIX: Citizens bypass BotRegistry, so the behavior task never
+    // starts (BotBehaviorTask.tick never runs → brains never tick → citizens
+    // stand still). Trigger startup now that entries exist.
+    try { runtime.ensureBehaviorTaskStarted?.(); } catch {}
 
     this.api.emitPlayerLogin({ player: bot, username: record.username });
     bot.moveTo?.(spawn.clone());

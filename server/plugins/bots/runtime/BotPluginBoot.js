@@ -250,6 +250,9 @@ function bootPlayerBotsRuntime(options = {}) {
     entries,
     entriesByUsername,
   });
+  // Expose for CitizenDirector: citizens add entries directly and must
+  // trigger behavior task startup (they bypass BotRegistry).
+  runtime.ensureBehaviorTaskStarted = ensureBehaviorTaskStarted;
 
   registerBrainProgressEvents({ api, runtime });
   configureBrainActivities({
