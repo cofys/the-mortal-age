@@ -196,6 +196,7 @@ const { tickJustice } = require("../lib/CitizenJusticeLife");
 const { tickLegalLife } = require("../lib/CitizenLegalLife");
 const { tickSurgery } = require("../lib/CitizenSurgeryLife");
 const { tickTravel } = require("../lib/CitizenTravelLife");
+const { tickWhereabouts } = require("../lib/CitizenWhereaboutsLife");
 const { tickEntertain } = require("../lib/CitizenEntertainLife");
 const CitizenHealth = require("../lib/CitizenHealth");
 const CitizenCrime = require("../lib/CitizenCrime");
@@ -4161,6 +4162,17 @@ class CitizenDirector {
       name: 'travel failed',
       run: () => {
         tickTravel(this, nowMs);
+      },
+    },
+    // Citizen whereabouts: want-driven data-tier movement (Jon 2026-10-13 —
+    // citizens are players, not anchors). Offline citizens advance toward
+    // destinations picked from their wants; materialization spawns at
+    // record.position, so travelers/gatherers/visitors populate the roads
+    // and countryside. Data tier, zero LLM.
+    {
+      name: 'whereabouts failed',
+      run: () => {
+        tickWhereabouts(this, nowMs);
       },
     },
     // Citizen entertainment: taverns, bards, theater, arena, sobriety.
