@@ -248,6 +248,18 @@ const ANCHOR_ACTIVITIES = new Set([
   ACT_TITHE_DUTY, // the round is a long duty, re-decidable like guard_patrol
   ACT_CARAVAN, // the road walk is a long duty, re-decidable like guard_patrol
   ACT_FARM,
+  // Jon 2026-10-13: the safety net is a fallback, not a destination. A
+  // citizen parked on safetynet_wander must be interruptible to real work
+  // (chop/mine/fish) — otherwise they sit on wander forever because the
+  // wander action doesn't complete on a useful cadence.
+  ACT_SAFETYNET_WANDER,
+  ACT_SAFETYNET_SOCIALIZE,
+  ACT_SAFETYNET_REST,
+  // Gather activities are long work sessions; they get the same periodic
+  // re-decision so a citizen doesn't chop through a critical need.
+  ACT_CHOP,
+  ACT_MINE,
+  ACT_FISH,
 ]);
 
 const MEAL_ROLES = new Set(["commoner", "merchant", "guard", "courtier"]);
