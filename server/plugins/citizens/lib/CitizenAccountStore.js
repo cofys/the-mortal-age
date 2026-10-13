@@ -179,6 +179,25 @@ function clearCache() {
 }
 
 /**
+ * Dirty check: does the candidate account differ from the last saved/loaded
+ * version? Compares everything except updatedAt, so the director can sweep
+ * the roster each save cycle without rewriting thousands of unchanged files.
+ * Returns true when the citizen has no cached account (never saved this
+ * session) — the caller should save to create the file.
+ */
+function hasChanged(normalizedName, account) {
+  const key = normalizedName.toLowerCase().trim();
+  const cached = _cache.get(key);
+  if (!cached) return true;
+  const strip = (a) => {
+    const copy = { ...a };
+    delete copy.updatedAt;
+    return copy;
+  };
+  return JSON.stringify(strip(cached)) !== JSON.stringify(strip(account));
+}
+
+/**
  * List all account files (for migration/verification).
  * Returns array of normalized names (derived from filenames).
  */
@@ -202,5 +221,6 @@ module.exports = {
   setBlock,
   createAccount,
   clearCache,
+  hasChanged,
   listAccounts,
 };

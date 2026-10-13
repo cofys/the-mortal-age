@@ -74,6 +74,9 @@ const CitizenCampaigns = require("../lib/CitizenCampaigns");
 const CitizenCrafting = require("../lib/CitizenCrafting");
 const CitizenSkilling = require("../lib/CitizenSkilling");
 const CitizenXpSync = require("../lib/CitizenXpSync");
+// Jon 2026-10-13: citizen account migration — per-citizen account files
+// (data/saves/citizens/<name>.json) like human player accounts.
+const CitizenAccountStore = require("../lib/CitizenAccountStore");
 const CitizenFishing = require("../brain/actions/CitizenFishing");
 const CitizenActivityChatter = require("../chat/CitizenActivityChatter");
 const CitizenWarChatter = require("../chat/CitizenWarChatter");
@@ -884,7 +887,149 @@ class CitizenDirector {
       }
     }
     this.log("roster built", { citizens: this.roster.size });
+    // Jon 2026-10-13: citizen account migration — load per-citizen accounts
+    // (gender, home, persisted XP) before the first tick.
+    this.hydrateCitizenAccounts();
     this.startTask();
+  }
+
+  /**
+   * Jon 2026-10-13: citizen account migration, load half.
+   * For each roster record, load the per-citizen account file when one
+   * exists and hydrate director-owned fields (gender, home) plus the
+   * data-tier skill store (persisted XP). Citizens without an account file
+   * get one on the next account-store save sweep — no boot-time write storm.
+   * The sharded per-system files stay authoritative wherever they are
+   * populated; account data only fills gaps.
+   */
+  hydrateCitizenAccounts() {
+    let hydrated = 0;
+    let found = 0;
+    for (const record of this.roster.values()) {
+      try {
+        const account = CitizenAccountStore.load(record.username);
+        if (!account) continue;
+        found++;
+        const gender = account.gender;
+        if (gender === "female" || gender === "male") {
+          record.gender = gender;
+        }
+        if (account.identity && typeof account.identity === "object" && account.identity.home) {
+          record.home = account.identity.home;
+        }
+        if (account.skills && typeof account.skills === "object") {
+          const norm = normalizeName(record.username);
+          if (!CitizenSkilling.skillStore.xp.has(norm)) {
+            CitizenSkilling.skillStore.xp.set(norm, { ...account.skills });
+            CitizenSkilling.skillStore.dirty = true;
+          }
+        }
+        hydrated++;
+      } catch (error) {
+        this.log("citizen account hydrate failed", {
+          citizen: record.username,
+          error: String(error?.message ?? error),
+        });
+      }
+    }
+    this.log("citizen accounts hydrated", { found, hydrated, total: this.roster.size });
+  }
+
+  /**
+   * Jon 2026-10-13: citizen account migration — build one citizen's account
+   * snapshot from live state (roster record + data-tier skill/aging/health).
+   */
+  buildCitizenAccount(record) {
+    const username = record.username;
+    const norm = normalizeName(username);
+    let createdAt = Date.now();
+    try {
+      const existing = CitizenAccountStore.load(username);
+      if (existing && Number.isFinite(existing.createdAt)) {
+        createdAt = existing.createdAt;
+      }
+    } catch {
+      // Fresh account — createdAt stays now.
+    }
+    const gender = record.gender ?? record.personality?.gender ?? "unknown";
+    let aging = {};
+    try {
+      const age = Aging.ageOf(record);
+      if (Number.isFinite(age)) aging = { age };
+    } catch {
+      // Snapshot is best-effort; never blocks the save sweep.
+    }
+    let health = {};
+    try {
+      const rec = CitizenHealth.recordOf(username);
+      if (rec && typeof rec === "object") health = { ...rec };
+    } catch {
+      // Snapshot is best-effort; never blocks the save sweep.
+    }
+    return {
+      version: CitizenAccountStore.ACCOUNT_VERSION,
+      username,
+      normalizedName: norm,
+      gender,
+      createdAt,
+      updatedAt: Date.now(),
+      identity: {
+        role: record.role ?? "commoner",
+        kingdomId: record.kingdomId ?? null,
+        settlementId: record.settlementId ?? null,
+        townId: record.townId ?? null,
+        home: record.home ?? null,
+        traits: record.personality?.traits ?? [],
+      },
+      appearance: { gender },
+      skills: { ...(CitizenSkilling.skillStore.xp.get(norm) ?? {}) },
+      aging,
+      health,
+    };
+  }
+
+  /**
+   * Jon 2026-10-13: citizen account migration, save half.
+   * Flush per-citizen account files for a bounded slice of the roster.
+   * Runs inside the 70ms budgeted feature tick: the slice cursor persists
+   * on the director so the full roster is swept over successive calls, and
+   * only accounts whose data changed since the last save are rewritten.
+   * Returns the number of accounts written.
+   */
+  saveCitizenAccounts() {
+    const SLICE_SIZE = 400;
+    if (!Array.isArray(this._accountSaveNames)) {
+      this._accountSaveNames = [...this.roster.keys()];
+      this._accountSaveIdx = 0;
+    }
+    const names = this._accountSaveNames;
+    let idx = this._accountSaveIdx ?? 0;
+    let written = 0;
+    const end = Math.min(idx + SLICE_SIZE, names.length);
+    for (; idx < end; idx++) {
+      const record = this.roster.get(names[idx]);
+      if (!record) continue;
+      try {
+        const account = this.buildCitizenAccount(record);
+        if (CitizenAccountStore.hasChanged(record.username, account)) {
+          CitizenAccountStore.save(record.username, account);
+          written++;
+        }
+      } catch (error) {
+        this.log("citizen account save failed", {
+          citizen: names[idx],
+          error: String(error?.message ?? error),
+        });
+      }
+    }
+    if (end >= names.length) {
+      // Full sweep done — rebuild the name list next call (picks up new citizens).
+      this._accountSaveNames = null;
+      this._accountSaveIdx = 0;
+    } else {
+      this._accountSaveIdx = end;
+    }
+    return written;
   }
 
   addCitizen(kingdomId, role, settlementId = null, townId = null) {
@@ -5098,6 +5243,16 @@ class CitizenDirector {
       name: 'citizen kinship save failed',
       run: () => {
         CitizenKinship.getKinship().saveIfDirty();
+      },
+    },
+    {
+      // Jon 2026-10-13: citizen account migration — per-citizen account
+      // files (data/saves/citizens/<name>.json), like human player accounts.
+      name: 'citizen account store save failed',
+      run: () => {
+        if (this.saveCitizenAccounts() > 0) {
+          this.log("citizen account store saved");
+        }
       },
     },
     ];
