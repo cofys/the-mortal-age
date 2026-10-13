@@ -2749,7 +2749,8 @@
           "type": "citizenExplore"
         }
       ],
-      "_note": "SAFETY NET: no role requirement. Guarantees every citizen always has candidates."
+      "_note": "SAFETY NET: no role requirement. Guarantees every citizen always has candidates.",
+      "slotCapacity": 16
     },
     {
       "id": "safetynet_socialize",

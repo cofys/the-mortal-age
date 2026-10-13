@@ -35,6 +35,7 @@ const {
 } = require("../../../bots/behaviours/navigation/BotNavigation");
 const { siteTile, kingdomIdOf } = require("../CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
+const SlotCapacity = require("../CitizenSlotCapacity");
 const {
   agentRng,
   personalSpot,
@@ -166,7 +167,26 @@ function createCitizenExploreAction(spec, world) {
         state.giveUpAt = nowMs + GIVE_UP_MS;
         state.wildTile = wildernessTile(player, state.rng);
         try {
-          state.homeTile = siteTile(player, "market") ?? { x: 3200, y: 3200, z: 0 };
+          const market = siteTile(player, "market") ?? { x: 3200, y: 3200, z: 0 };
+          // Destack: claim a distinct slot at the market anchor so returning
+          // citizens don't pile on the exact tile. Falls back to the anchor.
+          let home = null;
+          try {
+            const claim = SlotCapacity.claimSlot(
+              player,
+              "safetynet_wander",
+              Math.round(market.x),
+              Math.round(market.y),
+              Math.round(market.z ?? 0),
+              state.rng
+            );
+            if (claim && Number.isFinite(claim.x) && Number.isFinite(claim.y)) {
+              home = { x: claim.x, y: claim.y, z: market.z ?? 0 };
+            }
+          } catch {
+            // Claim failure degrades to the anchor — never a break.
+          }
+          state.homeTile = home ?? market;
         } catch {
           state.homeTile = { x: 3200, y: 3200, z: 0 };
         }
@@ -262,6 +282,11 @@ function createCitizenExploreAction(spec, world) {
         s.phase = "outbound";
         s.searchesDone = 0;
         s.wildTile = null;
+        try {
+          SlotCapacity.releaseFor(ctx.player); // free the home slot
+        } catch {
+          // Best-effort.
+        }
       }
     },
   };
