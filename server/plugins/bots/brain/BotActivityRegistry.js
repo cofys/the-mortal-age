@@ -498,6 +498,8 @@ function createBotActivityRegistry(options = {}) {
     /** `allowed` limits the pick to those ids; `avoid` excludes one (a rotation switch). */
     /** `weights` (id -> weight, default 1) biases a fresh pick, e.g. by a site's mode counts. */
     pickActivity(player, nowMs = Date.now(), { allowed = null, avoid = null, own = null, weights = null } = {}) {
+      // TEMP-DIAG: emergency logging to see if pickActivity is called and why scorer never runs
+      try { console.log(`[PICKER-ENTRY] ${player?.getUsername?.() ?? "unknown"}: own=${own}, picker=${typeof activityPicker}`); } catch {}
       if (own) {
         // A bot going back to the activity it was given: only its failure cooldown
         // holds it back (capacity and `manual` are about handing out new activities).
