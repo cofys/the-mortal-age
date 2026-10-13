@@ -690,7 +690,12 @@ function createCitizenRoutineAction(spec, world) {
   // (The tavern socialDelegate was removed with KIND_SOCIAL, Jon 2026-10-12:
   // beer breaks handle tavern time now.)
   const marketDelegate = createIdleSocialAction(
-    { anchorKind: "market", chatterMinMs: 180000, chatterMaxMs: 480000 },
+    {
+      anchorKind: "market",
+      chatterMinMs: 180000,
+      chatterMaxMs: 480000,
+      activityId: "citizen_routine_market", // destack slot namespace
+    },
     world
   );
   let workDelegate = null;

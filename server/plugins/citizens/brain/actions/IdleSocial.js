@@ -18,6 +18,7 @@ const {
 const { isKingdomAtWar } = require("../../CitizenEvents");
 const { siteTile, kingdomIdOf } = require("../CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
+const SlotCapacity = require("../CitizenSlotCapacity");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
 const {
   agentRng,
@@ -78,12 +79,51 @@ function atTile(player, tile, radius = ARRIVE_RADIUS) {
   );
 }
 
+/**
+ * Pick a distinct standing tile near the shared anchor. Citizens claiming
+ * the same anchor land on distinct spiral-ring slots (structural de-dup),
+ * so a tavern fills up like a crowd, not a single stacked tile. Falls back
+ * to uncoordinated noise when the anchor's slots are full.
+ */
+function pickSocialSpot(player, anchor, radius, rng, activityId, releaseFirst) {
+  if (releaseFirst) {
+    try {
+      SlotCapacity.releaseFor(player);
+    } catch {
+      // Best-effort; a stuck claim degrades to the stale backstop.
+    }
+  }
+  try {
+    const claim = SlotCapacity.claimSlot(
+      player,
+      activityId,
+      Math.round(anchor.x),
+      Math.round(anchor.y),
+      Math.round(anchor.z ?? 0),
+      rng
+    );
+    if (claim && Number.isFinite(claim.x) && Number.isFinite(claim.y)) {
+      return { x: claim.x, y: claim.y, z: claim.z, claimed: true };
+    }
+  } catch {
+    // Claim failure degrades to noise — never a break.
+  }
+  const tile = noisyTile(anchor.x, anchor.y, radius, rng);
+  return { x: tile.x, y: tile.y, z: anchor.z ?? 0, claimed: false };
+}
+
 function createIdleSocialAction(spec, world) {
   const anchorKind = ["court", "tavern", "market"].includes(spec.anchorKind)
     ? spec.anchorKind
     : "tavern";
   const chatterMinMs = Math.max(1000, Number(spec.chatterMinMs ?? 60000));
   const chatterMaxMs = Math.max(chatterMinMs, Number(spec.chatterMaxMs ?? 240000));
+  // Slot namespace for the destack claim; set per activity in
+  // citizen-activities.json so tavern/court/market capacities stay distinct.
+  const slotActivityId =
+    typeof spec.activityId === "string" && spec.activityId.length > 0
+      ? spec.activityId
+      : "citizen_social";
 
   function botState(player) {
     return playerState(action, player, () => {
@@ -118,10 +158,35 @@ function createIdleSocialAction(spec, world) {
       }
 
       // Pick a spot near the anchor (tighter when the kingdom is at war).
+      // The spot is a claimed slot tile when the anchor has free slots, so
+      // N citizens socializing at one tavern stand on N distinct tiles.
       if (!state.spot || (atWar && state.spot.loose === true)) {
         const radius = atWar ? 2 : 6;
-        const tile = noisyTile(anchor.x, anchor.y, radius, state.rng);
-        state.spot = { x: tile.x, y: tile.y, z: anchor.z ?? 0, loose: atWar !== true };
+        const releaseFirst = !!state.spot; // departing the old slot frees it
+        const picked = pickSocialSpot(
+          player,
+          anchor,
+          radius,
+          state.rng,
+          slotActivityId,
+          releaseFirst
+        );
+        state.spot = { ...picked, loose: atWar !== true };
+      } else if (state.spot.claimed) {
+        // Refresh the claim while lingering: the same spot+citizen re-claims
+        // the same slot, keeping the tile stable and the claim alive past
+        // the stale-claim backstop.
+        const refreshed = pickSocialSpot(
+          player,
+          anchor,
+          atWar ? 2 : 6,
+          state.rng,
+          slotActivityId,
+          false
+        );
+        if (refreshed.claimed) {
+          state.spot = { ...refreshed, loose: state.spot.loose };
+        }
       }
       if (!atTile(player, state.spot)) {
         requestMovement(player, state.spot.x, state.spot.y, {
@@ -137,8 +202,15 @@ function createIdleSocialAction(spec, world) {
         state.nextDriftAt =
           nowMs + logNormalJitter(state.rng, 120000, state.human.tempoSigma);
         if (chance(state.rng, 0.5)) {
-          const tile = noisyTile(anchor.x, anchor.y, atWar ? 2 : 6, state.rng);
-          state.spot = { x: tile.x, y: tile.y, z: anchor.z ?? 0, loose: atWar !== true };
+          const picked = pickSocialSpot(
+            player,
+            anchor,
+            atWar ? 2 : 6,
+            state.rng,
+            slotActivityId,
+            true // drifting off the old slot frees it for someone else
+          );
+          state.spot = { ...picked, loose: atWar !== true };
           return "running";
         }
       }
@@ -162,6 +234,11 @@ function createIdleSocialAction(spec, world) {
     stop(ctx) {
       if (ctx?.player) {
         clearMovementRequest(ctx.player);
+        try {
+          SlotCapacity.releaseFor(ctx.player); // leaving the anchor frees the slot
+        } catch {
+          // Best-effort.
+        }
       }
     },
   };

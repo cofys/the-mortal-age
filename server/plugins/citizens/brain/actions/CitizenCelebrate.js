@@ -33,6 +33,7 @@ const {
 } = require("../../../bots/behaviours/navigation/BotNavigation");
 const { siteTile, kingdomIdOf } = require("../CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
+const SlotCapacity = require("../CitizenSlotCapacity");
 const {
   agentRng,
   personalSpot,
@@ -59,6 +60,35 @@ function workTileFor(player) {
   } catch {
     return null;
   }
+}
+
+// Slot namespace for the celebration gathering (citizen-activities.json
+// carries slotCapacity 16: sixteen distinct spiral tiles around the market
+// anchor, so a festival crowd spreads out instead of stacking one tile).
+const ACT_CELEBRATE = "citizen_celebrate";
+
+/**
+ * Distinct standing tile at the celebration venue. Claims a slot at the
+ * market anchor; falls back to the personal ring when slots are full.
+ */
+function venueSpotFor(player, venue) {
+  const name = player.getUsername?.() ?? "unknown";
+  try {
+    const claim = SlotCapacity.claimSlot(
+      player,
+      ACT_CELEBRATE,
+      Math.round(venue.x),
+      Math.round(venue.y),
+      Math.round(venue.z ?? 0)
+    );
+    if (claim && Number.isFinite(claim.x) && Number.isFinite(claim.y)) {
+      return { x: claim.x, y: claim.y, z: claim.z };
+    }
+  } catch {
+    // Claim failure degrades to the personal ring — never a break.
+  }
+  const spot = personalSpot(name, venue.x, venue.y, 2, 8);
+  return { x: spot.x, y: spot.y, z: venue.z ?? 0 };
 }
 
 /** Sociability 0-1 (defensive). */
@@ -135,7 +165,12 @@ function createCitizenCelebrateAction(spec, world) {
           clearMovementRequest(player);
           return "success";
         }
-        if (!st.workTile) st.workTile = workTileFor(player);
+        if (!st.workTile) {
+          st.workTile = workTileFor(player);
+          // Destack: walk to a distinct slot tile at the venue, not the
+          // exact market anchor every celebrant shares.
+          st.venueTile = st.workTile ? venueSpotFor(player, st.workTile) : null;
+        }
         if (!st.homeTile) {
           try {
             // Personal loiter spot near the venue (market) so citizens don't stack.
@@ -152,7 +187,8 @@ function createCitizenCelebrateAction(spec, world) {
               st.phase = "celebrating";
               return "running";
             }
-            requestMovement(player, st.workTile.x, st.workTile.y, { z: st.workTile.z ?? 0 });
+            const dest = st.venueTile ?? st.workTile;
+            requestMovement(player, dest.x, dest.y, { z: dest.z ?? 0 });
             return "running";
           }
           case "celebrating": {

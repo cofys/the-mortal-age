@@ -131,7 +131,8 @@
           "anchorKind": "court",
           "chatterMaxMs": 300000,
           "chatterMinMs": 90000,
-          "type": "idleSocial"
+          "type": "idleSocial",
+          "activityId": "courtier_attend"
         }
       ],
       "capacity": 32,
@@ -156,7 +157,8 @@
           "anchorKind": "tavern",
           "chatterMaxMs": 240000,
           "chatterMinMs": 60000,
-          "type": "idleSocial"
+          "type": "idleSocial",
+          "activityId": "tavern_social"
         }
       ],
       "capacity": 64,
@@ -184,7 +186,8 @@
           "anchorKind": "market",
           "chatterMaxMs": 360000,
           "chatterMinMs": 120000,
-          "type": "idleSocial"
+          "type": "idleSocial",
+          "activityId": "leisure_stroll"
         }
       ],
       "capacity": 32,
@@ -973,7 +976,8 @@
         {
           "type": "citizenCelebrate"
         }
-      ]
+      ],
+      "slotCapacity": 16
     },
     {
       "id": "citizen_compete",
@@ -2397,7 +2401,8 @@
         {
           "type": "idleSocial",
           "chatterMinMs": 30000,
-          "chatterMaxMs": 120000
+          "chatterMaxMs": 120000,
+          "activityId": "safetynet_socialize"
         }
       ],
       "_note": "SAFETY NET: no role requirement. Falls back to kingdom tavern anchor."

@@ -20,10 +20,20 @@ const {
 } = require("../../../bots/behaviours/navigation/BotNavigation");
 const { pickPlace } = require("../CitizenSites");
 const { agentRng, personalSpot } = require("../../lib/humanizer");
+const SlotCapacity = require("../CitizenSlotCapacity");
 
 const ARRIVE_RADIUS = 6;
 const STUCK_MS = 4 * 60 * 1000;
 const STICKY_MS = 90 * 60 * 1000;
+
+// The activity that owns the gather spot of each kind, for destack slot
+// claims. Same spot + same activity => same claim pool, so N citizens
+// gathering at one place stand on N distinct slot tiles.
+const GATHER_ACTIVITY_FOR_KIND = Object.freeze({
+  tree: "citizen_chop",
+  rock: "citizen_mine",
+  fish: "citizen_fish",
+});
 
 function createCitizenGoToPlaceAction(spec, world) {
   const kind = spec.kind;
@@ -43,7 +53,30 @@ function createCitizenGoToPlaceAction(spec, world) {
         const rng = agentRng(`place:${name}:${kind}:${Math.floor(nowMs / STICKY_MS)}`);
         const place = pickPlace(player, kind, rng);
         if (!place) return "failed";
-        const spot = personalSpot(name, place.x, place.y, 2, place.radius ?? 6);
+        // Distinct slot tile at the shared gather place (destack); falls
+        // back to the personal ring when the place's slots are full.
+        let spot = null;
+        const activityId = GATHER_ACTIVITY_FOR_KIND[kind];
+        if (activityId) {
+          try {
+            const claim = SlotCapacity.claimSlot(
+              player,
+              activityId,
+              Math.round(place.x),
+              Math.round(place.y),
+              Math.round(place.z ?? 0),
+              rng
+            );
+            if (claim && Number.isFinite(claim.x) && Number.isFinite(claim.y)) {
+              spot = { x: claim.x, y: claim.y };
+            }
+          } catch {
+            // Claim failure degrades to the personal ring — never a break.
+          }
+        }
+        if (!spot) {
+          spot = personalSpot(name, place.x, place.y, 2, place.radius ?? 6);
+        }
         s.spot = { x: spot.x, y: spot.y, z: place.z, placeId: place.id };
         s.giveUpAt = nowMs + STUCK_MS;
         // TODO: shared ensureWorkTool(player, kind) here (see routine's fix),
@@ -69,6 +102,11 @@ function createCitizenGoToPlaceAction(spec, world) {
       if (!ctx?.player) return;
       st(ctx.player).spot = null; // fresh pick next run (no stale state)
       clearMovementRequest(ctx.player);
+      try {
+        SlotCapacity.releaseFor(ctx.player); // arrived or gave up: free the slot
+      } catch {
+        // Best-effort.
+      }
     },
   };
 
