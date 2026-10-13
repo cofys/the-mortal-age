@@ -91,9 +91,9 @@ Estimate: tokens ~= chars / 4. Per chat call:
 | Player notes (top 5) | ~150 |
 | History (last 6 exchanges, truncated oldest-first) | ~300 |
 | Current player line | ~100 |
-| Reply output cap (60 tokens; public chat lines are 80 chars anyway) | 60 |
+| Reply output cap (50 tokens; ~two 80-char public-chat lines) | 50 |
 | Overhead | ~30 |
-| **Total per call** | **~920** |
+| **Total per call** | **~910** |
 
 Input hard cap: 2000 tokens (history is truncated to fit). Prompts stay lean
 regardless of provider context windows — free-tier *request* limits are the

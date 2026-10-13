@@ -2,9 +2,10 @@
 //
 // Budget: kept lean for free-tier request/token budgets.
 //   - INPUT hard cap: 2000 tokens (history is truncated oldest-first to fit).
-//   - OUTPUT cap: 32 tokens (~128 chars = ~2 short sentences). Citizens talk
-//     like real players: short, but with substance. Mouth.js paces multi-line
-//     replies with natural pauses between lines.
+//   - OUTPUT cap: 50 tokens (~200 chars = two public-chat lines). Citizens
+//     talk like real players: short, but with substance. sayPublic word-
+//     chunks longer replies into 80-char lines ~800ms apart, so a two-line
+//     utterance never reads as one truncated message.
 // Token estimate: chars / 4 (rough, English-heavy, errs on the safe side).
 //
 // Typical call math (see DESIGN.md):
@@ -15,9 +16,10 @@ const TOKEN_CHARS = 4;
 const estimateTokens = (text) => Math.ceil(String(text ?? "").length / TOKEN_CHARS);
 
 const INPUT_BUDGET_TOKENS = 2000;
-const MAX_OUTPUT_TOKENS = 20; // ~80 chars = one chat line. Multi-chunk utterances
-// interleave with other speakers in the chatbox, so generation must fit in a
-// single chunk. Shorter is more human anyway.
+const MAX_OUTPUT_TOKENS = 50; // ~200 chars = two 80-char chat lines.
+// sayPublic word-chunks longer utterances into 80-char lines ~800ms apart,
+// which keeps multi-line replies readable (real players type a second line);
+// shorter is still more human, so the prompt asks for one or two sentences.
 const MAX_CARD_CHARS = 480; // short personality cards, not long system prompts
 const MAX_NOTES_IN_PROMPT = 5;
 const MAX_HISTORY_EXCHANGES = 6;
@@ -30,7 +32,7 @@ const WORLD_GROUNDING =
   "everyone has a theory why. Great powers: Asgarnia (Falador, no king), Misthalin " +
   "(Varrock, aging king), Kandarin (Ardougne, the plague lie), Morytania (vampyres), " +
   "Keldagrim (dwarf mining companies). Stay in character. Never mention you are an AI. " +
-  "Reply in one short sentence (under 80 characters), like a real player typing. " +
+  "Reply in one or two short sentences (under 200 characters), like a real player typing. " +
   "Be specific: mention what you're doing, what you're working toward, or what's " +
   "happening around you. Have opinions — real players complain, brag, and gossip. " +
   "Never give a generic greeting; if you wouldn't say it to a friend, don't say it. " +
@@ -90,7 +92,7 @@ function buildSpeakPrompt({ card, context, toName, toRole, toMemory, toKind, pla
       `Say something to them grounded in your current moment — what you're ` +
       `doing, working toward, or noticing. Mention it specifically, like ` +
       `"almost 70 fishing" or "these yews are packed today". Have an opinion ` +
-      `or ask them something real. One short sentence (under 80 characters), like a real player ` +
+      `or ask them something real. One or two short sentences (under 200 characters), like a real ` +
       `typing. Speak directly, no narration, no asterisks.`;
   } else {
     user =
@@ -98,7 +100,7 @@ function buildSpeakPrompt({ card, context, toName, toRole, toMemory, toKind, pla
       (toMemory ? `${toMemory} ` : "") +
       `Say something grounded in your current moment — what you're doing, ` +
       `working toward, or noticing. Be specific, have an opinion, or share ` +
-      `a bit of gossip. One short sentence (under 80 characters), like a real player typing. ` +
+      `a bit of gossip. One or two short sentences (under 200 characters), like a real player typing. ` +
       `Speak directly, no narration, no asterisks.`;
   }
 

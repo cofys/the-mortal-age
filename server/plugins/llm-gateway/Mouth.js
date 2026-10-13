@@ -14,21 +14,12 @@
 // Disable the default mouth with LLM_GATEWAY_MOUTH=0 if the citizens plugin
 // wants to speak replies itself.
 
-const PUBLIC_CHAT_MAX_CHARS = 60;
-
 // Shared with the template chat path: strip a leading self-name prefix
 // ("Ora Nettle: ...") that the LLM adds when roleplaying with name tags.
 // Public delivery funnels through CitizenSayPublic.sayPublic (voice backstop,
 // anti-repeat memory, 80-char word-boundary chunking, chat-box throttle).
 // CitizenSayPublic only requires lib/citizenVoice + constants — no cycle.
 const { stripSelfNamePrefix, sayPublic } = require("../citizens/chat/CitizenSayPublic");
-
-// Pacing between multi-line replies: chunks go out back-to-back with only a
-// brief pause. Long delays let other speakers' messages interleave between a
-// single utterance's chunks, making conversations unreadable. Generation is
-// now capped at 80 chars (one chunk), so this is a rare fallback, not the norm.
-const INTER_CHUNK_MIN_MS = 400;
-const INTER_CHUNK_MAX_MS = 800;
 
 const MOUTH_ENABLED = (process.env.LLM_GATEWAY_MOUTH ?? "1") === "1";
 
@@ -43,17 +34,6 @@ function chunk(text, size) {
   }
   if (rest.length > 0) chunks.push(rest);
   return chunks;
-}
-
-function recipientsFor(bot, World) {
-  const recipients = new Set();
-  if (typeof bot.getLocalPlayers === "function") {
-    for (const p of bot.getLocalPlayers()) recipients.add(p);
-  }
-  if (typeof World?.getNearbyPlayersForUpdate === "function") {
-    for (const p of World.getNearbyPlayersForUpdate(bot)) recipients.add(p);
-  }
-  return recipients;
 }
 
 function displayNameOf(bot) {
@@ -84,18 +64,6 @@ function speakPublic(api, bot, text) {
   // chunker splits at word boundaries on whole lines only.
   const clean = String(text ?? "").replace(/\s+/g, " ").trim();
   return sayPublic(bot, clean);
-}
-
-function speakPublicLine(api, bot, line) {
-  const World = api.core.World;
-  bot.forceChat(line);
-  const username = bot.getUsername();
-  const index = bot.getIndex();
-  for (const recipient of recipientsFor(bot, World)) {
-    if (recipient === bot) continue;
-    if (recipient?.getRelations?.().canReceivePublicChatFrom?.(bot) === false) continue;
-    recipient?.getPacketSender?.().sendPublicChat?.(line, username, index);
-  }
 }
 
 function speakPrivate(api, bot, requester, text) {
@@ -129,4 +97,4 @@ function onChatResponse(api, payload) {
   }
 }
 
-module.exports = { onChatResponse, speakPublic, speakPrivate, chunk, PUBLIC_CHAT_MAX_CHARS };
+module.exports = { onChatResponse, speakPublic, speakPrivate, chunk };

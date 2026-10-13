@@ -41,6 +41,7 @@ const {
 } = require("../../../bots/behaviours/navigation/BotNavigation");
 const { createBankAction } = require("../../../bots/brain/actions/Bank");
 const { siteTile, kingdomIdOf } = require("../CitizenSites");
+const { sayPublic } = require("../../chat/CitizenSayPublic");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
 const {
   agentRng,
@@ -418,7 +419,7 @@ function createCitizenThieveAction(spec, world) {
             GUARD_CATCH_LINES[
               Math.floor((state.rng?.() ?? Math.random()) * GUARD_CATCH_LINES.length)
             ];
-          guard.forceChat?.(line);
+          sayPublic(guard, line);
         } catch {
           // best effort
         }
@@ -482,7 +483,7 @@ function createCitizenThieveAction(spec, world) {
       const guard = witnessingGuard(player);
       if (guard && (state.rng?.() ?? Math.random()) < 0.5) {
         try {
-          guard.forceChat?.("Hey! Stop, thief!");
+          sayPublic(guard, "Hey! Stop, thief!");
         } catch {
           // best effort
         }

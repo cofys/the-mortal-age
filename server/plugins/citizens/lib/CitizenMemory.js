@@ -30,6 +30,10 @@
 const fs = require("fs");
 const path = require("path");
 const CitizenAccountStore = require("./CitizenAccountStore");
+// Gossip rumors are spoken through the canonical sayPublic path (overhead +
+// chat box, voice backstop, anti-repeat memory) — never raw forceChat, which
+// renders overhead-only and bypasses the shared speech pipeline.
+const { sayPublic } = require("../chat/CitizenSayPublic");
 
 // Dual-read with the per-citizen account store: the account "memory" block
 // wins when present and non-empty, the old citizen-memory.json is the
@@ -106,6 +110,24 @@ const GOSSIP_HOPS = 4; // how many social links a rumor travels
 const GOSSIP_HOP_MIN_MS = 90 * 1000; // min time between hops
 const GOSSIP_MAX_AGE_MS = 6 * 3600 * 1000;
 const GOSSIP_SPEAK_COOLDOWN_MS = 10 * 60 * 1000; // per citizen, mirrors realm rumors
+
+// Citizen-to-citizen street talk. Zero LLM: template lines only, each naming
+// the subject (the "street-talk names the subject" invariant). {S} = subject
+// display, {T} = rumor text. Kind-specific phrasing keeps the grammar natural:
+// a wedding isn't something someone "did", a feud isn't a "what did?" either.
+const GOSSIP_SPEAK_LINES = {
+  [GOSSIP_WEDDING]: ["Have you heard? {S} {T}", "Did you hear the news? {S} {T}"],
+  [GOSSIP_FEUD]: ["Word is {S} — {T}", "Heard about it? {S} {T}"],
+  [GOSSIP_OFFICE]: ["Big news — {S} {T}", "Did you hear? {S} {T}"],
+  [GOSSIP_GENEROSITY]: ["Have you heard? {S} {T}", "Word travels fast — {S} {T}"],
+  default: ["Did you hear what {S} did? {T}", "Word is {S} — {T}"],
+};
+
+function gossipSpeakLine(kind, subjectDisplay, text) {
+  const pool = GOSSIP_SPEAK_LINES[kind] ?? GOSSIP_SPEAK_LINES.default;
+  const tpl = pool[Math.floor(Math.random() * pool.length)];
+  return tpl.replace("{S}", subjectDisplay).replace("{T}", text);
+}
 
 const FRIENDLY_WORDS = [
   "thank", "thanks", "please", "hello", "hi", "hey", "good", "great",
@@ -758,9 +780,9 @@ class CitizenMemoryStore {
         now - (this.lastGossipSpeakAt.get(rumor.holder) ?? 0) >= GOSSIP_SPEAK_COOLDOWN_MS
       ) {
         const bot = botFor?.(next);
-        const line = `Did you hear what ${rumor.subjectDisplay} did? ${rumor.text}`;
+        const line = gossipSpeakLine(rumor.kind, rumor.subjectDisplay ?? "someone", rumor.text ?? "");
         try {
-          bot?.forceChat?.(line.slice(0, 160));
+          sayPublic(bot, line);
           this.lastGossipSpeakAt.set(rumor.holder, now);
           spoken.push({ speaker: next, line });
         } catch {

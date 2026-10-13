@@ -5,8 +5,9 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { resolveReplyTier } = require("./Gateway");
+const { resolveReplyTier, capReply, MAX_LLM_PUBLIC_CHARS } = require("./Gateway");
 const { JsonMemoryStore } = require("./JsonMemoryStore");
+const { CHAT_MAX_LEN, MAX_CHUNKS } = require("../citizens/chat/CitizenSayPublic");
 
 let failures = 0;
 function test(name, fn) {
@@ -119,6 +120,47 @@ async function main() {
     assert.equal(fs.existsSync(file), true, "explicit flush writes");
     const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
     assert.equal(parsed.history["c|p"].length, 2);
+  });
+
+  // ---- LLM reply cap: 3 word-chunked chat lines, never a mid-word cut ----
+  await test("cap budget matches sayPublic utterance capacity (3 x 80-char lines)", () => {
+    assert.equal(MAX_LLM_PUBLIC_CHARS, CHAT_MAX_LEN * MAX_CHUNKS);
+    assert.equal(MAX_LLM_PUBLIC_CHARS, 240);
+  });
+
+  await test("short replies pass through capReply unchanged", () => {
+    assert.equal(capReply("Nice haul today!"), "Nice haul today!");
+  });
+
+  await test("capReply never truncates mid-word", () => {
+    const words = [];
+    let len = 0;
+    for (let i = 0; len <= MAX_LLM_PUBLIC_CHARS + 20; i++) {
+      const w = `word${i}`;
+      words.push(w);
+      len += w.length + 1;
+    }
+    const capped = capReply(words.join(" "));
+    assert.ok(capped.length <= MAX_LLM_PUBLIC_CHARS, `capped too long: ${capped.length}`);
+    // The tail is a whole word (or the cap exactly), never a fragment: the
+    // next word in the source starts at the same word index.
+    assert.equal(words.join(" ").indexOf(capped) === 0, true);
+    assert.ok(/word\d+$/.test(capped), `ends mid-word: ...${capped.slice(-12)}`);
+  });
+
+  await test("capReply collapses whitespace before capping", () => {
+    assert.equal(capReply("hello\n\n   there   friend"), "hello there friend");
+  });
+
+  await test("capReply hard-cuts a single overlong word (no space to break at)", () => {
+    const long = "a".repeat(MAX_LLM_PUBLIC_CHARS + 50);
+    assert.equal(capReply(long).length, MAX_LLM_PUBLIC_CHARS);
+  });
+
+  await test("replies between 80 and 240 chars are no longer truncated (the old bug)", () => {
+    const twoLines = "word ".repeat(40).trim(); // 199 chars: two chat lines
+    assert.ok(twoLines.length > 80 && twoLines.length < MAX_LLM_PUBLIC_CHARS);
+    assert.equal(capReply(twoLines), twoLines, "was sliced at 80 chars before the fix");
   });
 
   if (failures > 0) {
