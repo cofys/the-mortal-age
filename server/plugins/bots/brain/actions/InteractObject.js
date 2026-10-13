@@ -83,7 +83,37 @@ function objectKey(object) {
  * inventory. State is per player: the action instance is shared.
  */
 function createInteractObjectAction(spec, world) {
-  const objectIds = resolveCatalogObjectIds(spec);
+  // Opt-in tier filter (citizen gather activities, Jon 2026-10-13): when
+  // spec.tierAttribute names a player attribute holding a tier (e.g.
+  // "willow"), object ids resolve for that tier only, so the citizen works
+  // the tier citizenGoToPlace chose instead of any nearby lower-tier
+  // resource. Unset = all catalog ids (existing behavior, unchanged).
+  const tierAttribute =
+    typeof spec.tierAttribute === "string" && spec.tierAttribute ? spec.tierAttribute : null;
+  const baseObjectIds = resolveCatalogObjectIds(spec);
+  const tierIdCache = new Map(); // tier -> ids
+  function objectIdsFor(player) {
+    if (!tierAttribute) return baseObjectIds;
+    let tier = null;
+    try {
+      tier = player?.getAttribute?.(tierAttribute);
+    } catch {
+      tier = null;
+    }
+    tier = typeof tier === "string" && tier ? tier : null;
+    if (!tier) return baseObjectIds;
+    if (!tierIdCache.has(tier)) {
+      let ids = baseObjectIds;
+      try {
+        const resolved = resolveCatalogObjectIds({ ...spec, tier });
+        if (Array.isArray(resolved) && resolved.length > 0) ids = resolved;
+      } catch {
+        // Resolution never breaks the action; fall back to all ids.
+      }
+      tierIdCache.set(tier, ids);
+    }
+    return tierIdCache.get(tier);
+  }
   const option = spec.option ?? "Chop down";
   const routeExists = world.routes?.canReachSpot ?? canReachSpot;
   const stallMs = Math.max(5, Number(spec.stallSeconds ?? 120)) * 1000;
@@ -110,7 +140,7 @@ function createInteractObjectAction(spec, world) {
     bot.crowded = false;
     const loc = player.getLocation();
     const candidates =
-      world.objectSearch?.findCandidatesByIds?.(player, objectIds, {
+      world.objectSearch?.findCandidatesByIds?.(player, objectIdsFor(player), {
         regionRadius: 1,
         z: loc.getZ(),
         privateArea: player.getPrivateArea?.() ?? null,
@@ -220,7 +250,7 @@ function createInteractObjectAction(spec, world) {
     // The nearest spot the route planner can reach (an island is never picked).
     for (let attempt = 0; !bot.searchTarget && attempt < 4; attempt += 1) {
       const minDistance = bot.crowded ? MAX_TARGET_TILES : 0;
-      const spot = world.objectSearch?.findNearestIndexedLocation?.(player, objectIds, {
+      const spot = world.objectSearch?.findNearestIndexedLocation?.(player, objectIdsFor(player), {
         accept: (id, x, y, z) => (bot.skips.get(`${id}:${x}:${y}:${z}`) ?? 0) <= nowMs &&
           (bot.skips.get(spotKey(x, y, z)) ?? 0) <= nowMs &&
           Math.max(Math.abs(x - here.getX()), Math.abs(y - here.getY())) > minDistance,

@@ -10,6 +10,58 @@ const {
   peekMovementRequest,
 } = require("../../behaviours/navigation/BotNavigation");
 const Fishing = require("../../../skills/Fishing.plugin");
+// RegionManager statics (same pattern as LightFire.js/Climbing.js): the
+// water layer distinguishes shore from sea where the clipping mask cannot
+// (Jon 2026-10-13, Draynor — citizens fished standing on water).
+const { RegionManager } = require("../../../../src/main/typescript/elvarg/game/collision/RegionManager");
+
+function tileIsWater(x, y, z) {
+  try {
+    return RegionManager.isWater({ getX: () => x, getY: () => y, getZ: () => z }) === true;
+  } catch {
+    return false; // unknown: don't block, never strand
+  }
+}
+function tileIsBlocked(x, y, z) {
+  try {
+    return RegionManager.blocked({ getX: () => x, getY: () => y, getZ: () => z }, null) === true;
+  } catch {
+    return false;
+  }
+}
+/**
+ * Land stand tile for a fishing spot: nearest non-water, non-blocked tile
+ * within 2 rings of the spot, ring 1 preferred, tie-broken by nearest to
+ * the player. Citizens fish from the shoreline adjacent to the spot —
+ * never from the water (Jon 2026-10-13, Draynor has no pier).
+ */
+function landStandTile(player, spot) {
+  const sl = spot.getLocation();
+  const sx = sl.getX();
+  const sy = sl.getY();
+  const sz = sl.getZ();
+  const pl = player.getLocation();
+  const px = pl.getX();
+  const py = pl.getY();
+  let best = null;
+  let bestScore = Infinity;
+  for (let r = 1; r <= 2; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = sx + dx;
+        const y = sy + dy;
+        if (tileIsWater(x, y, sz) || tileIsBlocked(x, y, sz)) continue;
+        const score = r * 100 + Math.max(Math.abs(x - px), Math.abs(y - py));
+        if (score < bestScore) {
+          bestScore = score;
+          best = { x, y, z: sz };
+        }
+      }
+    }
+  }
+  return best;
+}
 
 // Spots of the chosen cluster: within this of its centre.
 const SITE_RADIUS = 16;
@@ -188,6 +240,7 @@ function createFishAction(spec, world) {
       }
       if (Fishing.isFishingActive(player)) {
         bot.idleSince = 0;
+        bot.lastFishActiveAt = nowMs;
         if (bot.approach) bot.spotTries.delete(bot.approach);
         bot.approach = null;
         return "running";
@@ -244,7 +297,12 @@ function createFishAction(spec, world) {
           }
           return "running";
         }
-        if (nowMs - bot.lastStartAt < START_RETRY_MS) return "running";
+        // A session that just died (random spot depletion) with the citizen
+        // still in place resumes without the retry delay — humans re-click
+        // immediately instead of standing around.
+        const instantResume =
+          bot.lastFishActiveAt && nowMs - bot.lastFishActiveAt < 15000;
+        if (!instantResume && nowMs - bot.lastStartAt < START_RETRY_MS) return "running";
         // Walked at before and still not fishing: that spot has no shore tile in reach.
         if (bot.approach === spot) {
           const tries = (bot.spotTries.get(spot) ?? 0) + 1;
@@ -258,15 +316,28 @@ function createFishAction(spec, world) {
         }
         bot.approach = spot;
         bot.lastStartAt = nowMs;
-        // As a player's click on the spot: walk into NPC reach (adjacent, not diagonal or a
-        // square back), face it and fish (NPCOptionPacketListener does the same).
-        player.getMovementQueue().walkToEntity(spot, () => {
+        const emitFish = () => {
           const at = spot.getLocation();
           world.emitNpcInteraction?.({
             player, npc: spot, npcId: spot.getId(), npcIndex: spot.getIndex(),
             clickType: clickTypeAt(spot), location: { x: at.getX(), y: at.getY(), z: at.getZ() }, handled: false,
           });
-        }, 1);
+        };
+        // Jon 2026-10-13 (Draynor): fish from the shoreline, not the water.
+        // Route to a land stand tile adjacent to the spot; only fall back to
+        // walkToEntity when no land tile exists (spot mid-water).
+        const stand = landStandTile(player, spot);
+        const hereTile = tile(loc);
+        if (stand && (hereTile.x !== stand.x || hereTile.y !== stand.y)) {
+          const dest = loc.clone();
+          dest.setX(stand.x);
+          dest.setY(stand.y);
+          player.getMovementQueue().walkToTile(dest, emitFish);
+          return "running";
+        }
+        // As a player's click on the spot: walk into NPC reach (adjacent, not diagonal or a
+        // square back), face it and fish (NPCOptionPacketListener does the same).
+        player.getMovementQueue().walkToEntity(spot, emitFish, 1);
         return "running";
       }
       const fromSite = chebyshev(here, bot.site);

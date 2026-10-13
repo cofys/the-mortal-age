@@ -43,6 +43,24 @@ function getRegionManager() {
   }
 }
 
+/**
+ * True when the tile is open water, via the region's water layer.
+ * Open water carries no block flags in this fork's collision (Jon
+ * 2026-10-13: citizens standing in the ocean at Draynor reported
+ * blocked:false), so blocked() alone cannot see it. The engine tracks
+ * water separately from cache terrain overlays (Region.isWater).
+ * Null when walkability can't be determined (no region manager).
+ */
+function isWaterTile(x, y, z) {
+  const rm = getRegionManager();
+  if (!rm || typeof rm.isWater !== "function") return null;
+  try {
+    return rm.isWater(asLocation(x, y, z)) === true;
+  } catch {
+    return null;
+  }
+}
+
 /** Minimal location shape — RegionManager.blocked only reads getX/getY/getZ. */
 function asLocation(x, y, z) {
   const ix = Math.round(x);
@@ -61,12 +79,22 @@ function asLocation(x, y, z) {
 /**
  * True when the tile is blocked (water, wall, mountain), false when walkable,
  * null when walkability can't be determined (no region manager).
+ *
+ * Water counts as blocked: open sea carries no block flags in this fork's
+ * collision, so the region's water layer is consulted too (Jon 2026-10-13:
+ * Draynor shoreline — citizens fished standing on water tiles that reported
+ * blocked:false). Piers and bridges are safe: their tiles carry structure
+ * overlays, not water, so isWater is false for them.
  */
 function isBlockedTile(x, y, z) {
   const rm = getRegionManager();
   if (!rm) return null;
   try {
-    return rm.blocked(asLocation(x, y, z), null) === true;
+    if (rm.blocked(asLocation(x, y, z), null) === true) return true;
+    if (typeof rm.isWater === "function" && rm.isWater(asLocation(x, y, z)) === true) {
+      return true;
+    }
+    return false;
   } catch {
     return null;
   }
@@ -87,7 +115,13 @@ function snapToWalkableTile(x, y, z, maxRadius) {
   const radius = Math.max(0, Math.min(40, Math.floor(Number(maxRadius) || 12)));
   const blockedAt = (tx, ty) => {
     try {
-      return rm.blocked(asLocation(tx, ty, iz), null) === true;
+      if (rm.blocked(asLocation(tx, ty, iz), null) === true) return true;
+      // Water counts as blocked (see isBlockedTile): the snap must never
+      // leave a citizen standing in the sea.
+      if (typeof rm.isWater === "function" && rm.isWater(asLocation(tx, ty, iz)) === true) {
+        return true;
+      }
+      return false;
     } catch {
       return false; // check failed: treat as walkable, don't strand
     }
@@ -110,5 +144,6 @@ module.exports = {
   setRegionManagerProvider,
   getRegionManager,
   isBlockedTile,
+  isWaterTile,
   snapToWalkableTile,
 };

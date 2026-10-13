@@ -386,7 +386,8 @@
           "until": {
             "inventoryFull": true
           },
-          "stallSeconds": 120
+          "stallSeconds": 120,
+          "tierAttribute": "citizens:local-resource-tier"
         },
         {
           "type": "citizenBank"
@@ -425,7 +426,8 @@
           "until": {
             "inventoryFull": true
           },
-          "stallSeconds": 120
+          "stallSeconds": 120,
+          "tierAttribute": "citizens:local-resource-tier"
         },
         {
           "type": "citizenBank"

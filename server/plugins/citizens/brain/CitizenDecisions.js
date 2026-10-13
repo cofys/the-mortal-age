@@ -50,6 +50,7 @@ const {
   ATTR_CITIZEN_GOAL,
   ATTR_KINGDOM_ID,
   ATTR_CARAVAN_DUTY,
+  ATTR_CITIZEN_LOCAL_RESOURCE,
 } = require("../constants");
 const {
   GOAL_SAVE_GOLD,
@@ -2852,7 +2853,26 @@ compete: competeInfo(player),
     climate: climateInfo(),
     night: nightInfo(),
     hour: new Date().getHours(), // server-local, per the timezone rule
-    here: (() => { try { const { placeKindNear } = require("./CitizenSites"); return placeKindNear(player); } catch { return null; } })(),
+    here: (() => {
+      // Local-resource stamp first (Jon 2026-10-13): a citizen working
+      // real nearby trees/rocks/water is "here" for the locality bonus
+      // even when no fixed gather anchor is near. Freshness-bounded so a
+      // stale stamp can't pin the bonus.
+      try {
+        const stamped = player?.getAttribute?.(ATTR_CITIZEN_LOCAL_RESOURCE);
+        if (typeof stamped === "string") {
+          const idx = stamped.lastIndexOf(":");
+          const kind = idx > 0 ? stamped.slice(0, idx) : null;
+          const at = idx > 0 ? Number(stamped.slice(idx + 1)) : NaN;
+          if (kind && Number.isFinite(at) && Date.now() - at < 5 * 60 * 1000) {
+            return kind;
+          }
+        }
+      } catch {
+        // Fall through to anchor proximity.
+      }
+      try { const { placeKindNear } = require("./CitizenSites"); return placeKindNear(player); } catch { return null; }
+    })(),
   };
 }
 

@@ -26,6 +26,13 @@ const ATTR_CITIZEN_TOWN = "citizens:town";
 // stamped on the bot at spawn so the routine works where the director
 // spawned them (see lib/CitizenAnchor.js).
 const ATTR_CITIZEN_WORK_KIND = "citizens:work-kind";
+// Local-resource prospecting (Jon 2026-10-13): citizenGoToPlace stamps these
+// when it resolves a gather target from real nearby objects instead of a
+// fixed anchor. local-resource = "<kind>:<epochMs>" (drives the scorer's
+// locality bonus while fresh); local-resource-tier = the tier name the
+// citizen is working (drives interactObject's tier filter).
+const ATTR_CITIZEN_LOCAL_RESOURCE = "citizens:local-resource";
+const ATTR_CITIZEN_LOCAL_TIER = "citizens:local-resource-tier";
 // Per-merchant stall overrides. Unset means the default bread stall
 // (see the merchant_tend spec in data/citizen-activities.json).
 const ATTR_WARE_ITEM = "citizens:ware-item";
@@ -115,6 +122,8 @@ module.exports = {
   ATTR_CITIZEN_SETTLEMENT,
   ATTR_CITIZEN_TOWN,
   ATTR_CITIZEN_WORK_KIND,
+  ATTR_CITIZEN_LOCAL_RESOURCE,
+  ATTR_CITIZEN_LOCAL_TIER,
   ATTR_WARE_ITEM,
   ATTR_WARE_PRICE,
   ATTR_MARKET_WARES,

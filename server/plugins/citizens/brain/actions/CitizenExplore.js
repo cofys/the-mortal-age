@@ -99,7 +99,17 @@ function wildernessTile(player, rng) {
   try {
     const home = siteTile(player, "market") ?? { x: 3200, y: 3200, z: 0 };
     const off = WILDERNESS_OFFSETS[Math.floor(rng() * WILDERNESS_OFFSETS.length)];
-    return personalSpot(player.getUsername?.() ?? "unknown", home.x + off.dx, home.y + off.dy, 2, 8);
+    const spot = personalSpot(player.getUsername?.() ?? "unknown", home.x + off.dx, home.y + off.dy, 2, 8);
+    // Jon 2026-10-13 (Draynor): wilderness targets near coasts can land in
+    // the sea — snap to walkable land so explorers never walk into water.
+    try {
+      const { snapToWalkableTile } = require("../../lib/CitizenTiles");
+      const snapped = snapToWalkableTile(spot.x, spot.y, spot.z ?? 0, 12);
+      if (snapped) return { x: snapped.x, y: snapped.y, z: spot.z ?? 0 };
+    } catch {
+      // snap is best-effort; never breaks the explore
+    }
+    return spot;
   } catch {
     return { x: 3240, y: 3230, z: 0 };
   }
