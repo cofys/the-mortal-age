@@ -4458,7 +4458,6 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
   }
   const username = usernameOf(player);
   // TEMP-DIAG: scorer diagnostic logging (remove after debugging)
-  console.log(`[SCORER-DIAG] ${username ?? "unknown"}: ${candidates.length} candidates`);
   pruneState(nowMs);
   ambientChatter(player, brain, nowMs);
 
@@ -4510,11 +4509,9 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
     }))
     .sort((x, y) => y.score - x.score);
   if (scored.length === 0) {
-    console.log(`[SCORER-DIAG] ${username ?? "unknown"}: no scored candidates`);
     return null;
   }
   // TEMP-DIAG: top 5 scores (remove after debugging)
-  scored.slice(0, 5).forEach((e) => console.log(`[SCORER-DIAG]   ${e.activity.id}: ${e.score.toFixed(1)}`));
 
   const traits = traitSet(snap.personality);
   const epsilon = traits.has("daydreamer") ? EPSILON_DAYDREAMER : EPSILON;
@@ -4540,7 +4537,6 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
   }
   recordPick(username, chosen.id);
   // TEMP-DIAG: picked activity (remove after debugging)
-  console.log(`[SCORER-DIAG] ${username ?? "unknown"}: picked ${chosen.id}`);
   return chosen;
 }
 

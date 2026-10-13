@@ -171,8 +171,7 @@ class BotBrain {
   }
 
   assignNext(nowMs) {
-    try { console.log(`[ASSIGNNEXT] ${this.player?.getUsername?.() ?? "unknown"}`); } catch {}
-    // TEMP: Always use scorer, never the sticky `own` pin.
+    // Citizens use utility scoring, not the sticky `own` pin.
     const activity = this.registry?.pickActivity?.(this.player, nowMs, this.rotation
       ? { allowed: this.rotation.activityIds, weights: this.rotation.weights }
       : {});
@@ -431,11 +430,6 @@ class BotBrain {
 
   /** @returns {"running"|"idle"} */
   tick(nowMs = Date.now()) {
-    if (!this._diagLogged) {
-      this._diagLogged = true;
-      const username = this.player?.getUsername?.() ?? 'unknown';
-      console.log(`[DIAG-CITIZEN] brain ticking for ${username}`);
-    }
     this.lastTickAt = nowMs;
     this.dispatchMovement(nowMs);
     // Support runs before the activity action: boosts, defensive/retreat,
