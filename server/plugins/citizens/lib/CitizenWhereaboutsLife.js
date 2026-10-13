@@ -31,6 +31,9 @@
 
 const { pickDestination, arrivedAt } = require("../brain/CitizenDestinations");
 const { agentRng, personalSpot } = require("./humanizer");
+// Jon 2026-10-13 (Catherby water tiles): settled positions snap to walkable
+// tiles so the data tier never records a position on water/inside a wall.
+const CitizenTiles = require("./CitizenTiles");
 const {
   GOAL_SAVE_GOLD,
   GOAL_MASTER_TRADE,
@@ -337,6 +340,18 @@ function settle(record, dest, now) {
     }
   } catch {
     // jitter is cosmetic
+  }
+  // Jon 2026-10-13 (Catherby water tiles): the personal-spot ring around a
+  // dock can land in the sea — snap to the nearest walkable tile so the
+  // recorded position is always somewhere a citizen can actually stand.
+  try {
+    const snapped = CitizenTiles.snapToWalkableTile(x, y, dest.z ?? 0, 12);
+    if (snapped) {
+      x = snapped.x;
+      y = snapped.y;
+    }
+  } catch {
+    // snap is best-effort; never blocks settling
   }
   record.position = { x: Math.round(x), y: Math.round(y), z: dest.z ?? 0 };
   try {

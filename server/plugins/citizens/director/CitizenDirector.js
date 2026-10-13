@@ -80,6 +80,9 @@ const CitizenXpSync = require("../lib/CitizenXpSync");
 const CitizenAccountStore = require("../lib/CitizenAccountStore");
 const CitizenFishing = require("../brain/actions/CitizenFishing");
 const CitizenActivityChatter = require("../chat/CitizenActivityChatter");
+// Jon 2026-10-13: Catherby water tiles — walkability snap for all citizen
+// placement (materialization, whereabouts settle, gather slots).
+const CitizenTiles = require("../lib/CitizenTiles");
 const CitizenWarChatter = require("../chat/CitizenWarChatter");
 const CitizenGoalChatter = require("../chat/CitizenGoalChatter");
 const PartyPlay = require("../lib/CitizenPartyPlay");
@@ -801,10 +804,39 @@ class CitizenDirector {
     return { x: anchor.x, y: anchor.y };
   }
 
+  /**
+   * Snap an arbitrary tile to the nearest walkable tile (Jon 2026-10-13:
+   * Catherby water tiles). Used by materialization and the whereabouts sim
+   * so a bad recorded position can never strand a citizen on water/wall.
+   * Never throws; degrades to the input tile when walkability is unknown.
+   */
+  snapToWalkableTile(x, y, z) {
+    try {
+      return CitizenTiles.snapToWalkableTile(x, y, z, 12);
+    } catch {
+      return {
+        x: Math.round(x),
+        y: Math.round(y),
+        z: Number.isFinite(z) ? Math.round(z) : 0,
+      };
+    }
+  }
+
   /** Build the roster from the plan; spawn happens lazily on the first tick. */
   boot() {
     if (!this.registry) {
       throw new Error("[citizens] director needs the bot activity registry");
+    }
+    // Jon 2026-10-13 (Catherby water tiles): the director owns the plugin
+    // api, so it injects the engine RegionManager into the shared
+    // walkability helper. Every citizen placement path (materialization,
+    // whereabouts settle, gather slots) snaps through CitizenTiles.
+    try {
+      CitizenTiles.setRegionManagerProvider(
+        () => this.api?.getRegionManager?.() ?? null
+      );
+    } catch {
+      // walkability degrades to pass-through; never blocks boot
     }
     const plan = loadPlan();
     for (const [kingdomId, roles] of Object.entries(plan)) {
@@ -2477,7 +2509,23 @@ class CitizenDirector {
     }
     // Activity-anchored spawn: materialize at the data-tier position
     // (work anchor when the citizen has one), not always at home.
-    const spawnTile = record.position ?? record.home;
+    // Jon 2026-10-13 (Catherby water tiles): the recorded position is never
+    // trusted blindly — snap to the nearest walkable tile so a citizen can
+    // never materialize on water/inside a wall. The snapped tile is written
+    // back so the bad position doesn't persist.
+    const rawTile = record.position ?? record.home;
+    const spawnTile = this.snapToWalkableTile(rawTile.x, rawTile.y, rawTile.z ?? 0);
+    if (
+      record.position &&
+      (spawnTile.x !== Math.round(rawTile.x) || spawnTile.y !== Math.round(rawTile.y))
+    ) {
+      this.log("spawn tile snapped to walkable", {
+        citizen: record.username,
+        from: { x: rawTile.x, y: rawTile.y },
+        to: { x: spawnTile.x, y: spawnTile.y },
+      });
+      record.position = { x: spawnTile.x, y: spawnTile.y, z: spawnTile.z };
+    }
     const spawn = new Location(spawnTile.x, spawnTile.y, spawnTile.z ?? 0);
     const bot = createBotPlayer(record.username, spawn, {
       api: this.api,

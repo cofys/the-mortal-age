@@ -152,6 +152,7 @@ function handleMonitor(query) {
   // DEBUG: Fake player control for autonomous testing (no real player needed).
   // ?fakePlayer=x,y,z - simulate a player at coordinates
   // ?clearFakePlayer=1 - remove the simulated player
+  // ?tileCheck=x,y[,z] - engine walkability report for a tile (debug)
   // Note: query is a Map (has .get()), not a plain object.
   try {
     const getParam = (k) => {
@@ -173,6 +174,27 @@ function handleMonitor(query) {
     if (getParam("clearFakePlayer")) {
       CitizenDirector.clearDebugFakePlayers();
       return { ok: true, cleared: true };
+    }
+    // ?tileCheck=x,y[,z] - report engine walkability for tiles (debug).
+    // Jon 2026-10-13 (Catherby water tiles): lets autonomous verification
+    // confirm citizens stand on walkable tiles without a client.
+    const tileCheckParam = getParam("tileCheck");
+    if (tileCheckParam) {
+      const parts = String(tileCheckParam).split(",").map(Number);
+      if (parts.length >= 2 && parts.slice(0, 2).every(Number.isFinite)) {
+        const x = Math.round(parts[0]);
+        const y = Math.round(parts[1]);
+        const z = Number.isFinite(parts[2]) ? Math.round(parts[2]) : 0;
+        try {
+          const CitizenTiles = require("../citizens/lib/CitizenTiles");
+          const blocked = CitizenTiles.isBlockedTile(x, y, z);
+          const snapped = CitizenTiles.snapToWalkableTile(x, y, z, 12);
+          return { ok: true, tile: { x, y, z }, blocked, snapped };
+        } catch (e) {
+          return { ok: false, error: "tile check failed: " + (e && e.message ? String(e.message) : String(e)) };
+        }
+      }
+      return { ok: false, error: "Invalid tileCheck format. Use ?tileCheck=x,y[,z]" };
     }
   } catch (e) {
     return { ok: false, error: "fake player control failed: " + (e && e.message ? e.message : String(e)) };

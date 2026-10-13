@@ -21,6 +21,9 @@ const {
 const { pickPlace } = require("../CitizenSites");
 const { agentRng, personalSpot } = require("../../lib/humanizer");
 const SlotCapacity = require("../CitizenSlotCapacity");
+// Jon 2026-10-13 (Catherby water tiles): slot/personal-spot tiles around a
+// dock can land in the sea — snap the final destination to walkable.
+const CitizenTiles = require("../../lib/CitizenTiles");
 
 const ARRIVE_RADIUS = 6;
 const STUCK_MS = 4 * 60 * 1000;
@@ -76,6 +79,20 @@ function createCitizenGoToPlaceAction(spec, world) {
         }
         if (!spot) {
           spot = personalSpot(name, place.x, place.y, 2, place.radius ?? 6);
+        }
+        // Jon 2026-10-13 (Catherby water tiles): a claimed slot or the
+        // personal ring around a dock can sit in the sea — snap to the
+        // nearest walkable tile so the citizen never walks onto water.
+        try {
+          const snapped = CitizenTiles.snapToWalkableTile(
+            spot.x,
+            spot.y,
+            place.z ?? 0,
+            12
+          );
+          if (snapped) spot = { x: snapped.x, y: snapped.y };
+        } catch {
+          // snap is best-effort; never breaks the trip
         }
         s.spot = { x: spot.x, y: spot.y, z: place.z, placeId: place.id };
         s.giveUpAt = nowMs + STUCK_MS;
