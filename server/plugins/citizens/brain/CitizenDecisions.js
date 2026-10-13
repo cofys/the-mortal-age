@@ -2901,7 +2901,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, rangedLevel, magicLevel, prayer, role, tithe, caravan } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, digguild, stage, stageguild, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, rangedLevel, magicLevel, prayer, role, tithe, caravan } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -4605,6 +4605,8 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
     // Slot release never breaks the pick.
   }
 
+  const snap = snapshot(player);
+
   // The interrupt path may direct the next pick (consumed once).
   if (username) {
     const directedId = directedPick.get(username);
@@ -4613,35 +4615,70 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
       const directed = candidates.find((a) => a?.id === directedId);
       if (directed) {
         recordPick(username, directed.id);
+        // DIAG: a directed pick is still a pick — stamp it so the monitor
+        // reflects every decision. (2026-10-13: spawn/interrupt directed
+        // picks skipped the diag, making "pickDiag empty" ambiguous.)
+        try {
+          lastPickDiag.set(username, {
+            at: nowMs,
+            chosen: directed.id,
+            directed: true,
+            weary: (snap.energy ?? 100) < WEARY_AT,
+            hurt: (snap.hp ?? 100) < HURT_AT,
+            energy: Math.round(snap.energy ?? -1),
+            hp: Math.round(snap.hp ?? -1),
+            candidates: candidates.length,
+            top: [],
+          });
+          if (lastPickDiag.size > 1000) {
+            lastPickDiag.delete(lastPickDiag.keys().next().value);
+          }
+        } catch {
+          // Diagnostics never break the pick.
+        }
         return directed;
       }
     }
   }
-
-  const snap = snapshot(player);
   const sick = snap.sick ?? 0;
   const jailed = snap.jailed ?? 0;
   const drunkPenalty = snap.drunk ? 30 : 0;
   const scored = candidates
     .filter((a) => a && typeof a.id === "string")
-    .map((a) => ({
-      activity: a,
-      // Session intents steer the pick: a citizen with "earn 2000 coins"
-      // scores work higher. Capped so intents never override critical needs.
-      // Sickness keeps citizens away from work: the sicker they are, the
-      // less work appeals (a plague is -60: effectively no work at all).
-      // Jail is the same: a jailed citizen serves time, not shifts.
-      // Drunkenness is similar: a drunk citizen shouldn't operate machinery.
-      // Night darkens outdoor labor: nobody sane chops trees in the dark
-      // (nightPenalty is already negative, so it adds the penalty).
-      score:
-        scoreActivity(a.id, snap) +
-        intentBonusFor(a.id, player) -
-        (sick > 0 && WORK_ACTIVITIES.has(a.id) ? sick : 0) -
-        (jailed > 0 && WORK_ACTIVITIES.has(a.id) ? jailed : 0) -
-        (drunkPenalty > 0 && WORK_ACTIVITIES.has(a.id) ? drunkPenalty : 0) +
-        (snap.night?.nightPenalty < 0 && WORK_ACTIVITIES.has(a.id) ? snap.night.nightPenalty : 0),
-    }))
+    .flatMap((a) => {
+      // One broken activity scorer must never kill the whole pick: skip
+      // the candidate instead of throwing the decision away. (2026-10-13:
+      // an undeclared variable in one guild case's scorer threw on every
+      // pick for every commoner, silently pinning them on their spawn
+      // activity with no pickDiag. The registry's sticky fallback made it
+      // invisible.)
+      let score;
+      try {
+        score =
+          scoreActivity(a.id, snap) +
+          intentBonusFor(a.id, player) -
+          (sick > 0 && WORK_ACTIVITIES.has(a.id) ? sick : 0) -
+          (jailed > 0 && WORK_ACTIVITIES.has(a.id) ? jailed : 0) -
+          (drunkPenalty > 0 && WORK_ACTIVITIES.has(a.id) ? drunkPenalty : 0) +
+          (snap.night?.nightPenalty < 0 && WORK_ACTIVITIES.has(a.id) ? snap.night.nightPenalty : 0);
+      } catch {
+        return [];
+      }
+      return [
+        {
+          activity: a,
+          // Session intents steer the pick: a citizen with "earn 2000 coins"
+          // scores work higher. Capped so intents never override critical needs.
+          // Sickness keeps citizens away from work: the sicker they are, the
+          // less work appeals (a plague is -60: effectively no work at all).
+          // Jail is the same: a jailed citizen serves time, not shifts.
+          // Drunkenness is similar: a drunk citizen shouldn't operate machinery.
+          // Night darkens outdoor labor: nobody sane chops trees in the dark
+          // (nightPenalty is already negative, so it adds the penalty).
+          score,
+        },
+      ];
+    })
     .sort((x, y) => y.score - x.score);
   if (scored.length === 0) {
     return null;
@@ -4746,26 +4783,15 @@ function interruptTarget(player, brain, nowMs) {
   if (nowMs - lastInterrupt < INTERRUPT_COOLDOWN_MS) {
     return null;
   }
-  let best = null;
-  let bestScore = -Infinity;
-  for (const activity of candidates) {
-    const s = scoreActivity(activity.id, snap);
-    if (s > bestScore) {
-      bestScore = s;
-      best = activity;
-    }
-  }
-  if (!best || best.id === currentId) {
-    return null;
-  }
-  const currentScore = scoreActivity(currentId, snap);
-  if (bestScore > currentScore + SWITCH_MARGIN) {
-    return { activity: best, reason: "better" };
-  }
   // Periodic macro re-decide for anchored citizens: every MACRO_EVERY-th
   // decision gate, take the registry's honest pick (epsilon-greedy + variety
-  // guard) instead of demanding the margin. doInterrupt's 90s cooldown still
-  // paces the actual switches, so this can't thrash.
+  // guard) instead of demanding the margin. This MUST run before the margin
+  // early-return below: when the static table agrees with the current
+  // activity (best.id === currentId), the return would otherwise make the
+  // macro dead code and pick() unreachable for parked citizens.
+  // (2026-10-13: wanderers whose best static scorer was wander itself never
+  // re-decided.) doInterrupt's 90s cooldown still paces actual switches, so
+  // this can't thrash.
   if (username) {
     const macroCount = (macroCounts.get(username) ?? 0) + 1;
     macroCounts.set(username, macroCount);
@@ -4779,6 +4805,29 @@ function interruptTarget(player, brain, nowMs) {
         // A bad macro pick never blocks the margin path.
       }
     }
+  }
+  let best = null;
+  let bestScore = -Infinity;
+  for (const activity of candidates) {
+    // Same rule as pick(): one broken scorer skips its candidate, never
+    // the whole interrupt.
+    let s;
+    try {
+      s = scoreActivity(activity.id, snap);
+    } catch {
+      continue;
+    }
+    if (s > bestScore) {
+      bestScore = s;
+      best = activity;
+    }
+  }
+  if (!best || best.id === currentId) {
+    return null;
+  }
+  const currentScore = scoreActivity(currentId, snap);
+  if (bestScore > currentScore + SWITCH_MARGIN) {
+    return { activity: best, reason: "better" };
   }
   return null;
 }

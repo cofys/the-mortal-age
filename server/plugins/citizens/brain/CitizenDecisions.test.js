@@ -24,6 +24,8 @@ const {
   resetForTests,
   CRITICAL_HP,
   CRITICAL_ENERGY,
+  getPickDiag,
+  queueDirectedPick,
   _interruptTarget,
   _directedPick,
   _recentByUser,
@@ -594,6 +596,88 @@ run("devout citizens detour for prayer more eagerly", () => {
 run("threshold constants match CitizenNeeds", () => {
   assert.ok(CRITICAL_HP < HURT_AT, "critical HP is below the hurt line");
   assert.ok(CRITICAL_ENERGY < WEARY_AT, "critical energy is below the weary line");
+});
+
+// --- 2026-10-13: wanderer re-decide regressions --------------------------------
+// Root cause: scoreActivity("citizen_digguild") / ("citizen_stageguild")
+// threw ReferenceError (digguild/stageguild not destructured, file is
+// "use strict"). Both activities require role commoner, so EVERY commoner's
+// pick() threw (no pickDiag, registry sticky-random fallback pinned them on
+// their spawn activity) and interruptTarget's margin loop threw (decisionTick
+// swallowed it: no interrupts, macro re-decide unreachable).
+
+run("digguild/stageguild scorers do not throw and return numbers", () => {
+  const base = {
+    hp: 100, energy: 90, mood: 70, goal: null, personality: { traits: [] },
+    coins: 500, freeSlots: 28, nearby: 0, hour: 12, kingdomId: "misthalin",
+  };
+  for (const id of ["citizen_digguild", "citizen_stageguild"]) {
+    let s;
+    assert.doesNotThrow(() => { s = scoreActivity(id, base); }, `${id} must not throw`);
+    assert.equal(typeof s, "number", `${id} must score a number`);
+  }
+});
+
+run("pick() survives guild candidates: commoner gets a real scored pick + diag", () => {
+  const p = mockPlayer({ role: "commoner", coins: 500, traits: ["industrious"] });
+  setNeeds(p.getUsername(), { hp: 100, energy: 100, mood: 80 });
+  const ids = ["safetynet_wander", "citizen_chop", "citizen_mine", "citizen_fish", "citizen_digguild", "citizen_stageguild"];
+  let picked;
+  assert.doesNotThrow(() => {
+    picked = pick(p, candidates(...ids), Date.now(), noEpsilon);
+  }, "pick must not throw when guild candidates are present");
+  assert.ok(picked && ids.includes(picked.id), "must return a candidate");
+  const diag = getPickDiag(p.getUsername());
+  assert.ok(diag, "pickDiag must be stamped");
+  assert.equal(diag.chosen, picked.id);
+});
+
+run("interrupt margin path fires for a healthy wanderer with guild candidates present", () => {
+  const p = mockPlayer({ role: "commoner", coins: 500, traits: ["industrious"] });
+  setNeeds(p.getUsername(), { hp: 100, energy: 100, mood: 80 });
+  const ids = ["safetynet_wander", "citizen_chop", "citizen_mine", "citizen_fish", "citizen_digguild", "citizen_stageguild"];
+  const holder = mockBrain("safetynet_wander", ids);
+  let target;
+  assert.doesNotThrow(() => {
+    target = _interruptTarget(p, holder.brain, Date.now());
+  }, "interruptTarget must not throw");
+  assert.ok(target, "healthy wanderer near work must be interrupted");
+  assert.notEqual(target.activity.id, "safetynet_wander");
+});
+
+run("macro re-decide is reachable even when the margin path declines", () => {
+  // Weary citizen on wander: work scores tank, wander (12) is the static
+  // best == current, so the margin path declines every gate. The macro
+  // branch (every 10th gate) must still run pick() — previously it sat
+  // below the best===current early return and was dead code.
+  const p = mockPlayer({ role: "commoner", coins: 500, traits: [] });
+  setNeeds(p.getUsername(), { hp: 100, energy: 5, mood: 80 });
+  const ids = ["safetynet_wander", "citizen_chop", "citizen_mine"];
+  const holder = mockBrain("safetynet_wander", ids);
+  const now0 = Date.now();
+  let firedMargin = false;
+  for (let g = 0; g < 10; g++) {
+    const t = _interruptTarget(p, holder.brain, now0 + g * 35000);
+    if (t) { firedMargin = true; break; }
+  }
+  assert.ok(!firedMargin, "margin path should decline for the weary wanderer");
+  const diag = getPickDiag(p.getUsername());
+  assert.ok(diag, "macro re-decide must have run pick() by the 10th gate (pickDiag stamped)");
+});
+
+run("directed picks stamp pickDiag (spawn/interrupt kicks are decisions too)", () => {
+  const p = mockPlayer({ role: "commoner" });
+  setNeeds(p.getUsername(), { hp: 100, energy: 100, mood: 80 });
+  // First pick fires resetForTests' forced hourly prune (lastPruneAt=0);
+  // queue the directed pick after so it survives to the consume.
+  pick(p, candidates("safetynet_wander", "citizen_chop"), Date.now(), noEpsilon);
+  queueDirectedPick(p.getUsername(), "citizen_chop");
+  const picked = pick(p, candidates("safetynet_wander", "citizen_chop"), Date.now() + 1, noEpsilon);
+  assert.equal(picked.id, "citizen_chop");
+  const diag = getPickDiag(p.getUsername());
+  assert.ok(diag, "directed pick must stamp pickDiag");
+  assert.equal(diag.chosen, "citizen_chop");
+  assert.equal(diag.directed, true);
 });
 
 console.log("ALL CITIZENDECISIONS TESTS DONE");
