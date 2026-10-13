@@ -31,6 +31,7 @@ const path = require("path");
 const { isFriend, isEnemy, addFriend, addEnemy } = require("./CitizenBonds");
 const { getMemory, relativeTime } = require("./CitizenMemory");
 const { getJournal } = require("./CitizenJournal");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-social-bonds.json");
 
@@ -95,6 +96,36 @@ function clampScore(v) {
 let data = null; // { owners: { ownerKey: { targetKey: entry } } }
 let dirty = false;
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-social-bonds.json registry is the
+// fallback (and stays fully written). "socialBonds" is already taken by
+// CitizenBonds, so this file uses "socialBondsExtended". storeEnabled is
+// flipped off by the test seams so unit tests stay hermetic.
+const STORE_BLOCK = "socialBondsExtended";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file registry is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's bond map into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 function blankEntry() {
   return { s: 0, f: [], g: [], u: 0 };
 }
@@ -107,6 +138,13 @@ function load() {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
       data.owners = parsed.owners ?? {};
+      // Dual-read: overlay account blocks over the old-file registry.
+      if (storeEnabled) {
+        for (const key of Object.keys(data.owners)) {
+          const block = storeBlockFor(key);
+          if (block) data.owners[key] = block;
+        }
+      }
     }
   } catch {
     // First boot or corrupt save — start clean, never break the tick.
@@ -140,6 +178,11 @@ function entryFor(owner, target, create = false) {
   const o = normalizeName(owner);
   const t = normalizeName(target);
   if (!o || !t || o === t) return null;
+  if (!owners[o]) {
+    // Dual-read: the account block may hold what the old registry lacks.
+    const block = storeBlockFor(owner);
+    if (block) owners[o] = block;
+  }
   if (!owners[o] && !create) return null;
   if (!owners[o]) {
     if (Object.keys(owners).length >= MAX_OWNERS) return null;
@@ -217,6 +260,7 @@ function recordInteraction(owner, target, kind, opts = {}) {
   entry.s = after;
   entry.u = opts.at ?? Date.now();
   markDirty();
+  syncStore(o, load().owners[o]);
 
   if (!opts.quiet) promote(o, t, before, after, kind);
 
@@ -228,6 +272,7 @@ function recordInteraction(owner, target, kind, opts = {}) {
       back.s = bAfter;
       back.u = entry.u;
       markDirty();
+      syncStore(t, load().owners[t]);
       if (!opts.quiet) promote(t, o, bBefore, bAfter, kind);
     }
   }
@@ -447,6 +492,7 @@ function tickDecay(nowMs = Date.now()) {
   let decayed = 0;
   let pruned = 0;
   for (const o of Object.keys(owners)) {
+    const d0 = decayed, p0 = pruned;
     const map = owners[o];
     const targets = Object.keys(map);
     // Bound: keep the strongest bonds, drop the indifferent.
@@ -479,6 +525,9 @@ function tickDecay(nowMs = Date.now()) {
       }
     }
     if (Object.keys(map).length === 0) delete owners[o];
+    if (decayed !== d0 || pruned !== p0 || !owners[o]) {
+      syncStore(o, owners[o] ?? null); // clear the block when no bonds remain
+    }
   }
   if (decayed > 0 || pruned > 0) markDirty();
   return { decayed, pruned };
@@ -489,12 +538,14 @@ function tickDecay(nowMs = Date.now()) {
 function resetForTests() {
   data = { owners: {} };
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
   data = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 module.exports = {

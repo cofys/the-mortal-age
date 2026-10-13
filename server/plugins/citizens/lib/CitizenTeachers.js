@@ -39,6 +39,48 @@ const { siteTileByKingdom } = require("../brain/CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
 const { voiceFor, voiceLine } = require("./citizenVoice");
 const { sayPublic } = require("../chat/CitizenSayPublic");
+const CitizenAccountStore = require("./CitizenAccountStore");
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-teachers.json file is the fallback
+// (and stays fully written). The block holds this citizen's slices of the
+// two per-citizen registries: { student, playerTeacher }. Kingdom schools
+// stay in the old file only. storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "teachers";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file record is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** This citizen's teachers record for the account block, or null when empty. */
+function blockEntryFor(st, key) {
+  const entry = {};
+  const s = st.students.get(key);
+  const p = st.playerTeachers.get(key);
+  if (s) entry.student = { ...s };
+  if (p) entry.playerTeacher = { ...p };
+  return Object.keys(entry).length ? entry : null;
+}
+
+/** Dual-write one citizen's teachers record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
 
 
 // === Tuning: all magic numbers here ===
@@ -355,6 +397,16 @@ class TeacherStore {
         }
       }
       this.lastAssignAt = Number(parsed?.lastAssignAt) || 0;
+      // Dual-read: overlay account blocks over the old-file registries.
+      if (storeEnabled) {
+        const keys = new Set([...this.students.keys(), ...this.playerTeachers.keys()]);
+        for (const key of keys) {
+          const block = storeBlockFor(key);
+          if (!block) continue;
+          if (block.student && typeof block.student === "object") this.students.set(key, block.student);
+          if (block.playerTeacher && typeof block.playerTeacher === "object") this.playerTeachers.set(key, block.playerTeacher);
+        }
+      }
     } catch {
       // No save yet — start fresh.
     }
@@ -441,6 +493,7 @@ function ensureSchools(director, nowMs) {
           lastAdvancedAt: 0,
           graduated: false,
         });
+        syncStore(key, blockEntryFor(st, key));
         changed = true;
       }
     }
@@ -457,6 +510,7 @@ function ensureSchools(director, nowMs) {
 function advanceStudents(nowMs) {
   const st = getStore();
   let changed = false;
+  const touched = new Set();
   for (const [key, student] of st.students) {
     if (student.graduated) continue;
     if (nowMs - student.lastAdvancedAt < DAY_MS) continue;
@@ -465,11 +519,13 @@ function advanceStudents(nowMs) {
       // Maxed out but somehow not graduated — mark it.
       student.graduated = true;
       changed = true;
+      touched.add(key);
       continue;
     }
     student.subjects = subjects;
     student.lastAdvancedAt = nowMs;
     changed = true;
+    touched.add(key);
     if (hasGraduated(subjects)) {
       student.graduated = true;
       journalEvent(key, `Graduated from the ${student.kingdomId} school — a skilled worker now.`);
@@ -477,6 +533,7 @@ function advanceStudents(nowMs) {
     }
   }
   if (changed) st.save();
+  for (const key of touched) syncStore(key, blockEntryFor(st, key));
 }
 
 // ============================================================================
@@ -634,8 +691,10 @@ function volunteerTeach(director, playerUsername, subject) {
   void director;
   const st = getStore();
   const clean = SUBJECTS.includes(subject) ? subject : "reading";
-  st.playerTeachers.set(normalizeName(playerUsername), { subject: clean, since: Date.now() });
+  const key = normalizeName(playerUsername);
+  st.playerTeachers.set(key, { subject: clean, since: Date.now() });
   st.save();
+  syncStore(key, blockEntryFor(st, key));
   journalEvent(playerUsername, `Volunteered to teach ${clean} at the school.`);
   return { username: playerUsername, subject: clean };
 }
@@ -644,10 +703,12 @@ function volunteerTeach(director, playerUsername, subject) {
 function _setSaveFileForTests(p) {
   saveFile = p;
   storeLoaded = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
   store.resetForTests();
 }
 
 function _resetStoreForTests() {
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
   store.resetForTests();
 }
 

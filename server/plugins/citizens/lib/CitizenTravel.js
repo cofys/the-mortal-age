@@ -39,17 +39,49 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-travel.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-travel.json registry is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "travel";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file registry is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's journey into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
 }
 
 // === Route catalog ===========================================================
@@ -222,6 +254,13 @@ function data() {
       cache = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8"));
       if (!cache || typeof cache !== "object") cache = blank();
       if (!cache.journeys || typeof cache.journeys !== "object") cache.journeys = {};
+      // Dual-read: overlay account blocks over the old-file registry.
+      if (storeEnabled) {
+        for (const key of Object.keys(cache.journeys)) {
+          const block = storeBlockFor(key);
+          if (block) cache.journeys[key] = block;
+        }
+      }
     } catch {
       cache = blank();
     }
@@ -248,7 +287,15 @@ function save() {
 /** The active journey for a citizen, or null. */
 function journeyOf(username) {
   const d = data();
-  return d.journeys[normalizeName(username)] ?? null;
+  const key = normalizeName(username);
+  if (d.journeys[key]) return d.journeys[key];
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(username);
+  if (block) {
+    d.journeys[key] = block;
+    return block;
+  }
+  return null;
 }
 
 /** All active journeys as an array. */
@@ -347,6 +394,7 @@ function startJourney(username, from, to, nowMs, player) {
   };
   data().journeys[uname] = journey;
   markDirty();
+  syncStore(uname, journey);
   return { ok: true, journey };
 }
 
@@ -356,6 +404,7 @@ function setCargo(username, manifest) {
   if (!j) return false;
   j.cargo = Array.isArray(manifest) ? manifest.slice(0, 6) : null;
   markDirty();
+  syncStore(normalizeName(username), j);
   return true;
 }
 
@@ -365,6 +414,7 @@ function clearJourney(username) {
   if (data().journeys[uname]) {
     delete data().journeys[uname];
     markDirty();
+    syncStore(uname, null); // clear the block so the journey isn't resurrected
     return true;
   }
   return false;
