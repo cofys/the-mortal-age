@@ -17,12 +17,25 @@
  * so a mid-route traveler materializes ON the road. Data tier, zero LLM,
  * pure arithmetic over roster records.
  *
+ * Slice 3 — inter-kingdom visits: settling somewhere new stamps
+ * record.visit; short visits keep record.kingdomId/townId (visiting, like
+ * a player would). A visit that outlasts its deterministic length (2–8h)
+ * while a settling goal (work/friends) still wins becomes a relocation:
+ * kingdomId + townId/settlementId flip, home re-anchors. Anything else
+ * ends with a trip home. No pathfinding invented — the slice-1 enRoute
+ * mechanism already interpolates the long hauls.
+ *
  * Wiring: CitizenDirector calls tickWhereabouts(this, nowMs) in the slow
  * tick inside try/catch. Never throws — every record is guarded.
  */
 
 const { pickDestination, arrivedAt } = require("../brain/CitizenDestinations");
 const { agentRng, personalSpot } = require("./humanizer");
+const {
+  GOAL_SAVE_GOLD,
+  GOAL_MASTER_TRADE,
+  GOAL_MAKE_FRIENDS,
+} = require("./goals");
 
 // Human walking speed, tiles per minute. The slow tick runs ~60s, so a
 // citizen covers ~WALK_TILES_PER_TICK tiles per whereabouts tick.
@@ -34,6 +47,203 @@ const WALK_TILES_PER_TICK = WALK_TILES_PER_MIN;
 const ARRIVE_RADIUS = 6;
 // Cross-town trips get journaled this often (a player would note the trip).
 const TRIP_JOURNAL_CHANCE = 0.25;
+// Inter-kingdom visits (slice 3). A visit is a fixed-length stay, decided
+// once per visit, deterministic per citizen: 2–8h. A player visits another
+// kingdom for a session; they only put down roots when the same wants keep
+// winning past it.
+const VISIT_MIN_MS = 2 * 60 * 60 * 1000;
+const VISIT_MAX_MS = 8 * 60 * 60 * 1000;
+// How close to the visit tile counts as "still settled there" when the
+// visit matures (a player who already left doesn't relocate).
+const VISIT_SETTLED_RADIUS = 40;
+// Goals that make a player put down roots: work and friends. (Marriage
+// follows the same social axis via make_friends; spouse-driven moves are a
+// follow-up.) Anything else — the trip ends and they head home.
+const SETTLING_GOALS = new Set([GOAL_SAVE_GOLD, GOAL_MASTER_TRADE, GOAL_MAKE_FRIENDS]);
+
+/** Visit length, deterministic per citizen per visit (agentRng seed). */
+function visitLengthFor(username, since) {
+  const rng = agentRng(`visitlen:${username ?? "unknown"}:${since}`);
+  return Math.round(VISIT_MIN_MS + rng() * (VISIT_MAX_MS - VISIT_MIN_MS));
+}
+
+function visitExpired(record, now) {
+  const v = record?.visit;
+  return !!(
+    v &&
+    Number.isFinite(v.since) &&
+    Number.isFinite(v.len) &&
+    now - v.since >= v.len
+  );
+}
+
+/** True when the citizen is still hanging around the visit tile. */
+function settledNearVisit(record) {
+  const v = record?.visit;
+  if (!v || !record?.position) return false;
+  return (
+    (record.position.z ?? 0) === (v.z ?? 0) &&
+    cheby(record.position.x, record.position.y, v.x, v.y) <= VISIT_SETTLED_RADIUS
+  );
+}
+
+/**
+ * Record an inter-kingdom (or cross-town) visit on settle. Short visits
+ * keep record.kingdomId/townId — the citizen belongs to their kingdom,
+ * they're just visiting, like a player would. Settling back on home turf
+ * (or a dest with no placement) clears any visit.
+ */
+function noteVisit(record, dest, now) {
+  try {
+    const pk = dest?.kingdomId ?? null;
+    const pt = dest?.townId ?? null;
+    const ps = dest?.settlementId ?? null;
+    const sameKingdom = pk && record.kingdomId && pk === record.kingdomId;
+    const sameSpot =
+      (pt ?? null) === (record.townId ?? null) &&
+      (ps ?? null) === (record.settlementId ?? null);
+    if (!pk || (sameKingdom && sameSpot)) {
+      record.visit = null;
+      return;
+    }
+    const v = record.visit;
+    if (
+      v &&
+      v.kingdomId === pk &&
+      (v.townId ?? null) === (pt ?? null) &&
+      (v.settlementId ?? null) === (ps ?? null)
+    ) {
+      // Same visit continues — keep the original since/len.
+      v.x = record.position.x;
+      v.y = record.position.y;
+      v.placeId = dest.placeId ?? v.placeId;
+      return;
+    }
+    const since = Number.isFinite(now) ? now : Date.now();
+    record.visit = {
+      kingdomId: pk,
+      townId: pt,
+      settlementId: ps,
+      placeId: dest.placeId ?? null,
+      x: record.position.x,
+      y: record.position.y,
+      z: record.position.z ?? 0,
+      since,
+      len: visitLengthFor(record.username, since),
+    };
+  } catch {
+    // visits never block settling
+  }
+}
+
+/**
+ * Pure record flip for a relocation (used directly when the director
+ * offers no relocateCitizen — e.g. test doubles). The director's method
+ * also fixes the kingdom index and housing.
+ */
+function applyRelocation(record, placement) {
+  if (!record || !placement || typeof placement.kingdomId !== "string") return false;
+  record.kingdomId = placement.kingdomId;
+  record.townId = placement.townId ?? null;
+  record.settlementId = placement.settlementId ?? null;
+  if (placement.home && Number.isFinite(placement.home.x) && Number.isFinite(placement.home.y)) {
+    record.home = {
+      x: Math.round(placement.home.x),
+      y: Math.round(placement.home.y),
+      z: placement.home.z ?? 0,
+    };
+  }
+  return true;
+}
+
+function journalRelocation(record, visit) {
+  try {
+    const where = visit.townId ?? visit.settlementId ?? visit.kingdomId ?? "a new home";
+    const { getJournal } = require("./CitizenJournal");
+    getJournal().log(record.username, "travel", `moved to ${where} for good.`);
+  } catch {
+    // journaling never moves anyone
+  }
+}
+
+/**
+ * A visit matured: the citizen stayed past the threshold and their goal is
+ * a settling one — they relocate. Flip kingdomId + townId/settlementId,
+ * re-anchor home to the visit tile, keep the roster index and housing
+ * honest through the director. Waypoints need nothing new: the trip here
+ * already interpolated through the slice-1 enRoute road mechanism.
+ */
+function relocateOnVisit(director, record, visit) {
+  const placement = {
+    kingdomId: visit.kingdomId,
+    townId: visit.townId ?? null,
+    settlementId: visit.settlementId ?? null,
+    home: { x: visit.x, y: visit.y, z: visit.z ?? 0 },
+  };
+  let done = false;
+  if (director && typeof director.relocateCitizen === "function") {
+    try {
+      done = !!director.relocateCitizen(record.username, placement);
+    } catch {
+      done = false;
+    }
+  }
+  if (!done) applyRelocation(record, placement);
+  journalRelocation(record, visit);
+}
+
+/**
+ * The trip's over without relocation: point the citizen home like a
+ * player ending a visit. advance() turns the long haul into an en-route
+ * road trip — no pathfinding invented.
+ */
+function endVisitHome(record) {
+  const home = record?.home;
+  if (!home || !Number.isFinite(home.x) || !Number.isFinite(home.y)) return;
+  record.dest = {
+    x: home.x,
+    y: home.y,
+    z: home.z ?? 0,
+    placeId: "home",
+    kind: "home",
+    reason: "heading home",
+    kingdomId: record.kingdomId ?? null,
+    townId: record.townId ?? null,
+    settlementId: record.settlementId ?? null,
+  };
+  record.enRoute = null;
+  try {
+    const { getJournal } = require("./CitizenJournal");
+    getJournal().log(record.username, "travel", "heading home after the trip.");
+  } catch {
+    // journaling never moves anyone
+  }
+}
+
+/**
+ * Visit lifecycle, checked before each destination pick. A matured visit
+ * either becomes a relocation (settling goals, still there) or ends with
+ * a trip home. Mid-trip citizens are left alone — the visit matures when
+ * they settle. Never throws.
+ */
+function maybeMatureVisit(director, record, now) {
+  try {
+    if (!record?.visit || !visitExpired(record, now)) return;
+    const dest = record.dest;
+    if (destValid(dest) && !arrivedAt(record, dest, ARRIVE_RADIUS)) return;
+    const visit = record.visit;
+    const settled = settledNearVisit(record);
+    record.visit = null;
+    if (!settled) return; // wandered off — normal wants decide
+    if (SETTLING_GOALS.has(record?.goal?.type)) {
+      relocateOnVisit(director, record, visit);
+    } else {
+      endVisitHome(record);
+    }
+  } catch {
+    // a broken visit never stalls the roster
+  }
+}
 
 function cheby(ax, ay, bx, by) {
   return Math.max(Math.abs(ax - bx), Math.abs(ay - by));
@@ -143,6 +353,7 @@ function settle(record, dest, now) {
   }
   record.dest = null;
   record.enRoute = null;
+  noteVisit(record, dest, now);
 }
 
 /** Advance record.position toward dest: arrive, or go en-route for long hauls. */
@@ -203,6 +414,10 @@ function stepRecord(director, record, now) {
   }
 
   let dest = record.dest;
+  // Inter-kingdom visit lifecycle (slice 3): matured visits become
+  // relocations or end with a trip home, before the next pick.
+  maybeMatureVisit(director, record, now);
+  dest = record.dest;
   if (!destValid(dest) || arrivedAt(record, dest, ARRIVE_RADIUS)) {
     dest = pickDestination(record, now);
     record.dest = dest;
@@ -229,4 +444,11 @@ function tickWhereabouts(director, nowMs) {
 
 module.exports = {
   tickWhereabouts,
+  // Slice-3 visit/relocation surface (exported for tests):
+  applyRelocation,
+  visitLengthFor,
+  visitExpired,
+  maybeMatureVisit,
+  VISIT_MIN_MS,
+  VISIT_MAX_MS,
 };

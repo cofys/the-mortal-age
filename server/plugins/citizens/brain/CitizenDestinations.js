@@ -28,6 +28,8 @@ const {
   siteTileByKingdom,
   siteTileByTown,
   siteTileBySettlement,
+  kingdomIdOfTown,
+  kingdomIdOfSettlement,
   GATHER_PLACES,
 } = require("./CitizenSites");
 const { agentRng } = require("../lib/humanizer");
@@ -49,6 +51,69 @@ const LOCALITY_DIVISOR = 60;
 const EXPLORER_LOCALITY_DIVISOR = 180;
 // Epsilon: this often the citizen just goes somewhere unplanned. Players do.
 const EPSILON = 0.1;
+// Inter-kingdom visits (slice 3): while a visit is active the citizen
+// lingers — visited-kingdom places win more often, home-kingdom places lose
+// their pull. Short visits keep record.kingdomId (visiting, not moving);
+// the data tier matures long visits into relocation. Multipliers, not bans
+// (Jon 2026-10-12: likes/dislikes are multipliers, never hard exclusions).
+const VISIT_STAY_MULT = 1.6;
+const VISIT_HOME_DAMP = 0.6;
+
+/**
+ * Resolve a candidate place to its kingdom/town/settlement placement, from
+ * real data (towns.json / settlements.json kingdom links via CitizenSites;
+ * capitals and gather places carry kingdomId directly). The picker returns
+ * this on every destination so the data tier can run visit semantics
+ * without re-deriving anything.
+ */
+function placementOf(place) {
+  if (!place) return { kingdomId: null, townId: null, settlementId: null };
+  if (place.settlementId) {
+    return {
+      kingdomId: kingdomIdOfSettlement(place.settlementId),
+      townId: null,
+      settlementId: place.settlementId,
+    };
+  }
+  if (place.townId) {
+    return {
+      kingdomId: kingdomIdOfTown(place.townId),
+      townId: place.townId,
+      settlementId: null,
+    };
+  }
+  return {
+    kingdomId: place.kingdomId ?? null,
+    townId: null,
+    settlementId: null,
+  };
+}
+
+/**
+ * Visit bias multiplier for one candidate (slice 3). While a visit is
+ * active, visited-kingdom candidates win more often (linger) and
+ * home-kingdom candidates lose their pull (don't drift back early).
+ * Everything else scores normally. Pure — tested directly.
+ */
+function visitBiasMult(candidateKingdomId, visit, homeKingdomId) {
+  if (!visit || !candidateKingdomId) return 1;
+  if (candidateKingdomId === visit.kingdomId) return VISIT_STAY_MULT;
+  if (homeKingdomId && candidateKingdomId === homeKingdomId) return VISIT_HOME_DAMP;
+  return 1;
+}
+
+/**
+ * The visit the citizen is currently inside, or null. A visit is "active"
+ * while now - since < len; expiry is handled by the data tier (it mutates
+ * the record). Pure read — deterministic given the record.
+ */
+function activeVisit(record, now) {
+  const v = record?.visit;
+  if (!v || typeof v.kingdomId !== "string") return null;
+  if (!Number.isFinite(v.since) || !Number.isFinite(v.len)) return null;
+  const at = Number.isFinite(now) ? now : Date.now();
+  return at - v.since < v.len ? v : null;
+}
 
 /**
  * All candidate destinations, built once from existing data. Kinds:
@@ -218,8 +283,9 @@ function reasonFor(kind, goalType, favKind) {
 
 /**
  * Pick where this citizen wants to be right now. Returns
- * { x, y, z, placeId, kind, reason }. Deterministic per citizen per
- * DEST_STICKY_MS bucket — stable for hours, then re-decided.
+ * { x, y, z, placeId, kind, reason, kingdomId, townId, settlementId }.
+ * Deterministic per citizen per DEST_STICKY_MS bucket — stable for hours,
+ * then re-decided.
  */
 function pickDestination(record, nowMs) {
   const now = nowMs ?? Date.now();
@@ -237,6 +303,9 @@ function pickDestination(record, nowMs) {
     placeId: "home",
     kind: "home",
     reason,
+    kingdomId: record?.kingdomId ?? null,
+    townId: record?.townId ?? null,
+    settlementId: record?.settlementId ?? null,
   });
 
   // Needs first: hurt or weary citizens head home. There is no hunger in
@@ -260,6 +329,9 @@ function pickDestination(record, nowMs) {
   const localityDiv = explorer ? EXPLORER_LOCALITY_DIVISOR : LOCALITY_DIVISOR;
 
   const ctx = { role, goalType, traits, favKind };
+  // A visit in progress: linger where you are, don't drift home early.
+  const visit = activeVisit(record, now);
+  const homeKid = record?.kingdomId ?? null;
   let best = null;
   let bestScore = -Infinity;
   for (const c of DEST_PLACES) {
@@ -267,7 +339,12 @@ function pickDestination(record, nowMs) {
     const dist = cheby(px, py, c.x, c.y);
     const locality = 1 / (1 + dist / localityDiv);
     const planePenalty = c.z !== pz ? 0.05 : 1; // stay on this plane
-    const score = want * locality * planePenalty;
+    let score = want * locality * planePenalty;
+    if (visit) {
+      const ck = c.kingdomId ?? (c.townId ? kingdomIdOfTown(c.townId) : null)
+        ?? (c.settlementId ? kingdomIdOfSettlement(c.settlementId) : null);
+      score *= visitBiasMult(ck, visit, homeKid);
+    }
     if (score > bestScore) {
       bestScore = score;
       best = c;
@@ -280,6 +357,7 @@ function pickDestination(record, nowMs) {
   }
   if (!best) return homeDest("to rest up at home");
 
+  const place = placementOf(best);
   return {
     x: best.x,
     y: best.y,
@@ -287,6 +365,9 @@ function pickDestination(record, nowMs) {
     placeId: best.id,
     kind: best.kind,
     reason: reasonFor(best.kind, goalType, favKind),
+    kingdomId: place.kingdomId,
+    townId: place.townId,
+    settlementId: place.settlementId,
   };
 }
 
@@ -302,7 +383,12 @@ function arrivedAt(record, dest, radius = 6) {
 module.exports = {
   DEST_PLACES,
   DEST_STICKY_MS,
+  VISIT_STAY_MULT,
+  VISIT_HOME_DAMP,
   pickDestination,
   arrivedAt,
   favoriteGatherKind,
+  placementOf,
+  activeVisit,
+  visitBiasMult,
 };
