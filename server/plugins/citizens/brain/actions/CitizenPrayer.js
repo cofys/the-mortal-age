@@ -46,6 +46,9 @@
  *     plugin's handlePrayerAltar.
  *   - buryBones: one bone per call with a human-paced cooldown, real XP
  *     via SkillManager.addExperiences, mirroring the Prayer plugin.
+ *   - offerBonesAtAltar: one bone per call at the nearest name-verified
+ *     town altar, real XP at Prayer.plugin's 2.5x/3.5x offering
+ *     multipliers — how players actually train Prayer.
  *   - ensureSupplies: withdraws prayer potions from the bank (shared Bank
  *     action delegate) before a fight — only when the bank actually has
  *     them, so it never stalls.
@@ -773,23 +776,17 @@ function tickSupplies(state, bot, world, ctx) {
 // --- sustainment: altar recharge --------------------------------------------------
 
 /**
- * Walk to the nearest prayer altar and recharge, exactly like the Altars
- * plugin's handlePrayerAltar (animation 645, full restore, the same
- * message). Returns 'recharged' | 'walking' | 'full' | 'no-altar' |
- * 'in-combat' | null (no engine/world).
+ * Nearest name-verified prayer altar. `allowedNames` defaults to the
+ * objects the Altars plugin recharges at ("Altar"/"Shrine"); callers
+ * pass their own set (bone offering also works at gilded altars).
+ * Returns { obj, dist, name } or null.
  */
-function rechargeAtAltar(bot, world) {
+function findAltar(bot, world, allowedNames = null) {
   const eng = engine();
   if (!eng || !bot || !world) return null;
-  try {
-    if (bot.getCombat?.()?.getTarget?.() || bot.getCombat?.()?.getAttacker?.()) {
-      return "in-combat";
-    }
-  } catch {
-    return null;
-  }
+  const allowed = new Set(allowedNames ?? ["Altar", "Shrine"]);
   const ids = altarObjectIds(eng);
-  if (ids.length === 0) return "no-altar";
+  if (ids.length === 0) return null;
   const bt = botTile(bot);
   if (!bt) return null;
 
@@ -805,11 +802,12 @@ function rechargeAtAltar(bot, world) {
   }
   let best = null;
   let bestDist = Infinity;
+  let bestName = null;
   for (const obj of candidates) {
     let name = null;
     try { name = obj?.getDefinition?.()?.getName?.(); } catch { /* skip */ }
-    // Name-verified: only objects the Altars plugin actually recharges at.
-    if (name !== "Altar" && name !== "Shrine") continue;
+    // Name-verified: only altar objects the caller asked for.
+    if (!allowed.has(name)) continue;
     let ot = null;
     try {
       const loc = obj.getLocation?.();
@@ -817,22 +815,48 @@ function rechargeAtAltar(bot, world) {
     } catch { /* skip */ }
     if (!ot) continue;
     const d = chebyshev(bt.x, bt.y, ot.x, ot.y);
-    if (d < bestDist) { best = obj; bestDist = d; }
+    if (d < bestDist) { best = obj; bestDist = d; bestName = name; }
   }
-  if (!best) return "no-altar";
-  if (bestDist > ALTAR_ARRIVE_TILES) {
-    try {
-      const loc = best.getLocation();
-      nav().requestMovement?.(bot, loc.getX(), loc.getY(), {
-        reason: "citizen_prayer_altar",
-        basicPather: true,
-        z: bt.z,
-      });
-    } catch {
-      return null;
-    }
+  if (!best) return null;
+  return { obj: best, dist: bestDist, name: bestName };
+}
+
+/** Walk the bot to an altar object; returns "walking" or null on failure. */
+function walkToAltar(bot, altar, bt) {
+  try {
+    const loc = altar.obj.getLocation();
+    nav().requestMovement?.(bot, loc.getX(), loc.getY(), {
+      reason: "citizen_prayer_altar",
+      basicPather: true,
+      z: bt.z,
+    });
     return "walking";
+  } catch {
+    return null;
   }
+}
+
+/**
+ * Walk to the nearest prayer altar and recharge, exactly like the Altars
+ * plugin's handlePrayerAltar (animation 645, full restore, the same
+ * message). Returns 'recharged' | 'walking' | 'full' | 'no-altar' |
+ * 'in-combat' | null (no engine/world).
+ */
+function rechargeAtAltar(bot, world) {
+  const eng = engine();
+  if (!eng || !bot || !world) return null;
+  try {
+    if (bot.getCombat?.()?.getTarget?.() || bot.getCombat?.()?.getAttacker?.()) {
+      return "in-combat";
+    }
+  } catch {
+    return null;
+  }
+  const altar = findAltar(bot, world);
+  if (!altar) return "no-altar";
+  const bt = botTile(bot);
+  if (!bt) return null;
+  if (altar.dist > ALTAR_ARRIVE_TILES) return walkToAltar(bot, altar, bt);
   try {
     const sm = bot.getSkillManager?.();
     const cur = sm.getCurrentLevel(eng.Skill.PRAYER);
@@ -907,15 +931,96 @@ function buryBones(bot, engArg = null, nowMs = null) {
   return 0;
 }
 
+// --- sustainment: bone offering at altars ---------------------------------------
+
+// Mirrors Prayer.plugin's ALTAR_MULTIPLIERS (OSRS: plain altar 2.5x, gilded 3.5x).
+const ALTAR_XP_MULTIPLIERS = new Map([
+  ["Altar", 2.5],
+  ["Gilded altar", 3.5],
+]);
+// Human-paced offering cadence (the engine's own offer delay is 1800ms).
+const OFFER_COOLDOWN_MS = 4000;
+const OFFER_AT = new WeakMap();
+
+/**
+ * Prayer XP for offering one bone at a named altar. Pure: null when the
+ * altar or bone has no offering table entry.
+ */
+function offerXp(eng, boneId, altarName) {
+  const mult = ALTAR_XP_MULTIPLIERS.get(altarName);
+  if (!mult) return null;
+  const base = boneXp(eng).get(boneId);
+  if (!Number.isFinite(base)) return null;
+  return Math.floor(base * mult);
+}
+
+/**
+ * Offer one bone at the nearest town altar for real Prayer XP, exactly the
+ * way a player trains Prayer (walk to the altar, use bones on it). Mirrors
+ * Prayer.plugin's offerBone: same multipliers, same messages, same XP —
+ * without the packet path, which bots don't have.
+ *
+ * Returns 'offered' | 'walking' | 'no-altar' | null (no engine/world).
+ * Gated by having bones: 0 bones means nothing to offer.
+ */
+function offerBonesAtAltar(bot, world, engArg = null, nowMs = null) {
+  const eng = engArg ?? engine();
+  if (!eng || !bot || !world) return null;
+  if (boneCount(bot) <= 0) return null;
+  const now = nowMs ?? Date.now();
+  if (now - (OFFER_AT.get(bot) ?? 0) < OFFER_COOLDOWN_MS) return "offered";
+
+  const altar = findAltar(bot, world, [...ALTAR_XP_MULTIPLIERS.keys()]);
+  if (!altar) return "no-altar";
+  const bt = botTile(bot);
+  if (!bt) return null;
+  if (altar.dist > ALTAR_ARRIVE_TILES) return walkToAltar(bot, altar, bt);
+
+  let inv = null;
+  try { inv = bot.getInventory?.(); } catch { return null; }
+  if (!inv) return null;
+  const bones = boneXp(eng);
+  for (const [id] of bones) {
+    let slot = -1;
+    try { slot = inv.getSlotForItemId?.(id) ?? -1; } catch { slot = -1; }
+    if (slot < 0) continue;
+    const xp = offerXp(eng, id, altar.name);
+    if (xp == null) continue;
+    try {
+      if (inv.getItems?.()[slot]?.getId?.() !== id) continue;
+      let boneName = "bones";
+      try {
+        boneName = eng.ItemDefinition?.forId?.(id)?.getName?.() ?? boneName;
+      } catch { /* keep default */ }
+      inv.deleteAtSlot(slot, 1);
+      try { bot.performAnimation?.(new eng.Animation(BURY_ANIMATION)); } catch { /* cosmetic */ }
+      try { eng.Sounds.sendSound(bot, eng.Sound.BURY_BONES); } catch { /* cosmetic */ }
+      bot.getSkillManager?.().addExperiences(eng.Skill.PRAYER, xp);
+      if (altar.name === "Gilded altar") {
+        try { bot.sendMessage?.(`You offer the ${boneName} at the gilded altar.`); } catch { /* best effort */ }
+        try { bot.sendMessage?.("The gods are pleased with your offering."); } catch { /* best effort */ }
+      } else {
+        try { bot.sendMessage?.(`You offer the ${boneName} at the altar.`); } catch { /* best effort */ }
+      }
+      OFFER_AT.set(bot, now);
+      return "offered";
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 // --- the sustainment hinge action --------------------------------------------------
 
 const PRAYER_GIVE_UP_MS = 5 * 60 * 1000;
 
 /**
  * citizenPrayer — the prayer hinge. Scored by the decision layer when the
- * bar is low or bones are piling up: bury bones for XP on the spot, then
- * walk to the nearest altar and recharge. Never interrupts combat — the
- * combat actions own prayers mid-fight.
+ * bar is low or bones are piling up: offer bones at the nearest town
+ * altar for real Prayer XP when one is reachable, otherwise bury bones
+ * for XP on the spot; then walk to the nearest altar and recharge. Never
+ * interrupts combat — the combat actions own prayers mid-fight.
  */
 function createCitizenPrayerAction(spec, world) {
   const action = {
@@ -943,11 +1048,15 @@ function createCitizenPrayerAction(spec, world) {
       if (!eng) return "failed";
       const w = world ?? ctx?.world ?? null;
 
-      // 1. Bones are XP on the floor — bury them where we stand.
+      // 1. Bones are Prayer XP. A reachable town altar multiplies the XP
+      //    (2.5x plain altar, 3.5x gilded) — offer there the way a player
+      //    trains Prayer; with no altar in reach, bury where we stand.
       if (boneCount(bot) > 0) {
+        const offered = offerBonesAtAltar(bot, w, eng, nowMs);
+        if (offered === "offered" || offered === "walking") return "running";
         const buried = buryBones(bot, eng, nowMs);
         if (buried > 0) return "running";
-        // Cooldown between burials: linger, don't spin the decision layer.
+        // Cooldown between offerings/burials: linger, don't spin the decision layer.
         return "running";
       }
 
@@ -991,6 +1100,9 @@ module.exports = {
   ensureSupplies,
   tickSupplies,
   rechargeAtAltar,
+  offerBonesAtAltar,
+  offerXp,
+  ALTAR_XP_MULTIPLIERS,
   buryBones,
   boneCount,
   prayerLevels,
