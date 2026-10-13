@@ -1,5 +1,13 @@
 // CitizenMarketStalls unit checks — pure logic, no running server.
 const assert = require("node:assert/strict");
+
+// Stub sayPublic so the deferred-emote path is observable without a server.
+const sayPath = require.resolve("../chat/CitizenSayPublic");
+const said = [];
+require.cache[sayPath] = {
+  exports: { sayPublic: (bot, text) => { said.push({ bot, text: String(text) }); return true; } },
+};
+
 const {
   isMarketOpenHour,
   dateKeyFor,
@@ -8,9 +16,17 @@ const {
   stallSpotFor,
   fillLine,
   parseMarketWares,
+  emoteDelayMsFor,
+  chorusAnnouncedRecently,
+  tickPendingEmotes,
   WARE_POOLS,
   MIN_WARES,
   MAX_WARES,
+  SETUP_EMOTE_DELAY_MAX_MS,
+  CHORUS_DEDUPE_RADIUS,
+  CHORUS_DEDUPE_WINDOW_MS,
+  _pendingEmotes,
+  _chorusLog,
 } = require("./CitizenMarketStalls");
 
 let n = 0;
@@ -121,5 +137,61 @@ check(
 );
 const mixed = parseMarketWares('[{"id": 1, "price": 5}, {"id": "nope", "price": 5}]');
 check(mixed && mixed.length === 1 && mixed[0].id === 1, "partially valid list keeps good entries");
+
+// --- emote destacking (no lockstep chorus) ---
+
+// deterministic stagger
+const d1 = emoteDelayMsFor("SomeMerchant", "2026-10-13", "stall-open");
+const d1b = emoteDelayMsFor("SomeMerchant", "2026-10-13", "stall-open");
+check(d1 === d1b, "emote delay deterministic per (username, day, kind)");
+check(d1 >= 0 && d1 <= SETUP_EMOTE_DELAY_MAX_MS, `delay inside 0..${SETUP_EMOTE_DELAY_MAX_MS}ms (got ${d1})`);
+const dCustom = emoteDelayMsFor("SomeMerchant", "2026-10-13", "stall-close", 5000);
+check(dCustom >= 0 && dCustom <= 5000, "custom maxMs window respected");
+const delays = [];
+for (let i = 0; i < 20; i++) delays.push(emoteDelayMsFor(`Merchant${i}`, "2026-10-13", "stall-open"));
+const spread = Math.max(...delays) - Math.min(...delays);
+check(spread > 30000, `delays spread across merchants (spread ${spread}ms > 30s)`);
+check(new Set(delays).size > 10, "delays mostly distinct across merchants");
+
+// cluster dedupe
+const now = 1_700_000_000_000;
+const log = [{ kind: "stall-open", x: 100, y: 100, z: 0, atMs: now - 10_000 }];
+check(chorusAnnouncedRecently(log, "stall-open", { x: 105, y: 105, z: 0 }, now) === true, "nearby same-kind announcement suppresses");
+check(chorusAnnouncedRecently(log, "stall-open", { x: 100 + CHORUS_DEDUPE_RADIUS + 1, y: 100, z: 0 }, now) === false, "beyond dedupe radius does not suppress");
+check(chorusAnnouncedRecently(log, "stall-close", { x: 100, y: 100, z: 0 }, now) === false, "different emote kind does not suppress");
+const stale = [{ kind: "stall-open", x: 100, y: 100, z: 0, atMs: now - CHORUS_DEDUPE_WINDOW_MS - 1000 }];
+check(chorusAnnouncedRecently(stale, "stall-open", { x: 100, y: 100, z: 0 }, now) === false, "announcement older than window does not suppress");
+check(chorusAnnouncedRecently([], "stall-open", { x: 100, y: 100, z: 0 }, now) === false, "empty log does not suppress");
+
+// deferred fire on the tick: first merchant speaks, nearby second stays quiet
+function fakeBot(name, x, y) {
+  return {
+    getUsername: () => name,
+    getAttribute: () => ({}),
+    getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }),
+  };
+}
+_pendingEmotes.clear();
+_chorusLog.length = 0;
+said.length = 0;
+const bots = {
+  alpha: fakeBot("Alpha", 200, 200),
+  beta: fakeBot("Beta", 205, 203), // ~7 tiles from alpha: inside dedupe radius
+};
+const director = { getBot: (record) => bots[record.username] ?? null };
+_pendingEmotes.set("alpha", { kind: "stall-open", line: "*sets up their stall for the day*", atMs: now, record: { username: "alpha" } });
+_pendingEmotes.set("beta", { kind: "stall-open", line: "*sets up their stall for the day*", atMs: now, record: { username: "beta" } });
+_pendingEmotes.set("ghost", { kind: "stall-open", line: "*sets up their stall for the day*", atMs: now, record: { username: "ghost" } }); // no bot: despawned
+_pendingEmotes.set("later", { kind: "stall-open", line: "*sets up their stall for the day*", atMs: now + 60_000, record: { username: "alpha" } }); // not due
+tickPendingEmotes(director, now);
+check(_pendingEmotes.has("later"), "not-yet-due emote stays pending");
+check(!_pendingEmotes.has("alpha") && !_pendingEmotes.has("beta") && !_pendingEmotes.has("ghost"), "due/despawned entries consumed");
+check(said.length === 1, `exactly one merchant spoke (got ${said.length})`);
+check(said[0].text === "*sets up their stall for the day*", "spoken line is the setup emote");
+check(_chorusLog.length === 1 && _chorusLog[0].kind === "stall-open", "fired announcement recorded in chorus log");
+// stale chorus entries pruned
+_chorusLog.push({ kind: "stall-open", x: 0, y: 0, z: 0, atMs: now - CHORUS_DEDUPE_WINDOW_MS - 5000 });
+tickPendingEmotes(director, now);
+check(_chorusLog.every((e) => now - e.atMs <= CHORUS_DEDUPE_WINDOW_MS), "stale chorus entries pruned on tick");
 
 console.log(`\n${n} assertions passed.`);
