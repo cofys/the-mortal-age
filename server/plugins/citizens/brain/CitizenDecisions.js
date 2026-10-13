@@ -4981,28 +4981,44 @@ function decisionTick(args) {
  * decisionTick hook on the shared brain world. Idempotent.
  */
 let initialized = false;
+// TEMP-DIAG (remove after live verification): records the outcome of the
+// decisionTick install so the monitor can report it.
+const wiringDiag = { initialized: false, pickerInstalled: false, worldInstall: "not-run" };
 function initCitizenDecisions(registry) {
   if (initialized || !registry) {
+    wiringDiag.initialized = initialized;
+    if (!registry) wiringDiag.worldInstall = "no-registry";
     return;
   }
   initialized = true;
+  wiringDiag.initialized = true;
   try {
     if (typeof registry.setActivityPicker === "function") {
       registry.setActivityPicker((player, candidates, nowMs) =>
         pick(player, candidates, nowMs)
       );
+      wiringDiag.pickerInstalled = true;
     }
   } catch {
     // The picker is an enhancement; the brain works without it.
   }
   try {
     const world = registry.world;
-    if (world && !world.decisionTick) {
+    if (!world) {
+      wiringDiag.worldInstall = "no-world";
+    } else if (world.decisionTick) {
+      wiringDiag.worldInstall = "already-present";
+    } else {
       world.decisionTick = (args) => decisionTick(args);
+      wiringDiag.worldInstall = world.decisionTick ? "installed" : "install-failed";
     }
-  } catch {
-    // Same: enhancement only.
+  } catch (e) {
+    wiringDiag.worldInstall = "error:" + String((e && e.message) || e);
   }
+}
+/** TEMP-DIAG: expose the install outcome for the monitor API. */
+function getDecisionWiring() {
+  return { ...wiringDiag };
 }
 
 /** Test seam: clear all per-citizen decision state. */
@@ -5073,6 +5089,7 @@ ACT_COMPETE,
   scoreActivity,
   snapshot,
   getPickDiag,
+  getDecisionWiring, // TEMP-DIAG
   industriousness,
   sociabilityOf,
   titheInfo,

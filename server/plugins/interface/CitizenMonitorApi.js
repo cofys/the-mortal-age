@@ -175,6 +175,16 @@ function handleMonitor(query) {
       CitizenDirector.clearDebugFakePlayers();
       return { ok: true, cleared: true };
     }
+    // ?decisionWiring=1 - TEMP-DIAG: report whether the decision layer
+    // (activity picker + world.decisionTick) was installed at boot.
+    if (getParam("decisionWiring")) {
+      try {
+        const w = require("../citizens/brain/CitizenDecisions").getDecisionWiring?.() ?? null;
+        return { ok: true, decisionWiring: w };
+      } catch (e) {
+        return { ok: false, error: "decision wiring check failed: " + (e && e.message ? String(e.message) : String(e)) };
+      }
+    }
     // ?tileCheck=x,y[,z] - report engine walkability for tiles (debug).
     // Jon 2026-10-13 (Catherby water tiles): lets autonomous verification
     // confirm citizens stand on walkable tiles without a client.
