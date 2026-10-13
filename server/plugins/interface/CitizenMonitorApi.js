@@ -43,6 +43,15 @@ const { getDirector, CitizenDirector } = require("../citizens/director/CitizenDi
 const { recentSpeechEvents } = require("../citizens/chat/CitizenSayPublic");
 const { skillStore, levelForXp } = require("../citizens/lib/CitizenSkilling");
 const { SKILL_ID_TO_ENUM, getSkillEnum } = require("../citizens/lib/CitizenXpSync");
+// DIAG-2026-10-13: lazy require (init order) — may be null if decisions never loaded.
+let getPickDiag = null;
+let getBaseRegistry = null;
+try {
+  getPickDiag = require("../citizens/brain/CitizenDecisions").getPickDiag ?? null;
+} catch { /* diag unavailable */ }
+try {
+  getBaseRegistry = require("../citizens/brain/CitizenActivityRegistry").getBaseRegistry ?? null;
+} catch { /* diag unavailable */ }
 
 // Skill enum captured at attach (api.core.Skill) for live engine reads.
 let SkillEnum = null;
@@ -213,6 +222,9 @@ function handleMonitor(query) {
         lastMoveAt,
         secsSinceMove: Math.round((now - lastMoveAt) / 1000),
         skills: getCitizenSkills(director, record),
+        // DIAG-2026-10-13: last pick() top-8 scores + weary/hurt flags, so a
+        // live read shows why the winner beat the alternatives.
+        pickDiag: (() => { try { return getPickDiag?.(record.username) ?? null; } catch { return null; } })(),
       });
     }
   }
@@ -254,12 +266,25 @@ function handleMonitor(query) {
 
   let fakePlayers = [];
   try { fakePlayers = CitizenDirector.getDebugFakePlayers(); } catch {}
+  // DIAG-2026-10-13: global capacity room for the key work activities, so a
+  // live read can tell "work scored low" apart from "work wasn't a candidate".
+  let workCapacity = null;
+  try {
+    const reg = getBaseRegistry?.();
+    if (reg && typeof reg.hasRoom === "function") {
+      workCapacity = {};
+      for (const id of ["citizen_chop", "citizen_mine", "citizen_fish", "citizen_routine", "safetynet_wander"]) {
+        workCapacity[id] = reg.hasRoom(id);
+      }
+    }
+  } catch { /* diag unavailable */ }
   return {
     timestamp: now,
     total,
     materialized,
     count: citizens.length,
     citizens,
+    workCapacity,
     debugFakePlayers: fakePlayers,
     recentSpeech: recentSpeechEvents(),
     skillSummary,

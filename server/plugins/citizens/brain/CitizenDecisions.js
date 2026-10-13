@@ -4531,6 +4531,20 @@ function violatesVariety(username, activityId) {
   );
 }
 
+// DIAG-2026-10-13: per-citizen pick diagnostic, surfaced read-only via
+// /api/citizen-monitor. Records the top-8 scored candidates of the most
+// recent pick() so a live read shows exactly why the winner beat the
+// alternatives (e.g. safetynet_wander at 12 vs citizen_chop at 36 — or
+// chop missing from the candidate list entirely). Bounded to 1000 entries.
+const lastPickDiag = new Map();
+
+/** Read-only accessor for the monitor endpoint. Returns a copy or null. */
+function getPickDiag(username) {
+  if (!username) return null;
+  const d = lastPickDiag.get(username);
+  return d ? { ...d, top: d.top.map((t) => ({ ...t })) } : null;
+}
+
 /**
  * Registry picker: score every candidate, epsilon-greedy pick with the
  * variety guard. Returns a candidate or null (null = default brain choice).
@@ -4620,7 +4634,30 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
     }
   }
   recordPick(username, chosen.id);
-  // TEMP-DIAG: picked activity (remove after debugging)
+  // DIAG-2026-10-13: record the pick's top-8 scores for the monitor. A
+  // throwing diag never breaks the pick.
+  try {
+    if (username) {
+      lastPickDiag.set(username, {
+        at: nowMs,
+        chosen: chosen.id,
+        weary: (snap.energy ?? 100) < WEARY_AT,
+        hurt: (snap.hp ?? 100) < HURT_AT,
+        energy: Math.round(snap.energy ?? -1),
+        hp: Math.round(snap.hp ?? -1),
+        candidates: scored.length,
+        top: scored.slice(0, 8).map((e) => ({
+          id: e.activity.id,
+          s: Math.round(e.score),
+        })),
+      });
+      if (lastPickDiag.size > 1000) {
+        lastPickDiag.delete(lastPickDiag.keys().next().value);
+      }
+    }
+  } catch {
+    // Diagnostics never break the pick.
+  }
   return chosen;
 }
 
@@ -4870,6 +4907,7 @@ function initCitizenDecisions(registry) {
 /** Test seam: clear all per-citizen decision state. */
 function resetForTests() {
   recentByUser.clear();
+  lastPickDiag.clear();
   nextDecisionAt.clear();
   directedPick.clear();
   lastInterruptAt.clear();
@@ -4932,6 +4970,7 @@ ACT_COMPETE,
   queueDirectedPick,
   scoreActivity,
   snapshot,
+  getPickDiag,
   industriousness,
   sociabilityOf,
   titheInfo,
