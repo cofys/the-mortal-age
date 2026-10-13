@@ -507,6 +507,10 @@ function createBotActivityRegistry(options = {}) {
         if (activity && !isBlocked(player, own, nowMs)) {
           return activity;
         }
+        // TEMP-DIAG: picker fall-through logging (remove after debugging)
+        try {
+          console.log(`[PICKER-DIAG] ${player?.getUsername?.() ?? "unknown"}: own=${own} blocked/missing, falling through to scorer`);
+        } catch {}
       }
       const previousId = lastActivityByPlayer.get(player);
       const candidates = available(player, nowMs).filter(
