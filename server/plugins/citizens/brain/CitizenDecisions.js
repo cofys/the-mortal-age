@@ -5018,7 +5018,11 @@ function initCitizenDecisions(registry) {
 }
 /** TEMP-DIAG: expose the install outcome for the monitor API. */
 function getDecisionWiring() {
-  return { ...wiringDiag };
+  return {
+    ...wiringDiag,
+    citizensGated: nextDecisionAt.size,
+    citizensInterrupted: lastInterruptAt.size,
+  };
 }
 
 /** Test seam: clear all per-citizen decision state. */
