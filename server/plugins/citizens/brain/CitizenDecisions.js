@@ -112,6 +112,8 @@ const ACT_AGILITY = "citizen_agility";
 const ACT_SLAYER = "citizen_slayer";
 const ACT_PKER = "citizen_pker";
 const ACT_COMBAT_TRAIN = "citizen_combat_train";
+const ACT_RANGED_TRAIN = "citizen_ranged_train";
+const ACT_MAGIC_TRAIN = "citizen_magic_train";
 const ACT_HUNT = "citizen_hunt";
 const ACT_FARM = "citizen_farm";
 const ACT_THIEVE = "citizen_thieve";
@@ -201,6 +203,8 @@ const WORK_ACTIVITIES = new Set([
   ACT_SLAYER,
   ACT_PKER,
   ACT_COMBAT_TRAIN,
+  ACT_RANGED_TRAIN,
+  ACT_MAGIC_TRAIN,
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,
@@ -502,6 +506,19 @@ function combatLevel(player) {
     // fall through
   }
   return 3;
+}
+
+/** Max level in a named skill (1 when unreadable). Lazy engine require, like prayerInfo. */
+function skillMaxLevel(player, skillName) {
+  try {
+    const Skill = require("../../../src/main/typescript/elvarg/game/model/Skill")
+      .Skill;
+    const lvl = player?.getSkillManager?.()?.getMaxLevel?.(Skill[skillName]);
+    if (Number.isFinite(lvl) && lvl >= 1) return Math.floor(lvl);
+  } catch {
+    // fall through
+  }
+  return 1;
 }
 
 /**
@@ -2745,6 +2762,8 @@ function snapshot(player) {
     role: (() => { try { return player?.getAttribute?.(ATTR_CITIZEN_ROLE) ?? null; } catch { return null; } })(),
     kingdomId: (() => { try { return player?.getAttribute?.(ATTR_KINGDOM_ID) ?? null; } catch { return null; } })(),
     combatLevel: combatLevel(player),
+    rangedLevel: skillMaxLevel(player, "RANGED"),
+    magicLevel: skillMaxLevel(player, "MAGIC"),
     prayer: prayerInfo(player),
     coins: coinCount(player),
     food: foodCount(player),
@@ -2843,7 +2862,7 @@ function goalUrgency(goal) {
  * no rng here, so scoring is deterministic and testable.
  */
 function scoreActivity(activityId, snap) {
-const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, prayer, role, tithe, caravan } = snap;  const industrious = industriousness(personality);
+const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, logs, ore, gems, rawFood, herbs, fletchLogs, essence, hunts, seeds, thiefLevel, builds, buildLevel, homeFurnishable, notoriety, reputation, travel, entertain, guild, pets, art, perform, fashion, cuisine, celebrate, compete, diplomat, spy, explore, invent, construct, philosophy, legal, league, science, infra, astro, maps, mapguild, press, pressguild, bankguild, bank, ins, insureguild, lawguild, diplocorps, spyguild, tradeguild, dig, stage, runway, train, cookoff, festival, gallery, library, docent, surgery, drunk, climate, night, hour, sportsguild, cookguild, weaverguild, musicguild, artguild, libguild, obsguild, combatLevel, rangedLevel, magicLevel, prayer, role, tithe, caravan } = snap;  const industrious = industriousness(personality);
   const sociable = sociabilityOf(personality);
   const goalType = goal?.type ?? null;
   const urgent = goalUrgency(goal);
@@ -3148,6 +3167,52 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (goalType === GOAL_RANK_UP) s += 8;
       const lvl = Number.isFinite(combatLevel) ? combatLevel : 3;
       if (lvl <= 10) s += 12; // level 3s train hardest
+      else if (lvl >= 40) s -= 12; // veterans maintain, not grind
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s + goalBoost;
+    }
+    case ACT_RANGED_TRAIN: {
+      // Ranged training: the same monster-grind as melee, with a bow.
+      // Brave and industrious citizens train; the watch keeps its archers
+      // sharp. Low Ranged trains hardest; veterans taper off. The action
+      // provisions its own bow, arrows (1000) and food and gates gear by
+      // the cache's real level requirements, so scoring only shapes who
+      // goes — mirroring citizen_combat_train.
+      const traits = traitSet(personality);
+      let s = 30 + industrious * 10;
+      if (traits.has("brave") || traits.has("aggressive")) s += 14;
+      if (role === "guard") s += 12; // the watch needs archers too
+      if (goalType === GOAL_BOSS_SLAYER) s += 16; // combat goal
+      else if (goalType === GOAL_RANK_UP) s += 8;
+      const lvl = Number.isFinite(rangedLevel) ? rangedLevel : 1;
+      if (lvl <= 10) s += 12; // new archers train hardest
+      else if (lvl >= 40) s -= 12; // veterans maintain, not grind
+      if (criticalHp || exhausted) s -= 70;
+      else if (hurt) s -= 30;
+      else if (weary) s -= 25;
+      if (mood < 20) s -= 8;
+      return s + goalBoost;
+    }
+    case ACT_MAGIC_TRAIN: {
+      // Magic training: autocast combat spells at low-level monsters the
+      // way players do (wind strike at crabs, then bolts, then blasts).
+      // The daydreamers and methodical take to it; the watch keeps a few
+      // battlemages. Low Magic trains hardest; veterans taper off. The
+      // action provisions its own staff, runes (3000) and food and gates
+      // spells by real level requirements, so scoring only shapes who
+      // goes — mirroring citizen_combat_train.
+      const traits = traitSet(personality);
+      let s = 28 + industrious * 10;
+      if (traits.has("daydreamer") || traits.has("methodical")) s += 14;
+      if (traits.has("brave") || traits.has("aggressive")) s += 8;
+      if (role === "guard") s += 8; // a few battlemages on the watch
+      if (goalType === GOAL_BOSS_SLAYER) s += 16; // combat goal
+      else if (goalType === GOAL_RANK_UP) s += 8;
+      const lvl = Number.isFinite(magicLevel) ? magicLevel : 1;
+      if (lvl <= 10) s += 12; // new mages train hardest
       else if (lvl >= 40) s -= 12; // veterans maintain, not grind
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
@@ -4813,6 +4878,8 @@ module.exports = {
   ACT_SLAYER,
   ACT_PKER,
   ACT_COMBAT_TRAIN,
+  ACT_RANGED_TRAIN,
+  ACT_MAGIC_TRAIN,
   ACT_HUNT,
   ACT_FARM,
   ACT_THIEVE,

@@ -349,6 +349,9 @@
             ]
           }
         }
+      ],
+      "produces": [
+        "prayer"
       ]
     },
     {
@@ -2334,6 +2337,370 @@
                   "AMULET_OF_POWER",
                   "AMULET_OF_STRENGTH",
                   "AMULET_OF_GLORY"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "citizen_ranged_train",
+      "mode": "citizen_ranged_train",
+      "repeat": false,
+      "capacity": 24,
+      "slotCapacity": 4,
+      "failureCooldownSeconds": 60,
+      "produces": [
+        "ranged",
+        "hitpoints"
+      ],
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "guard",
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "trainCombat",
+          "durationSeconds": {
+            "min": 300,
+            "max": 720
+          },
+          "food": "TROUT",
+          "foodAmount": 16,
+          "maxFailedTargets": 6,
+          "styles": [
+            "ranged"
+          ],
+          "spreadDistance": 150,
+          "excludeNames": [
+            "Duck",
+            "Duckling"
+          ],
+          "stages": [
+            {
+              "id": "beginner",
+              "minLevel": 1,
+              "npcLevels": {
+                "min": 1,
+                "max": 5
+              }
+            },
+            {
+              "id": "novice",
+              "minLevel": 10,
+              "npcLevels": {
+                "min": 2,
+                "max": 13
+              }
+            },
+            {
+              "id": "intermediate",
+              "minLevel": 20,
+              "npcLevels": {
+                "min": 9,
+                "max": 27
+              }
+            },
+            {
+              "id": "advanced",
+              "minLevel": 40,
+              "npcLevels": {
+                "min": 20,
+                "max": 45
+              }
+            },
+            {
+              "id": "expert",
+              "minLevel": 60,
+              "npcLevels": {
+                "min": 45,
+                "max": 100
+              }
+            }
+          ],
+          "rangedTiers": [
+            {
+              "minLevel": 1,
+              "weapons": [
+                "SHORTBOW",
+                "OAK_SHORTBOW"
+              ],
+              "ammo": [
+                "BRONZE_ARROW",
+                "IRON_ARROW"
+              ],
+              "armour": {
+                "HEAD_SLOT": [
+                  "LEATHER_COWL",
+                  "COIF",
+                  null
+                ],
+                "BODY_SLOT": [
+                  "LEATHER_BODY",
+                  "HARDLEATHER_BODY",
+                  null
+                ],
+                "LEG_SLOT": [
+                  "LEATHER_CHAPS",
+                  null
+                ],
+                "HANDS_SLOT": [
+                  "LEATHER_GLOVES",
+                  null
+                ],
+                "FEET_SLOT": [
+                  "LEATHER_BOOTS",
+                  null
+                ]
+              }
+            },
+            {
+              "minLevel": 20,
+              "weapons": [
+                "WILLOW_SHORTBOW",
+                "MAPLE_SHORTBOW"
+              ],
+              "ammo": [
+                "STEEL_ARROW",
+                "MITHRIL_ARROW"
+              ],
+              "armour": {
+                "HEAD_SLOT": [
+                  "COIF",
+                  null
+                ],
+                "BODY_SLOT": [
+                  "STUDDED_BODY",
+                  "HARDLEATHER_BODY",
+                  null
+                ],
+                "LEG_SLOT": [
+                  "STUDDED_CHAPS",
+                  "LEATHER_CHAPS",
+                  null
+                ],
+                "HANDS_SLOT": [
+                  "LEATHER_GLOVES",
+                  null
+                ],
+                "FEET_SLOT": [
+                  "LEATHER_BOOTS",
+                  null
+                ]
+              }
+            },
+            {
+              "minLevel": 40,
+              "weapons": [
+                "YEW_SHORTBOW",
+                "MAGIC_SHORTBOW"
+              ],
+              "ammo": [
+                "ADAMANT_ARROW",
+                "RUNE_ARROW"
+              ],
+              "armour": {
+                "HEAD_SLOT": [
+                  "COIF",
+                  null
+                ],
+                "BODY_SLOT": [
+                  "GREEN_DHIDE_BODY",
+                  "STUDDED_BODY",
+                  null
+                ],
+                "LEG_SLOT": [
+                  "GREEN_DHIDE_CHAPS",
+                  "STUDDED_CHAPS",
+                  null
+                ],
+                "HANDS_SLOT": [
+                  "LEATHER_GLOVES",
+                  null
+                ],
+                "FEET_SLOT": [
+                  "LEATHER_BOOTS",
+                  null
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "citizen_magic_train",
+      "mode": "citizen_magic_train",
+      "repeat": false,
+      "capacity": 24,
+      "slotCapacity": 4,
+      "failureCooldownSeconds": 60,
+      "produces": [
+        "magic",
+        "hitpoints"
+      ],
+      "requires": [
+        {
+          "citizen": {
+            "roles": [
+              "guard",
+              "commoner"
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "trainCombat",
+          "durationSeconds": {
+            "min": 300,
+            "max": 720
+          },
+          "food": "TROUT",
+          "foodAmount": 16,
+          "maxFailedTargets": 6,
+          "styles": [
+            "magic"
+          ],
+          "spreadDistance": 150,
+          "excludeNames": [
+            "Duck",
+            "Duckling"
+          ],
+          "stages": [
+            {
+              "id": "beginner",
+              "minLevel": 1,
+              "npcLevels": {
+                "min": 1,
+                "max": 5
+              }
+            },
+            {
+              "id": "novice",
+              "minLevel": 10,
+              "npcLevels": {
+                "min": 2,
+                "max": 13
+              }
+            },
+            {
+              "id": "intermediate",
+              "minLevel": 20,
+              "npcLevels": {
+                "min": 9,
+                "max": 27
+              }
+            },
+            {
+              "id": "advanced",
+              "minLevel": 40,
+              "npcLevels": {
+                "min": 20,
+                "max": 45
+              }
+            },
+            {
+              "id": "expert",
+              "minLevel": 60,
+              "npcLevels": {
+                "min": 45,
+                "max": 100
+              }
+            }
+          ],
+          "magicTiers": [
+            {
+              "minLevel": 1,
+              "weapons": [
+                "STAFF_OF_AIR",
+                "STAFF_OF_WATER",
+                "STAFF_OF_EARTH",
+                "STAFF_OF_FIRE",
+                "MAGIC_STAFF"
+              ],
+              "spells": [
+                "WIND_STRIKE",
+                "WATER_STRIKE",
+                "EARTH_STRIKE",
+                "FIRE_STRIKE",
+                "CONFUSE",
+                "WEAKEN",
+                "CURSE"
+              ],
+              "armour": {
+                "HEAD_SLOT": [
+                  "BLUE_WIZARD_HAT",
+                  "WIZARD_HAT",
+                  null
+                ],
+                "BODY_SLOT": [
+                  "BLUE_WIZARD_ROBE",
+                  "BLACK_ROBE",
+                  null
+                ]
+              }
+            },
+            {
+              "minLevel": 13,
+              "weapons": [
+                "AIR_BATTLESTAFF",
+                "WATER_BATTLESTAFF",
+                "EARTH_BATTLESTAFF",
+                "FIRE_BATTLESTAFF",
+                "BATTLESTAFF"
+              ],
+              "spells": [
+                "WIND_BOLT",
+                "WATER_BOLT",
+                "EARTH_BOLT",
+                "FIRE_BOLT"
+              ],
+              "armour": {
+                "HEAD_SLOT": [
+                  "BLUE_WIZARD_HAT",
+                  "WIZARD_HAT",
+                  null
+                ],
+                "BODY_SLOT": [
+                  "BLUE_WIZARD_ROBE",
+                  "BLACK_ROBE",
+                  null
+                ]
+              }
+            },
+            {
+              "minLevel": 41,
+              "weapons": [
+                "AIR_BATTLESTAFF",
+                "WATER_BATTLESTAFF",
+                "EARTH_BATTLESTAFF",
+                "FIRE_BATTLESTAFF",
+                "BATTLESTAFF"
+              ],
+              "spells": [
+                "WIND_BLAST",
+                "WATER_BLAST",
+                "EARTH_BLAST",
+                "FIRE_BLAST"
+              ],
+              "armour": {
+                "HEAD_SLOT": [
+                  "BLUE_WIZARD_HAT",
+                  "WIZARD_HAT",
+                  null
+                ],
+                "BODY_SLOT": [
+                  "BLUE_WIZARD_ROBE",
+                  "BLACK_ROBE",
+                  null
                 ]
               }
             }
