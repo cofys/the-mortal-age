@@ -175,23 +175,56 @@ test("WORLD_GROUNDING drops the 60-char limit", () => {
   assert.ok(!WORLD_GROUNDING.toLowerCase().includes("under 60"), "still has under-60");
 });
 
-test("WORLD_GROUNDING demands one short sentence and bans name-first", () => {
-  assert.ok(WORLD_GROUNDING.includes("one short sentence"), "missing one-sentence rule");
+test("WORLD_GROUNDING demands brevity and bans name-first", () => {
+  assert.ok(WORLD_GROUNDING.includes("short sentences"), "missing brevity rule");
+  assert.ok(WORLD_GROUNDING.includes("under 200 characters"), "missing 200-char rule");
   assert.ok(
     WORLD_GROUNDING.toLowerCase().includes("never start your message with your own name"),
     "missing name-first ban"
   );
 });
 
-test("buildSpeakPrompt strings demand one short sentence", () => {
+test("buildSpeakPrompt strings demand one or two short sentences", () => {
   const card = "A cheerful fisher.";
   const forPlayer = buildSpeakPrompt({ card, toName: "Liam", toKind: "player", citizenName: "Ora Nettle" });
   const forCitizen = buildSpeakPrompt({ card, toName: "Bob", toRole: "miner", citizenName: "Ora Nettle" });
   for (const p of [forPlayer, forCitizen]) {
     assert.ok(!p.user.includes("60 characters"), `user still has 60 chars: ${p.user}`);
     assert.ok(!p.system.includes("60 characters"), "system still has 60 chars");
-    assert.ok(p.user.includes("One short sentence"), `missing one-sentence: ${p.user}`);
+    assert.ok(p.user.includes("One or two short sentences"), `missing brevity rule: ${p.user}`);
+    assert.ok(p.user.includes("under 200 characters"), `missing 200-char rule: ${p.user}`);
   }
+});
+
+// ---- single send path: the dead raw forceChat+packets helper is gone ----
+// The Mouth used to re-implement public speech itself (own chunking, own
+// pacing, own recipient loop) — a second send path that bypassed the voice
+// backstop and anti-repeat memory. Public speech now funnels only through
+// CitizenSayPublic.sayPublic via speakPublic; this test fails if the second
+// path ever comes back.
+test("no second public send path remains", () => {
+  const mouth = require("./Mouth");
+  assert.equal(mouth.speakPublicLine, undefined, "speakPublicLine resurrected");
+  assert.equal(mouth.PUBLIC_CHAT_MAX_CHARS, undefined, "60-char cap resurrected");
+});
+
+// Voice attribution: an LLM reply spoken through the Mouth carries the
+// speaker's voice signature (terse citizens don't exclaim) — proof the
+// unified path's voice backstop applies to LLM speech, not just templates.
+test("speakPublic applies the speaker's voice backstop to LLM replies", () => {
+  const api = mockApi();
+  const bot = mockBot("oranettle", "Ora Nettle");
+  bot.getAttribute = (k) =>
+    k === "character:display-name"
+      ? "Ora Nettle"
+      : k === "citizens:personality"
+        ? { speechStyle: "short clipped sentences" } // terse voice
+        : undefined;
+  speakPublic(api, bot, "Hey! I found a great spot!");
+  assert.equal(bot.spoken.length, 1);
+  // Terse voice: "!" -> "." AND lowercased — the full voice signature, not
+  // just the pool default, lands on LLM speech through the unified path.
+  assert.equal(bot.spoken[0], "hey. i found a great spot.", "terse voice did not restyle the reply");
 });
 
 if (failures > 0) {

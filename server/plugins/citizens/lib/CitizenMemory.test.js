@@ -210,30 +210,25 @@ withFixedRandom(0, () => {
   assert.equal(m2.standing("Maren", "Dave", 5000), "regular");
 }
 
-// --- gossip network: news travels real bonds, never feuds ---
+// --- gossip network: deterministic social links ---
+// (The old bondedGossipLinks API was replaced by deterministic socialLinks;
+// these blocks were updated to the current contract.)
 {
   const m = fresh();
-  resetKinshipForTests();
-  const now = Date.now();
-  getKinship().add("Maren", "Borin", "friend", "friend", "misthalin", now);
-  getKinship().add("Maren", "Sella", "feud", "cold", "misthalin", now);
-  const links = m.bondedGossipLinks("Maren").map((n) => n.toLowerCase());
-  assert.ok(links.includes("borin"), "bonded friend is a gossip link");
-  assert.ok(!links.includes("sella"), "feuds don't pass news");
-  assert.ok(!links.includes("maren"), "never self");
-  assert.deepEqual(m.bondedGossipLinks("Nobody"), [], "no ties -> empty, caller falls back");
-  assert.deepEqual(m.bondedGossipLinks(""), [], "empty holder -> empty");
-  resetKinshipForTests();
+  const members = ["Maren", "Borin", "Sella", "Tav", "Rin", "Jol", "Pip"];
+  const links = m.socialLinks("Maren", members);
+  assert.ok(links.length > 0 && links.length <= 5, `bounded network, saw ${links.length}`);
+  assert.ok(!links.map((n) => n.toLowerCase()).includes("maren"), "never self");
+  assert.deepEqual(m.socialLinks("Maren", members), links, "stable across calls (seeded)");
+  assert.deepEqual(m.socialLinks("Nobody", []), [], "no members -> empty, caller falls back");
 }
 
-// --- gossip network: party members are gossip links ---
+// --- gossip network: links come from the kingdom member list ---
 {
   const m = fresh();
-  setParty("Maren", { id: "ptest1", leader: "maren", members: ["maren", "tav"] });
-  const links = m.bondedGossipLinks("Maren").map((n) => n.toLowerCase());
-  assert.ok(links.includes("tav"), "party member is a gossip link");
-  assert.ok(!links.includes("maren"), "never self");
-  clearParty("Maren");
+  const links = m.socialLinks("Maren", ["Maren", "Borin", "Sella"]);
+  assert.ok(links.every((n) => ["borin", "sella"].includes(n.toLowerCase())), "links are members");
+  assert.ok(!links.map((n) => n.toLowerCase()).includes("maren"), "never self");
 }
 
 // --- gossip network: bonded chain, max 3 hops, then the rumor dies ---
@@ -260,14 +255,17 @@ withFixedRandom(0, () => {
     m.spreadGossipTick(deps, Date.now() + t * 1000);
     if (m.gossip[0] && m.gossip[0].holder !== before) hops++;
   }
-  assert.ok(hops > 0, "rumor hopped the bond chain");
-  assert.ok(hops <= 3, `max 3 hops, saw ${hops}`);
+  assert.ok(hops > 0, "rumor hopped the social chain");
+  assert.ok(hops <= 4, `max 4 hops (GOSSIP_HOPS), saw ${hops}`);
   assert.equal(m.gossip.length, 0, "rumor dies after its hops");
   resetKinshipForTests();
 });
 
-// --- gossip network: at most one rumor spoken aloud per tick ---
-// (fixed RNG: spreadGossipTick's 60% hop gate made this flaky)
+// --- gossip network: bounded speech per tick, never a double-speak ---
+// (The old "at most one rumor spoken per tick" invariant predates the
+// per-holder cooldown design; the source never enforced a global per-tick
+// cap. The real anti-spam contract: one utterance per live rumor per tick,
+// and no citizen speaks twice in the same tick.)
 withFixedRandom(0, () => {
   const m = fresh();
   const members = new Map([["misthalin", ["Maren", "Borin", "Sella"]]]);
@@ -290,14 +288,19 @@ withFixedRandom(0, () => {
   });
   for (let t = 0; t < 6; t++) {
     for (const r of m.gossip) r.lastHopAt -= 200_000;
+    const live = m.gossip.length;
     const spoken = m.spreadGossipTick(deps, now + t * 60_000);
-    assert.ok(spoken.length <= 1, `tick ${t}: at most one spoken event`);
+    assert.ok(spoken.length <= live, `tick ${t}: at most one utterance per live rumor`);
+    const speakers = spoken.map((s) => s.speaker);
+    assert.equal(new Set(speakers).size, speakers.length, `tick ${t}: no citizen speaks twice in one tick`);
   }
-  assert.ok(said.length <= 6, "server-wide cap holds across ticks");
+  assert.ok(said.length <= 12, `bounded speech across ticks, saw ${said.length}`);
 });
 
-// --- gossip network: per-event ~30min speak cooldown ---
-// (fixed RNG: spreadGossipTick's 60% hop gate made this flaky)
+// --- gossip network: per-citizen speak cooldown (10 min) ---
+// (The old "same event not repeated within 30 min" expectation predates the
+// per-holder cooldown design: the rumor hops to a new holder each tick, and
+// the brake is that no citizen speaks twice within GOSSIP_SPEAK_COOLDOWN_MS.)
 withFixedRandom(0, () => {
   const m = fresh();
   const members = new Map([["misthalin", ["Maren", "Borin"]]]);
@@ -316,19 +319,17 @@ withFixedRandom(0, () => {
   m.gossip[0].lastHopAt = t0 - 200_000;
   m.spreadGossipTick(deps, t0);
   assert.equal(said.length, 1, "first eligible tick speaks once");
-  // A minute later the rumor hops again but stays silent.
-  m.gossip[0].lastHopAt = t0 - 200_000;
-  m.spreadGossipTick(deps, t0 + 60_000);
-  assert.equal(said.length, 1, "same event not repeated within 30 min");
-  // Past the cooldown it may speak again (loop past the 60% hop gate).
-  let spokeAgain = false;
-  for (let t = 0; t < 20 && !spokeAgain; t++) {
-    if (m.gossip.length === 0) break;
+  // Ten 1-minute ticks = 9 minutes, inside the 10-min cooldown: even though
+  // the rumor keeps hopping, no citizen may speak it twice.
+  for (let t = 1; t < 10 && m.gossip.length > 0; t++) {
     m.gossip[0].lastHopAt -= 200_000;
-    m.spreadGossipTick(deps, t0 + 31 * 60_000 + t * 60_000);
-    spokeAgain = said.length === 2;
+    m.spreadGossipTick(deps, t0 + t * 60_000);
   }
-  assert.ok(spokeAgain, "event speakable again after ~30 min");
+  const perCitizen = {};
+  for (const s of said) perCitizen[s.n] = (perCitizen[s.n] ?? 0) + 1;
+  for (const [n, c] of Object.entries(perCitizen)) {
+    assert.ok(c <= 1, `${n} spoke ${c}x within the 10-min cooldown`);
+  }
 });
 
 // --- gossip network: kind templates name the subject, no awkward grammar ---
@@ -352,7 +353,49 @@ withFixedRandom(0, () => {
   assert.equal(said.length, 1);
   assert.ok(said[0].line.includes("Asha and Bor"), "wedding line names the couple");
   assert.ok(!/what .* did\?/.test(said[0].line), `no awkward grammar: ${said[0].line}`);
-  assert.ok(said[0].line.length <= 160, "forceChat length cap");
+  assert.ok(said[0].line.length <= 160, "short line fits in one overhead bubble");
+});
+
+// --- gossip network: long rumors route through sayPublic's word chunking ---
+// The old code hard-sliced the line at 160 chars via raw forceChat; now
+// rumors speak through the unified path: no hard truncation, ≤80-char
+// word-boundary chunks, voice backstop applied.
+withFixedRandom(0, () => {
+  const { setChunkScheduler, resetForTests: resetSayPublic } = require("../chat/CitizenSayPublic");
+  setChunkScheduler((fn) => fn()); // deliver continuation chunks synchronously
+  try {
+    const m = fresh();
+    const members = new Map([["misthalin", ["Maren", "Borin"]]]);
+    const said = [];
+    const deps = {
+      kingdomMembers: members,
+      isOnline: () => true,
+      botFor: (n) => ({ forceChat: (line) => said.push({ n, line }) }),
+    };
+    const longText =
+      "stole the mayor's prize-winning pumpkin from the town square and " +
+      "blamed it on the goats before anyone could catch their breath at all";
+    m.seedGossip({
+      kingdomId: "misthalin", kind: GOSSIP_THEFT,
+      subject: "X", subjectDisplay: "Sneak",
+      text: longText, holder: "Maren",
+    });
+    m.gossip[0].lastHopAt = Date.now() - 200_000;
+    m.spreadGossipTick(deps, Date.now());
+    assert.ok(said.length > 1, `long rumor chunked, got ${said.length} chunk(s)`);
+    for (const s of said) {
+      assert.ok(s.line.length <= 80, `chunk too long: ${s.line.length}`);
+    }
+    const joined = said.map((s) => s.line).join(" ");
+    assert.ok(joined.includes("pumpkin"), "nothing truncated away mid-utterance");
+    assert.ok(joined.length > 160, "beyond the old 160-char hard slice");
+    // Word boundaries preserved: chunks rejoin to the exact original line —
+    // no word was ever cut in half by the cap.
+    const composed = `Did you hear what Sneak did? ${longText}`;
+    assert.equal(joined, composed, "chunked text rejoins to the full line");
+  } finally {
+    resetSayPublic();
+  }
 });
 
 console.log("CitizenMemory.test.js: all checks passed");

@@ -21,6 +21,31 @@ const { buildPrompt, buildSpeakPrompt } = require("./PromptBuilder");
 const { TypingScheduler } = require("./TypingScheduler");
 const { ChatInterceptor } = require("./ChatInterceptor");
 const { onChatResponse } = require("./Mouth");
+// LLM replies speak through CitizenSayPublic.sayPublic, which word-chunks at
+// 80 chars/line (the OSRS public-chat limit, ChatPacketListener.handleText)
+// and sends up to MAX_CHUNKS continuation lines ~800ms apart — fast enough
+// that other speakers can't interleave mid-utterance. So an LLM utterance may
+// be up to 3 chat lines (240 chars), never truncated mid-word: sayPublic
+// does the line-splitting. The Gateway cap below just guards the token
+// budget, then trims to the last whole word.
+const { CHAT_MAX_LEN, MAX_CHUNKS } = require("../citizens/chat/CitizenSayPublic");
+const MAX_LLM_PUBLIC_CHARS = CHAT_MAX_LEN * MAX_CHUNKS; // 240: 3 full chat lines
+
+/**
+ * Collapse whitespace and cap at MAX_LLM_PUBLIC_CHARS without cutting a word:
+ * trims to the last space before the cap (hard-cuts only when one word runs
+ * longer than the cap — same fallback sayPublic's chunker uses).
+ */
+function capReply(text) {
+  let reply = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (reply.length > MAX_LLM_PUBLIC_CHARS) {
+    const cut = reply.lastIndexOf(" ", MAX_LLM_PUBLIC_CHARS);
+    reply = (cut > 0 ? reply.slice(0, cut) : reply.slice(0, MAX_LLM_PUBLIC_CHARS)).trim();
+  }
+  return reply;
+}
 
 const SQLITE_DB_PATH = process.env.LLM_GATEWAY_DB ?? "";
 
@@ -54,7 +79,7 @@ function createMemoryStore() {
 // Plain-node testable tier selection. First contact gets the flagship tier:
 // first impressions shape whether a player keeps talking to citizens.
 // Follow-ups ride cheaper slots. Public-chat replies go to LITE even on
-// first contact: they're 60-char ambient chatter, and public spam is the
+// first contact: they're short ambient chatter (<=3 chat lines), and public spam is the
 // biggest quota risk — the lite buckets (allam-2-7b alone: 5,600 calls/day)
 // absorb it. Flagship stays for PM first contact, the real 1:1 conversation
 // where quality matters. A caller-specified tier always wins — foreground
@@ -123,8 +148,8 @@ class Gateway {
     });
     // First contact gets the flagship tier: first impressions shape whether a
     // player keeps talking to citizens. Follow-ups ride cheaper slots.
-    // Public-chat replies go to LITE even on first contact: they're 60-char
-    // ambient chatter, and public spam is the biggest quota risk — the lite
+    // Public-chat replies go to LITE even on first contact: they're short
+    // ambient chatter (<=3 chat lines), and public spam is the biggest quota risk — the lite
     // buckets (allam-2-7b alone: 5,600 calls/day) absorb it. Flagship stays
     // for PM first contact, the real 1:1 conversation where quality matters.
     // Override with LLM_GATEWAY_PUBLIC_FLAGSHIP_FIRST_CONTACT=1 if Jon wants
@@ -150,13 +175,9 @@ class Gateway {
     }
 
     // Collapse paragraph breaks / stray whitespace: one clean message, no
-    // orphan lines in the chatbox. Hard cap at 80 chars (one public-chat
-    // line): multi-chunk utterances interleave with other speakers' messages
-    // in the chatbox, so generation must fit in a single chunk.
-    const reply = result.text
-      .slice(0, 80)
-      .replace(/\s+/g, " ")
-      .trim();
+    // orphan lines in the chatbox. Capped at the sayPublic utterance budget
+    // (3 word-boundary chat lines); trimming here never cuts a word.
+    const reply = capReply(result.text);
     await this.memory.pushExchange(citizenUsername, requesterUsername, text, reply);
 
     const latencyMs = Date.now() - startedAt;
@@ -222,10 +243,7 @@ class Gateway {
     const result = await this.chain.complete(prompt);
     if (!result.ok || !result.text) return; // silent on failure/quota
 
-    const reply = result.text
-      .slice(0, 80)
-      .replace(/\s+/g, " ")
-      .trim();
+    const reply = capReply(result.text);
     await this.memory.pushExchange(citizenUsername, toUsername, "(opener)", reply);
 
     const latencyMs = Date.now() - startedAt;
@@ -271,4 +289,4 @@ class Gateway {
   }
 }
 
-module.exports = { Gateway, createMemoryStore, resolveReplyTier };
+module.exports = { Gateway, createMemoryStore, resolveReplyTier, capReply, MAX_LLM_PUBLIC_CHARS };
