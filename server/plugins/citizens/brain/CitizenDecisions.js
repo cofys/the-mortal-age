@@ -4683,7 +4683,6 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
   if (scored.length === 0) {
     return null;
   }
-  // TEMP-DIAG: top 5 scores (remove after debugging)
 
   const traits = traitSet(snap.personality);
   const epsilon = traits.has("daydreamer") ? EPSILON_DAYDREAMER : EPSILON;
@@ -4919,27 +4918,12 @@ function ambientChatter(player, brain, nowMs) {
   }
 }
 
-// TEMP-DIAG 2026-10-13: prove decisionTick fires live (remove after verification).
-const decisionTickAliveLogged = new Set();
-
 function decisionTick(args) {
   const { player, brain, nowMs = Date.now() } = args ?? {};
   if (!player || !brain || !isCitizen(player)) {
     return;
   }
   const username = usernameOf(player);
-  // TEMP-DIAG: one log line per citizen on their first gate — proves the
-  // world.decisionTick hook is installed and firing on the live server.
-  if (username && !decisionTickAliveLogged.has(username)) {
-    decisionTickAliveLogged.add(username);
-    try {
-      const frames = brain?.frames ?? [];
-      const cur = frames[frames.length - 1]?.behaviour?.id ?? "(none)";
-      brain?.world?.log?.("citizen_decision_tick_alive", { username, currentActivity: cur });
-    } catch {
-      // Diagnostic never breaks the tick.
-    }
-  }
   pruneState(nowMs);
   ambientChatter(player, brain, nowMs);
   // Session intents tick BEFORE the stagger gate: the first call after
@@ -4981,48 +4965,28 @@ function decisionTick(args) {
  * decisionTick hook on the shared brain world. Idempotent.
  */
 let initialized = false;
-// TEMP-DIAG (remove after live verification): records the outcome of the
-// decisionTick install so the monitor can report it.
-const wiringDiag = { initialized: false, pickerInstalled: false, worldInstall: "not-run" };
 function initCitizenDecisions(registry) {
   if (initialized || !registry) {
-    wiringDiag.initialized = initialized;
-    if (!registry) wiringDiag.worldInstall = "no-registry";
     return;
   }
   initialized = true;
-  wiringDiag.initialized = true;
   try {
     if (typeof registry.setActivityPicker === "function") {
       registry.setActivityPicker((player, candidates, nowMs) =>
         pick(player, candidates, nowMs)
       );
-      wiringDiag.pickerInstalled = true;
     }
   } catch {
     // The picker is an enhancement; the brain works without it.
   }
   try {
     const world = registry.world;
-    if (!world) {
-      wiringDiag.worldInstall = "no-world";
-    } else if (world.decisionTick) {
-      wiringDiag.worldInstall = "already-present";
-    } else {
+    if (world && !world.decisionTick) {
       world.decisionTick = (args) => decisionTick(args);
-      wiringDiag.worldInstall = world.decisionTick ? "installed" : "install-failed";
     }
-  } catch (e) {
-    wiringDiag.worldInstall = "error:" + String((e && e.message) || e);
+  } catch {
+    // The decision tick is an enhancement; the brain works without it.
   }
-}
-/** TEMP-DIAG: expose the install outcome for the monitor API. */
-function getDecisionWiring() {
-  return {
-    ...wiringDiag,
-    citizensGated: nextDecisionAt.size,
-    citizensInterrupted: lastInterruptAt.size,
-  };
 }
 
 /** Test seam: clear all per-citizen decision state. */
@@ -5033,7 +4997,6 @@ function resetForTests() {
   directedPick.clear();
   lastInterruptAt.clear();
   macroCounts.clear();
-  decisionTickAliveLogged.clear();
   lastPruneAt = 0;
 }
 
@@ -5093,7 +5056,6 @@ ACT_COMPETE,
   scoreActivity,
   snapshot,
   getPickDiag,
-  getDecisionWiring, // TEMP-DIAG
   industriousness,
   sociabilityOf,
   titheInfo,

@@ -1654,10 +1654,18 @@ class CitizenDirector {
     // The systems keep their own tick loops — desync just gates them.
     this.aiTickCount += 1;
     const positions = this.realPlayerPositions();
-    // Fast path: no real players online means no spawns, no online citizens,
-    // nothing to do. Skips the 3111-record iteration entirely. (Scale-3000
-    // perf: the full scan is O(roster) and must not run when idle.)
+    // No real players online: despawn every materialized citizen to the data
+    // tier. The old early-return here left materialized citizens live forever
+    // when Jon logged out (60 stayed live 60s after a fake player cleared) —
+    // a CPU leak on the 8GB box. Citizens must never be invisible-but-live:
+    // the data tier keeps running on the roster record; only the materialized
+    // Player is torn down. Map dots stay honest (grey = data-tier) because
+    // logoutCitizen flips record.online. Materialization resumes normally
+    // when a player arrives (spawn path below), so nothing needs to wake up.
+    // Iterates only the materialized set, not the full roster (perf comment
+    // below still applies).
     if (positions.length === 0) {
+      this.despawnAllMaterialized();
       return;
     }
     const desync = { tick: this.aiTickCount, spread: this.desyncSpread() };
@@ -2493,6 +2501,46 @@ class CitizenDirector {
       // Stamp it so the brain LOD treats them as observed even if the
       // LOD's own session scan misses the player (web-client sessions).
       this.markHumanNearby(record);
+    }
+  }
+
+  /**
+   * Despawn every materialized citizen to the data tier. Called from
+   * tickProximity when no real players are online: invisible-but-live
+   * citizens are a CPU leak on the 8GB box when Jon logs out. Uses the
+   * standard logoutCitizen path (XP persisted, record.online flipped) so
+   * map dots stay honest (grey = data-tier). Materialization resumes
+   * normally when a player arrives, so nothing needs to wake up.
+   * O(materialized), not O(roster) — safe on the idle path.
+   */
+  despawnAllMaterialized() {
+    const entries = this.runtime()?.entriesByUsername;
+    if (!entries || entries.size === 0) {
+      return;
+    }
+    let despawned = 0;
+    // Snapshot the keys: logoutCitizen mutates the map via onPlayerLogout.
+    // Roster keys are normalized (lowercase) — entries keys are raw
+    // usernames, so normalize before lookup (mixed-case names would miss).
+    for (const username of [...entries.keys()]) {
+      try {
+        const record = this.roster.get(normalizeName(username));
+        if (!record) {
+          continue;
+        }
+        this.logoutCitizen(record);
+        despawned += 1;
+      } catch (error) {
+        this.log("no-player despawn failed", {
+          citizen: username,
+          error: String(error?.message ?? error),
+        });
+      }
+    }
+    if (despawned > 0) {
+      this.log("all materialized citizens despawned (no players online)", {
+        despawned,
+      });
     }
   }
 

@@ -175,39 +175,6 @@ function handleMonitor(query) {
       CitizenDirector.clearDebugFakePlayers();
       return { ok: true, cleared: true };
     }
-    // ?decisionWiring=1 - TEMP-DIAG: report whether the decision layer
-    // (activity picker + world.decisionTick) was installed at boot.
-    if (getParam("decisionWiring")) {
-      try {
-        const w = require("../citizens/brain/CitizenDecisions").getDecisionWiring?.() ?? null;
-        // TEMP-DIAG: sample live citizen brains — is world.decisionTick
-        // present on the world object their brains actually use, and is it
-        // the same object the install ran against?
-        const brainSample = { checked: 0, withDecisionTick: 0, sameWorldAsRegistry: 0 };
-        try {
-          const director = getDirector?.();
-          const runtime = director?.runtime?.();
-          const entries = runtime?.entriesByUsername;
-          const regWorld = require("../bots/brain/BotActivityRegistry").getBotActivityRegistries?.()?.[0]?.world ?? null;
-          if (entries && typeof entries.forEach === "function") {
-            entries.forEach((entry) => {
-              if (brainSample.checked >= 30) return;
-              const bw = entry?.brain?.world;
-              if (!bw) return;
-              brainSample.checked++;
-              if (typeof bw.decisionTick === "function") brainSample.withDecisionTick++;
-              if (regWorld && bw === regWorld) brainSample.sameWorldAsRegistry++;
-            });
-          }
-          brainSample.registryWorldHasDecisionTick = regWorld ? typeof regWorld.decisionTick === "function" : null;
-        } catch (e) {
-          brainSample.error = String((e && e.message) || e);
-        }
-        return { ok: true, decisionWiring: w, brainSample };
-      } catch (e) {
-        return { ok: false, error: "decision wiring check failed: " + (e && e.message ? String(e.message) : String(e)) };
-      }
-    }
     // ?tileCheck=x,y[,z] - report engine walkability for tiles (debug).
     // Jon 2026-10-13 (Catherby water tiles): lets autonomous verification
     // confirm citizens stand on walkable tiles without a client.
