@@ -2363,7 +2363,7 @@
     {
       "id": "safetynet_wander",
       "mode": "citizen_safetynet",
-      "repeat": true,
+      "repeat": false,
       "capacity": 1000,
       "failureCooldownSeconds": 5,
       "requires": [
