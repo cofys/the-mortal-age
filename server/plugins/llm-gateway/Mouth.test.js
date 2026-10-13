@@ -1,13 +1,19 @@
-// Tests for the LLM mouth name-strip + prompt fixes.
+// Tests for the LLM mouth: name-strip, the public-channel delegation to
+// CitizenSayPublic.sayPublic, the private channel, and the prompt fixes.
 // Plain node, no framework. Run: node server/plugins/llm-gateway/Mouth.test.js
 // (from repo root)
 const assert = require("node:assert/strict");
 const { speakPublic, speakPrivate } = require("./Mouth");
+const {
+  resetForTests: resetSayPublic,
+  setChunkScheduler,
+} = require("../citizens/chat/CitizenSayPublic");
 const { WORLD_GROUNDING, buildSpeakPrompt } = require("./PromptBuilder");
 
 let failures = 0;
 function test(name, fn) {
   try {
+    resetSayPublic(); // isolate throttle + anti-repeat memory between tests
     fn();
     console.log(`ok - ${name}`);
   } catch (e) {
@@ -42,7 +48,23 @@ function mockRequester() {
   };
 }
 
-// ---- speakPublic: name-strip ----
+/** A nearby real player who hears public chat. */
+function mockHearer() {
+  const heard = [];
+  return {
+    heard,
+    isPlayerBot: () => false,
+    getHostAddress: () => "127.0.0.1",
+    getUsername: () => "listener",
+    getIndex: () => 42,
+    getRelations: () => ({ canReceivePublicChatFrom: () => true }),
+    getPacketSender: () => ({
+      sendPublicChat: (line, from, index) => heard.push({ line, from, index }),
+    }),
+  };
+}
+
+// ---- speakPublic delegates to sayPublic: name-strip ----
 test("strips full display-name prefix from public line", () => {
   const api = mockApi();
   const bot = mockBot("oranettle", "Ora Nettle");
@@ -83,7 +105,51 @@ test("falls back to username when no display name", () => {
   assert.equal(bot.spoken[0], "hey");
 });
 
-// ---- speakPrivate: name-strip ----
+// ---- speakPublic delegates to sayPublic: delegation semantics ----
+test("chunks long replies at 80-char word boundaries", () => {
+  setChunkScheduler((fn) => fn()); // run continuation chunks synchronously
+  const api = mockApi();
+  const bot = mockBot("oranettle", "Ora Nettle");
+  const text = "a".repeat(40) + " " + "b".repeat(40) + " " + "c".repeat(68);
+  speakPublic(api, bot, text);
+  assert.equal(bot.spoken.length, 3);
+  for (const line of bot.spoken) assert.ok(line.length <= 80, `line too long: ${line}`);
+  assert.equal(bot.spoken.join(" "), text); // word boundaries preserved, nothing cut mid-word
+  setChunkScheduler(null); // back to default async delivery
+});
+
+test("collapses newlines and extra whitespace before delegating", () => {
+  const api = mockApi();
+  const bot = mockBot("oranettle", "Ora Nettle");
+  speakPublic(api, bot, "hello\n\nthere   friend");
+  assert.equal(bot.spoken.length, 1);
+  assert.equal(bot.spoken[0], "hello there friend");
+});
+
+test("returns false with no nearby players but still speaks overhead", () => {
+  const api = mockApi();
+  const bot = mockBot("oranettle", "Ora Nettle");
+  const result = speakPublic(api, bot, "Anyone out there?");
+  assert.equal(result, false); // nobody's chat box got it...
+  assert.equal(bot.spoken.length, 1); // ...but the overhead bubble still fires
+});
+
+test("falls under sayPublic's 8s chat-box throttle", () => {
+  const api = mockApi();
+  const bot = mockBot("oranettle", "Ora Nettle");
+  const hearer = mockHearer();
+  bot.getLocalPlayers = () => [hearer];
+  const first = speakPublic(api, bot, "First line.");
+  assert.equal(first, true);
+  assert.equal(hearer.heard.length, 1);
+  assert.equal(hearer.heard[0].line, "First line.");
+  const second = speakPublic(api, bot, "Second line.");
+  assert.equal(second, false); // throttled: stays silent entirely
+  assert.equal(bot.spoken.length, 1);
+  assert.equal(hearer.heard.length, 1);
+});
+
+// ---- speakPrivate: name-strip (unchanged path) ----
 test("strips name prefix from private message", () => {
   const api = mockApi();
   const bot = mockBot("oranettle", "Ora Nettle");

@@ -2,9 +2,10 @@
 //
 // Listens for `llm:chat-response` { citizenUsername, requesterUsername, text, channel }
 // and delivers it:
-//   - public: forceChat bubble + sendPublicChat to nearby players, mirroring
-//     ChatPacketListener.handleText's broadcast loop. Capped at 80 chars per
-//     line (OSRS public-chat limit); longer replies are chunked.
+//   - public: delegates to CitizenSayPublic.sayPublic — the overhead bubble +
+//     chat-box line for nearby players, <=80-char word-boundary chunking (the
+//     OSRS public-chat limit), the speaker's voice backstop, the anti-repeat
+//     memory, and the per-citizen chat-box throttle.
 //   - private: a real private message to the requester via their PacketSender.
 //   - friends_chat: treated like public (nearby channel members see it).
 //
@@ -17,8 +18,10 @@ const PUBLIC_CHAT_MAX_CHARS = 60;
 
 // Shared with the template chat path: strip a leading self-name prefix
 // ("Ora Nettle: ...") that the LLM adds when roleplaying with name tags.
+// Public delivery funnels through CitizenSayPublic.sayPublic (voice backstop,
+// anti-repeat memory, 80-char word-boundary chunking, chat-box throttle).
 // CitizenSayPublic only requires lib/citizenVoice + constants — no cycle.
-const { stripSelfNamePrefix } = require("../citizens/chat/CitizenSayPublic");
+const { stripSelfNamePrefix, sayPublic } = require("../citizens/chat/CitizenSayPublic");
 
 // Pacing between multi-line replies: chunks go out back-to-back with only a
 // brief pause. Long delays let other speakers' messages interleave between a
@@ -67,43 +70,20 @@ function displayNameOf(bot) {
   }
 }
 
+/**
+ * Public delivery — a thin wrapper over the canonical
+ * CitizenSayPublic.sayPublic choke point, which handles the overhead bubble +
+ * chat-box send, <=80-char word-boundary chunking with a fixed 800ms
+ * inter-line gap, the speaker's voice backstop, the anti-repeat memory, and
+ * the per-citizen 8s chat-box throttle. The Mouth used to re-implement all of
+ * that here (60-char chunks, own pacing, own recipient loop); the duplicate
+ * path is gone, so LLM replies behave exactly like template speech.
+ */
 function speakPublic(api, bot, text) {
-  const World = api.core.World;
-  // Defense in depth: no line breaks, one flowing message (chunking below
-  // handles the 80-char OSRS limit).
+  // Defense in depth: no line breaks, one flowing message — sayPublic's
+  // chunker splits at word boundaries on whole lines only.
   const clean = String(text ?? "").replace(/\s+/g, " ").trim();
-  // The LLM roleplays with name tags ("Ora Nettle: ...") — strip the
-  // self-name prefix before chunking, or the chat box reads doubled.
-  const stripped = stripSelfNamePrefix(clean, displayNameOf(bot));
-  if (!stripped) return;
-  const lines = chunk(stripped, PUBLIC_CHAT_MAX_CHARS);
-  if (lines.length === 0) return;
-
-  // First line goes out now (the TypingScheduler already applied a human
-  // typing delay before this was called).
-  speakPublicLine(api, bot, lines[0]);
-
-  // Later lines get natural pauses between them — like a player hitting
-  // enter, thinking, then typing the next line. Never a 3-line burst.
-  let delayMs = 0;
-  for (let i = 1; i < lines.length; i++) {
-    delayMs += INTER_CHUNK_MIN_MS + Math.random() * (INTER_CHUNK_MAX_MS - INTER_CHUNK_MIN_MS);
-    const line = lines[i];
-    const username = bot.getUsername();
-    const timeout = setTimeout(() => {
-      try {
-        // Re-lookup: the bot may have despawned (proximity lifecycle) or the
-        // player walked away. A missing bot just means nobody hears the rest.
-        const liveBot = World?.getPlayerByName?.(username);
-        if (!liveBot) return;
-        speakPublicLine(api, liveBot, line);
-      } catch (error) {
-        console.warn(`[llm-gateway] delayed chunk failed for ${username}`, error?.message ?? error);
-      }
-    }, Math.round(delayMs));
-    // Don't keep the process alive for a pending chat line on shutdown.
-    timeout.unref?.();
-  }
+  return sayPublic(bot, clean);
 }
 
 function speakPublicLine(api, bot, line) {
