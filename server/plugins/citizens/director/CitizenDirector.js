@@ -1205,6 +1205,53 @@ class CitizenDirector {
   }
 
   /**
+   * Relocate a citizen to a new kingdom/town (whereabouts slice 3): a long
+   * visit matured into a move. Flips record.kingdomId + townId/
+   * settlementId, re-anchors home to the new tile, keeps the
+   * rosterByKingdom index honest, and releases an old-kingdom house so the
+   * home tick re-homes them in the new kingdom (a player who moves doesn't
+   * keep paying rent two kingdoms over). Within-kingdom town moves keep
+   * the old house — they commute.
+   * @param {string} username
+   * @param {object} placement { kingdomId, townId, settlementId, home }
+   * @returns {boolean} true when the move landed
+   */
+  relocateCitizen(username, placement) {
+    try {
+      const norm = normalizeName(username);
+      const record = this.roster.get(norm);
+      if (!record || !placement || typeof placement.kingdomId !== "string") return false;
+      const crossedKingdoms = (record.kingdomId ?? null) !== placement.kingdomId;
+      this._indexRosterRemove(norm, record);
+      record.kingdomId = placement.kingdomId;
+      record.townId = placement.townId ?? null;
+      record.settlementId = placement.settlementId ?? null;
+      if (placement.home && Number.isFinite(placement.home.x) && Number.isFinite(placement.home.y)) {
+        record.home = {
+          x: Math.round(placement.home.x),
+          y: Math.round(placement.home.y),
+          z: placement.home.z ?? 0,
+        };
+      }
+      this._indexRosterAdd(norm, record);
+      if (crossedKingdoms) {
+        try {
+          const Homes = require("../lib/CitizenHomes");
+          const old = Homes.homeOf?.(record.username);
+          if (old?.id && String(old.kingdomId) !== String(placement.kingdomId)) {
+            Homes.removeHome(old.id, `moved away to ${placement.kingdomId}`);
+          }
+        } catch {
+          // housing is garnish — the move stands without it
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Perf: O(1) random same-kingdom citizen, excluding one username.
    * Replaces O(n) roster scans (was 19M iterations/60s at 3k citizens).
    * @param {string} kingdomId

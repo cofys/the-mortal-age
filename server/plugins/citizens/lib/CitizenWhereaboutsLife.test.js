@@ -6,7 +6,14 @@
  */
 
 const assert = require("assert");
-const { tickWhereabouts } = require("./CitizenWhereaboutsLife");
+const {
+  tickWhereabouts,
+  applyRelocation,
+  visitLengthFor,
+  visitExpired,
+  VISIT_MIN_MS,
+  VISIT_MAX_MS,
+} = require("./CitizenWhereaboutsLife");
 
 // A slow-tick timestamp at 14:00 local — nobody is asleep (sleepStart 22).
 const NOW = new Date(2026, 9, 13, 14, 0, 0).getTime();
@@ -158,3 +165,184 @@ function baseRecord(name, overrides = {}) {
 }
 
 console.log("CitizenWhereaboutsLife.test: all passed");
+
+// --- slice 3: inter-kingdom visits -----------------------------------------
+// (appended after the pass line so the numbered slice-1/2 cases above stay
+// stable; these run as a second block in the same file.)
+
+function visitRecord(name, overrides = {}) {
+  return baseRecord(name, {
+    kingdomId: "asgarnia",
+    townId: null,
+    settlementId: null,
+    position: { x: 5000, y: 5000, z: 0 },
+    home: { x: 3000, y: 3400, z: 0 },
+    ...overrides,
+  });
+}
+
+// A. Settling cross-kingdom stamps record.visit (visiting, not moving).
+{
+  const rec = visitRecord("Visitor1");
+  rec.dest = {
+    x: 5050, y: 5000, z: 0, placeId: "kandarin:square", kind: "square",
+    reason: "test", kingdomId: "kandarin", townId: null, settlementId: null,
+  };
+  tickWhereabouts(fakeDirector([rec]), NOW);
+  assert(rec.visit, "cross-kingdom settle did not stamp a visit");
+  assert.strictEqual(rec.visit.kingdomId, "kandarin", `wrong visit kingdom: ${rec.visit.kingdomId}`);
+  assert.strictEqual(rec.kingdomId, "asgarnia", "visit must NOT flip kingdomId");
+  assert(
+    rec.visit.len >= VISIT_MIN_MS && rec.visit.len <= VISIT_MAX_MS,
+    `visit len out of range: ${rec.visit.len}`
+  );
+  assert(Math.abs(rec.visit.since - NOW) < 60000, "visit since not stamped");
+  console.log("ok A — cross-kingdom settle stamps a visit, keeps kingdomId");
+}
+
+// B. Settling on home turf clears any visit.
+{
+  const rec = visitRecord("Visitor2", {
+    position: { x: 3020, y: 3400, z: 0 },
+    visit: { kingdomId: "kandarin", since: NOW - 3600000, len: 8 * 3600000 },
+  });
+  rec.dest = {
+    x: 3005, y: 3405, z: 0, placeId: "home", kind: "home",
+    reason: "test", kingdomId: "asgarnia", townId: null, settlementId: null,
+  };
+  tickWhereabouts(fakeDirector([rec]), NOW);
+  assert.strictEqual(rec.visit, null, "coming home did not clear the visit");
+  console.log("ok B — settling home clears the visit");
+}
+
+// C. Matured visit + settling goal -> relocation (fallback path: bare
+// director without relocateCitizen flips the record fields directly).
+{
+  const rec = visitRecord("Mover1", {
+    visit: {
+      kingdomId: "kandarin", townId: "catherby", settlementId: null,
+      placeId: "catherby:square", x: 5000, y: 5000, z: 0,
+      since: NOW - 9 * 3600000, len: 8 * 3600000,
+    },
+  });
+  rec.dest = null;
+  tickWhereabouts(fakeDirector([rec]), NOW);
+  assert.strictEqual(rec.visit, null, "visit not cleared on relocation");
+  assert.strictEqual(rec.kingdomId, "kandarin", `kingdom not flipped: ${rec.kingdomId}`);
+  assert.strictEqual(rec.townId, "catherby", `town not flipped: ${rec.townId}`);
+  assert.deepStrictEqual(rec.home, { x: 5000, y: 5000, z: 0 }, `home not re-anchored: ${JSON.stringify(rec.home)}`);
+  console.log("ok C — matured visit + save_gold relocates (fallback flip)");
+}
+
+// D. Matured visit + non-settling goal -> trip home, no relocation.
+{
+  const rec = visitRecord("Tripper1", {
+    goal: { type: "boss_slayer", target: 1, progress: 0 },
+    visit: {
+      kingdomId: "kandarin", townId: null, settlementId: null,
+      placeId: "kandarin:square", x: 5000, y: 5000, z: 0,
+      since: NOW - 9 * 3600000, len: 8 * 3600000,
+    },
+  });
+  rec.dest = null;
+  tickWhereabouts(fakeDirector([rec]), NOW);
+  assert.strictEqual(rec.visit, null, "visit not cleared on trip home");
+  assert.strictEqual(rec.kingdomId, "asgarnia", "non-settling goal must NOT relocate");
+  assert(rec.dest && rec.dest.placeId === "home", `not headed home: ${JSON.stringify(rec.dest)}`);
+  console.log("ok D — matured visit + boss_slayer heads home");
+}
+
+// E. Expired visit mid en-route: left alone, matures on arrival.
+{
+  const rec = visitRecord("Midway1", {
+    position: { x: 4000, y: 4200, z: 0 },
+    dest: {
+      x: 5050, y: 5000, z: 0, placeId: "kandarin:square", kind: "square",
+      reason: "test", kingdomId: "kandarin", townId: null, settlementId: null,
+    },
+    enRoute: {
+      from: { x: 3000, y: 3400, z: 0 },
+      to: { x: 5050, y: 5000, z: 0 },
+      departAt: NOW - 60000,
+      arriveAt: NOW + 3600000,
+    },
+    visit: {
+      kingdomId: "kandarin", townId: null, settlementId: null,
+      placeId: "kandarin:square", x: 5050, y: 5000, z: 0,
+      since: NOW - 9 * 3600000, len: 8 * 3600000,
+    },
+  });
+  const destBefore = rec.dest;
+  tickWhereabouts(fakeDirector([rec]), NOW);
+  assert(rec.visit, "mid-route visit was matured early");
+  assert.strictEqual(rec.dest, destBefore, "mid-route dest was yanked");
+  assert.strictEqual(rec.kingdomId, "asgarnia", "mid-route citizen relocated early");
+  console.log("ok E — expired visit mid-route is left alone");
+}
+
+// F. A director offering relocateCitizen gets the call with the placement.
+{
+  const rec = visitRecord("Mover2", {
+    visit: {
+      kingdomId: "kandarin", townId: null, settlementId: null,
+      placeId: "kandarin:square", x: 5000, y: 5000, z: 0,
+      since: NOW - 9 * 3600000, len: 8 * 3600000,
+    },
+  });
+  rec.dest = null;
+  const calls = [];
+  const director = fakeDirector([rec]);
+  director.relocateCitizen = (username, placement) => {
+    calls.push({ username, placement });
+    // mimic the real method: flip the fields
+    rec.kingdomId = placement.kingdomId;
+    rec.townId = placement.townId;
+    rec.settlementId = placement.settlementId;
+    rec.home = placement.home;
+    return true;
+  };
+  tickWhereabouts(director, NOW);
+  assert.strictEqual(calls.length, 1, `relocateCitizen not called once: ${calls.length}`);
+  assert.strictEqual(calls[0].username, "Mover2", "wrong username passed");
+  assert.strictEqual(calls[0].placement.kingdomId, "kandarin", "wrong placement");
+  assert.deepStrictEqual(calls[0].placement.home, { x: 5000, y: 5000, z: 0 },
+    "placement home not the visit tile");
+  console.log("ok F — director.relocateCitizen receives the placement");
+}
+
+// G. visitLengthFor: deterministic per citizen per visit, inside 2–8h.
+{
+  const a = visitLengthFor("Lenny", 1111);
+  const b = visitLengthFor("Lenny", 1111);
+  const c = visitLengthFor("Lenny", 2222);
+  assert.strictEqual(a, b, "same visit must give the same length");
+  assert(a >= VISIT_MIN_MS && a <= VISIT_MAX_MS, `out of range: ${a}`);
+  assert(c >= VISIT_MIN_MS && c <= VISIT_MAX_MS, `out of range: ${c}`);
+  console.log(`ok G — deterministic visit length (${Math.round(a / 3600000 * 10) / 10}h)`);
+}
+
+// H. visitExpired boundaries.
+{
+  const v = { kingdomId: "k", since: NOW - 1000, len: 2000 };
+  assert.strictEqual(visitExpired({ visit: v }, NOW), false, "1s in must not be expired");
+  assert.strictEqual(visitExpired({ visit: v }, NOW + 1500), true, "past len must be expired");
+  assert.strictEqual(visitExpired({}, NOW), false, "no visit must not be expired");
+  console.log("ok H — visitExpired boundaries");
+}
+
+// I. applyRelocation: pure field flip.
+{
+  const rec = { username: "Pure", kingdomId: "a", townId: "t", settlementId: null, home: { x: 1, y: 2, z: 0 } };
+  assert.strictEqual(
+    applyRelocation(rec, { kingdomId: "b", townId: null, settlementId: "s", home: { x: 9, y: 9, z: 0 } }),
+    true, "applyRelocation must return true"
+  );
+  assert.strictEqual(rec.kingdomId, "b");
+  assert.strictEqual(rec.townId, null);
+  assert.strictEqual(rec.settlementId, "s");
+  assert.deepStrictEqual(rec.home, { x: 9, y: 9, z: 0 });
+  assert.strictEqual(applyRelocation(rec, null), false, "null placement must fail");
+  console.log("ok I — applyRelocation flips fields");
+}
+
+console.log("CitizenWhereaboutsLife.test (slice 3): all passed");

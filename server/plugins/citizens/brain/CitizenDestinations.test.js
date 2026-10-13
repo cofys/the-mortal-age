@@ -11,6 +11,11 @@ const {
   pickDestination,
   arrivedAt,
   favoriteGatherKind,
+  placementOf,
+  activeVisit,
+  visitBiasMult,
+  VISIT_STAY_MULT,
+  VISIT_HOME_DAMP,
 } = require("./CitizenDestinations");
 
 function baseRecord(overrides = {}) {
@@ -132,6 +137,87 @@ console.log(`ok 4 — population diverges (${[...kinds].join(", ")})`);
   const d = pickDestination({ username: "BarelyThere" }, NOW);
   assert(Number.isFinite(d.x) && Number.isFinite(d.y), "degraded dest invalid");
   console.log("ok 10 — missing-data record degrades gracefully");
+}
+
+// --- slice 3: inter-kingdom visit semantics ------------------------------
+
+// 11. Every destination carries its placement (kingdom/town/settlement).
+{
+  for (let i = 0; i < 40; i += 1) {
+    const rec = baseRecord({ username: `Placed${i}` });
+    const d = pickDestination(rec, NOW);
+    assert("kingdomId" in d && "townId" in d && "settlementId" in d,
+      `dest missing placement: ${JSON.stringify(d)}`);
+  }
+  // The hurt->home path carries the citizen's own placement, not a visit's.
+  const { ensureNeeds } = require("./CitizenNeeds");
+  ensureNeeds("HurtHedwig").hp = 5;
+  const hd = pickDestination(
+    baseRecord({ username: "HurtHedwig", kingdomId: "asgarnia", townId: "falador" }),
+    NOW
+  );
+  assert.strictEqual(hd.placeId, "home", "hurt citizen must head home");
+  assert.strictEqual(hd.kingdomId, "asgarnia", "home dest must keep home kingdom");
+  assert.strictEqual(hd.townId, "falador", "home dest must keep home town");
+  console.log("ok 11 — destinations carry kingdomId/townId/settlementId");
+}
+
+// 12. placementOf resolves real data: a town place maps to its kingdom.
+{
+  const townPlace = DEST_PLACES.find((p) => p.townId);
+  assert(townPlace, "no town places in the candidate set");
+  const place = placementOf(townPlace);
+  assert.strictEqual(place.townId, townPlace.townId, "townId passthrough");
+  assert(typeof place.kingdomId === "string" && place.kingdomId.length > 0,
+    `town ${townPlace.townId} has no kingdom`);
+  assert.strictEqual(place.settlementId, null, "town place must not claim a settlement");
+  const capPlace = DEST_PLACES.find((p) => p.kingdomId && !p.townId && !p.settlementId);
+  const cap = placementOf(capPlace);
+  assert.strictEqual(cap.kingdomId, capPlace.kingdomId, "capital kingdom passthrough");
+  assert.deepStrictEqual(placementOf(null), { kingdomId: null, townId: null, settlementId: null },
+    "null place degrades");
+  console.log(`ok 12 — placementOf resolves towns to kingdoms (${townPlace.townId} -> ${place.kingdomId})`);
+}
+
+// 13. activeVisit: active inside the window, null when expired/missing.
+{
+  const v = { kingdomId: "kandarin", since: NOW - 3600000, len: 8 * 3600000 };
+  assert.strictEqual(activeVisit({ visit: v }, NOW), v, "active visit not returned");
+  assert.strictEqual(
+    activeVisit({ visit: { ...v, since: NOW - 9 * 3600000 } }, NOW), null,
+    "expired visit must read as none"
+  );
+  assert.strictEqual(activeVisit({}, NOW), null, "missing visit must read as none");
+  assert.strictEqual(activeVisit({ visit: { since: NOW } }, NOW), null,
+    "malformed visit must read as none");
+  console.log("ok 13 — activeVisit window logic");
+}
+
+// 14. Visit stay-bias: visited-kingdom candidates win more often (linger),
+// home-kingdom candidates lose their pull (don't drift back early).
+// Everything else scores normally; no visit means no bias.
+{
+  const visit = { kingdomId: "kandarin", since: NOW - 3600000, len: 8 * 3600000 };
+  assert.strictEqual(visitBiasMult("kandarin", visit, "asgarnia"), VISIT_STAY_MULT,
+    "visited kingdom must get the stay multiplier");
+  assert.strictEqual(visitBiasMult("asgarnia", visit, "asgarnia"), VISIT_HOME_DAMP,
+    "home kingdom must be damped during a visit");
+  assert.strictEqual(visitBiasMult("morytania", visit, "asgarnia"), 1,
+    "third kingdoms score normally");
+  assert.strictEqual(visitBiasMult("kandarin", null, "asgarnia"), 1, "no visit, no bias");
+  assert.strictEqual(visitBiasMult(null, visit, "asgarnia"), 1, "unknown kingdom, no bias");
+  // Integration: an active visit never breaks picking and the dest still
+  // carries placement.
+  const rec = baseRecord({
+    username: "BiasIntegration",
+    kingdomId: "asgarnia",
+    position: { x: 5000, y: 5000, z: 0 },
+    visit,
+  });
+  const d = pickDestination(rec, NOW);
+  assert(Number.isFinite(d.x) && typeof d.kingdomId === "string",
+    `bad dest during visit: ${JSON.stringify(d)}`);
+  console.log("ok 14 — visit stay-bias multipliers");
 }
 
 console.log("CitizenDestinations.test: all passed");
