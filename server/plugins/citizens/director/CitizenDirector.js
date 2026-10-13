@@ -54,6 +54,7 @@ const { registerCitizenForChat, unregisterCitizenForChat } = require("../chat/Ci
 const { getMemory } = require("../lib/CitizenMemory");
 const { getJournal } = require("../lib/CitizenJournal");
 const { dropNeeds } = require("../brain/CitizenNeeds");
+const { shouldReassertPhase } = require("../lib/CitizenPhasePolicy");
 // anchorFor removed (Jon 2026-10-12): no anchor model. Citizens are
 // free-roaming sandbox agents; position emerges from goals and movement.
 const {
@@ -3105,10 +3106,9 @@ class CitizenDirector {
       if (!bot) {
         continue;
       }
-      if (phase.activityId && phase.activityId !== record.currentActivityId) {
+      if (shouldReassertPhase(record, phase)) {
         this.switchActivity(record, phase.activityId);
-      }
-      // Sync the roster's activity label from the brain's live frame. The
+      }      // Sync the roster's activity label from the brain's live frame. The
       // brain's utility picker (CitizenDecisions.pick) selects activities
       // autonomously; without this sync the monitor/chat/social layers see
       // the spawn-time activity forever (e.g. safetynet_wander while the
