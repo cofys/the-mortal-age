@@ -55,12 +55,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-observatories.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- tuning ------------------------------------------------------------------
@@ -108,6 +110,50 @@ let state = blankState();
 let dirty = false;
 let loaded = false;
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-observatories.json file is the
+// fallback (and stays fully written). The block holds this citizen's slices
+// of the three per-citizen registries: { sightings, chartCopies, toursLed }.
+// Visits, tours, parties, gatherings, funds and chart sales are shared and
+// stay in the old file only. storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "observatories";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file registry is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** This citizen's observatory record for the account block, or null when empty. */
+function blockEntryFor(key) {
+  const entry = {};
+  const s = state.sightings[key];
+  const c = state.chartCopies[key];
+  const t = state.toursLed[key];
+  if (s) entry.sightings = { ...s };
+  if (c) entry.chartCopies = [...c];
+  if (t) entry.toursLed = t;
+  return Object.keys(entry).length ? entry : null;
+}
+
+/** Dual-write one citizen's observatory record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 function load() {
   if (loaded) return state;
   loaded = true;
@@ -115,6 +161,21 @@ function load() {
     if (fs.existsSync(SAVE_FILE)) {
       const raw = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8"));
       state = Object.assign(blankState(), raw);
+      // Dual-read: overlay account blocks over the old-file registries.
+      if (storeEnabled) {
+        const keys = new Set([
+          ...Object.keys(state.sightings ?? {}),
+          ...Object.keys(state.chartCopies ?? {}),
+          ...Object.keys(state.toursLed ?? {}),
+        ]);
+        for (const key of keys) {
+          const block = storeBlockFor(key);
+          if (!block) continue;
+          if (block.sightings && typeof block.sightings === "object") state.sightings[key] = block.sightings;
+          if (Array.isArray(block.chartCopies)) state.chartCopies[key] = block.chartCopies;
+          if (Number.isFinite(block.toursLed)) state.toursLed[key] = block.toursLed;
+        }
+      }
     }
   } catch {
     state = blankState();
@@ -143,6 +204,7 @@ function resetForTests() {
   state = blankState();
   dirty = false;
   loaded = true;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 function nextId(prefix) {
@@ -321,14 +383,24 @@ function recordSighting(player, kingdomId, nowMs = Date.now()) {
   const username = usernameOf(player);
   if (!username) return null;
   const v = whatIsVisible(kingdomId, nowMs);
-  state.sightings[norm(username)] = { objects: v.objects, sawEvent: v.event, at: nowMs };
+  const key = norm(username);
+  state.sightings[key] = { objects: v.objects, sawEvent: v.event, at: nowMs };
   markDirty();
+  syncStore(key, blockEntryFor(key));
   return v;
 }
 
 function sightingFor(player) {
   load();
-  return state.sightings[norm(usernameOf(player))] ?? null;
+  const key = norm(usernameOf(player));
+  if (state.sightings[key]) return state.sightings[key];
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(usernameOf(player));
+  if (block && block.sightings && typeof block.sightings === "object") {
+    state.sightings[key] = block.sightings;
+    return block.sightings;
+  }
+  return null;
 }
 
 function fundFor(kingdomId) {
@@ -383,6 +455,7 @@ function buyChart(player, chartId, kingdomId, nowMs = Date.now()) {
   state.chartSales[saleId] = { id: saleId, chartId, buyer: username, price: chart.price, at: nowMs };
   state.funds[kingdomId] = (state.funds[kingdomId] ?? 0) + chart.price;
   markDirty();
+  syncStore(key, blockEntryFor(key));
   // Award the chartcollector deed at 3 owned copies.
   if (state.chartCopies[key].length >= 3) {
     try {
@@ -396,9 +469,18 @@ function buyChart(player, chartId, kingdomId, nowMs = Date.now()) {
 /** Chart copies owned by a player — viewable collection. */
 function chartCopiesFor(player) {
   load();
-  const owned = state.chartCopies[norm(usernameOf(player))] ?? [];
+  const key = norm(usernameOf(player));
+  let owned = state.chartCopies[key];
+  if (!owned) {
+    // Dual-read: the account block may hold what the old registry lacks.
+    const block = storeBlockFor(usernameOf(player));
+    if (block && Array.isArray(block.chartCopies)) {
+      state.chartCopies[key] = block.chartCopies;
+      owned = block.chartCopies;
+    }
+  }
   const Astro = astronomyApi();
-  return owned.map((id) => {
+  return (owned ?? []).map((id) => {
     let detail = null;
     try {
       const all = [];
@@ -478,6 +560,7 @@ function closeTour(tourId, nowMs = Date.now()) {
   const key = norm(t.astronomer);
   state.toursLed[key] = (state.toursLed[key] ?? 0) + 1;
   markDirty();
+  syncStore(key, blockEntryFor(key));
   // Award the tourguide deed at 5 completed tours.
   if (state.toursLed[key] >= 5) {
     try {

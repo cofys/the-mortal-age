@@ -33,12 +33,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-reputation.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- tuning ------------------------------------------------------------------
@@ -167,12 +169,49 @@ function blankRep(username) {
   return { username, score: 0, deeds: [], lastDecay: 0, announcedTier: "unknown" };
 }
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-reputation.json registry is the
+// fallback (and stays fully written). storeEnabled is flipped off by the
+// test seams so unit tests stay hermetic.
+const STORE_BLOCK = "reputation";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file registry is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's reputation entry into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 function load() {
   if (cache) return cache;
   try {
     const raw = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8"));
     cache = blankState();
     if (raw && typeof raw === "object") {
+      // Dual-read: account blocks win over the old-file entries
+      // (the loop below still validates/normalizes them).
+      if (storeEnabled && raw.reps && typeof raw.reps === "object") {
+        for (const key of Object.keys(raw.reps)) {
+          const block = storeBlockFor(key);
+          if (block) raw.reps[key] = block;
+        }
+      }
       for (const [k, v] of Object.entries(raw.reps ?? {})) {
         if (!v || typeof v !== "object") continue;
         cache.reps[k] = {
@@ -219,7 +258,12 @@ function tierLabel(tierKey) {
 function reputationFor(username) {
   if (!username) return 0;
   const st = load();
-  return st.reps[normalizeName(username)]?.score ?? 0;
+  const rep = st.reps[normalizeName(username)];
+  if (rep) return rep.score;
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(username);
+  if (block && Number.isFinite(Number(block.score))) return clampScore(Number(block.score));
+  return 0;
 }
 
 /** Fame tier key for a citizen. */
@@ -314,6 +358,7 @@ function addReputation(username, amount, reason, nowMs = Date.now()) {
   rep.deeds.push({ at: nowMs, amount: Math.round(amount), reason: String(reason ?? "deed") });
   if (rep.deeds.length > 20) rep.deeds = rep.deeds.slice(-20);
   markDirty();
+  syncStore(key, rep);
   return rep.score;
 }
 
@@ -347,6 +392,7 @@ function syncCrimeInfamy(username, nowMs = Date.now()) {
     st.reps[key].deeds.push({ at: nowMs, amount: target - current, reason: "criminal notoriety" });
     if (st.reps[key].deeds.length > 20) st.reps[key].deeds = st.reps[key].deeds.slice(-20);
     markDirty();
+    syncStore(key, st.reps[key]);
     return target;
   } catch {
     return reputationFor(username);
@@ -367,6 +413,7 @@ function decayOnce(username, nowMs = Date.now()) {
   rep.score += rep.score > 0 ? -DECAY_PER_DAY : DECAY_PER_DAY;
   rep.score = clampScore(rep.score);
   markDirty();
+  syncStore(key, rep);
   return true;
 }
 
@@ -388,6 +435,7 @@ function markTierAnnounced(username, tierKey) {
   if (st.reps[key].announcedTier !== tierKey) {
     st.reps[key].announcedTier = tierKey;
     markDirty();
+    syncStore(key, st.reps[key]);
   }
 }
 
@@ -415,6 +463,7 @@ function save() {
 function resetForTests() {
   cache = blankState();
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 module.exports = {
