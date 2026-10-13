@@ -79,7 +79,8 @@ const CitizenXpSync = require("../lib/CitizenXpSync");
 // Jon 2026-10-13: citizen account migration — per-citizen account files
 // (data/saves/citizens/<name>.json) like human player accounts.
 const CitizenAccountStore = require("../lib/CitizenAccountStore");
-const CitizenFishing = require("../brain/actions/CitizenFishing");
+// (Jon 2026-10-13: CitizenFishing retired — real fishing runs through the
+// Fishing plugin's sessions via lib/CitizenRealWork drivers.)
 const CitizenActivityChatter = require("../chat/CitizenActivityChatter");
 // Jon 2026-10-13: Catherby water tiles — walkability snap for all citizen
 // placement (materialization, whereabouts settle, gather slots).
@@ -3276,15 +3277,11 @@ class CitizenDirector {
         CitizenSkilling.tickSkilling(this, hour);
       },
     },
-    // Real fishing catches: materialized citizens in arrived fishing sessions
-    // land real fish (player inventory API) + real Fishing XP (player skills
-    // API) at real fishing spots. Zero LLM.
-    {
-      name: 'citizen fishing failed',
-      run: () => {
-        CitizenFishing.tickCitizenFishing(this);
-      },
-    },
+    // (Jon 2026-10-13: retired — the old tickCitizenFishing rolled catches
+    // directly without clicking a spot. Real fishing now runs through the
+    // Fishing plugin's own sessions: the routine's fish delegate, the
+    // citizen_fish activity, and session drivers in lib/CitizenRealWork
+    // click live spot NPCs; the plugin owns animation, catches, and XP.)
     // Visible activity chatter: citizens in skilling sessions talk about the
     // grind (milestone-aware, personality-scaled) and announce session goals
     // once per session. Watched-only, throttled. Zero LLM.

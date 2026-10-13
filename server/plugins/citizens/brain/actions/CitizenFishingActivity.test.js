@@ -79,20 +79,28 @@ const ACTIVITIES_PATH = path.join(
 })();
 
 describe("citizen_fish activity", () => {
-  test("is defined with ensureItem -> fish -> citizenBank", () => {
+  test("is defined with citizenGoToPlace -> ensureItem -> fish -> citizenBank", () => {
     const data = JSON.parse(fs.readFileSync(ACTIVITIES_PATH, "utf8"));
     const fish = data.activities.find((a) => a.id === "citizen_fish");
     assert.ok(fish, "citizen_fish activity must exist");
     assert.equal(fish.mode, "citizen_fish");
-    assert.equal(fish.repeat, true);
+    assert.equal(fish.repeat, false);
 
     const types = fish.actions.map((a) => a.type);
-    assert.deepEqual(types, ["ensureItem", "fish", "citizenBank"]);
+    assert.deepEqual(types, [
+      "citizenGoToPlace",
+      "ensureItem",
+      "fish",
+      "citizenBank",
+    ]);
 
-    const net = fish.actions[0];
+    const goTo = fish.actions[0];
+    assert.equal(goTo.kind, "fish");
+
+    const net = fish.actions[1];
     assert.equal(net.item, "SMALL_FISHING_NET");
 
-    const fishStep = fish.actions[1];
+    const fishStep = fish.actions[2];
     assert.equal(fishStep.tool, "NET");
     assert.ok(fishStep.until?.inventoryFull, "must fish until inventory full");
   });

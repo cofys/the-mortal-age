@@ -20,6 +20,10 @@ const {
 const {
   createInteractObjectAction,
 } = require("../../../bots/brain/actions/InteractObject");
+// Jon 2026-10-13 — no fake skilling: routine fishers click real fishing spots
+// through the same brain action the citizen_fish activity uses. The Fishing
+// plugin owns animation, catches, and XP from the real click.
+const { createFishAction } = require("../../../bots/brain/actions/Fish");
 const { getReferencePrice } = require("../../../economy/Prices.Economy");
 const { createBankAction } = require("../../../bots/brain/actions/Bank");
 const { createIdleSocialAction } = require("./IdleSocial");
@@ -92,10 +96,10 @@ const BEER_PRICE = 2; // coins, the standard tavern price
 const BEER_BREAK_MAX_MS = 20 * 60 * 1000; // never longer than 20 minutes
 const BEER_CHAT_MIN_MS = 60 * 1000; // chat 1-2 minutes, per Jon
 const BEER_CHAT_MAX_MS = 2 * 60 * 1000;
-// Animations (engine ids): 829 = drink (Potions.plugin.js), 621 = small-net
-// fishing (Fishing.plugin.js ANIM.NET).
+// Animations (engine ids): 829 = drink (Potions.plugin.js). Fishing
+// animation comes from the real Fishing plugin session now (Jon 2026-10-13:
+// no fake skilling) — never played by hand.
 const DRINK_ANIM_ID = 829;
-const FISH_NET_ANIM_ID = 621;
 
 // Lazy engine Animation (CitizenPrayer pattern): cosmetic only, never blocks.
 let AnimationClass = null;
@@ -147,7 +151,6 @@ function ensureWorkTool(player, workKind) {
 
 const DAY_MINUTES = 24 * 60;
 const RETRY_WORK_MS = 60000;
-const CASTS_PER_HAUL = 4;
 
 /**
  * Town + settlement-aware site resolution. Smaller-town citizens live at
@@ -231,10 +234,6 @@ function workSiteLocal(player) {
 const SELL_GIVE_UP_MS = 3 * 60 * 1000;
 const COINS_ID = 995;
 const BREAD_ID = 2309;
-// The small-net catch table (Fishing.plugin.js: small net, animation 621 —
-// the citizen fishing visual): raw shrimps + raw anchovies.
-const RAW_SHRIMPS_ID = 317;
-const RAW_ANCHOVIES_ID = 321;
 
 // Goal-threading (review finding #2): the day plan is a reasonable default,
 // but active session intents bend it instead of the clock winning blindly.
@@ -246,25 +245,6 @@ const FRESH_GRIND_RATIO = 0.5; // intent <50%: work through low-value legs
 const WORK_EXTEND_MIN = 45; // near-done: finish the grind
 const WORK_GRIND_LATE_MIN = 60; // fresh grind: work into the evening
 const MAX_BENDS_PER_DAY = 2;
-
-const FISHING_LINES = Object.freeze({
-  plain: Object.freeze([
-    "Come on, bite...",
-    "The river's generous today.",
-    "Caught a boot last week. A BOOT.",
-    "Quiet water, full net. That's the way.",
-    "My father fished this same spot.",
-    "Shh — you'll scare them off.",
-  ]),
-  terse: Object.freeze([
-    "bite...",
-    "good water today.",
-    "caught a boot once.",
-    "quiet. good.",
-    "dad fished here.",
-    "shh.",
-  ]),
-});
 
 function minutesNow() {
   const now = new Date();
@@ -705,6 +685,32 @@ function createCitizenRoutineAction(spec, world) {
   // delegates. The InteractObject action keeps per-player state internally.
   const workDelegates = new Map();
   let bankDelegate = null;
+  // One shared real-fish delegate (Jon 2026-10-13): routine fishers click
+  // real fishing spots through the same brain action the citizen_fish
+  // activity uses. Per-player state lives inside the action.
+  let fishDelegate = null;
+
+  function fishDelegatesFor(player) {
+    if (!fishDelegate) {
+      fishDelegate = createFishAction(
+        { tool: "NET", until: { inventoryFull: true } },
+        world
+      );
+    }
+    if (!bankDelegate) {
+      bankDelegate = createBankAction({}, world);
+    }
+    return { workDelegate: fishDelegate, bankDelegate };
+  }
+
+  function stopFishDelegate(player) {
+    if (!fishDelegate || !player) return;
+    try {
+      fishDelegate.stop?.({ player, nowMs: Date.now() });
+    } catch {
+      // Best-effort.
+    }
+  }
 
   function delegatesFor(player) {
     const site = workSiteLocal(player) ?? { catalog: "tree", tier: "normal", option: "Chop down" };
@@ -742,8 +748,6 @@ function createCitizenRoutineAction(spec, world) {
         workRetryAt: 0,
         lingerUntil: 0,
         workKind: null, // resolved lazily: 'fishing' | 'tree' | 'rock'
-        nextCastAt: 0,
-        casts: 0,
         bendsToday: 0, // goal-threading: how many times intents bent today's plan
         eveningStyle: null, // resolved on first evening: workLate | homeEarly | tavernBreak
         beerBreak: null, // active beer-break state machine, or null
@@ -1018,138 +1022,6 @@ function createCitizenRoutineAction(spec, world) {
     return workSiteLocal(player);
   }
 
-  /**
-   * Fisher's shift: walk to the dock, then cast on a human rhythm with
-   * fishing chatter. Catches are the stubbed part (real fishing needs a
-   * brain NPC-interaction path that doesn't exist yet — see DESIGN.md); the
-   * visible behavior and the work rhythm are real, and completed hauls feed
-   * the master_trade goal like banked loads do for gatherers.
-   */
-  function fishWorkTick(ctx, state) {
-    const { player, nowMs } = ctx;
-    const dock = dockSite(player);
-    if (!dock) {
-      return "failed";
-    }
-    if (!atTile(player, dock, 8)) {
-      walkTo(player, dock);
-      return "running";
-    }
-    if (nowMs < state.nextCastAt) {
-      return "running";
-    }
-    state.nextCastAt =
-      nowMs + logNormalJitter(state.rng, 45000, state.human.tempoSigma);
-    state.casts += 1;
-    // Visible casting animation (Jon 2026-10-12): the fisher visibly works
-    // the water, not just stands at the dock.
-    playAnim(player, FISH_NET_ANIM_ID);
-    if (chance(state.rng, 0.5 * state.human.chatRate)) {
-      try {
-        const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
-        sayPublic(player, voiceLine(voiceFor(personality), FISHING_LINES, state.rng));
-      } catch (error) {
-        // Cosmetic only.
-      }
-    }
-    if (state.casts % CASTS_PER_HAUL === 0) {
-      const bucket = (ctx.state.citizens ??= {});
-      bucket.workCyclesBanked = (bucket.workCyclesBanked ?? 0) + 1;
-      world?.log?.("citizen_routine_haul", {
-        citizen: player.getUsername?.(),
-        kingdom: kingdomIdOf(player),
-        hauls: bucket.workCyclesBanked,
-      });
-      // The catch goes to the provisioner: real fish items sold dockside at
-      // the real reference price — the human trading loop (catch, check
-      // price, sell), never minted coins. Unsold fish ride in the pack.
-      try {
-        sellFisherHaul(player, state);
-      } catch (error) {
-        // The haul still counted toward the goal.
-      }
-      addMood(player, 3);
-    }
-    return "running";
-  }
-
-  /**
-   * The fisher's haul is real fish (the small-net catch table), granted as
-   * real inventory items, then sold dockside to a nearby provisioner at
-   * the real reference price per fish — verified credits with debit
-   * rollback (vanishing-coins sweep contract). A provisioner that can't
-   * cover the whole catch buys what it can; unsold fish stay in the pack
-   * for the market trip (the decision layer banks a full pack).
-   */
-  function sellFisherHaul(player, state) {
-    const inventory = player.getInventory?.();
-    if (!inventory) {
-      return;
-    }
-    const fishId = chance(state.rng, 0.6) ? RAW_SHRIMPS_ID : RAW_ANCHOVIES_ID;
-    const qty = 2 + Math.floor((state.rng?.() ?? 0.5) * 3); // 2-4 fish
-    if (!verifiedAdds(inventory, fishId, qty)) {
-      return; // full pack — the haul never left the water
-    }
-    const unitPrice = haulPriceFor(fishId);
-    let sold = 0;
-    let earned = 0;
-    let buyerName = null;
-    for (const provisioner of localProvisioners(player)) {
-      if (sold >= qty) {
-        break;
-      }
-      const provisionerInv = provisioner.getInventory?.();
-      if (!provisionerInv) {
-        continue;
-      }
-      const canAfford = Math.floor(
-        (provisionerInv.getAmount?.(COINS_ID) ?? 0) / unitPrice
-      );
-      const sellQty = Math.min(qty - sold, canAfford);
-      if (sellQty <= 0) {
-        continue;
-      }
-      const paid = sellItems(inventory, provisionerInv, fishId, sellQty, unitPrice);
-      if (paid > 0) {
-        sold += sellQty;
-        earned += paid;
-        buyerName = provisioner.getUsername?.() ?? buyerName;
-      }
-    }
-    const fishName = fishId === RAW_ANCHOVIES_ID ? "raw anchovies" : "raw shrimps";
-    if (sold > 0) {
-      world?.log?.("citizen_routine_catch_sale", {
-        citizen: player.getUsername?.(),
-        provisioner: buyerName,
-        item: fishId,
-        qty: sold,
-        unitPrice,
-        earned,
-      });
-      journalWork(
-        player,
-        `Sold ${sold} ${fishName} to ${buyerName ?? "a provisioner"} for ${earned} coins (${unitPrice} each).`
-      );
-    } else {
-      journalWork(
-        player,
-        `Kept the catch (${qty} ${fishName}) — no provisioner dockside with the coin.`
-      );
-    }
-  }
-
-  function ensurePlan(state) {
-    const today = dayStamp();
-    if (state.day !== today || state.planVersion !== PLAN_VERSION) {
-      state.day = today;
-      state.planVersion = PLAN_VERSION;
-      state.plan = buildDayPlan(state.rng);
-      state.phaseKind = null; // force phase re-entry
-      state.bendsToday = 0; // fresh day, fresh bends
-    }
-  }
-
   /** Bread-selling merchants in view — the meal break's food source. */
   function localProvisioners(player) {
     const out = [];
@@ -1253,6 +1125,9 @@ function createCitizenRoutineAction(spec, world) {
     state.lingerUntil = 0;
     state.sellMode = null;
     state.sellGiveUpAt = 0;
+    // A phase change stops any in-progress real-fishing delegate (its site
+    // claim is released; the Fishing plugin session ends when they walk).
+    stopFishDelegate(ctx?.player);
     // A phase change cancels any in-progress beer break (it resumes via
     // the new phase's own logic) and re-arms the per-phase break roll.
     state.beerBreak = null;
@@ -1382,15 +1257,29 @@ function createCitizenRoutineAction(spec, world) {
         sayWorkLine(player, state);
       }
     }
-    if (resolveWorkKind(player, state) === WORK_FISHING) {
-      return fishWorkTick(ctx, state);
-    }
     // Mid-shift sale: the supplier buys the shift's output at the market.
     if (state.sellMode) {
       return sellTick(ctx, state);
     }
-    const { workDelegate, bankDelegate } = delegatesFor(player);
-    const site = workSiteLocal(player);
+    // Jon 2026-10-13 — no fake skilling: fishers click real fishing spots
+    // through the real fish brain action (the Fishing plugin owns animation,
+    // catches, and XP from the click). No pre-walk to a dock anchor: the
+    // action picks its own live spot cluster and works from a land stand
+    // tile; a relocated spot is re-targeted and re-clicked like a player.
+    if (resolveWorkKind(player, state) === WORK_FISHING) {
+      return runWorkDelegate(ctx, state, fishDelegatesFor(player), null);
+    }
+    return runWorkDelegate(ctx, state, delegatesFor(player), workSiteLocal(player));
+  }
+
+  /**
+   * Shared work/bank/sell/retry flow for a work delegate. site=null skips
+   * the pre-walk — the delegate picks its own spot (the fish action's live
+   * fishing-spot clusters).
+   */
+  function runWorkDelegate(ctx, state, delegates, site) {
+    const { player, nowMs } = ctx;
+    const { workDelegate, bankDelegate } = delegates;
     if (state.workMode === "bank") {
       const result = bankDelegate.update(ctx);
       if (result === "success") {
@@ -1504,6 +1393,7 @@ function createCitizenRoutineAction(spec, world) {
     stop(ctx) {
       if (ctx?.player) {
         clearMovementRequest(ctx.player);
+        stopFishDelegate(ctx.player);
         // Slot-capacity lifecycle: ending the routine frees the spot claim.
         try {
           SlotCapacity.releaseFor(ctx.player);

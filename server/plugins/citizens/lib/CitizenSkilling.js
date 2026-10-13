@@ -52,6 +52,10 @@ const { createParty, disbandParty, leaveParty } = require("./CitizenSocialMechan
 const { getJournal } = require("./CitizenJournal");
 const { agentRng, chance } = require("./humanizer");
 const { siteTileByKingdom } = require("../brain/CitizenSites");
+// Jon 2026-10-13 — no fake skilling: harvest skills (fishing/woodcutting/
+// mining) run ONLY through real engine interactions. The drivers click real
+// spots/objects; the skill plugins own animation, catches, and XP.
+const CitizenRealWork = require("./CitizenRealWork");
 
 // --- skill definitions -------------------------------------------------------
 // site: key into data/sites.json. `workTree`/`workRock` resolve against the
@@ -696,8 +700,19 @@ function maintainSession(director, key, session) {
   }
 
   // Travel: nudge the leader; party members follow via tickFollow.
+  // Jon 2026-10-13: once arrived, a leader who's really working (a live
+  // plugin session, or walking to a real target) is not dragged back to the
+  // site anchor — the work owns their feet now.
   const tile = botTile(leaderBot);
-  if (chebyshev(tile, session.site) > ARRIVE_RADIUS) {
+  if (
+    session.arrived &&
+    (session.skill === "fishing" ||
+      session.skill === "woodcutting" ||
+      session.skill === "mining") &&
+    CitizenRealWork.isWorking(director.api, leaderBot, session.skill)
+  ) {
+    // Working for real — travel nudge stays out of the way.
+  } else if (chebyshev(tile, session.site) > ARRIVE_RADIUS) {
     const jx = session.site.x + Math.floor(rng() * 5) - 2;
     const jy = session.site.y + Math.floor(rng() * 5) - 2;
     requestMovement(leaderBot, jx, jy, session.site.z ?? 0);
@@ -741,8 +756,9 @@ function sessionSummary(session, def) {
   if (session.skill === "cooking") {
     return `${who} finished cooking — ${session.items} shrimps cooked, ${Math.round(session.xp ?? 0)} Cooking xp earned.`;
   }
-  const itemName = { woodcutting: "logs", fishing: "shrimps", mining: "ore" }[session.skill] ?? "goods";
-  return `${who} finished ${def.label.toLowerCase()} — ${session.items} ${itemName} gathered.`;
+  // Harvest skills work for real now (CitizenRealWork): the yield lives in
+  // the citizens' own packs and XP, not a session counter — don't cite it.
+  return `${who} finished ${def.label.toLowerCase()} — the haul's in their packs.`;
 }
 
 function endSession(director, key, session, note) {
@@ -819,6 +835,29 @@ function doSkillAction(director, key, session, def, memberName) {
   if (!bot) return;
   const rng = agentRng(`skillact:${memberName}:${Date.now() >> 13}`);
 
+  // Jon 2026-10-13 — no fake skilling: fishing, woodcutting, and mining
+  // happen ONLY through real engine interactions. The driver clicks a real
+  // fishing-spot NPC / tree / rock; the skill plugin then owns the
+  // animation, the catches, and the XP — exactly like a player. No live
+  // target in reach: the member stands with the crew. Never a timer-driven
+  // animation, never conjured yield.
+  if (
+    session.skill === "fishing" ||
+    session.skill === "woodcutting" ||
+    session.skill === "mining"
+  ) {
+    if (!session.arrived) return;
+    const worked = CitizenRealWork.drive(director.api, bot, session.skill, {
+      leader: normalizeName(memberName) === normalizeName(session.leader),
+    });
+    session.actions += 1;
+    // The journal stays truthful: only log work that really happened.
+    if (worked === "active" && chance(rng, 0.1)) {
+      journalEvent(memberName, pickOne(rng, def.flavorLines) + ".", "work");
+    }
+    return;
+  }
+
   // Cooking consumes; if this member is out of raw fish they idle.
   if (session.skill === "cooking") {
     if (inventoryAmount(bot, def.consumes) < 1) return;
@@ -828,42 +867,26 @@ function doSkillAction(director, key, session, def, memberName) {
   // Visible: play the skilling animation where players can see it.
   playSkillAnim(director, bot, def.anim);
 
-  // Fishing yield is REAL now (brain/actions/CitizenFishing): materialized
-  // citizens in arrived fishing sessions land real catches at real spots
-  // with real items + real Fishing XP on their own cadence. Skip the
-  // data-tier grant here so fishing doesn't double-dip; the visual stays.
-  if (session.skill === "fishing") {
-    session.actions += 1;
-    return;
-  }
-
-  // Yield: items + XP, with a level-scaled bonus chance.
+  // Yield: items + XP, with a level-scaled bonus chance. (Cooking only now —
+  // harvest skills work for real through CitizenRealWork above.)
   const level = skillStore.getLevel(memberName, session.skill);
   const bonusChance = Math.min(0.35, (level - 1) * 0.012);
   let n = 1;
   if (chance(rng, bonusChance)) n = 2;
 
-  if (session.skill === "cooking") {
-    grantItem(bot, def.produces, n);
-  } else if (session.skill === "mining") {
-    grantItem(bot, pickOne(rng, def.items), n);
-  } else {
-    grantItem(bot, def.item, n);
-  }
+  grantItem(bot, def.produces, n);
   session.actions += 1;
   session.items += n;
   session.xp = (session.xp ?? 0) + def.xpPer * n;
   grantXpWithCelebration(director, rec, session.skill, def.xpPer * n);
 
-  // Occasional journaled catch (data-tier; keeps the LLM truthful).
+  // Occasional journaled note (data-tier; keeps the LLM truthful).
   if (chance(rng, 0.1)) {
-    const lines = {
-      woodcutting: `Chopped ${n > 1 ? n + " logs" : "a log"} — the pile's growing.`,
-      fishing: `Netted ${n > 1 ? n + " shrimps" : "a shrimp"}.`,
-      mining: `Dug out ${n > 1 ? n + " ores" : "an ore"}.`,
-      cooking: `Cooked ${n > 1 ? n + " shrimps" : "a shrimp"} to perfection.`,
-    };
-    journalEvent(memberName, lines[session.skill] ?? "Kept at the work.", "work");
+    journalEvent(
+      memberName,
+      `Cooked ${n > 1 ? n + " shrimps" : "a shrimp"} to perfection.`,
+      "work"
+    );
   }
 }
 

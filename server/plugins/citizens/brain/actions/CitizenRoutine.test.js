@@ -31,6 +31,9 @@ function stubEngineModules() {
     "../../../bots/brain/actions/Bank": {
       createBankAction: () => ({ update: () => "running", stop: () => {} }),
     },
+    "../../../bots/brain/actions/Fish": {
+      createFishAction: () => ({ update: () => "running", stop: () => {} }),
+    },
   };
   for (const [rel, exports] of Object.entries(stubs)) {
     const path = require.resolve(rel);

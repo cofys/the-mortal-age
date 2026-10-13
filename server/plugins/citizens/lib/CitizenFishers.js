@@ -21,10 +21,10 @@ const { sayPublic } = require("../chat/CitizenSayPublic");
  *   state is its source of truth).
  *
  * WHAT THE PLAYER SEES (interaction tier, only near real players):
- *   Fishers visibly work the water: rod casts (engine animation 622),
- *   net hauls (621), harpoon strikes (618), cage traps (619). Big catches
- *   trigger celebrations; fishers hawk fresh catch to passers-by. In
- *   storm weather they stay ashore and warn of the sea.
+ *   Fishers hawk fresh catch to passers-by and warn of the sea in storm
+ *   weather. Visible work animations come ONLY from real Fishing plugin
+ *   sessions (a clicked spot) — this module never plays them by hand
+ *   (Jon 2026-10-13: no fake skilling).
  *
  * Zero LLM: scripted emote pools, catch/hawk/storm lines, chance-gated.
  *
@@ -324,20 +324,8 @@ function journalEvent(citizenName, text) {
   }
 }
 
-/** Play a fishing animation, best-effort. */
-function playAnim(director, bot, animId) {
-  try {
-    if (!animId) return false;
-    const Anim = director?.api?.core?.Animation;
-    if (!Anim || !bot?.performAnimation) return false;
-    bot.performAnimation(new Anim(animId));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Animation for a fisher type. */
+/** Animation for a fisher type. (Kept exported for tests; no longer played
+ * without a real clicked spot — Jon 2026-10-13.) */
 function animFor(type) {
   if (type === FISHER_DEEPSEA) return ANIM_HARPOON;
   if (type === FISHER_DIVER) return ANIM_CAGE;
@@ -471,7 +459,9 @@ function doFishWork(director, record, citizen, type, nowMs) {
     } catch {
       // forceChat is best-effort.
     }
-    playAnim(director, citizen, animFor(type));
+    // Jon 2026-10-13 — no fake skilling: the visible work animation comes
+    // ONLY from a real Fishing plugin session (a clicked spot). This module
+    // keeps the chatter and the journal; the theater animation is gone.
     journalEvent(record.username, `Landed a big ${fish} at ${spot ? spot.name : "the water"} — the crowd loved it.`);
     return;
   }
@@ -480,7 +470,8 @@ function doFishWork(director, record, citizen, type, nowMs) {
   } catch {
     // forceChat is best-effort.
   }
-  playAnim(director, citizen, animFor(type));
+  // Jon 2026-10-13 — no fake skilling: no theater animation without a
+  // real clicked spot (see above). Chat + journal stay.
   // One journal line per loop — the LLM's source of truth. Includes the
   // spot and the catch, so "what have you been up to?" is answerable, and
   // a note that the catch is for sale (buying dialogue is the LLM tier).
