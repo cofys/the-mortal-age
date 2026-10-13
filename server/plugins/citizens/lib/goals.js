@@ -14,6 +14,10 @@ const GOAL_RANK_UP = "rank_up";
 const GOAL_MASTER_TRADE = "master_trade";
 const GOAL_BOSS_SLAYER = "boss_slayer";
 const GOAL_MAKE_FRIENDS = "make_friends";
+// Concrete progression goals (resolved by CitizenGoalResolver).
+const GOAL_SKILL_TARGET = "skill_target";
+const GOAL_ITEM_BUY = "item_buy";
+const GOAL_SKILL_UNLOCK = "skill_unlock";
 
 function coinWealth(player) {
   let total = 0;
@@ -94,6 +98,20 @@ function nextGoalForRole(role, tier = 0) {
       startedAt: Date.now(),
     };
   }
+  // Every 4th tier, a concrete skill goal: "I'm going for 60 WC".
+  // Skills cycle so citizens develop distinct identities.
+  if (tier % 4 === 3) {
+    const skills = ["woodcutting", "mining", "fishing"];
+    const skill = skills[tier % skills.length];
+    const target = Math.min(99, 30 + Math.floor(tier / 4) * 15);
+    return {
+      type: GOAL_SKILL_TARGET,
+      skill,
+      target,
+      progress: 0,
+      startedAt: Date.now(),
+    };
+  }
   return {
     type: GOAL_MASTER_TRADE,
     target: 500 * (tier + 1), // work cycles (chop/mine/smelt sessions banked)
@@ -121,6 +139,23 @@ function sampleGoalProgress(goal, player, directorState = {}) {
     progress = bossRunCount(directorState.citizenName ?? "");
   } else if (goal.type === GOAL_MAKE_FRIENDS) {
     progress = friendCount(directorState.citizenName ?? "");
+  } else if (goal.type === GOAL_SKILL_TARGET || goal.type === GOAL_SKILL_UNLOCK) {
+    // Progress is the current skill level.
+    try {
+      const skills = player?.getSkills?.();
+      const need = goal.type === GOAL_SKILL_TARGET ? goal.target : goal.requiredLevel;
+      if (skills?.getLevel && goal.skill) {
+        progress = skills.getLevel(goal.skill) ?? 0;
+      } else if (player?.getLevel && goal.skill) {
+        progress = player.getLevel(goal.skill) ?? 0;
+      }
+      return { progress, complete: progress >= (need ?? Infinity) };
+    } catch {
+      // Fall through to default.
+    }
+  } else if (goal.type === GOAL_ITEM_BUY) {
+    // Progress is coin wealth vs item price.
+    progress = coinWealth(player);
   }
   return { progress, complete: progress >= (goal.target ?? Infinity) };
 }
@@ -135,6 +170,9 @@ module.exports = {
   GOAL_MASTER_TRADE,
   GOAL_BOSS_SLAYER,
   GOAL_MAKE_FRIENDS,
+  GOAL_SKILL_TARGET,
+  GOAL_ITEM_BUY,
+  GOAL_SKILL_UNLOCK,
   coinWealth,
   nextGoalForRole,
   sampleGoalProgress,

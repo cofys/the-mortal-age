@@ -58,6 +58,7 @@ const {
   GOAL_BOSS_SLAYER,
   GOAL_MAKE_FRIENDS,
 } = require("../lib/goals");
+const { resolveGoal, GOAL_RESOLUTION_BOOST } = require("./CitizenGoalResolver");
 const { hashSeed, agentRng } = require("../lib/humanizer");
 const { tickIntents, intentBonusFor } = require("./CitizenIntents");
 const SlotCapacity = require("./CitizenSlotCapacity");
@@ -2739,6 +2740,7 @@ function snapshot(player) {
     energy: needs ? needs.energy : 100,
     mood: (needs ? needs.mood : 80) + petMoodBonus(player),
     goal,
+    goalResolution: (() => { try { return resolveGoal(player, goal); } catch { return null; } })(),
     personality,
     role: (() => { try { return player?.getAttribute?.(ATTR_CITIZEN_ROLE) ?? null; } catch { return null; } })(),
     kingdomId: (() => { try { return player?.getAttribute?.(ATTR_KINGDOM_ID) ?? null; } catch { return null; } })(),
@@ -2850,6 +2852,18 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
   const criticalHp = hp < CRITICAL_HP;
   const exhausted = energy < CRITICAL_ENERGY;
 
+  // Goal resolution boost: if the citizen's concrete goal resolves to this
+  // activity, boost it. This connects "60 Woodcutting" to actually chopping.
+  // Applied before the switch so it stacks with existing bonuses.
+  let goalBoost = 0;
+  try {
+    if (snap.goalResolution && snap.goalResolution.activityId === activityId) {
+      goalBoost = GOAL_RESOLUTION_BOOST;
+    }
+  } catch {
+    // Never break scoring.
+  }
+
   switch (activityId) {
     case ACT_ROUTINE: {
       // Work: the commoner's living. Broke + industrious citizens grind;
@@ -2869,7 +2883,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (hurt) s -= 30;
       if (mood < 20) s -= 8;
       if (freeSlots <= 2) s += 10; // full inventory: the routine's bank leg handles it
-      return s;
+      return s + goalBoost;
     }
     case ACT_MEAL: {
       // No hunger in RuneScape — eat when HP is low, from inventory, on the
@@ -2877,14 +2891,14 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (!hurt) return 4;
       let s = 58 + (HURT_AT - hp) * 1.1;
       if (food <= 0) s += 10; // out of food and hurt: resupply is urgent
-      return s;
+      return s + goalBoost;
     }
     case ACT_REST: {
       if (!weary) return 4;
       let s = 58 + (WEARY_AT - energy) * 1.3;
       // Night is for sleeping: the weary rest deeper after dark.
       if (night?.isNight) s += 20;
-      return s;
+      return s + goalBoost;
     }
     case ACT_BANK: {
       // The inventory clock: a full pack forces the hinge trip.
@@ -2893,7 +2907,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (freeSlots <= 6) s = 40;
       if (goalType === GOAL_MASTER_TRADE || goalType === GOAL_SAVE_GOLD) s += 10;
       if (criticalHp || exhausted) s -= 40;
-      return s;
+      return s + goalBoost;
     }
     case ACT_PRAYER: {
       // The prayer hinge: bones are XP on the floor, and an empty bar
@@ -2911,7 +2925,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (traits.has("greedy")) s -= 6; // the gods can wait
       if (criticalHp || exhausted) s -= 40; // hurt first, pray later
       else if (hurt || weary) s -= 20;
-      return s;
+      return s + goalBoost;
     }
     case ACT_LIGHT_FIRE: {
       // Firemaking: burn logs for XP. No logs, no fire. Industrious citizens
@@ -2928,7 +2942,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_TRAIN: {
       // Athletics: athletes train at the stadium; the athletic are drawn
@@ -2945,7 +2959,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_CURATE: {
       // Galleries: curators tend the gallery when there is work — open
@@ -2964,7 +2978,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_LIBRARIAN: {
       // Libraries: librarians tend the library when there is work — books
@@ -2984,7 +2998,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_DOCENT: {
       // Observatories: registered astronomers host visitors at night — they
@@ -3006,7 +3020,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_COOKOFF: {
       // Cook-offs: chefs duel when a cook-off is open; entered chefs with
@@ -3023,7 +3037,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_FESTIVAL: {
       // Music festivals: promoters work the ground when a festival is
@@ -3042,7 +3056,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_FLETCH: {
       // Fletching: cut logs into shafts and bows for XP and coin. No logs
@@ -3060,7 +3074,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_AGILITY: {
       // Agility: run obstacle courses for XP and faster run-energy restore.
@@ -3075,7 +3089,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_SLAYER: {
       // Slayer: hunt assigned monsters for Slayer + combat XP. No task and
@@ -3092,7 +3106,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_PKER: {
       // PKing: hunt real players in the Wilderness for loot and glory.
@@ -3115,7 +3129,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_COMBAT_TRAIN: {
       // Combat training: grind monsters for Attack/Strength/Defence XP the
@@ -3139,7 +3153,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_HUNT: {
       // Hunter: lay bird snares and trap birds for Hunter XP and loot.
@@ -3158,7 +3172,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_FARM: {
       // Farming: run the patch circuit for XP and produce. No seeds
@@ -3184,7 +3198,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       // Kingdom resource profile (phase 3): farm what the kingdom is rich
       // in. Tie-breaker scale — personality and needs still dominate.
       s += profileWorkBonus(snap.kingdomId, ACT_FARM);
-      return s;
+      return s + goalBoost;
     }
     case ACT_THIEVE: {
       // Thieving: steal from market stalls for Thieving XP and loot.
@@ -3211,7 +3225,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_BUILD: {
       // Construction: build furniture from planks for XP and coin. No
@@ -3234,7 +3248,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_TRAVEL: {
       // Travel: ships and caravans between capitals. Costs real fare,
@@ -3255,7 +3269,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_ENTERTAIN: {
       // Entertainment: tavern drinks, dice, bard music, theater. Costs
@@ -3277,7 +3291,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
-      return s;
+      return s + goalBoost;
     }
     case ACT_GUILD: {
       // Guilds: the professional's home. Members train for favor and work
@@ -3299,7 +3313,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
-      return s;
+      return s + goalBoost;
     }
     case ACT_PETCARE: {
       // Pet care: feed the hungry, play with the sad. A human with pets
@@ -3313,7 +3327,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
-      return s;
+      return s + goalBoost;
     }
     case ACT_CREATEART: {
       // Art: creative citizens with materials make art. A human artist
@@ -3329,7 +3343,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
-      return s;
+      return s + goalBoost;
     }
 
     case ACT_PERFORM: {
@@ -3351,7 +3365,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // drunk performers are a liability
-      return s;
+      return s + goalBoost;
     }
 
     case ACT_FASHION: {
@@ -3371,7 +3385,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // drunk tailors prick fingers
-      return s;
+      return s + goalBoost;
     }
 
     case ACT_CUISINE: {
@@ -3392,7 +3406,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // drunk chefs burn the roast
-      return s;
+      return s + goalBoost;
     }
 
     case ACT_CELEBRATE: {
@@ -3414,7 +3428,7 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 15; // drunk celebrants cause trouble
-      return s;
+      return s + goalBoost;
     }
 
 case ACT_COMPETE: {
@@ -3436,7 +3450,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody fights drunk well
-      return s;
+      return s + goalBoost;
     }
     case ACT_DIPLOMAT: {
       // Covert and dynastic diplomacy: spies watch hot borders, famous
@@ -3458,7 +3472,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody spies drunk well
-      return s;
+      return s + goalBoost;
     }
     case ACT_SPY: {
       // Espionage operations: spymasters run covert ops where borders run
@@ -3473,7 +3487,7 @@ case ACT_COMPETE: {
         else if (hurt) s -= 30;
         else if (weary) s -= 25;
         if (drunk) s -= 20;
-        return s;
+        return s + goalBoost;
       }
       if (!canOperate) return 4; // nothing to do in the shadows
       if (sp.hasOperation) return 24; // the operation is live — see it through
@@ -3485,7 +3499,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody runs ops drunk well
-      return s;
+      return s + goalBoost;
     }
     case ACT_DIG: {
       // Archaeology: archaeologists dig where the finds are. A human digger
@@ -3503,7 +3517,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_STAGE: {
       // Theater: troupe members rehearse toward booked shows; playwrights
@@ -3522,7 +3536,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_RUNWAY: {
       // Runway fashion: house members stage toward booked shows; designers
@@ -3541,7 +3555,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_EXPLORE: {
       // Exploration: venture into the wilds, search, discover. Hunters
@@ -3557,7 +3571,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody explores drunk well
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_INVENT: {
       // Invention: research blueprints at the workshop. Crafters with
@@ -3574,7 +3588,7 @@ case ACT_COMPETE: {
         else if (hurt) s -= 30;
         else if (weary) s -= 25;
         if (drunk) s -= 20;
-        return s;
+        return s + goalBoost;
       }
       if ((v.affordableCount ?? 0) <= 0) return 4; // no materials, no research
       let s = 22 + Math.min((v.craftingLevel ?? 1) * 0.4, 14);
@@ -3587,7 +3601,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody invents drunk well
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_PHILOSOPHIZE: {
       // Philosophy: contemplate at the academy, gain wisdom, join debates.
@@ -3607,7 +3621,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody philosophizes drunk well
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_LAWYER: {
       // Law: lawyers take cases for accused citizens. A human lawyer seeks
@@ -3627,7 +3641,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20; // nobody argues drunk well
-      return s;
+      return s + goalBoost;
     }
     case ACT_SURGEON: {
       // Surgery: surgeons operate on the severely ill and injured. A human
@@ -3643,7 +3657,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 40; // nobody operates drunk
-      return s;
+      return s + goalBoost;
     }
     case ACT_CONSTRUCT: {
       // Construction: builders raise the kingdom's real buildings. A human
@@ -3661,7 +3675,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_TEAMPLAY: {
       // Team leagues: citizens play for real teams in real seasons. A human
@@ -3682,7 +3696,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20;
-      return s;
+      return s + goalBoost;
     }
     case ACT_ENGINEER: {
       // Infrastructure: engineers build the kingdom's real bridges, roads,
@@ -3702,7 +3716,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_OBSERVE: {
       // Astronomy: astronomers watch the night sky from the observatory and
@@ -3720,7 +3734,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_CHART: {
       // Cartography: cartographers draft real maps at the map shop from
@@ -3737,7 +3751,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_MAPGUILD: {
       // Guild hall sessions: members in good standing attend. Masters run
@@ -3754,7 +3768,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_REPORT: {
       // Journalism: reporters file real stories from real events at the
@@ -3773,7 +3787,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_PRESSGUILD: {
       // Press association hall sessions: members in good standing attend.
@@ -3792,7 +3806,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_BANKGUILD: {
       // Bankers'-association hall sessions: members in good standing attend.
@@ -3810,7 +3824,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_INSUREGUILD: {
       // Underwriters'-association hall sessions: members in good standing attend.
@@ -3827,7 +3841,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_LAWGUILD: {
       // Bar-association hall sessions: members in good standing attend.
@@ -3844,7 +3858,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_DIPLOCORPS: {
       // Diplomatic-corps hall sessions: members in good standing attend.
@@ -3862,7 +3876,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_TRADEGUILD: {
       // Merchants'-association hall sessions: members in good standing attend.
@@ -3881,7 +3895,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_DIGGUILD: {
       // Excavators' Guild hall sessions: members in good standing attend.
@@ -3899,7 +3913,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_STAGEGUILD: {
       // Players' Guild hall sessions: members in good standing attend.
@@ -3917,7 +3931,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_SPORTSGUILD: {
       // Athletes' Guild hall sessions: members in good standing attend.
@@ -3935,7 +3949,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_COOKGUILD: {
       // Chefs' Guild hall sessions: members in good standing attend.
@@ -3953,7 +3967,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_WEAVERGUILD: {
       // Weavers' Guild hall sessions: members in good standing attend.
@@ -3971,7 +3985,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_MUSICGUILD: {
       // Minstrels' Guild hall sessions: members in good standing attend.
@@ -3989,7 +4003,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_ARTGUILD: {
       // Artists' Guild hall sessions: members in good standing attend.
@@ -4007,7 +4021,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_LIBGUILD: {
       // Librarians' Guild hall sessions: members in good standing attend.
@@ -4025,7 +4039,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_OBSGUILD: {
       // Astronomers' Guild hall sessions: members in good standing attend.
@@ -4043,7 +4057,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_SPYGUILD: {
       // Shadow-guild hall sessions: members in good standing attend.
@@ -4061,7 +4075,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 20;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_BANKERWORK: {
       // Banking: bankers serve real customers at the branch — processing
@@ -4077,7 +4091,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 40; // drunk bankers are a liability
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_INSURERWORK: {
       // Insurance: insurers sell real policies and settle real claims at
@@ -4093,7 +4107,7 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       if (drunk) s -= 40; // drunk insurers are a liability
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_SCIENCE: {
       // Science: scientists run real experiments in the kingdom lab. A human
@@ -4112,7 +4126,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (drunk) s -= 20;
-      return s;
+      return s + goalBoost;
     }
     case ACT_RC: {
       // Runecrafting: craft essence into runes for XP and coin. No essence
@@ -4130,7 +4144,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_SMELT: {
       // Smelting: turn ore into bars for XP and coin. No ore anywhere, no
@@ -4146,7 +4160,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_CRAFT: {
       // Crafting: cut uncut gems for XP and coin. No gems anywhere, no
@@ -4163,7 +4177,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_COOK: {
       // Cooking: turn raw food into cooked food for XP, coin, and healing.
@@ -4181,7 +4195,7 @@ case ACT_COMPETE: {
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
       if (mood < 20) s -= 8;
-      return s;
+      return s + goalBoost;
     }
     case ACT_HERB: {
       // Herblore: clean herbs and mix potions for XP and coin. No herbs
@@ -4202,7 +4216,7 @@ case ACT_COMPETE: {
       // Kingdom resource profile (phase 3): gather what the kingdom is rich
       // in. Tie-breaker scale — personality and needs still dominate.
       s += profileWorkBonus(snap.kingdomId, ACT_HERB);
-      return s;
+      return s + goalBoost;
     }
     case ACT_SOCIAL: {
       let s = 18 + sociable * 22;
@@ -4225,7 +4239,7 @@ case ACT_COMPETE: {
       else if (repTier === "disliked") s -= 4;
       else if (repTier === "notorious") s -= 8;
       else if (repTier === "infamous") s -= 12;
-      return s;
+      return s + goalBoost;
     }
     case "guard_patrol":
     case "merchant_tend":
@@ -4239,7 +4253,7 @@ case ACT_COMPETE: {
       if (criticalHp || exhausted) s -= 70; // critical needs beat duty
       else if (hurt) s -= 20;
       else if (weary) s -= 30;
-      return s;
+      return s + goalBoost;
     }
     case ACT_TITHE_DUTY: {
       // Blood tithe collection duty: Morytanian guards/collectors walk the
@@ -4257,7 +4271,7 @@ case ACT_COMPETE: {
       if (criticalHp || exhausted) s -= 70; // critical needs beat duty
       else if (hurt) s -= 20;
       else if (weary) s -= 30;
-      return s;
+      return s + goalBoost;
     }
     case ACT_PAY_TITHE: {
       // Pay the blood tithe: travel to Sarev's tithe office and clear the
@@ -4280,7 +4294,7 @@ case ACT_COMPETE: {
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 25;
       else if (weary) s -= 20;
-      return s;
+      return s + goalBoost;
     }
     case ACT_CARAVAN: {
       // Caravan duty: the citizen is walking a visible trade caravan — this
@@ -4293,18 +4307,18 @@ case ACT_COMPETE: {
       if (criticalHp || exhausted) s -= 70; // critical needs beat duty
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
-      return s;
+      return s + goalBoost;
     }
     case "courtier_attend":
     case "leisure_stroll": {
       let s = 40 + sociable * 15;
       if (criticalHp || exhausted) s -= 70;
-      return s;
+      return s + goalBoost;
     }
     case "refugee_flight": {
       let s = 55;
       if (exhausted) s -= 40;
-      return s;
+      return s + goalBoost;
     }
     case ACT_MINE: {
       // Mining: ore for the smiths, coins for the miner. Industrious
@@ -4324,7 +4338,7 @@ case ACT_COMPETE: {
       // in. Tie-breaker scale — personality and needs still dominate.
       s += profileWorkBonus(snap.kingdomId, ACT_MINE);
       if (snap.here === "rock") s += 25; // already at the rocks: keep working
-      return s;
+      return s + goalBoost;
     }
     case ACT_CHOP: {
       // Woodcutting: logs for the fires, coins for the cutter. Industrious
@@ -4347,7 +4361,7 @@ case ACT_COMPETE: {
       // in. Tie-breaker scale — personality and needs still dominate.
       s += profileWorkBonus(snap.kingdomId, ACT_CHOP);
       if (snap.here === "tree") s += 25; // already at the trees: keep working
-      return s;
+      return s + goalBoost;
     }
     case ACT_FISH: {
       // Fishing: nets at the dock, real fish for the cook fire and the
@@ -4379,7 +4393,7 @@ case ACT_COMPETE: {
       // in fish. Tie-breaker scale — personality and needs still dominate.
       s += profileWorkBonus(snap.kingdomId, ACT_FISH);
       if (snap.here === "fish") s += 25; // already at the water: keep fishing
-      return s;
+      return s + goalBoost;
     }
     case ACT_WILD_GATHER: {
       // Wilderness gathering: rich rocks and timber for the brave — the
@@ -4404,10 +4418,10 @@ case ACT_COMPETE: {
       if (criticalHp || exhausted) s -= 70;
       else if (hurt) s -= 30;
       else if (weary) s -= 25;
-      return s;
+      return s + goalBoost;
     }
     default:
-      return 30; // unknown future activity: neutral, never breaks
+      return 30 + goalBoost; // unknown future activity: neutral, never breaks
   }
 }
 
