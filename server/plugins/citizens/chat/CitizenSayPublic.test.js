@@ -4,7 +4,7 @@
 const assert = require("node:assert/strict");
 const {
   sayPublic,
-  setWorld,
+  setNearbyResolver,
   displayNameOf,
   isRealPlayer,
   stripSelfNamePrefix,
@@ -144,13 +144,16 @@ run("angle brackets stripped", () => {
   assert.equal(r.sent[0].message, "hi img=5 there");
 });
 
-// 8. Chat-box throttle: second line within 8s => overhead only, returns false.
-run("chat-box throttled per citizen, overhead still fires", () => {
+// 8. Chat-box throttle: second line within 8s => fully silent, returns false.
+// Throttled speech shows NOTHING (no overhead either) — overhead-without-
+// chatbox confused players (bubbles visible but chatbox empty), so the
+// module now keeps overhead and chatbox in sync: throttled = silent.
+run("chat-box throttled per citizen: fully silent, returns false", () => {
   const r = makeRecipient();
   const c = makeCitizen({ username: "Chatty", locals: [r] });
   assert.equal(sayPublic(c.player, "one"), true);
-  assert.equal(sayPublic(c.player, "two"), false); // throttled: no box
-  assert.deepEqual(c.forced, ["one", "two"]); // overhead both times
+  assert.equal(sayPublic(c.player, "two"), false); // throttled: silence
+  assert.deepEqual(c.forced, ["one"]); // no overhead while throttled
   assert.equal(r.sent.length, 1);
 });
 
@@ -338,7 +341,7 @@ run("chunking: continuations refresh throttle, new message can't interleave", ()
   );
 });
 
-run("chunking: throttled utterance still shows all chunks as overhead", () => {
+run("chunking: throttled utterance is fully silent (no overhead)", () => {
   setChunkScheduler((fn) => fn());
   const r = makeRecipient();
   const c = makeCitizen({ username: "Slow", locals: [r] });
@@ -347,9 +350,10 @@ run("chunking: throttled utterance still shows all chunks as overhead", () => {
   const text = "beta ".repeat(30);
   assert.equal(sayPublic(c.player, text), false); // throttled
   assert.equal(r.sent.length, 1, "box stays quiet while throttled");
-  assert.ok(
-    c.forced.length > forcedBefore + 1,
-    "all chunks still show as overhead in turn"
+  assert.equal(
+    c.forced.length,
+    forcedBefore,
+    "throttled speech shows nothing, not even overhead"
   );
 });
 
@@ -599,15 +603,41 @@ console.log("ALL VOICE-BACKSTOP TESTS DONE");
 // it with World.getNearbyPlayersForUpdate (bucket-based), mirroring
 // llm-gateway/Mouth.js. Reading only the local list was Jon's bug: chatter
 // reached overhead (rendered through the observer's own sync) but never the
-// chat box.
+// chat box. The seam for injecting this is setNearbyResolver (the same seam
+// the plugin wires in Citizens.plugin.js); the tests wire bucket-shaped
+// resolvers directly.
 
-function makeWorld(nearby = []) {
-  return { getNearbyPlayersForUpdate: (citizen) => nearby.map((n) => n.player ?? n) };
+// Mirrors the plugin's World-aware resolver shape: locals first, then a
+// bucket lookup, each in its own try/catch so one broken source falls back
+// to the other.
+function makeWorldAwareResolver(bucketFn) {
+  return (citizen) => {
+    const seen = new Set();
+    const out = [];
+    const push = (p) => {
+      if (!p || seen.has(p)) return;
+      seen.add(p);
+      out.push(p);
+    };
+    try {
+      for (const p of citizen.getLocalPlayers?.() ?? []) push(p);
+    } catch {
+      // fall through
+    }
+    try {
+      for (const p of bucketFn(citizen) ?? []) {
+        if (!seen.has(p)) push(p);
+      }
+    } catch {
+      // Bucket lookup failing doesn't break the symmetric path.
+    }
+    return out;
+  };
 }
 
-run("recipients: empty local list + World wired => chat box reached", () => {
+run("recipients: empty local list + World-aware resolver => chat box reached", () => {
   const r = makeRecipient();
-  setWorld(makeWorld([r]));
+  setNearbyResolver(makeWorldAwareResolver(() => [r.player]));
   const c = makeCitizen({ username: "BucketBob", locals: [] }); // like a real bot
   const ok = sayPublic(c.player, "hello there");
   assert.equal(ok, true);
@@ -616,8 +646,8 @@ run("recipients: empty local list + World wired => chat box reached", () => {
   assert.equal(r.sent[0].message, "hello there");
 });
 
-run("recipients: unwired World + empty locals => overhead only (old bug mode)", () => {
-  // No setWorld: resolution falls back to the citizen's own local list.
+run("recipients: default resolver + empty locals => overhead only (old bug mode)", () => {
+  // No setNearbyResolver: the default resolver reads the citizen's own local list.
   const c = makeCitizen({ username: "Lonely", locals: [] });
   assert.equal(sayPublic(c.player, "hello?"), false);
   assert.deepEqual(c.forced, ["hello?"]);
@@ -625,7 +655,7 @@ run("recipients: unwired World + empty locals => overhead only (old bug mode)", 
 
 run("recipients: player in both sources gets exactly one line", () => {
   const r = makeRecipient();
-  setWorld(makeWorld([r]));
+  setNearbyResolver(makeWorldAwareResolver(() => [r.player]));
   const c = makeCitizen({ username: "Dedup", locals: [r] });
   sayPublic(c.player, "hi");
   assert.equal(r.sent.length, 1);
@@ -636,25 +666,29 @@ run("recipients: bots from the bucket list never get chat-box lines", () => {
   const bot = makeRecipient({ username: "OtherBot", index: 9 });
   bot.player.isPlayerBot = () => true;
   bot.player.getHostAddress = () => "bot";
-  setWorld(makeWorld([bot, real]));
+  setNearbyResolver(makeWorldAwareResolver(() => [bot.player, real.player]));
   const c = makeCitizen({ username: "Filter", locals: [] });
   assert.equal(sayPublic(c.player, "hi all"), true);
   assert.equal(bot.sent.length, 0);
   assert.equal(real.sent.length, 1);
 });
 
-run("recipients: broken World read falls back to the local list", () => {
+run("recipients: broken bucket read falls back to the local list", () => {
   const r = makeRecipient();
-  setWorld({ getNearbyPlayersForUpdate: () => { throw new Error("boom"); } });
+  setNearbyResolver(
+    makeWorldAwareResolver(() => {
+      throw new Error("boom");
+    })
+  );
   const c = makeCitizen({ username: "Fallback", locals: [r] });
   assert.equal(sayPublic(c.player, "hi"), true);
   assert.equal(r.sent.length, 1);
 });
 
-run("recipients: setWorld(null) unwires the bucket source again", () => {
+run("recipients: symmetric-only resolver unwires the bucket source again", () => {
   const r = makeRecipient();
-  setWorld(makeWorld([r]));
-  setWorld(null);
+  setNearbyResolver(makeWorldAwareResolver(() => [r.player]));
+  setNearbyResolver((citizen) => citizen.getLocalPlayers?.() ?? []); // back to default shape
   const c = makeCitizen({ username: "Unwired", locals: [] });
   assert.equal(sayPublic(c.player, "hi"), false); // overhead only
   assert.deepEqual(c.forced, ["hi"]);
@@ -663,7 +697,7 @@ run("recipients: setWorld(null) unwires the bucket source again", () => {
 run("recipients: privacy still respected on bucket-sourced recipients", () => {
   const blocked = makeRecipient({ username: "Busy", index: 8, canReceive: false });
   const open = makeRecipient({ username: "Cofy", index: 7, canReceive: true });
-  setWorld(makeWorld([blocked, open]));
+  setNearbyResolver(makeWorldAwareResolver(() => [blocked.player, open.player]));
   const c = makeCitizen({ username: "Private", locals: [] });
   sayPublic(c.player, "hi");
   assert.equal(blocked.sent.length, 0);
