@@ -112,8 +112,11 @@ function journalTrip(record, dest) {
 }
 
 /** Settle at the destination: personal spot jitter (destack law — never
- *  N citizens on one tile), destination cleared so the next tick re-picks. */
-function settle(record, dest) {
+ *  N citizens on one tile), destination cleared so the next tick re-picks.
+ *  Stamps record.arrived so the brain can seed arrival behavior when the
+ *  citizen materializes (whereabouts slice 2): kind + tile + time, consumed
+ *  once by the spawn hook. */
+function settle(record, dest, now) {
   let x = dest.x;
   let y = dest.y;
   try {
@@ -126,6 +129,18 @@ function settle(record, dest) {
     // jitter is cosmetic
   }
   record.position = { x: Math.round(x), y: Math.round(y), z: dest.z ?? 0 };
+  try {
+    record.arrived = {
+      kind: dest.kind ?? null,
+      placeId: dest.placeId ?? null,
+      x: record.position.x,
+      y: record.position.y,
+      z: record.position.z,
+      at: Number.isFinite(now) ? now : Date.now(),
+    };
+  } catch {
+    // the stamp is advisory — arrival never blocks settling
+  }
   record.dest = null;
   record.enRoute = null;
 }
@@ -135,7 +150,7 @@ function advance(record, dest, now) {
   const p = record.position;
   const dist = cheby(p.x, p.y, dest.x, dest.y);
   if (dist <= ARRIVE_RADIUS) {
-    settle(record, dest);
+    settle(record, dest, now);
     return;
   }
   // Resume an in-progress long haul.
@@ -153,7 +168,7 @@ function advance(record, dest, now) {
   record.enRoute = null;
   if (dist <= WALK_TILES_PER_TICK) {
     // Human walking speed covers this inside one slow tick — arrive now.
-    settle(record, dest);
+    settle(record, dest, now);
     return;
   }
   // Long haul: interpolate at walking speed across multiple slow ticks, so

@@ -135,4 +135,26 @@ function baseRecord(name, overrides = {}) {
   console.log("ok 9 — hurt citizens head home");
 }
 
+// 10. Arrival stamps record.arrived for slice-2 brain seeding (kind + tile
+// + time), and the stamp is consumed where the citizen settled.
+{
+  const rec = baseRecord("Walker10");
+  rec.dest = { x: 3250, y: 3200, z: 0, placeId: "test:tree-1", kind: "tree", reason: "test" };
+  tickWhereabouts(fakeDirector([rec]), NOW);
+  assert(rec.arrived, "arrival marker not stamped on settle");
+  assert.strictEqual(rec.arrived.kind, "tree", `wrong kind: ${rec.arrived.kind}`);
+  assert.strictEqual(rec.arrived.placeId, "test:tree-1", `wrong placeId: ${rec.arrived.placeId}`);
+  assert.strictEqual(rec.arrived.z, 0, "wrong plane on stamp");
+  assert(
+    Number.isFinite(rec.arrived.at) && Math.abs(rec.arrived.at - NOW) < 60000,
+    `bad stamp time: ${rec.arrived.at}`
+  );
+  const d = Math.max(
+    Math.abs(rec.arrived.x - rec.position.x),
+    Math.abs(rec.arrived.y - rec.position.y)
+  );
+  assert.strictEqual(d, 0, "stamp tile != settled tile");
+  console.log("ok 10 — arrival stamps record.arrived on settle");
+}
+
 console.log("CitizenWhereaboutsLife.test: all passed");

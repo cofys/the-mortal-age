@@ -59,6 +59,7 @@ const { dropNeeds } = require("../brain/CitizenNeeds");
 const {
   CRITICAL_HP,
   CRITICAL_ENERGY,
+  queueDirectedPick,
 } = require("../brain/CitizenDecisions");
 const { backgroundStep } = require("../lib/CitizenBackground");
 const { maybeSocialize, maybeGreetPlayer } = require("../chat/CitizenSocial");
@@ -2442,6 +2443,27 @@ class CitizenDirector {
     }
     bot.setPlayerBot?.(true);
     bot.setAttribute?.(ATTR_SKIP_PERSISTENCE, true);
+
+    // Whereabouts slice 2 (Jon 2026-10-13): brain-side arrival behavior. A
+    // citizen who materializes where the data tier delivered them seeds the
+    // matching activity (gather place -> chop/mine/fish, square/market ->
+    // idle-social, bank -> bank run) instead of a blank re-pick — the human
+    // player model's "main activity" after the arrival. Needs utility still
+    // wins: hurt/weary citizens get nothing seeded (the needs/interrupt
+    // engine owns them). The marker is consumed once either way.
+    try {
+      const { arrivalActivityFor } = require("../brain/CitizenArrival");
+      const activityId = arrivalActivityFor(record);
+      record.arrived = null;
+      if (activityId) {
+        queueDirectedPick(record.username, activityId);
+      }
+    } catch (error) {
+      this.log("arrival seed failed", {
+        citizen: record.username,
+        error: String(error?.message ?? error),
+      });
+    }
 
     // Jon 2026-10-13: female names → female character model, male names → male.
     // Appearance.GENDER: 0 = male, 1 = female.
