@@ -37,18 +37,21 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-entertainment.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 /** Test seam — clear in-memory state. */
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- tuning ------------------------------------------------------------------
@@ -114,6 +117,56 @@ function arena() {
 let cache = null;
 let dirty = false;
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-entertainment.json file is the
+// fallback (and stays fully written). storeEnabled is flipped off by the
+// test seams so unit tests stay hermetic.
+const STORE_BLOCK = "entertainment";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's entertainment slice into their account block. */
+function syncStore(username) {
+  if (!storeEnabled || !cache) return;
+  const key = normalizeName(username);
+  if (!key) return;
+  try {
+    CitizenAccountStore.setBlock(username, STORE_BLOCK, {
+      drinker: cache.drinkers[key] ?? null,
+      bard: cache.bards[key] ?? null,
+    });
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
+/** Overlay account blocks over the old-file registries (bulk boot load). */
+function overlayStore(st) {
+  if (!storeEnabled || !st) return;
+  const keys = new Set([...Object.keys(st.drinkers), ...Object.keys(st.bards)]);
+  for (const key of keys) {
+    const block = storeBlockFor(key);
+    if (!block) continue;
+    if (!st.drinkers[key] && block.drinker && typeof block.drinker === "object") {
+      st.drinkers[key] = block.drinker;
+    }
+    if (!st.bards[key] && block.bard && typeof block.bard === "object") {
+      st.bards[key] = block.bard;
+    }
+  }
+}
+
 function blank() {
   return {
     // username -> { drinks: n, drunkenness: 0..100, lastDrinkAt: ms }
@@ -141,6 +194,7 @@ function load() {
     if (!raw.bards || typeof raw.bards !== "object") raw.bards = {};
     if (!Array.isArray(raw.fights)) raw.fights = [];
     if (!Array.isArray(raw.shows)) raw.shows = [];
+    overlayStore(raw);
     return raw;
   } catch {
     return blank();
@@ -167,7 +221,13 @@ function save() {
 // --- drunkenness ---------------------------------------------------------------
 function drunkennessOf(username) {
   const key = normalizeName(username);
-  return data().drinkers[key]?.drunkenness ?? 0;
+  const d = data();
+  if (!d.drinkers[key]) {
+    // Dual-read: the account block may hold what the old registry lacks.
+    const block = storeBlockFor(username);
+    if (block && block.drinker && typeof block.drinker === "object") d.drinkers[key] = block.drinker;
+  }
+  return d.drinkers[key]?.drunkenness ?? 0;
 }
 
 function isDrunk(username) {
@@ -185,6 +245,7 @@ function soberUp(username, hoursElapsed) {
   if (!record || record.drunkenness <= 0) return;
   record.drunkenness = Math.max(0, record.drunkenness - hoursElapsed * DRUNK_DECAY_PER_HOUR);
   markDirty();
+  syncStore(username);
 }
 
 // --- drinks (honest coins) -------------------------------------------------------
@@ -278,12 +339,20 @@ function buyDrink(username, player) {
   }
   const key = normalizeName(username);
   const d = data();
-  if (!d.drinkers[key]) d.drinkers[key] = { drinks: 0, drunkenness: 0, lastDrinkAt: 0 };
+  if (!d.drinkers[key]) {
+    // Dual-read: the account block wins when present.
+    const block = storeBlockFor(username);
+    d.drinkers[key] =
+      block && block.drinker && typeof block.drinker === "object"
+        ? block.drinker
+        : { drinks: 0, drunkenness: 0, lastDrinkAt: 0 };
+  }
   const record = d.drinkers[key];
   record.drinks += 1;
   record.drunkenness = Math.min(100, record.drunkenness + DRUNK_PER_DRINK);
   record.lastDrinkAt = Date.now();
   markDirty();
+  syncStore(username);
 
   try {
     const { addMood } = require("../brain/CitizenNeeds");
@@ -331,15 +400,28 @@ function playDice(username, player, bet, rng) {
 function recordPerformance(bardUsername, nowMs) {
   const key = normalizeName(bardUsername);
   const d = data();
-  if (!d.bards[key]) d.bards[key] = { lastPerformanceAt: 0, performances: 0 };
+  if (!d.bards[key]) {
+    // Dual-read: the account block wins when present.
+    const block = storeBlockFor(bardUsername);
+    d.bards[key] =
+      block && block.bard && typeof block.bard === "object"
+        ? block.bard
+        : { lastPerformanceAt: 0, performances: 0 };
+  }
   d.bards[key].lastPerformanceAt = nowMs;
   d.bards[key].performances += 1;
   markDirty();
+  syncStore(bardUsername);
 }
 
 function lastPerformanceAt(bardUsername) {
   const key = normalizeName(bardUsername);
-  return data().bards[key]?.lastPerformanceAt ?? 0;
+  const d = data();
+  if (!d.bards[key]) {
+    const block = storeBlockFor(bardUsername);
+    if (block && block.bard && typeof block.bard === "object") d.bards[key] = block.bard;
+  }
+  return d.bards[key]?.lastPerformanceAt ?? 0;
 }
 
 /**

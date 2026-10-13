@@ -41,12 +41,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-crime.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- crime catalog -----------------------------------------------------------
@@ -106,6 +108,52 @@ const FINE_DEBT_CAP = 2000; // offline fine debt never exceeds this
 let cache = null; // { crimes: { [norm]: [record] }, records: { [norm]: rec }, prisons: { [kingdomId]: prison } }
 let dirty = false;
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-crime.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "crime";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's crime slice into their account block. */
+function syncStore(username) {
+  if (!storeEnabled || !cache) return;
+  const norm = normalizeName(username);
+  if (!norm) return;
+  try {
+    CitizenAccountStore.setBlock(username, STORE_BLOCK, {
+      record: cache.records[norm] ?? null,
+      crimes: cache.crimes[norm] ?? [],
+    });
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
+/** Overlay account blocks over the old-file registry (bulk boot load). */
+function overlayStore() {
+  if (!storeEnabled || !cache) return;
+  const keys = new Set([...Object.keys(cache.records), ...Object.keys(cache.crimes)]);
+  for (const key of keys) {
+    const block = storeBlockFor(key);
+    if (!block) continue;
+    if (block.record && typeof block.record === "object") cache.records[key] = block.record;
+    if (Array.isArray(block.crimes)) cache.crimes[key] = block.crimes;
+  }
+}
+
 function blankState() {
   return {
     crimes: Object.create(null),
@@ -145,6 +193,7 @@ function load() {
     // Corrupt save — start clean rather than crash the tick.
     cache = blankState();
   }
+  overlayStore();
   return cache;
 }
 
@@ -171,6 +220,7 @@ function markDirty() {
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- crime records -----------------------------------------------------------
@@ -178,14 +228,25 @@ function resetForTests() {
 function recordOf(username) {
   const st = load();
   const norm = normalizeName(username);
-  if (!st.records[norm]) st.records[norm] = blankRecord(norm);
+  if (!st.records[norm]) {
+    // Dual-read: the account block wins when present.
+    const block = storeBlockFor(username);
+    st.records[norm] =
+      block && block.record && typeof block.record === "object" ? block.record : blankRecord(norm);
+    if (block && Array.isArray(block.crimes) && !st.crimes[norm]) st.crimes[norm] = block.crimes;
+  }
   return st.records[norm];
 }
 
 /** All recorded offenses for a citizen, newest last. */
 function crimeHistory(username) {
   const st = load();
-  return (st.crimes[normalizeName(username)] ?? []).slice();
+  const norm = normalizeName(username);
+  if (!st.crimes[norm]) {
+    const block = storeBlockFor(username);
+    if (block && Array.isArray(block.crimes)) st.crimes[norm] = block.crimes;
+  }
+  return (st.crimes[norm] ?? []).slice();
 }
 
 function convictionCount(username) {
@@ -218,6 +279,7 @@ function reportOffense(username, kind, opts = {}) {
   const r = recordOf(username);
   r.lastCrimeAt = now;
   markDirty();
+  syncStore(username);
   // The kingdom court posts a real bounty for reported theft/assault
   // (Jobs/Bounties phase 3) — treasury-escrowed, collectable by contract
   // hunters. Lazy + fail-safe: citizens must not hard-depend on kingdoms.
@@ -364,6 +426,7 @@ function imprison(username, kingdomId, untilMs, crimeKind, display) {
   rec.jailedUntil = untilMs;
   rec.jailedFor = crimeKind ?? null;
   markDirty();
+  syncStore(username);
   return true;
 }
 
@@ -387,6 +450,7 @@ function release(username) {
     rec.jailedUntil = 0;
     rec.jailedFor = null;
     markDirty();
+    syncStore(username);
   }
   if (held) markDirty();
   return held || !!rec?.jailed;
@@ -471,6 +535,7 @@ function applyFine(username, amount, player) {
     rec.fineDebt = Math.min(FINE_DEBT_CAP, rec.fineDebt + rest);
   }
   markDirty();
+  syncStore(username);
   return { paid, debted: rest };
 }
 
@@ -481,6 +546,7 @@ function exileCitizen(username, kingdomId, nowMs) {
   rec.exiledAt = nowMs ?? Date.now();
   rec.exiledFrom = kingdomId ?? null;
   markDirty();
+  syncStore(username);
   return true;
 }
 
@@ -493,6 +559,7 @@ function pardon(username) {
   rec.exiledAt = 0;
   rec.exiledFrom = null;
   markDirty();
+  syncStore(username);
   return true;
 }
 
@@ -519,6 +586,7 @@ function convict(username, kind, nowMs) {
     sentence = { type: "fine", fine, jailDays: 0 };
   }
   markDirty();
+  syncStore(username);
   return sentence;
 }
 
