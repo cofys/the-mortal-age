@@ -4555,9 +4555,14 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
     return null;
   }
   const username = usernameOf(player);
-  // TEMP-DIAG: scorer diagnostic logging (remove after debugging)
+  // NOTE: ambientChatter is NOT called here — pick() has no brain in scope
+  // (it receives only player/candidates/nowMs from the registry). Calling
+  // ambientChatter(player, brain, ...) threw ReferenceError on every pick,
+  // silently disabling the entire utility scorer (the registry catches the
+  // throw and falls back to sticky-random, pinning citizens on their spawn
+  // activity forever). Chatter already runs in decisionTick with the real
+  // brain. Jon 2026-10-13: 25-40/60 citizens stuck on safetynet_wander.
   pruneState(nowMs);
-  ambientChatter(player, brain, nowMs);
 
   // Slot-capacity lifecycle: a new pick means the previous activity ended,
   // so release any spot claim the citizen still held — the freed slot goes

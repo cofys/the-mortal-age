@@ -235,10 +235,29 @@ function createCitizenExploreAction(spec, world) {
           return "running";
         }
         if (nowMs - state.lastSearchAt < SEARCH_COOLDOWN_MS) {
-          return "running"; // pacing — searching takes time
+          // Pacing — searching takes time, but a living searcher paces:
+          // small steps, looking around, not a statue. Jon 2026-10-13:
+          // 40s of motionless standing read as broken.
+          try {
+            const ptx = state.paceTarget?.x, pty = state.paceTarget?.y;
+            const pdx = (ptx ?? px) - px, pdy = (pty ?? py) - py;
+            if (ptx === undefined || Math.sqrt(pdx * pdx + pdy * pdy) <= 1.5) {
+              // Pick a new nearby spot to pace to (2-4 tiles, any direction).
+              const ang = state.rng() * Math.PI * 2;
+              const dist = 2 + state.rng() * 2;
+              state.paceTarget = {
+                x: Math.round(px + Math.cos(ang) * dist),
+                y: Math.round(py + Math.sin(ang) * dist),
+              };
+            } else {
+              requestMovement(player, ptx, pty);
+            }
+          } catch { /* pacing never breaks the search */ }
+          return "running";
         }
         state.lastSearchAt = nowMs;
         state.searchesDone++;
+        state.paceTarget = null; // re-pick a pacing spot after each search
 
         // Danger first: the wilds are dangerous.
         if (state.rng() < dangerChance(player)) {
