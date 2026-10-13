@@ -501,8 +501,12 @@ function createBotActivityRegistry(options = {}) {
       if (own) {
         // A bot going back to the activity it was given: only its failure cooldown
         // holds it back (capacity and `manual` are about handing out new activities).
+        // If own is blocked/missing, fall through to the scorer instead of returning
+        // null — this lets citizens recover from failed activities via utility scoring.
         const activity = byId.get(own) ?? null;
-        return activity && !isBlocked(player, own, nowMs) ? activity : null;
+        if (activity && !isBlocked(player, own, nowMs)) {
+          return activity;
+        }
       }
       const previousId = lastActivityByPlayer.get(player);
       const candidates = available(player, nowMs).filter(
