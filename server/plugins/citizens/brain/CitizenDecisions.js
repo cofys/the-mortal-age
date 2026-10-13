@@ -4919,12 +4919,27 @@ function ambientChatter(player, brain, nowMs) {
   }
 }
 
+// TEMP-DIAG 2026-10-13: prove decisionTick fires live (remove after verification).
+const decisionTickAliveLogged = new Set();
+
 function decisionTick(args) {
   const { player, brain, nowMs = Date.now() } = args ?? {};
   if (!player || !brain || !isCitizen(player)) {
     return;
   }
   const username = usernameOf(player);
+  // TEMP-DIAG: one log line per citizen on their first gate — proves the
+  // world.decisionTick hook is installed and firing on the live server.
+  if (username && !decisionTickAliveLogged.has(username)) {
+    decisionTickAliveLogged.add(username);
+    try {
+      const frames = brain?.frames ?? [];
+      const cur = frames[frames.length - 1]?.behaviour?.id ?? "(none)";
+      brain?.world?.log?.("citizen_decision_tick_alive", { username, currentActivity: cur });
+    } catch {
+      // Diagnostic never breaks the tick.
+    }
+  }
   pruneState(nowMs);
   ambientChatter(player, brain, nowMs);
   // Session intents tick BEFORE the stagger gate: the first call after
@@ -4998,6 +5013,7 @@ function resetForTests() {
   directedPick.clear();
   lastInterruptAt.clear();
   macroCounts.clear();
+  decisionTickAliveLogged.clear();
   lastPruneAt = 0;
 }
 

@@ -207,7 +207,11 @@ run("variety guard blocks the same pick 3x in a row", () => {
 run("epsilon-greedy sometimes picks non-best", () => {
   const p = mockPlayer({ freeSlots: 28 });
   setNeeds(p.getUsername(), { hp: 100, energy: 90, mood: 70 });
-  const cands = candidates("citizen_routine", "tavern_social", "citizen_bank");
+  // Time-independent candidate set: tavern_social has an evening bonus
+  // (hour>=17), which made citizen_routine not-the-best during evening
+  // hours and flaked this test. citizen_bank/citizen_rest have no
+  // time-dependent scores, so routine is unambiguously the greedy best.
+  const cands = candidates("citizen_routine", "citizen_bank", "citizen_rest");
   const picked = pick(p, cands, Date.now(), forceEpsilon);
   assert.notEqual(picked.id, "citizen_routine", "forced epsilon must avoid the greedy pick");
 });
@@ -649,20 +653,21 @@ run("macro re-decide is reachable even when the margin path declines", () => {
   // Weary citizen on wander: work scores tank, wander (12) is the static
   // best == current, so the margin path declines every gate. The macro
   // branch (every 10th gate) must still run pick() — previously it sat
-  // below the best===current early return and was dead code.
+  // below the best===current early return and was dead code. (The macro
+  // may itself return a target via epsilon; what matters is that pick()
+  // ran, i.e. a full scored diag exists.)
   const p = mockPlayer({ role: "commoner", coins: 500, traits: [] });
   setNeeds(p.getUsername(), { hp: 100, energy: 5, mood: 80 });
   const ids = ["safetynet_wander", "citizen_chop", "citizen_mine"];
   const holder = mockBrain("safetynet_wander", ids);
   const now0 = Date.now();
-  let firedMargin = false;
   for (let g = 0; g < 10; g++) {
-    const t = _interruptTarget(p, holder.brain, now0 + g * 35000);
-    if (t) { firedMargin = true; break; }
+    _interruptTarget(p, holder.brain, now0 + g * 35000);
   }
-  assert.ok(!firedMargin, "margin path should decline for the weary wanderer");
   const diag = getPickDiag(p.getUsername());
   assert.ok(diag, "macro re-decide must have run pick() by the 10th gate (pickDiag stamped)");
+  assert.ok(!diag.directed, "macro pick must be a full scored pick, not a directed one");
+  assert.ok(diag.top.length > 0, "full pick must record its top scores");
 });
 
 run("directed picks stamp pickDiag (spawn/interrupt kicks are decisions too)", () => {
