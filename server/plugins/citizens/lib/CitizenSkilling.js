@@ -505,7 +505,12 @@ function pickLevelFlavor(name, skillId) {
 
 function tickXpDrip(director) {
   for (const record of director.roster.values()) {
-    if (!director.isOnline(record)) continue;
+    // Jon 2026-10-13: the XP drip is data-tier simulation for UNMATERIALIZED
+    // citizens. Materialized citizens are VISIBLE in the world — they must only
+    // gain XP through real visible actions (chopping, fishing, etc.), never
+    // through this invisible drip. Otherwise players watch citizens standing
+    // idle on safetynet_wander while their levels climb on paper.
+    if (director.isOnline(record)) continue;
     if (record.role !== "commoner") continue;
     const rng = agentRng(`skilldrip:${record.username}:${Date.now() >> 16}`);
     if (!chance(rng, DRIP_CHANCE)) continue;

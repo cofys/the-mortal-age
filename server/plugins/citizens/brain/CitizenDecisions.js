@@ -171,6 +171,13 @@ const ACT_FESTIVAL = "citizen_promote";
 const ACT_CURATE = "citizen_curate";
 const ACT_LIBRARIAN = "citizen_librarian";
 const ACT_DOCENT = "citizen_docent";
+// Safety-net fallback activities: these must score LOW so they're true
+// fallbacks, not steady states. A healthy citizen should always prefer real
+// work (chop/mine/fish/etc.) over wandering. Jon 2026-10-13: 40/59 live
+// citizens were stuck on safetynet_wander while standing idle.
+const ACT_SAFETYNET_WANDER = "safetynet_wander";
+const ACT_SAFETYNET_SOCIALIZE = "safetynet_socialize";
+const ACT_SAFETYNET_REST = "safetynet_rest";
 // Patch types the citizen_farm circuit works (mirrors CitizenFarm.js).
 const FARM_PATCH_TYPES = ["HERB", "ALLOTMENT", "FLOWER"];
 const ACT_SOCIAL = "tavern_social";
@@ -4485,6 +4492,18 @@ case ACT_COMPETE: {
       else if (weary) s -= 25;
       return s + goalBoost;
     }
+    case ACT_SAFETYNET_WANDER:
+    case ACT_SAFETYNET_SOCIALIZE:
+    case ACT_SAFETYNET_REST: {
+      // Safety net: true fallback, not a steady state. Scores low so any
+      // real work activity (chop/mine/fish/etc. at 36+) beats it for a
+      // healthy citizen. Weary/hurt citizens still land here because work
+      // activities penalize those states heavily. Jon 2026-10-13: citizens
+      // were standing idle on safetynet_wander at 30 (default) while work
+      // sat at 36 — too close, and wander won whenever work was briefly
+      // blocked or at capacity.
+      return 12 + goalBoost;
+    }
     default:
       return 30 + goalBoost; // unknown future activity: neutral, never breaks
   }
@@ -4900,6 +4919,9 @@ ACT_COMPETE,
   ACT_BANK,
   ACT_PRAYER,
   ACT_SOCIAL,
+  ACT_SAFETYNET_WANDER,
+  ACT_SAFETYNET_SOCIALIZE,
+  ACT_SAFETYNET_REST,
   CRITICAL_HP,
   CRITICAL_ENERGY,
   SWITCH_MARGIN,
