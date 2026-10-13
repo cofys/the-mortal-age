@@ -65,6 +65,14 @@ const HAGGLE_PCT_MAX = 15;
 const PITCH_RADIUS = 10; // tiles: sales pitches carry this far
 const PITCH_COOLDOWN_MS = 20 * 60 * 1000; // per merchant
 const PITCH_CHANCE = 0.25; // per eligible tick
+// Stall emotes are never fired in lockstep: when merchants materialize at
+// once (e.g. a player arriving), each one's setup/pack-up announcement is
+// deferred to their own deterministic moment inside the stagger window, and
+// the cluster dedupe keeps a nearby merchant from echoing the same emote.
+const SETUP_EMOTE_DELAY_MAX_MS = 90 * 1000; // per-merchant stagger window
+const CLOSE_EMOTE_DELAY_MAX_MS = 90 * 1000;
+const CHORUS_DEDUPE_RADIUS = 12; // tiles
+const CHORUS_DEDUPE_WINDOW_MS = 60 * 1000;
 
 // Stall spots: a ring of pitches around the market anchor so merchants
 // spread out deterministically instead of stacking on one tile.
@@ -116,11 +124,18 @@ const PITCH_LINES = Object.freeze([
   "Selling {ware}, priced to move!",
 ]);
 
+// Stall emote texts. Fired deferred + deduped (see tickPendingEmotes), never
+// synchronously at setup/close — that was the lockstep chorus.
+const SETUP_EMOTE = "*sets up their stall for the day*";
+const CLOSE_EMOTE = "*packs up the stall for the night*";
+
 // --- state (in-memory; re-derived on restart, idempotent) -----------------------
 
 const stallState = new Map(); // normalized citizen name -> { dateKey, spot, wares: [{id, name, price}] }
 const lastOfferAt = new Map(); // normalized citizen name -> ms
 const lastPitchAt = new Map(); // normalized citizen name -> ms
+const pendingEmotes = new Map(); // normalized citizen name -> { kind, line, atMs, record }
+const chorusLog = []; // [{ kind, x, y, z, atMs }] — recent public stall announcements
 
 // --- pure helpers (testable with plain node) ------------------------------------
 
@@ -176,6 +191,32 @@ function fillLine(line, vars) {
   return String(line).replace(/\{(\w+)\}/g, (_, k) =>
     vars[k] !== undefined ? String(vars[k]) : `{${k}}`
   );
+}
+
+/**
+ * Deterministic per-citizen emote stagger: hash (username, day, kind) into
+ * 0..maxMs. Every merchant gets their own moment inside the window, so a
+ * crowd materializing at once never announces in lockstep. Stable for the
+ * day, spreads across merchants. Pure: (username, dateKey, kind, maxMs) => ms.
+ */
+function emoteDelayMsFor(username, dateKey, kind, maxMs = SETUP_EMOTE_DELAY_MAX_MS) {
+  const rng = agentRng(
+    `marketstall:emote:${kind}:${String(username ?? "").toLowerCase()}:${dateKey}`
+  );
+  return Math.floor(rng() * (maxMs + 1));
+}
+
+/**
+ * Has a merchant near `tile` already announced this emote kind inside the
+ * dedupe window? Pure over the supplied log: (log, kind, tile, nowMs) => bool.
+ */
+function chorusAnnouncedRecently(log, kind, tile, nowMs) {
+  for (const e of log ?? []) {
+    if (e?.kind !== kind) continue;
+    if (nowMs - e.atMs > CHORUS_DEDUPE_WINDOW_MS) continue;
+    if (chebyshev(e, tile) <= CHORUS_DEDUPE_RADIUS) return true;
+  }
+  return false;
 }
 
 /**
@@ -260,6 +301,16 @@ function journalEvent(citizenName, text) {
     getJournal().log(citizenName, "trade", text);
   } catch {
     // Non-fatal.
+  }
+}
+
+/** One public stall emote on the sayPublic+citizenVoice path. Cosmetic, never throws. */
+function sayStallEmote(bot, line) {
+  try {
+    const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
+    sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: [line] }));
+  } catch {
+    // Cosmetic.
   }
 }
 
@@ -419,11 +470,16 @@ function setupStall(director, record, bot, todayKey, nowMs) {
     return false;
   }
   walkTo(director, bot, spot);
-  try {
-    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: ["*sets up their stall for the day*"] })); }
-  } catch {
-    // Cosmetic.
-  }
+  // Defer the announcement — never fire it synchronously here. Every
+  // merchant materializing in the same tick would chorus the identical
+  // emote; instead each one speaks at their own deterministic moment in
+  // the stagger window, and tickPendingEmotes dedupes nearby echoes.
+  pendingEmotes.set(name, {
+    kind: "stall-open",
+    line: SETUP_EMOTE,
+    atMs: nowMs + emoteDelayMsFor(record.username, todayKey, "stall-open"),
+    record,
+  });
   stallState.set(name, { dateKey: todayKey, spot, wares });
   journalEvent(
     record.username,
@@ -433,7 +489,7 @@ function setupStall(director, record, bot, todayKey, nowMs) {
 }
 
 /** Pack up for the night: clear the published wares, walk off the pitch. */
-function closeStall(director, record, bot) {
+function closeStall(director, record, bot, nowMs = Date.now()) {
   const name = normalizeName(record.username);
   try {
     bot.setAttribute?.(ATTR_MARKET_WARES, "");
@@ -442,11 +498,21 @@ function closeStall(director, record, bot) {
   }
   const anchor = marketTile(record.kingdomId);
   if (anchor) walkTo(director, bot, anchor);
-  try {
-    { const _cvp = bot.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {}; sayPublic(bot, voiceLine(voiceFor(_cvp), { plain: ["*packs up the stall for the night*"] })); }
-  } catch {
-    // Cosmetic.
-  }
+  // Same deferral as setup: every merchant closing on the same night tick
+  // would chorus the pack-up emote. Stagger + cluster dedupe instead.
+  pendingEmotes.set(name, {
+    kind: "stall-close",
+    line: CLOSE_EMOTE,
+    atMs:
+      nowMs +
+      emoteDelayMsFor(
+        record.username,
+        dateKeyFor(new Date(nowMs)),
+        "stall-close",
+        CLOSE_EMOTE_DELAY_MAX_MS
+      ),
+    record,
+  });
   stallState.delete(name);
   journalEvent(record.username, "Packed up the market stall for the night.");
   return true;
@@ -534,7 +600,7 @@ function tickMerchantStall(director, record, open, todayKey, nowMs) {
 
   if (!open) {
     // Night: pack up any open stall.
-    if (stallState.has(name)) closeStall(director, record, bot);
+    if (stallState.has(name)) closeStall(director, record, bot, nowMs);
     return;
   }
 
@@ -550,6 +616,46 @@ function tickMerchantStall(director, record, open, todayKey, nowMs) {
   // Stall is open for business: haggle offers and pitches.
   tickHaggleOffers(director, record, bot, name, nowMs);
   tickSalesPitch(director, record, bot, name, nowMs);
+}
+
+/**
+ * Fire due stall emotes from the fast tick (~10s): tick-safe (no timers),
+ * still on the sayPublic+citizenVoice path. Two anti-chorus layers:
+ *  1. stagger — each merchant's emote was scheduled at their own
+ *     deterministic moment inside the window, so simultaneous setups don't
+ *     speak at once;
+ *  2. cluster dedupe — if another merchant within ~12 tiles announced the
+ *     same emote in the last ~60s, this one stays quiet.
+ * A merchant that despawned before their moment simply never speaks.
+ */
+function tickPendingEmotes(director, nowMs = Date.now()) {
+  if (pendingEmotes.size === 0) return;
+  // Prune chorus entries older than the dedupe window (bounded memory).
+  for (let i = chorusLog.length - 1; i >= 0; i--) {
+    if (nowMs - chorusLog[i].atMs > CHORUS_DEDUPE_WINDOW_MS) chorusLog.splice(i, 1);
+  }
+  for (const [name, pending] of pendingEmotes) {
+    if (pending.atMs > nowMs) continue;
+    pendingEmotes.delete(name);
+    let bot = null;
+    try {
+      bot = director?.getBot?.(pending.record);
+    } catch {
+      bot = null;
+    }
+    if (!bot) continue; // merchant gone — nobody to speak
+    const tile = botTile(bot);
+    if (!tile) continue;
+    if (chorusAnnouncedRecently(chorusLog, pending.kind, tile, nowMs)) continue;
+    sayStallEmote(bot, pending.line);
+    chorusLog.push({
+      kind: pending.kind,
+      x: tile.x,
+      y: tile.y,
+      z: tile.z ?? 0,
+      atMs: nowMs,
+    });
+  }
 }
 
 /**
@@ -569,6 +675,11 @@ function tickMarketStalls(director, nowMs = Date.now()) {
       // One bad citizen never breaks the tick.
     }
   }
+  try {
+    tickPendingEmotes(director, nowMs);
+  } catch {
+    // Cosmetic layer — never breaks the tick.
+  }
 }
 
 module.exports = {
@@ -585,6 +696,10 @@ module.exports = {
   PITCH_RADIUS,
   PITCH_COOLDOWN_MS,
   PITCH_CHANCE,
+  SETUP_EMOTE_DELAY_MAX_MS,
+  CLOSE_EMOTE_DELAY_MAX_MS,
+  CHORUS_DEDUPE_RADIUS,
+  CHORUS_DEDUPE_WINDOW_MS,
   // data
   STALL_SPOT_OFFSETS,
   WARE_POOLS,
@@ -599,12 +714,17 @@ module.exports = {
   stallSpotFor,
   fillLine,
   parseMarketWares,
+  emoteDelayMsFor,
+  chorusAnnouncedRecently,
   // lifecycle
   tickMarketStalls,
+  tickPendingEmotes,
   setupStall,
   closeStall,
   // seams (tests)
   _stallState: stallState,
   _lastOfferAt: lastOfferAt,
   _lastPitchAt: lastPitchAt,
+  _pendingEmotes: pendingEmotes,
+  _chorusLog: chorusLog,
 };
