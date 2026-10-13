@@ -49,12 +49,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-galleries.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- tuning ------------------------------------------------------------------
@@ -97,12 +99,48 @@ function load() {
   } catch {
     _state = blankState();
   }
+  // Dual-read: overlay account blocks over the old-file curator registry.
+  if (storeEnabled && _state.curators && typeof _state.curators === "object") {
+    for (const key of Object.keys(_state.curators)) {
+      const block = storeBlockFor(key);
+      if (block) _state.curators[key] = block;
+    }
+  }
   _dirty = false;
   return _state;
 }
 
 function markDirty() {
   _dirty = true;
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-galleries.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "galleries";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's curator record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
 }
 
 function save() {
@@ -121,6 +159,7 @@ function resetForTests() {
   _state = blankState();
   _savePath = SAVE_FILE;
   _dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
   try {
     fs.unlinkSync(SAVE_FILE);
   } catch {
@@ -235,7 +274,9 @@ function registerCurator(username, kingdomId, nowMs = Date.now()) {
   const key = normalizeName(username);
   if (!key) return null;
   if (st.curators[key]) return st.curators[key];
-  st.curators[key] = {
+  // Dual-read: the account block wins when present.
+  const stored = storeBlockFor(username);
+  st.curators[key] = stored ?? {
     username: key,
     kingdomId: String(kingdomId ?? "unknown"),
     appointedAt: nowMs,
@@ -244,17 +285,34 @@ function registerCurator(username, kingdomId, nowMs = Date.now()) {
     commissionsBrokered: 0,
   };
   markDirty();
+  syncStore(username, st.curators[key]);
   return st.curators[key];
 }
 
 function isCurator(username) {
   const st = load();
-  return !!st.curators[normalizeName(username)];
+  const key = normalizeName(username);
+  if (!st.curators[key]) {
+    const block = storeBlockFor(username);
+    if (block) {
+      st.curators[key] = block;
+      markDirty();
+    }
+  }
+  return !!st.curators[key];
 }
 
 function curatorInfo(username) {
   const st = load();
-  return st.curators[normalizeName(username)] ?? null;
+  const key = normalizeName(username);
+  if (!st.curators[key]) {
+    const block = storeBlockFor(username);
+    if (block) {
+      st.curators[key] = block;
+      markDirty();
+    }
+  }
+  return st.curators[key] ?? null;
 }
 
 function curatorsIn(kingdomId) {
@@ -376,6 +434,7 @@ function consignAuction(artworkId, sellerPlayer, reserve, nowMs = Date.now()) {
   if (curs[0]) {
     curs[0].auctionsRun += 1;
     markDirty();
+    syncStore(curs[0].username, curs[0]);
   }
   return { ok: true, auction };
 }
@@ -657,6 +716,7 @@ function deliverCommission(commissionId, artworkId, payee, nowMs = Date.now()) {
   if (curs[0]) {
     curs[0].commissionsBrokered += 1;
     markDirty();
+    syncStore(curs[0].username, curs[0]);
   }
   return { ok: true, escrow: c.escrow };
 }
@@ -732,6 +792,7 @@ function appraise(artworkId, curatorUsername, clientPlayer, nowMs = Date.now()) 
   const ops = galleryOpsFor(curator.kingdomId, nowMs);
   ops.budget += APPRAISAL_FEE;
   markDirty();
+  syncStore(curatorUsername, curator);
   return { ok: true, appraisal: record };
 }
 

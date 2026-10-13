@@ -33,12 +33,14 @@ const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
 const { getJournal } = require("./CitizenJournal");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-homes.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- house sizes -------------------------------------------------------------
@@ -104,6 +106,17 @@ function load() {
     if (!raw || typeof raw !== "object") return { homes: {}, seq: 0 };
     if (!raw.homes || typeof raw.homes !== "object") raw.homes = {};
     if (!Number.isFinite(raw.seq)) raw.seq = 0;
+    // Dual-read: overlay account blocks over the old-file home registry.
+    if (storeEnabled) {
+      for (const [id, home] of Object.entries(raw.homes)) {
+        if (!home || !home.owner) continue;
+        const block = storeBlockFor(home.owner);
+        if (block) {
+          delete raw.homes[id];
+          raw.homes[block.id ?? id] = block;
+        }
+      }
+    }
     return raw;
   } catch {
     return { homes: {}, seq: 0 };
@@ -124,6 +137,45 @@ function save() {
 
 function markDirty() {
   dirty = true;
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-homes.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "homes";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's home into their account block. */
+function syncHome(home) {
+  if (!storeEnabled || !home || !home.owner) return;
+  try {
+    CitizenAccountStore.setBlock(home.owner, STORE_BLOCK, home);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
+/** Clear a citizen's home block (eviction / ownership transfer). */
+function clearHome(ownerName) {
+  if (!storeEnabled || !ownerName) return;
+  try {
+    CitizenAccountStore.setBlock(ownerName, STORE_BLOCK, null);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
 }
 
 function journalEvent(citizenName, text, kind) {
@@ -202,7 +254,17 @@ function homesInKingdom(kingdomId) {
 function homeOf(citizenName) {
   const n = normalizeName(citizenName);
   if (!n) return null;
-  return allHomes().find((h) => h.owner === n) ?? null;
+  const found = allHomes().find((h) => h.owner === n) ?? null;
+  if (found) return found;
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(citizenName);
+  if (block && block.id) {
+    const d = data();
+    d.homes[block.id] = block;
+    markDirty();
+    return block;
+  }
+  return null;
 }
 
 /** The tile a citizen's home sits on — the spawn-at-home anchor. */
@@ -261,6 +323,7 @@ function recordActivity(home, text) {
   home.activityLog.push({ at: Date.now(), text: String(text) });
   while (home.activityLog.length > MAX_ACTIVITY_LOG) home.activityLog.shift();
   markDirty();
+  syncHome(home);
 }
 
 /**
@@ -281,6 +344,7 @@ function createHome(ownerName, ownerDisplay, kingdomId, size) {
   const home = blankHome(id, n, ownerDisplay ?? ownerName, kid, finalSize, tile);
   d.homes[id] = home;
   markDirty();
+  syncHome(home);
   const label = HOUSE_SIZES[finalSize].label;
   journalEvent(n, `Moved into a ${label} of my own.`, "social");
   recordActivity(home, `${home.ownerDisplay} moved in.`);
@@ -296,6 +360,7 @@ function addFurnishing(homeId, furnishingKey) {
   if ((home.furnishings ?? []).some((f) => f.key === piece.key)) return false;
   home.furnishings.push({ key: piece.key, name: piece.name, comfort: piece.comfort, boughtAt: Date.now() });
   markDirty();
+  syncHome(home);
   journalEvent(home.owner, `Furnished the ${HOUSE_SIZES[home.size].label} with a ${piece.name}.`, "social");
   recordActivity(home, `Added a ${piece.name}.`);
   return true;
@@ -315,6 +380,7 @@ function inviteGuest(homeId, guestName, nowMs = Date.now()) {
     home.guests.push({ name: n, until: nowMs + GUEST_VISIT_MS });
   }
   markDirty();
+  syncHome(home);
   return true;
 }
 
@@ -325,6 +391,7 @@ function revokeGuest(homeId, guestName) {
   const before = (home.guests ?? []).length;
   home.guests = (home.guests ?? []).filter((g) => g.name !== n);
   if (home.guests.length !== before) markDirty();
+  if (home.guests.length !== before) syncHome(home);
   return home.guests.length !== before;
 }
 
@@ -334,6 +401,7 @@ function recordRentPaid(home, nowMs = Date.now()) {
   home.rentDebt = 0;
   home.rentDueAt = nowMs + 24 * 3600 * 1000;
   markDirty();
+  syncHome(home);
 }
 
 /** A missed day: debt grows, clock resets for the next attempt. */
@@ -342,6 +410,7 @@ function addRentDebt(home, nowMs = Date.now()) {
   home.rentDebt = (home.rentDebt ?? 0) + (home.rentPerDay ?? 50);
   home.rentDueAt = nowMs + 24 * 3600 * 1000;
   markDirty();
+  syncHome(home);
   recordActivity(home, `Rent went unpaid (${home.rentDebt} coins owed).`);
 }
 
@@ -354,6 +423,7 @@ function removeHome(homeId, reason) {
   recordActivity(home, `The home was lost (${reason ?? "evicted"}).`);
   delete d.homes[String(homeId)];
   markDirty();
+  clearHome(home.owner); // clear the block so the home isn't resurrected
   return true;
 }
 
@@ -368,6 +438,7 @@ function transferHome(homeId, newOwnerName, newOwnerDisplay) {
   const d = data();
   const home = d.homes[String(homeId)];
   if (!home || !newOwnerName) return false;
+  const prevOwner = home.owner;
   const prevDisplay = home.ownerDisplay;
   home.owner = normalizeName(newOwnerName);
   home.ownerDisplay = newOwnerDisplay ?? newOwnerName;
@@ -376,6 +447,8 @@ function transferHome(homeId, newOwnerName, newOwnerDisplay) {
   recordActivity(home, `Ownership transferred from ${prevDisplay} to ${home.ownerDisplay}.`);
   journalEvent(home.owner, `Took ownership of the family home.`, "social");
   markDirty();
+  clearHome(prevOwner);
+  syncHome(home);
   return true;
 }
 
@@ -384,6 +457,7 @@ function transferHome(homeId, newOwnerName, newOwnerDisplay) {
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 function homeCount() {
