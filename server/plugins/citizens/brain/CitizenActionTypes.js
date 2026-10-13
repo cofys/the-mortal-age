@@ -15,6 +15,7 @@ const {
   registerBotConditionKind,
 } = registryModule;
 const { createGuardPatrolAction } = require("./actions/GuardPatrol");
+const { createCitizenChooseAction } = require("./actions/CitizenChoose");
 const { createMerchantAction } = require("./actions/Merchant");
 const { createPrimeMerchantAction } = require("./actions/PrimeMerchant");
 const { createCitizenRoutineAction } = require("./actions/CitizenRoutine");
@@ -213,6 +214,7 @@ registerBotActionType("citizenCompete", createCitizenCompeteAction);
   registerBotActionType("citizenDocent", createCitizenDocentAction);
   registerBotActionType("citizenExplore", createCitizenExploreAction);
   registerBotActionType("citizenGoToPlace", createCitizenGoToPlaceAction);
+  registerBotActionType("citizenChoose", createCitizenChooseAction);
   registerBotActionType("citizenInvent", createCitizenInventAction);
   registerBotActionType("citizenPhilosophize", createCitizenPhilosophizeAction);
   registerBotActionType("citizenLawyer", createCitizenLawyerAction);

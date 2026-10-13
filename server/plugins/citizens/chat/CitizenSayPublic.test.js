@@ -4,6 +4,7 @@
 const assert = require("node:assert/strict");
 const {
   sayPublic,
+  setWorld,
   displayNameOf,
   isRealPlayer,
   stripSelfNamePrefix,
@@ -591,3 +592,82 @@ run("voice backstop: voiced lines land in the repeat memory as spoken", () => {
 });
 
 console.log("ALL VOICE-BACKSTOP TESTS DONE");
+
+// --- Recipient resolution: bots' own local lists are never maintained by the
+// engine (World.updateLocalPlayers only runs for real players), so a citizen's
+// getLocalPlayers() is always empty in production. chatboxRecipients unions
+// it with World.getNearbyPlayersForUpdate (bucket-based), mirroring
+// llm-gateway/Mouth.js. Reading only the local list was Jon's bug: chatter
+// reached overhead (rendered through the observer's own sync) but never the
+// chat box.
+
+function makeWorld(nearby = []) {
+  return { getNearbyPlayersForUpdate: (citizen) => nearby.map((n) => n.player ?? n) };
+}
+
+run("recipients: empty local list + World wired => chat box reached", () => {
+  const r = makeRecipient();
+  setWorld(makeWorld([r]));
+  const c = makeCitizen({ username: "BucketBob", locals: [] }); // like a real bot
+  const ok = sayPublic(c.player, "hello there");
+  assert.equal(ok, true);
+  assert.deepEqual(c.forced, ["hello there"]);
+  assert.equal(r.sent.length, 1);
+  assert.equal(r.sent[0].message, "hello there");
+});
+
+run("recipients: unwired World + empty locals => overhead only (old bug mode)", () => {
+  // No setWorld: resolution falls back to the citizen's own local list.
+  const c = makeCitizen({ username: "Lonely", locals: [] });
+  assert.equal(sayPublic(c.player, "hello?"), false);
+  assert.deepEqual(c.forced, ["hello?"]);
+});
+
+run("recipients: player in both sources gets exactly one line", () => {
+  const r = makeRecipient();
+  setWorld(makeWorld([r]));
+  const c = makeCitizen({ username: "Dedup", locals: [r] });
+  sayPublic(c.player, "hi");
+  assert.equal(r.sent.length, 1);
+});
+
+run("recipients: bots from the bucket list never get chat-box lines", () => {
+  const real = makeRecipient({ username: "Cofy", index: 7 });
+  const bot = makeRecipient({ username: "OtherBot", index: 9 });
+  bot.player.isPlayerBot = () => true;
+  bot.player.getHostAddress = () => "bot";
+  setWorld(makeWorld([bot, real]));
+  const c = makeCitizen({ username: "Filter", locals: [] });
+  assert.equal(sayPublic(c.player, "hi all"), true);
+  assert.equal(bot.sent.length, 0);
+  assert.equal(real.sent.length, 1);
+});
+
+run("recipients: broken World read falls back to the local list", () => {
+  const r = makeRecipient();
+  setWorld({ getNearbyPlayersForUpdate: () => { throw new Error("boom"); } });
+  const c = makeCitizen({ username: "Fallback", locals: [r] });
+  assert.equal(sayPublic(c.player, "hi"), true);
+  assert.equal(r.sent.length, 1);
+});
+
+run("recipients: setWorld(null) unwires the bucket source again", () => {
+  const r = makeRecipient();
+  setWorld(makeWorld([r]));
+  setWorld(null);
+  const c = makeCitizen({ username: "Unwired", locals: [] });
+  assert.equal(sayPublic(c.player, "hi"), false); // overhead only
+  assert.deepEqual(c.forced, ["hi"]);
+});
+
+run("recipients: privacy still respected on bucket-sourced recipients", () => {
+  const blocked = makeRecipient({ username: "Busy", index: 8, canReceive: false });
+  const open = makeRecipient({ username: "Cofy", index: 7, canReceive: true });
+  setWorld(makeWorld([blocked, open]));
+  const c = makeCitizen({ username: "Private", locals: [] });
+  sayPublic(c.player, "hi");
+  assert.equal(blocked.sent.length, 0);
+  assert.equal(open.sent.length, 1);
+});
+
+console.log("ALL RECIPIENT-RESOLUTION TESTS DONE");

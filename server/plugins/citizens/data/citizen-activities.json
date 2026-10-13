@@ -2,6 +2,26 @@
   "_note": "Citizen brain activities. Compiled by the citizens plugin into the shared bot activity registry via the catalogue extension seam (registerBotActionType / appendActivityDefinitions). The `citizen` requires-condition keeps base bots (wilderness roamers, skillers) from ever picking citizen activities; the director attaches them explicitly.",
   "activities": [
     {
+      "id": "citizen_choose",
+      "mode": "citizen_chooser",
+      "repeat": false,
+      "capacity": 1000,
+      "failureCooldownSeconds": 1,
+      "requires": [
+        {
+          "citizen": {
+            "safetyNet": true
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "citizenChoose"
+        }
+      ],
+      "_note": "CHOOSER: immediately fails so the utility scorer picks the real activity. Unpins commoners from citizen_routine."
+    },
+    {
       "actions": [
         {
           "challengeCooldownMs": 60000,
