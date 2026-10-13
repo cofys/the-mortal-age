@@ -947,6 +947,8 @@ class CitizenDirector {
     const record = {
       username,
       personality,
+      // Jon 2026-10-13: gender from name for appearance matching
+      gender: personality.gender ?? "unknown",
       kingdomId,
       settlementId,
       townId,
@@ -1184,6 +1186,8 @@ class CitizenDirector {
     const record = {
       username,
       personality,
+      // Jon 2026-10-13: gender from name for appearance matching
+      gender: personality.gender ?? "unknown",
       kingdomId,
       role,
       merchantKind: null,
@@ -2292,6 +2296,21 @@ class CitizenDirector {
     }
     bot.setPlayerBot?.(true);
     bot.setAttribute?.(ATTR_SKIP_PERSISTENCE, true);
+
+    // Jon 2026-10-13: female names → female character model, male names → male.
+    // Appearance.GENDER: 0 = male, 1 = female.
+    try {
+      const gender = record.gender ?? record.personality?.gender ?? "unknown";
+      if (gender === "female" || gender === "male") {
+        const appearance = bot.getAppearance?.();
+        if (appearance && appearance.look) {
+          appearance.look[0] = gender === "female" ? 1 : 0;
+          bot.getUpdateFlag?.()?.flag?.(5); // APPEARANCE flag
+        }
+      }
+    } catch (error) {
+      // Appearance setting never blocks spawn
+    }
 
     // Trade wiring: the engine's trade flow calls getTradingInteraction() on
     // the receiving side. Without this, trade requests to citizens die silently.

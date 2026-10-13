@@ -120,18 +120,29 @@ function pickUnique(rng, list, count) {
 }
 
 function generateName(rng, usedNames) {
+  // Backwards-compatible wrapper: returns just the name string.
+  // For gender info, use generateNameWithGender().
+  return generateNameWithGender(rng, usedNames).name;
+}
+
+/**
+ * Generate a unique citizen name with gender tracking.
+ * Returns {name, gender} where gender is 'female', 'male', or 'unknown' (fallback).
+ * Jon 2026-10-13: female names must map to female character models and vice versa.
+ */
+function generateNameWithGender(rng, usedNames) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const female = chance(rng, 0.5);
     const first = pick(rng, female ? NAMES.first_female : NAMES.first_male);
     const name = `${first} ${pick(rng, NAMES.surnames)}`;
     if (!usedNames.has(name)) {
       usedNames.add(name);
-      return name;
+      return { name, gender: female ? 'female' : 'male' };
     }
   }
   const fallback = `Citizen ${Math.floor(rng() * 90000) + 10000}`;
   usedNames.add(fallback);
-  return fallback;
+  return { name: fallback, gender: 'unknown' };
 }
 
 /**
@@ -141,8 +152,11 @@ function generateName(rng, usedNames) {
 function generatePersonality(username, { role, kingdomId, usedNames } = {}) {
   const rng = agentRng(`citizen:${username}`);
   const finalRole = ROLES.includes(role) ? role : pick(rng, ROLES);
+  // Jon 2026-10-13: track gender from name for appearance matching
+  const { name, gender } = generateNameWithGender(rng, usedNames ?? new Set());
   return {
-    name: generateName(rng, usedNames ?? new Set()),
+    name,
+    gender,
     role: finalRole,
     kingdomId: kingdomId ?? null,
     traits: pickUnique(rng, TRAITS, 2),
@@ -204,6 +218,7 @@ module.exports = {
   MANNERISMS,
   generatePersonality,
   generateName,
+  generateNameWithGender,
   voiceLine,
   personalityCard,
 };
