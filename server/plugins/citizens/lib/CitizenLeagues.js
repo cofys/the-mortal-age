@@ -49,12 +49,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-leagues.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- tuning ------------------------------------------------------------------
@@ -134,6 +136,13 @@ function load() {
       if (parsed.seasons && typeof parsed.seasons === "object") s.seasons = parsed.seasons;
       if (parsed.organizers && typeof parsed.organizers === "object") s.organizers = parsed.organizers;
       if (parsed.fans && typeof parsed.fans === "object") s.fans = parsed.fans;
+      // Dual-read: overlay account blocks over the old-file fan registry.
+      if (storeEnabled) {
+        for (const key of Object.keys(s.fans)) {
+          const block = storeBlockFor(key);
+          if (block && block.fanOf) s.fans[key] = block.fanOf;
+        }
+      }
       return s;
     }
   } catch { /* missing or corrupt — start blank */ }
@@ -156,10 +165,40 @@ function markDirty() {
   dirty = true;
 }
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-leagues.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "leagues";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's fan-club pick into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 /** Test seam — drop the in-memory cache so the next read reloads from disk. */
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- teams -------------------------------------------------------------------
@@ -486,11 +525,22 @@ function joinFanClub(username, teamId) {
   if (!s.teams[teamId]) return false;
   s.fans[normalizeName(username)] = teamId;
   markDirty();
+  syncStore(username, { fanOf: teamId });
   return true;
 }
 
 function fanTeamOf(username) {
-  const teamId = state().fans[normalizeName(username)];
+  const s = state();
+  const key = normalizeName(username);
+  if (!s.fans[key]) {
+    // Dual-read: the account block may hold what the old registry lacks.
+    const block = storeBlockFor(username);
+    if (block && block.fanOf && s.teams[block.fanOf]) {
+      s.fans[key] = block.fanOf;
+      markDirty();
+    }
+  }
+  const teamId = s.fans[key];
   return teamId ? teamById(teamId) : null;
 }
 

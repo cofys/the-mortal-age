@@ -57,12 +57,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-libraries.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- tuning ------------------------------------------------------------------
@@ -113,11 +115,65 @@ function load() {
     // corrupt save — start fresh rather than crash
     state = blankState();
   }
+  overlayStore();
   return state;
 }
 
 function markDirty() {
   dirty = true;
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-libraries.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "libraries";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/**
+ * Dual-write one citizen's library slice into their account block.
+ * Shape: { librarian: {...}|null, lastResearchAt: ms }.
+ */
+function syncStore(name) {
+  if (!storeEnabled || !name) return;
+  const key = normalizeName(name);
+  if (!key) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, {
+      librarian: state.librarians[key] ?? null,
+      lastResearchAt: state.researchLog[key] ?? 0,
+    });
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
+/** Overlay account blocks over the old-file registries (bulk boot load). */
+function overlayStore() {
+  if (!storeEnabled) return;
+  const keys = new Set([...Object.keys(state.librarians), ...Object.keys(state.researchLog)]);
+  for (const key of keys) {
+    const block = storeBlockFor(key);
+    if (!block) continue;
+    if (!state.librarians[key] && block.librarian && typeof block.librarian === "object") {
+      state.librarians[key] = block.librarian;
+    }
+    if (!state.researchLog[key] && Number.isFinite(Number(block.lastResearchAt))) {
+      state.researchLog[key] = Number(block.lastResearchAt);
+    }
+  }
 }
 
 function save() {
@@ -138,6 +194,7 @@ function resetForTests() {
   state = blankState();
   dirty = false;
   loaded = false; // force re-load from disk on next load()
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 function nextId(prefix, nowMs) {
@@ -288,19 +345,41 @@ function registerLibrarian(username, kingdomId, nowMs = Date.now()) {
   load();
   const key = normalizeName(username);
   if (!key || state.librarians[key]) return false;
-  state.librarians[key] = { username: key, kingdomId, hiredAt: nowMs };
+  // Dual-read: the account block wins when present.
+  const block = storeBlockFor(username);
+  state.librarians[key] =
+    block && block.librarian && typeof block.librarian === "object"
+      ? block.librarian
+      : { username: key, kingdomId, hiredAt: nowMs };
   markDirty();
+  syncStore(username);
   return true;
 }
 
 function isLibrarian(username) {
   load();
-  return !!state.librarians[normalizeName(username)];
+  const key = normalizeName(username);
+  if (!state.librarians[key]) {
+    const block = storeBlockFor(username);
+    if (block && block.librarian && typeof block.librarian === "object") {
+      state.librarians[key] = block.librarian;
+      markDirty();
+    }
+  }
+  return !!state.librarians[key];
 }
 
 function librarianInfo(username) {
   load();
-  return state.librarians[normalizeName(username)] || null;
+  const key = normalizeName(username);
+  if (!state.librarians[key]) {
+    const block = storeBlockFor(username);
+    if (block && block.librarian && typeof block.librarian === "object") {
+      state.librarians[key] = block.librarian;
+      markDirty();
+    }
+  }
+  return state.librarians[key] || null;
 }
 
 function librariansIn(kingdomId) {
@@ -456,6 +535,13 @@ function researchBook(researcherPlayer, bookId, skill, nowMs = Date.now()) {
   const book = state.books[bookId];
   if (!book) return { ok: false, reason: "no-book" };
   const key = normalizeName(username);
+  if (!state.researchLog[key]) {
+    // Dual-read: the account block may hold what the old registry lacks.
+    const block = storeBlockFor(username);
+    if (block && Number.isFinite(Number(block.lastResearchAt))) {
+      state.researchLog[key] = Number(block.lastResearchAt);
+    }
+  }
   const last = state.researchLog[key] || 0;
   if (last > 0 && nowMs - last < RESEARCH_SESSION_MS) {
     return { ok: false, reason: "too-soon" };
@@ -470,6 +556,7 @@ function researchBook(researcherPlayer, bookId, skill, nowMs = Date.now()) {
   }
   state.researchLog[key] = nowMs;
   markDirty();
+  syncStore(username);
   return { ok: true, xp: RESEARCH_XP_PER_SESSION + book.quality * 2 };
 }
 

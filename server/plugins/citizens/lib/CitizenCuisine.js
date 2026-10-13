@@ -37,6 +37,7 @@
  */
 
 // === Tuning: all magic numbers here ===
+const CitizenAccountStore = require("./CitizenAccountStore");
 const COMPETITION_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // monthly competitions
 const COMPETITION_PRIZE = 600; // coins for best-dish winner
 const COMPETITION_RUNNER_UP = 250; // coins for runner-up
@@ -112,6 +113,13 @@ function load() {
       const data = JSON.parse(fs.readFileSync(full, "utf8"));
       if (data && typeof data === "object") {
         cache = Object.assign(blankState(), data);
+        // Dual-read: overlay account blocks over the old-file chef registry.
+        if (storeEnabled && cache.chefs && typeof cache.chefs === "object") {
+          for (const key of Object.keys(cache.chefs)) {
+            const block = storeBlockFor(key);
+            if (block) cache.chefs[key] = block;
+          }
+        }
       }
     }
   } catch {
@@ -148,6 +156,35 @@ function resetForTests() {
   cache = blankState();
   dirty = false;
   _ingredientCache = null;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-cuisine.json file is the fallback
+// (and stays fully written).
+const STORE_BLOCK = "cuisine";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's chef record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
 }
 
 // --- ingredient resolution (defensive) ---------------------------------------
@@ -220,14 +257,29 @@ function safeRequire(p) {
 function awardMasterChef(username) {
   const st = load();
   const n = norm(username);
-  if (!n || st.chefs[n]) return false;
-  st.chefs[n] = { title: "master", earnedAt: Date.now() };
-  markDirty();
-  return true;
+  if (!n) return false;
+  if (!st.chefs[n]) {
+    // Dual-read: the account block wins when present.
+    st.chefs[n] = storeBlockFor(username) ?? { title: "master", earnedAt: Date.now() };
+    markDirty();
+    syncStore(username, st.chefs[n]);
+    return true;
+  }
+  return false;
 }
 
 function isMasterChef(username) {
-  return !!load().chefs[norm(username)];
+  const st = load();
+  const n = norm(username);
+  if (!n) return false;
+  if (!st.chefs[n]) {
+    const block = storeBlockFor(username);
+    if (block) {
+      st.chefs[n] = block;
+      markDirty();
+    }
+  }
+  return !!st.chefs[n];
 }
 
 function masterChefs() {

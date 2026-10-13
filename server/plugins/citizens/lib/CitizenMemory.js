@@ -29,8 +29,15 @@
 
 const fs = require("fs");
 const path = require("path");
+const CitizenAccountStore = require("./CitizenAccountStore");
+
+// Dual-read with the per-citizen account store: the account "memory" block
+// wins when present and non-empty, the old citizen-memory.json is the
+// fallback (and stays fully written). Gossip is global, not per-citizen,
+// so it stays in the old file only.
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-memory.json");
+const STORE_BLOCK = "memory";
 
 // Memorable-moment kinds. Positive moments make citizens fond of a player;
 const MAX_PLAYERS_PER_CITIZEN = 40;
@@ -186,6 +193,8 @@ class CitizenMemoryStore {
     this.dirty = false;
     this._savePath = SAVE_FILE;
     this._saveInFlight = false;
+    // Dual-read: account store enabled unless a test seam flips it off.
+    this._storeEnabled = true;
   }
 
   /** Test seam: keep everything in memory, never touch disk. */
@@ -196,6 +205,7 @@ class CitizenMemoryStore {
     this.dirty = false;
     this._savePath = null;
     this._saveInFlight = false;
+    this._storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
   }
 
   _citizen(citizenName) {
@@ -237,8 +247,78 @@ class CitizenMemoryStore {
     }
   }
 
+  /** This citizen's account block, or null when absent/empty/the store is off. */
+  _storeBlockFor(key) {
+    if (!this._storeEnabled) return null;
+    try {
+      const block = CitizenAccountStore.getBlock(key, STORE_BLOCK);
+      if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+    } catch {
+      // The old-file record is the fallback — never break the tick.
+    }
+    return null;
+  }
+
+  /** Rebuild a live record from a stored block (same shape as toJSON). */
+  _blockToRecord(key, block) {
+    const players = new Map();
+    for (const [pkey, data] of Object.entries(block?.players ?? {})) {
+      const { display, ...entry } = data ?? {};
+      players.set(pkey, {
+        display: display ?? pkey,
+        entry: { ...blankEntry(0), ...entry, heard: entry.heard ?? {} },
+      });
+    }
+    return { display: block?.display ?? key, players };
+  }
+
+  /** Serialize one citizen's memory record (toJSON shape for this citizen). */
+  _serializeCitizen(key) {
+    const record = this.citizens.get(key);
+    if (!record) return null;
+    const players = {};
+    for (const [pkey, held] of record.players) {
+      players[pkey] = { display: held.display, ...held.entry };
+    }
+    return { display: record.display, players };
+  }
+
+  /** Dual-write one citizen's memory record into their account block. */
+  _syncStore(citizenName) {
+    if (!this._storeEnabled) return;
+    const key = normalizeName(citizenName);
+    if (!key) return;
+    try {
+      const data = this._serializeCitizen(key);
+      if (data) CitizenAccountStore.setBlock(key, STORE_BLOCK, data);
+    } catch {
+      // The old-file save remains the durable fallback.
+    }
+  }
+
+  /** Clear a citizen's memory block (forget). */
+  _clearStore(citizenName) {
+    if (!this._storeEnabled) return;
+    const key = normalizeName(citizenName);
+    if (!key) return;
+    try {
+      CitizenAccountStore.setBlock(key, STORE_BLOCK, null);
+    } catch {
+      // The old-file save remains the durable fallback.
+    }
+  }
+
   getEntry(citizenName, playerName) {
-    const record = this.citizens.get(normalizeName(citizenName));
+    const key = normalizeName(citizenName);
+    let record = this.citizens.get(key);
+    if (!record) {
+      // Dual-read: the account block may hold what the old registry lacks.
+      const block = this._storeBlockFor(key);
+      if (block) {
+        record = this._blockToRecord(key, block);
+        this.citizens.set(key, record);
+      }
+    }
     return record?.players.get(normalizeName(playerName))?.entry ?? null;
   }
 

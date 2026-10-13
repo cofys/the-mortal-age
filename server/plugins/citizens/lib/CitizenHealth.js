@@ -36,12 +36,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-health.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- illness catalog ---------------------------------------------------------
@@ -128,6 +130,13 @@ function load() {
       if (raw && typeof raw === "object") {
         if (raw.sick && typeof raw.sick === "object") cache.sick = raw.sick;
         if (raw.hospitals && typeof raw.hospitals === "object") cache.hospitals = raw.hospitals;
+        // Dual-read: overlay account blocks over the old-file sick registry.
+        if (storeEnabled) {
+          for (const key of Object.keys(cache.sick)) {
+            const block = storeBlockFor(key);
+            if (block) cache.sick[key] = block;
+          }
+        }
       }
     }
   } catch {
@@ -156,17 +165,59 @@ function markDirty() {
   dirty = true;
 }
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-health.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "health";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/**
+ * Dual-write one citizen's health record into their account block.
+ * Pass null to clear the block (the citizen is healthy again).
+ */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 /** Test seam — drop the in-memory cache. */
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- illness records ---------------------------------------------------------
 
 function recordOf(username) {
   const st = load();
-  return st.sick[normalizeName(username)] ?? null;
+  const key = normalizeName(username);
+  if (!st.sick[key]) {
+    // Dual-read: the account block may hold what the old registry lacks.
+    const block = storeBlockFor(username);
+    if (block) {
+      st.sick[key] = block;
+      markDirty();
+    }
+  }
+  return st.sick[key] ?? null;
 }
 
 function isSick(username) {
@@ -213,6 +264,7 @@ function sicken(username, illnessKey, nowMs, opts = {}) {
   } catch { /* athletics unreadable, no bonus */ }
   st.sick[norm] = rec;
   markDirty();
+  syncStore(username, rec);
   return rec;
 }
 
@@ -223,6 +275,7 @@ function cure(username, how = "recovered") {
   if (!st.sick[norm]) return false;
   delete st.sick[norm];
   markDirty();
+  syncStore(username, null); // clear the block so the cure isn't resurrected
   return true;
 }
 
@@ -237,6 +290,7 @@ function setTreatedBy(username, healerName) {
   const remaining = Math.max(0, rec.recoverAt - now);
   rec.recoverAt = now + Math.floor(remaining * 0.66);
   markDirty();
+  syncStore(username, rec);
   return true;
 }
 
@@ -330,6 +384,7 @@ function admitPatient(username, kingdomId) {
   const now = Date.now();
   rec.recoverAt = Math.min(rec.recoverAt, now + Math.floor(Math.max(0, rec.recoverAt - now) / HOSPITAL_RECOVERY_MULT));
   markDirty();
+  syncStore(username, rec);
   return true;
 }
 
@@ -344,6 +399,7 @@ function dischargePatient(username) {
   const rec = st.sick[norm];
   if (rec) rec.inHospital = false;
   markDirty();
+  if (rec) syncStore(username, rec);
 }
 
 module.exports = {

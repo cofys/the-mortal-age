@@ -54,12 +54,14 @@
 const fs = require("fs");
 const path = require("path");
 const { agentRng } = require("./humanizer");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-runways.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 /** Test seam — clear in-memory state. */
@@ -68,6 +70,61 @@ function resetForTests() {
   dirty = false;
   nextCollectionId = 1;
   nextShowId = 1;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-runways.json file is the fallback
+// (and stays fully written). The block holds this citizen's slices of the
+// four per-citizen registries: { designer, atelier, model, purseOwed }.
+// Houses, collections, shows, venues and reviews are shared and stay in the
+// old file only. storeEnabled is flipped off by the test seams so unit
+// tests stay hermetic.
+const STORE_BLOCK = "runways";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file registry is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** This citizen's runway record for the account block, or null when empty. */
+function blockEntryFor(st, key) {
+  const entry = {};
+  const d = st.designers[key];
+  const a = st.ateliers[key];
+  const m = st.models[key];
+  const owed = st.purseOwed?.[key];
+  if (d) entry.designer = { ...d };
+  if (a) entry.atelier = { ...a, inventory: Array.isArray(a.inventory) ? a.inventory.map((i) => ({ ...i })) : [] };
+  if (m) entry.model = { ...m };
+  if (owed) entry.purseOwed = owed;
+  return Object.keys(entry).length ? entry : null;
+}
+
+/** Dual-write one citizen's runway record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
+/** Overlay one citizen's stored slices onto the loaded registries. */
+function overlayBlock(st, key, block) {
+  if (block.designer && typeof block.designer === "object") st.designers[key] = block.designer;
+  if (block.atelier && typeof block.atelier === "object") st.ateliers[key] = block.atelier;
+  if (block.model && typeof block.model === "object") st.models[key] = block.model;
+  if (block.purseOwed && st.purseOwed && typeof st.purseOwed === "object") st.purseOwed[key] = block.purseOwed;
 }
 
 // === Tuning: all magic numbers here ===
@@ -142,6 +199,20 @@ function load() {
         const sIds = Object.keys(cache.shows).map(Number).filter((n) => Number.isFinite(n));
         if (cIds.length) nextCollectionId = Math.max(...cIds) + 1;
         if (sIds.length) nextShowId = Math.max(...sIds) + 1;
+        // Dual-read: overlay account blocks over the old-file registries.
+        if (storeEnabled) {
+          if (!cache.purseOwed || typeof cache.purseOwed !== "object") cache.purseOwed = {};
+          const keys = new Set([
+            ...Object.keys(cache.designers ?? {}),
+            ...Object.keys(cache.ateliers ?? {}),
+            ...Object.keys(cache.models ?? {}),
+            ...Object.keys(cache.purseOwed),
+          ]);
+          for (const key of keys) {
+            const block = storeBlockFor(key);
+            if (block) overlayBlock(cache, key, block);
+          }
+        }
       }
     }
   } catch {
@@ -248,6 +319,7 @@ function registerDesigner(username, kingdomId) {
       registeredAt: Date.now(),
     };
     markDirty();
+    syncStore(key, blockEntryFor(st, key));
   }
   return { ok: true, designer: st.designers[key] };
 }
@@ -257,7 +329,16 @@ function isDesigner(username) {
 }
 
 function designerFor(username) {
-  return load().designers[norm(username)] || null;
+  const st = load();
+  const key = norm(username);
+  if (st.designers[key]) return st.designers[key];
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(username);
+  if (block) {
+    overlayBlock(st, key, block);
+    if (st.designers[key]) return st.designers[key];
+  }
+  return null;
 }
 
 /** Quality 1-10 from the designer's REAL engagement — never random. */
@@ -433,6 +514,7 @@ function createCollection(designerUsername, theme, opts) {
   d.collectionsMade = (d.collectionsMade || 0) + 1;
   if (house && !house.collections.includes(id)) house.collections.push(id);
   markDirty();
+  syncStore(norm(designerUsername), blockEntryFor(st, norm(designerUsername)));
   return { ok: true, collection };
 }
 
@@ -454,6 +536,7 @@ function registerModel(username, kingdomId) {
   if (!st.models[key]) {
     st.models[key] = { username: String(username), kingdomId: norm(kingdomId) || null, showsWalked: 0, registeredAt: Date.now() };
     markDirty();
+    syncStore(key, blockEntryFor(st, key));
   }
   return { ok: true, model: st.models[key] };
 }
@@ -522,7 +605,10 @@ function bookShow(houseName, collectionId, opts) {
   };
   st.shows[String(id)] = show;
   const d = designerFor(col.designer);
-  if (d) d.showsStaged = (d.showsStaged || 0) + 1;
+  if (d) {
+    d.showsStaged = (d.showsStaged || 0) + 1;
+    syncStore(norm(col.designer), blockEntryFor(st, norm(col.designer)));
+  }
   markDirty();
   return { ok: true, show };
 }
@@ -614,6 +700,7 @@ function settleShow(showId, coinSink) {
     if (m) {
       m.showsWalked = (m.showsWalked || 0) + 1;
       pursePaid.push(u);
+      syncStore(norm(u), blockEntryFor(st, norm(u)));
     }
   }
   show.settled = true;
@@ -657,11 +744,21 @@ function openAtelier(ownerUsername, kingdomId) {
     foundedAt: Date.now(),
   };
   markDirty();
+  syncStore(key, blockEntryFor(st, key));
   return { ok: true, atelier: st.ateliers[key] };
 }
 
 function atelierFor(ownerUsername) {
-  return load().ateliers[norm(ownerUsername)] || null;
+  const st = load();
+  const key = norm(ownerUsername);
+  if (st.ateliers[key]) return st.ateliers[key];
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(ownerUsername);
+  if (block) {
+    overlayBlock(st, key, block);
+    if (st.ateliers[key]) return st.ateliers[key];
+  }
+  return null;
 }
 
 /** Stock a collection's unsold pieces into the designer's atelier. */
@@ -680,6 +777,7 @@ function stockAtelier(ownerUsername, collectionId) {
     stocked++;
   }
   markDirty();
+  syncStore(norm(ownerUsername), blockEntryFor(st, norm(ownerUsername)));
   return { ok: true, stocked, atelier: at };
 }
 
@@ -695,6 +793,7 @@ function buyFromAtelier(player, ownerUsername, pieceId) {
   // credit the designer house treasury (real economy, not invented coins)
   const house = houseForDesigner(at.owner);
   if (house) house.treasury = (house.treasury || 0) + item.price;
+  syncStore(norm(at.owner), blockEntryFor(st, norm(at.owner)));
   // mark the source collection piece sold too
   const col = st.collections[String(item.collectionId)];
   if (col) {
@@ -856,6 +955,7 @@ function oweModelPurse(username, amount) {
   if (!st.purseOwed || typeof st.purseOwed !== "object") st.purseOwed = {};
   st.purseOwed[key] = (st.purseOwed[key] || 0) + amount;
   markDirty();
+  syncStore(key, blockEntryFor(st, key));
   return st.purseOwed[key];
 }
 
@@ -873,6 +973,7 @@ function clearPurseOwed(username) {
   if (st.purseOwed && key in st.purseOwed) {
     delete st.purseOwed[key];
     markDirty();
+    syncStore(key, blockEntryFor(st, key)); // clear or shrink the block
     return true;
   }
   return false;

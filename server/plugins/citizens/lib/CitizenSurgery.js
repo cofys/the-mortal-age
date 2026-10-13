@@ -45,12 +45,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-surgery.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- surgery catalog ---------------------------------------------------------
@@ -199,12 +201,64 @@ function blankState() {
 let cache = null;
 let dirty = false;
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-surgery.json file is the fallback
+// (and stays fully written). The block holds this citizen's slices of the
+// two per-citizen registries: { procedure, surgeon }. Wings, research and
+// quarantine are kingdom-level and stay in the old file only. Real-player
+// procedures (isPlayer) are never synced into citizen accounts.
+// storeEnabled is flipped off by the test seams so unit tests stay hermetic.
+const STORE_BLOCK = "surgery";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file record is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** This citizen's surgery record for the account block, or null when empty. */
+function blockEntryFor(st, key) {
+  const entry = {};
+  const p = st.procedures[key];
+  const s = st.surgeons[key];
+  if (p && !p.isPlayer) entry.procedure = { ...p };
+  if (s) entry.surgeon = { ...s };
+  return Object.keys(entry).length ? entry : null;
+}
+
+/** Dual-write one citizen's surgery record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 function load() {
   if (cache) return cache;
   try {
     const raw = fs.readFileSync(SAVE_FILE, "utf8");
     const parsed = JSON.parse(raw);
     cache = { ...blankState(), ...parsed };
+    // Dual-read: overlay account blocks over the old-file registries.
+    if (storeEnabled) {
+      const keys = new Set([...Object.keys(cache.procedures), ...Object.keys(cache.surgeons)]);
+      for (const key of keys) {
+        const block = storeBlockFor(key);
+        if (!block) continue;
+        if (block.procedure && typeof block.procedure === "object") cache.procedures[key] = block.procedure;
+        if (block.surgeon && typeof block.surgeon === "object") cache.surgeons[key] = block.surgeon;
+      }
+    }
   } catch {
     cache = blankState();
   }
@@ -232,13 +286,22 @@ function resetForTests() {
   cache = null;
   dirty = false;
   _materialCache = null;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- surgeon registry ----------------------------------------------------------
 
 function isSurgeon(username) {
   const st = load();
-  return !!st.surgeons[normalizeName(username)];
+  const key = normalizeName(username);
+  if (st.surgeons[key]) return true;
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(username);
+  if (block && block.surgeon) {
+    st.surgeons[key] = block.surgeon;
+    return true;
+  }
+  return false;
 }
 
 function registerSurgeon(username, nowMs) {
@@ -247,6 +310,7 @@ function registerSurgeon(username, nowMs) {
   if (!st.surgeons[key]) {
     st.surgeons[key] = { since: nowMs };
     markDirty();
+    syncStore(key, blockEntryFor(st, key));
   }
 }
 
@@ -325,7 +389,15 @@ function needsSurgery(username) {
 
 function procedureOf(username) {
   const st = load();
-  return st.procedures[normalizeName(username)] ?? null;
+  const key = normalizeName(username);
+  if (st.procedures[key]) return st.procedures[key];
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(username);
+  if (block && block.procedure && typeof block.procedure === "object") {
+    st.procedures[key] = block.procedure;
+    return block.procedure;
+  }
+  return null;
 }
 
 function scheduleProcedure(username, procedureKey, surgeonName, kingdomId, nowMs) {
@@ -342,6 +414,7 @@ function scheduleProcedure(username, procedureKey, surgeonName, kingdomId, nowMs
     status: "in_progress",
   };
   markDirty();
+  syncStore(key, blockEntryFor(st, key));
   return true;
 }
 
@@ -353,6 +426,7 @@ function completeProcedure(username, success, nowMs) {
   rec.status = success ? "completed" : "failed";
   rec.completedAt = nowMs;
   markDirty();
+  syncStore(key, blockEntryFor(st, key));
   // On success, cure through the real health system — never bypass it.
   if (success) {
     try {

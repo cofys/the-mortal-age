@@ -52,6 +52,7 @@
 const fs = require("fs");
 const path = require("path");
 const { getJournal } = require("./CitizenJournal");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-deaths.json");
 
@@ -64,6 +65,37 @@ let loaded = false;
 let dirty = false;
 const deaths = []; // outcome records, oldest first
 const deathCounts = {}; // normalized username -> total combat deaths ever
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-deaths.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "deaths";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file ledger is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's death count into their account block. */
+function syncStore(username) {
+  if (!storeEnabled) return;
+  const norm = normalizeName(username);
+  if (!norm) return;
+  try {
+    CitizenAccountStore.setBlock(username, STORE_BLOCK, { deathCount: deathCounts[norm] ?? 0 });
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
 
 function normalizeName(name) {
   return String(name ?? "").toLowerCase().trim();
@@ -93,6 +125,15 @@ function load() {
       if (d && d.username) deaths.push(d);
     }
     while (deaths.length > MAX_DEATHS) deaths.shift();
+    // Dual-read: overlay account blocks over the old-file counts.
+    if (storeEnabled) {
+      for (const key of Object.keys(deathCounts)) {
+        const block = storeBlockFor(key);
+        if (block && Number.isFinite(Number(block.deathCount))) {
+          deathCounts[key] = Number(block.deathCount);
+        }
+      }
+    }
   } catch {
     // Corrupt or missing save — start empty, never crash.
   }
@@ -104,6 +145,7 @@ function resetForTests() {
   for (const k of Object.keys(deathCounts)) delete deathCounts[k];
   dirty = false;
   loaded = true;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 function saveIfDirty() {
@@ -177,7 +219,15 @@ function resolveDeathOutcome(record, { deathSeq, diedAt, cause, killerName }) {
 /** Total combat deaths ever recorded for a citizen (0 when unknown). */
 function deathCountFor(username) {
   load();
-  return deathCounts[normalizeName(username)] ?? 0;
+  const norm = normalizeName(username);
+  if (deathCounts[norm] == null) {
+    // Dual-read: the account block may hold what the old ledger lacks.
+    const block = storeBlockFor(username);
+    if (block && Number.isFinite(Number(block.deathCount))) {
+      deathCounts[norm] = Number(block.deathCount);
+    }
+  }
+  return deathCounts[norm] ?? 0;
 }
 
 /** The persisted death ledger, oldest first. */
@@ -295,6 +345,8 @@ function recordCitizenDeath(director, record, { cause, killerName } = {}, nowMs 
   const username = normalizeName(record.username);
   const seq = (deathCounts[username] ?? 0) + 1;
   deathCounts[username] = seq;
+  dirty = true;
+  syncStore(username);
   const outcome = resolveDeathOutcome(record, {
     deathSeq: seq,
     diedAt: nowMs,

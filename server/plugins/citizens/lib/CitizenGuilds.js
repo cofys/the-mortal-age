@@ -41,12 +41,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-guilds.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- tuning ------------------------------------------------------------------
@@ -139,6 +141,14 @@ function load() {
     const raw = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8"));
     cache = blankState();
     if (raw && typeof raw === "object") {
+      // Dual-read: account blocks win over the old-file member registry
+      // (the loop below still validates/normalizes them).
+      if (storeEnabled && raw.members && typeof raw.members === "object") {
+        for (const key of Object.keys(raw.members)) {
+          const block = storeBlockFor(key);
+          if (block) raw.members[key] = block;
+        }
+      }
       for (const [k, v] of Object.entries(raw.members ?? {})) {
         if (!v || typeof v !== "object" || !GUILDS[v.guildId]) continue;
         cache.members[k] = {
@@ -166,6 +176,35 @@ function load() {
 
 function markDirty() {
   dirty = true;
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-guilds.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "guilds";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's guild membership into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
 }
 
 // --- reads -------------------------------------------------------------------
@@ -197,7 +236,24 @@ function rankLabel(rankKey) {
 /** Trade-guild membership for a citizen, or null when not a member. */
 function membershipFor(username) {
   if (!username) return null;
-  return load().members[normalizeName(username)] ?? null;
+  const st = load();
+  const key = normalizeName(username);
+  if (!st.members[key]) {
+    // Dual-read: the account block may hold what the old registry lacks.
+    const block = storeBlockFor(username);
+    if (block && block.guildId && GUILDS[block.guildId]) {
+      st.members[key] = {
+        username: String(block.username ?? key),
+        guildId: block.guildId,
+        rank: typeof block.rank === "string" ? block.rank : "novice",
+        favor: Math.max(0, Number(block.favor ?? 0)),
+        joinedAt: Number(block.joinedAt ?? 0),
+        mission: block.mission && typeof block.mission === "object" ? block.mission : null,
+      };
+      markDirty();
+    }
+  }
+  return st.members[key] ?? null;
 }
 
 /** Guild id for a citizen, or null. */
@@ -355,6 +411,7 @@ function joinGuild(username, guildId, player = null, nowMs = Date.now()) {
   }
   st.members[key] = blankMember(username, g.id, nowMs);
   markDirty();
+  syncStore(username, st.members[key]);
   awardGuildReputation(username, 3, `joined the ${g.name}`, nowMs);
   return { ok: true, guild: g };
 }
@@ -367,6 +424,7 @@ function leaveGuild(username) {
   if (!st.members[key]) return false;
   delete st.members[key];
   markDirty();
+  syncStore(username, null); // clear the block so the membership isn't resurrected
   return true;
 }
 
@@ -385,6 +443,7 @@ function addFavor(username, amount, reason, nowMs = Date.now()) {
   // Earning favor resets the decay clock — fresh effort doesn't instantly fade.
   if (amount > 0) m.favorDecayAt = Math.max(m.favorDecayAt ?? 0, nowMs);
   markDirty();
+  syncStore(username, m);
   const rankedUp = m.rank !== before && RANKS.findIndex((r) => r.key === m.rank) < RANKS.findIndex((r) => r.key === before);
   if (rankedUp) {
     awardGuildReputation(username, 5, `rose to ${rankLabel(m.rank)} of the ${guildFor(m.guildId).name}`, nowMs);
@@ -405,6 +464,7 @@ function startMission(username, nowMs = Date.now()) {
   const g = guildFor(m.guildId);
   m.mission = { kind: g.mission.kind, label: g.mission.label, target: g.mission.target, progress: 0, favor: g.mission.favor, startedAt: nowMs };
   markDirty();
+  syncStore(username, m);
   return m.mission;
 }
 
@@ -420,6 +480,7 @@ function advanceMission(username, amount, nowMs = Date.now()) {
   if (!m?.mission || !Number.isFinite(amount) || amount <= 0) return null;
   m.mission.progress += amount;
   markDirty();
+  syncStore(username, m);
   if (m.mission.progress >= m.mission.target) {
     const favor = m.mission.favor;
     const label = m.mission.label;
@@ -437,6 +498,7 @@ function abandonMission(username) {
   if (!m?.mission) return false;
   m.mission = null;
   markDirty();
+  syncStore(username, m);
   return true;
 }
 
@@ -474,6 +536,7 @@ function decayFavor(nowMs = Date.now()) {
     if (m.favor > floor) {
       m.favor = Math.max(floor, m.favor - 1);
       changed++;
+      syncStore(m.username, m);
     }
   }
   if (changed) markDirty();
@@ -616,6 +679,7 @@ function save() {
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 module.exports = {

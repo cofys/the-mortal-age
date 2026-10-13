@@ -42,18 +42,69 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-music-dance.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 /** Test seam — clear in-memory state. */
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-music-dance.json file is the fallback
+// (and stays fully written). The block holds this citizen's slices of the
+// two per-citizen registries: { player, payoutOwed }. Ensembles, troupes,
+// halls and concerts are shared and stay in the old file only. storeEnabled
+// is flipped off by the test seams so unit tests stay hermetic.
+const STORE_BLOCK = "musicDance";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file registry is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** This citizen's music/dance record for the account block, or null when empty. */
+function blockEntryFor(st, key) {
+  const entry = {};
+  const p = st.players[key];
+  const owed = st.payoutsOwed?.[key];
+  if (p) entry.player = { ...p };
+  if (owed) entry.payoutOwed = owed;
+  return Object.keys(entry).length ? entry : null;
+}
+
+/** Dual-write one citizen's music/dance record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
+/** Dual-write after a per-citizen player-record mutation. */
+function syncPlayer(username) {
+  const st = load();
+  const key = normalizeName(username);
+  if (key) syncStore(key, blockEntryFor(st, key));
 }
 
 // === Tuning: all magic numbers here ===
@@ -147,6 +198,17 @@ function load() {
     if (!Array.isArray(cache.ensembles)) cache.ensembles = [];
     if (!Array.isArray(cache.troupes)) cache.troupes = [];
     if (!Array.isArray(cache.concerts)) cache.concerts = [];
+    // Dual-read: overlay account blocks over the old-file registries.
+    if (storeEnabled) {
+      if (!cache.payoutsOwed || typeof cache.payoutsOwed !== "object") cache.payoutsOwed = Object.create(null);
+      const keys = new Set([...Object.keys(cache.players), ...Object.keys(cache.payoutsOwed)]);
+      for (const key of keys) {
+        const block = storeBlockFor(key);
+        if (!block) continue;
+        if (block.player && typeof block.player === "object") cache.players[key] = block.player;
+        if (block.payoutOwed) cache.payoutsOwed[key] = block.payoutOwed;
+      }
+    }
   } catch {
     cache = blankState();
   }
@@ -179,7 +241,16 @@ function playerRec(username) {
   const key = normalizeName(username);
   if (!key) return null;
   if (!st.players[key]) {
-    st.players[key] = { music: 0, dance: 0, instrumentId: null, lastPractice: 0, lastLesson: 0 };
+    // Dual-read: the account block may hold what the old registry lacks.
+    const block = storeBlockFor(username);
+    if (block && block.player && typeof block.player === "object") {
+      st.players[key] = block.player;
+      if (block.payoutOwed && st.payoutsOwed && typeof st.payoutsOwed === "object") {
+        st.payoutsOwed[key] = block.payoutOwed;
+      }
+    } else {
+      st.players[key] = { music: 0, dance: 0, instrumentId: null, lastPractice: 0, lastLesson: 0 };
+    }
     markDirty();
   }
   return st.players[key];
@@ -220,6 +291,7 @@ function setInstrument(username, instrumentId) {
   if (!rec) return false;
   rec.instrumentId = inst.id;
   markDirty();
+  syncPlayer(username);
   return true;
 }
 
@@ -244,6 +316,7 @@ function addMusic(username, amount) {
   if (!rec) return 0;
   rec.music = Math.max(0, Math.min(100, rec.music + amount));
   markDirty();
+  syncPlayer(username);
   return rec.music;
 }
 
@@ -252,6 +325,7 @@ function addDance(username, amount) {
   if (!rec) return 0;
   rec.dance = Math.max(0, Math.min(100, rec.dance + amount));
   markDirty();
+  syncPlayer(username);
   return rec.dance;
 }
 
@@ -445,6 +519,7 @@ function practice(username, player, kind, nowMs) {
   if (kind === "dance") rec.dance = Math.min(100, rec.dance + gain);
   else rec.music = Math.min(100, rec.music + gain);
   markDirty();
+  syncPlayer(username);
   return { ok: true, gain, withInstrument: !!withInstrument };
 }
 
@@ -488,6 +563,7 @@ function owePayout(username, amount) {
   if (!st.payoutsOwed || typeof st.payoutsOwed !== "object") st.payoutsOwed = Object.create(null);
   st.payoutsOwed[key] = (st.payoutsOwed[key] || 0) + amount;
   markDirty();
+  syncStore(key, blockEntryFor(st, key));
   return st.payoutsOwed[key];
 }
 
@@ -505,6 +581,7 @@ function clearOwedPayout(username) {
   if (st.payoutsOwed && key in st.payoutsOwed) {
     delete st.payoutsOwed[key];
     markDirty();
+    syncStore(key, blockEntryFor(st, key)); // clear or shrink the block
     return true;
   }
   return false;

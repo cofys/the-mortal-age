@@ -62,12 +62,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-legalcode.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- tuning ----------------------------------------------------------------
@@ -111,6 +113,13 @@ function state() {
           cache.playerAccusations = Array.isArray(raw.playerAccusations)
             ? raw.playerAccusations
             : [];
+          // Dual-read: overlay account blocks over the old-file lawyer registry.
+          if (storeEnabled) {
+            for (const key of Object.keys(cache.lawyers)) {
+              const block = storeBlockFor(key);
+              if (block) cache.lawyers[key] = block;
+            }
+          }
         }
       }
     } catch {
@@ -122,6 +131,35 @@ function state() {
 
 function markDirty() {
   dirty = true;
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-legalcode.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "legalcode";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's lawyer record into their account block (null clears). */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
 }
 
 function save() {
@@ -139,6 +177,7 @@ function save() {
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- helpers -----------------------------------------------------------------
@@ -248,18 +287,29 @@ function hireLawyer(accusedUsername, lawyerUsername, nowMs, feePaid) {
     feePaid: !!feePaid,
   };
   markDirty();
+  syncStore(accusedUsername, s.lawyers[norm]);
   return s.lawyers[norm];
 }
 
 function lawyerFor(accusedUsername) {
   const s = state();
-  return s.lawyers[normalizeName(accusedUsername)] || null;
+  const norm = normalizeName(accusedUsername);
+  if (!s.lawyers[norm]) {
+    // Dual-read: the account block may hold what the old registry lacks.
+    const block = storeBlockFor(accusedUsername);
+    if (block) {
+      s.lawyers[norm] = block;
+      markDirty();
+    }
+  }
+  return s.lawyers[norm] || null;
 }
 
 function clearLawyer(accusedUsername) {
   const s = state();
   delete s.lawyers[normalizeName(accusedUsername)];
   markDirty();
+  syncStore(accusedUsername, null); // clear the block so it isn't resurrected
 }
 
 /** Defense bonus for the trial hook: 0.15 guilt reduction when represented. */

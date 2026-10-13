@@ -36,12 +36,14 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-pets.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- tuning ------------------------------------------------------------------
@@ -112,6 +114,35 @@ const ALL_PET_ITEM_IDS = (() => {
 let petsByOwner = {}; // normalized username -> [ petRecord ]
 let dirty = false;
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-pets.json registry is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "pets";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file registry is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's pet list into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 function petKey(username) {
   return normalizeName(username || "");
 }
@@ -123,6 +154,13 @@ function load() {
     const raw = fs.readFileSync(SAVE_FILE, "utf8");
     const data = JSON.parse(raw);
     petsByOwner = data.petsByOwner || {};
+    // Dual-read: overlay account blocks over the old-file registry.
+    if (storeEnabled) {
+      for (const key of Object.keys(petsByOwner)) {
+        const block = storeBlockFor(key);
+        if (block) petsByOwner[key] = block;
+      }
+    }
     dirty = false;
   } catch {
     petsByOwner = {};
@@ -151,6 +189,7 @@ function markDirty() {
 function resetForTests() {
   petsByOwner = {};
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- pet records ---------------------------------------------------------------
@@ -163,7 +202,15 @@ function resetForTests() {
  */
 function petsOf(username) {
   const key = petKey(username);
-  return petsByOwner[key] || [];
+  const list = petsByOwner[key];
+  if (list && list.length) return list;
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(username);
+  if (block) {
+    petsByOwner[key] = block;
+    return block;
+  }
+  return list || [];
 }
 
 function addPet(username, type, itemId, opts = {}) {
@@ -187,6 +234,7 @@ function addPet(username, type, itemId, opts = {}) {
   if (!petsByOwner[key]) petsByOwner[key] = [];
   petsByOwner[key].push(record);
   markDirty();
+  syncStore(key, petsByOwner[key]);
   return record;
 }
 
@@ -198,6 +246,7 @@ function removePet(username, itemId) {
   if (idx < 0) return false;
   list.splice(idx, 1);
   markDirty();
+  syncStore(key, list.length ? list : null); // clear the block when the last pet leaves
   return true;
 }
 
@@ -252,6 +301,7 @@ function feedPet(username, itemId) {
   pet.happiness = Math.min(100, pet.happiness + FEED_HAPPINESS_BOOST);
   pet.fedAt = Date.now();
   markDirty();
+  syncStore(key, list);
   return true;
 }
 
@@ -267,6 +317,7 @@ function playWithPet(username, itemId) {
   if (!pet) return false;
   pet.happiness = Math.min(100, pet.happiness + PLAY_HAPPINESS_BOOST);
   markDirty();
+  syncStore(key, list);
   return true;
 }
 
@@ -290,6 +341,7 @@ function decayPets(username, daysElapsed) {
     if (pet.hunger < 20) critical.push(pet);
   }
   markDirty();
+  syncStore(key, list);
   return critical;
 }
 

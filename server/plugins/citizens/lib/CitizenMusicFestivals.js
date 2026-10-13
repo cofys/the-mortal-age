@@ -57,12 +57,14 @@
 const fs = require("fs");
 const path = require("path");
 const { agentRng } = require("./humanizer");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-music-festivals.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 /** Test seam — clear in-memory state. */
@@ -71,6 +73,38 @@ function resetForTests() {
   dirty = false;
   nextFestivalId = 1;
   nextBookingId = 1;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
+}
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-music-festivals.json file is the
+// fallback (and stays fully written). Only the promoters registry is
+// per-citizen; companies, grounds, festivals, bookings, vendors and campers
+// are shared and stay in the old file only. storeEnabled is flipped off by
+// the test seams so unit tests stay hermetic.
+const STORE_BLOCK = "musicFestivals";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file registry is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's promoter record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
 }
 
 // === Tuning: all magic numbers here ===
@@ -142,6 +176,13 @@ function load() {
         const n = parseInt(String(id).replace("book", ""), 10);
         if (!isNaN(n) && n >= nextBookingId) nextBookingId = n + 1;
       }
+      // Dual-read: overlay account blocks over the old-file promoters registry.
+      if (storeEnabled && cache.promoters && typeof cache.promoters === "object") {
+        for (const key of Object.keys(cache.promoters)) {
+          const block = storeBlockFor(key);
+          if (block) cache.promoters[key] = block;
+        }
+      }
       return cache;
     }
   } catch (e) { /* missing or corrupt — start fresh */ }
@@ -196,13 +237,22 @@ function registerPromoter(username, kingdomId) {
       registeredAt: Date.now(),
     };
     markDirty();
+    syncStore(key, st.promoters[key]);
   }
   return { ok: true, promoter: st.promoters[key] };
 }
 
 function promoterFor(username) {
   const st = load();
-  return st.promoters[norm(username)] || null;
+  const key = norm(username);
+  if (st.promoters[key]) return st.promoters[key];
+  // Dual-read: the account block may hold what the old registry lacks.
+  const block = storeBlockFor(username);
+  if (block) {
+    st.promoters[key] = block;
+    return block;
+  }
+  return null;
 }
 
 function isPromoter(username) {
@@ -405,6 +455,7 @@ function scheduleFestival(companyName, kingdomId, days, name) {
   const promoter = st.promoters[norm(c.founder)];
   if (promoter) {
     promoter.festivalsPromoted += 1;
+    syncStore(norm(c.founder), promoter);
   }
   markDirty();
   return { ok: true, festival: st.festivals[id] };
