@@ -2226,12 +2226,18 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         const name = String(row[5] ?? "?");
                         const online = (row[6] | 0) === 1;
                         const size = online ? dotSize * 1.6 : dotSize;
+                        // Jon 2026-10-13: grey = simulated data-tier citizen
+                        // (not physically there); full activity color =
+                        // materialized and standing in the world.
+                        const color = online
+                            ? WORLD_MAP_CITIZEN_CAT_COLORS[cat]
+                            : [0.5, 0.5, 0.5, 0.8];
                         glr.drawRect(
                             dot.x - size / 2,
                             dot.y - size / 2,
                             size,
                             size,
-                            WORLD_MAP_CITIZEN_CAT_COLORS[cat],
+                            color,
                         );
                         const hit = Math.max(7, size / 2 + 3);
                         citizenDots.push({

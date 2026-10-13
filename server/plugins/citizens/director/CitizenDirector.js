@@ -403,6 +403,19 @@ const PROXIMITY_TICK_TICKS = 17; // ~10s at 600ms/tick: fast spawn/despawn for r
 // actually think and move, instead of 150 statues.
 const CITIZEN_MAX_MATERIALIZED = 60;
 
+// --- Invisible materialization (Jon 2026-10-13) ---
+// Citizens must never arrive as a synchronized visible wave. Spawn
+// candidates queue up and drain a few per engine tick (nearest-first), so a
+// player entering an area finds people already there, mid-activity — never
+// an empty field that suddenly pops full. A citizen whose destination is
+// inside a player's view spawns just outside it and walks in like a person
+// arriving. (Client viewport is ~15-25 tiles; margins stay outside it.)
+const CITIZEN_SPAWN_VIEWPORT = 22; // cheby tiles: spawn this close to a player is visible
+const CITIZEN_WALKIN_RADIUS = 26; // off-view spawn distance from the viewer
+const SPAWN_DRAIN_PER_TICK = 3; // base queue drain rate (jittered 2-4 per tick)
+const SPAWN_QUEUE_MAX = 250; // safety: farthest entries drop when exceeded
+const TELEPORT_DETECT_TILES = 40; // position discontinuity => arrival, evaluate now
+
 // role -> rank granted through the kingdoms plugin's hierarchy.
 const ROLE_RANK = Object.freeze({
   [ROLE_GUARD]: "Man-at-arms",
@@ -735,6 +748,14 @@ class CitizenDirector {
     // restarts), so the counter itself doesn't need persisting.
     this.aiTickCount = 0;
     this._desyncSpread = null;
+    // Invisible-materialization spawn queue: candidates enqueue (deduped)
+    // and drain a few per engine tick, nearest-first. See tickSpawnQueue.
+    this.spawnQueue = []; // [{ key, dist }] sorted nearest-first
+    this.spawnQueued = new Set(); // normalized usernames currently queued
+    // Last seen real-player positions by identity: detects teleports and
+    // logins (position discontinuity) so arrivals evaluate immediately
+    // instead of waiting for the 17-tick proximity cycle.
+    this._lastPlayerPos = new Map();
     // Round-robin cursor for the budgeted feature-tick list in tick().
     // Persists across slow ticks so deferred features resume where the
     // previous cycle stopped instead of starving.
@@ -1490,6 +1511,29 @@ class CitizenDirector {
       }
     }
     this.api.getTaskManager?.()?.submit(new ProximityTask(PROXIMITY_TICK_TICKS));
+    // Invisible-materialization drain (Jon 2026-10-13): runs every engine
+    // tick. Detects player arrivals (teleport/login) for immediate spawn
+    // evaluation and drains the spawn queue a few per tick, nearest-first —
+    // never the whole cohort in one synchronized wave. Cheap per tick:
+    // one player-list scan plus a handful of spawns; the roster scan only
+    // happens on actual arrivals.
+    class SpawnDrainTask extends Task {
+      execute() {
+        const t0 = Date.now();
+        try {
+          director.tickSpawnQueue();
+        } catch (error) {
+          director.log("spawn drain failed", {
+            error: String(error?.message ?? error),
+          });
+        } finally {
+          try {
+            TickTiming.record("director.tickSpawnQueue", Date.now() - t0, director.spawnQueue?.length ?? 0);
+          } catch {}
+        }
+      }
+    }
+    this.api.getTaskManager?.()?.submit(new SpawnDrainTask(1));
   }
 
   /**
@@ -1499,9 +1543,9 @@ class CitizenDirector {
   realPlayerPositions() {
     const out = [];
     // DEBUG: Include fake player positions for autonomous testing.
-    for (const fp of debugFakePositions) {
-      out.push({ x: fp.x, y: fp.y, z: fp.z ?? 0 });
-    }
+    debugFakePositions.forEach((fp, i) => {
+      out.push({ x: fp.x, y: fp.y, z: fp.z ?? 0, name: `__fake${i}` });
+    });
     try {
       const World = this.api.core?.World;
       const players = World?.players;
@@ -1522,6 +1566,9 @@ class CitizenDirector {
             x: loc.getX?.() ?? loc.x ?? 0,
             y: loc.getY?.() ?? loc.y ?? 0,
             z: loc.getZ?.() ?? loc.z ?? 0,
+            // Identity for arrival detection (teleport/login discontinuity).
+            // Only the drain task reads it; distance checks ignore it.
+            name: p.getUsername?.() ?? p.username ?? null,
           });
         } catch {
           // Skip unreadable players.
@@ -1699,33 +1746,21 @@ class CitizenDirector {
     } catch (error) {
       this.log("tick-lod-proximity failed", { error: String(error?.message ?? error) });
     }
-    // Nearest-first materialization under the global cap: the citizens a
-    // player can actually see always win the spawn budget.
+    // Invisible materialization (Jon 2026-10-13): candidates ENQUEUE here and
+    // drain a few per engine tick in tickSpawnQueue — never the whole cohort
+    // in one synchronized wave. The queue stays nearest-first so the
+    // citizens a player will see first materialize first; the drain
+    // enforces CITIZEN_MAX_MATERIALIZED and re-checks proximity at spawn
+    // time (a player who walked on leaves stale entries behind).
     if (spawnCandidates.length > 0) {
-      // Perf (#10): partial selection of the nearest K (the remaining spawn
-      // budget) instead of a full O(n log n) sort of every candidate.
-      const nearest = selectNearestK(
-        spawnCandidates,
-        CITIZEN_MAX_MATERIALIZED - materializedCount
-      );
-      for (const { record } of nearest) {
-        if (materializedCount >= CITIZEN_MAX_MATERIALIZED) {
-          break;
-        }
-        try {
-          this.spawnCitizen(record);
-          materializedCount += 1;
-        } catch (error) {
-          this.log("capped spawn failed", {
-            citizen: record.username,
-            error: String(error?.message ?? error),
-          });
-        }
+      const nearest = selectNearestK(spawnCandidates, CITIZEN_MAX_MATERIALIZED);
+      for (const { record, dist } of nearest) {
+        this.enqueueSpawn(record, dist);
       }
-      if (materializedCount >= CITIZEN_MAX_MATERIALIZED) {
-        this.log("citizen spawn cap reached", {
-          cap: CITIZEN_MAX_MATERIALIZED,
-          deferred: spawnCandidates.length,
+      if (this.spawnQueue.length > 40) {
+        this.log("spawn queue backlog", {
+          queued: this.spawnQueue.length,
+          candidates: spawnCandidates.length,
         });
       }
     }
@@ -2503,7 +2538,190 @@ class CitizenDirector {
     return out;
   }
 
-  spawnCitizen(record) {
+  /**
+   * Invisible-materialization queue (Jon 2026-10-13). enqueueSpawn is called
+   * by the proximity tick and by arrival detection; tickSpawnQueue drains a
+   * few per engine tick, nearest-first. Citizens materialize during a
+   * player's approach — already there, mid-activity — instead of popping in
+   * as a synchronized wave after seconds of emptiness.
+   */
+  enqueueSpawn(record, dist = 0) {
+    try {
+      if (!record || !record.username) return;
+      const key = normalizeName(record.username);
+      if (this.spawnQueued.has(key) || this.isOnline(record)) return;
+      if (this.spawnQueue.length >= SPAWN_QUEUE_MAX) {
+        const dropped = this.spawnQueue.pop(); // farthest goes first
+        if (dropped) this.spawnQueued.delete(dropped.key);
+      }
+      this.spawnQueued.add(key);
+      const item = { key, dist: Number.isFinite(dist) ? dist : 0 };
+      // Keep nearest-first.
+      let i = this.spawnQueue.length;
+      while (i > 0 && this.spawnQueue[i - 1].dist > item.dist) i--;
+      this.spawnQueue.splice(i, 0, item);
+    } catch {
+      // Queueing never blocks the tick.
+    }
+  }
+
+  /**
+   * Per-engine-tick spawn drain. (1) Detect player arrivals — a new identity
+   * or a position discontinuity (teleport/login) — and evaluate spawn
+   * candidates for them immediately instead of waiting for the 17-tick
+   * proximity cycle. (2) Drain the queue a few per tick with jitter so
+   * spawns never land as a synchronized burst.
+   */
+  tickSpawnQueue() {
+    const positions = this.realPlayerPositions();
+    try {
+      this.detectArrivals(positions);
+    } catch (error) {
+      this.log("arrival detect failed", { error: String(error?.message ?? error) });
+    }
+    try {
+      this.drainSpawnQueue(positions);
+    } catch (error) {
+      this.log("spawn drain failed", { error: String(error?.message ?? error) });
+    }
+  }
+
+  detectArrivals(positions) {
+    const seen = new Set();
+    for (const p of positions) {
+      const name = p.name ?? `anon${p.x},${p.y}`;
+      seen.add(name);
+      const last = this._lastPlayerPos.get(name);
+      this._lastPlayerPos.set(name, { x: p.x, y: p.y, z: p.z ?? 0 });
+      if (last && (last.z ?? 0) === (p.z ?? 0)) {
+        const moved = Math.max(Math.abs(last.x - p.x), Math.abs(last.y - p.y));
+        if (moved <= TELEPORT_DETECT_TILES) continue; // ordinary walking
+      }
+      // New player or teleported: they need citizens NOW, not in 17 ticks.
+      this.enqueueNearPlayer(p);
+    }
+    for (const name of this._lastPlayerPos.keys()) {
+      if (!seen.has(name)) this._lastPlayerPos.delete(name);
+    }
+  }
+
+  /** Spawn-candidate evaluation for one newly-arrived player (O(roster)). */
+  enqueueNearPlayer(playerPos) {
+    const hour = hourNow();
+    const cands = [];
+    for (const record of this.roster.values()) {
+      try {
+        if (this.isOnline(record)) continue;
+        const key = normalizeName(record.username);
+        if (this.spawnQueued.has(key)) continue;
+        if (!desiredPhase(record, hour).online) continue;
+        const at = record.position ?? record.home;
+        if (!at) continue;
+        if ((at.z ?? 0) !== (playerPos.z ?? 0)) continue;
+        const d = Math.max(Math.abs(at.x - playerPos.x), Math.abs(at.y - playerPos.y));
+        if (d <= CITIZEN_SPAWN_RADIUS) cands.push({ record, dist: d });
+      } catch {
+        // Skip unreadable records.
+      }
+    }
+    cands.sort((a, b) => a.dist - b.dist);
+    for (const { record, dist } of cands) this.enqueueSpawn(record, dist);
+  }
+
+  /** Drain the spawn queue: jittered 2-4 per tick, nearest-first. */
+  drainSpawnQueue(positions) {
+    if (this.spawnQueue.length === 0) return;
+    const onlineCount = this.runtime()?.entriesByUsername?.size ?? 0;
+    let budget = CITIZEN_MAX_MATERIALIZED - onlineCount;
+    if (budget <= 0) return;
+    let n = Math.min(this.spawnQueue.length, budget, 2 + Math.floor(Math.random() * 3));
+    const hour = hourNow();
+    while (n > 0 && this.spawnQueue.length > 0 && budget > 0) {
+      n--;
+      const item = this.spawnQueue.shift();
+      this.spawnQueued.delete(item.key);
+      const record = this.roster.get(item.key);
+      if (!record || this.isOnline(record)) continue;
+      try {
+        if (!desiredPhase(record, hour).online) continue;
+        const at = record.position ?? record.home;
+        const dist = at
+          ? this.nearestRealPlayerDist(at.x, at.y, at.z ?? 0, positions)
+          : null;
+        if (dist === null || dist > CITIZEN_SPAWN_RADIUS) continue; // walked on
+        if (this.spawnCitizen(record, positions)) budget--;
+      } catch (error) {
+        this.log("queued spawn failed", {
+          citizen: record?.username,
+          error: String(error?.message ?? error),
+        });
+      }
+    }
+    if (this.spawnQueue.length > 40) {
+      this.log("spawn queue still deep", { queued: this.spawnQueue.length });
+    }
+  }
+
+  /**
+   * Walk-in spawn tile (Jon 2026-10-13): when a citizen's destination is
+   * inside a player's view, spawn them just outside it and let their
+   * arrival activity walk them in like a person arriving — never a poof
+   * into existence at the destination. record.position keeps the TRUE
+   * destination, so the arrival seed and GoToPlace still target it (their
+   * 48-tile prospecting radius covers the ~26-tile displacement).
+   * Returns the walk-in tile or null when an in-place spawn is fine.
+   */
+  walkInSpawnTile(destTile, record, positions) {
+    try {
+      if (!positions || positions.length === 0) return null;
+      const dz = destTile.z ?? 0;
+      let nearest = null;
+      let nd = Infinity;
+      for (const p of positions) {
+        if ((p.z ?? 0) !== dz) continue;
+        const d = Math.max(Math.abs(p.x - destTile.x), Math.abs(p.y - destTile.y));
+        if (d < nd) {
+          nd = d;
+          nearest = p;
+        }
+      }
+      if (!nearest || nd > CITIZEN_SPAWN_VIEWPORT) return null;
+      // Ring around the viewer at walk-in radius; take the walkable tile
+      // nearest the true destination (they were just out of sight).
+      let best = null;
+      let bd = Infinity;
+      for (let i = 0; i < 16; i++) {
+        const ang = (i / 16) * Math.PI * 2 + 0.19;
+        const cx = Math.round(nearest.x + Math.cos(ang) * CITIZEN_WALKIN_RADIUS);
+        const cy = Math.round(nearest.y + Math.sin(ang) * CITIZEN_WALKIN_RADIUS);
+        const t = this.snapToWalkableTile(cx, cy, dz);
+        if (!t) continue;
+        if (
+          Math.max(Math.abs(t.x - nearest.x), Math.abs(t.y - nearest.y)) <=
+          CITIZEN_SPAWN_VIEWPORT
+        ) {
+          continue; // snap pulled it back into view
+        }
+        const d = Math.max(Math.abs(t.x - destTile.x), Math.abs(t.y - destTile.y));
+        if (d < bd) {
+          bd = d;
+          best = t;
+        }
+      }
+      if (best) {
+        this.log("walk-in spawn", {
+          citizen: record?.username,
+          dest: { x: destTile.x, y: destTile.y },
+          via: { x: best.x, y: best.y },
+        });
+      }
+      return best;
+    } catch {
+      return null; // fall back to in-place spawn
+    }
+  }
+
+  spawnCitizen(record, positions = null) {
     const runtime = this.runtime();
     if (!runtime) {
       this.log("no bot runtime yet, deferring spawn", { citizen: record.username });
@@ -2528,7 +2746,18 @@ class CitizenDirector {
       });
       record.position = { x: spawnTile.x, y: spawnTile.y, z: spawnTile.z };
     }
-    const spawn = new Location(spawnTile.x, spawnTile.y, spawnTile.z ?? 0);
+    // Invisible materialization (Jon 2026-10-13): when the destination is
+    // inside a player's view, the bot spawns just outside it and walks in
+    // like a person arriving. record.position keeps the TRUE destination so
+    // the arrival seed (CitizenArrival, near-tile check) and the activity's
+    // GoToPlace (48-tile prospecting) still target it.
+    const walkIn = this.walkInSpawnTile(
+      spawnTile,
+      record,
+      positions ?? this.realPlayerPositions()
+    );
+    const botTile = walkIn ?? spawnTile;
+    const spawn = new Location(botTile.x, botTile.y, botTile.z ?? 0);
     const bot = createBotPlayer(record.username, spawn, {
       api: this.api,
       loadPersistence: false,
@@ -2686,7 +2915,7 @@ class CitizenDirector {
     }
 
     const state = createInitialState(
-      { x: spawnTile.x, y: spawnTile.y, z: spawnTile.z ?? 0 },
+      { x: botTile.x, y: botTile.y, z: botTile.z ?? 0 },
       { ROAMING: "roaming" }
     );
     // XP unification (Jon 2026-10-12): SkillManager is the source of truth.
