@@ -326,6 +326,7 @@ function forgetCitizen(username) {
   if (key && data().citizens[key]) {
     delete data().citizens[key];
     markDirty();
+    syncStore(key, null); // clear the block so the entry isn't resurrected
   }
 }
 
