@@ -33,7 +33,7 @@ interface TilePoint {
  * resolveBrowserQualityProfile selects from.
  */
 export function resolveWebGPURenderDistance(renderer: WebGPURenderer): number {
-    const base = clamp(renderer.osrsClient.renderDistance | 0, 25,
+    const base = clamp((renderer.osrsClient.gpuPlugin?.settings()?.drawDistance ?? renderer.osrsClient.renderDistance) | 0, 25,
         renderer.osrsClient.hdPlugin?.isEnabled() ? 160 : 90);
     const profile = resolveQualityProfile();
     const target = isTouchDevice || isLowEndDevice ? Math.min(base, profile.renderDistanceCap | 0) : base;
@@ -43,7 +43,8 @@ export function resolveWebGPURenderDistance(renderer: WebGPURenderer): number {
 /** Same full-detail radius and device caps as WebGL's resolveEffectiveLodThresholdTiles. */
 export function resolveWebGPULodDistance(renderer: WebGPURenderer): number {
     const distance = resolveWebGPURenderDistance(renderer);
-    const base = clamp(renderer.osrsClient.lodDistance | 0, 0,
+    const gpu = renderer.osrsClient.gpuPlugin?.settings();
+    const base = clamp(gpu ? gpu.drawDistance - 2 : renderer.osrsClient.lodDistance | 0, 0,
         Math.min(distance, renderer.osrsClient.hdPlugin?.isEnabled() ? 48 : distance));
     return isTouchDevice || isLowEndDevice
         ? Math.min(base, resolveQualityProfile().lodThresholdCap | 0)

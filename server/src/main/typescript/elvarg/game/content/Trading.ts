@@ -412,6 +412,8 @@ export class Trading {
                 if (this.interact.isPlayerBot && this.interact.isPlayerBot()) {
                     // Automatically accept the trade whenever an item is added by the player
                     this.interact.getTrading().acceptTrade();
+                    // A bot with a trading handler re-judges the trade whenever the offer changes.
+                    (this.interact as any).getTradingInteraction?.()?.offerChanged?.(this.player);
                 }
             } else {
                 this.player.getPacketSender().sendInterfaceRemoval();
@@ -621,6 +623,6 @@ export class Trading {
     }
 }
 
-enum TradeState {
+export enum TradeState {
     NONE, REQUESTED_TRADE, TRADE_SCREEN, ACCEPTED_TRADE_SCREEN, CONFIRM_SCREEN, ACCEPTED_CONFIRM_SCREEN
 }

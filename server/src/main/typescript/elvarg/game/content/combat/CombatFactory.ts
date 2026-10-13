@@ -587,7 +587,7 @@ export class CombatFactory {
                     !target.getCombat().getHitQueue().isEmpty(attacker)
                 )
             ) {
-                return CanAttackResponse.ALREADY_UNDER_ATTACK;
+                return CanAttackResponse.TARGET_IN_COMBAT;
             }
         }
 
@@ -1560,6 +1560,8 @@ export class CombatFactory {
 export enum CanAttackResponse {
     INVALID_TARGET,
     ALREADY_UNDER_ATTACK,
+    /** Single combat: someone else is fighting the target. */
+    TARGET_IN_COMBAT,
     CANT_ATTACK_IN_AREA,
     COMBAT_METHOD_NOT_ALLOWED,
     LEVEL_DIFFERENCE_TOO_GREAT,

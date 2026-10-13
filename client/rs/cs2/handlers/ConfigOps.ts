@@ -140,7 +140,9 @@ export function registerConfigOps(handlers: HandlerMap): void {
             const maxItemId = 65535;
             for (let id = 0; id < maxItemId; id++) {
                 const obj = ctx.objTypeLoader.load(id);
-                if (obj && obj.name && obj.name !== "null") {
+                // Bank placeholders share their item's name but are never real items (a blank
+                // model): spawned and dropped, one is an invisible ground item.
+                if (obj && obj.name && obj.name !== "null" && obj.placeholderTemplate === -1) {
                     if (obj.name.toLowerCase().includes(query)) {
                         ctx.itemSearchResults.push(id);
                     }

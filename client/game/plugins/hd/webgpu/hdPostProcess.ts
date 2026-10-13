@@ -10,10 +10,10 @@
  */
 import { mat4 } from "gl-matrix";
 
+import { FxaaPass } from "../../../../render/webgpu/fxaa";
 import type { WebGPUSceneFrameTargets } from "../../../../render/webgpu/sceneExtension";
 import type { WebGPURenderer } from "../../../../render/webgpu/WebGPURenderer";
 import type { HdOptions } from "../HdConfig";
-import { HdFxaaPass } from "./hd-fxaa";
 import { HdBloomPass } from "./hd-bloom";
 import { HdDepthOfFieldPass } from "./hd-dof";
 import { HdSsaoPass } from "./hd-ssao";
@@ -33,7 +33,7 @@ export class HdPostProcess {
     private readonly bloom: HdBloomPass;
     private readonly dof: HdDepthOfFieldPass;
     private readonly tonemap: HdTonemapPass;
-    private fxaa?: HdFxaaPass;
+    private fxaa?: FxaaPass;
     private readonly inverseProjection = mat4.create() as Float32Array;
     private disposed = false;
 
@@ -81,7 +81,7 @@ export class HdPostProcess {
             focusDistance,
             strength,
         );
-        const fxaa = options.antiAliasing ? (this.fxaa ??= new HdFxaaPass(this.device, this.canvasFormat)) : undefined;
+        const fxaa = options.antiAliasing ? (this.fxaa ??= new FxaaPass(this.device, this.canvasFormat)) : undefined;
         this.tonemap.encode(encoder, fxaa?.ensure(width, height) ?? frame.canvasView,
             sceneView, bloomView, aoView, width, height, options.hdr);
         fxaa?.encode(encoder, frame.canvasView);

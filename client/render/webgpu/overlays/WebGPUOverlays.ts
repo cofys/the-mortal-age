@@ -190,7 +190,7 @@ export class WebGPUOverlays {
         const hdrActive = !!world?.extensionActive && !!world.extension?.sceneColorFormat;
         try {
             this.groundMeshes?.drawWorld(pass);
-            this.tileMarker?.drawWorld(pass, hdrActive);
+            this.tileMarker?.drawWorld(pass, hdrActive, world?.sampleCount ?? 1);
         } catch (error) {
             console.warn("[webgpu] overlays world draw failed", error);
         }

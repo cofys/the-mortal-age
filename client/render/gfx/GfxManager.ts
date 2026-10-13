@@ -309,6 +309,29 @@ export class GfxManager {
         }
     }
 
+    /**
+     * The world graphics drawn by a map square: those on the tiles it draws, from where it is
+     * drawn (an instance scene starts at its centre chunk less 6, not at its map square's start).
+     */
+    listWorldInstancesForDrawnMap(map: { mapX: number; mapY: number; getRenderBaseTileX?(): number; getRenderBaseTileY?(): number; getLocalTileSpan?(): number }): GfxInstance[] {
+        const baseX = map.getRenderBaseTileX?.() ?? map.mapX * 64;
+        const baseY = map.getRenderBaseTileY?.() ?? map.mapY * 64;
+        const span = map.getLocalTileSpan?.() || 64;
+        const out = this.worldInstancesBuffer;
+        out.length = 0;
+        const nowCycle = getClientCycle() | 0;
+        for (const inst of this.instances.values()) {
+            if (!inst.world) continue;
+            if ((inst.startCycle | 0) > nowCycle) continue;
+            const tileX = inst.world.tileX | 0;
+            const tileY = inst.world.tileY | 0;
+            if (tileX < baseX || tileX >= baseX + span) continue;
+            if (tileY < baseY || tileY >= baseY + span) continue;
+            out.push(inst);
+        }
+        return out;
+    }
+
     listWorldInstancesForMap(mapX: number, mapY: number): GfxInstance[] {
         const out = this.worldInstancesBuffer;
         out.length = 0; // Clear and reuse buffer

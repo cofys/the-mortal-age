@@ -328,9 +328,13 @@ function tick() {
       }
       continue;
     }
+    // A live encounter must never regenerate (the engine heals an NPC that has
+    // not attacked for 20 s; Zulrah, Mad Angel and the Doom do the same).
+    npc.getCombat?.().getLastAttack?.().reset?.();
     const players = npc.getPlayersWithinDistance(25);
     const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
     if (session) Minions.ensureTargets(session);
+    if (session) Minions.pinEggs(session);
     tickBall(npc, fight, players);
     tickDrips(npc, fight);
     tickPools(npc, fight, players);

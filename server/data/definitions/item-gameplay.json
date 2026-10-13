@@ -26391,7 +26391,7 @@
   {"id":27007,"name":"Void melee helm (l)(or)","requirements":[42,42,42,42,42,22,42,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
   {"id":27008,"name":"Dragon defender (l)(t)","requirements":[60,60,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
   {"id":27009,"name":"Rune defender (l)(t)","requirements":[40,40,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
-  {"id":27021,"name":"Colossal blade","equipmentType":"WEAPON","weaponInterface":"TWO_HANDED_SWORD","blockAnim":410,"standAnim":2561,"walkAnim":2064,"runAnim":2563,"standTurnAnim":2561,"turn180Anim":2561,"turn90CWAnim":2561,"turn90CCWAnim":2561,"equipSound":2233,"requirements":[60,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {"id":27021,"name":"Colossal blade","equipmentType":"WEAPON","weaponInterface":"TWO_HANDED_SWORD","blockAnim":410,"standAnim":9460,"walkAnim":9461,"runAnim":9459,"standTurnAnim":9461,"turn180Anim":9461,"turn90CWAnim":9461,"turn90CCWAnim":9461,"equipSound":2233,"requirements":[60,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
   {"id":27025,"name":"Smiths trousers","equipSound":2242},
   {"id":27031,"name":"Smiths gloves (i)","equipSound":2236},
   {"id":27100,"name":"Elder maul (or)","equipmentType":"WEAPON","weaponInterface":"ELDER_MAUL","blockAnim":7517,"standAnim":7518,"walkAnim":7520,"runAnim":7519,"standTurnAnim":7220,"turn180Anim":7220,"turn90CWAnim":7220,"turn90CCWAnim":7220,"requirements":[75,0,75,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},

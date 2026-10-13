@@ -640,6 +640,10 @@ export class NpcEcs {
     getNpcTypeId(id: number): number {
         return this.npcTypeId[id] | 0;
     }
+    /** Re-points the render type (server transform, or a model customisation's synthetic id). */
+    setNpcTypeId(id: number, typeId: number): void {
+        this.npcTypeId[id] = typeId | 0;
+    }
     setOverheadText(id: number, text: string, durationCycles: number = 100): void {
         this.overheadText[id] = text;
         this.overheadCycle[id] = durationCycles | 0;

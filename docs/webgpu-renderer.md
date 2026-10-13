@@ -34,8 +34,8 @@ Rules that keep the port cheap:
    shared. Only uploads and draw dispatch differ per backend.
 2. **One backend at a time owns the canvas.** No mixed contexts. Stages that are not ported yet
    are simply unavailable under WebGPU, not silently broken.
-3. **Opt-in first, default last.** `?renderer=webgpu` selects the new backend until Stage 7.
-   `PREFER_WEBGPU_DEFAULT` in `GameRenderers.ts` flips the default when parity is reached.
+3. **WebGPU by default.** `PREFER_WEBGPU_DEFAULT` in `GameRenderers.ts` prefers WebGPU
+   when an adapter is available. `?renderer=webgl` forces the WebGL backend.
 4. **Fallback is serverless and automatic.** If WebGPU is requested (URL or default) but no
    adapter can be obtained, the client logs and uses WebGL.
 
@@ -253,10 +253,10 @@ world-depth cache copied before fresh actor shadows every frame. HD fragments sk
 fogged surfaces and redundant cache-albedo samples, and fade detail lighting from 24 to 48
 tiles. Unchanged actor data skips its texture upload. HD FXAA runs before the HUD.
 
-### Stage 7 — default flip
+### Stage 7 — default flip (**done**)
 
-`PREFER_WEBGPU_DEFAULT = true`; keep `?renderer=webgl` as an escape hatch. Exit: a release
-with WebGPU default on Chrome/Edge/Safari 26+ and WebGL elsewhere.
+`PREFER_WEBGPU_DEFAULT = true`; `?renderer=webgl` remains an escape hatch. WebGPU is the
+default when an adapter is available, with automatic WebGL fallback otherwise.
 
 ## Verification
 

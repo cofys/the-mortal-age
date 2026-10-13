@@ -47,6 +47,9 @@ import { environmentAt } from "../render/environment";
 import { GPU_TEXTURE_USAGE, SCENE_DEPTH_FORMAT, SCENE_GROUP, WORLD_TEXTURES_GROUP } from "./bindings";
 import { getControlledPlayerEcsIndex, updateFollowCamera } from "./camera";
 import { computeWebGPURoofPlaneLimit, resolveWebGPULodDistance, resolveWebGPURenderDistance } from "./frameConfig";
+import { FxaaPass } from "./fxaa";
+import { SceneMsaaTargets } from "./msaaTargets";
+import { WEBGPU_MSAA_SAMPLES } from "./multisample";
 import { WebGPUOverlays } from "./overlays/WebGPUOverlays";
 import { LocUpdates, type LocReloadGroup } from "./locUpdates";
 import { getClientCycle } from "../../network/ServerConnection";
@@ -89,6 +92,9 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     private sceneColorView?: GPUTextureView;
     private sceneColorWidth: number = 0;
     private sceneColorHeight: number = 0;
+    /** The GPU plugin's anti-aliasing: multisampled world-pass targets, or FXAA on the base path. */
+    private msaaTargets?: SceneMsaaTargets;
+    private fxaa?: FxaaPass;
 
     private dataLoader = new SdMapDataLoader();
 
@@ -577,7 +583,8 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         data[61] = fogDepth;
         data[62] = timeSec;
         data[63] = this.brightness;
-        data[64] = 255.0; // colorBanding (WebGL default; shader divides by 255)
+        // colorBanding: the GPU plugin's, else WebGL's default (the shader divides by it).
+        data[64] = this.osrsClient.gpuPlugin?.settings()?.colorBanding ?? 255.0;
         data[65] = this.osrsClient.isNewTextureAnim ? 1.0 : 0.0;
         this.world.flushSceneUniforms();
     }
@@ -662,7 +669,9 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         // A scene extension (e.g. 117 HD) is a runtime toggle: pick the pipeline pair once per
         // frame, before any map draw.
         const extension = world.extension;
-        world.selectExtension(!!extension?.isActive());
+        const gpu = this.osrsClient.gpuPlugin?.settings();
+        const sampleCount = gpu && gpu.msaaSamples > 0 ? WEBGPU_MSAA_SAMPLES : 1;
+        world.selectExtension(!!extension?.isActive(), sampleCount);
 
         // Same point the WebGL frame loop flushes queued client packets (render.ts login
         // early-out and in-game path).
@@ -705,13 +714,26 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             this.sceneColorView
                 ? this.sceneColorView
                 : undefined;
+        // Without the extension's target, FXAA has the world drawn into its own and presents it.
+        const fxaa = !hdrTarget && gpu?.fxaa ? (this.fxaa ??= new FxaaPass(this.device, this.format)) : undefined;
+        const sceneTarget = hdrTarget ?? fxaa?.ensure(width, height) ?? canvasView;
+        // MSAA draws into multisampled targets that resolve into sceneTarget as the pass ends.
+        let msaa: SceneMsaaTargets | undefined;
+        if (sampleCount > 1) {
+            msaa = this.msaaTargets ??= new SceneMsaaTargets(this.device);
+            msaa.ensure(width, height, hdrTarget ? sceneExtension!.sceneColorFormat! : this.format);
+        } else if (this.msaaTargets) {
+            this.msaaTargets.destroy();
+            this.msaaTargets = undefined;
+        }
         // The HDR target holds linear light, so the display-referred sky clear is linearised;
         // the tonemap pass re-encodes it.
         const toLinear = (value: number) => Math.pow(Math.max(value, 0), 2.2);
         const pass = encoder.beginRenderPass({
             colorAttachments: [
                 {
-                    view: hdrTarget ?? canvasView,
+                    view: msaa?.colorView ?? sceneTarget,
+                    resolveTarget: msaa ? sceneTarget : undefined,
                     clearValue: hdrTarget
                         ? {
                               r: toLinear(this.skyColor[0]),
@@ -726,14 +748,15 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
                               a: 1,
                           },
                     loadOp: "clear",
-                    storeOp: "store",
+                    storeOp: msaa ? "discard" : "store",
                 },
             ],
             depthStencilAttachment: {
-                view: this.depthView,
+                view: msaa?.depthView ?? this.depthView,
                 depthClearValue: 1.0,
                 depthLoadOp: "clear",
-                depthStoreOp: "store",
+                // Multisampled depth is only read again to resolve it for the extension.
+                depthStoreOp: msaa && !hdrTarget ? "discard" : "store",
             },
         });
 
@@ -754,6 +777,10 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         }
 
         pass.end();
+
+        // The extension's post passes read and depth-test against the single-sampled depth.
+        if (msaa && hdrTarget) msaa.resolveDepth(encoder, this.depthView);
+        fxaa?.encode(encoder, canvasView);
 
         if (hdrTarget) {
             sceneExtension!.afterScene!(this, encoder, {
@@ -891,6 +918,11 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.locUpdates.refreshGamemodeWorldLocs();
     }
 
+    protected override reloadMultiLocSquare(mapX: number, mapY: number): void {
+        if (this.instanceActive) this.scheduleInstanceLocRebuild();
+        else this.locUpdates.scheduleReload(mapX, mapY, "full");
+    }
+
     override onRegionReplacement(payload: RegionReplacementEvent): void {
         this.locUpdates.onRegionReplacement(payload);
     }
@@ -977,5 +1009,9 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.sceneColorTexture?.destroy();
         this.sceneColorTexture = undefined;
         this.sceneColorView = undefined;
+        this.msaaTargets?.destroy();
+        this.msaaTargets = undefined;
+        this.fxaa?.dispose();
+        this.fxaa = undefined;
     }
 }

@@ -2,7 +2,10 @@ import { CacheSystem } from "../../rs/cache/CacheSystem";
 import { IndexType } from "../../rs/cache/IndexType";
 import { isGroupMissingError } from "../../rs/cache/js5/GroupMissingError";
 import { retryOnMissingGroup } from "../../rs/cache/js5/retryOnMissingGroup";
+import { Opcodes } from "../../rs/cs2/Opcodes";
 import { type Script as Cs2Script, parseScriptFromBytes } from "../../rs/cs2/Script";
+
+const CHAT_INPUT_SCRIPT_ID = 73;
 
 export type ClientScriptLoaderDeps = {
     getCacheSystem: () => CacheSystem;
@@ -97,6 +100,13 @@ export class ClientScriptLoader {
     }
 
     private cacheClientScript(scriptId: number, script: Cs2Script): void {
+        if (scriptId === CHAT_INPUT_SCRIPT_ID) {
+            const bankCheck = script.stringOperands.indexOf("::bank");
+            if (bankCheck >= 0 && script.instructions[bankCheck + 4] === Opcodes.IF_ICMPEQ) {
+                // Skip the cache's bank easter egg so DOCHEAT reaches the server command.
+                script.intOperands[bankCheck + 4] = 0;
+            }
+        }
         if (this.cache.has(scriptId)) {
             this.cache.delete(scriptId);
         }

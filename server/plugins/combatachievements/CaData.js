@@ -47,7 +47,7 @@ const POINTS_VARBIT = 14815; // ca_points
 /** "Kill the King Black Dragon 10 times.", "Open Obor's chest once.", "Kill a Black Dragon." */
 const KILL_COUNT_PATTERN = /^(?:Kill|Defeat|Subdue|Complete|Open) (.+?)(?: (once|\d[\d,]* times))?\.?$/;
 /** A kill-count task whose target carries a condition (a mode, a place, a level) is left to its plugin. */
-const KILL_COUNT_CONDITION = /\b(?:in|after|within|without|and|while|using|with|on|levels?|at|from|before|waves?|solo|duo|trio)\b|,/i;
+const KILL_COUNT_CONDITION = /\b(?:in|after|within|without|and|while|using|with|on|under|levels?|at|from|before|waves?|solo|duo|trio)\b|,/i;
 
 let core;
 let data = null;

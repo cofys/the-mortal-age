@@ -345,7 +345,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopMining(activeSessions, player, false);
     });
-    api.onPlayerLevelUp(({ player }) => {
+    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
       stopMining(activeSessions, player, false);
     });
 

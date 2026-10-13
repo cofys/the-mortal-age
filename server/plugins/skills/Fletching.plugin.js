@@ -878,7 +878,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopFletchingSession(activeSessions, player, false);
     });
-    api.onPlayerLevelUp(({ player }) => {
+    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
       stopFletchingSession(activeSessions, player, false);
     });
 

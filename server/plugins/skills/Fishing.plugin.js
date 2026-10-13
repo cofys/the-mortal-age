@@ -608,7 +608,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopFishing(activeSessions, player, false);
     });
-    api.onPlayerLevelUp(({ player }) => {
+    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
       stopFishing(activeSessions, player, false);
     });
 

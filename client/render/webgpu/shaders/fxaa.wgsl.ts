@@ -41,7 +41,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 /** WGSL port of render/shaders/includes/fxaa/fxaa.glsl, after tone mapping and before UI. */
-export const HD_FXAA_WGSL = `
+export const FXAA_WGSL = `
 @group(0) @binding(0) var t_scene: texture_2d<f32>;
 @group(0) @binding(1) var s_scene: sampler;
 

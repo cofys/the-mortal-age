@@ -10,6 +10,7 @@ import type { SdMapData } from "../../loader/SdMapData";
 import { MAX_TEXTURES, RENDER_CONSTANTS } from "../../render/constants";
 import { GPU_SHADER_STAGE, SCENE_DEPTH_FORMAT } from "../bindings";
 import { resolveWebGPURenderDistance } from "../frameConfig";
+import { createScenePipeline, withSampleCount } from "../multisample";
 import type { WebGPUMapSquare } from "../WebGPUMapSquare";
 import type { WebGPURenderer } from "../WebGPURenderer";
 import type { WorldResources } from "../WorldResources";
@@ -280,7 +281,7 @@ export class WebGPUActors {
                         attributes: [{ shaderLocation: 1, offset: 0, format: "uint32" }],
                     });
                 }
-                out.set(kind, device.createRenderPipeline({
+                out.set(kind, createScenePipeline(device, {
                     label: `webgpu actor ${kind}${alpha ? " alpha" : ""}${mode === "base" ? "" : ` ${mode}`}`,
                     layout: mode === "base" ? pipelineLayout : extendedPipelineLayout!,
                     vertex: { module, entryPoint: actorVertexEntry(kind, depth), buffers },
@@ -305,7 +306,6 @@ export class WebGPUActors {
                         depthWriteEnabled: true,
                         depthCompare: "less-equal",
                     },
-                    multisample: { count: 1 },
                 }));
             }
             return out;
@@ -486,7 +486,7 @@ export class WebGPUActors {
             for (const item of alpha ? state.alpha : state.opaque) {
                 const variants = extended ? this.variants.get(item.pipeline) : undefined;
                 const pipeline = depth ? variants?.depth : variants?.extended ?? item.pipeline;
-                if (pipeline) this.dispatch(pass, state, item, pipeline);
+                if (pipeline) this.dispatch(pass, state, item, pipeline, depth ? 1 : world.sampleCount);
             }
         }
     }
@@ -496,10 +496,11 @@ export class WebGPUActors {
         state: MapActorState,
         item: ActorDrawItem,
         pipeline: GPURenderPipeline,
+        sampleCount: number,
     ): void {
         const bindGroup = state.uniforms.bindGroupFor(item.entry);
         if (!bindGroup) return;
-        pass.setPipeline(pipeline);
+        pass.setPipeline(withSampleCount(pipeline, sampleCount));
         pass.setBindGroup(2, bindGroup, [state.uniforms.offsetFor(item.entry)]);
         pass.setVertexBuffer(0, item.geometry.vertices);
         if (this.playerPipelines.has(pipeline)) {
@@ -901,7 +902,7 @@ export class WebGPUActors {
         const overlayView = this.renderer.osrsClient?.worldViewManager?.getWorldViewByOverlayMapId?.(map.id);
         const instances = overlayView
             ? runtime.manager.listWorldInstancesInView(overlayView)
-            : runtime.manager.listWorldInstancesForMap(map.mapX, map.mapY);
+            : runtime.manager.listWorldInstancesForDrawnMap(map);
         for (const inst of instances) {
             const world = inst.world;
             if (!world) continue;

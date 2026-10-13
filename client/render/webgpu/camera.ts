@@ -240,7 +240,7 @@ export function updateFollowCamera(
 
     const viewportWidth = renderer.canvas.width || 1;
     const viewportHeight = renderer.canvas.height || 1;
-    const { viewportHeight: effectiveViewportHeight } = camera.computeViewportMetricsForSize(
+    const { unitViewportHeight: effectiveViewportHeight } = camera.computeViewportMetricsForSize(
         viewportWidth,
         viewportHeight,
     );

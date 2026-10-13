@@ -387,7 +387,9 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
                 console.warn("117 HD: ground clutter unavailable", error);
             }
         }
-        post.encode(renderer, encoder, frame, options);
+        // The GPU plugin's anti-aliasing replaces HD's own: FXAA here, MSAA in the world pass.
+        const gpu = renderer.osrsClient.gpuPlugin?.settings();
+        post.encode(renderer, encoder, frame, gpu ? { ...options, antiAliasing: gpu.fxaa } : options);
     }
 
     /** Port of HdPlugin.beforeSceneRender's uniform + shadow matrix block. */

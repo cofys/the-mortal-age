@@ -59,8 +59,11 @@ function spawnEggs(session) {
     const egg = core.NPC.create(Shared.EGG_ID[type], new core.Location(x, y, 0));
     egg.__skipDefaultRespawn = true;
     egg.setHitpoints?.(Shared.EGG_HITPOINTS);
-    // Eggs sit where they were laid: no wander, no step toward whoever hits them.
+    // Eggs sit where they were laid: the radius stops wandering, and scripted
+    // movement stops the retaliation chase (Combat keeps pursuing transient
+    // denials like a canPursue refusal, so the flag is what actually pins them).
     egg.getMovementCoordinator?.().setRadius?.(0);
+    egg.setScriptedMovement?.(true);
     egg.performAnimation(new core.Animation(EGG_ANIMATION));
     egg.setAttribute?.(Shared.ATTR_ENCOUNTER, session);
     area?.add?.(egg);
@@ -118,10 +121,28 @@ function ensureTargets(session) {
   if (session.area != null && fighter.getPrivateArea?.() !== session.area) return;
   for (const minion of session.minions ?? []) {
     if (!alive(minion)) continue;
+    minion.getCombat?.().getLastAttack?.().reset?.();
     const current = minion.getCombat?.().getTarget?.() ?? null;
     if (current && alive(current)) continue;
     minion.setTarget?.(fighter);
     minion.getCombat?.().attack?.(fighter);
+  }
+}
+
+/**
+ * Eggs neither move nor turn: retaliation keeps handing them a mobile
+ * interaction (which the client renders as turning to face the attacker as
+ * they walk), so the fight engine clears it and the combat target every tick.
+ */
+function pinEggs(session) {
+  for (const entry of session?.eggs ?? []) {
+    const egg = entry?.npc ?? null;
+    if (!egg?.isRegistered?.()) continue;
+    if (egg.getInteractingMobile?.() != null) egg.setMobileInteraction?.(null);
+    egg.getCombat?.().reset?.();
+    // Eggs never attack, so the engine would always see their last attack as
+    // ancient and heal them; keep the stopwatch fresh while the fight runs.
+    egg.getCombat?.().getLastAttack?.().reset?.();
   }
 }
 
@@ -386,6 +407,7 @@ module.exports = {
   spawnEggs,
   hatchNext,
   ensureTargets,
+  pinEggs,
   crumbleAll,
   explodeRuptura,
   modifyHit,

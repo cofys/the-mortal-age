@@ -930,7 +930,7 @@ module.exports = {
       ACTIVE_SMITHING_MENUS.delete(player);
       ACTIVE_SMITHING_QUANTITY.delete(player);
     });
-    api.onPlayerLevelUp(({ player }) => {
+    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
       stopSmithingSession(ACTIVE_SMITHING_SESSIONS, player, false);
     });
 

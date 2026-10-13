@@ -275,6 +275,16 @@ export function processWidgetClickInput(
                     // Handlers can mutate widget ops (e.g., Mute -> Unmute), but the transmitted action
                     // should reflect what was clicked pre-mutation.
                     const primaryAction = getPrimaryWidgetAction(w);
+                    if (deps.handlePluginWidgetAction?.({
+                        widget: w,
+                        ...primaryAction,
+                        source: "primary",
+                        cursorX: widgetInteraction.clickedWidgetX,
+                        cursorY: widgetInteraction.clickedWidgetY,
+                    })) {
+                        widgetInteraction.clickedWidgetHandled = true;
+                        break;
+                    }
 
                     // A ::items / ::npcs result row: send the pick ourselves and skip the
                     // cache search's select script, which resumes the dialog and closes the

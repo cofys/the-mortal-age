@@ -195,7 +195,9 @@ function ensureEncounter(player, area) {
 function enterLair({ player }) {
   if (!player) return;
   if (!insideLair(player.getLocation?.())) {
-    destroyArea(player);
+    // Only a player who had a lair leaves one: tearing down for everyone else every tick
+    // cleared every player's incoming hits.
+    if (player.getAttribute?.(ATTR_AREA) || sessions.has(player)) destroyArea(player);
     return;
   }
   let area = areaOf(player);

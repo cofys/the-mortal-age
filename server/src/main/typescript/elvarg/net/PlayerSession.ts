@@ -88,6 +88,7 @@ export class PlayerSession {
   private lastMusicTrack = -1;
   private lastMusicMode = -1;
   private lastGroundItemRegion = -1;
+  private lastGroundItemLevel = -1;
   // The first tick after login sends encodeInitialPlayerSync (no appearance/anim data at
   // all), but World's end-of-tick resetUpdating() still unconditionally clears
   // Flag.APPEARANCE for every player that tick - so by the next tick, when createPlayerView
@@ -230,8 +231,9 @@ export class PlayerSession {
       const musicRegion = privateArea instanceof TemplatedInstanceArea
         ? Music.regionForInstanceLocation(privateArea, current.x, current.y, current.level) ?? -1
         : groundItemRegion;
-      if (groundItemRegion !== this.lastGroundItemRegion) {
+      if (groundItemRegion !== this.lastGroundItemRegion || current.level !== this.lastGroundItemLevel) {
         this.lastGroundItemRegion = groundItemRegion;
+        this.lastGroundItemLevel = current.level;
         require("../game/entity/impl/grounditem/ItemOnGroundManager")
           .ItemOnGroundManager.onRegionChange(player);
       }

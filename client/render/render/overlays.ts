@@ -274,6 +274,7 @@ export function resetOverheadPrayerOutput(host: WebGLOsrsRendererHost, ): void {
             entry.headIconPrayer = -1;
             entry.headIconHint = false;
             entry.npcHeadIcons = undefined;
+            entry.customHeadIcons = undefined;
             entry.heightOffsetTiles = 0.9;
             host.overheadPrayerPool.push(entry);
         }

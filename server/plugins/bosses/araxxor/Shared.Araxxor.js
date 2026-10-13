@@ -234,15 +234,17 @@ function splatterTiles(x, y, isWalkable, direction = null, count = SPLATTER_COUN
   return isWalkable ? tiles.filter(([tx, ty]) => isWalkable(tx, ty)) : tiles;
 }
 
-/** The three cleave pool tiles: the struck tile and one either side, perpendicular to the blow. */
+/**
+ * The three cleave pool tiles: the struck tile and one either side, along the
+ * blow (the boss-to-player line, so the pools connect the stabbing legs to the
+ * player's tile). A level blow lays a row, a straight north/south blow a column,
+ * and standing underfoot (no direction) picks the row.
+ */
 function cleavePoolTiles(x, y, dx, dy) {
-  if (dx === 0 && dy === 0) {
+  if (Math.abs(dx) >= Math.abs(dy)) {
     return [[x, y], [x - 1, y], [x + 1, y]];
   }
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return [[x, y], [x, y - 1], [x, y + 1]];
-  }
-  return [[x, y], [x - 1, y], [x + 1, y]];
+  return [[x, y], [x, y - 1], [x, y + 1]];
 }
 
 /** Pool damage for a player who has now stood in acid for `ticks` ticks. */
