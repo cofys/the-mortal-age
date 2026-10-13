@@ -20,11 +20,17 @@
  * By default only materialized (online) citizens are included — use
  * ?all=1 to include the full roster (heavier).
  *
+ * `recentSpeech` carries the last ~200 citizen utterances recorded by
+ * CitizenSayPublic (who said what, where, whether it reached a chat box) —
+ * server-side observability for ambient chatter without a real player
+ * watching.
+ *
  * No auth: read-only position data that's visible to any player in-game.
  * This is a debug endpoint; do not expose the game port publicly.
  */
 
 const { getDirector, CitizenDirector } = require("../citizens/director/CitizenDirector");
+const { recentSpeechEvents } = require("../citizens/chat/CitizenSayPublic");
 
 // username -> { x, y, z, lastMoveAt }. Module-level so it persists across polls.
 const lastSeen = new Map();
@@ -165,6 +171,7 @@ function handleMonitor(query) {
     count: citizens.length,
     citizens,
     debugFakePlayers: fakePlayers,
+    recentSpeech: recentSpeechEvents(),
   };
 }
 

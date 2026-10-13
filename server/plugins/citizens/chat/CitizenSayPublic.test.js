@@ -14,6 +14,7 @@ const {
   pickLineAvoidingRepeat,
   normalizeRepeatLine,
   repeatGuardStats,
+  recentSpeechEvents,
   applyVoiceStyle,
   CHAT_MAX_LEN,
   CHATBOX_MIN_GAP_MS,
@@ -702,6 +703,36 @@ run("recipients: privacy still respected on bucket-sourced recipients", () => {
   sayPublic(c.player, "hi");
   assert.equal(blocked.sent.length, 0);
   assert.equal(open.sent.length, 1);
+});
+
+// Observability: speech records an event even when no real player receives it.
+run("observability: utterance recorded in the speech ring (chatBox=true)", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ username: "Gabby", locals: [r] });
+  assert.equal(sayPublic(c.player, "hello there"), true);
+  const ev = recentSpeechEvents();
+  assert.equal(ev.length, 1);
+  assert.equal(ev[0].username, "Gabby");
+  assert.equal(ev[0].chatBox, true);
+  assert.equal(ev[0].chunks, 1);
+  assert.ok(typeof ev[0].at === "number");
+});
+
+run("observability: overhead-only utterance still recorded (chatBox=false)", () => {
+  const c = makeCitizen({ username: "Lonely", locals: [] });
+  assert.equal(sayPublic(c.player, "nobody here"), false);
+  const ev = recentSpeechEvents();
+  assert.equal(ev.length, 1);
+  assert.equal(ev[0].username, "Lonely");
+  assert.equal(ev[0].chatBox, false);
+});
+
+run("observability: throttled-silent utterance records nothing", () => {
+  const r1 = makeRecipient({ username: "One", index: 7 });
+  const c = makeCitizen({ username: "Throttled", locals: [r1] });
+  assert.equal(sayPublic(c.player, "first"), true);
+  assert.equal(sayPublic(c.player, "second"), false); // within 8s chat-box throttle
+  assert.equal(recentSpeechEvents().length, 1); // the silenced one is not recorded
 });
 
 console.log("ALL RECIPIENT-RESOLUTION TESTS DONE");

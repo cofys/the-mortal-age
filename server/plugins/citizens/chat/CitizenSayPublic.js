@@ -324,6 +324,71 @@ function repeatGuardStats() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Speech observability (2026-10-13): sayPublic had zero server-side
+// observability — speech exists only as packets to real players' clients, so
+// fakePlayer-based autonomous verification could never see ambient chatter
+// fire. This is verification tooling, not gameplay: a rate-limited log line
+// plus a small ring buffer surfaced via the citizen-monitor debug endpoint.
+// No behavior change; speech path and throttle untouched.
+// ---------------------------------------------------------------------------
+
+const SPEECH_LOG_MIN_GAP_MS = 5000; // global cap on observability log lines
+const SPEECH_TEXT_MAX = 120; // chars of the line kept per ring entry
+const SPEECH_RING_MAX = 200; // utterances kept (oldest evicted)
+
+/**
+ * Recent spoken utterances, newest last. Read by the citizen-monitor debug
+ * endpoint; each entry is { at, username, displayName, text, x, y, chunks,
+ * chatBox } where chatBox is true when at least one real player's chat box
+ * received the first chunk (overhead-only speech still records: fakePlayer
+ * verification coordinates never receive packets).
+ */
+const recentSpeech = [];
+let lastSpeechLogAt = 0;
+
+function recordSpeechEvent(citizen, text, chunks, chatBox, nowMs) {
+  let tile = null;
+  try {
+    tile = tileOf(citizen);
+  } catch {
+    // Location read failing doesn't stop the record.
+  }
+  const entry = {
+    at: nowMs,
+    username: usernameOf(citizen),
+    displayName: displayNameOf(citizen),
+    text: String(text).slice(0, SPEECH_TEXT_MAX),
+    x: tile ? tile.x : null,
+    y: tile ? tile.y : null,
+    chunks: chunks | 0,
+    chatBox: !!chatBox,
+  };
+  recentSpeech.push(entry);
+  if (recentSpeech.length > SPEECH_RING_MAX) {
+    recentSpeech.splice(0, recentSpeech.length - SPEECH_RING_MAX);
+  }
+  // Rate-limited log line: the only server-side trace that ambient chatter
+  // actually fired while no real player was watching.
+  try {
+    if (nowMs - lastSpeechLogAt >= SPEECH_LOG_MIN_GAP_MS) {
+      lastSpeechLogAt = nowMs;
+      const at = tile ? ` @(${tile.x},${tile.y})` : "";
+      console.log(
+        `[citizen-speech] ${entry.displayName}${at}: "${entry.text}"` +
+          (chatBox ? "" : " (overhead-only, no real player received)")
+      );
+    }
+  } catch {
+    // Logging must never break speech.
+  }
+}
+
+/** Test seam / monitor read path: oldest-first copy of the speech ring. */
+function recentSpeechEvents() {
+  return recentSpeech.slice();
+}
+
 /**
  * Voice backstop: apply the speaker's own voice signature (case/punctuation
  * per lib/citizenVoice) to a line about to speak. Call sites that already
@@ -590,6 +655,9 @@ function sayPublic(citizen, text, opts = {}) {
   }
 
   const sentFirst = sendChunk(citizen, chunks[0], from, username, nowMs);
+  // Observability: record the utterance even when no real player received it
+  // (throttled=fully-silent path returns above, so nothing records there).
+  recordSpeechEvent(citizen, voiced, chunks.length, sentFirst, nowMs);
   for (let i = 1; i < chunks.length; i++) {
     const chunk = chunks[i];
     scheduleChunk(() => {
@@ -601,7 +669,7 @@ function sayPublic(citizen, text, opts = {}) {
   return sentFirst;
 }
 
-/** Test seam: clear throttle + repeat-guard state, reset the chunk scheduler. */
+/** Test seam: clear throttle + repeat-guard + speech-observability state, reset the chunk scheduler. */
 function resetForTests() {
   lastChatBoxAt.clear();
   lastPruneAt = 0;
@@ -609,6 +677,8 @@ function resetForTests() {
   recentAreaLines.length = 0;
   pendingPicks.length = 0;
   lastRepeatPruneAt = 0;
+  recentSpeech.length = 0;
+  lastSpeechLogAt = 0;
   chunkScheduler = (fn, ms) => setTimeout(fn, ms);
   nearbyResolver = (citizen) => {
     try {
@@ -631,6 +701,7 @@ module.exports = {
   pickLineAvoidingRepeat,
   normalizeRepeatLine,
   repeatGuardStats,
+  recentSpeechEvents,
   applyVoiceStyle,
   CHAT_MAX_LEN,
   CHATBOX_MIN_GAP_MS,
