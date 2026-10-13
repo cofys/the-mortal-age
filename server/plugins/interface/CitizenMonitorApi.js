@@ -25,12 +25,82 @@
  * server-side observability for ambient chatter without a real player
  * watching.
  *
+ * `skills` on each citizen carries live skill levels/XP from IN-MEMORY state
+ * only (never the save files — read-only debug surfacing like recentSpeech):
+ * materialized citizens read the engine SkillManager (source of truth while
+ * online); everyone else reads the data-tier skillStore snapshot (module
+ * state, updated on every grant and dematerialize). Only skills with xp > 0
+ * are listed, as { skillId: { level, xp } }. `skillSummary` aggregates the
+ * gain signal across the returned set: citizens with XP above start in any
+ * non-HP skill — i.e. whether the skill systems are actually granting XP,
+ * not just wired in code.
+ *
  * No auth: read-only position data that's visible to any player in-game.
  * This is a debug endpoint; do not expose the game port publicly.
  */
 
 const { getDirector, CitizenDirector } = require("../citizens/director/CitizenDirector");
 const { recentSpeechEvents } = require("../citizens/chat/CitizenSayPublic");
+const { skillStore, levelForXp } = require("../citizens/lib/CitizenSkilling");
+const { SKILL_ID_TO_ENUM, getSkillEnum } = require("../citizens/lib/CitizenXpSync");
+
+// Skill enum captured at attach (api.core.Skill) for live engine reads.
+let SkillEnum = null;
+
+const NON_HP_SKILLS = Object.keys(SKILL_ID_TO_ENUM).filter((id) => id !== "hitpoints");
+
+/**
+ * Live skill levels/XP for one citizen, from in-memory state only.
+ * 1) Materialized citizens: engine SkillManager (source of truth while online).
+ * 2) Everyone else (or no Skill enum): data-tier skillStore snapshot.
+ * Returns { skillId: { level, xp } } for skills with xp > 0. Read-only.
+ */
+function getCitizenSkills(director, record) {
+  const skills = {};
+  const username = record && record.username;
+  if (!username) return skills;
+
+  // 1) Live engine read for materialized citizens.
+  if (SkillEnum) {
+    try {
+      const bot = director.getBot?.(record);
+      const sm = bot?.getSkillManager?.();
+      if (sm?.getExperience) {
+        for (const skillId of Object.keys(SKILL_ID_TO_ENUM)) {
+          const skill = getSkillEnum(SkillEnum, skillId);
+          if (!skill) continue;
+          let xp = 0;
+          try {
+            xp = sm.getExperience(skill) || 0;
+          } catch {
+            continue;
+          }
+          if (xp > 0) {
+            const whole = Math.floor(xp);
+            skills[skillId] = { level: levelForXp(whole), xp: whole };
+          }
+        }
+        return skills;
+      }
+    } catch {
+      /* fall through to store */
+    }
+  }
+
+  // 2) Data-tier in-memory snapshot (live module state — not a file read).
+  try {
+    for (const skillId of Object.keys(SKILL_ID_TO_ENUM)) {
+      const xp = skillStore.getXp(username, skillId) || 0;
+      if (xp > 0) {
+        const whole = Math.floor(xp);
+        skills[skillId] = { level: levelForXp(whole), xp: whole };
+      }
+    }
+  } catch {
+    /* no skills */
+  }
+  return skills;
+}
 
 // username -> { x, y, z, lastMoveAt }. Module-level so it persists across polls.
 const lastSeen = new Map();
@@ -142,8 +212,28 @@ function handleMonitor(query) {
         live: pos.live ? 1 : 0,
         lastMoveAt,
         secsSinceMove: Math.round((now - lastMoveAt) / 1000),
+        skills: getCitizenSkills(director, record),
       });
     }
+  }
+
+  // Aggregate gain signal: citizens with XP above start in any non-HP skill.
+  const skillSummary = {
+    scope: includeAll ? "all" : "materialized",
+    citizensChecked: citizens.length,
+    citizensWithNonHpXp: 0,
+    skillsTouched: {},
+  };
+  for (const c of citizens) {
+    let gained = false;
+    for (const skillId of NON_HP_SKILLS) {
+      const s = c.skills && c.skills[skillId];
+      if (s && s.xp > 0) {
+        gained = true;
+        skillSummary.skillsTouched[skillId] = (skillSummary.skillsTouched[skillId] || 0) + 1;
+      }
+    }
+    if (gained) skillSummary.citizensWithNonHpXp += 1;
   }
 
   // Prune entries for citizens that no longer exist (roster churn).
@@ -172,10 +262,12 @@ function handleMonitor(query) {
     citizens,
     debugFakePlayers: fakePlayers,
     recentSpeech: recentSpeechEvents(),
+    skillSummary,
   };
 }
 
 function attach(api) {
+  SkillEnum = api?.core?.Skill ?? null;
   api.registerContentEndpoint("citizen-monitor", (query) => {
     try {
       return handleMonitor(query);
