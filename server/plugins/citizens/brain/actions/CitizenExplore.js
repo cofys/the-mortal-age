@@ -261,13 +261,20 @@ function createCitizenExploreAction(spec, world) {
 
       // --- phase: returning (walk home) ---
       if (state.phase === "returning") {
-        const dx = state.homeTile.x - px, dy = state.homeTile.y - py;
+        // Per-citizen spread on the home leg: without this every returner
+        // converges on the exact market anchor tile (anchor-stack).
+        // personalSpot is deterministic per username — same tile each tick.
+        const home = personalSpot(
+          player.getUsername?.() ?? "unknown",
+          state.homeTile.x, state.homeTile.y, 2, 8
+        );
+        const dx = home.x - px, dy = home.y - py;
         if (Math.sqrt(dx * dx + dy * dy) <= ARRIVE_RADIUS) {
           try { clearMovementRequest(player); } catch { /* best-effort */ }
           return "success";
         }
         try {
-          requestMovement(player, state.homeTile.x, state.homeTile.y);
+          requestMovement(player, home.x, home.y);
         } catch { /* best-effort */ }
         return "running";
       }
