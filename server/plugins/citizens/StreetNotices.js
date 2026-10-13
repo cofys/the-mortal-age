@@ -21,7 +21,7 @@
  */
 
 const { getMemory } = require("./lib/CitizenMemory");
-const { sayPublic } = require("./chat/CitizenSayPublic");
+const { sayPublic, pickLineAvoidingRepeat } = require("./chat/CitizenSayPublic");
 const { getJournal } = require("./lib/CitizenJournal");
 const { humanizerProfile, chance } = require("./lib/humanizer");
 const { normalizeName } = require("./lib/CitizenBonds");
@@ -312,21 +312,38 @@ function onPlayerLevelUpNotice(event, nowMs = Date.now()) {
 // A citizen announces at most this often; milestones always announce.
 const CITIZEN_ANNOUNCE_COOLDOWN_MS = 15 * 60 * 1000;
 const CITIZEN_ANNOUNCE_CHANCE = 0.7; // per eligible non-milestone level
-const MAX_GZ_REACTORS = 2;
 
 // Announce lines are shaped to match CitizenHeardReactions' levelup pattern
 // ("ding|just hit|just got|just reached" + a digit), so nearby citizens'
-// tryScriptedReaction reflex fires on them.
+// tryScriptedReaction reflex fires on them. Jon 2026-10-13: four templates
+// meant every fresh level-2 in the county said the same line within minutes.
+// Pools are wide now, and flavor lines reference the real next level —
+// never invented goals.
 const CITIZEN_ANNOUNCE_LINES = Object.freeze({
   plain: Object.freeze([
     "just hit {level} {skill}!",
     "ding {level} {skill}!",
     "just got {level} {skill}!",
     "just reached {level} {skill}!",
+    "ding! {level} {skill}, on to {next} now",
+    "just hit {level} {skill}, that took a while",
+    "just got {level} {skill}! finally",
+    "just reached {level} {skill}. slow and steady",
+    "ding {level} {skill}! keepin it moving",
+    "just hit {level} {skill}. not bad for a day's work",
+    "just got {level} {skill}! one more to {next}",
+    "ding! {level} {skill}, aye!",
+    "just reached {level} {skill}, the grind pays off",
+    "just hit {level} {skill}, feels good",
   ]),
   terse: Object.freeze([
     "ding. {level} {skill}.",
     "just hit {level} {skill}.",
+    "just got {level} {skill}.",
+    "ding {level} {skill}, next",
+    "just reached {level} {skill}. nice.",
+    "just hit {level} {skill}, finally",
+    "ding. {level} {skill}, moving up",
     "just got {level} {skill}.",
   ]),
 });
@@ -335,10 +352,18 @@ const CITIZEN_MILESTONE_LINES = Object.freeze({
     "just hit {level} {skill}!! let's go!",
     "ding! {level} {skill}! been working toward this",
     "just reached {level} {skill}!",
+    "ding!! {level} {skill}! that's the one i wanted",
+    "just hit {level} {skill}!! months of this",
+    "just got {level} {skill}!! finally finally",
+    "ding {level} {skill}! new unlocks now",
+    "just reached {level} {skill}!! can't believe it",
   ]),
   terse: Object.freeze([
     "ding. {level} {skill}. big one.",
     "just hit {level} {skill}. finally.",
+    "ding {level} {skill}. huge.",
+    "just got {level} {skill}. let's go.",
+    "just reached {level} {skill}. earned it.",
   ]),
 });
 
@@ -396,7 +421,16 @@ function onCitizenLevelUpNotice(event, nowMs = Date.now()) {
     }
     const voice = voiceFor(personality);
     const pool = milestone ? CITIZEN_MILESTONE_LINES : CITIZEN_ANNOUNCE_LINES;
-    const line = fillLine(voiceLine(voice, pool), { name: "", skill: skillName, level: newLevel });
+    // Anti-repeat re-roll: the same citizen can't announce two levels with
+    // the same line, and neither can a neighbor who just said it.
+    const line = pickLineAvoidingRepeat(player, () =>
+      fillLine(voiceLine(voice, pool), {
+        name: "",
+        skill: skillName,
+        level: newLevel,
+        next: newLevel + 1,
+      })
+    );
     if (!line) return;
     try {
       sayPublic(player, line.slice(0, 80));
@@ -406,9 +440,17 @@ function onCitizenLevelUpNotice(event, nowMs = Date.now()) {
     if (username) lastCitizenAnnounceAt.set(username, nowMs);
 
     // Nearby citizens gz — the same reflex they'd use on real chat.
-    // The leveler is excluded (nearbyCitizens skips `local === player`).
+    // Variable crowd (Jon 2026-10-13): one gz is certain, a bigger crowd
+    // pulls a few more. The leveler is excluded (nearbyCitizens skips
+    // `local === player`).
     const hearers = nearbyCitizens(player, NOTICE_RADIUS);
-    for (const { record, bot } of pickUpTo(hearers, MAX_GZ_REACTORS)) {
+    const gzCount = Math.min(
+      hearers.length,
+      1 + (hearers.length >= 4 && Math.random() < 0.6 ? 1 : 0) +
+        (hearers.length >= 8 && Math.random() < 0.4 ? 1 : 0) +
+        (hearers.length >= 12 && Math.random() < 0.3 ? 1 : 0)
+    );
+    for (const { record, bot } of pickUpTo(hearers, Math.max(1, gzCount))) {
       try {
         tryScriptedReaction(record.username, username ?? "someone", line, bot, nowMs);
       } catch {

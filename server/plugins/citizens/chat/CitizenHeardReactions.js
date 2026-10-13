@@ -216,7 +216,8 @@ function speakShun(citizenUsername, personality, bot, nowMs) {
   const delay = Math.round(800 + Math.random() * 1200);
   scheduleReaction(() => {
     try {
-      sayPublic(bot, line);
+      // Player-directed: a shun answers a specific speaker, guard skipped.
+      sayPublic(bot, line, { skipRepeatGuard: true });
     } catch {
       // A failed shun just never lands — never crash the chat path.
     }
@@ -238,9 +239,18 @@ function speakShun(citizenUsername, personality, bot, nowMs) {
  * @param {string} text - what they said
  * @param {object} bot - the citizen's Player object (for forceChat + personality)
  * @param {number} nowMs - Date.now()
+ * @param {object} opts - { staggerMs } crowd stagger: responder n waits an
+ *   extra beat so a multi-citizen answer doesn't land in one tick
  * @returns {{line: string, delayMs: number}|null} the scheduled reaction, or null
  */
-function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs = Date.now()) {
+function tryScriptedReaction(
+  citizenUsername,
+  speakerUsername,
+  text,
+  bot,
+  nowMs = Date.now(),
+  opts = {}
+) {
   pruneCooldowns(nowMs);
   if (!citizenUsername || !bot || !text) return null;
 
@@ -333,12 +343,16 @@ function tryScriptedReaction(citizenUsername, speakerUsername, text, bot, nowMs 
   // tick as the player's keystroke, which was the most visible bot tell
   // in player-facing chat. The throttle is claimed now (at reaction
   // time), not at speak time, so a pending reply can't double-fire.
-  const delay = typingDelayMs(line, personality);
+  // Crowd stagger: responder n waits an extra beat (Jon 2026-10-13 — the
+  // 2-bot cap became a variable crowd, and the crowd must not land at once).
+  const staggerMs = Number.isFinite(opts?.staggerMs) && opts.staggerMs > 0 ? opts.staggerMs : 0;
+  const delay = typingDelayMs(line, personality) + staggerMs;
   const capturedBot = bot;
   const capturedLine = line;
   scheduleReaction(() => {
     try {
-      sayPublic(capturedBot, capturedLine);
+      // Player-directed reflex: answers a specific speaker, guard skipped.
+      sayPublic(capturedBot, capturedLine, { skipRepeatGuard: true });
     } catch {
       // sayPublic degrades gracefully; a failed reflex just never lands.
     }

@@ -181,18 +181,30 @@ class Gateway {
     await this.memory.pushExchange(citizenUsername, requesterUsername, text, reply);
 
     const latencyMs = Date.now() - startedAt;
-    this.scheduler.schedule(citizenUsername, requesterUsername, reply, () => {
-      this.api.emitCustomEvent("llm:chat-response", {
-        citizenUsername,
-        requesterUsername,
-        text: reply,
-        channel,
-        threadId: payload?.threadId ?? null,
-        provider: result.provider,
-        tokensUsed: result.tokensUsed ?? prompt.totalBudgetTokens,
-        latencyMs,
-      });
-    });
+    // Crowd stagger (Jon 2026-10-13): when several citizens answer one
+    // speaker, responder n waits an extra beat on top of the typing delay.
+    const staggerMs =
+      Number.isFinite(payload?.staggerMs) && payload.staggerMs > 0
+        ? payload.staggerMs
+        : 0;
+    this.scheduler.schedule(
+      citizenUsername,
+      requesterUsername,
+      reply,
+      () => {
+        this.api.emitCustomEvent("llm:chat-response", {
+          citizenUsername,
+          requesterUsername,
+          text: reply,
+          channel,
+          threadId: payload?.threadId ?? null,
+          provider: result.provider,
+          tokensUsed: result.tokensUsed ?? prompt.totalBudgetTokens,
+          latencyMs,
+        });
+      },
+      staggerMs
+    );
   }
 
   handleCitizenRegister(payload) {

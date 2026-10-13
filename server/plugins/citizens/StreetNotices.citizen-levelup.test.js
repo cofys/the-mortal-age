@@ -37,7 +37,13 @@ const {
   CITIZEN_MILESTONE_LINES,
   resetForTests: resetNotices,
 } = require("./StreetNotices");
-const { matchPattern, resetForTests: resetReactions } = require("./chat/CitizenHeardReactions");
+const {
+  matchPattern,
+  resetForTests: resetReactions,
+  setReactionScheduler,
+} = require("./chat/CitizenHeardReactions");
+// Reactions schedule through setTimeout in prod; run them immediately here.
+setReactionScheduler((fn) => fn());
 const { resetForTests: resetSayPublic } = require("./chat/CitizenSayPublic");
 
 // --- Mocks ------------------------------------------------------------------
@@ -203,7 +209,10 @@ check("nearby citizens answer with gz (and the leveler doesn't gz itself)", () =
   );
 });
 
-check("at most two nearby citizens answer", () => {
+// Jon 2026-10-13: the hard 2-gz cap became a variable crowd (1 guaranteed +
+// crowd-scaled extras, max 4). With Math.random stubbed to 0 every extra
+// join coin lands, so 5 hearers -> 1 + up to 3 extras.
+check("a variable crowd answers, never a storm", () => {
   const hearers = [];
   for (let i = 0; i < 5; i += 1) {
     const h = mockBot({
@@ -219,8 +228,9 @@ check("at most two nearby citizens answer", () => {
   const leveler = mockBot({ username: "Tessa Fisher", role: "commoner", locals: hearers });
   onCitizenLevelUpNotice({ player: leveler, skill: fishing, oldLevel: 69, newLevel: 70 });
   const answered = hearers.filter((h) => h.forcedChat.length > 0).length;
-  assert.ok(answered <= 2, `at most 2 gz answers, got ${answered}`);
   assert.ok(answered >= 1, "at least one citizen answers");
+  assert.ok(answered <= 4, `crowd capped, got ${answered}`);
+  assert.ok(answered > 1, `a 5-citizen crowd pulls more than one gz, got ${answered}`);
 });
 
 check("citizens too far away don't hear it", () => {

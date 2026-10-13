@@ -735,4 +735,37 @@ run("observability: throttled-silent utterance records nothing", () => {
   assert.equal(recentSpeechEvents().length, 1); // the silenced one is not recorded
 });
 
+// Jon 2026-10-13: identical ambient lines looping is the bot tell — the
+// repeat backstop drops them at the mouth, whatever module picked them.
+run("repeat backstop drops an identical ambient line", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r] });
+  assert.equal(sayPublic(c.player, "All quiet on the walls."), true);
+  assert.equal(sayPublic(c.player, "All quiet on the walls."), false);
+  assert.deepEqual(c.forced, ["All quiet on the walls."]);
+});
+
+// A different citizen can't echo a neighbor's just-spoken line either.
+run("repeat backstop blocks area echo of the same line", () => {
+  const r = makeRecipient();
+  const a = makeCitizen({ username: "GuardA", index: 43, locals: [r] });
+  const b = makeCitizen({ username: "GuardB", index: 44, locals: [r] });
+  // Neighbors 3 tiles apart — inside the area window.
+  a.player.getLocation = () => ({ getX: () => 3000, getY: () => 3200 });
+  b.player.getLocation = () => ({ getX: () => 3003, getY: () => 3200 });
+  assert.equal(sayPublic(a.player, "Mind the pickpockets near the market."), true);
+  assert.equal(sayPublic(b.player, "Mind the pickpockets near the market."), false);
+  assert.deepEqual(b.forced, []);
+});
+
+// Deliberate player-directed replies (gz, addressed answers) are exempt.
+run("skipRepeatGuard lets deliberate replies repeat", () => {
+  const r = makeRecipient();
+  const c = makeCitizen({ locals: [r] });
+  const opts = { skipRepeatGuard: true, bypassThrottle: true };
+  assert.equal(sayPublic(c.player, "gz!", opts), true);
+  assert.equal(sayPublic(c.player, "gz!", opts), true);
+  assert.deepEqual(c.forced, ["gz!", "gz!"]);
+});
+
 console.log("ALL RECIPIENT-RESOLUTION TESTS DONE");

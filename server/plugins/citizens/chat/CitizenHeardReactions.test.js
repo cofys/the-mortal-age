@@ -125,9 +125,16 @@ check("tryScriptedReaction: greeting fires and speaks", () => {
   const spoken = [];
   const bot = mockBot({ traits: ["chatty"] }, spoken);
   // Force the chance gate to pass by using chatty (0.85) — retry until it fires.
+  // Reset bond state each attempt: a successful fire warms the bond, and the
+  // warm override would greet BY NAME (greetFriend pool) on later attempts.
   let line = null;
   for (let i = 0; i < 20 && !line; i++) {
     resetForTests();
+    try {
+      require("../lib/CitizenSocialBonds").resetForTests();
+    } catch {
+      // bond module optional in this harness
+    }
     spoken.length = 0;
     line = tryScriptedReaction("Petra Stone", "Cofy", "hi", bot, Date.now());
   }

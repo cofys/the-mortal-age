@@ -630,10 +630,39 @@ function sayPublic(citizen, text, opts = {}) {
   const voiced = applyVoiceStyle(citizen, line);
   if (!voiced) return false;
 
+  // Repetition backstop (Jon 2026-10-13): every send path funnels through
+  // here, but only some call sites opt into pickLineAvoidingRepeat. The
+  // final guard kills exact repeats at the mouth: the same citizen saying
+  // their own recent line again, or an identical line spoken nearby moments
+  // ago ("All quiet on the walls." three times in seven minutes was real).
+  // Deliberate player-directed replies (gz, addressed answers, scripted
+  // reactions) pass opts.skipRepeatGuard — a player getting three "gz!"s
+  // still hears them; ambient chatter doesn't get to loop.
+  const nowMs = Date.now();
+  if (!opts.skipRepeatGuard) {
+    const repeatKey = normalizeRepeatLine(voiced, from);
+    const selfName = usernameOf(citizen);
+    // The citizen's own in-flight pick (typing-delayed line about to
+    // commit) reserved this key — it must not block its own utterance.
+    // recordCommittedLine below does the same release on the speak path.
+    for (let i = pendingPicks.length - 1; i >= 0; i--) {
+      const p = pendingPicks[i];
+      if (p.username === selfName && p.key === repeatKey) {
+        pendingPicks.splice(i, 1);
+        break;
+      }
+    }
+    if (
+      repeatKey &&
+      isRecentLine(selfName, repeatKey, tileOf(citizen), nowMs)
+    ) {
+      return false;
+    }
+  }
+
   // Split before any length cap: no more mid-sentence truncation.
   const chunks = splitChunks(voiced, CHAT_MAX_LEN).slice(0, MAX_CHUNKS);
 
-  const nowMs = Date.now();
   pruneThrottle(nowMs);
 
   // Feed the repetition guard: every spoken line lands in the per-citizen

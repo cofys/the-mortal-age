@@ -114,10 +114,11 @@ function onCitizenChatHeard(event) {
   if (!pluginApi) {
     return;
   }
-  const { citizenUsername, speakerUsername, text, shouldReply } = event ?? {};
+  const { citizenUsername, speakerUsername, text, shouldReply, staggerMs } = event ?? {};
   if (!citizenUsername || !speakerUsername || !text) {
     return;
   }
+  const crowdStaggerMs = Number.isFinite(staggerMs) && staggerMs > 0 ? staggerMs : 0;
   // Enemy cold shoulder: enemies get silence, not conversation. (Checked
   // before memory recording so enemies don't warm the relationship by
   // talking.)
@@ -215,7 +216,10 @@ function onCitizenChatHeard(event) {
     const { tryScriptedReaction } = require("./CitizenHeardReactions");
     const bot = findPlayerByName(citizenUsername);
     const reaction =
-      bot && tryScriptedReaction(citizenUsername, speakerUsername, text, bot);
+      bot &&
+      tryScriptedReaction(citizenUsername, speakerUsername, text, bot, Date.now(), {
+        staggerMs: crowdStaggerMs,
+      });
     if (reaction) {
       pluginApi.log?.("[citizens] scripted chat reaction", {
         citizen: citizenUsername,
@@ -259,6 +263,9 @@ function onCitizenChatHeard(event) {
     requesterUsername: speakerUsername,
     text: String(text).slice(0, 320),
     channel: "public",
+    // Crowd stagger rides into the gateway's typing scheduler so a 3-4
+    // citizen LLM answer doesn't land in one tick either.
+    staggerMs: crowdStaggerMs,
     // Ground the reply in the citizen's live moment (mood, activity, goal,
     // relationship with this speaker). Built here, not in the gateway, so
     // the gateway never reaches into the citizens plugin's state.
@@ -279,17 +286,38 @@ function getDirectorKingdom(citizenUsername) {
 }
 
 /**
- * Social-packet hook: public chat near citizen bots. Selects up to 2
- * citizens to reply — not all of them. Real players don't all answer at
- * once; neither do citizens.
+ * Social-packet hook: public chat near citizen bots. A VARIABLE number of
+ * citizens reply — like a real crowd. Jon 2026-10-13: the hard 2-replier cap
+ * read fake; some remarks pull one answer, a busy square pulls a few, and
+ * most of the crowd just hears it. Not "everyone answers" — that's a reply
+ * storm and equally fake.
  *
  * Selection:
- *   1. A citizen addressed by name in the message always replies (priority).
- *   2. Otherwise, score by proximity + relationship warmth + randomness,
- *      pick the top 2. The randomness means different citizens speak up
- *      each time, like a real crowd.
+ *   1. A citizen addressed by name in the message always replies (priority,
+ *      at most 2 addressed).
+ *   2. Otherwise, score by proximity + relationship warmth + willingness +
+ *      randomness; take 1 guaranteed responder plus extras whose join
+ *      probability scales with crowd size, capped at MAX_CROWD_REPLIERS.
+ *      Citizens mid-task (skilling, working) usually keep working — they
+ *      heard it, they don't stop to chat.
  */
-const MAX_PUBLIC_REPLIERS = 2;
+const MAX_CROWD_REPLIERS = 5;
+// Below this scored willingness, a citizen doesn't volunteer a reply at all.
+const CROWD_REPLY_SCORE_FLOOR = 0.35;
+// Per-order stagger so a 3-4 citizen answer doesn't land in the same tick:
+// responder n waits an extra n * STAGGER_STEP_MS on top of their typing delay.
+const CROWD_STAGGER_STEP_MS = 2200;
+
+/** Variable responder count: 1 guaranteed + crowd-scaled extras, capped. */
+function crowdReplyCount(scoredCount, nearbyCount, rng = Math.random) {
+  if (scoredCount <= 0) return 0;
+  let count = 1;
+  const p = Math.min(0.75, 0.25 + nearbyCount * 0.03);
+  while (count < MAX_CROWD_REPLIERS && count < scoredCount && rng() < p) {
+    count++;
+  }
+  return count;
+}
 // Track who replied to whom recently so the same citizens don't dominate
 // every exchange. username -> Map(speakerUsername -> timestamp)
 const recentRepliers = new Map();
@@ -337,13 +365,23 @@ function selectRepliers(citizens, speaker, speakerName, text) {
     else unaddressed.push(bot);
   }
   if (addressed.length > 0) {
-    // The addressed citizen replies; at most one unaddressed joins in.
-    const rest = scoreCandidates(unaddressed, speaker, speakerName, speakerTile, nowMs);
-    return [...addressed.slice(0, MAX_PUBLIC_REPLIERS), ...rest.slice(0, Math.max(0, MAX_PUBLIC_REPLIERS - addressed.length))];
+    // The addressed citizen replies; a crowd-scaled few may join in.
+    const rest = scoreCandidates(unaddressed, speaker, speakerName, speakerTile, nowMs)
+      .filter((s) => s.score >= CROWD_REPLY_SCORE_FLOOR);
+    const n = Math.min(
+      rest.length,
+      Math.max(0, MAX_CROWD_REPLIERS - Math.min(addressed.length, 2))
+    );
+    const joiners = rest.slice(0, Math.min(n, crowdReplyCount(rest.length, citizens.length)));
+    return [...addressed.slice(0, 2).map((bot) => ({ bot })), ...joiners].map((s) => s.bot);
   }
 
-  // 2. No direct address: score and pick top 2.
-  return scoreCandidates(unaddressed, speaker, speakerName, speakerTile, nowMs).slice(0, MAX_PUBLIC_REPLIERS);
+  // 2. No direct address: score, drop the unwilling, take a crowd-sized few.
+  const scored = scoreCandidates(unaddressed, speaker, speakerName, speakerTile, nowMs)
+    .filter((s) => s.score >= CROWD_REPLY_SCORE_FLOOR);
+  return scored
+    .slice(0, crowdReplyCount(scored.length, citizens.length))
+    .map((s) => s.bot);
 }
 
 function scoreCandidates(candidates, speaker, speakerName, speakerTile, nowMs) {
@@ -383,10 +421,27 @@ function scoreCandidates(candidates, speaker, speakerName, speakerTile, nowMs) {
       // Non-fatal.
     }
 
+    // Busy penalty: a citizen mid-task (skilling, working) usually keeps
+    // working. They heard it — memory records that — but they don't stop
+    // to chat. Jon 2026-10-13: fishers/choppers answering mid-swing is fake.
+    try {
+      const { isWorking } = require("../lib/CitizenRealWork");
+      if (
+        pluginApi &&
+        (isWorking(pluginApi, bot, "fishing") ||
+          isWorking(pluginApi, bot, "woodcutting") ||
+          isWorking(pluginApi, bot, "mining"))
+      ) {
+        score -= 0.5;
+      }
+    } catch {
+      // Non-fatal.
+    }
+
     scored.push({ bot, name, score });
   }
   scored.sort((a, b) => b.score - a.score);
-  return scored.map((s) => s.bot);
+  return scored;
 }
 
 function markReplied(citizenName, speakerName) {
@@ -414,20 +469,27 @@ function onSocialPacket(event) {
   if (nearby.length === 0) return;
   const speakerName = player.getUsername();
   const repliers = selectRepliers(nearby, player, speakerName, text);
-  const replierSet = new Set(repliers.map((b) => b.getUsername?.()));
+  // replyOrder staggers the crowd: responder n waits an extra beat on top of
+  // their typing delay, so a 3-4 citizen answer doesn't land in one tick.
+  const replierOrder = new Map(
+    repliers.map((b, i) => [b.getUsername?.(), i])
+  );
   // ALL nearby citizens hear (for memory/mood/reactions); only the selected
   // repliers may speak (shouldReply). The rest are the crowd — they heard it,
   // they remember it, but they don't all chime in.
   for (const bot of nearby) {
     const citizenUsername = bot.getUsername?.();
     if (!citizenUsername) continue;
-    const shouldReply = replierSet.has(citizenUsername);
+    const order = replierOrder.get(citizenUsername);
+    const shouldReply = order !== undefined;
     if (shouldReply) markReplied(citizenUsername, speakerName);
     pluginApi.emitCustomEvent(EVENT_CITIZEN_CHAT_HEARD, {
       citizenUsername,
       speakerUsername: speakerName,
       text: text.slice(0, 320),
       shouldReply,
+      replyOrder: order ?? -1,
+      staggerMs: order === undefined ? 0 : order * CROWD_STAGGER_STEP_MS,
     });
   }
   if (repliers.length > 0) {
@@ -2699,4 +2761,8 @@ module.exports = {
   chatHeardEventName,
   // test seam: roster-backed kingdom lookup for username strings
   citizenKingdomId,
+  // test seams: crowd reply model
+  crowdReplyCount,
+  selectRepliers,
+  MAX_CROWD_REPLIERS,
 };

@@ -81,11 +81,23 @@ check("onSocialPacket: emits for all nearby citizens with shouldReply flag", () 
   const heard = emitted.filter((e) => e.name === "citizens:chat-heard");
   assert.equal(heard.length, 3, `should emit 3 chat-heard events, got ${heard.length}`);
 
-  // Exactly 2 should have shouldReply=true (MAX_PUBLIC_REPLIERS).
+  // Jon 2026-10-13: the hard 2-replier cap became a variable crowd —
+  // 1 guaranteed responder plus crowd-scaled extras, capped at 5.
   const repliers = heard.filter((e) => e.payload.shouldReply === true);
   const hearers = heard.filter((e) => e.payload.shouldReply === false);
-  assert.equal(repliers.length, 2, `should have 2 repliers, got ${repliers.length}`);
-  assert.equal(hearers.length, 1, `should have 1 hearer, got ${hearers.length}`);
+  assert.ok(
+    repliers.length >= 1 && repliers.length <= 5,
+    `should have 1-5 repliers, got ${repliers.length}`
+  );
+  assert.equal(
+    hearers.length,
+    3 - repliers.length,
+    `hearers + repliers should cover all 3 citizens`
+  );
+  // Stagger rides along so the crowd doesn't land in one tick.
+  for (const e of repliers) {
+    assert.equal(typeof e.payload.staggerMs, "number");
+  }
 
   // All should have the text.
   for (const e of heard) {

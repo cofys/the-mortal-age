@@ -30,10 +30,11 @@ class TypingScheduler {
 
   // Queue fn to run after the typing delay; replaces any pending reply for the
   // same (citizen, requester) pair. Returns { cancel }.
-  schedule(citizenUsername, requesterUsername, reply, fn) {
+  schedule(citizenUsername, requesterUsername, reply, fn, extraDelayMs = 0) {
     const key = this.key(citizenUsername, requesterUsername);
     this.cancel(key);
-    const delayMs = typingDelayMs(reply);
+    const extra = Number.isFinite(extraDelayMs) && extraDelayMs > 0 ? extraDelayMs : 0;
+    const delayMs = typingDelayMs(reply) + extra;
     const timeout = setTimeout(() => {
       this.pending.delete(key);
       Promise.resolve().then(fn).catch((error) =>

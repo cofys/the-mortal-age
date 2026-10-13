@@ -336,7 +336,12 @@ class AiBotMind {
   /** Public chat goes out after a typing pause, and never faster than the chat cooldown. */
   queueSay(raw, to, nowMs) {
     // Public chat starting with :: runs a command; a bot's line never does.
-    const text = raw.replace(/^[\s:]+/, "");
+    let text = raw.replace(/^[\s:]+/, "");
+    if (!text) return;
+    // Jon 2026-10-13: strip third-person self-introductions the model still
+    // emits ("Sidney Parker, a commoner from Misthalin, humbly responds: ...").
+    // The game shows the name above the head; a player never narrates themselves.
+    text = stripSelfNarration(text, this.name);
     if (!text) return;
     const cooldownMs = (this.services.config.chat.cooldownSeconds ?? 6) * 1000;
     const last = Math.max(this.lastSpokeAt, this.sayQueue.at?.(-1)?.at ?? 0);
@@ -399,4 +404,6 @@ class AiBotMind {
   }
 }
 
-module.exports = { AiBotMind, ASKS };
+const { stripSelfNarration } = require("./AiBotNarration");
+
+module.exports = { AiBotMind, ASKS, stripSelfNarration };

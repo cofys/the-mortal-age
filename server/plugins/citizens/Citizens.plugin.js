@@ -80,6 +80,7 @@ const { onNpcKillWitnessed, onPlayerDropWitnessed } = require("./StreetSpectacle
 const { onLogoutFarewell } = require("./StreetFarewells");
 const { onIdleSeen, clearIdleOnLogout } = require("./StreetIdle");
 const { onGiftGiven } = require("./CitizenGifts");
+const { initCitizenLoot, onCitizenDropsRolled } = require("./brain/actions/CitizenLoot");
 const { tipPerformer } = require("./lib/CitizenStreetPerformers");
 const { tipBard } = require("./lib/CitizenBards");
 const { tipActor } = require("./lib/CitizenActors");
@@ -555,6 +556,18 @@ function onCitizensDiagCommand({ player }) {
   return true;
 }
 
+/** Jon 2026-10-13: owner-only ::run — reset run energy to 100. */
+function onRunCommand({ player }) {
+  try {
+    player?.setRunEnergy?.(100);
+    player?.getPacketSender?.()?.sendRunEnergy?.();
+    player?.sendMessage?.("Run energy restored to 100%.");
+  } catch {
+    // best-effort
+  }
+  return true;
+}
+
 function onCitizenCommand({ player, parts }) {
   const director = getDirector();
   const sub = (parts[1] ?? "status").toLowerCase();
@@ -878,6 +891,9 @@ module.exports = {
     api.onPlayerDeath(onDeathSeen);
     api.onPlayerDeath(onPlayerDeathInsured);
     api.onNpcDeath(onKillWitnessed);
+    // Jon 2026-10-13: citizens loot what they kill, like a player.
+    initCitizenLoot(api);
+    api.onCustomEvent("npc-drops:roll", onCitizenDropsRolled);
     api.onPlayerLogin(onFriendLoggedIn);
     api.onPlayerLogout(onFriendLoggedOut);
     api.onPlayerLogout(onFarewellSeen);
@@ -895,6 +911,9 @@ module.exports = {
       PlayerRights.ADMINISTRATOR,
       "Manage AI citizens: ::citizen [status|spawn]"
     );
+    // Jon 2026-10-13: owner-only run-energy reset. Real engine path —
+    // setRunEnergy clamps 0..100 and sendRunEnergy refreshes the client orb.
+    api.registerCommand("run", onRunCommand, PlayerRights.OWNER, "Reset your run energy to 100");
     api.registerCommand(
       "citizens",
       onCitizensDiagCommand,

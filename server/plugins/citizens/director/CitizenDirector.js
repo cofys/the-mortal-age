@@ -3277,6 +3277,15 @@ class CitizenDirector {
         CitizenSkilling.tickSkilling(this, hour);
       },
     },
+    // Citizen looting (Jon 2026-10-13): citizens pick up what they kill —
+    // walk to the drop, real engine pickup, player-like judgment on what's
+    // worth taking. Data tier, zero LLM.
+    {
+      name: 'citizen loot failed',
+      run: () => {
+        require("../brain/actions/CitizenLoot").tickCitizenLoot(Date.now());
+      },
+    },
     // (Jon 2026-10-13: retired — the old tickCitizenFishing rolled catches
     // directly without clicking a spot. Real fishing now runs through the
     // Fishing plugin's own sessions: the routine's fish delegate, the

@@ -30,7 +30,7 @@ const {
 } = require("../../lib/humanizer");
 const { getMemory } = require("../../lib/CitizenMemory");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
-const { sayPublic } = require("../../chat/CitizenSayPublic");
+const { sayPublic, pickLineAvoidingRepeat } = require("../../chat/CitizenSayPublic");
 const Influence = require("../../../kingdoms/Influence.Kingdoms");
 
 // Hatred: lines for confronting hated/enemy players. {name} is filled at speak time.
@@ -84,13 +84,34 @@ const CHALLENGE_LINES_WAR = Object.freeze([
   "Press-gangs walk tonight. You look able-bodied... move along, citizen, and stay out of sight.",
 ]);
 
+// Jon 2026-10-13: three templates meant "All quiet on the walls." three
+// times in seven minutes from the same guard. Pools are wide now; the
+// sayPublic repeat backstop is the final guard.
 const GREETING_LINES = Object.freeze({
   plain: Object.freeze([
     "Quiet watch today.",
     "All quiet on the walls.",
     "Mind the pickpockets near the market.",
+    "Streets are calm. For now.",
+    "Nothing moving but the pigeons.",
+    "Peaceful shift, touch wood.",
+    "All clear on my round.",
+    "Keep it lawful, folks.",
+    "Eyes open, that's the job.",
+    "No trouble on this beat.",
+    "Quiet. Almost too quiet.",
+    "Watch is steady. Carry on.",
   ]),
-  terse: Object.freeze(["quiet today.", "all quiet.", "watch yer purse."]),
+  terse: Object.freeze([
+    "quiet today.",
+    "all quiet.",
+    "watch yer purse.",
+    "calm streets.",
+    "nothing moving.",
+    "all clear.",
+    "steady watch.",
+    "no trouble.",
+  ]),
 });
 
 const WARNED_LINES = Object.freeze({
@@ -660,7 +681,10 @@ function createGuardPatrolAction(spec, world) {
         if (chance(state.rng, 0.12 * state.human.chatRate)) {
           try {
             const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
-            sayPublic(player, voiceLine(voiceFor(personality), GREETING_LINES, state.rng));
+            const line = pickLineAvoidingRepeat(player, () =>
+              voiceLine(voiceFor(personality), GREETING_LINES, state.rng)
+            );
+            if (line) sayPublic(player, line);
           } catch (error) {
             // Cosmetic only.
           }
