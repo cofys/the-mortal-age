@@ -171,9 +171,13 @@ class BotBrain {
   }
 
   assignNext(nowMs) {
+    // Citizens use utility scoring, not the sticky `own` pin. The `own` mechanism
+    // was designed for wilderness PvP bots with fixed behaviors. For citizens,
+    // always let the scorer pick the best activity.
+    const isCitizen = this.player?.getAttribute?.("citizens:role") != null;
     const activity = this.registry?.pickActivity?.(this.player, nowMs, this.rotation
       ? { allowed: this.rotation.activityIds, weights: this.rotation.weights }
-      : { own: this.rootActivityId });
+      : isCitizen ? {} : { own: this.rootActivityId });
     if (!activity) {
       return false;
     }
