@@ -20,6 +20,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 const SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-bonds.json");
 
@@ -42,7 +43,15 @@ function load() {
   try {
     if (!fs.existsSync(SAVE_FILE)) return {};
     const raw = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8"));
-    return raw && typeof raw === "object" ? raw : {};
+    const parsed = raw && typeof raw === "object" ? raw : {};
+    // Dual-read: overlay account blocks over the old-file cache.
+    if (storeEnabled) {
+      for (const key of Object.keys(parsed)) {
+        const block = storeBlockFor(key);
+        if (block) parsed[key] = block;
+      }
+    }
+    return parsed;
   } catch {
     return {};
   }
@@ -50,6 +59,34 @@ function load() {
 
 let cache = null;
 let dirty = false;
+
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-bonds.json file is the fallback
+// (and stays fully written).
+const STORE_BLOCK = "socialBonds";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's bonds entry into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
 
 function data() {
   if (!cache) cache = load();
@@ -79,7 +116,8 @@ function bonds(citizenName) {
   const key = normalizeName(citizenName);
   const d = data();
   if (!d[key]) {
-    d[key] = { friends: [], enemies: [], party: null, pendingInvites: [], following: null };
+    // The account block wins when present, else a blank entry.
+    d[key] = storeBlockFor(citizenName) ?? { friends: [], enemies: [], party: null, pendingInvites: [], following: null };
     dirty = true;
   }
   const b = d[key];
@@ -106,6 +144,7 @@ function addFriend(citizenName, otherName) {
   b.enemies = b.enemies.filter((e) => e !== n);
   b.friends.push(n);
   dirty = true;
+  syncStore(citizenName, b);
   return true;
 }
 
@@ -115,6 +154,7 @@ function removeFriend(citizenName, otherName) {
   const before = b.friends.length;
   b.friends = b.friends.filter((f) => f !== n);
   if (b.friends.length !== before) dirty = true;
+  if (b.friends.length !== before) syncStore(citizenName, b);
   return b.friends.length !== before;
 }
 
@@ -133,6 +173,7 @@ function addEnemy(citizenName, otherName) {
   b.friends = b.friends.filter((f) => f !== n);
   b.enemies.push(n);
   dirty = true;
+  syncStore(citizenName, b);
   return true;
 }
 
@@ -142,6 +183,7 @@ function removeEnemy(citizenName, otherName) {
   const before = b.enemies.length;
   b.enemies = b.enemies.filter((e) => e !== n);
   if (b.enemies.length !== before) dirty = true;
+  if (b.enemies.length !== before) syncStore(citizenName, b);
   return b.enemies.length !== before;
 }
 
@@ -169,6 +211,7 @@ function sendInvite(from, to, kind, extraData) {
     data: extraData ?? {},
   });
   dirty = true;
+  syncStore(to, toBonds);
   return id;
 }
 
@@ -183,6 +226,7 @@ function resolveInvite(name, inviteId, accepted) {
   if (idx < 0) return null;
   const [invite] = b.pendingInvites.splice(idx, 1);
   dirty = true;
+  syncStore(name, b);
   // Apply the accepted invite's effect.
   if (accepted) {
     if (invite.kind === INVITE_FRIEND) {
@@ -209,6 +253,7 @@ function setFollow(citizenName, targetName, reason) {
   if (!t) return false;
   b.following = { target: t, reason: reason ?? "follow", since: Date.now() };
   dirty = true;
+  syncStore(citizenName, b);
   return true;
 }
 
@@ -217,6 +262,7 @@ function clearFollow(citizenName) {
   if (!b.following) return false;
   b.following = null;
   dirty = true;
+  syncStore(citizenName, b);
   return true;
 }
 
@@ -227,13 +273,17 @@ function getParty(citizenName) {
 }
 
 function setParty(citizenName, party) {
-  bonds(citizenName).party = party;
+  const b = bonds(citizenName);
+  b.party = party;
   dirty = true;
+  syncStore(citizenName, b);
 }
 
 function clearParty(citizenName) {
-  bonds(citizenName).party = null;
+  const b = bonds(citizenName);
+  b.party = null;
   dirty = true;
+  syncStore(citizenName, b);
 }
 
 module.exports = {

@@ -46,6 +46,7 @@ const path = require("path");
 const { getJournal } = require("./CitizenJournal");
 const { normalizeName } = require("./CitizenBonds");
 const { agentRng, chance } = require("./humanizer");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-aging.json");
 
@@ -87,6 +88,35 @@ let cache = null; // { citizens: { [normName]: { age, lastAgedAt } } }
 let dirty = false;
 let loaded = false;
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-aging.json registry is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "aging";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file registry is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's aging entry into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 function data() {
   if (!cache) {
     cache = { citizens: {} };
@@ -103,6 +133,13 @@ function load() {
     const parsed = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8"));
     if (parsed && typeof parsed.citizens === "object") {
       cache.citizens = parsed.citizens;
+      // Dual-read: overlay account blocks over the old-file registry.
+      if (storeEnabled) {
+        for (const key of Object.keys(cache.citizens)) {
+          const block = storeBlockFor(key);
+          if (block) cache.citizens[key] = block;
+        }
+      }
     }
   } catch {
     // Corrupt or missing save — start empty, never crash.
@@ -136,6 +173,7 @@ function resetForTests() {
 /** Test seam — redirect the save path. */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
   resetForTests();
 }
 
@@ -183,6 +221,9 @@ function ageOf(record) {
     const key = normalizeName(record?.username);
     const entry = key ? data().citizens[key] : null;
     if (entry && Number.isFinite(Number(entry.age))) return Number(entry.age);
+    // Dual-read: the account block may hold what the old registry lacks.
+    const stored = key ? storeBlockFor(record.username) : null;
+    if (stored && Number.isFinite(Number(stored.age))) return Number(stored.age);
   } catch {
     // Fall through to the record.
   }
@@ -235,19 +276,26 @@ function ageCitizen(record, nowMs, rng) {
   const d = data();
   let entry = d.citizens[key];
   if (!entry) {
-    // First sight: seed from the record or fresh.
-    const startAge = Number.isFinite(Number(record?.personality?.age))
-      ? Number(record.personality.age)
-      : seedAge(rng);
-    entry = { age: startAge, lastAgedAt: nowMs, stage: ageStage(startAge) };
+    // First sight: the account block wins, else seed from the record or fresh.
+    const stored = storeBlockFor(record.username);
+    if (stored && Number.isFinite(Number(stored.age))) {
+      entry = stored;
+    } else {
+      const startAge = Number.isFinite(Number(record?.personality?.age))
+        ? Number(record.personality.age)
+        : seedAge(rng);
+      entry = { age: startAge, lastAgedAt: nowMs, stage: ageStage(startAge) };
+    }
     d.citizens[key] = entry;
     markDirty();
+    syncStore(key, entry);
   }
   const years = Math.floor((nowMs - (entry.lastAgedAt || nowMs)) / YEAR_MS);
   if (years > 0) {
     entry.age += years;
     entry.lastAgedAt = (entry.lastAgedAt || nowMs) + years * YEAR_MS;
     markDirty();
+    syncStore(key, entry);
   }
   // Keep the live record honest for every existing reader.
   try {
@@ -260,6 +308,7 @@ function ageCitizen(record, nowMs, rng) {
   if (entry.stage !== stage) {
     entry.stage = stage;
     markDirty();
+    syncStore(key, entry);
     if (stage === "middle-aged" || stage === "elder") {
       const line = pickOne(rng ?? Math.random, STAGE_LINES[stage]).replace(
         "{name}",
@@ -407,6 +456,7 @@ function processImmigration(director, nowMs, rng) {
         // Registry is the source of truth.
       }
       markDirty();
+      syncStore(key, data().citizens[key]);
       const origin = pickOne(random, CARAVAN_ORIGINS);
       const where = kingdomDisplay(need.kingdomId);
       journalEvent(

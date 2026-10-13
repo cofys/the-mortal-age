@@ -44,12 +44,14 @@ const fs = require("fs");
 const path = require("path");
 const { normalizeName } = require("./CitizenBonds");
 const { getJournal } = require("./CitizenJournal");
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 let SAVE_FILE = path.join(process.cwd(), "data", "saves", "citizen-careers.json");
 
 /** Test seam — redirect the save path (tests must not touch the real one). */
 function _setSavePathForTests(p) {
   SAVE_FILE = p;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- ranks -------------------------------------------------------------------
@@ -150,6 +152,35 @@ const MAX_HISTORY = 8;
 let cache = null;
 let dirty = false;
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-careers.json file is the fallback
+// (and stays fully written). storeEnabled is flipped off by the test seams
+// so unit tests stay hermetic.
+const STORE_BLOCK = "careers";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's career record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 function data() {
   if (!cache) cache = load();
   return cache;
@@ -161,6 +192,13 @@ function load() {
     const raw = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8"));
     if (!raw || typeof raw !== "object") return { careers: {} };
     if (!raw.careers || typeof raw.careers !== "object") raw.careers = {};
+    // Dual-read: overlay account blocks over the old-file registry.
+    if (storeEnabled) {
+      for (const key of Object.keys(raw.careers)) {
+        const block = storeBlockFor(key);
+        if (block) raw.careers[key] = block;
+      }
+    }
     return raw;
   } catch {
     return { careers: {} };
@@ -210,7 +248,8 @@ function careerFor(citizenName, nowMs) {
   if (!key) return null;
   const d = data();
   if (!d.careers[key]) {
-    d.careers[key] = blankCareer("laborer", nowMs);
+    // The account block wins when present, else a fresh blank career.
+    d.careers[key] = storeBlockFor(citizenName) ?? blankCareer("laborer", nowMs);
     markDirty();
   }
   return d.careers[key];
@@ -237,6 +276,7 @@ function setCareer(citizenName, careerKey, nowMs) {
   rec.since = now;
   rec.rankSince = now;
   markDirty();
+  syncStore(citizenName, rec);
   journalCareer(citizenName, `took up ${def.label} work`);
   return rec;
 }
@@ -250,6 +290,7 @@ function setRank(citizenName, rank, nowMs) {
   rec.rank = rank;
   rec.rankSince = nowMs ?? Date.now();
   markDirty();
+  syncStore(citizenName, rec);
   const def = careerDef(rec.career);
   journalCareer(citizenName, `rose to ${rank} ${def ? def.label : rec.career}`);
   return rec;
@@ -326,6 +367,7 @@ function retireCitizen(citizenName, nowMs) {
   rec.retired = true;
   rec.retiredAt = nowMs ?? Date.now();
   markDirty();
+  syncStore(citizenName, rec);
   journalCareer(citizenName, `retired from ${rec.career} work after a lifetime of it`);
   return rec;
 }
