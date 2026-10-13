@@ -31,6 +31,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const CitizenAccountStore = require("./CitizenAccountStore");
 const { agentRng, chance } = require("./humanizer");
 const { ROLE_MERCHANT } = require("../constants");
 const { ATTR_CITIZEN_PERSONALITY } = require("../constants");
@@ -128,6 +129,48 @@ function pairKey(a, b) {
   return x < y ? `${x}|${y}` : `${y}|${x}`;
 }
 
+// Dual-read with the per-citizen account store: each citizen's account block
+// ("kin") holds their own bond list [{ other, bond }]. The pair-keyed
+// citizen-kin.json file is the fallback (and stays fully written).
+// storeEnabled is flipped off by the test seams so unit tests stay hermetic.
+const STORE_BLOCK = "kin";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file map is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/**
+ * Merge one citizen's stored bond list into a bond map.
+ * Returns true when at least one bond was added.
+ */
+function hydrateBondsInto(bondMap, name, block) {
+  if (!block || !Array.isArray(block.bonds)) return false;
+  const key = normalizeName(name);
+  if (!key) return false;
+  let added = false;
+  for (const entry of block.bonds) {
+    const other = normalizeName(entry?.other);
+    const bond = entry?.bond;
+    if (!other || other === key || !bond || typeof bond !== "object") continue;
+    if (!STAGES[bond.type] || !STAGES[bond.type].includes(bond.stage)) continue;
+    const pk = pairKey(key, other);
+    if (!bondMap.has(pk)) {
+      bondMap.set(pk, { a: key < other ? key : other, b: key < other ? other : key, bond });
+      added = true;
+    }
+  }
+  return added;
+}
+
 function clamp01(v) {
   return Math.max(0, Math.min(1, v));
 }
@@ -214,6 +257,44 @@ class CitizenKinshipStore {
   resetForTests() {
     this.bonds = new Map();
     this.dirty = false;
+    storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
+  }
+
+  /** Dual-write one citizen's bond list into their account block. */
+  _syncKin(name) {
+    if (!storeEnabled) return;
+    const key = normalizeName(name);
+    if (!key) return;
+    try {
+      CitizenAccountStore.setBlock(key, STORE_BLOCK, { bonds: this.of(key) });
+    } catch {
+      // The old-file save remains the durable fallback.
+    }
+  }
+
+  /** Clear one citizen's bond block (all bonds forgotten). */
+  _clearKin(name) {
+    if (!storeEnabled) return;
+    const key = normalizeName(name);
+    if (!key) return;
+    try {
+      CitizenAccountStore.setBlock(key, STORE_BLOCK, null);
+    } catch {
+      // The old-file save remains the durable fallback.
+    }
+  }
+
+  /** Bulk boot load: overlay account blocks for citizens present in old data. */
+  _overlayStore() {
+    if (!storeEnabled) return;
+    const seen = new Set();
+    for (const { a, b } of this.bonds.values()) {
+      for (const name of [a, b]) {
+        if (seen.has(name)) continue;
+        seen.add(name);
+        if (hydrateBondsInto(this.bonds, name, storeBlockFor(name))) this.dirty = true;
+      }
+    }
   }
 
   load() {
@@ -231,6 +312,7 @@ class CitizenKinshipStore {
     } catch {
       // Corrupt save -> start clean. Never break boot on a save file.
     }
+    this._overlayStore();
   }
 
   save() {
@@ -272,6 +354,13 @@ class CitizenKinshipStore {
       if (a === key) out.push({ other: b, bond });
       else if (b === key) out.push({ other: a, bond });
     }
+    if (out.length === 0) {
+      // Dual-read: the account block may hold bonds the old file lacks.
+      if (hydrateBondsInto(this.bonds, key, storeBlockFor(key))) {
+        this.dirty = true;
+        return this.of(name);
+      }
+    }
     return out;
   }
 
@@ -300,13 +389,21 @@ class CitizenKinshipStore {
     const rec = { a: x, b: y, bond: blankBond(type, stage, kingdomId, now) };
     this.bonds.set(pairKey(x, y), rec);
     this.dirty = true;
+    this._syncKin(x);
+    this._syncKin(y);
     return rec;
   }
 
   remove(a, b) {
     this._loaded();
-    const ok = this.bonds.delete(pairKey(a, b));
-    if (ok) this.dirty = true;
+    const x = normalizeName(a);
+    const y = normalizeName(b);
+    const ok = this.bonds.delete(pairKey(x, y));
+    if (ok) {
+      this.dirty = true;
+      this._syncKin(x);
+      this._syncKin(y);
+    }
     return ok;
   }
 
@@ -320,13 +417,19 @@ class CitizenKinshipStore {
     const key = normalizeName(name);
     if (!key) return 0;
     let removed = 0;
+    const affected = new Set();
     for (const [pair, rec] of this.bonds) {
       if (rec.a === key || rec.b === key) {
+        affected.add(rec.a === key ? rec.b : rec.a);
         this.bonds.delete(pair);
         removed += 1;
       }
     }
-    if (removed > 0) this.dirty = true;
+    if (removed > 0) {
+      this.dirty = true;
+      this._clearKin(key);
+      for (const other of affected) this._syncKin(other);
+    }
     return removed;
   }
 
@@ -337,6 +440,8 @@ class CitizenKinshipStore {
     rec.bond.stage = stage;
     rec.bond.updatedAt = now;
     this.dirty = true;
+    this._syncKin(a);
+    this._syncKin(b);
     return true;
   }
 
@@ -345,6 +450,8 @@ class CitizenKinshipStore {
     if (rec) {
       rec.bond.updatedAt = now;
       this.dirty = true;
+      this._syncKin(a);
+      this._syncKin(b);
     }
   }
 }
@@ -358,6 +465,7 @@ function getKinship() {
 function resetKinshipForTests() {
   _store = new CitizenKinshipStore();
   _store.resetForTests();
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // Lazy singletons (avoid load-order cycles with the director).

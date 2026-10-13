@@ -104,6 +104,7 @@ const PROJECTS = Object.freeze({
 const ENGINEER_MIN_CONSTRUCTION = 40;
 const ROYAL_PROJECT_FEE = 8000; // coins from the real treasury per project
 const SAVE_PATH = "data/saves/citizen-infrastructure.json";
+const CitizenAccountStore = require("./CitizenAccountStore");
 
 // --- state -----------------------------------------------------------------
 
@@ -125,6 +126,13 @@ function load() {
       const raw = JSON.parse(fs.readFileSync(full, "utf8"));
       if (raw && typeof raw === "object") {
         cache = Object.assign(blankState(), raw);
+        // Dual-read: overlay account blocks over the old-file engineer registry.
+        if (storeEnabled && cache.engineers && typeof cache.engineers === "object") {
+          for (const key of Object.keys(cache.engineers)) {
+            const block = storeBlockFor(key);
+            if (block) cache.engineers[key] = block;
+          }
+        }
       }
     }
   } catch {
@@ -152,6 +160,35 @@ function markDirty() {
   dirty = true;
 }
 
+// Dual-read with the per-citizen account store: the account block wins when
+// present and non-empty, the old citizen-infrastructure.json file is the
+// fallback (and stays fully written). storeEnabled is flipped off by the
+// test seams so unit tests stay hermetic.
+const STORE_BLOCK = "infrastructure";
+let storeEnabled = true;
+
+/** This citizen's account block, or null when absent/empty/the store is off. */
+function storeBlockFor(name) {
+  if (!storeEnabled) return null;
+  try {
+    const block = CitizenAccountStore.getBlock(name, STORE_BLOCK);
+    if (block && typeof block === "object" && Object.keys(block).length > 0) return block;
+  } catch {
+    // The old-file cache is the fallback — never break the tick.
+  }
+  return null;
+}
+
+/** Dual-write one citizen's engineer record into their account block. */
+function syncStore(name, entry) {
+  if (!storeEnabled || !name) return;
+  try {
+    CitizenAccountStore.setBlock(name, STORE_BLOCK, entry);
+  } catch {
+    // The old-file save remains the durable fallback.
+  }
+}
+
 function nextId(prefix) {
   const st = load();
   const id = `${prefix}_${st.seq++}`;
@@ -163,6 +200,7 @@ function _setSavePathForTests() {} // seam parity with siblings (unused)
 function resetForTests() {
   cache = null;
   dirty = false;
+  storeEnabled = false; // keep unit tests hermetic: no account-store reads/writes
 }
 
 // --- catalog ----------------------------------------------------------------
@@ -202,7 +240,8 @@ function registerEngineer(username, kingdomId, constructionLevel) {
   const st = load();
   const key = String(username).toLowerCase();
   if (!st.engineers[key]) {
-    st.engineers[key] = {
+    // Dual-read: the account block wins when present.
+    st.engineers[key] = storeBlockFor(username) ?? {
       username: String(username),
       kingdomId: kingdomId || null,
       constructionLevel: constructionLevel || ENGINEER_MIN_CONSTRUCTION,
@@ -210,13 +249,22 @@ function registerEngineer(username, kingdomId, constructionLevel) {
       registeredAt: Date.now(),
     };
     markDirty();
+    syncStore(username, st.engineers[key]);
   }
   return st.engineers[key];
 }
 
 function engineerFor(username) {
   const st = load();
-  return st.engineers[String(username).toLowerCase()] || null;
+  const key = String(username).toLowerCase();
+  if (!st.engineers[key]) {
+    const block = storeBlockFor(username);
+    if (block) {
+      st.engineers[key] = block;
+      markDirty();
+    }
+  }
+  return st.engineers[key] || null;
 }
 
 function engineersFor(kingdomId) {
