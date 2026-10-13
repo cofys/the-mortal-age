@@ -714,6 +714,8 @@ class BotBehaviorTask extends Task {
   }
 
   shouldProcessEntryHeavy(entry, nowMs) {
+    // TEMP: Disable LOD entirely - always tick brains. Citizens weren't ticking at all.
+    return true
     // Temporal sharding for performance: calm/idle bots skip brain ticks on
     // some cycles. Urgent bots (combat, traversal, transient, pvp) are
     // always processed every cycle for responsiveness.
