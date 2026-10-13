@@ -67,16 +67,25 @@ function handleMonitor(query) {
   // DEBUG: Fake player control for autonomous testing (no real player needed).
   // ?fakePlayer=x,y,z - simulate a player at coordinates
   // ?clearFakePlayer=1 - remove the simulated player
+  // Note: query is a Map (has .get()), not a plain object.
   try {
-    if (query && query.fakePlayer) {
-      const parts = String(query.fakePlayer).split(",").map(Number);
+    const getParam = (k) => {
+      try {
+        if (query && typeof query.get === "function") return query.get(k);
+        if (query && query[k] != null) return query[k];
+      } catch {}
+      return null;
+    };
+    const fakePlayerParam = getParam("fakePlayer");
+    if (fakePlayerParam) {
+      const parts = String(fakePlayerParam).split(",").map(Number);
       if (parts.length >= 2 && parts.slice(0, 2).every(Number.isFinite)) {
         CitizenDirector.setDebugFakePlayer(parts[0], parts[1], parts[2] ?? 0);
         return { ok: true, fakePlayer: { x: parts[0], y: parts[1], z: parts[2] ?? 0 } };
       }
       return { ok: false, error: "Invalid fakePlayer format. Use ?fakePlayer=x,y,z" };
     }
-    if (query && query.clearFakePlayer) {
+    if (getParam("clearFakePlayer")) {
       CitizenDirector.clearDebugFakePlayers();
       return { ok: true, cleared: true };
     }
