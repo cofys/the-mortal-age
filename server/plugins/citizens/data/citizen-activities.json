@@ -351,7 +351,7 @@
     {
       "id": "citizen_mine",
       "mode": "citizen_mine",
-      "repeat": true,
+      "repeat": false,
       "capacity": 32,
       "slotCapacity": 4,
       "failureCooldownSeconds": 10,
@@ -365,6 +365,10 @@
         }
       ],
       "actions": [
+        {
+          "type": "citizenGoToPlace",
+          "kind": "rock"
+        },
         {
           "type": "equipTool",
           "tool": "pickaxe"
@@ -386,7 +390,7 @@
     {
       "id": "citizen_chop",
       "mode": "citizen_chop",
-      "repeat": true,
+      "repeat": false,
       "capacity": 32,
       "slotCapacity": 4,
       "failureCooldownSeconds": 10,
@@ -400,6 +404,10 @@
         }
       ],
       "actions": [
+        {
+          "type": "citizenGoToPlace",
+          "kind": "tree"
+        },
         {
           "type": "equipTool",
           "tool": "axe"
@@ -421,7 +429,7 @@
     {
       "id": "citizen_fish",
       "mode": "citizen_fish",
-      "repeat": true,
+      "repeat": false,
       "capacity": 32,
       "slotCapacity": 4,
       "failureCooldownSeconds": 10,
@@ -435,6 +443,10 @@
         }
       ],
       "actions": [
+        {
+          "type": "citizenGoToPlace",
+          "kind": "fish"
+        },
         {
           "type": "ensureItem",
           "item": "SMALL_FISHING_NET",

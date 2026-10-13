@@ -105,6 +105,90 @@ function kingdomIdOfTown(townId) {
   const id = sites?.kingdomId;
   return typeof id === "string" && SITES[id] ? id : KINGDOM_IDS[0];
 }
+// ---------------------------------------------------------------------------
+// PASTE INTO CitizenSites.js, below the existing consts + kingdomIdOfTown().
+// Then add GATHER_PLACES, pickPlace, placeKindNear to module.exports.
+//
+// Regional gather places, built ONLY from anchors you already have
+// (kingdom work/rocks/dock + town work/dock). No new coordinates needed.
+// A Lumbridge citizen can now chop at Draynor's willows, fish at Draynor's
+// dock, or mine at the Varrock-side rocks: inter-town trips for free.
+// ---------------------------------------------------------------------------
+const GATHER_PLACES = (() => {
+  const out = [];
+  const seen = new Set();
+  const add = (id, kingdomId, kind, spot, extra = {}) => {
+    if (!spot || !Number.isFinite(spot.x) || !Number.isFinite(spot.y)) return;
+    const key = `${kind}|${spot.x}|${spot.y}|${spot.z ?? 0}`;
+    if (seen.has(key)) return; // Keldagrim districts share one rock tile
+    seen.add(key);
+    out.push({ id, kingdomId, kind, x: spot.x, y: spot.y, z: spot.z ?? 0, radius: 6, ...extra });
+  };
+  for (const kid of KINGDOM_IDS) {
+    const s = SITES[kid];
+    add(`${kid}:work`, kid, s.work?.catalog === "rock" ? "rock" : "tree", s.work, { tier: s.work?.tier });
+    add(`${kid}:rocks`, kid, "rock", s.rocks); // sites.json 'rocks' was never read before
+    add(`${kid}:dock`, kid, "fish", s.dock);
+  }
+  for (const tid of TOWN_IDS) {
+    const t = TOWNS[tid];
+    const kid = kingdomIdOfTown(tid);
+    add(`${tid}:work`, kid, t.work?.catalog === "rock" ? "rock" : "tree", t.work, { tier: t.work?.tier });
+    add(`${tid}:dock`, kid, "fish", t.dock);
+  }
+  return Object.freeze(out);
+})();
+
+/** Chebyshev distance, the metric the nav layer uses. */
+function tileDist(ax, ay, bx, by) {
+  return Math.max(Math.abs(ax - bx), Math.abs(ay - by));
+}
+
+/**
+ * Weighted pick of a place of `kind` in the citizen's kingdom. Nearer places
+ * are likelier, but anything within maxDist is reachable, so people leave
+ * their own town. rng is injected (agentRng) so picks are deterministic.
+ */
+function pickPlace(player, kind, rng, maxDist = 220) {
+  const kid = kingdomIdOf(player);
+  const loc = player?.getLocation?.();
+  const px = loc?.getX?.() ?? 0;
+  const py = loc?.getY?.() ?? 0;
+  const pool = GATHER_PLACES.filter((p) => p.kind === kind && p.kingdomId === kid);
+  if (pool.length === 0) return null;
+  let near = pool.filter((p) => tileDist(p.x, p.y, px, py) <= maxDist);
+  if (near.length === 0) near = pool;
+  const weights = near.map((p) => 1 / (1 + tileDist(p.x, p.y, px, py) / 60));
+  let roll = rng() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < near.length; i += 1) {
+    roll -= weights[i];
+    if (roll <= 0) return near[i];
+  }
+  return near[near.length - 1];
+}
+
+/** Kind of the NEAREST gather place within `radius` (null if none). Used by the
+ *  decision layer as a locality bonus: standing by trees makes chopping attractive.
+ *  Nearest-wins matters: Draynor's willows sit 3-5 tiles from its dock. */
+function placeKindNear(player, radius = 12) {
+  const loc = player?.getLocation?.();
+  if (!loc) return null;
+  const x = loc.getX();
+  const y = loc.getY();
+  const z = loc.getZ();
+  let best = null;
+  let bestD = Infinity;
+  for (const p of GATHER_PLACES) {
+    if (p.z !== z) continue;
+    const d = tileDist(p.x, p.y, x, y);
+    if (d <= radius && d < bestD) {
+      best = p;
+      bestD = d;
+    }
+  }
+  return best ? best.kind : null;
+}
+
 
 /** Town ids belonging to a kingdom (for roster distribution + tests). */
 function townsForKingdom(kingdomId) {
@@ -283,4 +367,7 @@ module.exports = {
   patrolCircuit,
   workSite,
   dockSite,
+  GATHER_PLACES,
+  pickPlace,
+  placeKindNear,
 };

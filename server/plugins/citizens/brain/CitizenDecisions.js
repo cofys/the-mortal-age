@@ -234,9 +234,6 @@ const ANCHOR_ACTIVITIES = new Set([
   "refugee_flight",
   ACT_TITHE_DUTY, // the round is a long duty, re-decidable like guard_patrol
   ACT_CARAVAN, // the road walk is a long duty, re-decidable like guard_patrol
-  ACT_MINE,
-  ACT_CHOP,
-  ACT_FISH,
   ACT_FARM,
 ]);
 
@@ -2793,7 +2790,7 @@ compete: competeInfo(player),
     science: scienceInfo(player),
     astro: astroInfo(player),
     maps: mapInfo(player),
-    mapguild: guildInfo(player),
+
     press: pressInfo(player),
     pressguild: pressGuildInfo(player),
     bankguild: bankGuildInfo(player),
@@ -2827,6 +2824,7 @@ compete: competeInfo(player),
     climate: climateInfo(),
     night: nightInfo(),
     hour: new Date().getHours(), // server-local, per the timezone rule
+    here: (() => { try { const { placeKindNear } = require("./CitizenSites"); return placeKindNear(player); } catch { return null; } })(),
   };
 }
 
@@ -2856,7 +2854,8 @@ const { hp, energy, mood, goal, personality, coins, food, freeSlots, nearby, log
     case ACT_ROUTINE: {
       // Work: the commoner's living. Broke + industrious citizens grind;
       // the weary stay away until rested. Hurt citizens eat first.
-      let s = 45;
+      // (Lowered from 45: routine is town life now, not the default.)
+      let s = 28;
       if (goalType === GOAL_MASTER_TRADE) s += 18;
       else if (goalType === GOAL_SAVE_GOLD) s += 14;
       else if (goalType === GOAL_RANK_UP) s += 4;
@@ -4324,6 +4323,7 @@ case ACT_COMPETE: {
       // Kingdom resource profile (phase 3): mine what the kingdom is rich
       // in. Tie-breaker scale — personality and needs still dominate.
       s += profileWorkBonus(snap.kingdomId, ACT_MINE);
+      if (snap.here === "rock") s += 25; // already at the rocks: keep working
       return s;
     }
     case ACT_CHOP: {
@@ -4346,6 +4346,7 @@ case ACT_COMPETE: {
       // Kingdom resource profile (phase 3): chop what the kingdom is rich
       // in. Tie-breaker scale — personality and needs still dominate.
       s += profileWorkBonus(snap.kingdomId, ACT_CHOP);
+      if (snap.here === "tree") s += 25; // already at the trees: keep working
       return s;
     }
     case ACT_FISH: {
@@ -4377,6 +4378,7 @@ case ACT_COMPETE: {
       // Kingdom resource profile (phase 3): fish where the kingdom is rich
       // in fish. Tie-breaker scale — personality and needs still dominate.
       s += profileWorkBonus(snap.kingdomId, ACT_FISH);
+      if (snap.here === "fish") s += 25; // already at the water: keep fishing
       return s;
     }
     case ACT_WILD_GATHER: {
@@ -4442,6 +4444,7 @@ function pick(player, candidates, nowMs = Date.now(), rng = Math.random) {
   }
   const username = usernameOf(player);
   pruneState(nowMs);
+  ambientChatter(player, brain, nowMs);
 
   // Slot-capacity lifecycle: a new pick means the previous activity ended,
   // so release any spot claim the citizen still held — the freed slot goes
@@ -4666,6 +4669,32 @@ function doInterrupt(player, brain, target, nowMs, critical) {
  * critical needs or a much better activity, then returns — the frame switch
  * below in tick() picks up whatever the interrupt installed.
  */
+// Ambient chatter: citizens talk wherever they are, not just in taverns.
+// Runs on every decisionTick (before the stagger gate) with per-citizen cooldown.
+const nextChatAt = new Map();
+const CHAT_BY_ACTIVITY = {
+  citizen_chop: ["Timber!", "This one's a good oak.", "My axe is getting dull.", "Nice day for chopping."],
+  citizen_mine: ["Clink... clink...", "This vein is rich.", "My arms are tired.", "Found a good spot here."],
+  citizen_fish: ["Got a bite!", "The fish are biting today.", "Nice and peaceful out here.", "Come on, you beauty."],
+  citizen_routine: ["Lovely day, isn't it?", "How's business?", "Seen the news?", "Busy busy."],
+};
+function ambientChatter(player, brain, nowMs) {
+  try {
+    const u = usernameOf(player);
+    if (!u) return;
+    if (nowMs < (nextChatAt.get(u) ?? 0)) return;
+    nextChatAt.set(u, nowMs + 90000 + Math.random() * 150000);
+    if (nearbyCount(player) === 0) return;
+    const id = brain?.frames?.at(-1)?.behaviour?.id;
+    const pool = CHAT_BY_ACTIVITY[id];
+    if (!pool || pool.length === 0) return;
+    const { sayPublic } = require("../chat/CitizenSayPublic");
+    sayPublic(player, pool[Math.floor(Math.random() * pool.length)]);
+  } catch {
+    // Chatter never breaks the tick.
+  }
+}
+
 function decisionTick(args) {
   const { player, brain, nowMs = Date.now() } = args ?? {};
   if (!player || !brain || !isCitizen(player)) {
@@ -4673,6 +4702,7 @@ function decisionTick(args) {
   }
   const username = usernameOf(player);
   pruneState(nowMs);
+  ambientChatter(player, brain, nowMs);
   // Session intents tick BEFORE the stagger gate: the first call after
   // materialize is the "login with a plan" moment and must not wait up to
   // 45s. Sampling itself is cheap (Map lookups + a few inventory reads).

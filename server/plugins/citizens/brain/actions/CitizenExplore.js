@@ -213,7 +213,7 @@ function createCitizenExploreAction(spec, world) {
             try {
               const { sayPublic } = require("../../chat/CitizenSayPublic");
               // Only shout if a real player might hear (cheap check).
-              sayPublic(null, player.getUsername?.(), "Bandits! I'm getting out of here!");
+              sayPublic(player, "Bandits! I'm getting out of here!");
             } catch { /* best-effort */ }
             return "running";
           } else {
@@ -253,6 +253,16 @@ function createCitizenExploreAction(spec, world) {
       }
 
       return "success";
+    },
+    stop(ctx) {
+      // Reset exploration state so the next run starts fresh.
+      if (ctx?.player) {
+        const s = botState(ctx.player);
+        s.giveUpAt = 0;
+        s.phase = "outbound";
+        s.searchesDone = 0;
+        s.wildTile = null;
+      }
     },
   };
 

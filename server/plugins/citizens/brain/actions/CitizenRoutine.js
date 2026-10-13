@@ -23,7 +23,7 @@ const {
 const { getReferencePrice } = require("../../../economy/Prices.Economy");
 const { createBankAction } = require("../../../bots/brain/actions/Bank");
 const { createIdleSocialAction } = require("./IdleSocial");
-const { siteTile, workSite, dockSite, kingdomIdOf, siteTileBySettlement, workSiteBySettlement, siteTileByTown, workSiteByTown, fishingBiasByTown } = require("../CitizenSites");
+const { siteTile, workSite, dockSite, kingdomIdOf, siteTileBySettlement, workSiteBySettlement, siteTileByTown, workSiteByTown, fishingBiasByTown, pickPlace } = require("../CitizenSites");
 const { isKingdomAtWar } = require("../../CitizenEvents");
 const {
   ATTR_CITIZEN_PERSONALITY,
@@ -55,6 +55,7 @@ const {
   activeIntents,
 } = require("../CitizenIntents");
 const { ACT_ROUTINE } = require("../CitizenDecisions");
+const { industriousness, sociabilityOf } = require("../CitizenDecisions");
 const SlotCapacity = require("../CitizenSlotCapacity");
 
 const KIND_HOME = "home";
@@ -63,7 +64,7 @@ const KIND_MARKET = "market";
 const KIND_MEAL = "meal";
 
 // Bump to force day-plan rebuild on deploy (old plans have SOCIAL phase).
-const PLAN_VERSION = 2;
+const PLAN_VERSION = 3;
 // KIND_EVENING replaced KIND_SOCIAL (Jon 2026-10-12): no more 5-hour tavern
 // block. Evenings are personality-varied — work late, home early, or a brief
 // tavern beer break — and socializing happens ambiently wherever citizens are.
@@ -188,6 +189,27 @@ function siteTileLocal(player, kind) {
 }
 
 function workSiteLocal(player) {
+  // Use pickPlace for inter-town variety: citizens work at gather places
+  // across the kingdom, not just their town's single tile.
+  try {
+    const { agentRng } = require("../../lib/humanizer");
+    const name = player.getUsername?.() ?? "unknown";
+    const rng = agentRng(`workplace:${name}:${Math.floor(Date.now() / (90 * 60 * 1000))}`);
+    // Pick based on citizen's work kind preference (default tree)
+    const workKind = player.getAttribute?.("citizen:workKind") ?? "tree";
+    const kind = workKind === "rock" ? "rock" : "tree";
+    const place = pickPlace(player, kind, rng);
+    if (place) {
+      return {
+        catalog: place.kind === "rock" ? "rock" : "tree",
+        tier: place.tier ?? "normal",
+        option: place.kind === "rock" ? "Mine" : "Chop down",
+        x: place.x, y: place.y, z: place.z,
+      };
+    }
+  } catch {
+    // Fall through to legacy logic
+  }
   const tid = townIdOf(player);
   if (tid) {
     const site = workSiteByTown(tid);
@@ -734,8 +756,8 @@ function createCitizenRoutineAction(spec, world) {
   function resolveEveningStyle(player, state) {
     if (state.eveningStyle) return state.eveningStyle;
     const personality = player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
-    const industrious = Number(personality.industrious ?? personality.conscientiousness ?? 0.5);
-    const social = Number(personality.social ?? personality.extraversion ?? 0.5);
+    const industrious = industriousness(personality);
+    const social = sociabilityOf(personality);
     const roll = state.rng();
     // Weighted: industrious -> work late, social -> tavern, else home early.
     if (roll < 0.25 + industrious * 0.25) {
@@ -926,7 +948,7 @@ function createCitizenRoutineAction(spec, world) {
     if (state.beerBreakRolled) return false; // already rolled this phase
     state.beerBreakRolled = true;
     const personality = ctx.player.getAttribute?.(ATTR_CITIZEN_PERSONALITY) ?? {};
-    const social = Number(personality.social ?? personality.extraversion ?? 0.5);
+    const social = sociabilityOf(personality);
     // ~35% of days for an average citizen, more for social ones.
     if (!chance(state.rng, 0.2 + social * 0.3)) return false;
     const site = workSiteLocal(ctx.player);
