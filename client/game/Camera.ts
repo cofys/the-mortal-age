@@ -23,6 +23,17 @@ export class Camera {
     private static readonly FOV_SCRIPT_SCALE = 256;
 
     pos: vec3;
+    readonly focalPoint: vec3 = vec3.create();
+
+    setFocalPoint(x: number, y: number, z: number): void {
+        vec3.set(this.focalPoint, x, y, z);
+    }
+
+    moveFocalPoint(x: number, y: number, z: number): void {
+        const dx = x - this.focalPoint[0], dy = y - this.focalPoint[1], dz = z - this.focalPoint[2];
+        this.setFocalPoint(x, y, z);
+        this.snapToPosition(this.pos[0] + dx, this.pos[1] + dy, this.pos[2] + dz);
+    }
 
     pitch: number;
     yaw: number;
@@ -333,6 +344,7 @@ export class Camera {
             (this.yaw - 1024) * RS_TO_RADIANS,
         );
 
+        vec3.add(this.focalPoint, this.focalPoint, Camera.deltaTemp);
         vec3.add(this.pos, this.pos, Camera.deltaTemp);
         vec3.copy(this.targetPos, this.pos);
         this.updated = true;
@@ -594,6 +606,9 @@ export class Camera {
     getMapY(): number {
         return this.getPosZ() >> 6;
     }
+
+    getTargetYaw(): number { return this.targetYaw; }
+    getTargetPitch(): number { return this.targetPitch; }
 
     getTargetPos(): vec3 {
         return this.targetPos;

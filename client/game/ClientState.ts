@@ -203,7 +203,8 @@ export class ClientState {
      * 3 = Hidden
      * 4 = Right-click where available for clan members
      */
-    static playerOptions = new Map<number, { option: string; priority: boolean }>();
+    static readonly playerOptionsChangedListeners = new Set<(index: number) => void>();
+    static playerOptions = new Map<number, { option: string; priority: boolean; opcode?: number }>();
     static playerAttackOption: number = 0; // Default: depends on combat levels
 
     /** Local player's combat level (used for depends-on-level comparison) */

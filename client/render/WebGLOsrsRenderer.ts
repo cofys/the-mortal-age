@@ -2010,7 +2010,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     }
 
     public resolveNpcHighlightTargetFromEntry(
-        entry: Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY"> | undefined,
+        entry: Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY" | "npcServerId"> | undefined,
         fallbackTile?: { tileX: number; tileY: number; plane?: number },
     ): NpcHighlightTarget | undefined {
         return render.resolveNpcHighlightTargetFromEntry(this, entry, fallbackTile);
@@ -2023,7 +2023,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     }
 
     public resolveInteractHighlightTargetFromEntry(
-        entry: Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY"> | undefined,
+        entry: Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY" | "npcServerId"> | undefined,
         fallbackTile?: { tileX: number; tileY: number; plane?: number },
     ): InteractHighlightTarget | undefined {
         return render.resolveInteractHighlightTargetFromEntry(this, entry, fallbackTile);

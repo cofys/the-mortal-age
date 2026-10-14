@@ -3,20 +3,23 @@
  * rolling acid ball, chasing drip pools).
  *
  * The special replaces every seventh attack and turns on the first egg's colour (Wiki:
- * every six standards, first at attack 7):
- *  - Acidic: the boss rears (11476), a ball (13676) rolls from its feet two tiles a tick
- *    leaving acid pools, burning anyone within two tiles for 4 venom, then bursts (11492)
- *    into nine splatters;
- *  - Mirrorback: the boss splatters acid (11478) onto nine tiles around the player;
- *  - Ruptura: the boss drips (11477) a pool onto the player's tile that chases them for six
- *    ticks.
+ * every six standards, first at attack 7). As captured:
+ *  - Acidic: the boss rears (11476, sound 9488) and two ticks later the 3x3 ball (13676) lands
+ *    centred on the player's tile from the cast, for 14-18 venom to a player under it. It then
+ *    rolls away from her middle, gliding two tiles a tick (exact_move, 11491) and pooling the
+ *    tiles it leaves, until the next step is blocked: then it throws six blobs, bursts (11492)
+ *    and goes;
+ *  - Mirrorback: the boss sprays acid (11478) onto nine tiles around the player, each blob
+ *    landing (and pooling) by its distance from her;
+ *  - Ruptura: the boss leaks (11477) a blob onto the player that lands four ticks later; they
+ *    drip venom (graphic 1626) for seven ticks, pooling every tile they step through.
  *
- * Pools (object 54148, shape 10) are the damage field: standing in acid hurts more the
- * longer you keep standing (Wiki; ramp values ours). The capture shows only one collapsing
- * graphic per pool, so pools are pooled objects on the private area, cleared on death.
+ * Pools (object 54148, shape 10) are the damage field: standing in acid deals a flat 4-5
+ * venom a tick. They stay until the fight ends.
  */
 const Shared = require("./Shared.Araxxor");
 const Minions = require("./Minions.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
 
 const SPECIAL_ANIMATION = Object.freeze({ ball: 11476, splatter: 11478, drip: 11477 });
 const BALL_ANIMATION = 11491;
@@ -28,7 +31,7 @@ let api = null;
 let core = null;
 let CombatFactory = null;
 
-/** Live fights by boss NPC: pools, standing counters, the ball and drip follow-ups. */
+/** Live fights by boss NPC: pools, the ball and the dripping players. */
 const fights = new Map();
 
 function later(ticks, target, execFunc) {
@@ -54,9 +57,7 @@ function getFight(npc) {
   if (!fight) {
     fight = {
       pools: new Map(),
-      standing: new Map(),
       ball: null,
-      ballTiles: 0,
       drips: [],
     };
     fights.set(npc, fight);
@@ -104,7 +105,7 @@ function checkStandardHatch(npc) {
   const next = npc.getAttribute?.(Shared.ATTR_NEXT_HATCH) ?? Shared.FIRST_HATCH_STANDARDS;
   if (standards >= next) {
     npc.setAttribute(Shared.ATTR_NEXT_HATCH, next + Shared.HATCH_INTERVAL_STANDARDS);
-    Minions.hatchNext(npc);
+    later(Shared.HATCH_DELAY_TICKS, npc, () => Minions.hatchNext(npc));
   }
 }
 
@@ -113,9 +114,14 @@ function startSpecial(npc, target) {
   if (!kind) return;
   npc.performAnimation(new core.Animation(SPECIAL_ANIMATION[kind] ?? SPECIAL_ANIMATION.ball));
   if (kind === "ball") {
+    const pos = target?.getLocation?.();
+    if (!pos) return;
+    // Captured: the ball lands on the tile the player stood on at the cast.
+    const landing = { x: pos.getX(), y: pos.getY() };
+    Shared.playCaptured(target.isPlayer?.() ? target.getAsPlayer() : null, Shared.SOUND.ball);
     later(2, target, () => {
       // A corpse keeps 1 HP so players can walk to it: never start a ball off one.
-      if (alive(npc) && npc.getAttribute?.(Shared.ATTR_DYING) !== true) startBall(npc, target);
+      if (alive(npc) && npc.getAttribute?.(Shared.ATTR_DYING) !== true) startBall(npc, target, landing);
     });
   } else if (kind === "splatter") {
     const pos = target?.getLocation?.();
@@ -124,155 +130,199 @@ function startSpecial(npc, target) {
     const centre = core.Projectile.centreOf(npc);
     const direction = { x: pos.getX() - centre.getX(), y: pos.getY() - centre.getY() };
     const tiles = Shared.splatterTiles(pos.getX(), pos.getY(), isWalkable, direction);
-    throwBlobs(npc, tiles);
+    throwBlobs(npc, centre, tiles, Shared.PROJECTILE.spray);
   } else if (kind === "drip") {
     startDrip(npc, target);
   }
 }
 
-/** A projectile for every tile; the pool grows where the blob lands. */
-function throwBlobs(npc, tiles) {
+/**
+ * A blob for every tile from `from`, each landing by its own distance: the splash graphic and
+ * sound go out with the throw, delayed to the arrival, and the pool grows on the tick it lands.
+ */
+function throwBlobs(npc, from, tiles, shape) {
   const areaDestroyed = () => npc.getPrivateArea?.()?.isDestroyed?.() === true;
+  const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
+  const viewer = session?.player ?? session?.fighter ?? null;
+  const sender = viewer?.getPacketSender?.() ?? null;
+  const z = npc.getLocation().getZ();
   for (const [x, y] of tiles) {
-    new core.Projectile(
-      core.Projectile.centreOf(npc),
-      new core.Location(x, y, npc.getLocation().getZ()),
-      null,
-      Shared.ACID_PROJECTILE,
-      30,
-      90,
-      35,
-      0,
-      npc.getPrivateArea(),
-    ).sendProjectile();
-  }
-  later(3, npc, () => {
-    if (areaDestroyed()) return;
-    // Captured: every blob bursts into the 2923 splat at ground height with the 4135
-    // splash (MapAnim + SoundArea at the projectile's arrival) on the same tick the
-    // pool object grows.
-    const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
-    const viewer = session?.player ?? session?.fighter ?? null;
-    const sender = viewer?.getPacketSender?.() ?? null;
-    // Wiki: the splatter damages before the pool forms. Anyone standing on a landing
-    // tile takes the impact; the boss herself never does (captures + venom immunity).
-    const victims = npc.getPlayersWithinDistance?.(25) ?? [];
-    for (const [x, y] of tiles) {
-      if (sender) {
-        const at = new core.Location(x, y, npc.getLocation().getZ());
-        const impact = new core.Graphic(Shared.ACID_SPLAT_GFX);
-        impact.height = 0;
-        sender.sendGlobalGraphic(impact, at);
-        sender.sendAreaSound(Shared.ACID_SPLAT_SOUND, x, y, at.getZ(), 1, 0, 2, 0);
-      }
-      for (const player of victims) {
+    const at = new core.Location(x, y, z);
+    const end = Shared.projectileEnd(shape, from.getDistance(at));
+    new core.Projectile(from, at, null, shape.id, shape.start, end, shape.startHeight, shape.endHeight, npc.getPrivateArea())
+      .withAngle(shape.angle).withProgress(shape.progress).sendProjectile();
+    if (sender) {
+      const impact = new core.Graphic(Shared.ACID_SPLAT_GFX);
+      impact.height = 0;
+      // Set directly: Graphic's overloads read a delay of 0/50/100 as a height.
+      impact.delay = end;
+      sender.sendGlobalGraphic(impact, at);
+      sender.sendAreaSound(Shared.ACID_SPLAT_SOUND, x, y, z, 1, end, 2, 0);
+    }
+    later(Shared.landingTicks(end), npc, () => {
+      // Blobs still in the air when she dies land on nothing: the fight's pools are gone.
+      if (areaDestroyed() || !fights.has(npc) || npc.getAttribute?.(Shared.ATTR_DYING) === true) return;
+      // Wiki: the splatter damages before the pool forms. Anyone standing on a landing
+      // tile takes the impact; the boss herself never does (captures + venom immunity).
+      for (const player of npc.getPlayersWithinDistance?.(25) ?? []) {
         if (!alive(player)) continue;
         const pos = player.getLocation();
         if (pos.getX() !== x || pos.getY() !== y) continue;
-        player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(Shared.SPLAT_IMPACT_DAMAGE, core.HitMask.RED)]);
-        if (player.isVenomed?.() !== true) {
-          CombatFactory?.poisonEntity?.(player, 6, 2);
-        }
+        player.getCombat().getHitQueue().addPendingDamage([Shared.venomHit(core, Shared.SPLAT_IMPACT_DAMAGE)]);
+        CombatAchievements.avoidableDamage(player, Shared.SPLAT_IMPACT_DAMAGE);
+        envenom(player);
       }
       spawnPool(npc, x, y);
-    }
-  });
+    });
+  }
+}
+
+/** Venom once, so an active venom keeps escalating. */
+function envenom(player) {
+  if (player.isVenomed?.() !== true) {
+    CombatFactory?.poisonEntity?.(player, 6, 2);
+  }
 }
 
 /**
- * The rolling acid ball: two tiles a tick in the player's direction at the cast, an acid
- * pool under every tile it crosses, 4 venom to anyone within two tiles, and a nine-blob
- * burst when it stops (walls, or its range).
+ * The rolling acid ball (captured): the 3x3 ball lands centred on `landing`, the player's tile
+ * at the cast, for 14-18 venom to a player under it, then rolls away from Araxxor's middle.
  */
-function startBall(npc, target) {
+function startBall(npc, target, landing) {
   const fight = getFight(npc);
   if (fight.ball && alive(fight.ball)) return;
-  const centre = core.Projectile.centreOf(npc);
-  let x = centre.getX() - 1;
-  let y = centre.getY();
-  const pos = target?.getLocation?.();
-  const dx = pos ? Math.sign(pos.getX() - x) : 0;
-  const dy = pos ? Math.sign(pos.getY() - y) : 0;
-  if (dx === 0 && dy === 0) return;
   const area = npc.getPrivateArea?.() ?? null;
   if (area?.isDestroyed?.() === true) return;
-  const ball = core.NPC.create(Shared.BALL_ID, new core.Location(x, y, npc.getLocation().getZ()));
+  const centre = core.Projectile.centreOf(npc);
+  const dx = Math.sign(landing.x - centre.getX());
+  const dy = Math.sign(landing.y - centre.getY());
+  if (dx === 0 && dy === 0) return;
+  const offset = (Shared.BALL_SIZE - 1) >> 1;
+  const z = npc.getLocation().getZ();
+  const ball = core.NPC.create(Shared.BALL_ID, new core.Location(landing.x - offset, landing.y - offset, z));
   ball.__skipDefaultRespawn = true;
   // The cache has no hitpoints for 13676 (-1); the tracker's alive() needs a positive one.
   ball.setHitpoints?.(1);
-  // Rolls through bodies, notably the boss's own 7x7, instead of stalling on them.
   ball.setFlag?.(core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
+  ball.performAnimation(new core.Animation(BALL_ANIMATION));
   area?.add?.(ball);
   core.World.getAddNPCQueue().push(ball);
   fight.ball = ball;
-  fight.ballTiles = 0;
   fight.ballDirection = { x: dx, y: dy };
+  fight.ballMoves = 0;
+  fight.ballBursting = false;
+  // Captured: whoever stood under the ball as it landed takes the hit on the next tick,
+  // even after running out.
+  const under = (npc.getPlayersWithinDistance?.(25) ?? []).filter((player) => {
+    const pos = player.getLocation();
+    return Math.abs(pos.getX() - landing.x) <= offset && Math.abs(pos.getY() - landing.y) <= offset;
+  });
+  later(1, ball, () => {
+    if (area?.isDestroyed?.() === true) return;
+    for (const player of under) {
+      if (!alive(player)) continue;
+      const damage = Shared.randomBetween(Shared.BALL_DAMAGE_MIN, Shared.BALL_DAMAGE_MAX);
+      player.getCombat().getHitQueue().addPendingDamage([Shared.venomHit(core, damage)]);
+      CombatAchievements.avoidableDamage(player, damage);
+      envenom(player);
+    }
+  });
 }
 
-function tickBall(npc, fight, players) {
+/** Whether the ball's middle can take its next two-tile step. */
+function ballCanStep(x, y, dx, dy) {
+  for (let step = 1; step <= Shared.BALL_STEP_TILES; step++) {
+    if (!isWalkable(x + dx * step, y + dy * step)) return false;
+  }
+  return true;
+}
+
+/**
+ * One tick of the ball (captured): every tick from the one it appears it glides two tiles
+ * (a teleport with an exact_move over the whole tick, facing the way it rolls), pooling the
+ * middle of where it set off and the tile behind that. When the next jump would be blocked it
+ * throws six blobs instead, bursts the tick after and goes the one after that.
+ */
+function tickBall(npc, fight) {
   const ball = fight.ball;
   if (!ball) return;
   if (!ball.isRegistered?.() || (npc.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) {
-    fight.ball = null;
+    if (!core.World.getAddNPCQueue().includes(ball)) fight.ball = null;
     return;
   }
-  const location = ball.getLocation();
-  spawnPool(npc, location.getX(), location.getY());
-  for (const player of players) {
-    if (!alive(player)) continue;
-    const pos = player.getLocation();
-    const distance = Math.max(Math.abs(pos.getX() - location.getX()), Math.abs(pos.getY() - location.getY()));
-    if (distance <= 2) {
-      player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(Shared.BALL_DAMAGE, core.HitMask.RED)]);
-      CombatFactory?.poisonEntity?.(player, 6, 2);
-    }
-  }
-  const { x: dx, y: dy } = fight.ballDirection ?? { x: 0, y: 0 };
-  const next = { x: location.getX() + dx, y: location.getY() + dy };
-  fight.ballTiles += 1;
-  if (fight.ballTiles >= Shared.BALL_ROLL_TILES || !isWalkable(next.x, next.y)) {
+  if (fight.ballBursting) {
     ball.performAnimation(new core.Animation(BALL_BURST_ANIMATION));
-    core.World.getRemoveNPCQueue().push(ball);
+    later(1, ball, () => core.World.getRemoveNPCQueue().push(ball));
     fight.ball = null;
-    throwBlobs(npc, Shared.splatterTiles(location.getX(), location.getY(), isWalkable));
     return;
   }
+  const { x: dx, y: dy } = fight.ballDirection;
+  const middle = core.Projectile.centreOf(ball);
+  if (fight.ballMoves > 0) {
+    spawnPool(npc, middle.getX(), middle.getY());
+    spawnPool(npc, middle.getX() - dx, middle.getY() - dy);
+  }
+  if (!ballCanStep(middle.getX(), middle.getY(), dx, dy)) {
+    fight.ballBursting = true;
+    const tiles = Shared.splatterTiles(
+      middle.getX(), middle.getY(), isWalkable, null, Shared.BALL_BURST_COUNT, Shared.BALL_BURST_SPREAD,
+    );
+    throwBlobs(npc, middle, tiles, Shared.PROJECTILE.ballBurst);
+    return;
+  }
+  const step = Shared.BALL_STEP_TILES;
+  ball.exactMove(ball.getLocation().transform(dx * step, dy * step));
   ball.performAnimation(new core.Animation(BALL_ANIMATION));
-  const step = new core.Location(next.x, next.y, ball.getLocation().getZ());
-  const movement = ball.getMovementQueue?.();
-  movement?.reset?.();
-  movement?.addSteps?.(step);
-  if (!movement?.addSteps) ball.moveTo?.(step);
+  fight.ballMoves += 1;
 }
 
-/** The dripping pool: lands after the flight, then chases the player for six ticks. */
+/**
+ * The acid leak (captured): a blob lands on the player four ticks after the cast; they drip
+ * venom (graphic 1626) for seven ticks, and from the next tick every tile they stood on or
+ * ran through the tick before gets a pool.
+ */
 function startDrip(npc, target) {
   const pos = target?.getLocation?.();
-  if (!pos) return;
-  const from = core.Projectile.centreOf(npc);
-  const distance = Math.max(1, from.getDistance(pos));
-  // The pool must land with its blob: the packet's end time is delay + duration
-  // (30 + 30 per tile), i.e. 1 + distance ticks after the cast.
-  const delay = 1 + distance;
+  if (!pos || !target.isPlayer?.()) return;
+  const shape = Shared.PROJECTILE.drip;
   new core.Projectile(
-    from,
-    new core.Location(pos.getX(), pos.getY(), npc.getLocation().getZ()),
-    null,
-    Shared.ACID_PROJECTILE,
-    30,
-    30 + 30 * distance,
-    35,
-    0,
-    npc.getPrivateArea(),
-  ).sendProjectile();
+    core.Projectile.centreOf(npc), pos, target, shape.id, shape.start, shape.end,
+    shape.startHeight, shape.endHeight, npc.getPrivateArea(),
+  ).withSource(npc).withAngle(shape.angle).withProgress(shape.progress).sendProjectile();
   const fight = getFight(npc);
-  const landing = { x: pos.getX(), y: pos.getY() };
-  later(delay, target, () => {
+  const player = target.getAsPlayer();
+  later(Shared.landingTicks(shape.end), target, () => {
     if (!alive(npc) || npc.getAttribute?.(Shared.ATTR_DYING) === true
-      || (npc.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) return;
-    const object = spawnPool(npc, landing.x, landing.y);
-    if (object) fight.drips.push({ object, player: target, until: core.World.getProcessCycle() + Shared.DRIP_FOLLOW_TICKS });
+      || (npc.getPrivateArea?.() ?? null)?.isDestroyed?.() === true || !alive(player)) return;
+    player.sendMessage(Shared.DRIP_MESSAGE);
+    const now = core.World.getProcessCycle();
+    fight.drips.push({ player, from: now, until: now + Shared.DRIP_TICKS, last: null, passed: null });
+    dripTick(npc, fight.drips[fight.drips.length - 1], now);
   });
+}
+
+/** The tile between two positions a run step apart, or null for a walk or standing still. */
+function runMidpoint(from, to) {
+  if (!from || !to) return null;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) !== 2) return null;
+  return { x: from.x + Math.sign(dx), y: from.y + Math.sign(dy) };
+}
+
+function dripTick(npc, drip, now) {
+  const graphic = new core.Graphic(Shared.DRIP_GFX);
+  // Captured in graphic slot 2, so it plays over whatever else is on the player.
+  if (typeof drip.player.performGraphicInSlot === "function") drip.player.performGraphicInSlot(2, graphic);
+  else drip.player.performGraphic(graphic);
+  if (now > drip.from && drip.last) {
+    spawnPool(npc, drip.last.x, drip.last.y);
+    if (drip.passed) spawnPool(npc, drip.passed.x, drip.passed.y);
+  }
+  const pos = drip.player.getLocation();
+  const current = { x: pos.getX(), y: pos.getY() };
+  drip.passed = runMidpoint(drip.last, current);
+  drip.last = current;
 }
 
 function tickDrips(npc, fight) {
@@ -284,37 +334,21 @@ function tickDrips(npc, fight) {
       fight.drips.splice(index, 1);
       continue;
     }
-    const pos = drip.player.getLocation();
-    const key = Shared.tileKey(pos.getX(), pos.getY());
-    const currentKey = `${drip.object.getLocation().getX()},${drip.object.getLocation().getY()}`;
-    if (key === currentKey) continue;
-    core.ObjectManager.deregister(drip.object, true);
-    fight.pools.delete(currentKey);
-    const moved = spawnPool(npc, pos.getX(), pos.getY());
-    if (moved) drip.object = moved;
-    else fight.drips.splice(index, 1);
+    if (now > drip.from) dripTick(npc, drip, now);
   }
 }
 
-/** Acid hurts more the longer a player keeps standing on it (Wiki). */
+/** Captured: acid deals a flat 4-5 venom every tick a player stands in it. */
 function tickPools(npc, fight, players) {
   for (const player of players) {
     if (!alive(player)) continue;
     const pos = player.getLocation();
-    const key = Shared.tileKey(pos.getX(), pos.getY());
-    const standing = fight.standing.get(player);
-    if (!fight.pools.has(key)) {
-      fight.standing.delete(player);
-      continue;
-    }
-    const ticks = standing && standing.key === key ? standing.ticks + 1 : 1;
-    fight.standing.set(player, { key, ticks });
-    const damage = Shared.poolDamage(ticks);
-    player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(damage, core.HitMask.RED)]);
-    // The pools inflict venom too (Wiki); applied once so an active venom keeps escalating.
-    if (player.isVenomed?.() !== true) {
-      CombatFactory?.poisonEntity?.(player, 6, 2);
-    }
+    if (!fight.pools.has(Shared.tileKey(pos.getX(), pos.getY()))) continue;
+    const damage = Shared.poolDamage();
+    player.getCombat().getHitQueue().addPendingDamage([Shared.venomHit(core, damage)]);
+    CombatAchievements.avoidableDamage(player, damage);
+    // The pools inflict venom too (Wiki).
+    envenom(player);
   }
 }
 
@@ -335,43 +369,27 @@ function tick() {
     const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
     if (session) Minions.ensureTargets(session);
     if (session) Minions.pinEggs(session);
-    tickBall(npc, fight, players);
+    tickBall(npc, fight);
     tickDrips(npc, fight);
     tickPools(npc, fight, players);
   }
 }
 
 /**
- * A dying Acidic araxyte splashes acid onto nearby tiles (Wiki: "explode, splattering acid
- * on random squares within a 7x7 AoE surrounding it"; Near-Reality's nine blobs).
+ * A dying Acidic araxyte explodes (graphic 2926) and splashes 13 blobs within four tiles of
+ * it (captured), each pooling where it lands.
  */
 function acidicAraxyteDied({ npc }) {
   if (npc?.getId?.() !== Shared.MINION_ID.acidic) return;
   const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
   const boss = session?.npc ?? null;
   if (!boss || !alive(boss) || boss.getAttribute?.(Shared.ATTR_DYING) === true) return;
-  const location = npc.getLocation();
-  // Captured as 13 blobs (both transcripts), not the special's nine.
-  const tiles = Shared.splatterTiles(location.getX(), location.getY(), null, null, Shared.ACIDIC_DEATH_SPLATTER_COUNT);
-  const area = npc.getPrivateArea?.() ?? null;
-  for (const [x, y] of tiles) {
-    new core.Projectile(
-      location,
-      new core.Location(x, y, location.getZ()),
-      null,
-      Shared.ACID_PROJECTILE,
-      30,
-      90,
-      35,
-      0,
-      area,
-    ).sendProjectile();
-  }
-  later(3, npc, () => {
-    if (!alive(boss) || boss.getAttribute?.(Shared.ATTR_DYING) === true
-      || (boss.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) return;
-    for (const [x, y] of tiles) spawnPool(boss, x, y);
-  });
+  npc.performGraphic(new core.Graphic(Shared.ACIDIC_EXPLOSION_GFX));
+  const middle = core.Projectile.centreOf(npc);
+  const tiles = Shared.splatterTiles(
+    middle.getX(), middle.getY(), isWalkable, null, Shared.ACIDIC_DEATH_SPLATTER_COUNT, Shared.ACIDIC_DEATH_SPREAD,
+  );
+  throwBlobs(boss, middle, tiles, Shared.PROJECTILE.acidicDeath);
 }
 
 function endFight(npc) {
@@ -381,7 +399,6 @@ function endFight(npc) {
     core.ObjectManager.deregister(object, true);
   }
   fight.pools.clear();
-  fight.standing.clear();
   fight.drips.length = 0;
   if (fight.ball?.isRegistered?.()) {
     core.World.getRemoveNPCQueue().push(fight.ball);

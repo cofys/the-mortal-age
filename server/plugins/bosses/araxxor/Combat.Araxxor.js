@@ -9,13 +9,17 @@
  * the ticking fight engine (pools, the ball) is in Specials.Araxxor.js.
  *
  * As captured: standards every 6 ticks, the special replaces every 7th attack (first at
- * attack 7), ranged fires projectile 2924 from the middle, magic has none, and no hit lands
- * through Protect from Melee for more than 5 (Wiki).
+ * attack 7), melee lands the next tick with its 9413 swing, ranged (11493, projectile 2360)
+ * and magic (11479, projectile 1622) both land four ticks after the cast whatever the
+ * distance, and no hit lands through Protect from Melee for more than 5 (Wiki).
  */
 const Shared = require("./Shared.Araxxor");
 const Specials = require("./Specials.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
 
-const BOSS_ANIMATIONS = Object.freeze({ melee: 11480, magic: 11479, ranged: 11478, cleave: 11487, enrage: 11488, enraged: 11489 });
+const BOSS_ANIMATIONS = Object.freeze({ melee: 11480, magic: 11479, ranged: 11493, cleave: 11487, enrage: 11488, enraged: 11489 });
+/** Captured: the cleave's hit and its pools land two ticks after the swing. */
+const CLEAVE_LAND_TICKS = 2;
 
 let api = null;
 let core = null;
@@ -69,16 +73,16 @@ function chooseDistantAttack(player) {
   return rangedRoll < magicRoll ? Shared.Attack.RANGED : Shared.Attack.MAGIC;
 }
 
-/** Captured flight for the ranged blob: a 30-cycle wind-up, then about a tick per tile. */
-function sendBlob(npc, target) {
-  const from = core.Projectile.centreOf(npc);
-  const to = target.getLocation();
-  const distance = Math.max(1, from.getDistance(to));
-  const duration = 30 + 30 * distance;
+/**
+ * The captured ranged or magic shot: a fixed 30-120 cycle flight from her middle, so the hit
+ * is queued to land with it (melee lands on delay 0, a tick after the swing; these on 3).
+ */
+function sendShot(npc, target, shape) {
   new core.Projectile(
-    from, to, target, Shared.ACID_PROJECTILE, 30, duration, 35, 20, npc.getPrivateArea(),
-  ).sendProjectile();
-  return Math.ceil(duration / 30);
+    core.Projectile.centreOf(npc), target.getLocation(), target, shape.id, shape.start,
+    shape.end, shape.startHeight, shape.endHeight, npc.getPrivateArea(),
+  ).withSource(npc).withAngle(shape.angle).withProgress(shape.progress).sendProjectile();
+  return Shared.DISTANT_HIT_TICKS - 1;
 }
 
 function drainSkill(player, skill, factor) {
@@ -100,37 +104,33 @@ function checkEnrage(npc, incomingDamage = 0) {
   if (projected <= 0) return;
   if (projected > Math.floor(Shared.MAX_HITPOINTS * Shared.ENRAGE_THRESHOLD)) return;
   npc.setAttribute(Shared.ATTR_ENRAGED, true);
-  // The captured body change: the two front legs coat in venom (model customisation).
-  npc.setModelCustomisation?.(Shared.ENRAGE_MODELS);
+  // Captured: 11488, then 11489 two ticks later with the body change (the two front legs
+  // coat in venom). The screech is in the animations themselves: no sound packet goes out.
   npc.performAnimation(new core.Animation(BOSS_ANIMATIONS.enrage));
-  const fighter = npc.getCombat?.().getTarget?.();
-  for (const [sound, delay] of Shared.ENRAGE_SOUNDS.first) Shared.playSound(fighter, sound, delay);
   npc.getMovementQueue?.().setBlockMovement?.(true);
   afterTicks(2, npc, () => {
     if (!alive(npc)) return;
+    npc.setModelCustomisation?.(Shared.ENRAGE_MODELS);
     npc.performAnimation(new core.Animation(BOSS_ANIMATIONS.enraged));
-    for (const [sound, delay] of Shared.ENRAGE_SOUNDS.second) Shared.playSound(fighter, sound, delay);
     npc.getMovementQueue?.().setBlockMovement?.(false);
   });
 }
 
 /**
- * The enraged melee: "Skree!", a 1-tick wind-up, then the crush on the tile the target stood
- * on (step away to dodge), with a line of acid pools either side of the blow.
+ * The enraged melee: "Skree!", then two ticks later the crush on the tile the target stood
+ * on (step away to dodge), with a line of acid pools across the blow (captured).
  */
 function startCleave(npc, target) {
   const tile = { x: target.getLocation().getX(), y: target.getLocation().getY() };
   npc.performAnimation(new core.Animation(BOSS_ANIMATIONS.cleave));
   npc.forceChat?.("Skree!");
-  // Captured with the say: spotanim 1542 at height 92 on the boss.
-  const cleaveGfx = new core.Graphic(1542);
-  cleaveGfx.height = 92;
-  npc.performGraphic(cleaveGfx);
   npc.getMovementQueue?.().setBlockMovement?.(true);
+  // The raw offset from her middle, not its sign: the longer axis sets the line (captured
+  // (-4, +3) gave a north-south line, (-3, +4) an east-west one).
   const base = npc.getLocation();
-  const dx = Math.sign(tile.x - (base.getX() + 3));
-  const dy = Math.sign(tile.y - (base.getY() + 3));
-  afterTicks(1, target, () => {
+  const dx = tile.x - (base.getX() + 3);
+  const dy = tile.y - (base.getY() + 3);
+  afterTicks(CLEAVE_LAND_TICKS, target, () => {
     npc.getMovementQueue?.().setBlockMovement?.(false);
     if (!alive(npc)) return;
     if (alive(target)) {
@@ -142,6 +142,8 @@ function startCleave(npc, target) {
         const damage = protect ? Math.floor(rolled * Shared.CLEAVE_PROTECT_FACTOR) : rolled;
         if (damage > 0) {
           target.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(damage, core.HitMask.RED)]);
+          // Perfect Araxxor forbids melee taken off prayer; the cleave is her melee.
+          if (!protect && target.isPlayer?.()) CombatAchievements.avoidableDamage(target.getAsPlayer(), damage);
         }
       }
     }
@@ -193,13 +195,15 @@ function combatClass() {
         : chooseDistantAttack(target.getAsPlayer());
       // Captured: she turns to the player with every attack.
       npc.setPositionToFace?.(target.getLocation());
+      const player = target.isPlayer?.() ? target.getAsPlayer() : null;
       if (this.attack === Shared.Attack.MELEE) {
         npc.performAnimation(new core.Animation(BOSS_ANIMATIONS.melee));
+        Shared.playCaptured(player, Shared.SOUND.melee);
       } else {
-        npc.performAnimation(new core.Animation(
-          this.attack === Shared.Attack.RANGED ? BOSS_ANIMATIONS.ranged : BOSS_ANIMATIONS.magic,
-        ));
-        this.shotDelay = this.attack === Shared.Attack.RANGED ? sendBlob(npc, target) : 1;
+        const ranged = this.attack === Shared.Attack.RANGED;
+        npc.performAnimation(new core.Animation(ranged ? BOSS_ANIMATIONS.ranged : BOSS_ANIMATIONS.magic));
+        this.shotDelay = sendShot(npc, target, ranged ? Shared.PROJECTILE.ranged : Shared.PROJECTILE.magic);
+        Shared.playCaptured(player, ranged ? Shared.SOUND.ranged : Shared.SOUND.magic);
       }
     }
 
@@ -312,6 +316,7 @@ function redirectToMirrorback(boss, hit) {
     attacker.getAsPlayer().getCombat().getHitQueue().addPendingDamage([
       new core.HitDamage(recoil, core.HitMask.RED),
     ]);
+    CombatAchievements.avoidableDamage(attacker.getAsPlayer(), recoil);
   }
 }
 

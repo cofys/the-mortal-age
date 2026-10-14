@@ -7,21 +7,23 @@
  * captures (below).
  *
  * Ids from the cache (rev 241): NPCs 13668 (Araxxor, 7x7) / 13669 (corpse, Harvest+Destroy)
- * / eggs 13670 (Mirrorback), 13672 (Ruptura), 13674 (Acidic) / minions 13671, 13673, 13675 /
- * 13676 (unnamed acid ball). Object 54148 is the acid pool (shape 10, rotation 0).
- * Animations as captured: 11482 spawn, 11480 melee, 11479 magic (no projectile), 11478
- * ranged (projectile 2924), 11476 acid ball throw, 11491 ball rolling, 11492 ball burst,
+ * / eggs 13670 (Mirrorback), 13672 (Ruptura), 13674 (Acidic), all 2x2 / minions 13671, 13673,
+ * 13675 (2x2) / 13676 (the 3x3 acid ball). Object 54148 is the acid pool (shape 10, rotation 0).
+ * Animations as captured (gamevals in brackets): 11482 spawn, 11480 melee, 11479 magic
+ * (projectile 1622), 11493 ranged (acid_cannon_01, projectile 2360), 11476 acid ball throw
+ * (attack_ranged_01), 11478 acid spray, 11477 acid leak, 11491 ball rolling, 11492 ball burst,
  * 11487 cleave (with the "Skree!" say), 11488/11489 enrage, 11481 death, 11486 corpse sink,
- * 11506 egg settle, 11503 hatch, 11508 egg crumble, 11498 Acidic attack, 11500 Mirrorback
- * attack, 11510 Ruptura burst. Graphics 2927/2928/2929 are the Acidic/Ruptura/Mirrorback
- * hatch marks, 2926 the Acidic death spray.
+ * 11506 egg settle, 11503 hatch, 11508 egg crumble, 11498 Acidic attack (projectile 1560),
+ * 11500 Mirrorback attack, 11510 Mirrorback death, 11504 Ruptura/Acidic explode. Graphics
+ * 2927/2928/2929 are the Acidic/Ruptura/Mirrorback hatch marks, 2925 the Ruptura explosion,
+ * 2926 the Acidic death spray, 1626 the venom drip on the player.
  *
- * Checked against rsprox captures (https://rsprox.net/database; 48 recordings of 13668,
- * 27 of the corpse, 30-34 of each araxyte): the instance spawn of boss + all nine eggs, the
- * every-6-tick attack cadence, the special that replaces every seventh attack, the hatch
- * after 3 standards then every 6 standards (Wiki), the enrage at 25%, the death
- * at +5 ticks into the corpse, and the harvest animation 2282. Still unverified: mirrorback
- * melee anim, drip flight values, cleave pool spread, pool ramp and the destroy clue roll.
+ * Checked against rsprox captures (https://rsprox.net/database; 21 normal-world recordings,
+ * rev 224 and 237; facts in docs/araxxor.md): spawn tiles, the every-6-tick attack cadence,
+ * the special that replaces every seventh attack, the hatch 3 ticks after the 3rd standard and
+ * every 6th after, each attack's animation, projectile and sound, the ball, spray, drip and
+ * cleave pools, the flat 4-5 venom a tick in acid, the enrage at 25%, and the death at +5 ticks
+ * into the corpse. Still unverified: the destroy clue roll.
  */
 const SIZE = 7;
 const MAX_HITPOINTS = 1020;
@@ -35,20 +37,23 @@ const EGG_ID = Object.freeze({ mirrorback: 13670, ruptura: 13672, acidic: 13674 
 const MINION_ID = Object.freeze({ mirrorback: 13671, ruptura: 13673, acidic: 13675 });
 const HATCH_GFX = Object.freeze({ mirrorback: 2929, ruptura: 2928, acidic: 2927 });
 
-/** Boss tile, arena centre and the nine egg tiles, as Near-Reality and the captures place them. */
-const SPAWN_TILE = [3631, 9812, 0];
-const CENTRE_TILE = [3633, 9816];
+/** Boss tile and the middle of its 7x7 body there, as every captured spawn places them. */
+const SPAWN_TILE = [3631, 9814, 0];
+const CENTRE_TILE = [3634, 9817];
 /**
- * The nine eggs in hatch order (Wiki): first the south-easternmost, then clockwise.
- * Index 0 is the SE egg (3643, 9806); compass bearings from the centre increase
- * through the table. The first egg's colour picks the fight's special, so
- * pattern[0] is the SE egg.
+ * The nine eggs' south-west tiles (they are 2x2) in hatch order, as captured in every fight:
+ * first the south-easternmost, then clockwise. The first egg's colour picks the fight's
+ * special, so pattern[0] is the SE egg.
  */
 const EGG_TILES = Object.freeze([
-  [3643, 9806], [3637, 9803], [3631, 9803],
-  [3626, 9807], [3621, 9813], [3621, 9822],
-  [3631, 9826], [3637, 9826], [3644, 9823],
+  [3643, 9805], [3637, 9802], [3630, 9803],
+  [3625, 9806], [3620, 9813], [3621, 9822],
+  [3629, 9827], [3637, 9827], [3644, 9823],
 ]);
+/** Captured: each egg's tiles are blocked by an invisible 2x2 loc a tick after it is laid,
+ * swapped for the non-blocking one when it hatches. */
+const EGG_BLOCKING_OBJECT = 47348;
+const EGG_HATCHED_OBJECT = 29733;
 
 /** The lair interior: entering it grows the per-player instance, leaving destroys it.
  * The east wall's web tile (3655) stays outside, so the tunnel decides entry. */
@@ -65,9 +70,13 @@ const PATTERNS = Object.freeze([
 const ATTACK_SPEED_TICKS = 6;
 const ENRAGED_SPEED_TICKS = 4;
 const SPECIAL_EVERY_ATTACKS = 7;
-/** Wiki: the first egg hatches after 3 standards, then every 6 standards. */
+/** Wiki: the first egg hatches after 3 standards, then every 6 standards; captured 3 ticks
+ * after the standard that triggers it. */
 const FIRST_HATCH_STANDARDS = 3;
 const HATCH_INTERVAL_STANDARDS = 6;
+const HATCH_DELAY_TICKS = 3;
+/** Captured: the boss and eggs appear five ticks after the tunnel's message box closes. */
+const SPAWN_DELAY_TICKS = 5;
 /** Captured: boss + eggs spawn together, first attack 6 ticks after the spawn animation. */
 const ARM_TICKS = 6;
 /** Fires from up to 10 tiles like Vorkath; melee only when edge-adjacent (checked in start). */
@@ -101,31 +110,66 @@ const MINION_MAX = 15;
 const RUPTURA_PLAYER_DAMAGE = [70, 49, 28, 7];
 const RUPTURA_BOSS_DAMAGE = [80, 64, 48, 33];
 
-/** Captured: the ball crosses about thirteen tiles before bursting. */
-const BALL_ROLL_TILES = 13;
-/** Captured as ~18 venom damage (Wiki). */
-const BALL_DAMAGE = 18;
+/** Captured: the ball steps two tiles a tick until the next step is blocked (no range cap). */
+const BALL_STEP_TILES = 2;
+const BALL_SIZE = 3;
+/** Captured: the ball lands on the player for 14-18 venom, a tick after it appears. */
+const BALL_DAMAGE_MIN = 14;
+const BALL_DAMAGE_MAX = 18;
+/** Captured: the burst throws six blobs within two tiles of the ball's middle. */
+const BALL_BURST_COUNT = 6;
+const BALL_BURST_SPREAD = 2;
 const SPLATTER_COUNT = 9;
-const SPLATTER_SPREAD = 3;
-/** Captured: the acidic death explodes into 13 blobs (both transcripts), not nine. */
+/** Captured: the acidic death explodes into 13 blobs within four tiles of it. */
 const ACIDIC_DEATH_SPLATTER_COUNT = 13;
+const ACIDIC_DEATH_SPREAD = 4;
 /** Estimated blob-landing damage: the Wiki says the splatter damages ("low venom damage")
- * before the pool forms; the captures show recurring small player hits on impact ticks
- * (8 at 1442 T74/T76, 1508 T410/T411/T454/T455) - well under the ~18 ball hit and above
- * the pool's starting 4. Revisit if exact values surface. */
+ * before the pool forms; the captures show small player hits on impact ticks. */
 const SPLAT_IMPACT_DAMAGE = 8;
-/** Acid blob projectile (captured MapProjAnim id) and its cache-internal impact graphic. */
-const ACID_PROJECTILE = 2924;
-const MINION_PROJECTILE = 2925;
-/** Captured landing of every blob: the 2923 splat at ground height with the 4135 splash. */
+
+/** Captured projectiles: { id, start, end (fixed, or base + perTile), heights, angle, progress }. */
+const PROJECTILE = Object.freeze({
+  ranged: Object.freeze({ id: 2360, start: 30, end: 120, startHeight: 296, endHeight: 50, angle: 35, progress: 0 }),
+  magic: Object.freeze({ id: 1622, start: 30, end: 120, startHeight: 69, endHeight: 50, angle: 35, progress: 62 }),
+  /** The acid spray: end 100 + 10 per tile from the boss's middle (130-160 captured). */
+  spray: Object.freeze({ id: 2924, start: 30, base: 100, perTile: 10, startHeight: 170, endHeight: 0, angle: 35, progress: 200 }),
+  drip: Object.freeze({ id: 2924, start: 30, end: 120, startHeight: 170, endHeight: 30, angle: 35, progress: 200 }),
+  /** The acidic araxyte's death splash: end 90 + 10 per tile (110-130 captured). */
+  acidicDeath: Object.freeze({ id: 2924, start: 30, base: 90, perTile: 10, startHeight: 140, endHeight: 0, angle: 35, progress: 20 }),
+  /** The ball's burst: end 90 + 10 per tile (100-110 captured). */
+  ballBurst: Object.freeze({ id: 2924, start: 30, base: 90, perTile: 10, startHeight: 254, endHeight: 0, angle: 35, progress: 0 }),
+  /** The acidic araxyte's spit: end 39 + 10 per tile (49-119 captured). */
+  acidic: Object.freeze({ id: 1560, start: 39, base: 39, perTile: 10, startHeight: 32, endHeight: 64, angle: 16, progress: 40 }),
+});
+/** Captured: ranged and magic land four ticks after the cast, whatever the distance. */
+const DISTANT_HIT_TICKS = 4;
+/** Captured landing of every blob: the 2923 splat at ground height with the 4135 splash, sent
+ * with the cast and delayed to the blob's arrival; the pool appears on the tick it lands. */
 const ACID_SPLAT_GFX = 2923;
 const ACID_SPLAT_SOUND = 4135;
+const RUPTURA_EXPLOSION_GFX = 2925;
+const ACIDIC_EXPLOSION_GFX = 2926;
+const EXPLODE_ANIMATION = 11504;
 
-/** Pool damage ramps while a player keeps standing in acid (Wiki; step values ours). */
-const POOL_FIRST_DAMAGE = 4;
-const POOL_DAMAGE_STEP = 2;
-const POOL_MAX_DAMAGE = 20;
-const DRIP_FOLLOW_TICKS = 6;
+/** Captured sounds, as [id, delay]: the melee swing, ranged and magic landings, the ball throw. */
+const SOUND = Object.freeze({
+  melee: Object.freeze([9413, 40]),
+  ranged: Object.freeze([9470, 120]),
+  magic: Object.freeze([9479, 120]),
+  ball: Object.freeze([9488, 0]),
+  acidic: Object.freeze([9378, 25]),
+});
+
+/** Captured: standing in acid deals a flat 4-5 venom a tick (runs of 16 ticks never ramp). */
+const POOL_DAMAGE_MIN = 4;
+const POOL_DAMAGE_MAX = 5;
+/** RuneLite HitsplatID.VENOM: the pools, the drip and the ball land as venom splats. */
+const VENOM_SPLAT = 5;
+/** Captured: the drip lands four ticks after the cast, then the player drips for seven ticks
+ * (graphic 1626 each tick), leaving a pool on each tile they stepped through for six. */
+const DRIP_GFX = 1626;
+const DRIP_TICKS = 7;
+const DRIP_MESSAGE = "<col=ff3045>Araxxor covers you in venom. It slowly drips off you and covers the floor.";
 
 /** The corpse waits for the player's choice (Wiki: no respawn until Harvest or Destroy);
  * the cap is a safety net, and leaving the lair destroys it anyway. */
@@ -140,16 +184,6 @@ const CORPSE_DESTROY_PROMPT =
   "Destroying the corpse will give no loot, but doubles your chance of receiving Nid (1/1500 instead of 1/3000). Are you sure you want to destroy it?";
 
 /**
- * The enrage's screech, as the animations' embedded sounds read in the cache: 11488 rings
- * 9478/9391/9409 (frames 1/3/8) and 11489 rings 9480/9391/9478 (frames 1/8/10). Delays are
- * client cycles (three per frame).
- */
-const ENRAGE_SOUNDS = Object.freeze({
-  first: Object.freeze([[9478, 0], [9391, 9], [9409, 24]]),
-  second: Object.freeze([[9480, 0], [9391, 24], [9478, 30]]),
-});
-
-/**
  * The captured enrage body: slot 0 (54289) becomes 54288, the venom-coated front legs,
  * while slot 1 (54290) stays (sent, as captured). Sent as an npc model customisation.
  */
@@ -162,6 +196,25 @@ function playSound(player, id, delay = 0) {
   player?.getPacketSender?.()?.sendSoundEffect(id, 1, delay);
 }
 
+/** A captured [id, delay] sound for the player. */
+function playCaptured(player, sound) {
+  if (sound) playSound(player, sound[0], sound[1]);
+}
+
+/** Projectile end cycle for a captured shape: fixed, or base + perTile x distance. */
+function projectileEnd(shape, distance) {
+  return shape.end ?? shape.base + shape.perTile * Math.max(1, distance);
+}
+
+/** Ticks until a projectile ending at `end` cycles lands (30 cycles a tick). */
+function landingTicks(end) {
+  return Math.max(1, Math.ceil(end / 30));
+}
+
+function randomBetween(min, max) {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
 /** NPC attribute keys (kebab-case, namespaced). */
 const ATTR_ATTACKS = "araxxor:attacks";
 const ATTR_STANDARDS = "araxxor:standards";
@@ -172,6 +225,9 @@ const ATTR_DYING = "araxxor:dying";
 const ATTR_ENCOUNTER = "araxxor:encounter";
 const ATTR_SPECIAL = "araxxor:special";
 const ATTR_DESTROY_NO_PROMPT = "araxxor:destroy-no-prompt";
+/** Player attribute keys: the kill count and best fight time (ticks), persisted. */
+const ATTR_KILLS = "araxxor:kills";
+const ATTR_BEST_TICKS = "araxxor:best-ticks";
 
 const Attack = { MELEE: "melee", RANGED: "ranged", MAGIC: "magic", CLEAVE: "cleave" };
 
@@ -208,13 +264,15 @@ function tileKey(x, y) {
  * direction (dx, dy): a random spray biased outward along it - the Wiki's acid spray,
  * "sprays randomly outward in the player's general direction".
  */
-function splatterTiles(x, y, isWalkable, direction = null, count = SPLATTER_COUNT) {
+function splatterTiles(x, y, isWalkable, direction = null, count = SPLATTER_COUNT, spread = null) {
   const tiles = [];
   const dx = direction ? Math.sign(direction.x) : 0;
   const dy = direction ? Math.sign(direction.y) : 0;
   for (let index = 0; index < count; index++) {
     let tile;
-    if (dx === 0 && dy === 0) {
+    if (dx === 0 && dy === 0 && spread != null) {
+      tile = [x + randomBetween(-spread, spread), y + randomBetween(-spread, spread)];
+    } else if (dx === 0 && dy === 0) {
       const ox = -3 + Math.floor(Math.random() * 6);
       const oy = -3 + Math.floor(Math.random() * 6);
       tile = [x + ox, y + oy];
@@ -235,21 +293,25 @@ function splatterTiles(x, y, isWalkable, direction = null, count = SPLATTER_COUN
 }
 
 /**
- * The three cleave pool tiles: the struck tile and one either side, along the
- * blow (the boss-to-player line, so the pools connect the stabbing legs to the
- * player's tile). A level blow lays a row, a straight north/south blow a column,
- * and standing underfoot (no direction) picks the row.
+ * The three cleave pool tiles: the struck tile and one either side, across the blow
+ * (captured: a player west or east of her gets a north-south line, north or south of her
+ * an east-west one). Standing underfoot (no direction) picks the row.
  */
 function cleavePoolTiles(x, y, dx, dy) {
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return [[x, y], [x - 1, y], [x + 1, y]];
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return [[x, y], [x, y - 1], [x, y + 1]];
   }
-  return [[x, y], [x, y - 1], [x, y + 1]];
+  return [[x, y], [x - 1, y], [x + 1, y]];
 }
 
-/** Pool damage for a player who has now stood in acid for `ticks` ticks. */
-function poolDamage(ticks) {
-  return Math.min(POOL_MAX_DAMAGE, POOL_FIRST_DAMAGE + Math.max(0, ticks - 1) * POOL_DAMAGE_STEP);
+/** Captured: a flat 4-5 a tick, however long the player has stood in acid. */
+function poolDamage() {
+  return randomBetween(POOL_DAMAGE_MIN, POOL_DAMAGE_MAX);
+}
+
+/** A venom hitsplat for `damage`, as the pools, drip and ball land. */
+function venomHit(core, damage) {
+  return new core.HitDamage(damage, core.HitMask.RED).setSplatTypes(VENOM_SPLAT, VENOM_SPLAT);
 }
 
 /** Straight-line walkability from (x0, y0) to (x1, y1), stepping like the engine (diagonal-first). */
@@ -278,6 +340,8 @@ module.exports = {
   SPAWN_TILE,
   CENTRE_TILE,
   EGG_TILES,
+  EGG_BLOCKING_OBJECT,
+  EGG_HATCHED_OBJECT,
   LAIR,
   PATTERNS,
   ATTACK_SPEED_TICKS,
@@ -285,6 +349,8 @@ module.exports = {
   SPECIAL_EVERY_ATTACKS,
   FIRST_HATCH_STANDARDS,
   HATCH_INTERVAL_STANDARDS,
+  HATCH_DELAY_TICKS,
+  SPAWN_DELAY_TICKS,
   ARM_TICKS,
   ATTACK_DISTANCE,
   MELEE_MAX,
@@ -306,20 +372,30 @@ module.exports = {
   MINION_MAX,
   RUPTURA_PLAYER_DAMAGE,
   RUPTURA_BOSS_DAMAGE,
-  BALL_ROLL_TILES,
-  BALL_DAMAGE,
+  BALL_STEP_TILES,
+  BALL_SIZE,
+  BALL_DAMAGE_MIN,
+  BALL_DAMAGE_MAX,
+  BALL_BURST_COUNT,
+  BALL_BURST_SPREAD,
   SPLATTER_COUNT,
-  SPLATTER_SPREAD,
   ACIDIC_DEATH_SPLATTER_COUNT,
+  ACIDIC_DEATH_SPREAD,
   SPLAT_IMPACT_DAMAGE,
-  ACID_PROJECTILE,
-  MINION_PROJECTILE,
+  PROJECTILE,
+  DISTANT_HIT_TICKS,
   ACID_SPLAT_GFX,
   ACID_SPLAT_SOUND,
-  POOL_FIRST_DAMAGE,
-  POOL_DAMAGE_STEP,
-  POOL_MAX_DAMAGE,
-  DRIP_FOLLOW_TICKS,
+  RUPTURA_EXPLOSION_GFX,
+  ACIDIC_EXPLOSION_GFX,
+  EXPLODE_ANIMATION,
+  SOUND,
+  POOL_DAMAGE_MIN,
+  POOL_DAMAGE_MAX,
+  VENOM_SPLAT,
+  DRIP_GFX,
+  DRIP_TICKS,
+  DRIP_MESSAGE,
   CORPSE_TICKS,
   RESPAWN_TICKS,
   HARVEST_ANIMATION,
@@ -336,9 +412,15 @@ module.exports = {
   ATTR_ENCOUNTER,
   ATTR_SPECIAL,
   ATTR_DESTROY_NO_PROMPT,
-  ENRAGE_SOUNDS,
+  ATTR_KILLS,
+  ATTR_BEST_TICKS,
   ENRAGE_MODELS,
   playSound,
+  playCaptured,
+  projectileEnd,
+  landingTicks,
+  randomBetween,
+  venomHit,
   Attack,
   SPECIAL_FOR_PRIMARY,
   edgeDistance,

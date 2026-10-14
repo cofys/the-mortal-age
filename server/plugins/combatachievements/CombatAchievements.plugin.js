@@ -7,6 +7,8 @@
  * content it belongs to, through events (the units in ./tasks/ for content this server has):
  *   api.emitCustomEvent("combat-achievements:complete", { player, task: "Perfect Zulrah" })  name or id
  *   api.emitCustomEvent("combat-achievements:kill", { player, monster: "Barrows", count? })
+ *                                       comes back with `total`, the kill count it now holds;
+ *                                       announce(total), if given, runs before tasks finish
  *   answer "combat-achievements:kill-count" { player, counts }        counts["Zulrah"] = n, at login
  *   answer "combat-achievements:personal-best" { player, monster, best }   best in ticks
  *   answer "combat-achievements:reset-best" { player, monster, handled }

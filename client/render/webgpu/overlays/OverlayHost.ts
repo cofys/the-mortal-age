@@ -124,7 +124,9 @@ import type {
 import type { WebGPUMapSquare } from "../WebGPUMapSquare";
 import type { WebGPURenderer } from "../WebGPURenderer";
 import type { WebGLMapSquare } from "../../WebGLMapSquare";
-import { computeWebGPURoofPlaneLimit } from "../frameConfig";
+import { shouldRenderServerNpc } from "../actors/actorPacking";
+import { isMapWithinRenderDistance, getMapZoneDistanceFromPoint } from "../../render/draw2";
+import { computeWebGPURoofPlaneLimit, resolveWebGPURenderDistance } from "../frameConfig";
 
 const PLAYER_DEFAULT_HEIGHT_FALLBACK = 200 / 128;
 
@@ -274,6 +276,24 @@ export class OverlayHost {
             });
         this.boundToCssEvent = (gx?: number, gy?: number) =>
             this.toCssEvent(gx, gy, this.currentFrameCount);
+    }
+
+    get editorOverlays() { return this.renderer.editorOverlays; }
+    get terrainOverrides() { return this.renderer.terrainOverrides; }
+    get mapRegionReplacements() { return this.renderer.mapRegionReplacements; }
+    getMapIdForWorldTile(x: number, y: number): number { return this.renderer.locUpdates.getMapIdForWorldTile(x, y); }
+    scheduleLocReload(mapX: number, mapY: number): void { this.renderer.locUpdates.scheduleReload(mapX, mapY, "full"); }
+    getMinimapIcons(mapX: number, mapY: number, plane = 0) { return this.renderer.getMinimapIcons(mapX, mapY, plane); }
+    getRenderCullTile() { return this.getPlayerTileXY(); }
+    getFrameRenderDistanceTiles() { return resolveWebGPURenderDistance(this.renderer); }
+    getMapZoneDistanceFromPoint(map: WebGPUMapSquare, x: number, y: number) {
+        return getMapZoneDistanceFromPoint(this.typedHost, map as unknown as WebGLMapSquare, x, y);
+    }
+    isMapWithinRenderDistance(map: WebGPUMapSquare, x: number, y: number, distance: number, pad: number) {
+        return isMapWithinRenderDistance(this.typedHost, map as unknown as WebGLMapSquare, x, y, distance, pad);
+    }
+    shouldRenderNpcFromMap(map: WebGPUMapSquare, ecsId: number) {
+        return shouldRenderServerNpc(this.osrsClient, map, ecsId);
     }
 
     private get typedHost(): WebGLOsrsRendererHost {
@@ -766,7 +786,8 @@ export class OverlayHost {
         // As WebGL's frame does: plugins (the backquote crosshair) move the interaction point
         // first, so hover, the mouseover text and clicks use it rather than a pointer-locked mouse.
         this.osrsClient.clientPlugins.updateInteractionPointer(this.osrsClient.camera);
-        if (!this.osrsClient.isLoggedIn()) return;
+        this.currentFrameCount = this.renderer.stats.frameCount;
+        if (!this.osrsClient.isLoggedIn() && !this.osrsClient.scenePreviewEnabled) return;
         try {
             updateHoveredTileViaHost(this.typedHost);
         } catch (error) {
@@ -921,7 +942,7 @@ export class OverlayHost {
 
     resolveNpcHighlightTargetFromEntry(
         entry:
-            | Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY">
+            | Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY" | "npcServerId">
             | undefined,
         fallbackTile?: { tileX: number; tileY: number; plane?: number },
     ): NpcHighlightTarget | undefined {
@@ -930,7 +951,7 @@ export class OverlayHost {
 
     resolveInteractHighlightTargetFromEntry(
         entry:
-            | Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY">
+            | Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY" | "npcServerId">
             | undefined,
         fallbackTile?: { tileX: number; tileY: number; plane?: number },
     ): InteractHighlightTarget | undefined {

@@ -17,15 +17,32 @@ export type ClientScriptLoaderDeps = {
 export class ClientScriptLoader {
     private static readonly CACHE_CAPACITY = 128;
     private readonly cache: Map<number, Cs2Script> = new Map();
+    private readonly overrides = new Map<number, Cs2Script>();
     private readonly pendingLoads = new Map<number, Promise<Cs2Script | null>>();
 
     constructor(private readonly deps: ClientScriptLoaderDeps) {}
 
     clear(): void {
         this.cache.clear();
+        this.overrides.clear();
+    }
+
+    setOverride(script: Cs2Script): void {
+        if (!Number.isInteger(script.id) || script.id < 0) throw new RangeError("Invalid script override id");
+        this.overrides.set(script.id, script);
+    }
+    removeOverride(scriptId: number): void { this.overrides.delete(scriptId); }
+    async getRawBytesWithRetry(scriptId: number): Promise<Int8Array | null> {
+        return retryOnMissingGroup(() => {
+            const index = this.deps.getCacheSystem().getIndex(IndexType.DAT2.clientScript);
+            if (!index.archiveExists(scriptId)) return null;
+            return index.getArchive(scriptId)?.getFile(0)?.data?.slice() ?? null;
+        }, 20, 250).then(bytes => bytes ?? null);
     }
 
     private tryLoad(scriptId: number): Cs2Script | null {
+        const override = this.overrides.get(scriptId);
+        if (override) return override;
         const cached = this.cache.get(scriptId);
         if (cached) {
             this.cache.delete(scriptId);
@@ -74,6 +91,8 @@ export class ClientScriptLoader {
     }
 
     loadIfExists(scriptId: number): Cs2Script | null {
+        const override = this.overrides.get(scriptId);
+        if (override) return override;
         const cached = this.cache.get(scriptId);
         if (cached) {
             this.cache.delete(scriptId);

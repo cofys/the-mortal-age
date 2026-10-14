@@ -1,24 +1,31 @@
 /**
- * One Araxxor lair per player, following the Elvarg/Vorkath private-area pattern: whoever
- * walks into the lair (through the webbed tunnels) gets a personal instance with Araxxor,
- * the nine eggs and the fight. Leaving, logging out or disconnecting destroys it; NPCs,
- * acid pools and drops go with it. After a kill the corpse lingers for its harvest, then the
- * encounter resets on the lair's timer.
+ * One Araxxor lair per player. The lair is a registered Area: a player who walks (or
+ * teleports) into it is moved, from its process(), into their own private instance with
+ * Araxxor, the nine eggs and the fight. The instance is an Area too, so the fight only costs
+ * anything for players in it: its process() keeps the encounter going, and leaving it
+ * (walking out, teleporting, logging out or disconnecting) destroys it, with its NPCs, acid
+ * pools and drops. After a kill the corpse lingers for its harvest, then the encounter resets
+ * on the lair's timer.
  *
- * As captured: boss and all nine eggs spawn together, the boss holds for 6 ticks after its
- * spawn animation (11482) before its first attack, and the egg pattern is one of the three
- * fixed layouts (the first egg's colour picks the fight's special).
+ * As captured: the lair is empty when the player arrives; boss and all nine eggs spawn
+ * together five ticks after the tunnel's "You crawl through the webbed tunnel." box closes
+ * (so a player who leaves a dialogue open keeps her waiting). The boss holds for 6 ticks after
+ * its spawn animation (11482) before its first attack, and the egg pattern is one of the three
+ * fixed layouts (the first egg's colour picks the fight's special). After a kill the next
+ * one appears on the lair's respawn timer.
  */
 const Shared = require("./Shared.Araxxor");
 const Hud = require("./Hud.Araxxor");
 const Minions = require("./Minions.Araxxor");
 const Specials = require("./Specials.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
 
 const ATTR_AREA = "araxxor:instance-area";
 
 let api = null;
 let core = null;
 let AraxxorPrivateArea = null;
+let LairArea = null;
 /** player -> session for the player's live lair. */
 const sessions = new Map();
 
@@ -33,7 +40,31 @@ function insideLair(location) {
   return x >= Shared.LAIR.minX && x <= Shared.LAIR.maxX && y >= Shared.LAIR.minY && y <= Shared.LAIR.maxY;
 }
 
-function defineAreaClass() {
+/** The spiders of the fight: only the instance they belong to may attack them. */
+function isLairNpc(target) {
+  if (!target?.isNpc?.()) return false;
+  const id = target.getId?.();
+  return [Shared.BOSS_ID, Shared.CORPSE_ID, Shared.BALL_ID, Shared.MINION_ID.mirrorback, Shared.MINION_ID.ruptura,
+    Shared.MINION_ID.acidic, Shared.EGG_ID.mirrorback, Shared.EGG_ID.ruptura, Shared.EGG_ID.acidic].includes(id);
+}
+
+function defineAreaClasses() {
+  /** The lair as the map knows it: it only hands each player their own instance. */
+  class AraxxorLair extends core.Area {
+    constructor() {
+      super([lairBoundary()]);
+    }
+
+    process(mobile) {
+      if (mobile?.isPlayer?.()) enterInstance(mobile.getAsPlayer());
+    }
+
+    isMulti() {
+      return true;
+    }
+  }
+  LairArea = AraxxorLair;
+
   class AraxxorArea extends core.PrivateArea {
     constructor(ownerName) {
       super([lairBoundary()]);
@@ -61,11 +92,26 @@ function defineAreaClass() {
       super.destroy();
     }
 
-    postLeave(mobile) {
+    /** Per tick, players in this instance only: spawn (and respawn) the encounter. */
+    process(mobile) {
+      if (!mobile?.isPlayer?.()) return;
+      const player = mobile.getAsPlayer();
+      ensureEncounter(player, this);
+      CombatAchievements.tick(player, sessions.get(player)?.npc ?? null);
+    }
+
+    postLeave(mobile, logout) {
       if (mobile?.isPlayer?.()) {
-        clearSession(mobile.getAsPlayer(), this);
+        CombatAchievements.left(mobile.getAsPlayer());
+        destroyArea(mobile.getAsPlayer(), this);
       }
-      super.postLeave(mobile);
+      super.postLeave(mobile, logout);
+    }
+
+    /** Players fight only their own instance's spiders. */
+    canAttack(attacker, target) {
+      if (!attacker?.isPlayer?.() || !isLairNpc(target)) return null;
+      return attacker.getPrivateArea?.() === target.getPrivateArea?.() ? null : false;
     }
 
     /** The whole lair is one fight. */
@@ -94,26 +140,14 @@ function clearSession(player, sourceArea) {
   }
 }
 
-function destroyArea(player) {
+function destroyArea(player, area = player.getAttribute?.(ATTR_AREA)) {
   Hud.dropFor(player);
-  const area = player.getAttribute?.(ATTR_AREA);
   clearSession(player, area);
   if (area instanceof AraxxorPrivateArea && area.isDestroyed?.() !== true) {
     area.destroy();
   }
   // Shots already in flight die with the instance: nothing follows the player out.
   player.getCombat?.().getHitQueue?.().clear?.();
-}
-
-function moveIntoArea(player, area) {
-  const currentArea = player.getArea?.();
-  if (currentArea && currentArea !== area) {
-    currentArea.leave(player, false);
-    currentArea.postLeave(player, false);
-  }
-  if (player.getArea?.() !== area) {
-    area.enter(player);
-  }
 }
 
 function createSession(player, area) {
@@ -130,6 +164,8 @@ function createSession(player, area) {
     pendingPet: [],
     corpse: null,
     respawnAt: 0,
+    /** When the boss appears: null until the player is in the lair with nothing open. */
+    spawnAt: null,
   };
   sessions.set(player, session);
   return session;
@@ -158,9 +194,11 @@ function spawnEncounter(session) {
   session.npc = boss;
   session.respawnAt = 0;
   session.corpse = null;
+  session.spawnedAt = core.World.getProcessCycle();
   Specials.initFight(boss);
   Minions.spawnEggs(session);
   Hud.show(boss, session.player);
+  CombatAchievements.spawned(session.player, boss);
   core.TaskManager.submit(new (class extends core.Task {
     constructor() {
       super(Math.max(1, Shared.ARM_TICKS), null, false);
@@ -174,70 +212,53 @@ function spawnEncounter(session) {
   })());
 }
 
+/**
+ * Keeps the player's fight going: the first boss five ticks after they are through the tunnel
+ * with no dialogue open (captured), and after a kill the next one once the corpse is gone and the
+ * respawn timer has run.
+ */
 function ensureEncounter(player, area) {
   let session = sessions.get(player);
   const now = core.World.getProcessCycle();
-  // A dying boss stays registered through its corpse (remains), so only removal counts.
-  const bossGone = !session?.npc?.isRegistered?.();
-  if (session && bossGone) {
-    if (!session.respawnAt || now >= session.respawnAt) {
-      sessions.delete(player);
-      session = null;
-    } else {
-      return;
-    }
-  }
-  if (!session) {
+  if (session?.npc) {
+    // A dying boss stays registered through its corpse (remains), so only removal counts.
+    if (session.npc.isRegistered?.() || core.World.getAddNPCQueue().includes(session.npc)) return;
+    if (session.respawnAt && now < session.respawnAt) return;
+    sessions.delete(player);
     spawnEncounter(createSession(player, area));
-  }
-}
-
-function enterLair({ player }) {
-  if (!player) return;
-  if (!insideLair(player.getLocation?.())) {
-    // Only a player who had a lair leaves one: tearing down for everyone else every tick
-    // cleared every player's incoming hits.
-    if (player.getAttribute?.(ATTR_AREA) || sessions.has(player)) destroyArea(player);
     return;
   }
+  if (!session) session = createSession(player, area);
+  // The timer starts once the player is through: not mid-crawl (movement locked by the
+  // tunnel) and not reading a dialogue.
+  if (player.getDialogueManager?.()?.isActive?.() === true || player.getMovementQueue?.()?.isMovementBlocked?.() === true) {
+    session.spawnAt = null;
+    return;
+  }
+  if (session.spawnAt == null) session.spawnAt = now + Shared.SPAWN_DELAY_TICKS;
+  if (now >= session.spawnAt) spawnEncounter(session);
+}
+
+/**
+ * Moves a player standing in the lair into their own instance. Area.enter leaves the lair
+ * first, and AreaManager sees the move because it happens inside the lair's process().
+ */
+function enterInstance(player) {
+  if (!insideLair(player.getLocation?.())) return;
   let area = areaOf(player);
   if (!area) {
     area = new AraxxorPrivateArea(player.getUsername?.());
     player.setAttribute?.(ATTR_AREA, area);
   }
-  moveIntoArea(player, area);
+  if (player.getArea?.() !== area) area.enter(player);
   ensureEncounter(player, area);
-}
-
-/** Players fight only their own instance's spiders. */
-function denyForeignAttack(event) {
-  const target = event.target;
-  if (!target?.isNpc?.()) return;
-  const id = target.getId?.();
-  if (![Shared.BOSS_ID, Shared.CORPSE_ID, Shared.BALL_ID, Shared.MINION_ID.mirrorback, Shared.MINION_ID.ruptura,
-    Shared.MINION_ID.acidic, Shared.EGG_ID.mirrorback, Shared.EGG_ID.ruptura, Shared.EGG_ID.acidic].includes(id)) {
-    return;
-  }
-  const attacker = event.attacker;
-  if (!attacker?.isPlayer?.()) return;
-  if (attacker.getPrivateArea?.() !== target.getPrivateArea?.()) {
-    event.allow = false;
-  }
-}
-
-function leaveWorld({ player }) {
-  if (!player) return;
-  destroyArea(player);
 }
 
 function attach(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
-  defineAreaClass();
-  pluginApi.onPlayerProcess(enterLair);
-  pluginApi.onCanAttack(denyForeignAttack);
-  pluginApi.onPlayerLogout(leaveWorld);
-  pluginApi.onPlayerDisconnect(leaveWorld);
+  defineAreaClasses();
+  pluginApi.registerArea(new LairArea());
 }
 
 module.exports = {
@@ -248,5 +269,7 @@ module.exports = {
   spawnEncounter,
   ensureEncounter,
   destroyArea,
+  enterInstance,
+  isLairNpc,
   _test: { insideLair },
 };

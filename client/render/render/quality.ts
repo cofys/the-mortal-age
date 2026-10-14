@@ -361,7 +361,7 @@ export function getUiRenderMetrics(host: WebGLOsrsRendererHost,
     
 }
 
-export function getCanvasResolutionScale(host: WebGLOsrsRendererHost, cssWidth: number, cssHeight: number): number {
+export function getCanvasResolutionScale(host: Pick<WebGLOsrsRendererHost, "osrsClient">, cssWidth: number, cssHeight: number): number {
 
         if (typeof window === "undefined") {
             return 1;
@@ -518,7 +518,11 @@ export function shouldUseDirectTextureScenePass(host: WebGLOsrsRendererHost, ): 
  * resizable mode does the same with its layout size. Elsewhere the viewport is measured in
  * device pixels.
  */
-export function syncCameraViewportUnitScale(host: WebGLOsrsRendererHost): void {
+export function syncCameraViewportUnitScale(
+    host: Pick<WebGLOsrsRendererHost, "osrsClient" | "canvas" | "computeUiRenderMetrics"> & {
+        app?: { width: number; height: number };
+    },
+): void {
     const camera = host.osrsClient.camera;
     // Stretched resizable mode sees its smaller layout too, as RuneLite's game does.
     if (
@@ -528,8 +532,8 @@ export function syncCameraViewportUnitScale(host: WebGLOsrsRendererHost): void {
         camera.setViewportUnitScale(1, 1);
         return;
     }
-    const width = (host.app.width || host.canvas.width || 1) | 0;
-    const height = (host.app.height || host.canvas.height || 1) | 0;
+    const width = (host.app?.width || host.canvas.width || 1) | 0;
+    const height = (host.app?.height || host.canvas.height || 1) | 0;
     const metrics = host.computeUiRenderMetrics(width, height);
     camera.setViewportUnitScale(metrics.renderScaleX, metrics.renderScaleY);
 }

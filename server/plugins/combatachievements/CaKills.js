@@ -6,7 +6,11 @@
  * A kill counts for its monster when an NPC of that name dies with the player as killer. Content
  * that is not one NPC's death (a chest, a wave, a subdued boss, a raid) is counted by its plugin:
  *   api.emitCustomEvent("combat-achievements:kill", { player, monster: "Barrows", count? })
- * where `count` is the plugin's own count after this kill, when it keeps one. At login, plugins
+ * where `count` is the plugin's own count after this kill, when it keeps one; the request comes
+ * back with `total`, the kill count Combat Achievements now holds (what the boss page shows), so
+ * the plugin can tell the player one number. An `announce(total)` function in the request is
+ * called with it before any task finishes, so the kill-count message comes first, as live sends
+ * it. At login, plugins
  * that keep a count answer
  *   "combat-achievements:kill-count" { player, counts }  -> counts["Zulrah"] = 41
  * so kills from before Combat Achievements still finish their tasks (as the Wiki says kill-count
@@ -53,11 +57,15 @@ function setCount(player, monster, value) {
   sendKillCount(player, monster);
 }
 
-/** One more kill (or `amount`), raised to the plugin's own `count` when it is ahead. */
-function addKill(player, monster, { amount = 1, count = null } = {}) {
+/**
+ * One more kill (or `amount`), raised to the plugin's own `count` when it is ahead. `announce`
+ * hears the new count before any kill-count task finishes.
+ */
+function addKill(player, monster, { amount = 1, count = null, announce = null } = {}) {
   if (!player || !monster) return;
   const next = Math.max(killCount(player, monster) + amount, Number.isFinite(count) ? count : 0);
   setCount(player, monster, next);
+  if (typeof announce === "function") announce(next);
   checkTasks(player, monster);
 }
 
@@ -76,7 +84,12 @@ function onNpcDeath(event) {
 function onKill(request) {
   const monster = Data.monsterNamed(request?.monster ?? "");
   if (!request?.player || !monster) return;
-  addKill(request.player, monster, { amount: Number(request.amount ?? 1), count: Number.isFinite(request.count) ? request.count : null });
+  addKill(request.player, monster, {
+    amount: Number(request.amount ?? 1),
+    count: Number.isFinite(request.count) ? request.count : null,
+    announce: request.announce ?? null,
+  });
+  request.total = killCount(request.player, monster);
 }
 
 /** At login: catch up with the counts plugins keep, send every count, finish what they reach. */

@@ -8,11 +8,26 @@
  * yet, and keeps the drops (and any Nid) until the player chooses. Harvest turns them out;
  * Destroy keeps only elite clues and re-rolls Nid at 1/1500. Either way the corpse sinks
  * (11486) and the fight resets on the lair's respawn timer.
+ *
+ * As captured: five ticks into the death the kill count goes up ("Your Araxxor kill count is:
+ * N.", varp total_araxxor_kills) and the fight's length is told against the personal best,
+ * timed from the spawn to three ticks into the death. Harvest (2282) turns the loot out two
+ * ticks after the click, the corpse sinks the tick after and goes two ticks later.
  */
 const Shared = require("./Shared.Araxxor");
 const Hud = require("./Hud.Araxxor");
 const Minions = require("./Minions.Araxxor");
 const Specials = require("./Specials.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
+
+/** Cache varp total_araxxor_kills: the kill count the boss log reads. Combat Achievements sends
+ * it (its count is the one the boss page shows); this plugin only does when that is not running. */
+const TOTAL_KILLS_VARP = 4260;
+/** Captured: the kill messages five ticks into the death, timed to three ticks into it. */
+const KILL_MESSAGE_TICKS = 5;
+const DURATION_END_TICKS = 3;
+const HARVEST_LOOT_TICKS = 2;
+const HARVEST_SINK_TICKS = 3;
 
 let api = null;
 let core = null;
@@ -57,7 +72,44 @@ function bossDied(event) {
   npc.setHitpoints?.(1);
   session.corpse = npc;
   session.respawnAt = core.World.getProcessCycle() + Shared.CORPSE_TICKS + Shared.RESPAWN_TICKS;
+  const ticks = core.World.getProcessCycle() + DURATION_END_TICKS - (session.spawnedAt ?? core.World.getProcessCycle());
+  const player = session.player;
+  later(KILL_MESSAGE_TICKS, npc, () => {
+    if (player?.isRegistered?.()) recordKill(player, ticks);
+  });
 }
+
+/** Minutes, seconds and hundredths, as the fight-duration message shows them. */
+function formatTicks(ticks) {
+  const centis = Math.round(ticks * 60);
+  const minutes = Math.floor(centis / 6000);
+  const seconds = Math.floor((centis % 6000) / 100);
+  return `${minutes}:${String(seconds).padStart(2, "0")}.${String(centis % 100).padStart(2, "0")}`;
+}
+
+/**
+ * One kill: Combat Achievements counts it (and finishes the tasks the fight earned), and its
+ * total is the one told, so the message, the boss page and the kill-count tasks agree.
+ */
+function recordKill(player, ticks) {
+  const own = (Number(player.getAttribute(Shared.ATTR_KILLS)) || 0) + 1;
+  const total = CombatAchievements.killed(player, own, (kills) => announceKill(player, kills, ticks));
+  player.setAttribute(Shared.ATTR_KILLS, Math.max(own, total ?? 0));
+  if (total == null) player.getPacketSender().sendConfig(TOTAL_KILLS_VARP, own);
+}
+
+/** The kill count and the fight's length against the personal best (captured messages). */
+function announceKill(player, kills, ticks) {
+  player.sendMessage(`Your Araxxor kill count is: <col=ff0000>${kills}</col>.`);
+  const best = Number(player.getAttribute(Shared.ATTR_BEST_TICKS)) || 0;
+  if (!best || ticks < best) {
+    player.setAttribute(Shared.ATTR_BEST_TICKS, ticks);
+    player.sendMessage(`Fight duration: <col=ff0000>${formatTicks(ticks)}</col> (new personal best)`);
+  } else {
+    player.sendMessage(`Fight duration: <col=ff0000>${formatTicks(ticks)}</col>. Personal best: ${formatTicks(best)}`);
+  }
+}
+
 
 /**
  * The death roll: Nid is lifted out of the drops so the pet is only awarded when the
@@ -135,13 +187,15 @@ function harvest({ player, npc }) {
   player.performAnimation(new core.Animation(Shared.HARVEST_ANIMATION));
   const stash = session.stash ?? [];
   const pet = session.pendingPet ?? [];
-  later(1, npc, () => {
+  later(HARVEST_LOOT_TICKS, npc, () => {
     if (!npc.isRegistered?.()) return;
     spawnDrops(player, session, stash);
     if (pet.length > 0) {
       api.emitCustomEvent("npc-drops:roll", { player, npc, npcId: Shared.BOSS_ID, drops: pet });
     }
-    endCorpse(npc, session, 2);
+  });
+  later(HARVEST_SINK_TICKS, npc, () => {
+    if (npc.isRegistered?.()) endCorpse(npc, session, 2);
   });
   return true;
 }
@@ -202,6 +256,8 @@ function denyAttack({ npc }) {
 function attach(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
+  pluginApi.persistAttribute(Shared.ATTR_KILLS);
+  pluginApi.persistAttribute(Shared.ATTR_BEST_TICKS);
   pluginApi.onNpcDeath(bossDied);
   pluginApi.onCustomEvent("npc-drops:roll", stashRoll);
   pluginApi.onCustomEvent("npc-drops:generated", stashGenerated);
@@ -218,4 +274,5 @@ module.exports = {
   stashGenerated,
   spawnDrops,
   validCorpse,
+  formatTicks,
 };

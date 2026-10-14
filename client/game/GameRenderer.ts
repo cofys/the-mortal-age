@@ -235,6 +235,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     }
 
     handleKeyInput(deltaTime: number) {
+        if (this.osrsClient.editorCameraInput?.(deltaTime)) return;
         const deltaTimeSec = deltaTime / 1000;
 
         const inputManager = this.osrsClient.inputManager;

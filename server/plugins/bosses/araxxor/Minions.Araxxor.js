@@ -2,13 +2,14 @@
  * Eggs and the three araxytes: hatching, minion attacks, the Mirrorback's damage reflection
  * and the Ruptura's burst.
  *
- * As captured / Near-Reality: eggs settle with 11506, hatch on the fight's standard
- * count (Wiki: first after 3 standards, then every 6) into a fresh minion at the egg's
- * tile (hatch mark 2927/2928/2929 + 11503), which walks to the centre and starts attacking 3 ticks later. Acidic spits (11498,
- * projectile 2925), Mirrorback melees (11500) and reflects half of every non-halberd,
- * non-ranged, non-magic hit back at its attacker, Ruptura never attacks: it runs at its
- * target and bursts (11510) for up to 49, hurting Araxxor 80/64 by distance as well
- * (captured: the boss took an 80 from a burst).
+ * As captured: eggs settle with 11506 and block their 2x2 with an invisible loc (47348) a
+ * tick later, hatch on the fight's standard count (Wiki: first after 3 standards, then every
+ * 6) into a fresh minion at the egg's tile (hatch mark 2927/2928/2929 + 11503, the loc
+ * swapped for the non-blocking 29733), which goes for the player 3 ticks later. Acidic spits
+ * (11498, projectile 1560, sound 9378), Mirrorback melees (11500) and reflects half of every
+ * non-halberd, non-ranged, non-magic hit back at its attacker, Ruptura never attacks: it
+ * runs at its target and explodes (11504 + graphic 2925), hurting Araxxor 80/64/48/33 by
+ * distance two ticks later and going two ticks after that.
  *
  * Eggs and araxytes: the Wiki's max-hit setups (noxious halberd, crush style at top
  * accuracy, heavy ranged) always max-hit hatched araxytes, while unhatched eggs roll
@@ -16,6 +17,7 @@
  * the eggs weakens the spiders).
  */
 const Shared = require("./Shared.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
 
 let api = null;
 let core = null;
@@ -24,7 +26,6 @@ let BonusManager = null;
 const HATCH_ANIMATION = 11503;
 const EGG_ANIMATION = 11506;
 const EGG_DEATH_ANIMATION = 11508;
-const RUPTURA_ANIMATION = 11510;
 const RUPTURA_BURST_ATTRIBUTE = "araxxor:ruptura-burst";
 const INSTANT_KILL_WEAPONS = ["noxious halberd", "crossbow", "ballista"];
 
@@ -68,8 +69,30 @@ function spawnEggs(session) {
     egg.setAttribute?.(Shared.ATTR_ENCOUNTER, session);
     area?.add?.(egg);
     core.World.getAddNPCQueue().push(egg);
-    session.eggs.push({ type, x, y, npc: egg });
+    session.eggs.push({ type, x, y, npc: egg, block: null });
   }
+  later(1, session.npc, () => {
+    if (area?.isDestroyed?.() === true) return;
+    for (const entry of session.eggs) {
+      if (!alive(entry.npc) && !core.World.getAddNPCQueue().includes(entry.npc)) continue;
+      entry.block = placeObject(Shared.EGG_BLOCKING_OBJECT, entry.x, entry.y, area);
+    }
+  });
+}
+
+/** An invisible 2x2 loc on the instance, as the eggs' blocking locs are. */
+function placeObject(id, x, y, area) {
+  const object = new core.GameObject(id, new core.Location(x, y, 0), 10, 0, area);
+  core.ObjectManager.register(object, true);
+  area?.add?.(object);
+  return object;
+}
+
+/** Frees an egg's tiles once it hatches or crumbles: the blocking loc goes. */
+function unblockEgg(entry) {
+  if (!entry?.block) return;
+  core.ObjectManager.deregister(entry.block, true);
+  entry.block = null;
 }
 
 /** Hatches the next living egg in the pattern on the fight's hatch beat. */
@@ -80,6 +103,7 @@ function hatchNext(bossNpc) {
   if (!entry) return;
   const remaining = entry.npc.getHitpoints?.() ?? Shared.EGG_HITPOINTS;
   core.World.getRemoveNPCQueue().push(entry.npc);
+  unblockEgg(entry);
   // Overdamaged eggs despawn instead of hatching (Wiki): the next egg waits a full beat.
   if (remaining <= Shared.EGG_HITPOINTS - Shared.MINION_HITPOINTS) {
     return;
@@ -137,7 +161,11 @@ function ensureTargets(session) {
 function pinEggs(session) {
   for (const entry of session?.eggs ?? []) {
     const egg = entry?.npc ?? null;
-    if (!egg?.isRegistered?.()) continue;
+    if (!egg?.isRegistered?.()) {
+      // An egg killed before it hatched frees its tiles too.
+      if (entry?.block && !core.World.getAddNPCQueue().includes(egg)) unblockEgg(entry);
+      continue;
+    }
     if (egg.getInteractingMobile?.() != null) egg.setMobileInteraction?.(null);
     egg.getCombat?.().reset?.();
     // Eggs never attack, so the engine would always see their last attack as
@@ -153,7 +181,8 @@ function crumbleAll(bossNpc) {
   for (const entry of session.eggs) {
     if (!alive(entry.npc)) continue;
     entry.npc.performAnimation(new core.Animation(EGG_DEATH_ANIMATION));
-    core.World.getRemoveNPCQueue().push(entry.npc);
+    later(2, entry.npc, () => core.World.getRemoveNPCQueue().push(entry.npc));
+    unblockEgg(entry);
   }
   for (const minion of session.minions) {
     if (alive(minion)) core.World.getRemoveNPCQueue().push(minion);
@@ -179,14 +208,15 @@ function edgeDistance(npc, target) {
   return Math.max(dx, dy);
 }
 
-/** The Ruptura's burst: 11510, then 2 ticks later the 8x8 blast lands (Wiki) on the
- * boss, nearby players, minions and idle eggs — the egg-lure tactic works because
- * a burst catches the next egg too. */
+/** The Ruptura's burst: 11504 with the 2925 explosion, then 2 ticks later the blast lands
+ * (captured) on the boss, nearby players, minions and idle eggs - the egg-lure tactic works
+ * because a burst catches the next egg too. The araxyte goes two ticks after that. */
 function explodeRuptura(npc, target) {
   if (npc.getAttribute?.(RUPTURA_BURST_ATTRIBUTE) === true) return;
   npc.setAttribute?.(RUPTURA_BURST_ATTRIBUTE, true);
   npc.getMovementQueue?.().setBlockMovement?.(true);
-  npc.performAnimation(new core.Animation(RUPTURA_ANIMATION));
+  npc.performAnimation(new core.Animation(Shared.EXPLODE_ANIMATION));
+  npc.performGraphic(new core.Graphic(Shared.RUPTURA_EXPLOSION_GFX));
   later(2, npc, () => {
     const session = sessionOf(npc);
     const boss = session?.npc ?? null;
@@ -209,17 +239,22 @@ function explodeRuptura(npc, target) {
         player.getCombat().getHitQueue().addPendingDamage([
           new core.HitDamage(Shared.RUPTURA_PLAYER_DAMAGE[distance], core.HitMask.RED),
         ]);
+        CombatAchievements.avoidableDamage(player, Shared.RUPTURA_PLAYER_DAMAGE[distance]);
       }
     }
+    let araxytesKilled = 0;
     for (const minion of session?.minions ?? []) {
       if (minion === npc || !alive(minion)) continue;
       const distance = edgeDistance(npc, minion);
       if (distance < Shared.RUPTURA_BOSS_DAMAGE.length) {
+        const damage = Shared.RUPTURA_BOSS_DAMAGE[distance];
+        if (damage >= (minion.getHitpoints?.() ?? Infinity)) araxytesKilled++;
         minion.getCombat().getHitQueue().addPendingDamage([
-          new core.HitDamage(Shared.RUPTURA_BOSS_DAMAGE[distance], core.HitMask.BLUE),
+          new core.HitDamage(damage, core.HitMask.BLUE),
         ]);
       }
     }
+    CombatAchievements.betrayal(session?.player ?? null, araxytesKilled);
     for (const entry of session?.eggs ?? []) {
       const egg = entry?.npc ?? null;
       if (!alive(egg)) continue;
@@ -230,7 +265,7 @@ function explodeRuptura(npc, target) {
         ]);
       }
     }
-    core.World.getRemoveNPCQueue().push(npc);
+    later(2, npc, () => core.World.getRemoveNPCQueue().push(npc));
   });
 }
 
@@ -302,6 +337,7 @@ function modifyHit(event) {
   player.getCombat().getHitQueue().addPendingDamage([
     new core.HitDamage(Math.floor(damage / 2), core.HitMask.RED),
   ]);
+  CombatAchievements.avoidableDamage(player, Math.floor(damage / 2));
 }
 
 /** The eggs themselves are inert: no attacks, no retaliation, no pursuit. */
@@ -350,13 +386,20 @@ function minionClass() {
       if (id === Shared.MINION_ID.acidic) {
         this.attack = "ranged";
         npc.performAnimation(new core.Animation(11498));
-        const from = npc.getLocation();
-        const to = target.getLocation();
-        const flight = 30 + 20 * Math.max(1, from.getDistance(to));
+        const shape = Shared.PROJECTILE.acidic;
+        const from = core.Projectile.centreOf(npc);
+        const end = Shared.projectileEnd(shape, from.getDistance(target.getLocation()));
         new core.Projectile(
-          from, to, target, Shared.MINION_PROJECTILE, 30, flight, 30, 0, npc.getPrivateArea(),
-        ).sendProjectile();
-        this.shotDelay = Math.ceil(flight / 30);
+          from, target.getLocation(), target, shape.id, shape.start, end, shape.startHeight, shape.endHeight,
+          npc.getPrivateArea(),
+        ).withSource(npc).withAngle(shape.angle).withProgress(shape.progress).sendProjectile();
+        // Captured on the player's tile, heard within 5.
+        if (target.isPlayer?.()) {
+          const [sound, delay] = Shared.SOUND.acidic;
+          const at = target.getLocation();
+          target.getAsPlayer().getPacketSender?.()?.sendAreaSound(sound, at.getX(), at.getY(), at.getZ(), 1, delay, 5, 0);
+        }
+        this.shotDelay = Shared.landingTicks(end);
         return;
       }
       this.attack = "melee";

@@ -27,6 +27,8 @@ export type WidgetInteractionControllerDeps = {
  * Widget drag, click-state, and UI click-probe helpers extracted from OsrsClient.
  */
 export class WidgetInteractionController {
+    static readonly dragListeners = new Set<() => void>();
+
     dragSourceWidget: any = null;
     clickedWidget: any = null;
     clickedWidgetParent: any = null;

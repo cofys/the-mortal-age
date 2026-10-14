@@ -388,7 +388,7 @@ export function resolveNpcOverlayAnchor(host: WebGLOsrsRendererHost,
 
         let worldX = baseWorldX;
         let worldZ = baseWorldZ;
-        let defaultHeight = npcTypeId != null ? host.getNpcDefaultHeight(npcTypeId) : 200;
+        let defaultHeight = host.osrsClient.npcEcs.getModelHeightOverride(ecsId) ?? (npcTypeId != null ? host.getNpcDefaultHeight(npcTypeId) : 200);
         let logicalHeightTiles = defaultHeight / 128;
 
         try {
@@ -450,7 +450,7 @@ export function resolveNpcOverlayAnchor(host: WebGLOsrsRendererHost,
             }
             if (!model) {
                 const baseLogicalHeight =
-                    npcType.heightOffset >= 0 ? npcType.heightOffset : defaultHeight;
+                    npcEcs.getModelHeightOverride(ecsId) ?? (npcType.heightOffset >= 0 ? npcType.heightOffset : defaultHeight);
                 return {
                     worldX,
                     worldZ,
@@ -463,7 +463,7 @@ export function resolveNpcOverlayAnchor(host: WebGLOsrsRendererHost,
                 defaultHeight = Math.max(1, model.height | 0);
             } catch {}
             const baseLogicalHeight =
-                npcType.heightOffset >= 0 ? npcType.heightOffset : defaultHeight;
+                npcEcs.getModelHeightOverride(ecsId) ?? (npcType.heightOffset >= 0 ? npcType.heightOffset : defaultHeight);
             logicalHeightTiles = baseLogicalHeight / 128 + animHeightOffsetTiles;
 
             // Model-space center can be offset from origin; rotate it like npc.vert.glsl.

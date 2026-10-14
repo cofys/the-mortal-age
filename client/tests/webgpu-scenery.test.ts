@@ -32,14 +32,16 @@ function fixture(full: DrawRange[], far: DrawRange[], planes?: Uint8Array) {
         heightMapTextureData: new Int16Array(4), waterMaskTextureData: new Uint8Array(4),
         doorVertices: new Uint8Array(), doorIndices: new Int32Array(),
         doorDrawRanges: [], doorDrawRangesAlpha: [],
+        collisionDatas: Array.from({ length: 4 }, () => ({
+            sizeX: 64, sizeY: 64, flags: new Int32Array(64 * 64),
+        })),
         tileRenderFlags: [], locsAnimated: [], loc: geometry,
     };
     // Scene and loc groups use the same fixture ranges; make scene empty for draw assertions.
     data.drawRanges = [];
     data.drawRangesLod = [];
-    const square = WebGPUMapSquare.load(device as any, {
-        depthPipelines: [{}, {}], depthTextureBindGroup: {},
-    } as any, data as any, 0, 0);
+    const resources = { depthPipelines: [{}, {}], depthTextureBindGroup: {} };
+    const square = WebGPUMapSquare.load(device as any, resources as any, data as any, 0, 0);
     const draws: { count: number; first: number; uniform: number }[] = [];
     let uniform = -1;
     const pass = {
@@ -55,8 +57,32 @@ function fixture(full: DrawRange[], far: DrawRange[], planes?: Uint8Array) {
         tileX: 0, tileZ: 0, distance: 40, lodDistance: 8,
         camera: { intersectsBox: (box: number[][]) => box[0][0] < 40 } as Frustum,
     };
-    return { square, draws, pass, context };
+    return { square, draws, pass, context, data, device, resources };
 }
+
+test("WebGPU editor previews load and draw without collision metadata", () => {
+    const f = fixture([range(0, 6, 0)], []);
+    const preview = WebGPUMapSquare.load(f.device as any, f.resources as any,
+        { ...f.data, collisionDatas: undefined } as any, -1, 0);
+    assert.deepEqual(preview.collisionMaps, []);
+    assert.equal(preview.getCollisionFlag(0, 7, 9), 0);
+    preview.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 1, "draw-only previews still render their model");
+    preview.delete();
+    f.square.delete();
+});
+
+test("WebGPU retains collision flags and refreshes them with scenery metadata", () => {
+    const f = fixture([], []);
+    f.data.collisionDatas[2].flags[7 + 9 * 64] = 0x20100;
+    assert.equal(f.square.getCollisionFlag(2, 7, 9), 0x20100);
+    assert.equal(f.square.getCollisionFlag(1, 7, 9), 0);
+    const collisionDatas = f.data.collisionDatas.map(data => ({ ...data, flags: data.flags.slice() }));
+    collisionDatas[2].flags[7 + 9 * 64] = 0;
+    f.square.refreshPartial({ ...f.data, collisionDatas, locOnly: true } as any, {} as any, 1);
+    assert.equal(f.square.getCollisionFlag(2, 7, 9), 0);
+    f.square.delete();
+});
 
 test("WebGPU selects one scenery tier per chunk, culls fog/frustum and keeps unchunked items", () => {
     const f = fixture([range(0, 6, 0), range(24, 12, 24), range(72, 18, 64), range(144, 3, 24, false)],
@@ -108,5 +134,24 @@ test("WebGPU advances both full and far animated ranges to the same baked frame"
     assert.deepEqual(far[0].slice(0, 2), [48, 12]);
     assert.deepEqual(full[0].chunk, [0, 0]);
     assert.deepEqual(far[0].chunk, [24, 0]);
+    f.square.delete();
+});
+
+
+test("WebGPU wall previews give each placement its own uniform slot", () => {
+    const f = fixture([range(0, 6, 0)], []);
+    const first = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10, 0, 0, 1]);
+    const second = first.slice(); second[12] = 20;
+    f.square.setWorldEntityTransforms([first, second]);
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.deepEqual(f.draws.map(draw => draw.uniform), [0, 256], "copies cannot share the last matrix uploaded");
+    f.draws.length = 0;
+    f.square.setWorldEntityTransforms([first]);
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 1, "shortening a wall removes old preview copies");
+    f.draws.length = 0;
+    f.square.setWorldEntityTransforms([]);
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 0, "clearing previews leaves no phantom copy");
     f.square.delete();
 });

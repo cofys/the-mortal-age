@@ -376,6 +376,7 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
 
         const focusHeightTiles = (host.osrsClient.camFollowHeight | 0) / 128.0;
         const targetY = playerHeightSample.height - focusHeightTiles;
+        camera.setFocalPoint(targetX, targetY, targetZ);
         // Camera Y is purely the orbit position around the focal point; terrain clipping is
         // handled by the pitch clamp pressure, never by raising the camera off its orbit.
         const desiredPosY = Math.round((targetY - forward[1] * dist) * 128) / 128;

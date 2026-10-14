@@ -22,14 +22,18 @@ Combat Achievements live in `server/plugins/combatachievements/`. The 655 tasks,
 | Obor, Bryophyta | chest counts, Fighting as Intended (I and II) on a free-to-play world |
 | Zulrah | count, speed (off a slayer task), Perfect Zulrah, Snake. Snake!? Snaaaaaake! |
 | Vorkath | speed (timed from her waking), Faithless Encounter, The Walk, Dodging the Dragon and Extended Encounter (kills in a row without leaving her area; her specials' damage) |
+| Araxxor | count, the three speed tasks (N kills in 10:00 in one stay), Perfect Araxxor (I and II), Relaxxor, Let it seep in, Araxyte Betrayal, Arachnid Lover, Swimming in Venom |
 
-That's 291 of the 655 tasks: Easy 27/41, Medium 38/64, Hard 40/89, Elite 80/166, Master 58/173, Grandmaster 48/122. Most of the rest belong to content this server doesn't have yet (the Chambers of Xeric, the Theatre of Blood, the Nightmare, the Desert Treasure II bosses) or need a boss's own mechanics reported (ToA's rooms, Doom's grubs, the GWD instances).
+That's 301 of the 655 tasks: Easy 27/41, Medium 38/64, Hard 40/89, Elite 82/166, Master 63/173, Grandmaster 51/122. Most of the rest belong to content this server doesn't have yet (the Chambers of Xeric, the Theatre of Blood, the Nightmare, the Desert Treasure II bosses) or need a boss's own mechanics reported (ToA's rooms, Doom's grubs, the GWD instances).
 
 From another plugin:
 
 ```js
 api.emitCustomEvent("combat-achievements:complete", { player, task: "Perfect Zulrah" });   // name or id
 api.emitCustomEvent("combat-achievements:kill", { player, monster: "Barrows", count });     // count: the plugin's own, optional
+// The request comes back with `total`, the count it now holds; announce(total), when given, runs
+// before any task finishes, so the plugin's kill-count message comes first (live's order).
+api.emitCustomEvent("combat-achievements:kill", { player, monster: "Araxxor", count, announce: (total) => tell(total) });
 api.onCustomEvent("combat-achievements:kill-count", ({ player, counts }) => { counts.Zulrah = kills(player); }); // at login
 api.onCustomEvent("combat-achievements:personal-best", (request) => { request.best = bestTicks(request.player); });
 api.onCustomEvent("combat-achievements:reset-best", (request) => { /* ... */ request.handled = true; });
