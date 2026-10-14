@@ -1682,6 +1682,7 @@ class CitizenDirector {
     // thousands of materialized citizens (~4.8MB active cost each) and OOM the box.
     const spawnCandidates = [];
     let materializedCount = 0;
+    const tRoster0 = Date.now();
     for (const record of this.roster.values()) {
       try {
         const online = this.isOnline(record);
@@ -1754,6 +1755,9 @@ class CitizenDirector {
     } catch (error) {
       this.log("tick-lod-proximity failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.roster", Date.now() - tRoster0, this.roster?.size ?? 0);
+    } catch {}
     // Invisible materialization (Jon 2026-10-13): candidates ENQUEUE here and
     // drain a few per engine tick in tickSpawnQueue — never the whole cohort
     // in one synchronized wave. The queue stays nearest-first so the
@@ -1776,58 +1780,84 @@ class CitizenDirector {
     // director tick: facing, idle animations, greetings, and emote
     // reactions need to happen often enough for players to actually see
     // them. Data tier, zero LLM, per-citizen try/catch inside.
+    // Phase timing (perf): each subsystem gets its own TickTiming label so
+    // the next overrun investigation reads the breakdown from the log.
+    let tPhase0 = Date.now();
     try {
       CitizenAlive.tickAlive(this, Date.now(), desync);
     } catch (error) {
       this.log("alive (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.alive", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // In-town ambient craft-station work loops: idle commoners near a
     // forge/anvil/range/workbench/stall do short visible work loops, but
     // only while a real player is actually around to see them.
     // Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenWorkLoops.tickWorkLoops(this, Date.now(), desync);
     } catch (error) {
       this.log("work loops (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.workloops", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Merchant shopkeeping: shop owners visibly restock/arrange/sweep and
     // greet customers, but only while a real player is actually around to
     // see them. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenShopkeeping.tickShopkeeping(this, Date.now());
     } catch (error) {
       this.log("shopkeeping (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.shopkeeping", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Citizen healers: doctors, herbalists, surgeons, and midwives treat
     // the sick and injured at their town-square clinics, contain rare plague
     // outbreaks, and offer treatment to lingering players — visible work
     // only while a real player is actually around to see it. Data tier
     // (ailment sim, plague spread, births) runs free with zero players.
     // Zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenHealers.tickHealers(this, Date.now());
     } catch (error) {
       this.log("healers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.healers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Citizen artisans: master craftspeople work visibly at their workshops,
     // reveal masterpieces, announce completed commissions, and offer new
     // commissions to lingering players — but only while a real player is
     // actually around to see them. Data tier, zero LLM, per-citizen
     // try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenArtisans.tickArtisanLife(this, Date.now());
     } catch (error) {
       this.log("artisans (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.artisans", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Citizen builders: construction crews work visibly at the kingdom's
     // active site, the architect supervises, lingering players get hire
     // offers — but only while a real player is actually around to see them.
     // Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenBuilders.tickBuilderLife(this, Date.now(), desync);
     } catch (error) {
       this.log("builders (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.builders", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Rumors: citizens spread distorted retellings of real events along
     // social ties (data tier), and speak them aloud near real players
     // (taverns/streets). Zero LLM, per-citizen try/catch inside.
