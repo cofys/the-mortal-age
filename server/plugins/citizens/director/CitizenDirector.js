@@ -1861,164 +1861,232 @@ class CitizenDirector {
     // Rumors: citizens spread distorted retellings of real events along
     // social ties (data tier), and speak them aloud near real players
     // (taverns/streets). Zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenRumors.tickRumors(this, Date.now());
     } catch (error) {
       this.log("rumors (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.rumors", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Gift giving: citizens give gifts to real players — birthdays,
     // thank-yous after completed favors, festival gifts, reciprocity for
     // player generosity, and rare spontaneous generosity from fond
     // citizens. Personality-driven gift pools, ceremony lines, journaled
     // for the LLM. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenGiftGiving.tickGiftGiving(this, Date.now());
     } catch (error) {
       this.log("gift giving (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.giftgiving", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Mysteries: a monthly town mystery (missing person, theft, strange
     // lights) citizens whisper about; players find scattered clues and the
     // town reacts when it's solved. Data tier, zero LLM, per-citizen
     // try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenMystery.tickMystery(this, Date.now());
     } catch (error) {
       this.log("mystery (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.mystery", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Citizen teachers: schools with deterministic teacher staff, school-age
     // students whose curriculum advances daily (persisted), and visible
     // class sessions during school hours — but only while a real player is
     // actually around to see them. Data tier, zero LLM, per-citizen
     // try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenTeachers.tickTeachers(this, Date.now());
     } catch (error) {
       this.log("teachers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.teachers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Market stalls: merchants claim a pitch during market hours, set up
     // 3-5 wares with personality-driven prices, haggle with liked
     // customers, and pack up at night. Data tier, zero LLM,
     // per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenMarketStalls.tickMarketStalls(this, Date.now());
     } catch (error) {
       this.log("market stalls (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.marketstalls", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Farmers: crop/livestock/orchard/apiary citizens visibly work the
     // land (seasonal cycles, daily livestock rhythm, weather-adjusted) and
     // hawk fresh produce — only while a real player is around to see them.
     // Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenFarmers.tickFarmers(this, Date.now());
     } catch (error) {
       this.log("farmers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.farmers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Miners: prospectors, diggers, smelters and gem cutters work the mines
     // visibly (pickaxe swings, rich-vein callouts, hazard warnings) — only
     // while a real player is around to see them. Data tier, zero LLM,
     // per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenMiners.tickMiners(this, Date.now(), desync);
     } catch (error) {
       this.log("miners (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.miners", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Fishers: deep-sea fishers, river fishers, ice fishers and pearl divers
     // work the waters visibly (casts, net hauls, big-catch celebrations,
     // fresh-catch hawking, storm warnings) — only while a real player is
     // around to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenFishers.tickFishers(this, Date.now(), desync);
     } catch (error) {
       this.log("fishers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.fishers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Hunters: trackers, bowmen, trappers and beastmasters work the
     // wilds visibly (bow draws, snare settings, trophy celebrations,
     // meat/hide hawking, danger warnings) — only while a real player is
     // around to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenHunters.tickHunters(this, Date.now(), desync);
     } catch (error) {
       this.log("hunters (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.hunters", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Cooks: tavern keepers, bakers, chefs and street vendors visibly work
     // their kitchens (engine-verified cooking anims 896/897, meal-of-the-day
     // announcements, fresh-food hawking, recipe lesson offers) — only while
     // a real player is around to see them. Data tier, zero LLM,
     // per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenCooks.tickCooks(this, Date.now(), desync);
     } catch (error) {
       this.log("cooks (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.cooks", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Tailors: clothiers, armorers, weavers and embroiderers visibly work
     // their workshops (engine-verified needlework anim 885, season-style
     // announcements in kingdom colors, garment hawking, commission
     // offers, masterpiece unveilings) — only while a real player is around
     // to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenTailors.tickTailors(this, Date.now(), desync);
     } catch (error) {
       this.log("tailors (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.tailors", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Blacksmiths: weaponsmiths, armorsmiths, farriers and bladesmiths
     // visibly work their forges (engine-verified smithing anim 898,
     // smelting anim 899, wares hawking, masterwork unveilings,
     // commission offers) — only while a real player is around to see
     // them. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenBlacksmiths.tickSmiths(this, Date.now(), desync);
     } catch (error) {
       this.log("blacksmiths (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.blacksmiths", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Alchemists: potion brewers, transmuters, scholars and apothecaries
     // visibly work their laboratories (engine-verified herblore anim 363,
     // breakthrough unveilings, scripted mishaps, remedy hawking, recipe
     // lesson offers) — only while a real player is around to see them.
     // Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenAlchemists.tickAlchemists(this, Date.now(), desync);
     } catch (error) {
       this.log("alchemists (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.alchemists", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Herbalists: wildcrafters, gardeners, botanists and apothecary
     // suppliers visibly gather and prepare herbs (engine-verified digging
     // anim 830, herblore anim 363, herb hawking, rare-find unveilings,
     // herblore lesson offers) — only while a real player is around to see
     // them. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenHerbalists.tickHerbalists(this, Date.now(), desync);
     } catch (error) {
       this.log("herbalists (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.herbalists", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Jewelers: gem cutters, goldsmiths, appraisers and traders visibly
     // work their workshops (engine-verified gem-cutting anims 885-892,
     // 2717, 7185 from Crafting.plugin.js, wares hawking, masterpiece
     // unveilings, commission offers) — only while a real player is around
     // to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenJewelers.tickJewelers(this, Date.now(), desync);
     } catch (error) {
       this.log("jewelers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.jewelers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Sailors: deckhands, navigators, captains and dockworkers visibly
     // work the docks and decks (engine-verified sailing anims 13340,
     // 13576, 13599, passage offers, ship-arrival announcements, storm
     // batten-downs) — only while a real player is around to see them.
     // Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenSailors.tickSailors(this, Date.now(), desync);
     } catch (error) {
       this.log("sailors (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.sailors", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Street performers: buskers, bards and conjurers play the squares,
     // markets and tavern entrances for tips during the day. Nearby citizen
     // bots applaud; real players tip with "use coins on performer". Data
     // tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickPerformers(this, Date.now());
     } catch (error) {
       this.log("performers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.performers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Bards: professional minstrels play the great halls and feast halls
     // in the evening — named repertoire, touring troupes, court bards,
     // premieres, ballads composed from real journaled events, song
@@ -2026,21 +2094,29 @@ class CitizenDirector {
     // overlap with street performers (buskers own the squares) or inn
     // bards (they own the inns). Data tier, zero LLM, per-citizen
     // try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickBards(this, Date.now(), desync);
     } catch (error) {
       this.log("bards (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.bards", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Actors: stage plays at the theaters and amphitheaters during show
     // hours — scripted scenes, monologues, premieres, troupe-join offers
     // and coin tips ("use coins on actor"). No overlap with street
     // performers (squares), bards (great halls) or inn bards. Data tier,
     // zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickActors(this, Date.now(), desync);
     } catch (error) {
       this.log("actors (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.actors", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Painters: portraitists, landscapists, muralists and miniaturists
     // visibly work the kingdom studios and galleries during daylight
     // hours — scripted easel work, painting hawking, masterpiece
@@ -2048,11 +2124,15 @@ class CitizenDirector {
     // painter"). No overlap with street performers (squares), bards
     // (music), actors (theaters) or inn bards. Data tier, zero LLM,
     // per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickPainters(this, Date.now(), desync);
     } catch (error) {
       this.log("painters (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.painters", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Sculptors: stone carvers, wood carvers, metalworkers and restorers
     // visibly work the kingdom quarries, foundries and studios during
     // daylight hours — scripted carving work, sculpture hawking,
@@ -2061,11 +2141,15 @@ class CitizenDirector {
     // sculptor"). No overlap with street performers (squares), bards
     // (music), actors (theaters), inn bards, or painters (studios).
     // Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickSculptors(this, Date.now(), desync);
     } catch (error) {
       this.log("sculptors (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.sculptors", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Architects: master architects, draftsmen, surveyors and inspectors
     // visibly work the kingdom drafting studios during daylight hours —
     // scripted drafting/survey work, blueprint hawking, grand-design
@@ -2074,11 +2158,15 @@ class CitizenDirector {
     // projects), sculptors (carving), painters (studios), actors
     // (theaters), bards (music), street performers (squares) or inn bards.
     // Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickArchitects(this, Date.now(), desync);
     } catch (error) {
       this.log("architects (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.architects", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Citizen draftfolk (CitizenArchitects2): amateur rough-drafters,
     // plan-copyists and corner-advisers under the professional drafting
     // trade — corner draft boards (not the pro studios), daily rough
@@ -2103,11 +2191,15 @@ class CitizenDirector {
     // (studios), actors (theaters), bards (music), street performers
     // (squares) or inn bards. Data tier, zero LLM, per-citizen try/catch
     // inside.
+    tPhase0 = Date.now();
     try {
       tickEngineers(this, Date.now(), desync);
     } catch (error) {
       this.log("engineers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.engineers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Engineerfolk: amateur engineering-life folk under the professional
     // engineers — tinkers mend kettles/locks on the street corners,
     // grease-monkeys run errands for the workshops, rivet-hands do grunt
@@ -2134,11 +2226,15 @@ class CitizenDirector {
     // builders (construction), sculptors (carving), painters (studios),
     // actors (theaters), bards (music), street performers (squares) or inn
     // bards. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickClockmakers(this, Date.now(), desync);
     } catch (error) {
       this.log("clockmakers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.clockmakers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Glassblowers: vessel makers, window makers, ornament makers and
     // furnace tenders visibly work the kingdom glasshouses during furnace
     // hours — scripted glassblowing emotes, glassware hawking, masterwork
@@ -2151,11 +2247,15 @@ class CitizenDirector {
     // (carving), painters (studios), actors (theaters), bards (music),
     // street performers (squares) or inn bards. Data tier, zero LLM,
     // per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickGlassblowers(this, Date.now(), desync);
     } catch (error) {
       this.log("glassblowers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.glassblowers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Potters: vessel makers, tile makers, brick makers and potters'
     // artists visibly work the kingdom kilns during kiln hours — scripted
     // pottery-wheel/kiln emotes, clayware hawking, masterwork unveilings,
@@ -2168,61 +2268,85 @@ class CitizenDirector {
     // (construction), sculptors (carving), painters (studios), actors
     // (theaters), bards (music), street performers (squares) or inn
     // bards. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickPotters(this, Date.now(), desync);
     } catch (error) {
       this.log("potters (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.potters", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Guard patrols: the visible watch — checkpoint check-ins, disturbance
     // response, escort offers and follows, night-watch torch announcements,
     // and reassured citizens near patrolling guards. Data tier, zero LLM,
     // per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenGuardPatrols.tickGuardPatrols(this, Date.now());
     } catch (error) {
       this.log("guard patrols (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.guardpatrols", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Guards (deeper watch systems): guard types (city-watch, gate-guard,
     // royal-guard, investigator), shift-change announcements, gate
     // challenges for wanted/notorious players, investigator cold cases,
     // scripted arrests, and watch-volunteer welcomes. Data tier, zero LLM,
     // per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenGuards.tickGuards(this, Date.now());
     } catch (error) {
       this.log("guards (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.guards", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Judges: magistrates, high judges, arbiters and bailiffs hold court
     // (scripted trials from the day's docket during 09:00-16:00, summons,
     // arbitration offers, fine ledger, appeals) — only while a real player
     // is around to see them. Data tier, zero LLM, per-citizen try/catch
     // inside. Reads the live CitizenGuards wanted list.
+    tPhase0 = Date.now();
     try {
       CitizenJudges.tickJudges(this, Date.now());
     } catch (error) {
       this.log("judges (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.judges", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Tax collectors: assessors, collectors, auditors and enforcers work
     // collection rounds (08:00-18:00), assess property, audit players and
     // seize goods — only while a real player is around to see them. Data
     // tier, zero LLM, per-citizen try/catch inside. Writes evasion
     // penalties through the real CitizenJudges fine ledger.
+    tPhase0 = Date.now();
     try {
       CitizenTaxCollectors.tickTaxCollectors(this, Date.now());
     } catch (error) {
       this.log("taxcollectors (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.taxcollectors", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Messengers: couriers, heralds, runners and postmasters carry letters,
     // deliver packages, proclaim decrees/events/warnings and run post
     // offices (scripted delivery fanfare, proclamations seeded into
     // CitizenRumors, newspaper echo lines, player letter ledger) — only
     // while a real player is around to see them. Data tier, zero LLM,
     // per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenMessengers.tickMessengers(this, Date.now());
     } catch (error) {
       this.log("messengers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.messengers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Runnerfolk (CitizenMessengers2): amateur word-carriers under the
     // official post — gossip-carriers, word-runners and board-runners with
     // post corners cross-read from the master post offices and gossip lines
@@ -2242,11 +2366,15 @@ class CitizenDirector {
     // while a real player is around to see them. Data tier, zero LLM,
     // per-citizen try/catch inside. Reads the real CitizenExplorers
     // discoveries and CitizenSailors ports.
+    tPhase0 = Date.now();
     try {
       CitizenCartographers.tickCartographers(this, Date.now());
     } catch (error) {
       this.log("cartographers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.cartographers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Citizen mapfolk (CitizenCartographers2): amateur map-sketchers,
     // chart-hawkers and rough-drafters under the professional chart houses —
     // corner kiosks (not the pro studios), daily rough sketches (never fine
@@ -2266,41 +2394,57 @@ class CitizenDirector {
     // announcements, loan offers and collections, daily audits) — only
     // while a real player is around to see them. Data tier, zero LLM,
     // per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenBankers.tickBankers(this, Date.now());
     } catch (error) {
       this.log("bankers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.bankers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Innkeepers: hosts, cooks, stablehands and bards visibly run the inns
     // (scripted welcomes and room offers, meal hawking from the real
     // CitizenCooks tables, stable offers, evening bard verses, inn rumors
     // seeded into CitizenRumors) — only while a real player is around to
     // see them. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenInnkeepers.tickInnkeepers(this, Date.now(), desync);
     } catch (error) {
       this.log("innkeepers (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.innkeepers", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Stablehands: grooms, trainers, breeders and veterinarians visibly
     // run the stable yards (scripted grooming/training/breeding/vet lines,
     // foaling announcements, rare-breed hawking, stabling and riding-lesson
     // offers) — only while a real player is around to see them. Data tier,
     // zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenStablehands.tickStablehands(this, Date.now(), desync);
     } catch (error) {
       this.log("stablehands (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.stablehands", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Librarians: archivists, researchers, scribes and storytellers visibly
     // keep the kingdom libraries (scripted shelving/study/copying emotes,
     // service offers, rare-tome unveilings, evening tales, borrowing and
     // donations through a data-tier ledger) — only while a real player is
     // around to see them. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenLibrarians.tickLibrarians(this, Date.now());
     } catch (error) {
       this.log("librarians (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.librarians", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Citizen bookfolk (CitizenLibrarians2): amateur reading-room helpers,
     // pamphlet-sellers, story-circle minders and book-swappers under the
     // professional libraries — street reading spots (not the pro
@@ -2322,80 +2466,116 @@ class CitizenDirector {
     // the recently dead, wedding-officiant offers) — only while a real
     // player is around to see them. Data tier, zero LLM, per-citizen
     // try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenPriests.tickPriests(this, Date.now(), desync);
     } catch (error) {
       this.log("priests (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.priests", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Caravan shouts: muster/departure/arrival announcements and
     // guard/trader invites, only where a real player can see them.
     // Data tier, zero LLM, per-caravan try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickCaravanShouts(this, Date.now());
     } catch (error) {
       this.log("caravan shouts (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.caravanshouts", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Diplomat shouts: departure/return announcements at the home court
     // anchor and escort invitations to nearby real players, only where a
     // real player can see them. Data tier, zero LLM, per-mission
     // try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickDiplomatShouts(this, Date.now());
     } catch (error) {
       this.log("diplomat shouts (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.diplomatshouts", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Spy shouts: spymaster-handlers whisper recruitment/dossier offers and
     // informants whisper gathered intel to nearby real players, only where a
     // real player can hear. Asset wage payouts go out whenever an asset is
     // online. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickSpyShouts(this, Date.now());
     } catch (error) {
       this.log("spy shouts (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.spyshouts", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Personal companion invites: citizens invite nearby players on 1-on-1
     // outings (fishing, dungeon, walk, tavern) and remember yes/no.
     // Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenCompanions.tickCompanions(this, Date.now());
     } catch (error) {
       this.log("companions (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.companions", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Citizen-initiated guild invites: guild officer/founder citizens who
     // are friends with a nearby real player invite them to their guild via
     // the existing guild registry; outcomes recorded in CitizenMemory with
     // a 7-day no-re-ask after a decline. Data tier, zero LLM.
+    tPhase0 = Date.now();
     try {
       CitizenGuildInvites.tickGuildInvites(this, Date.now());
     } catch (error) {
       this.log("guild invites (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.guildinvites", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Master-apprentice life: apprentices follow their masters and the
     // pair exchange scripted trade chatter — only while a real player is
     // around to overhear. Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenApprentices.tickApprenticeLife(this, Date.now());
     } catch (error) {
       this.log("apprentices (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.apprentices", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Retirement: elders (60+) hold a one-time retirement ceremony, then
     // tell stories, share wisdom, and receive deference from younger
     // citizens — only while a real player is around to witness. Data tier,
     // zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       CitizenRetirement.tickRetirement(this, Date.now(), desync);
     } catch (error) {
       this.log("retirement (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.retirement", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Funerals (rites): the visible ceremony for the recently dead —
     // eulogist and mourners gather, grief lines, memorial visits, and
     // remembrance stories — only while a real player is around to witness.
     // Data tier, zero LLM, per-citizen try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickFuneralRites(this, Date.now(), desync);
     } catch (error) {
       this.log("funerals (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.funerals", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // New arrivals: announce immigrants where real players can hear.
     // The data tick stashed them on _pendingArrivals; this is the visible half.
     try {
@@ -2411,18 +2591,26 @@ class CitizenDirector {
     // headline and hands nearby real players a copy of the paper (opens the
     // heraldic overlay, once per edition per player). Data tier, zero LLM,
     // per-crier try/catch inside.
+    tPhase0 = Date.now();
     try {
       tickCrier(this, Date.now());
     } catch (error) {
       this.log("crier (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.crier", Date.now() - tPhase0, materializedCount);
+    } catch {}
     // Scholar lectures and studying aloud: visible only near real players,
     // desync-spread across the tick cycle. Data tier, zero LLM.
+    tPhase0 = Date.now();
     try {
       CitizenScholars.tickLectures(this, Date.now(), desync);
     } catch (error) {
       this.log("scholars (proximity) failed", { error: String(error?.message ?? error) });
     }
+    try {
+      TickTiming.record("director.tickProximity.scholars", Date.now() - tPhase0, materializedCount);
+    } catch {}
   }
 
   /**
