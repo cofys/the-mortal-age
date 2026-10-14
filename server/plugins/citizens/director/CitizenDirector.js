@@ -2426,6 +2426,15 @@ class CitizenDirector {
     if (bot.getMovementQueue?.()?.size?.() > 0) return;
     const req = peekMovementRequest(bot);
     if (req) {
+      // Honor the navigator's no-path backoff (mirrors BotBrain): a failed
+      // route search stamps nextDispatchAtMs, and re-dispatching before it
+      // expires just churns expensive A* searches inside the 600ms-budget
+      // proximity tick. The brain owns the retry; this safety net only
+      // handles requests nothing has dispatched yet.
+      const nextAt = Number(req.nextDispatchAtMs ?? 0);
+      if (Number.isFinite(nextAt) && nextAt > Date.now()) {
+        return;
+      }
       try {
         const result = dispatchMovementRequest(bot, req);
         if (result?.hasRoute === true) clearMovementRequest(bot);
