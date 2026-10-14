@@ -293,7 +293,26 @@ function dayNumber(nowMs) {
  * stable across restarts, zero storage. Excludes street performers, bards,
  * and inn bards so no citizen belongs to two performer systems.
  */
+// Profession-type memoization (perf): the exclusion chain below runs per citizen
+// per proximity tick (~3k roster); types are deterministic per username, so cache.
+const _typeCache = new Map(); // normName -> type|null
+const _TYPE_CACHE_MAX = 10000;
+function memoizedTypeOf(name, compute) {
+  if (_typeCache.has(name)) return _typeCache.get(name);
+  const result = compute();
+  if (_typeCache.size >= _TYPE_CACHE_MAX) _typeCache.delete(_typeCache.keys().next().value);
+  _typeCache.set(name, result);
+  return result;
+}
+
+/** Cached profession-type lookup (see computeActorTypeOf for the exclusion chain). */
 function actorTypeOf(record) {
+  const name = normalizeName(record?.username);
+  if (!name) return null;
+  return memoizedTypeOf(name, () => computeActorTypeOf(record));
+}
+
+function computeActorTypeOf(record) {
   try {
     const role = record?.role ?? record?.attributes?.role;
     if (role && role !== "commoner" && role !== "COMMONER") return null;

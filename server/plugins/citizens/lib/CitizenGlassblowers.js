@@ -50,7 +50,7 @@ const _sculptors = safeRequire("./CitizenSculptors");
 // Memoization: type checks are pure (deterministic from username), so cache
 // per-username results. The roster is bounded (~170), so the cache stays small.
 const _typeCache = new Map(); // normName -> type|null
-const _TYPE_CACHE_MAX = 1000;
+const _TYPE_CACHE_MAX = 10000;
 function memoizedTypeOf(name, compute) {
   if (_typeCache.has(name)) return _typeCache.get(name);
   const result = compute();
