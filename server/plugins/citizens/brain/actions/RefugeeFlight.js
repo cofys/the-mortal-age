@@ -16,14 +16,14 @@
  * This action only walks and talks.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
 
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { siteTile } = require("../CitizenSites");
 const {
   ATTR_CITIZEN_PERSONALITY,

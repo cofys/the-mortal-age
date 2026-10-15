@@ -25,10 +25,10 @@
  * the brain.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { siteTile, kingdomIdOf, siteTileByKingdom } = require("../CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
 const {

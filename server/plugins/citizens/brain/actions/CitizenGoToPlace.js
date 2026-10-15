@@ -13,11 +13,11 @@
  * AT the place. Fails (brain re-picks) if there's no place or they're stuck.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { pickPlace, GATHER_PLACES, kingdomIdOf } = require("../CitizenSites");
 const { agentRng, personalSpot } = require("../../lib/humanizer");
 const SlotCapacity = require("../CitizenSlotCapacity");
@@ -58,7 +58,7 @@ function miningPlugin() {
 }
 function objectCatalog() {
   try {
-    return require("../../../bots/brain/BotObjectCatalog");
+    return require("../../../bots/brain/ObjectCatalog.PlayerBots.js");
   } catch {
     return null;
   }

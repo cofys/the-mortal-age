@@ -85,7 +85,7 @@ function defaultConstructionMock(level = 1) {
 
 function stubEngineModules() {
   const stubs = {
-    "../../../bots/brain/ActionState": require("../../../bots/brain/ActionState"),
+    "../../../bots/brain/ActionState": require("../../../bots/brain/ActionState.PlayerBots.js"),
     "../../../bots/behaviours/navigation/BotNavigation": {
       requestMovement: (player, x, y, opts) => {
         moveRequests.push({ player, x, y, opts });

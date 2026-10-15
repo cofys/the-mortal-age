@@ -9,7 +9,7 @@
  * registerBotConditionKind). No existing bot brain files are edited.
  */
 
-const registryModule = require("../../bots/brain/BotActivityRegistry");
+const registryModule = require("../../bots/brain/ActivityRegistry.PlayerBots.js");
 const {
   registerBotActionType,
   registerBotConditionKind,

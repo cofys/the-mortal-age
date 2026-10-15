@@ -27,22 +27,22 @@ const { sayPublic } = require("../chat/CitizenSayPublic");
 
 const {
   createBotPlayer,
-} = require("../../bots/behaviours/spawn/BotPlayerFactory");
+} = require("../../bots/behaviours/spawn/PlayerFactory.PlayerBots.js");
 const {
   createInitialState,
   resetMovementState,
-} = require("../../bots/behaviours/state/PlayerBotState");
-const { attachBrain } = require("../../bots/brain/attachBrain");
-const { startActivity } = require("../../bots/brain/BrainActivities");
-const { getActiveBotRuntime } = require("../../bots/runtime/BotRuntimeRegistry");
+} = require("../../bots/behaviours/state/State.PlayerBots.js");
+const { attachBrain } = require("../../bots/brain/AttachBrain.PlayerBots.js");
+const { startActivity } = require("../../bots/brain/BrainActivities.PlayerBots.js");
+const { getActiveBotRuntime } = require("../../bots/runtime/RuntimeRegistry.PlayerBots.js");
 // Perf (#11): hoisted out of the tickProximity hot path (was require() per 10s tick).
 const {
   peekMovementRequest,
   dispatchMovementRequest,
   requestMovement,
   clearMovementRequest,
-} = require("../../bots/behaviours/navigation/BotNavigation");
-const { ATTR_SKIP_PERSISTENCE } = require("../../bots/runtime/BotPersistenceConstants");
+} = require("../../bots/behaviours/navigation/Navigation.PlayerBots.js");
+const { ATTR_SKIP_PERSISTENCE } = require("../../bots/runtime/PersistenceConstants.PlayerBots.js");
 const { agentRng, noisyTile } = require("../lib/humanizer");
 const { generatePersonality } = require("../lib/personalities");
 const {

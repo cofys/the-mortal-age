@@ -68,7 +68,7 @@ function miningPlugin() {
 }
 function objectCatalog() {
   try {
-    return require("../../bots/brain/BotObjectCatalog");
+    return require("../../bots/brain/ObjectCatalog.PlayerBots.js");
   } catch {
     return null;
   }

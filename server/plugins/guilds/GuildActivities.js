@@ -61,7 +61,7 @@ function pickOne(rng, arr) {
 
 function requestMovement(bot, x, y, z) {
   try {
-    const { requestMovement: rm } = require("../bots/behaviours/navigation/BotNavigation");
+    const { requestMovement: rm } = require("../bots/behaviours/navigation/Navigation.PlayerBots.js");
     rm(bot, x, y, { reason: "guild_outing", basicPather: true, z: z ?? 0 });
     return true;
   } catch {

@@ -107,7 +107,7 @@ function isMoving(bot) {
 
 function moveBot(bot, tile, reason) {
   try {
-    const { requestMovement } = require("../../bots/behaviours/navigation/BotNavigation");
+    const { requestMovement } = require("../../bots/behaviours/navigation/Navigation.PlayerBots.js");
     requestMovement(bot, tile.x, tile.y, { reason, basicPather: true, z: tile.z ?? 0 });
     return true;
   } catch {

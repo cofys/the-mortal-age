@@ -63,7 +63,7 @@
  * unit-testable in plain node.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
 const { agentRng } = require("../../lib/humanizer");
 
@@ -75,7 +75,7 @@ function nav() {
   if (!navigationModule) {
     try {
       navigationModule =
-        require("../../../bots/behaviours/navigation/BotNavigation");
+        require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
     } catch {
       navigationModule = {};
     }
@@ -737,7 +737,7 @@ function ensureSupplies(bot, world) {
   }
   if (!doseId) return null;
   try {
-    const { createBankAction } = require("../../../bots/brain/actions/Bank");
+    const { createBankAction } = require("../../../bots/brain/actions/Bank.PlayerBots.js");
     return createBankAction({ withdraw: [{ item: doseId, amount: 2 }] }, world);
   } catch {
     return null;

@@ -42,12 +42,12 @@
  * object comes from the live world.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
   clearMovementRequest,
   approachObject,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
 const { siteTile } = require("../CitizenSites");
@@ -122,7 +122,7 @@ function woodcuttingPlugin() {
 
 function objectCatalog() {
   try {
-    return require("../../../bots/brain/BotObjectCatalog");
+    return require("../../../bots/brain/ObjectCatalog.PlayerBots.js");
   } catch {
     return null;
   }

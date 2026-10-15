@@ -61,8 +61,8 @@ function stubTypeScriptModules() {
 stubTypeScriptModules();
 
 // REAL modules — not mocks
-const { attachBrain } = require("../../bots/brain/attachBrain");
-const { BotBrain } = require("../../bots/brain/BotBrain");
+const { attachBrain } = require("../../bots/brain/AttachBrain.PlayerBots.js");
+const { BotBrain } = require("../../bots/brain/Brain.PlayerBots.js");
 const { sayPublic, resetForTests: resetSayPublic } = require("../chat/CitizenSayPublic");
 
 /**

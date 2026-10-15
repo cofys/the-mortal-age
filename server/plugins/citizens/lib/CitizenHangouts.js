@@ -165,7 +165,7 @@ function journalEvent(citizenName, text, kind) {
 
 function requestMovement(bot, x, y, z) {
   try {
-    const { requestMovement: rm } = require("../../bots/behaviours/navigation/BotNavigation");
+    const { requestMovement: rm } = require("../../bots/behaviours/navigation/Navigation.PlayerBots.js");
     rm(bot, x, y, { reason: "citizen_hangout", basicPather: true, z: z ?? 0 });
     return true;
   } catch {

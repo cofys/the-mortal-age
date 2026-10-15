@@ -18,14 +18,14 @@
  * where players can hear it.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
 
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { Item } = require("../../../../src/main/typescript/elvarg/game/model/Item");
 const { ItemIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
 const { isKingdomAtWar } = require("../../CitizenEvents");

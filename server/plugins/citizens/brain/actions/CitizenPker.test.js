@@ -115,7 +115,7 @@ Module._load = function (request, parent, isMain) {
 
 const { createCitizenPkerAction } = require("./CitizenPker.js");
 // Real ActionState: reach the per-player session state to force expiry.
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 
 // --- helpers ------------------------------------------------------------------
 

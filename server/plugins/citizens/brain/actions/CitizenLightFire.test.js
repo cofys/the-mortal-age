@@ -29,7 +29,7 @@ let mockFiremaking = null;
 
 function stubEngineModules() {
   const stubs = {
-    "../../../bots/brain/ActionState": require("../../../bots/brain/ActionState"),
+    "../../../bots/brain/ActionState": require("../../../bots/brain/ActionState.PlayerBots.js"),
     "../../../bots/behaviours/navigation/BotNavigation": {
       requestMovement: (player, x, y, opts) => {
         movementCalls.push({ player, x, y, opts });

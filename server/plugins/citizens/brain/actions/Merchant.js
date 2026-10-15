@@ -12,11 +12,11 @@
  * customer side stays abstract. A future shop-front can replace sellTick.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { Bank } = require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank");
 const { Item } = require("../../../../src/main/typescript/elvarg/game/model/Item");
 const { ItemIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");

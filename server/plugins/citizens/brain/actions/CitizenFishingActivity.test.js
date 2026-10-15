@@ -113,7 +113,7 @@ describe("citizen_fish activity", () => {
   });
 
   test("fish action type resolves through the shared registry", () => {
-    const { createFishAction } = require("../../../bots/brain/actions/Fish");
+    const { createFishAction } = require("../../../bots/brain/actions/Fish.PlayerBots.js");
     assert.equal(typeof createFishAction, "function");
     // Unknown tools must throw at activity-compile time, not at runtime.
     assert.throws(() => createFishAction({ tool: "NOPE" }, {}), /unknown fishing tool/);

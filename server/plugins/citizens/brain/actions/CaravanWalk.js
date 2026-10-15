@@ -12,11 +12,11 @@
  * tag is cleared (arrival, or the run failing).
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { ATTR_CARAVAN_DUTY } = require("../../constants");
 const SlotCapacity = require("../CitizenSlotCapacity");
 const { personalSpot } = require("../../lib/humanizer");

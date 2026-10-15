@@ -16,11 +16,11 @@
  * Non-repeat: it completes and the brain re-decides.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { siteTile } = require("../CitizenSites");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
 const {

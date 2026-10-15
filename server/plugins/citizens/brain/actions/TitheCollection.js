@@ -16,8 +16,8 @@
  * by BloodTithe.Kingdoms) — never hashes, never invented amounts.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
-const { requestMovement } = require("../../../bots/behaviours/navigation/BotNavigation");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
+const { requestMovement } = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const {
   agentRng,
   logNormalJitter,

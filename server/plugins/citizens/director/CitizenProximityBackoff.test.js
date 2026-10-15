@@ -189,10 +189,10 @@ const {
   peekMovementRequest,
   dispatchMovementRequest,
   clearMovementRequest,
-} = require("../../bots/behaviours/navigation/BotNavigation");
+} = require("../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const {
   setActiveBotRuntime,
-} = require("../../bots/runtime/BotRuntimeRegistry");
+} = require("../../bots/runtime/RuntimeRegistry.PlayerBots.js");
 
 // ---------------------------------------------------------------------------
 // Fake world: 60 online citizen bots clustered around a fake player.

@@ -23,11 +23,11 @@
  * in the brain.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { siteTile, kingdomIdOf } = require("../CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
 const {

@@ -222,7 +222,7 @@ function faceToward(bot, targetTile) {
 
 function requestMovement(bot, x, y, z, reason) {
   try {
-    const { requestMovement: rm } = require("../../bots/behaviours/navigation/BotNavigation");
+    const { requestMovement: rm } = require("../../bots/behaviours/navigation/Navigation.PlayerBots.js");
     rm(bot, x, y, { reason: reason ?? "citizen_alive", basicPather: true, z: z ?? 0 });
     return true;
   } catch {

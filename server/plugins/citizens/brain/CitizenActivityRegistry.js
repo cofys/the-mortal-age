@@ -13,7 +13,7 @@ const fs = require("fs");
 const {
   appendActivityDefinitions,
   getBotActivityRegistries,
-} = require("../../bots/brain/BotActivityRegistry");
+} = require("../../bots/brain/ActivityRegistry.PlayerBots.js");
 
 const DEFINITIONS_PATH = path.join(__dirname, "..", "data", "citizen-activities.json");
 

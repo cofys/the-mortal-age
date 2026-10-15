@@ -369,7 +369,7 @@ function pickNotableDrop(drops, isLoggedFn) {
 
 function clogIsLogged(itemId) {
   try {
-    return require("../collectionlog/ClogData").isLogged(itemId) === true;
+    return require("../achievements/collectionlog/Data.CollectionLog.js").isLogged(itemId) === true;
   } catch {
     return false;
   }

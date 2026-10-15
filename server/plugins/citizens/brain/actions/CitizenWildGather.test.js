@@ -46,7 +46,7 @@ const saidLines = [];
 function stubEngineModules() {
   const SkillStub = { MINING: "MINING", WOODCUTTING: "WOODCUTTING" };
   const stubs = {
-    "../../../bots/brain/ActionState": require("../../../bots/brain/ActionState"),
+    "../../../bots/brain/ActionState": require("../../../bots/brain/ActionState.PlayerBots.js"),
     "../../../bots/behaviours/navigation/BotNavigation": {
       requestMovement: (player, x, y, opts) => {
         movementCalls.push({ fn: "requestMovement", x, y, opts });

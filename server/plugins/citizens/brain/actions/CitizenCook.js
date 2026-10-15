@@ -35,13 +35,13 @@
  * the brain.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
-const { createBankAction } = require("../../../bots/brain/actions/Bank");
-const { resolveCatalogObjectIds } = require("../../../bots/brain/BotObjectCatalog");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
+const { createBankAction } = require("../../../bots/brain/actions/Bank.PlayerBots.js");
+const { resolveCatalogObjectIds } = require("../../../bots/brain/ObjectCatalog.PlayerBots.js");
 const { siteTile, kingdomIdOf } = require("../CitizenSites");
 const { ATTR_CITIZEN_PERSONALITY } = require("../../constants");
 const {

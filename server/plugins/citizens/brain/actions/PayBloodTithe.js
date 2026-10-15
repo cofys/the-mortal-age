@@ -14,8 +14,8 @@
  * ledger, the treasury split, and the events stay single-sourced.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
-const { requestMovement } = require("../../../bots/behaviours/navigation/BotNavigation");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
+const { requestMovement } = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const {
   agentRng,
   logNormalJitter,

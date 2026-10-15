@@ -36,11 +36,11 @@
  * a stable per-username hash (~5%) otherwise.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const { hashSeed, agentRng, personalSpot } = require("../../lib/humanizer");
 const { sayPublic } = require("../../chat/CitizenSayPublic");
 const { voiceFor, voiceLine } = require("../../lib/citizenVoice");

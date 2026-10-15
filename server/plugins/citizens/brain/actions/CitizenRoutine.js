@@ -12,20 +12,20 @@
  * an internal bank trip, then goes back to work.
  */
 
-const { playerState } = require("../../../bots/brain/ActionState");
+const { playerState } = require("../../../bots/brain/ActionState.PlayerBots.js");
 const {
   requestMovement,
   clearMovementRequest,
-} = require("../../../bots/behaviours/navigation/BotNavigation");
+} = require("../../../bots/behaviours/navigation/Navigation.PlayerBots.js");
 const {
   createInteractObjectAction,
-} = require("../../../bots/brain/actions/InteractObject");
+} = require("../../../bots/brain/actions/InteractObject.PlayerBots.js");
 // Jon 2026-10-13 — no fake skilling: routine fishers click real fishing spots
 // through the same brain action the citizen_fish activity uses. The Fishing
 // plugin owns animation, catches, and XP from the real click.
-const { createFishAction } = require("../../../bots/brain/actions/Fish");
+const { createFishAction } = require("../../../bots/brain/actions/Fish.PlayerBots.js");
 const { getReferencePrice } = require("../../../economy/Prices.Economy");
-const { createBankAction } = require("../../../bots/brain/actions/Bank");
+const { createBankAction } = require("../../../bots/brain/actions/Bank.PlayerBots.js");
 const { createIdleSocialAction } = require("./IdleSocial");
 const { siteTile, workSite, dockSite, kingdomIdOf, siteTileBySettlement, workSiteBySettlement, siteTileByTown, workSiteByTown, fishingBiasByTown, pickPlace } = require("../CitizenSites");
 const { isKingdomAtWar } = require("../../CitizenEvents");
