@@ -18,6 +18,11 @@ export class GraphicsDefaults extends Type {
     mapDots: number = -1;
     scrollBars: number = -1;
     modIcons: number = -1;
+    /**
+     * The helm's heading indicator models (graphics defaults opcode 4/5): the white arrow that
+     * follows the mouse, then the yellow one shown where a heading was set.
+     */
+    headingIndicatorModels: [number, number] = [-1, -1];
 
     static load(cacheInfo: CacheInfo, fileSystem: CacheSystem): GraphicsDefaults {
         if (
@@ -89,13 +94,11 @@ export class GraphicsDefaults extends Type {
                 for (let i = 0; i < 15; i++) buffer.readMedium();
                 break;
             case 4:
-                // Heading indicator models.
-                buffer.readBigSmart();
-                buffer.readBigSmart();
+                this.headingIndicatorModels = [buffer.readBigSmart(), buffer.readBigSmart()];
                 break;
             case 5:
-                buffer.readInt();
-                buffer.readInt();
+                // The same pair as ints, for model ids too large for a big smart.
+                this.headingIndicatorModels = [buffer.readInt(), buffer.readInt()];
                 break;
         }
     }

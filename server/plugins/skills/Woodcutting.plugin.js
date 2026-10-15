@@ -1165,11 +1165,16 @@ function requestedChop(event) {
   if (tree) event.handled = startWoodcutting(event.player, event.object, tree, activeSessionsRef);
 }
 
+function requestedAxe(event) {
+  event.axe = findBestUsableAxe(event.player);
+}
+
 module.exports = {
   name: "Woodcutting",
   register(api) {
     pluginApi = api;
     api.onCustomEvent("woodcutting:chop", requestedChop);
+    api.onCustomEvent("woodcutting:axe", requestedAxe);
     TaskManager = api.getTaskManager();
     ObjectManager = api.getObjectManager();
     ItemOnGroundManager = api.getItemOnGroundManager();

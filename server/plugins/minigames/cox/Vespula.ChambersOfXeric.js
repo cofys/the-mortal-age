@@ -36,9 +36,9 @@
  *   draining 1 every 4 ticks; landed Vespula staying down 33 ticks (~20 seconds).
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
-const Monsters = require("./CoxMonsters");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
+const Monsters = require("./Monsters.ChambersOfXeric");
 
 const NPC = { VESPULA: 7530, ENRAGED: 7531, LANDED: 7532, PORTAL: 7533, GRUB: 7534, STUNG: 7535, STUNG_LOW: 7536, BURST: 7537, SOLDIER: 7538, SOLDIER_LANDED: 7539 };
 const OBJECT = { TENDRIL: 30024, ROOT: 30068, PICKED_ROOT: 30069, BOIL: 30070, BURST_BOIL: 30071, PILLARS: 30072, GONE_PILLARS: 30073 };

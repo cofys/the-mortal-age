@@ -7,11 +7,11 @@
 module.exports = {
   name: "DoomOfMokhaiotl",
   register(api) {
-    require("./doom/Lobby.Doom")(api);
-    require("./doom/Delve.Doom")(api);
-    require("./doom/Rewards.Doom")(api);
-    require("./doom/Scoreboard.Doom")(api);
-    require("./doom/Commands.Doom")(api);
-    require("./doom/CombatAchievements.Doom")(api);
+    require("./doom/Lobby.DoomOfMokhaiotl")(api);
+    require("./doom/Delve.DoomOfMokhaiotl")(api);
+    require("./doom/Rewards.DoomOfMokhaiotl")(api);
+    require("./doom/Scoreboard.DoomOfMokhaiotl")(api);
+    require("./doom/Commands.DoomOfMokhaiotl")(api);
+    require("./doom/CombatAchievements.DoomOfMokhaiotl")(api);
   },
 };

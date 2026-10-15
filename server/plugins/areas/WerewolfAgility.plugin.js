@@ -1,6 +1,6 @@
 /**
  * The Werewolf Agility Course's surroundings (the course itself is
- * plugins/skills/agility/courses/Werewolf.js):
+ * plugins/skills/agility/courses/Werewolf.Agility.js):
  * - the trapdoor east of Canifis, opened and climbed down only with a ring of Charos worn, past
  *   its werewolf guard, and the ladder back up;
  * - the Agility Boss throwing the stick when a lap starts on the first stepping stone;

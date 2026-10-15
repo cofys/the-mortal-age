@@ -6,7 +6,7 @@ const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cach
 const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wilderness/Wilderness");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Flag } = require("../../src/main/typescript/elvarg/game/model/Flag");
-const { JEWELLERY, DEFAULT_WILDERNESS_LEVEL } = require("./jewellery/teleportJewellery");
+const { JEWELLERY, DEFAULT_WILDERNESS_LEVEL } = require("./Teleports.Jewellery");
 const QuestRuntime = require("../quests/QuestRuntime");
 
 /** Item param holding a worn item's first equipment option (RuneLite: OC_ITEM_OP1). */

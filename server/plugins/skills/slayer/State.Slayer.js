@@ -35,10 +35,12 @@ const PERSISTED_VARBITS = [
 ];
 
 let core = null;
+let pluginApi = null;
 let persistedIds = null;
 
 function init(api) {
   core = api.core;
+  pluginApi = api;
 }
 
 function varbitId(name) {
@@ -65,6 +67,7 @@ function varbit(player, name) {
 function setVarbit(player, name, value) {
   player.getPacketSender().sendVarbit(varbitId(name), value);
   save(player);
+  if (name === "slayer_points") pluginApi.emitCustomEvent("persistence:save", { player, reason: "slayer-points" });
 }
 
 function varp(player, name) {

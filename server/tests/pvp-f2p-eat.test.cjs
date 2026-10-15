@@ -19,7 +19,7 @@ before(async () => {
   });
 });
 
-const filename = path.resolve(__dirname, '../plugins/bots/behaviours/nodes/actions/EatFoodActionNode.js');
+const filename = path.resolve(__dirname, '../plugins/bots/behaviours/nodes/actions/EatFoodActionNode.PlayerBots.js');
 const localRequire = createRequire(filename);
 
 function loadNode() {
@@ -27,14 +27,14 @@ function loadNode() {
   vm.runInNewContext(fs.readFileSync(filename, 'utf8'), {
     module,
     require: (name) => {
-      if (name.endsWith('/PvpAssignment')) {
+      if (name.endsWith('/PvpAssignment.PlayerBots')) {
         return { getPvpProfile: () => ({ id: 'standard', foodCharges: 10, eatAtHpRatio: 0.45, comboEatChance: 0 }) };
       }
-      if (name.endsWith('/state/PlayerBotState')) return {
+      if (name.endsWith('/state/State.PlayerBots')) return {
         computeEatThreshold: (maxHp, ratio, f2p) =>
           f2p ? Math.min(24, Math.max(1, maxHp - 1)) : Math.max(1, Math.ceil(maxHp * ratio)),
       };
-      if (name.endsWith('/BotNodeContext')) return { resolveBotNodeContext: (ctx) => ctx };
+      if (name.endsWith('/NodeContext.PlayerBots')) return { resolveBotNodeContext: (ctx) => ctx };
       return localRequire(name);
     },
   }, { filename });

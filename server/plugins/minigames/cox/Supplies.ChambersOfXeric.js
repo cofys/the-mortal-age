@@ -18,8 +18,8 @@
  *   and for the 5 extra sips, points are halved.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 const FOOD_TIERS = [
   [20856, 20858, 20860, 20862, 20864, 20866, 20868],

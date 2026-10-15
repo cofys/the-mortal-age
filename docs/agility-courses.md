@@ -15,7 +15,7 @@ obstacles' XP once.
 ## Shayzien Agility Course (basic and advanced)
 
 - **Shared start:** the ladder, monkeybars and first tightrope belong to the basic course
-  (`ShayzienBasic.js`); the advanced course (`ShayzienAdvanced.js`) shares them through obstacle 3.
+  (`ShayzienBasic.Agility.js`); the advanced course (`ShayzienAdvanced.Agility.js`) shares them through obstacle 3.
 - **Levels and XP:** the Wiki since the 2024 rebalance: basic 1 (153.5 a lap), advanced 45 (507.5),
   and no obstacle fails. Both laps add up from the obstacles alone, with no lap bonus.
 - **Captured** (rsprox 1632, rev 226; the only recording): the ladder (reach up, on the platform a
@@ -34,8 +34,8 @@ obstacles' XP once.
 
 ## Colossal Wyrm Agility Course (basic and advanced)
 
-- **Files:** `ColossalWyrmBasic.js` and `ColossalWyrmAdvanced.js`, with their shared steps in
-  `ColossalWyrmSteps.js`. The advanced course shares the start ladder and first tightrope
+- **Files:** `ColossalWyrmBasic.Agility.js` and `ColossalWyrmAdvanced.Agility.js`, with their shared steps in
+  `ColossalWyrmSteps.Agility.js`. The advanced course shares the start ladder and first tightrope
   (`sharesWith`, through obstacle 2), and both end on the same zipline.
 - **Levels and XP:** 50 and 62, never failed. Per obstacle, the course page's tables since the 2026
   rework: basic 601.6 a lap, advanced 1053.6. (The page's text says 633 for basic, which its own
@@ -59,7 +59,7 @@ obstacles' XP once.
 
 ## Werewolf Agility Course
 
-- **Files:** the course is `Werewolf.js`; the trapdoor, the stick throw, the trainers' lines and
+- **Files:** the course is `Werewolf.Agility.js`; the trapdoor, the stick throw, the trainers' lines and
   the Talk-To variants are `plugins/areas/WerewolfAgility.plugin.js`, which reacts to the Agility
   plugin's `agility:obstacle-start` event.
 - **Access:** the trapdoor east of Canifis opens and is climbed down only with a ring of Charos

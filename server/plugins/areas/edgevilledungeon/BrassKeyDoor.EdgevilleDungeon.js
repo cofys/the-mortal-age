@@ -6,7 +6,7 @@
  *   steps through; two ticks after that the door is shut again.
  * The capture went in; the way out is assumed to be the same.
  */
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 const Common = require("./Common.EdgevilleDungeon");
 
 let core = null;

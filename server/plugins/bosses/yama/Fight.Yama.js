@@ -20,7 +20,7 @@ const Hazards = require("./Hazards.Yama");
 const Flares = require("./Flares.Yama");
 const Judge = require("./Judge.Yama");
 const PhaseThree = require("./PhaseThree.Yama");
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
 const SUCCESS_VARP = 4701;
 const BEST_TICKS_ATTRIBUTE = "yama:best-ticks";

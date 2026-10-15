@@ -51,6 +51,31 @@ export class LocAnimated {
         }
     }
 
+    /**
+     * A square's locs are rebuilt when one of its multilocs changes (a varbit the cache reads),
+     * but the animations on them go on: OSRS keeps a loc's animation object through its transform
+     * changes. Each rebuilt loc playing the same sequence on the same loc picks up where it was,
+     * instead of restarting (the Giants' Foundry crucible poured twice when it emptied mid-pour).
+     */
+    static carryOver(previous: readonly LocAnimated[], next: readonly LocAnimated[]): void {
+        if (previous.length === 0) return;
+        const byLoc = new Map<string, LocAnimated>();
+        for (const loc of previous) {
+            if (loc.seqType) byLoc.set(loc.key(), loc);
+        }
+        for (const loc of next) {
+            const old = byLoc.get(loc.key());
+            if (!old || old.seqType?.id !== loc.seqType?.id) continue;
+            loc.frame = old.frame;
+            loc.cycleStart = old.cycleStart;
+            loc.lastSoundFrame = old.lastSoundFrame;
+        }
+    }
+
+    private key(): string {
+        return `${this.id},${this.x},${this.y},${this.level},${this.rotation}`;
+    }
+
     getDrawRangeIndex(isAlpha: boolean, isInteract: boolean, isLod: boolean) {
         if (isInteract) {
             if (isLod) {

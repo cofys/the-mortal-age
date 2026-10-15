@@ -27,7 +27,6 @@ export type WorldGameframe = (typeof WORLD_GAMEFRAMES)[number];
 export interface WorldDefinitionData {
     spawn: WorldPosition;
     zones: WorldZone[];
-    disabledPlugins: string[];
     experienceMultiplier: number;
     /** Optional: when set, players are switched to this layout on login. */
     gameframe?: WorldGameframe;
@@ -35,6 +34,10 @@ export interface WorldDefinitionData {
     membersWorld: boolean;
     /** Per-plugin settings, read by PluginManager.getPluginConfig; carried for /api/world. */
     pluginConfig?: Record<string, unknown>;
+    /** Plugin name -> on/off over the plugin's own default, read by PluginManager; carried for /api/world. */
+    plugins?: Record<string, unknown>;
+    /** Older whole-list form of `plugins`, still read by PluginManager; carried for /api/world. */
+    disabledPlugins?: unknown;
 }
 
 export class WorldDefinitionValidationError extends Error {}
@@ -44,8 +47,8 @@ type JsonObject = Record<string, unknown>;
 
 /**
  * world.json with world.local.json layered over it: each top-level key there replaces
- * world.json's, except pluginConfig, which is merged key by key. Read by both the world
- * definition and PluginManager (disabledPlugins, pluginConfig).
+ * world.json's, except pluginConfig and plugins, which are merged key by key. Read by both
+ * the world definition and PluginManager (plugins, pluginConfig).
  */
 export function readWorldConfig(): JsonObject {
     // Resolved per call from the working directory, as PluginManager always did.
@@ -56,10 +59,12 @@ export function readWorldConfig(): JsonObject {
     if (!fs.existsSync(localFile)) return shipped;
     const local = object(JSON.parse(fs.readFileSync(localFile, "utf8")), "world.local.json");
     const merged: JsonObject = { ...shipped, ...local };
-    const shippedConfig = shipped.pluginConfig;
-    const localConfig = local.pluginConfig;
-    if (isPlainObject(shippedConfig) && isPlainObject(localConfig)) {
-        merged.pluginConfig = { ...shippedConfig, ...localConfig };
+    for (const key of ["pluginConfig", "plugins"]) {
+        const shippedValue = shipped[key];
+        const localValue = local[key];
+        if (isPlainObject(shippedValue) && isPlainObject(localValue)) {
+            merged[key] = { ...shippedValue, ...localValue };
+        }
     }
     return merged;
 }
@@ -162,11 +167,6 @@ export function parseWorldDefinition(value: unknown): WorldDefinitionData {
     if (!Array.isArray(world.zones)) {
         throw new WorldDefinitionValidationError("world.json zones must be an array");
     }
-    if (!Array.isArray(world.disabledPlugins) || world.disabledPlugins.some(
-        (pluginName) => typeof pluginName !== "string" || pluginName.trim().length === 0
-    )) {
-        throw new WorldDefinitionValidationError("world.json disabledPlugins must be a string[]");
-    }
     const experienceMultiplier = world.experienceMultiplier === undefined
         ? 1
         : positiveNumber(world, "experienceMultiplier", "world.json");
@@ -188,13 +188,15 @@ export function parseWorldDefinition(value: unknown): WorldDefinitionData {
     return {
         spawn,
         zones,
-        disabledPlugins: world.disabledPlugins.map((pluginName) => pluginName.trim()),
         experienceMultiplier,
         membersWorld,
         ...(world.gameframe !== undefined && { gameframe: world.gameframe as WorldGameframe }),
         // Malformed config is ignored here as in PluginManager.loadPluginConfig, not fatal.
         ...(world.pluginConfig && typeof world.pluginConfig === "object" && !Array.isArray(world.pluginConfig) &&
             { pluginConfig: world.pluginConfig as Record<string, unknown> }),
+        // Validated where they are read, by PluginManager.
+        ...(isPlainObject(world.plugins) && { plugins: world.plugins }),
+        ...(world.disabledPlugins !== undefined && { disabledPlugins: world.disabledPlugins }),
     };
 }
 
@@ -269,11 +271,12 @@ function copyWorldDefinition(): WorldDefinitionData {
     return {
         spawn: { ...definition.spawn },
         zones: definition.zones.map((zone) => ({ ...zone, tags: [...zone.tags] })),
-        disabledPlugins: [...definition.disabledPlugins],
         experienceMultiplier: definition.experienceMultiplier,
         membersWorld: definition.membersWorld,
         ...(definition.gameframe !== undefined && { gameframe: definition.gameframe }),
         ...(definition.pluginConfig !== undefined && { pluginConfig: structuredClone(definition.pluginConfig) }),
+        ...(definition.plugins !== undefined && { plugins: { ...definition.plugins } }),
+        ...(definition.disabledPlugins !== undefined && { disabledPlugins: structuredClone(definition.disabledPlugins) }),
     };
 }
 

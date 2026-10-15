@@ -554,8 +554,24 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   // Conditions
   // ==========================================================================
 
-  function answerCondition({ npcId, player, stepId }) {
+  function answerCondition({ npcId, player, stepId, text }) {
     if (!QUEST_NPC_IDS.has(npcId)) return null;
+    // The Sphinx replaces a lost catspeak amulet for a player with a cat. This
+    // condition belongs to her post-Icthlarin dialogue, not A Tail of Two Cats'
+    // own quest-stage variants, so answer it here for completed-prerequisite
+    // players as well as active DS2 players.
+    if (SPHINX_NPC_IDS.has(npcId) && /lost the amulet of catspeak/i.test(String(text ?? ""))) {
+      const hasAnyCatspeak = held(player, CATSPEAK_AMULET_ITEM_ID)
+        || held(player, CATSPEAK_AMULET_E_ITEM_ID)
+        || wearingCatspeak(player);
+      return isQuestComplete(player, PREREQUISITE_KEY) && hasCatFollower(player) && !hasAnyCatspeak;
+    }
+    if (SPHINX_NPC_IDS.has(npcId) && /catspeak amulet is not worn/i.test(String(text ?? ""))) {
+      return !wearingCatspeak(player);
+    }
+    if (SPHINX_NPC_IDS.has(npcId) && /catspeak amulet is worn/i.test(String(text ?? ""))) {
+      return wearingCatspeak(player);
+    }
     switch (stepId) {
       // Requirements, cat and catspeak amulet.
       case "pZkgC1":
@@ -728,13 +744,24 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   }
 
   function handleMessage(event) {
-    const { player, stepId } = event;
+    const { player, stepId, text } = event;
     const clean = CLEAN_MESSAGES.get(stepId);
     if (clean !== undefined) {
       event.handled = true;
       player.sendMessage(clean);
     }
     switch (stepId) {
+      case "vA_xBM":
+        // Canonical Sphinx transcript action: "The Sphinx hands you an amulet
+        // of catspeak." Keep the normal item recoverable after the prerequisite
+        // quest has been completed; never mint it from the DS2 quest handler.
+        event.handled = true;
+        if (giveItem(player, CATSPEAK_AMULET_ITEM_ID)) {
+          player.sendMessage(String(text ?? "The Sphinx hands you an amulet of catspeak."));
+        } else {
+          player.sendMessage("You need an open inventory slot before the Sphinx can give you an amulet.");
+        }
+        return;
       case "4OiD70":
         consumeAmuletOffer(player);
         return;

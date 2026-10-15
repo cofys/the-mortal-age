@@ -13,7 +13,8 @@ require("../plugins/skills/farming/Core.Farming").init({ core });
 const Data = require("../plugins/skills/farming/Data.Farming");
 const Patches = require("../plugins/skills/farming/Patches.Farming");
 const Tithe = require("../plugins/skills/farming/Tithe.Farming");
-const ClogData = require("../plugins/collectionlog/ClogData");
+const ClogData = require("../plugins/achievements/collectionlog/Data.CollectionLog");
+ClogData({ core: { CacheDefinitions: require("../dist/game/cache/CacheDefinitions").CacheDefinitions } });
 
 let choices = [];
 let obtained = [];

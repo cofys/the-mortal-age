@@ -16,6 +16,71 @@ test("crater bounds cover the arena but not the wall line", () => {
   assert.equal(Area.insideCrater(null), false);
 });
 
+test("leaving the crater removes owned spawn and acid state", () => {
+  require("../dist/Server").Server.installProductionPathResolver();
+  const Specials = require("../plugins/bosses/vorkath/Specials.Vorkath");
+  const removeQueue = [];
+  const addQueue = [];
+  let deregistered = 0;
+  class PrivateArea {
+    constructor() { this.entities = []; this.destroyed = false; }
+    destroy() { this.destroyed = true; }
+    isDestroyed() { return this.destroyed; }
+    postLeave() { this.postLeft = true; }
+  }
+  const core = {
+    PrivateArea,
+    Boundary: class {},
+    Task: class {},
+    TaskManager: { submit() {} },
+    TimerKey: { FREEZE: 1, FREEZE_IMMUNITY: 2 },
+    World: { getAddNPCQueue: () => addQueue, getRemoveNPCQueue: () => removeQueue },
+    ObjectManager: { deregister: () => { deregistered++; } },
+  };
+  const hooks = { onPlayerProcess() {}, onPlayerLogout() {}, onPlayerDisconnect() {}, onNpcDeath() {} };
+  const pluginApi = { core, getCombatFactory: () => ({}), ...hooks };
+  Specials.fights.clear();
+  Specials.attach(pluginApi);
+  Area.attach(pluginApi);
+  const area = new (Area._test.getAreaClass())("DS2 test");
+  let areaAttribute = area;
+  const cancelled = [];
+  const player = {
+    isRegistered: () => true,
+    getHitpoints: () => 99,
+    getAttribute: (key) => key === "vorkath:instance-area" ? areaAttribute : undefined,
+    setAttribute: (key, value) => { if (key === "vorkath:instance-area") areaAttribute = value; },
+    getTimers: () => ({ cancel: (key) => cancelled.push(key) }),
+  };
+  const npc = (id, hp) => ({ isRegistered: () => true, getId: () => id, getHitpoints: () => hp });
+  const boss = npc(Shared.QUEST_AWAKE_ID, 460);
+  const spawn = npc(Shared.SPAWN_ID, 38);
+  const entities = [boss, spawn].map((value) => ({ isNpc: () => true, getAsNpc: () => value }));
+  area.entities.push(...entities);
+  const pool = {};
+  Specials.fights.set(boss, { pools: new Map([["2270,4060", pool]]), spawn, fighter: player });
+
+  area.postLeave({ isPlayer: () => true, getAsPlayer: () => player }, false);
+
+  assert.equal(area.isDestroyed(), true);
+  assert.equal(area.postLeft, true);
+  assert.equal(areaAttribute, null);
+  assert.equal(deregistered, 1);
+  assert.deepEqual(removeQueue, [spawn, boss]);
+  assert.deepEqual(cancelled, [core.TimerKey.FREEZE, core.TimerKey.FREEZE_IMMUNITY]);
+  assert.equal(Specials.fights.has(boss), false);
+});
+
+test("Vorkath wakes into the quest form before completion and the stronger form after it", () => {
+  const player = (stage) => ({ getAttribute: (key) => key === "quest.dragon_slayer_ii.stage" ? stage : undefined });
+  assert.equal(Shared.awakeIdForPlayer(player(8)), 8060);
+  assert.equal(Shared.maxHitpointsForId(8060), 460);
+  assert.equal(Shared.awakeIdForPlayer(player(14)), 8061);
+  assert.equal(Shared.maxHitpointsForId(8061), 750);
+  assert.equal(Shared.isAwakeNpc({ getId: () => 8060 }), true);
+  assert.equal(Shared.isAwakeNpc({ getId: () => 8061 }), true);
+});
+
 test("standard attacks follow the captured mix", () => {
   // From range (rsprox captures): ranged 30, magic 24, dragonfire 15, venom 11, fireball 11, prayer 8.
   const away = (roll) => Shared.chooseStandard({ adjacent: false, roll: () => roll });
@@ -79,6 +144,39 @@ test("spawn explosion scales with remaining hitpoints", () => {
   assert.equal(Shared.spawnExplosionDamage(0), 0);
   assert.equal(Shared.spawnExplosionDamage(999), 60);
   assert.equal(Shared.spawnExplosionDamage(-5), 0);
+});
+
+test("only the canonical Crumble Undead spell one-shots Vorkath's spawn", () => {
+  require("../dist/Server").Server.installProductionPathResolver();
+  const { attach } = require("../plugins/bosses/vorkath/Combat.Vorkath");
+  let onHit;
+  attach({
+    core: {
+      CombatSpells: { CRUMBLE_UNDEAD: { spellId: () => 1171 } },
+      NpcIdentifiers: { VORKATH_5: 8061 },
+      CombatMethod: class {},
+      CombatType: { MELEE: 0, RANGED: 1, MAGIC: 2 },
+    },
+    getPrayerHandler: () => ({}),
+    getCombatFactory: () => ({}),
+    onNpcHitModify: (callback) => { onHit = callback; },
+    registerNpcCombatMethodProvider() {},
+  });
+
+  const damageBySpell = (spellId) => {
+    let damage = 8;
+    const part = { setDamage: (value) => { damage = value; } };
+    const hit = {
+      getAttacker: () => ({ isPlayer: () => true, getCombat: () => ({ getCastSpell: () => ({ spellId: () => spellId }) }) }),
+      getHits: () => [part],
+      updateTotalDamage() {},
+    };
+    onHit({ npc: { getId: () => Shared.SPAWN_ID, getHitpoints: () => 38 }, hit });
+    return damage;
+  };
+
+  assert.equal(damageBySpell(1171), 38, "Crumble Undead kills the spawn in one hit");
+  assert.equal(damageBySpell(1169), 8, "Fire Bolt keeps its ordinary damage");
 });
 
 test("acid pools cover the grid, the player tile, and never the boss", () => {
@@ -166,6 +264,13 @@ test("the boss bar shows her at 750 and follows her hitpoints (captured)", () =>
   assert.deepEqual(events[1], ["boss-hud:update", { player, current: 713 }]);
   Hud.dropFor(player);
   assert.deepEqual(events[2], ["boss-hud:hide", { player, fade: false, afterTicks: 0 }]);
+  const questNpc = {
+    getId: () => 8060,
+    getAttribute: (key) => key === Shared.ATTR_AWAKE_ID ? 8060 : undefined,
+    getHitpoints: () => 460,
+  };
+  Hud.show(questNpc, player);
+  assert.deepEqual(events[3], ["boss-hud:show", { player, npcId: 8060, current: 460, maximum: 460 }]);
 });
 
 test("her loot lands on the nearest walkable tile one step out from her body (captured)", () => {
@@ -179,4 +284,14 @@ test("her loot lands on the nearest walkable tile one step out from her body (ca
   // The south middle blocked: the next nearest, never under her.
   assert.deepEqual(lootTile(base, at(2272, 4058), (x, y) => !(x === 2272 && y === 4061), () => 0), [2268, 4061]);
   assert.equal(lootTile(base, at(2272, 4058), () => false), null);
+});
+
+
+test("dragon protection recognizes both dragonfire shield states", () => {
+  const { CombatEquipment } = require("../dist/game/content/combat/CombatEquipment");
+  const equipped = (id) => ({ getEquipment: () => ({ get: () => ({ getId: () => id }) }) });
+  assert.equal(CombatEquipment.hasDragonProtectionGear(equipped(11283)), true, "charged dragonfire shield protects");
+  assert.equal(CombatEquipment.hasDragonProtectionGear(equipped(11284)), true, "uncharged dragonfire shield protects");
+  assert.equal(CombatEquipment.hasDragonProtectionGear(equipped(11285)), false, "the bank note is not wearable protection");
+  assert.equal(CombatEquipment.hasDragonProtectionGear(equipped(11282)), false, "unrelated equipment does not count");
 });

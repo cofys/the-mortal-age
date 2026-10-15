@@ -285,10 +285,11 @@ export class Sailing {
     /** Takes the player off the deck and removes the boat from the sea. */
     private static leave(player: Player, instance: Boat, reason: LeaveReason): void {
         Sailing.instances.delete(instance);
-        if (instance.helmPlayerId === player.getIndex()) instance.helmPlayerId = undefined;
+        const atHelm = instance.helmPlayerId === player.getIndex();
+        if (atHelm) instance.helmPlayerId = undefined;
         BoatManager.getDeck(instance)?.leave(player, false);
         BoatManager.dispose(instance);
-        emit("sailing:left", { player, boat: instance, reason });
+        emit("sailing:left", { player, boat: instance, reason, atHelm });
     }
 
     private static onTeleport(mobile: Mobile, target: Location): void {

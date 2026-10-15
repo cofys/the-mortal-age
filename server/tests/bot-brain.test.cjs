@@ -3,14 +3,14 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
-const { BotBrain } = require('../plugins/bots/brain/BotBrain');
+const { BotBrain } = require('../plugins/bots/brain/Brain.PlayerBots');
 const {
   buildPvpSeekIndex,
   nearby,
   activeTargetCount,
   hotspotFightCount,
   trackEngagement,
-} = require('../plugins/bots/brain/pvp/PvpSeekIndex');
+} = require('../plugins/bots/brain/pvp/PvpSeekIndex.PlayerBots');
 
 const fakePlayer = (name = 'bot', x = 3100, y = 3600) => ({
   getUsername: () => name,
@@ -73,7 +73,7 @@ test('a failed activity is blocked, releases its slot and the brain picks the ne
 });
 
 test('an ended action takes its pending walk with it', () => {
-  const { requestMovement, peekMovementRequest } = require('../plugins/bots/behaviours/navigation/BotNavigation');
+  const { requestMovement, peekMovementRequest } = require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   // A busy queue keeps the brain from dispatching the walk for real.
   const player = { ...fakePlayer('walker'), getMovementQueue: () => ({ size: () => 1 }) };
   let pendingAtMine = 'unset';
@@ -121,7 +121,7 @@ test('a bot without a rotation returns to its own activity, never a random one (
 test('cooking: food goes on a fire nearby; with no range or fire about, the bot lights one', () => {
   const Cooking = require('../plugins/skills/Cooking.plugin');
   const Firemaking = require('../plugins/skills/Firemaking.plugin');
-  const { createCookAction } = require('../plugins/bots/brain/actions/Cook');
+  const { createCookAction } = require('../plugins/bots/brain/actions/Cook.PlayerBots');
   const { Skill } = require('../dist/game/model/Skill');
   const { Location: Loc } = require('../dist/game/model/Location');
   const real = { cooking: Cooking.isCookingActive, firemaking: Firemaking.isFiremakingActive,
@@ -172,7 +172,7 @@ test('cooking: food goes on a fire nearby; with no range or fire about, the bot 
 });
 
 test('fishing spots are indexed by the tools they take (from the cache option list)', () => {
-  const { spotKeys } = require('../plugins/bots/brain/actions/Fish');
+  const { spotKeys } = require('../plugins/bots/brain/actions/Fish.PlayerBots');
   const spot = (name, actions) => ({ getName: () => name, getId: () => 1520, getActions: () => actions });
   assert.deepEqual(spotKeys(spot('Fishing spot', ['Cage', 'Harpoon', null, null, null])), ['LOBSTER_POT', 'HARPOON']);
   assert.deepEqual(spotKeys(spot('Rod Fishing spot', ['Lure', 'Bait', null, null, null])), ['FLY_FISHING_ROD', 'PIKE_ROD']);
@@ -214,7 +214,7 @@ function fishingScene(reachableDestX, playerX = 2600, playerY = 3400) {
 }
 
 test('a fishing spot the bot cannot reach is skipped for a reachable one', () => {
-  const { createFishAction } = require('../plugins/bots/brain/actions/Fish');
+  const { createFishAction } = require('../plugins/bots/brain/actions/Fish.PlayerBots');
   const Fishing = require('../plugins/skills/Fishing.plugin');
   const real = { spotTools: Fishing.spotTools, isFishingActive: Fishing.isFishingActive };
   Fishing.spotTools = () => [{ tool: 'LOBSTER_POT', clickType: 1 }];
@@ -234,7 +234,7 @@ test('a fishing spot the bot cannot reach is skipped for a reachable one', () =>
 });
 
 test('a fishing cluster with no reachable spot is dropped, not idled on', () => {
-  const { createFishAction } = require('../plugins/bots/brain/actions/Fish');
+  const { createFishAction } = require('../plugins/bots/brain/actions/Fish.PlayerBots');
   const Fishing = require('../plugins/skills/Fishing.plugin');
   const real = { spotTools: Fishing.spotTools, isFishingActive: Fishing.isFishingActive };
   Fishing.spotTools = () => [{ tool: 'LOBSTER_POT', clickType: 1 }];
@@ -253,7 +253,7 @@ test('a fishing cluster with no reachable spot is dropped, not idled on', () => 
 });
 
 test('a fishing site whose planning is starved is taken after a short grace, not stood on', () => {
-  const { createFishAction } = require('../plugins/bots/brain/actions/Fish');
+  const { createFishAction } = require('../plugins/bots/brain/actions/Fish.PlayerBots');
   const Fishing = require('../plugins/skills/Fishing.plugin');
   const real = { spotTools: Fishing.spotTools, isFishingActive: Fishing.isFishingActive };
   Fishing.spotTools = () => [{ tool: 'LOBSTER_POT', clickType: 1 }];
@@ -274,9 +274,9 @@ test('a fishing site whose planning is starved is taken after a short grace, not
 });
 
 test('a site walk that produces no movement at all is dropped quickly', () => {
-  const { createFishAction } = require('../plugins/bots/brain/actions/Fish');
+  const { createFishAction } = require('../plugins/bots/brain/actions/Fish.PlayerBots');
   const { peekMovementRequest: peek } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const Fishing = require('../plugins/skills/Fishing.plugin');
   const real = { spotTools: Fishing.spotTools, isFishingActive: Fishing.isFishingActive };
   Fishing.spotTools = () => [{ tool: 'LOBSTER_POT', clickType: 1 }];
@@ -364,9 +364,9 @@ test('pvp seek index buckets nearby bots and tracks target caps within a tick', 
 });
 
 test('with nothing in live range a gatherer walks to the nearest indexed object, else searches home', () => {
-  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   // Swamp copper sits 70 tiles from the Lumbridge spawn: outside the live 3x3 search.
   // The nearer indexed rock has no route (the planner says so), the next one does.
@@ -404,7 +404,7 @@ test('with nothing in live range a gatherer walks to the nearest indexed object,
 });
 
 test('re-mining a respawned rock from the same tile is not mistaken for an unreachable rock', () => {
-  const { createInteractObjectAction, CLAIMS } = require('../plugins/bots/brain/actions/InteractObject');
+  const { createInteractObjectAction, CLAIMS } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const rock = { getId: () => 11161, getLocation: () => new Loc(3230, 3145, 0) };
   CLAIMS.clear();
@@ -438,7 +438,7 @@ test('re-mining a respawned rock from the same tile is not mistaken for an unrea
 });
 
 test('idle bots re-send their facing so it survives the final walk step', () => {
-  const { refreshIdleFace } = require('../plugins/bots/behaviours/task/BotBehaviorTask');
+  const { refreshIdleFace } = require('../plugins/bots/behaviours/task/BehaviorTask.PlayerBots');
   let forced = 0;
   const player = {
     getPositionToFace: () => ({ x: 1, y: 2 }),
@@ -476,7 +476,7 @@ test('forced facing is re-sent after walking (same-coordinate setPositionToFace 
 });
 
 test('walking at a live gather target counts as progress for the brain stall', () => {
-  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
   const world = { objectSearch: { findCandidatesByIds: () => [] }, emitObjectInteraction: () => {} };
   const a = createInteractObjectAction({ catalog: 'rock', tier: 'tin', option: 'Mine' }, world);
   const player = { ...fakePlayer('miner'), getPrivateArea: () => null };
@@ -488,7 +488,7 @@ test('walking at a live gather target counts as progress for the brain stall', (
 });
 
 test('a gather walk that produces no movement is dropped instead of retried forever', () => {
-  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const rock = { getId: () => 11361, getLocation: () => new Loc(3155, 3340, 0), getType: () => 10, getFace: () => 0 };
   const world = {
@@ -514,9 +514,9 @@ test('a gather walk that produces no movement is dropped instead of retried fore
 });
 
 test('an object behind a fence is walked at with brain movement, not clicked blindly', () => {
-  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const rock = { getId: () => 11361, getLocation: () => new Loc(3172, 3366, 0), getType: () => 10, getFace: () => 0 };
   let clicks = 0;
@@ -543,8 +543,8 @@ test('an object behind a fence is walked at with brain movement, not clicked bli
 });
 
 test('a far spot the route planner cannot reach (an island) is never picked', () => {
-  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
-  const { clearMovementRequest: clear } = require('../plugins/bots/behaviours/navigation/BotNavigation');
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
+  const { clearMovementRequest: clear } = require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const spots = [{ x: 3100, y: 3100, z: 0 }, { x: 3150, y: 3230, z: 0 }]; // Tutorial Island, then the mainland
   const world = {
@@ -566,9 +566,9 @@ test('a far spot the route planner cannot reach (an island) is never picked', ()
 });
 
 test('gatherers claim their rock; a crowd moves on to the next spot instead of queueing', () => {
-  const { createInteractObjectAction, CLAIMS } = require('../plugins/bots/brain/actions/InteractObject');
+  const { createInteractObjectAction, CLAIMS } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   CLAIMS.clear();
   const rock = { getId: () => 11161, getLocation: () => new Loc(3230, 3145, 0) };
@@ -594,7 +594,7 @@ test('gatherers claim their rock; a crowd moves on to the next spot instead of q
   const a = createInteractObjectAction({ catalog: 'rock', tier: 'copper', option: 'Mine' }, world);
   const first = miner('first');
   const second = miner('second');
-  const { requestMovement } = require('../plugins/bots/behaviours/navigation/BotNavigation');
+  const { requestMovement } = require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   requestMovement(first, 3308, 3015, { reason: 'brain_search_walk' }); // leftover far search walk
   a.update({ player: first, state: {}, nowMs: 1000, frame: { lastProgressAt: 0 } });
   assert.equal(CLAIMS.get('11161:3230:3145:0')?.player, first, 'the first miner claims the rock');
@@ -610,8 +610,8 @@ test('gatherers claim their rock; a crowd moves on to the next spot instead of q
 });
 
 test('a far walk that stalls makes only that bot try another spot', () => {
-  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
-  const { clearMovementRequest: clear } = require('../plugins/bots/behaviours/navigation/BotNavigation');
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
+  const { clearMovementRequest: clear } = require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const spots = [{ x: 3285, y: 3361, z: 0 }, { x: 3300, y: 3290, z: 0 }];
   const world = {
@@ -642,7 +642,7 @@ test('a far walk that stalls makes only that bot try another spot', () => {
 });
 
 test('choose re-rolls a weighted option each time and runs its actions in order', () => {
-  const { createChooseAction } = require('../plugins/bots/brain/actions/Choose');
+  const { createChooseAction } = require('../plugins/bots/brain/actions/Choose.PlayerBots');
   const ran = [];
   const step = (name) => ({ id: name, update: () => { ran.push(name); return 'success'; } });
   const a = createChooseAction({
@@ -666,9 +666,9 @@ test('choose re-rolls a weighted option each time and runs its actions in order'
 });
 
 test('sellItems walks to the nearest general store keeper and sells through the shop', () => {
-  const { createSellItemsAction } = require('../plugins/bots/brain/actions/SellItems');
+  const { createSellItemsAction } = require('../plugins/bots/brain/actions/SellItems.PlayerBots');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const keeper = {
     ...fakeNpc('Shop keeper', 3212, 3246),
@@ -709,10 +709,10 @@ test('sellItems walks to the nearest general store keeper and sells through the 
 });
 
 test('a bank one bot cannot walk to is skipped by that bot only', () => {
-  const { createBankAction } = require('../plugins/bots/brain/actions/Bank');
+  const { createBankAction } = require('../plugins/bots/brain/actions/Bank.PlayerBots');
   const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const boothId = 6083; // a bank booth id; no cache in tests, so give it its Bank option
   const realForId = ObjectDefinition.forId;
@@ -742,10 +742,10 @@ test('a bank one bot cannot walk to is skipped by that bot only', () => {
 });
 
 test('a nearby bank booth across a wall is approached by brain movement, not a failed direct walk', () => {
-  const { createBankAction } = require('../plugins/bots/brain/actions/Bank');
+  const { createBankAction } = require('../plugins/bots/brain/actions/Bank.PlayerBots');
   const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const boothId = 6083;
   const realForId = ObjectDefinition.forId;
@@ -778,10 +778,10 @@ test('a nearby bank booth across a wall is approached by brain movement, not a f
 });
 
 test('a bank upstairs: the bot walks back down to its floor before the step ends', () => {
-  const { createBankAction } = require('../plugins/bots/brain/actions/Bank');
+  const { createBankAction } = require('../plugins/bots/brain/actions/Bank.PlayerBots');
   const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const boothId = 18491;
   const realForId = ObjectDefinition.forId;
@@ -811,9 +811,9 @@ test('a bank upstairs: the bot walks back down to its floor before the step ends
 
 test('a firemaker on a tile that refuses fires (a bank floor) moves off it, and gives up if nowhere works', () => {
   const Firemaking = require('../plugins/skills/Firemaking.plugin');
-  const { createLightFireAction } = require('../plugins/bots/brain/actions/LightFire');
+  const { createLightFireAction } = require('../plugins/bots/brain/actions/LightFire.PlayerBots');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const real = { ...Firemaking };
   // The bank tile the bot stands on refuses fires; the street outside does not.
@@ -850,9 +850,9 @@ test('a firemaker on a tile that refuses fires (a bank floor) moves off it, and 
 });
 
 test('a gatherer commits to its far spot: no turning back halfway, and it waits on arrival', () => {
-  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
-    require('../plugins/bots/behaviours/navigation/BotNavigation');
+    require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   let at = new Loc(3230, 3150, 0);
   const asked = [];
@@ -893,8 +893,8 @@ test('a gatherer commits to its far spot: no turning back halfway, and it waits 
 });
 
 test('a long walk toward a far spot counts as progress for the brain', () => {
-  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
-  const { clearMovementRequest: clear } = require('../plugins/bots/behaviours/navigation/BotNavigation');
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject.PlayerBots');
+  const { clearMovementRequest: clear } = require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   let at = new Loc(3150, 3307, 0);
   const world = { objectSearch: { findCandidatesByIds: () => [], findNearestIndexedLocation: () => ({ x: 3285, y: 3361, z: 0 }) } };
@@ -916,7 +916,7 @@ test('a long walk toward a far spot counts as progress for the brain', () => {
 });
 
 test('a tier list gathers from every listed rock kind', () => {
-  const { resolveCatalogObjectIds } = require('../plugins/bots/brain/BotObjectCatalog');
+  const { resolveCatalogObjectIds } = require('../plugins/bots/brain/ObjectCatalog.PlayerBots');
   const copper = resolveCatalogObjectIds({ catalog: 'rock', tier: 'copper' });
   const tin = resolveCatalogObjectIds({ catalog: 'rock', tier: 'tin' });
   const both = resolveCatalogObjectIds({ catalog: 'rock', tier: ['copper', 'tin'] });
@@ -924,12 +924,12 @@ test('a tier list gathers from every listed rock kind', () => {
   assert.deepEqual([...both].sort(), [...new Set([...copper, ...tin])].sort());
 });
 
-const { createPvpCombatAction } = require('../plugins/bots/brain/actions/PvpCombat');
-const { PvpController } = require('../plugins/bots/brain/pvp/PvpController');
+const { createPvpCombatAction } = require('../plugins/bots/brain/actions/PvpCombat.PlayerBots');
+const { PvpController } = require('../plugins/bots/brain/pvp/PvpController.PlayerBots');
 const { Location } = require('../dist/game/model/Location');
-const { peekMovementRequest, clearMovementRequest } = require('../plugins/bots/behaviours/navigation/BotNavigation');
-const { __testing: loadoutTesting } = require('../plugins/bots/behaviours/policies/PvpLoadoutPolicy');
-const { getWildernessHotspot, listWildernessHotspots } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry');
+const { peekMovementRequest, clearMovementRequest } = require('../plugins/bots/behaviours/navigation/Navigation.PlayerBots');
+const { __testing: loadoutTesting } = require('../plugins/bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots');
+const { getWildernessHotspot, listWildernessHotspots } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry.PlayerBots');
 const { SkillManager } = require('../dist/game/content/skill/SkillManager');
 
 test('unmatched pvp bots walk between seek retries; overlays return to their activity', () => {
@@ -998,7 +998,7 @@ test('hotspot clusters fill their band from their loadout catalogue; the ditch s
 });
 
 const fs = require('node:fs');
-const { createTrainCombatAction } = require('../plugins/bots/brain/actions/TrainCombat');
+const { createTrainCombatAction } = require('../plugins/bots/brain/actions/TrainCombat.PlayerBots');
 const { Skill } = require('../dist/game/model/Skill');
 const { Equipment } = require('../dist/game/model/container/impl/Equipment');
 const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
@@ -1350,7 +1350,7 @@ test('a long walk counts as progress for an action that reports none (a far bank
 });
 
 test('pvp combat reports seeking progress so the wait is not a stall', () => {
-  const { createPvpCombatAction } = require('../plugins/bots/brain/actions/PvpCombat');
+  const { createPvpCombatAction } = require('../plugins/bots/brain/actions/PvpCombat.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   const controller = { tick() {}, seek() {}, wanderWhileSeeking() {}, ensureLoadout() {} };
   const a = createPvpCombatAction({ id: 'pvpCombat' }, controller);
@@ -1390,7 +1390,7 @@ test('a frame with no progress for three minutes fails and logs a stall', () => 
 
 test('a door is opened when it unblocks the current segment of a longer route', () => {
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening');
+  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening.PlayerBots');
   const gate = {
     getId: () => 7,
     getLocation: () => ({ getX: () => 104, getY: () => 102, getZ: () => 0 }),
@@ -1439,7 +1439,7 @@ test('training stages pick opponents by overlapping NPC combat-level bands', () 
 });
 
 test('the NPC cluster index never places a cluster in the Wilderness', () => {
-  const { buildNpcClusters, nearestClusters } = require('../plugins/bots/brain/NpcClusterIndex');
+  const { buildNpcClusters, nearestClusters } = require('../plugins/bots/brain/NpcClusterIndex.PlayerBots');
   const spawns = JSON.parse(fs.readFileSync('data/definitions/npc-spawns.json', 'utf8'));
   const index = buildNpcClusters(spawns.map((n) => ({ key: n.name, x: n.x, y: n.y, z: n.level })));
   assert.ok(nearestClusters(index, ['Goblin'], { x: 3222, y: 3218, z: 0 })[0].distance < 100);
@@ -1461,7 +1461,7 @@ test('replacing a training brain stops its NPC fight and releases its claim', ()
 });
 
 test('far bots visited round-robin under the task budget still think every stride', () => {
-  const { BotBehaviorTask } = require('../plugins/bots/behaviours/task/BotBehaviorTask');
+  const { BotBehaviorTask } = require('../plugins/bots/behaviours/task/BehaviorTask.PlayerBots');
   const task = { _cycleCounter: 0 };
   const state = {};
   const ran = [];
@@ -1477,7 +1477,7 @@ test('far bots visited round-robin under the task budget still think every strid
 });
 
 test('the long route planner finds detours past walls and through gates, and gives up on islands', () => {
-  const { planRoute } = require('../plugins/bots/behaviours/navigation/LongRoutePlanner');
+  const { planRoute } = require('../plugins/bots/behaviours/navigation/LongRoutePlanner.PlayerBots');
   const WALL_EAST = 0x8, WALL_WEST = 0x80, BLOCK_WALK = 0x200000;
   // A north-south wall at x=100|101 from y=0..399; its only gap is 150 tiles north of the bot.
   const wall = (x, y) => (y < 400 && y !== 350 ? (x === 100 ? WALL_EAST : x === 101 ? WALL_WEST : 0) : 0);
@@ -1495,7 +1495,7 @@ test('the long route planner finds detours past walls and through gates, and giv
 });
 
 test('a planned walk never skips the far side of a gate it has not crossed', () => {
-  const { nextWaypoint } = require('../plugins/bots/behaviours/navigation/BotLongRoutes');
+  const { nextWaypoint } = require('../plugins/bots/behaviours/navigation/LongRoutes.PlayerBots');
   const { Location: Loc } = require('../dist/game/model/Location');
   let at = new Loc(3254, 3268, 0);
   const player = { getLocation: () => at, getPrivateArea: () => null };
@@ -1542,7 +1542,7 @@ test('bots are given tools, never resources: inputs come from gathering or the b
 
 test('combat-training activity compiles against the real plugin core API', () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
-  const { createBotActivityRegistry } = require('../plugins/bots/brain/BotActivityRegistry');
+  const { createBotActivityRegistry } = require('../plugins/bots/brain/ActivityRegistry.PlayerBots');
   const registry = createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() } });
   assert.equal(registry.byId.get('combat_training').actions[0].id, 'trainCombat');
 });
@@ -1582,7 +1582,7 @@ test('a rotation switches activity after its time, never mid-fight or under an o
 
 test('sites split each mode\'s count over the tiers and the registry only assigns their activities', () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
-  const { createBotActivityRegistry } = require('../plugins/bots/brain/BotActivityRegistry');
+  const { createBotActivityRegistry } = require('../plugins/bots/brain/ActivityRegistry.PlayerBots');
   const registry = createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() } });
   const bySite = new Map(registry.sites.map((site) => [site.id, site]));
   const towns = ['lumbridge', 'varrock', 'falador', 'seers', 'east_ardougne'];
@@ -1648,7 +1648,7 @@ test('sites split each mode\'s count over the tiers and the registry only assign
 });
 
 test('a site\'s levels are applied to every skill of a spawned bot (hitpoints at least 10)', () => {
-  const { applyLevels } = require('../plugins/bots/brain/BotSiteSpawner');
+  const { applyLevels } = require('../plugins/bots/brain/SiteSpawner.PlayerBots');
   const set = new Map();
   const manager = {
     setCurrentLevel(skill, level) { set.set(skill.getName(), level); return this; },
@@ -1666,7 +1666,7 @@ test('a site\'s levels are applied to every skill of a spawned bot (hitpoints at
   applyLevels(bot, { all: [30, 35] });
   const rolled = set.get(Skill.ATTACK.getName());
   assert.ok(rolled >= 30 && rolled <= 35, `a band rolls inside it (got ${rolled})`);
-  const { combatLevelOf } = require('../plugins/bots/brain/BotSiteSpawner');
+  const { combatLevelOf } = require('../plugins/bots/brain/SiteSpawner.PlayerBots');
   assert.equal(combatLevelOf([1, 1, 1, 10, 1, 1, 1]), 3);
   assert.equal(combatLevelOf([99, 99, 99, 99, 99, 99, 99]), 126);
   const combatSkills = [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.HITPOINTS, Skill.RANGED, Skill.MAGIC, Skill.PRAYER];
@@ -1681,7 +1681,7 @@ test('a site\'s levels are applied to every skill of a spawned bot (hitpoints at
 });
 
 test('a spawned bot is dressed for its tier with real items and keeps the weapon slot free', () => {
-  const { applyOutfit, outfitTier } = require('../plugins/bots/brain/BotSiteSpawner');
+  const { applyOutfit, outfitTier } = require('../plugins/bots/brain/SiteSpawner.PlayerBots');
   const { Equipment } = require('../src/main/typescript/elvarg/game/model/container/impl/Equipment');
   assert.equal(outfitTier(1), 'novice');
   assert.equal(outfitTier({ all: [1, 19] }), 'novice');
@@ -1751,7 +1751,7 @@ test('NPC trainers do not cross private areas or attack a non-attackable NPC', (
 
 test('a path-blocked movement request walks to and opens the door that unblocks the route', () => {
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening');
+  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening.PlayerBots');
   const gate = (id, x, y, action = 'Open') => ({
     getId: () => id,
     getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }),
@@ -1813,7 +1813,7 @@ test('a path-blocked movement request walks to and opens the door that unblocks 
 
 test('a degenerate segment on the bot does not hide the gate that traps it', () => {
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening');
+  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening.PlayerBots');
   const gate = {
     getId: () => 2,
     getLocation: () => ({ getX: () => 109, getY: () => 108, getZ: () => 0 }),
@@ -1864,7 +1864,7 @@ test('a gate behind the bot is opened when it unblocks the route', () => {
   // A moveNear walk parks the bot on the fence tile nearest the target, past the
   // pen's gate (Lumbridge cow fields); a "toward the target" filter hid that gate.
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening');
+  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening.PlayerBots');
   const gate = {
     getId: () => 6,
     getLocation: () => ({ getX: () => 96, getY: () => 97, getZ: () => 0 }),
@@ -1901,7 +1901,7 @@ test('a gate behind the bot is opened when it unblocks the route', () => {
 
 test('a gate is opened even when the walk already ends touching the target across the fence', () => {
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening');
+  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening.PlayerBots');
   const gate = {
     getId: () => 7,
     getLocation: () => ({ getX: () => 103, getY: () => 101, getZ: () => 0 }),
@@ -1932,7 +1932,7 @@ test('a gate is opened even when the walk already ends touching the target acros
 
 test('a toll gate is passed with its Pay-toll option, the toll provisioned so bots need no money', () => {
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening');
+  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening.PlayerBots');
   const tollGate = {
     getId: () => 44598,
     getLocation: () => ({ getX: () => 101, getY: () => 100, getZ: () => 0 }),
@@ -1968,7 +1968,7 @@ test('a toll gate is passed with its Pay-toll option, the toll provisioned so bo
 
 test('a door that does not improve the route is left closed', () => {
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening');
+  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening.PlayerBots');
   const useless = {
     getId: () => 5,
     getLocation: () => ({ getX: () => 104, getY: () => 102, getZ: () => 0 }),
@@ -1996,7 +1996,7 @@ test('a door that does not improve the route is left closed', () => {
 
 test('a path-blocked movement request climbs the wall that unblocks the route', () => {
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  const { maybeUseShortcut } = require('../plugins/bots/brain/ShortcutCrossing');
+  const { maybeUseShortcut } = require('../plugins/bots/brain/ShortcutCrossing.PlayerBots');
   const CRUMBLING_WALL_3 = 24222;
   const wall = {
     getId: () => CRUMBLING_WALL_3,
@@ -2107,7 +2107,7 @@ test('magic trainers equip a staff, set autocast and carry runes', () => {
 });
 
 test('bot spawns are paced a few per game tick', (t) => {
-  const { runPaced, SPAWNS_PER_BATCH, SPAWN_BATCH_DELAY_MS } = require('../plugins/bots/runtime/BotSpawnPacing');
+  const { runPaced, SPAWNS_PER_BATCH, SPAWN_BATCH_DELAY_MS } = require('../plugins/bots/runtime/SpawnPacing.PlayerBots');
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let ran = 0;
   let done = false;
@@ -2122,7 +2122,7 @@ test('bot spawns are paced a few per game tick', (t) => {
 });
 
 test('a failed step falls back down its orElse chain: bank, else sell, else drop', () => {
-  const { createOrElseAction } = require('../plugins/bots/brain/actions/OrElse');
+  const { createOrElseAction } = require('../plugins/bots/brain/actions/OrElse.PlayerBots');
   const ran = [];
   const step = (id, result) => ({ id, update: () => { ran.push(id); return result; }, stop() {} });
   const player = fakePlayer();
@@ -2147,8 +2147,8 @@ test('a failed step falls back down its orElse chain: bank, else sell, else drop
 });
 
 test('a bot stows a KO weapon it has held for 15-20s without finishing the fight', () => {
-  const { trackSpecWeaponHold } = require('../plugins/bots/behaviours/policies/PvpSpecialAttackPolicy');
-  const { SUPPORTED_SPEC_WEAPONS } = require('../plugins/bots/behaviours/policies/PvpCombatRuntimeCache');
+  const { trackSpecWeaponHold } = require('../plugins/bots/behaviours/policies/PvpSpecialAttackPolicy.PlayerBots');
+  const { SUPPORTED_SPEC_WEAPONS } = require('../plugins/bots/behaviours/policies/PvpCombatRuntimeCache.PlayerBots');
   const { Equipment } = require('../dist/game/model/container/impl/Equipment');
 
   const specWeaponId = SUPPORTED_SPEC_WEAPONS[0];
@@ -2174,7 +2174,7 @@ test('a bot stows a KO weapon it has held for 15-20s without finishing the fight
 });
 
 test('a bot only tells the opponent to stop praying while they have an overhead up', () => {
-  const { selectChatterLine } = require('../plugins/bots/behaviours/pvp/PvpChatter');
+  const { selectChatterLine } = require('../plugins/bots/behaviours/pvp/PvpChatter.PlayerBots');
   const { PrayerHandler } = require('../dist/game/content/PrayerHandler');
 
   const noPrayer = { getPrayerActive: () => ({}) };

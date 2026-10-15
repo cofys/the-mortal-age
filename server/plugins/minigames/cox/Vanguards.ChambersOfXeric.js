@@ -33,9 +33,9 @@
  *   protected by its shell."; the exit crystal 30017.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
-const Monsters = require("./CoxMonsters");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
+const Monsters = require("./Monsters.ChambersOfXeric");
 
 const FORM = { BURIED: 7525, SHELL: 7526, MELEE: 7527, RANGED: 7528, MAGIC: 7529 };
 const CRYSTAL = 30017;

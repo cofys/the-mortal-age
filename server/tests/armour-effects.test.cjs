@@ -11,7 +11,7 @@ const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 // Obsidian gear is matched by item name, read from the cache.
 CachePipeline.initialize();
 
-const registerObsidianEffects = require("../plugins/combat/effects/ObsidianArmour");
+const registerObsidianEffects = require("../plugins/combat/effects/ObsidianArmour.EquipmentEffects");
 const Graceful = require("../plugins/items/GracefulOutfit.plugin");
 
 function item(id) {

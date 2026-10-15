@@ -1,14 +1,14 @@
 "use strict";
 
 /**
- * Wintertodt's Combat Achievements (plugins/combatachievements/): the subdued count, and the tasks
+ * Wintertodt's Combat Achievements (plugins/achievements/combatachievements/): the subdued count, and the tasks
  * the round decides - by the points earned, the warm clothing worn and what happened to the
  * pyromancers and braziers - plus healing a fallen pyromancer and fixing a broken brazier.
  */
 
-const Shared = require("./WintertodtShared");
-const Corners = require("./WintertodtCorners");
-const Warmth = require("./WintertodtWarmth");
+const Shared = require("./Shared.Wintertodt");
+const Corners = require("./Corners.Wintertodt");
+const Warmth = require("./Warmth.Wintertodt");
 
 const WHY_FLETCH_POINTS = 3000;
 const COSY_WARM_ITEMS = 4;
@@ -27,7 +27,7 @@ function subdued(player, points, kills) {
 /** At login: the subdued count, so earlier rounds finish their kill-count tasks. */
 function answerKillCount(request) {
   // Required here: the round requires this unit.
-  const kills = Number(request.player.getAttribute(require("./WintertodtRound").ATTR_KILLS)) || 0;
+  const kills = Number(request.player.getAttribute(require("./Round.Wintertodt").ATTR_KILLS)) || 0;
   if (kills > 0) request.counts.Wintertodt = kills;
 }
 

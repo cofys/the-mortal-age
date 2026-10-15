@@ -91,7 +91,7 @@ export class MagicCombatMethod extends CombatMethod {
 
     public hits(character: Mobile, target: Mobile): PendingHit[] {
         let spell = character.getCombat().getSelectedSpell();
-        let hits: PendingHit[] = [new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell))];
+        let hits: PendingHit[] = [new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell)).setSpell(spell)];
 
 
         if (!spell) {
@@ -127,7 +127,7 @@ export class MagicCombatMethod extends CombatMethod {
                 if (!CombatFactory.canAttackSecondaryTarget(character, target, next, spellRadius)) {
                     continue;
                 }
-                let pendingHit: PendingHit = new PendingHit(character, next, this, MagicCombatMethod.hitDelay(character, next, spell), false);
+                let pendingHit: PendingHit = new PendingHit(character, next, this, MagicCombatMethod.hitDelay(character, next, spell), false).setSpell(spell);
                 multiCombatHits.push(pendingHit);
                 spell.onHitCalc(pendingHit);
             }
@@ -250,7 +250,7 @@ export class MagicCombatMethod extends CombatMethod {
             return;
         }
 
-        const previousSpell = attacker.getCombat().getPreviousCast();
+        const previousSpell = hit.getSpell();
 
         if (previousSpell) {
             if (accurate) {

@@ -26,11 +26,15 @@
  */
 module.exports = function registerRegicideQuest(api) {
   const {
+    HitDamage,
+    HitMask,
     Skill,
     Location,
     ItemIdentifiers,
     NpcIdentifiers,
     ObjectIdentifiers,
+    ObjectManager,
+    MapObjects,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript, getRegisteredQuests } = require("../QuestRuntime");
 
@@ -139,6 +143,11 @@ module.exports = function registerRegicideQuest(api) {
     ObjectIdentifiers.DENSE_FOREST_4,
     ObjectIdentifiers.DENSE_FOREST_5,
   ]);
+  const TRIPWIRE_IDS = new Set([ObjectIdentifiers.TRIPWIRE_3, ObjectIdentifiers.TRIPWIRE]);
+  const STICKS_IDS = new Set([ObjectIdentifiers.STICKS]);
+  const LEAVES_IDS = new Set([ObjectIdentifiers.LEAVES, ObjectIdentifiers.LEAVES_2, ObjectIdentifiers.LEAVES_3]);
+  const ISAFDAR_LOG_BALANCE_ID = ObjectIdentifiers.LOG_BALANCE_10;
+  const IORWERTH_LOG_BALANCE_ID = ObjectIdentifiers.LOG_BALANCE_9;
   const SULPHUR_ROCK_IDS = new Set([
     ObjectIdentifiers.SULPHUR,
     ObjectIdentifiers.SULPHUR_2,
@@ -501,7 +510,7 @@ module.exports = function registerRegicideQuest(api) {
   }
 
   function crossDenseForest(event) {
-    const { player, objectId, location } = event;
+    const { player, object, objectId, location } = event;
     const stage = quest.getStage(player);
     event.handled = true;
     if (stage < STAGE_SPOKEN_TRACKER_2) {
@@ -518,7 +527,215 @@ module.exports = function registerRegicideQuest(api) {
     } else if (stage === STAGE_DEFEATED_GUARD && objectId === ObjectIdentifiers.DENSE_FOREST_4) {
       quest.setStage(player, STAGE_ENTERED_CAMP);
     }
-    squeezeThrough(player, location);
+    const definition = event.definition ?? object?.getDefinition?.();
+    const face = object?.getFace?.() ?? 0;
+    const sizeX = definition?.getSizeX?.() ?? 1;
+    const sizeY = definition?.getSizeY?.() ?? 1;
+    const width = face % 2 === 0 ? sizeX : sizeY;
+    const height = face % 2 === 0 ? sizeY : sizeX;
+    const position = player.getLocation();
+    let x = position.getX();
+    let y = position.getY();
+    // This cache placement opens onto the north-side path only at these two
+    // collision-clear tiles. Object routing keeps the approach outside its
+    // three-tile footprint so the clicker's side is still unambiguous here.
+    if (location.x === 2302 && location.y === 3214 && objectId === ObjectIdentifiers.DENSE_FOREST) {
+      if (x < location.x) {
+        x = 2305;
+        y = 3213;
+      } else {
+        x = 2301;
+        y = 3215;
+      }
+    } else if (x < location.x) x = location.x + width;
+    else if (x >= location.x + width) x = location.x - 1;
+    else if (y < location.y) y = location.y + height;
+    else y = location.y - 1;
+    player.moveTo(new Location(x, y, position.getZ()));
+  }
+
+  function routeMeilyrDenseForest(event) {
+    if (LEAVES_IDS.has(event.objectId)) {
+      const objectLocation = event.object?.getLocation?.();
+      if (!objectLocation) return;
+      const location = {
+        x: objectLocation.getX(),
+        y: objectLocation.getY(),
+        z: objectLocation.getZ(),
+      };
+      const bounds = leafTrapBounds({ ...event, location });
+      const from = event.sourceLocation;
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+      if (from.x < bounds.minX) {
+        event.destination = { x: bounds.minX - 1, y: clamp(from.y, bounds.minY, bounds.maxY), z: from.z };
+      } else if (from.x > bounds.maxX) {
+        event.destination = { x: bounds.maxX + 1, y: clamp(from.y, bounds.minY, bounds.maxY), z: from.z };
+      } else if (from.y < bounds.minY) {
+        event.destination = { x: clamp(from.x, bounds.minX, bounds.maxX), y: bounds.minY - 1, z: from.z };
+      } else if (from.y > bounds.maxY) {
+        event.destination = { x: clamp(from.x, bounds.minX, bounds.maxX), y: bounds.maxY + 1, z: from.z };
+      }
+      return;
+    }
+    if (
+      event.objectId !== ObjectIdentifiers.DENSE_FOREST ||
+      event.object?.getLocation?.()?.getX() !== 2302 ||
+      event.object?.getLocation?.()?.getY() !== 3214
+    ) return;
+    const from = event.sourceLocation;
+    const z = event.object.getLocation().getZ();
+    event.destination = from.x < 2302
+      ? { x: 2301, y: 3215, z }
+      : { x: 2305, y: 3213, z };
+  }
+
+  /** Wiki's chance chart is 31/256 at level 1, rising to 156/256 at level 99. */
+  function stepOverTripwire(event) {
+    const { player, object, location } = event;
+    const option = event.definition?.getActions?.()?.[event.clickType - 1];
+    if (option !== "Step-over") return;
+    event.handled = true;
+    const position = player.getLocation();
+    const level = Math.max(1, Math.min(99, player.getSkillManager().getCurrentLevel(Skill.AGILITY)));
+    const successChance = (31 + ((level - 1) * (156 - 31)) / 98) / 256;
+    if (Math.random() >= successChance) {
+      player.getCombat().getHitQueue().addPendingDamage([new HitDamage(10, HitMask.RED)]);
+      const immunity = player.getCombat().getPoisonImmunityTimer?.();
+      if (!player.isPoisoned?.() && (!immunity || immunity.finished())) player.setPoisonDamage(2);
+      return;
+    }
+    const face = object?.getFace?.() ?? 0;
+    // Cross past the wire's full local-Y footprint, rotated onto the crossing axis.
+    const axis = face % 2 === 0 ? "y" : "x";
+    const current = axis === "x" ? position.getX() : position.getY();
+    const wire = location[axis];
+    const span = event.definition?.getSizeY?.() ?? 1;
+    const destination = current > wire ? wire - 1 : wire + span;
+    player.moveTo(new Location(
+      axis === "x" ? destination : position.getX(),
+      axis === "y" ? destination : position.getY(),
+      position.getZ(),
+    ));
+  }
+
+  function leafTrapBounds(event) {
+    const { location } = event;
+    const z = location.z ?? location.getZ?.() ?? 0;
+    const originX = location.x ?? location.getX?.();
+    const originY = location.y ?? location.getY?.();
+    const queue = [[originX, originY]];
+    const visited = new Set([`${originX},${originY}`]);
+    const tiles = [];
+    for (let i = 0; i < queue.length && i < 25; i++) {
+      const [x, y] = queue[i];
+      const tile = new Location(x, y, z);
+      const objects = [
+        ...(ObjectManager?.objectsAt?.(tile) ?? []),
+        ...(MapObjects?.mapObjects?.get?.(MapObjects.getHash(x, y, z)) ?? []),
+      ];
+      if (!objects.some((object) => LEAVES_IDS.has(object.getId?.()))) continue;
+      tiles.push([x, y]);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        const key = `${nx},${ny}`;
+        if (visited.has(key) || Math.abs(nx - originX) > 2 || Math.abs(ny - originY) > 2) continue;
+        visited.add(key);
+        queue.push([nx, ny]);
+      }
+    }
+    if (!tiles.length) return { minX: originX, maxX: originX, minY: originY, maxY: originY };
+    return {
+      minX: Math.min(...tiles.map(([x]) => x)), maxX: Math.max(...tiles.map(([x]) => x)),
+      minY: Math.min(...tiles.map(([, y]) => y)), maxY: Math.max(...tiles.map(([, y]) => y)),
+    };
+  }
+
+  function crossAgilityTrap(event, { successChance, damage, label }) {
+    const { player, location } = event;
+    const option = event.definition?.getActions?.()?.[event.clickType - 1];
+    if (option !== label) return;
+    event.handled = true;
+    const source = event.sourceLocation ?? player.getLocation();
+    const px = source.x ?? source.getX?.();
+    const py = source.y ?? source.getY?.();
+    const pz = source.z ?? source.getZ?.();
+    const locX = location.x ?? location.getX?.();
+    const locY = location.y ?? location.getY?.();
+    const level = Math.max(1, Math.min(99, player.getSkillManager().getCurrentLevel(Skill.AGILITY)));
+    if (Math.random() >= successChance(level)) {
+      const hit = LEAVES_IDS.has(event.objectId) ? Math.floor(Math.random() * damage) + 1 : damage;
+      player.getCombat().getHitQueue().addPendingDamage([new HitDamage(hit, HitMask.RED)]);
+      if (LEAVES_IDS.has(event.objectId)) {
+        player.sendMessage("You fall into the leaf trap and take damage.");
+      } else {
+        player.sendMessage("You fail to pass the trap and are knocked back.");
+        if (px < locX) player.moveTo(new Location(px - 1, py, pz));
+        else if (px > locX) player.moveTo(new Location(px + 1, py, pz));
+        else if (py < locY) player.moveTo(new Location(px, py - 1, pz));
+        else player.moveTo(new Location(px, py + 1, pz));
+      }
+      return;
+    }
+    const bounds = LEAVES_IDS.has(event.objectId)
+      ? leafTrapBounds(event)
+      : { minX: locX, maxX: locX, minY: locY, maxY: locY };
+    let x = px;
+    let y = py;
+    let axis;
+    if (px < bounds.minX) { axis = "x"; x = bounds.maxX + 1; }
+    else if (px > bounds.maxX) { axis = "x"; x = bounds.minX - 1; }
+    else if (py < bounds.minY) { axis = "y"; y = bounds.maxY + 1; }
+    else if (py > bounds.maxY) { axis = "y"; y = bounds.minY - 1; }
+    else {
+      player.sendMessage("Stand beside the near edge of the trap before trying to cross it.");
+      return;
+    }
+    player.moveTo(new Location(x, y, pz));
+  }
+
+  function jumpLeaves(event) {
+    crossAgilityTrap(event, {
+      successChance: (agility) => Math.round(181 + ((agility - 1) * 75) / 98) / 256,
+      damage: 18,
+      label: "Jump",
+    });
+  }
+
+  function passSticks(event) {
+    crossAgilityTrap(event, {
+      successChance: (agility) => Math.round(31 + ((agility - 1) * 125) / 98) / 256,
+      damage: 8,
+      label: "Pass",
+    });
+  }
+
+  /** Cache log endpoints connect the forest banks; land outside their collision. */
+  function crossIsafdarLogBalance(event) {
+    const { player, location, sourceLocation } = event;
+    if (event.objectId === IORWERTH_LOG_BALANCE_ID) {
+      if (location.z !== 0 || location.y !== 3237 || ![2197, 2201].includes(location.x) ||
+        (event.option && event.option.toLowerCase() !== "cross")) return;
+      event.handled = true;
+      if (agilityLevel(player) < 45) {
+        player.sendMessage("You need an Agility level of 45 to cross this log balance.");
+        return;
+      }
+      player.performAnimation?.(new api.core.Animation(762));
+      player.moveTo(location.x === 2197
+        ? new Location(2201, 3236, 0)
+        : new Location(2197, 3238, 0));
+      return;
+    }
+    if (location.z !== 0 || location.y !== 3250 || ![2259, 2263].includes(location.x) ||
+      (event.option && event.option.toLowerCase() !== "cross")) return;
+    event.handled = true;
+    const sourceX = sourceLocation?.x ?? player.getLocation().getX();
+    const destinationX = location.x === 2259
+      ? (sourceX > location.x ? 2258 : 2259)
+      : (sourceX < location.x ? 2264 : 2262);
+    player.performAnimation?.(new api.core.Animation(762));
+    player.moveTo(new Location(destinationX, 3250, 0));
   }
 
   function inspectFootprints(event) {
@@ -543,7 +760,10 @@ module.exports = function registerRegicideQuest(api) {
 
   function climbWell(event) {
     const { player } = event;
-    if (quest.getStage(player) < STAGE_RECEIVED_MESSAGE) return; // the well is only repaired for Regicide
+    // While the Regicide repair quest is active, its story route handles the
+    // well. Once complete, let the shared captured loc route own it: the same
+    // cache well is also the Underground Pass connection used by later quests.
+    if (quest.getStage(player) < STAGE_RECEIVED_MESSAGE || quest.isComplete(player)) return;
     event.handled = true;
     const pos = player.getLocation();
     player.sendMessage("You climb into the well..");
@@ -555,14 +775,20 @@ module.exports = function registerRegicideQuest(api) {
   }
 
   function passArandarGate(event) {
-    const { player, location } = event;
+    const { player, location, sourceLocation } = event;
     event.handled = true;
     if (quest.getStage(player) < STAGE_REPORTED_IORWERTH) {
       player.sendMessage("No human may enter Tirannwn. Unless you have the proper documentation, sealed by one of the great houses.");
       return;
     }
     player.sendMessage("The guards recognise Lord Iorwerth's seal and let you pass.");
-    squeezeThrough(player, location);
+    // Both Huge Gate leaves (3944/3945) form a north/south barrier. The
+    // object route puts the player beside the clicked leaf before this hook,
+    // so use that approach side and move across the full gate row.
+    const sourceY = sourceLocation?.y ?? player.getLocation().getY();
+    const destinationY = sourceY < location.y ? location.y + 2 : location.y - 2;
+    const position = player.getLocation();
+    player.moveTo(new Location(position.getX(), destinationY, position.getZ()));
   }
 
   function handleObjectInteraction(event) {
@@ -582,6 +808,22 @@ module.exports = function registerRegicideQuest(api) {
     }
     if (DENSE_FOREST_IDS.has(objectId)) {
       crossDenseForest(event);
+      return;
+    }
+    if (TRIPWIRE_IDS.has(objectId)) {
+      stepOverTripwire(event);
+      return;
+    }
+    if (LEAVES_IDS.has(objectId)) {
+      jumpLeaves(event);
+      return;
+    }
+    if (objectId === ISAFDAR_LOG_BALANCE_ID || objectId === IORWERTH_LOG_BALANCE_ID) {
+      crossIsafdarLogBalance(event);
+      return;
+    }
+    if (STICKS_IDS.has(objectId)) {
+      passSticks(event);
       return;
     }
     if (SULPHUR_ROCK_IDS.has(objectId)) {
@@ -806,6 +1048,7 @@ module.exports = function registerRegicideQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:condition", handleDialogueCondition);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectRoute(routeMeilyrDenseForest);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem);
   api.onPlayerLogout(handleLogout);

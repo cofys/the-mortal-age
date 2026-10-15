@@ -574,6 +574,34 @@ module.exports = function registerUndergroundPassQuest(api) {
     }
   }
 
+  /** Jump along a cache bridge onto the far bank instead of leaving the player in place. */
+  function landAcrossPlatform(player, event) {
+    const at = event.location ?? {};
+    const object = event.object;
+    const definition = event.definition ?? object?.getDefinition?.();
+    const face = object?.getFace?.() ?? 0;
+    const sizeX = definition?.getSizeX?.() ?? 1;
+    const sizeY = definition?.getSizeY?.() ?? 1;
+    const width = face % 2 === 0 ? sizeX : sizeY;
+    const height = face % 2 === 0 ? sizeY : sizeX;
+    const source = event.sourceLocation ?? {};
+    const here = player.getLocation();
+    const x = source.x ?? here.getX();
+    const y = source.y ?? here.getY();
+    const z = at.z ?? here.getZ();
+
+    if (height > width || (height === width && Math.abs(y - at.y) >= Math.abs(x - at.x))) {
+      const southBank = at.y + height;
+      const northBank = at.y - 1;
+      player.moveTo(new Location(Math.max(at.x, Math.min(at.x + width - 1, x)), y < at.y ? southBank : northBank, z));
+      return;
+    }
+
+    const eastBank = at.x + width;
+    const westBank = at.x - 1;
+    player.moveTo(new Location(x < at.x ? eastBank : westBank, Math.max(at.y, Math.min(at.y + height - 1, y)), z));
+  }
+
   /** Which transcript variant each indexed speaker plays, by quest stage. */
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
@@ -1266,6 +1294,9 @@ module.exports = function registerUndergroundPassQuest(api) {
       return;
     }
     if (TEMPLE_DOOR_IDS.has(event.objectId)) {
+      // Completing the quest necessarily means the history was read and the
+      // temple was entered; do not keep enforcing its pre-completion bits.
+      if (quest.isComplete(event.player)) return;
       event.handled = true;
       useTempleDoor(event.player);
     }
@@ -1561,6 +1592,7 @@ module.exports = function registerUndergroundPassQuest(api) {
         player.sendMessage("...but you slip and tumble into the darkness.");
         return;
       }
+      landAcrossPlatform(player, event);
       player.sendMessage("...you manage to cross safely.");
       return;
     }

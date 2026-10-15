@@ -222,8 +222,9 @@ test("Probita returns owned pets the player no longer has, once", () => {
 });
 
 test("every skilling-pet collection log item has a roll source", () => {
-  const log = require("../../client/common/collectionlog/collection-log.json");
-  const skilling = log.categories.find((category) => category.structId === 529)?.itemIds ?? [];
+  const ClogData = require("../plugins/achievements/collectionlog/Data.CollectionLog");
+  ClogData({ core: { CacheDefinitions: require("../dist/game/cache/CacheDefinitions").CacheDefinitions } });
+  const skilling = ClogData.tabs().flatMap((tab) => tab.categories).find((category) => category.struct === 529)?.items ?? [];
   assert.ok(skilling.length > 0, "the Skilling Pets collection log category is empty");
   const rollable = new Set(Pets.__internals.PETS.filter((pet) => pet.skill != null).map((pet) => pet.itemId));
   for (const itemId of skilling) {

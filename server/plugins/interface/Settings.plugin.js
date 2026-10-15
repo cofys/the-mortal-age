@@ -483,9 +483,9 @@ module.exports = {
     api.onPlayerLogin(syncXpDrops);
     api.onInterfaceActionButton(XPDROPS_ORB_UID, clickXpDrops);
     for (const tab of TAB_VARBIT_MAP) {
-      api.persistAttribute(keybindAttribute(tab.varbit));
+      api.persistAttribute(keybindAttribute(tab.varbit), tab.defaultKey);
     }
-    api.persistAttribute(keybindAttribute(ESC_CLOSES_VARBIT));
+    api.persistAttribute(keybindAttribute(ESC_CLOSES_VARBIT), 1);
 
     // "All Settings" button in the settings side panel, and its close button.
     api.onInterfaceActionButton(ALL_SETTINGS_SIDE_BUTTON, ({ player }) => openAllSettings(player));
@@ -540,8 +540,8 @@ module.exports = {
       return true;
     });
 
-    api.persistAttribute(CLIENT_LAYOUT_ATTRIBUTE);
-    api.persistAttribute(CLIENT_LAYOUT_317_ATTRIBUTE);
+    api.persistAttribute(CLIENT_LAYOUT_ATTRIBUTE, DEFAULT_GAMEFRAME_ROOT);
+    api.persistAttribute(CLIENT_LAYOUT_317_ATTRIBUTE, false);
 
     // A world.json "gameframe" overrides the player's saved layout. Login hooks run before
     // NetworkBuilder sends the gameframe bootstrap (and WelcomeScreen re-sends it), both of

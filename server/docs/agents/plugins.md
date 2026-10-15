@@ -172,6 +172,19 @@ api.onCustomEvent("slayer:assignment", (request) => {
 - The emitter owns the event name and payload shape; the listener owns the handler. Adding
   a new cross-plugin interaction means a new event name, not new `PluginManager` surface.
 
+## Turning plugins on and off
+
+Every plugin is on unless it exports `enabled: false` (VoiceChat does). world.json
+`plugins` overrides that per plugin, by its registered `name`; a name that matches no plugin
+is logged as a warning:
+
+```json
+"plugins": { "TutorialIsland": false, "VoiceChat": true }
+```
+
+The older `disabledPlugins` array still loads but is deprecated: when present, it alone
+decides (what it lists is off, everything else on).
+
 ## Members content
 
 Every plugin whose content is members-only in OSRS (members skills, areas, bosses, minigames,
@@ -217,16 +230,16 @@ wins over both of the above:
 ```
 
 A deployment keeps its own settings in `data/definitions/world.local.json` (gitignored), layered
-over world.json: each top-level key replaces world.json's, and `pluginConfig` merges key by key.
-A live world can then change its XP rate or `disabledPlugins` and still update from main by
-fast-forward:
+over world.json: each top-level key replaces world.json's, and `pluginConfig` and `plugins`
+merge key by key. A live world can then change its XP rate or turn plugins on and off and still
+update from main by fast-forward:
 
 ```json
-{ "experienceMultiplier": 10, "disabledPlugins": ["VoiceChat"] }
+{ "experienceMultiplier": 10, "plugins": { "TutorialIsland": true } }
 ```
 
 The bot population follows the same layering: `pluginConfig` `"PlayerBots:sites"` overrides
-bot-sites.json sites by id, property by property, and adds new ones (`plugins/bots/brain/BotSites.js`; docs/bot-combat-training.md).
+bot-sites.json sites by id, property by property, and adds new ones (`plugins/bots/brain/Sites.PlayerBots.js`; docs/bot-combat-training.md).
 
 ## Conventions
 

@@ -113,9 +113,9 @@ module.exports = {
   register(api) {
     api.onServerStartup(Runtime.start.bind(null, api));
     api.onServerShutdown(Runtime.shutdown);
-    api.persistAttribute(Birdhouses.ATTRIBUTE);
-    api.persistAttribute(Crabs.ATTRIBUTE);
-    api.persistAttribute(DriftNets.ATTRIBUTE);
+    api.persistAttribute(Birdhouses.ATTRIBUTE, {});
+    api.persistAttribute(Crabs.ATTRIBUTE, {});
+    api.persistAttribute(DriftNets.ATTRIBUTE, { nets: {}, stored: 0, until: 0 });
     api.persistAttribute(Rumours.ATTRIBUTE);
     api.persistAttribute(Tracking.ATTRIBUTE);
     api.persistAttribute(Aerial.ATTRIBUTE);
@@ -143,7 +143,7 @@ module.exports = {
     api.onObjectInteraction("Bush", { Rustle: Dungeon.rustle });
     api.onObjectInteraction("Pit trap", { Bait: Broavs.bait, Dismantle: Broavs.dismantle });
     api.onNpcInteraction("Broav", { "Pick-up": Broavs.pickup });
-    for (const name of ["Broav", "Unconscious broav"]) api.onItemAction(name, { Release: Broavs.release });
+    for (const name of ["Broav", "Unconscious broav"]) api.onItemAction(name, { Drop: Broavs.release, Release: Broavs.release });
     api.onItemAction("Magic box", { Activate: Traps.activate });
     api.onGroundItemSecondClick([api.core.ItemIdentifiers.BIRD_SNARE, api.core.ItemIdentifiers.BOX_TRAP, api.core.ItemIdentifiers.MAGIC_BOX, api.core.ItemIdentifiers.RABBIT_SNARE], Traps.groundActivate);
     for (const name of ["Bird snare", "Box trap", "Shaking box", "Magic box", "Magic box failed", "Deadfall", "Boulder", "Large boulder", "Net trap", "Young tree", "Collapsed trap"])

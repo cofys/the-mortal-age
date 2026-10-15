@@ -25,9 +25,9 @@
  *   melee anim 5485 (base 25); protection prayers letting half through.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
-const Monsters = require("./CoxMonsters");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
+const Monsters = require("./Monsters.ChambersOfXeric");
 
 const NPC = { MYSTICS: [7604, 7605, 7606] };
 const OBJECT = { MARK: 29741, PORTAL_START: 49996, PORTAL_MIDDLE: 49997, PORTAL_END: 49998 };

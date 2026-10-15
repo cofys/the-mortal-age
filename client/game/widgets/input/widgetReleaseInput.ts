@@ -184,17 +184,12 @@ export function processWidgetReleaseInput(
             delete widgetInteraction.dragRenderAreaAbsY;
         } else {
             // Mouse button released without dragging - fire onClick (for draggable widgets) and onRelease
+            const widget = widgetInteraction.clickedWidget;
+            const eventScaleX = widget._absScaleX ?? 1;
+            const eventScaleY = widget._absScaleY ?? 1;
             const releaseCtx: Partial<ScriptEvent> = {
-                mouseX:
-                    mx -
-                    (widgetInteraction.clickedWidget._absX ??
-                        widgetInteraction.clickedWidget.x ??
-                        0),
-                mouseY:
-                    my -
-                    (widgetInteraction.clickedWidget._absY ??
-                        widgetInteraction.clickedWidget.y ??
-                        0),
+                mouseX: ((mx - (widget._absX ?? widget.x ?? 0)) / eventScaleX) | 0,
+                mouseY: ((my - (widget._absY ?? widget.y ?? 0)) / eventScaleY) | 0,
                 opIndex: 1,
             };
 

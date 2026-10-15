@@ -457,6 +457,11 @@ module.exports = function registerBelowIceMountainQuest(api) {
    */
   function handleRamarnoTalk(event) {
     if (!RAMARNO_WORLD_NPC_IDS.has(event.npcId) || event.clickType !== 1) return;
+    // Ramarno is also the Whisperer chapter's guide in Desert Treasure II.
+    // Let that quest's named handler own the interaction while it is active;
+    // otherwise this generic post-quest transcript consumes the click first.
+    const dt2Stage = Number(event.player.getAttribute("quest.desert_treasure_ii.stage")) || 0;
+    if (dt2Stage > 0 && dt2Stage < 12) return;
     const variant = selectRamarnoVariant(event.player);
     if (!variant) return;
     event.handled = true;
@@ -838,12 +843,12 @@ module.exports = function registerBelowIceMountainQuest(api) {
   function handleKnifeSandwich(event) {
     const { player, usedItemId, usedWithItemId } = event;
     const pair = new Set([usedItemId, usedWithItemId]);
-    if (!pair.has(KNIFE_ITEM_ID) || !pair.has(BREAD_ITEM_ID) && !pair.has(COOKED_MEAT_ITEM_ID)) return;
+    if (!pair.has(KNIFE_ITEM_ID) || !pair.has(BREAD_ITEM_ID) && !pair.has(COOKED_MEAT_ITEM_ID)) return false;
     const stage = quest.getStage(player);
-    if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return;
-    if (memberState(player, MARLEY_ATTRIBUTE) !== MEMBER_IN_PROGRESS) return;
+    if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return false;
+    if (memberState(player, MARLEY_ATTRIBUTE) !== MEMBER_IN_PROGRESS) return false;
     if (!held(player, KNIFE_ITEM_ID) || !held(player, BREAD_ITEM_ID) || !held(player, COOKED_MEAT_ITEM_ID)) {
-      return;
+      return false;
     }
     event.handled = true;
     player.getInventory().deleteNumber(BREAD_ITEM_ID, 1);
@@ -851,6 +856,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
     player.getInventory().adds(STEAK_SANDWICH_ITEM_ID, 1);
     setFlag(player, SANDWICH_MADE_ATTRIBUTE, true);
     player.sendMessage("You make a steak sandwich.");
+    return true;
   }
 
   function handleItemOnRamarno(event) {

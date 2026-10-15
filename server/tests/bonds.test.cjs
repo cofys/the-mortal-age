@@ -123,6 +123,9 @@ function mockApi() {
       handlers.prompts.push({ player, title, pairs });
       return true;
     },
+    emitCustomEvent: (name, event) => {
+      for (const handler of handlers.custom.get(name) ?? []) handler(event);
+    },
   };
   return { api, handlers };
 }

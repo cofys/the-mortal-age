@@ -1,7 +1,7 @@
 "use strict";
 
-const Shared = require("./ZulrahShared");
-const Fight = require("./ZulrahFight");
+const Shared = require("./Shared.Zulrah");
+const Fight = require("./Fight.Zulrah");
 
 /** ::zulrah - to the Zul-Andra pier, beside the boat. */
 function toZulAndra({ player }) {

@@ -11,7 +11,7 @@
  * The pit's rocks are climbed into and out of with a slide (1148).
  * How often he stamps or knocks back isn't on the Wiki; the odds in the data are estimates.
  */
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 const Common = require("./Common.GiantLairs");
 const Lair = require("./Lair.GiantLairs");
 

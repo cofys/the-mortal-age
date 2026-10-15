@@ -679,7 +679,7 @@ class FriendsChatManager {
     }
     static persist(player) {
         try {
-            GameConstants.PLAYER_PERSISTENCE.save(player);
+            GameConstants.PLAYER_PERSISTENCE.requestSave(player, "clan-roster");
         }
         catch (error) {
             console.warn(`[social] failed to save ${player.getUsername()}`, error);

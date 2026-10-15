@@ -10,9 +10,9 @@
  * Near-Reality: the statement when Help is used without a potion.
  */
 
-const Shared = require("./WintertodtShared");
-const Round = require("./WintertodtRound");
-const Corners = require("./WintertodtCorners");
+const Shared = require("./Shared.Wintertodt");
+const Round = require("./Round.Wintertodt");
+const Corners = require("./Corners.Wintertodt");
 const Supplies = require("./Supplies.Wintertodt");
 const CombatAchievements = require("./CombatAchievements.Wintertodt");
 

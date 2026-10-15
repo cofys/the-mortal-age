@@ -15,8 +15,8 @@
  *   (anim 363, sound 2608), cleaning one every 2 ticks (sound 3923); the messages.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 const Supplies = require("./Supplies.ChambersOfXeric");
 
 const WATER_GOURD = 20801;

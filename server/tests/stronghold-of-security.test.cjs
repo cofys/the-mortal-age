@@ -14,10 +14,10 @@ const { Location } = require("../dist/game/model/Location");
 const { Skill } = require("../dist/game/model/Skill");
 const { Sounds } = require("../dist/game/Sounds");
 const Sos = require("../plugins/areas/strongholdofsecurity/StrongholdOfSecurity.plugin");
-const Data = require("../plugins/areas/strongholdofsecurity/SosData");
-const Doors = require("../plugins/areas/strongholdofsecurity/SosDoors");
-const Rewards = require("../plugins/areas/strongholdofsecurity/SosRewards");
-const Travel = require("../plugins/areas/strongholdofsecurity/SosTravel");
+const Data = require("../plugins/areas/strongholdofsecurity/Data.StrongholdOfSecurity");
+const Doors = require("../plugins/areas/strongholdofsecurity/Doors.StrongholdOfSecurity");
+const Rewards = require("../plugins/areas/strongholdofsecurity/Rewards.StrongholdOfSecurity");
+const Travel = require("../plugins/areas/strongholdofsecurity/Travel.StrongholdOfSecurity");
 
 const tasks = [];
 const prompts = [];
@@ -111,7 +111,7 @@ test("the data: every object and boot item as the cache names it, 33 questions w
 });
 
 test("as captured: a door speaks with its floor's door NPC as the head, door_chathead, under its name", () => {
-  const { DoorChatDialogue } = require("../plugins/areas/strongholdofsecurity/SosDialogues");
+  const { DoorChatDialogue } = require("../plugins/areas/strongholdofsecurity/Dialogues.StrongholdOfSecurity");
   const calls = [];
   const sender = new Proxy({}, { get: (_t, method) => (...args) => { calls.push([method, ...args]); return sender; } });
   new DoorChatDialogue(0, 2495, "Rickety Door", "Correct!").send({ getPacketSender: () => sender });

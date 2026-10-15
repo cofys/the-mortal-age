@@ -30,8 +30,8 @@
  *   biting for up to 10; bursting colours other than red and white.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 const CRAB = { WHITE: 7576, RED: 7577, GREEN: 7578, BLUE: 7579 };
 const FOCUS = { WHITE: 7580, RED: 7581, GREEN: 7582, BLUE: 7583 };

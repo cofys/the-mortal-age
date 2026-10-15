@@ -21,6 +21,7 @@ const FLOUR_STATE_VARBIT = 5325;
 
 const HOPPER_ATTRIBUTE = "windmill:hopper";
 const FLOUR_ATTRIBUTE = "windmill:flour";
+const FLOUR_KIND_ATTRIBUTE = "windmill:flour-kind";
 
 function flourAmount(player) {
   const value = Number(player.getAttribute(FLOUR_ATTRIBUTE));
@@ -34,12 +35,17 @@ function setFlourAmount(player, amount) {
   return value;
 }
 
-function hopperHasGrain(player) {
-  return player.getAttribute(HOPPER_ATTRIBUTE) === true;
+function hopperContents(player) {
+  const contents = player.getAttribute(HOPPER_ATTRIBUTE);
+  return contents === true ? "grain" : contents === "sweetcorn" ? "sweetcorn" : null;
 }
 
-function setHopperGrain(player, full) {
-  player.setAttribute(HOPPER_ATTRIBUTE, full === true);
+function hopperHasGrain(player) {
+  return hopperContents(player) !== null;
+}
+
+function setHopperGrain(player, contents) {
+  player.setAttribute(HOPPER_ATTRIBUTE, contents === true ? true : contents || false);
 }
 
 /** True for a loc whose cache record is the flour bin (direct or varbit-transformed). */
@@ -73,6 +79,7 @@ function findFlourBin(nearLocation) {
 
 /** Re-send a bin with the model its transform varbit now resolves to. */
 function refreshBinObject(player, bin) {
+  if (!bin) return;
   const cached = CacheDefinitions.getObject(bin.getId());
   if (!cached) return;
   let displayId = bin.getId();
@@ -114,9 +121,26 @@ function fillHopper(event) {
   );
 }
 
+function fillSweetcornHopper(event, api) {
+  const { player, objectId, itemId } = event;
+  if (itemId !== ItemIdentifiers.SWEETCORN) return;
+  const visible = api.core.ObjectDefinition.forPlayer(objectId, player);
+  if (visible?.getName?.() !== "Hopper") return;
+  if (hopperHasGrain(player)) {
+    event.handled = true;
+    player.sendMessage("There is already grain in the hopper.");
+    return;
+  }
+  event.handled = true;
+  player.getInventory().deleteNumber(ItemIdentifiers.SWEETCORN, 1);
+  setHopperGrain(player, "sweetcorn");
+  player.sendMessage("You put the sweetcorn in the hopper. You should now operate the controls nearby.");
+}
+
 function operateHopperControls(event) {
   const { player } = event;
-  if (!hopperHasGrain(player)) {
+  const contents = hopperContents(player);
+  if (!contents) {
     player.sendMessage("You operate the empty hopper. Nothing interesting happens.");
     return;
   }
@@ -124,7 +148,13 @@ function operateHopperControls(event) {
     player.sendMessage("The flour bin downstairs is full, I should empty it first.");
     return;
   }
+  const flourKind = player.getAttribute(FLOUR_KIND_ATTRIBUTE);
+  if (flourAmount(player) > 0 && flourKind && flourKind !== contents) {
+    player.sendMessage("The flour bin contains a different type of flour; empty it first.");
+    return;
+  }
   setHopperGrain(player, false);
+  player.setAttribute(FLOUR_KIND_ATTRIBUTE, contents);
   const amount = setFlourAmount(player, flourAmount(player) + 1);
   player.sendMessage("You operate the hopper. The grain slides down the chute.");
   if (amount >= MAX_FLOUR) player.sendMessage("The flour bin downstairs is now full.");
@@ -145,8 +175,10 @@ function emptyFlourBin(event) {
     return;
   }
   player.getInventory().deleteNumber(ItemIdentifiers.POT, 1);
-  player.getInventory().adds(ItemIdentifiers.POT_OF_FLOUR, 1);
+  const isCornflour = player.getAttribute(FLOUR_KIND_ATTRIBUTE) === "sweetcorn";
+  player.getInventory().adds(isCornflour ? ItemIdentifiers.POT_OF_CORNFLOUR : ItemIdentifiers.POT_OF_FLOUR, 1);
   const amount = setFlourAmount(player, flourAmount(player) - 1);
+  if (amount <= 0) player.setAttribute(FLOUR_KIND_ATTRIBUTE, null);
   player.sendMessage(
     amount <= 0
       ? "You fill a pot with the last of the flour in the bin."
@@ -160,8 +192,10 @@ module.exports = {
   register(api) {
     api.persistAttribute(HOPPER_ATTRIBUTE);
     api.persistAttribute(FLOUR_ATTRIBUTE);
+    api.persistAttribute(FLOUR_KIND_ATTRIBUTE);
     api.onObjectInteraction("Hopper", { Fill: fillHopper });
     api.onObjectInteraction("Hopper controls", { Operate: operateHopperControls });
     api.onObjectInteraction("Flour bin", { Empty: emptyFlourBin });
+    api.onItemOnObject((event) => fillSweetcornHopper(event, api), { noted: false });
   },
 };

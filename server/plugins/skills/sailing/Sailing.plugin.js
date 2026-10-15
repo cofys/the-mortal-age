@@ -17,12 +17,12 @@ const {
   boatType,
   setVarbit,
   animateSails,
-} = require("./sailingContent");
-const { repairKitUses } = require("./cargo");
-const { specFor } = require("./boatParts");
-const { hotspotLocs } = require("./boatFacilities");
-const { describeBoat, boatVarps, openSidepanel, clearBoatVarps, DESCRIPTION_VARBITS } = require("./sidepanel");
-const { sendBoatVarbits } = require("./boatVarbits");
+} = require("./SailingContent.Sailing");
+const { repairKitUses } = require("./Cargo.Sailing");
+const { specFor } = require("./BoatParts.Sailing");
+const { hotspotLocs } = require("./BoatFacilities.Sailing");
+const { describeBoat, boatVarps, openSidepanel, clearBoatVarps, DESCRIPTION_VARBITS } = require("./Sidepanel.Sailing");
+const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
 
 
 /** Values from live OSRS boarding traces (docs/sailing-osrs-reference.md). */
@@ -51,7 +51,7 @@ function boardedVarbits(type, owned) {
 
 const COMBAT_OPTIONS_GROUP = 593;
 const VIEW_SAILING_OPTIONS_CHILD = 46;
-/** The sidepanel's "View Combat Options" (see sidepanel.js). */
+/** The sidepanel's "View Combat Options" (see Sidepanel.Sailing.js). */
 const VIEW_COMBAT_OPTIONS_CHILD = 1;
 
 /** Everything reset when leaving a boat, whatever set it. */

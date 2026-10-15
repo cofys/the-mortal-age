@@ -511,6 +511,8 @@ test("only the player at the helm steers, by heading or by clicking", () => {
     assert.equal(boat.heading, WEST);
     assert.equal(BoatManager.steerToward(sailor, boat.tileX + 10, boat.tileY), true);
     assert.equal(boat.heading, EAST, "a click east of the boat");
+    assert.equal(BoatManager.steerToward(sailor, boat.deckBaseX + 3, boat.deckBaseY + 1), true);
+    assert.equal(boat.heading, EAST, "a deck click at the helm neither steers nor walks");
   } finally {
     BoatManager.dispose(boat);
   }
@@ -524,8 +526,8 @@ const { Inventory } = require("../dist/game/model/container/impl/Inventory");
 const { Item } = require("../dist/game/model/Item");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const { emptySailingState, normalizeSailingState } = require("../dist/game/content/sailing/SailingState");
-const cargo = require("../plugins/skills/sailing/cargo");
-const { boatName } = require("../plugins/skills/sailing/sailingContent");
+const cargo = require("../plugins/skills/sailing/Cargo.Sailing");
+const { boatName } = require("../plugins/skills/sailing/SailingContent.Sailing");
 
 const ITEM_NAMES = {
   995: "Coins", 2: "Steel cannonball", 385: "Shark", 8794: "Saw", 31964: "Repair kit",
@@ -927,7 +929,7 @@ test("with more than one boat, the gangplank's Board asks which one", () => {
 });
 
 test("each owned boat is described to the client by its varbit block", () => {
-  const { slotVarbits } = require("../plugins/skills/sailing/boatVarbits");
+  const { slotVarbits } = require("../plugins/skills/sailing/BoatVarbits.Sailing");
   const player = sailor();
   Sailing.giveBoat(player, "raft", "the_pandemonium", [0, 32, 57]);
   const raft = slotVarbits(0, player.getSailing().boats[0]);
@@ -1360,8 +1362,8 @@ test("the Build trigger's argument decodes as the live capture's option row", ()
 });
 
 test("a boat's parts rebuild the captured upgraded boats from the cache", () => {
-  const parts = require("../plugins/skills/sailing/boatParts");
-  const { boatType } = require("../plugins/skills/sailing/sailingContent");
+  const parts = require("../plugins/skills/sailing/BoatParts.Sailing");
+  const { boatType } = require("../plugins/skills/sailing/SailingContent.Sailing");
   const locIds = (spec) => Object.fromEntries(spec.locs.filter((loc) => loc.part).map((loc) => [loc.part, loc.id]));
   // The captured skiff: camphor hull, steel keel, teak sails, oak helm.
   const skiff = { type: "skiff", parts: { hull: 4, keel: 2, sails: 2, helm: 1 } };
@@ -1410,6 +1412,7 @@ function shipyardHarness() {
   const chatboxes = [];
   const sender = new Proxy({}, {
     get: (_t, key) => (...args) => {
+      if (key === "getVarbit") return varbits.get(args[0]) ?? 0;
       if (key === "sendVarbit") varbits.set(args[0], args[1]);
       if (key === "sendChatboxInterface") chatboxes.push(args[0]);
       return sender;
@@ -1492,8 +1495,8 @@ test("::boatmats spawns a part's materials from the cache, for the named or curr
 
 // --- Facilities.
 
-const facilities = require("../plugins/skills/sailing/boatFacilities");
-const { slotVarbits, hotspotVarbit } = require("../plugins/skills/sailing/boatVarbits");
+const facilities = require("../plugins/skills/sailing/BoatFacilities.Sailing");
+const { slotVarbits, hotspotVarbit } = require("../plugins/skills/sailing/BoatVarbits.Sailing");
 
 test("a boat's facility hotspots, what they allow and their deck locs come from the cache", () => {
   const sloop = facilities.hotspotsOf("sloop");
@@ -1640,8 +1643,8 @@ test("::boatmats facility spawns a facility's materials", () => {
 
 // --- Shipwreck salvaging.
 
-const shipwrecks = require("../plugins/skills/sailing/shipwrecks");
-const { content } = require("../plugins/skills/sailing/sailingContent");
+const shipwrecks = require("../plugins/skills/sailing/Shipwrecks.Salvaging");
+const { content } = require("../plugins/skills/sailing/SailingContent.Sailing");
 const { hookTierOf, successChance, rollLoot, outwardFrom } = require("../plugins/skills/sailing/Salvaging.plugin");
 
 function withRandom(value, run) {
@@ -1901,7 +1904,7 @@ test("Dock on a port's buoy docks the boat there; Disembark at any port docks it
 test("sails play live's sequence on the mast and the sail cloth (rsprox: a skiff's sails, tick by tick)", () => {
   clearTasks();
   const { BoatManager } = require("../dist/game/content/sailing/BoatManager");
-  const { animateSails, MOVE_MODE } = require("../plugins/skills/sailing/sailingContent");
+  const { animateSails, MOVE_MODE } = require("../plugins/skills/sailing/SailingContent.Sailing");
   const { sailButtonTransition, sailState } = require("../plugins/skills/sailing/Helm.plugin");
   const getSpec = BoatManager.getSpec;
   const boat = { deckBaseX: 0, deckBaseY: 0 };
@@ -1938,7 +1941,7 @@ test("sails play live's sequence on the mast and the sail cloth (rsprox: a skiff
 });
 
 test("the sail cloth shows Set or Un-set as the sails are set, re-sent before the change's animations (rsprox)", () => {
-  const { setSailClothOps, SAIL_CLOTH_OPS } = require("../plugins/skills/sailing/sailingContent");
+  const { setSailClothOps, SAIL_CLOTH_OPS } = require("../plugins/skills/sailing/SailingContent.Sailing");
   const cloth = { id: 29516, x: 3, y: 4, level: 1, shape: 10, rotation: 0, sailCloth: true, opFlags: SAIL_CLOTH_OPS.unset };
   const boat = BoatManager.spawn(1, { ...RAFT, locs: [cloth] }, AT_SEA);
   const sent = [];
@@ -1962,8 +1965,8 @@ test("gusts and trimming follow live's timing (rsprox): a gust, Trim, the boost 
   clearTasks();
   const { World } = require("../dist/game/World");
   const { BoatMoveMode } = require("../dist/game/content/sailing/Boat");
-  const trim = require("../plugins/skills/sailing/trim");
-  const { boatType } = require("../plugins/skills/sailing/sailingContent");
+  const trim = require("../plugins/skills/sailing/Trim.Helm");
+  const { boatType } = require("../plugins/skills/sailing/SailingContent.Sailing");
   const skiff = boatType("skiff");
   const cloth = skiff.locs.find((loc) => loc.sailCloth);
   const spec = { ...skiff, locs: [{ ...cloth, opFlags: 0b10000 }], stats: { baseSpeed: 320, speedCap: 384, speedBoostDuration: 24 } };
@@ -2128,7 +2131,7 @@ test("clicking another loc from the helm leaves it and stops the boat; the sail 
 
 test("::maxboat presets fill every hotspot with a facility it allows, the best parts, and their caps", () => {
   const { _test } = require("../plugins/skills/sailing/SailingCommands.plugin");
-  const { hotspotsOf } = require("../plugins/skills/sailing/boatFacilities");
+  const { hotspotsOf } = require("../plugins/skills/sailing/BoatFacilities.Sailing");
   for (const name of Object.keys(_test.LOADOUTS)) {
     for (const type of ["raft", "skiff", "sloop"]) {
       const chosen = _test.loadoutFacilities(type, _test.LOADOUTS[name]);
@@ -2139,7 +2142,7 @@ test("::maxboat presets fill every hotspot with a facility it allows, the best p
   }
   const sloop = [..._test.loadoutFacilities("sloop", _test.LOADOUTS.salvaging).values()];
   const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
-  const { FACILITY } = require("../plugins/skills/sailing/boatFacilities");
+  const { FACILITY } = require("../plugins/skills/sailing/BoatFacilities.Sailing");
   const count = (facility) => sloop.filter((row) => CacheDefinitions.getDbRow(row).string(FACILITY.name) === facility).length;
   assert.equal(count("Dragon salvaging hook"), 2, "both hook spots");
   assert.equal(count("Greater teleport focus"), 1, "capped at one");
@@ -2148,7 +2151,7 @@ test("::maxboat presets fill every hotspot with a facility it allows, the best p
 
 test("Navigate walks to each boat type's helm stand tile (rsprox: south of the skiff's wheel, south-east of the sloop's)", () => {
   const { route } = registerPlugin("Helm.plugin");
-  const { boatType } = require("../plugins/skills/sailing/sailingContent");
+  const { boatType } = require("../plugins/skills/sailing/SailingContent.Sailing");
   for (const [type, offset] of [["raft", [0, 0]], ["skiff", [0, -1]], ["sloop", [1, -1]]]) {
     const player = sailor();
     Sailing.giveBoat(player, type, DOCK.id);

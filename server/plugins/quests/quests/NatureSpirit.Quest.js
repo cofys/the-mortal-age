@@ -120,9 +120,10 @@ module.exports = function registerNatureSpiritQuest(api) {
   const SPELL_BLOOMABLE_IDS = new Set([ROTTING_LOG_ID]);
   const SICKLE_BLOOMABLE_IDS = new Set(BLOOMED_PLANT.keys());
   const POUCH_PRODUCE_ITEM_IDS = [
-    MORT_MYRE_FUNGUS_ITEM_ID,
-    MORT_MYRE_STEM_ITEM_ID,
     MORT_MYRE_PEAR_ITEM_ID,
+    MORT_MYRE_STEM_ITEM_ID,
+    MORT_MYRE_FUNGUS_ITEM_ID,
+    ItemIdentifiers.VINE_FLOWER,
   ];
   const BLOOM_RADIUS = 2;
 
@@ -279,7 +280,7 @@ module.exports = function registerNatureSpiritQuest(api) {
       return;
     }
     player.getInventory().deleteNumber(DRUID_POUCH_FILLED_ITEM_ID, 1);
-    player.getInventory().adds(DRUID_POUCH_EMPTY_ITEM_ID, 1);
+    if (!held(player, DRUID_POUCH_FILLED_ITEM_ID)) player.getInventory().adds(DRUID_POUCH_EMPTY_ITEM_ID, 1);
     const location = ghast.getLocation();
     const visible = api.spawnNpc({
       id: GHAST_VISIBLE_NPC_ID,
@@ -302,12 +303,15 @@ module.exports = function registerNatureSpiritQuest(api) {
     return null;
   }
 
-  /** Move one piece of nature's bounty into the empty pouch. */
+  /** Fill with three pieces, favouring the produce that grants more charges. */
   function fillPouch(player, produceId) {
-    if (!held(player, produceId) || !held(player, DRUID_POUCH_EMPTY_ITEM_ID)) return false;
-    player.getInventory().deleteNumber(produceId, 1);
-    player.getInventory().deleteNumber(DRUID_POUCH_EMPTY_ITEM_ID, 1);
-    player.getInventory().adds(DRUID_POUCH_FILLED_ITEM_ID, 1);
+    if (!held(player, produceId) || (!held(player, DRUID_POUCH_EMPTY_ITEM_ID) && !held(player, DRUID_POUCH_FILLED_ITEM_ID))) return false;
+    const produce = [];
+    for (const id of POUCH_PRODUCE_ITEM_IDS) for (let n=0;n<player.getInventory().getAmount(id)&&produce.length<3;n++) produce.push(id);
+    if (produce.length<3) { player.sendMessage("You need at least three pieces of nature's bounty to fill the pouch."); return true; }
+    for (const id of produce) player.getInventory().deleteNumber(id, 1);
+    if (held(player, DRUID_POUCH_EMPTY_ITEM_ID)) player.getInventory().deleteNumber(DRUID_POUCH_EMPTY_ITEM_ID, 1);
+    player.getInventory().adds(DRUID_POUCH_FILLED_ITEM_ID, produce.reduce((charges,id)=>charges+(id===MORT_MYRE_PEAR_ITEM_ID?3:id===MORT_MYRE_STEM_ITEM_ID?2:1),0));
     player.sendMessage("You fill the druid pouch with nature's bounty.");
     return true;
   }
@@ -730,7 +734,7 @@ module.exports = function registerNatureSpiritQuest(api) {
 
   /** The druid pouch's "Fill" option packs the produce in the inventory. */
   function handlePouchFill(event) {
-    if (event.itemId !== DRUID_POUCH_EMPTY_ITEM_ID) return;
+    if (event.itemId !== DRUID_POUCH_EMPTY_ITEM_ID && event.itemId !== DRUID_POUCH_FILLED_ITEM_ID) return;
     if (!String(event.option ?? "").toLowerCase().includes("fill")) return;
     const produce = firstProduce(event.player);
     if (produce === null) {
@@ -750,7 +754,7 @@ module.exports = function registerNatureSpiritQuest(api) {
         : null;
     if (produce === null) return;
     const other = produce === event.usedItemId ? event.usedWithItemId : event.usedItemId;
-    if (other !== DRUID_POUCH_EMPTY_ITEM_ID) return;
+    if (other !== DRUID_POUCH_EMPTY_ITEM_ID && other !== DRUID_POUCH_FILLED_ITEM_ID) return;
     if (fillPouch(event.player, produce)) event.handled = true;
   }
 

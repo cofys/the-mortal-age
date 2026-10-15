@@ -1828,13 +1828,13 @@ export class CombatSpells {
 
     )
     spellEffectOnHitCalc(cast, damage: number) {
-        cast.heal(Math.floor(damage * 0.10));
+        cast.heal(Math.floor(damage * 0.25));
     }
 
     public static BLOOD_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.10)); },
+        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 372, 0, 20, 43, 31); },
         () => { return new Graphic(373); },
@@ -1919,7 +1919,7 @@ export class CombatSpells {
     public static BLOOD_BURST = new CombatAncientSpellExtend(
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.15)); },
+        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(376); },
@@ -2001,7 +2001,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.20)); },
+        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 374, 0, 20, 43, 31); },
         () => { return new Graphic(375) },
@@ -2078,7 +2078,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.20)); },
+        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
         () => { return 1; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(377) },

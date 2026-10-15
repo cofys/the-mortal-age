@@ -7,19 +7,27 @@ const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const QuestRuntime = require("../plugins/quests/QuestRuntime");
-const Diaries = require("../plugins/diaries/AchievementDiaries.plugin");
-const Data = require("../plugins/diaries/DiaryData");
-const Progress = require("../plugins/diaries/DiaryProgress");
-const Journal = require("../plugins/diaries/DiaryJournal");
-const Rewards = require("../plugins/diaries/DiaryRewards");
-const Lamps = require("../plugins/diaries/DiaryLamps");
+const Diaries = require("../plugins/achievements/AchievementDiaries.plugin");
+const Data = require("../plugins/achievements/diaries/Data.AchievementDiaries");
+const Progress = require("../plugins/achievements/diaries/Progress.AchievementDiaries");
+const Journal = require("../plugins/achievements/diaries/Journal.AchievementDiaries");
+const Rewards = require("../plugins/achievements/diaries/Rewards.AchievementDiaries");
+const Lamps = require("../plugins/achievements/diaries/Lamps.AchievementDiaries");
 const CAPTURED = require("./fixtures/achievement-diary-journals.json").journals;
 
 const tasks = [];
 const xpRewards = [];
 const SKILLS = ["Attack", "Smithing"].map((name) => ({ getName: () => name }));
 Diaries.register(new Proxy({
-  core: { Skill: { values: () => SKILLS } },
+  core: {
+    Skill: { values: () => SKILLS },
+    Task: require("../dist/game/task/Task").Task,
+    DialogueChainBuilder: require("../dist/game/model/dialogues/builders/DialogueChainBuilder").DialogueChainBuilder,
+    StatementDialogue: require("../dist/game/model/dialogues/entries/impl/StatementDialogue").StatementDialogue,
+    EndDialogue: require("../dist/game/model/dialogues/entries/impl/EndDialogue").EndDialogue,
+    PlayerRights: require("../dist/game/model/rights/PlayerRights").PlayerRights,
+    Bank: require("../dist/game/model/container/impl/Bank").Bank,
+  },
   getTaskManager: () => ({ submit: (task) => { task.setRunning(true); tasks.push(task); } }),
   emitCustomEvent: (name, request) => { if (name === "xpreward:open") xpRewards.push(request); },
 }, { get: (target, key) => target[key] ?? (() => {}) }));
@@ -133,6 +141,20 @@ test("as captured (Ardougne easy): message and count on the tick, started on the
   const query = { player, diary: "ardougne", tier: "easy" };
   Diaries._test.onIsComplete(query);
   assert.equal(query.complete, true);
+  const all = { player };
+  Diaries._test.onAllComplete(all);
+  assert.equal(all.complete, false, "the other diaries are not done");
+});
+
+test("saves from before the attribute rename keep their progress", () => {
+  const player = createPlayer();
+  const easy = ARDOUGNE.tiers.easy.tasks.map((task) => task.key);
+  player.setAttribute("diary.ardougne.tasks", easy);
+  player.setAttribute("diary.ardougne.rewards", ["easy"]);
+  Progress.restore({ player });
+  assert.equal(Progress.tierCount(player, ARDOUGNE, "easy"), easy.length);
+  assert.ok(Progress.claimedTiers(player, ARDOUGNE).has("easy"));
+  assert.equal(player.getAttribute("diary.ardougne.tasks"), null, "the old key is cleared, so it is no longer saved");
 });
 
 test("every captured task list is rebuilt line for line from the progress it shows", () => {
@@ -145,9 +167,9 @@ test("every captured task list is rebuilt line for line from the progress it sho
       const section = captured.slice(headers[t], headers[t + 1] ?? captured.length).join("\n");
       return diary.tiers[tier].tasks.filter((task) => section.includes(task.lines.map((line) => `<str>${line}`).join("\n"))).map((task) => task.key);
     });
-    player.setAttribute(Progress.tasksAttribute(diary), done);
+    player.setAttribute(Progress.TASKS_ATTRIBUTE, { [diary.key]: done });
     const claimed = Data.TIERS.filter((tier, index) => captured.filter((line) => line.includes("If I ever lose my")).length > index);
-    player.setAttribute(Progress.rewardsAttribute(diary), claimed);
+    player.setAttribute(Progress.REWARDS_ATTRIBUTE, { [diary.key]: claimed });
     assert.deepEqual(Journal.journalLines(player, diary), captured, diary.name);
   }
 });

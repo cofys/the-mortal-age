@@ -3,6 +3,7 @@ import type { Ray } from "../../../game/math/Raycast";
 import type { SdMapData } from "../../loader/SdMapData";
 import type { WebGPUMapSquare } from "../WebGPUMapSquare";
 import type { WebGPURenderer } from "../WebGPURenderer";
+import { RENDER_CONSTANTS } from "../../render/constants";
 import { ClickCrossLayer } from "./ClickCrossLayer";
 import { GroundItemLabelLayer } from "./GroundItemLabelLayer";
 import { GroundItemMeshes } from "./GroundItemMeshes";
@@ -173,7 +174,10 @@ export class WebGPUOverlays {
             host.updateInteractionFrame();
             host.populateFrame(timeMs, deltaMs);
             screen.begin();
-            screen.setCanvasResolution(this.renderer.canvas.width, this.renderer.canvas.height);
+            const bufW = this.renderer.canvas.width;
+            const bufH = this.renderer.canvas.height;
+            screen.setCanvasResolution(bufW, bufH);
+            this.syncScale(this.renderer.getUiRenderMetrics(bufW, bufH).renderScaleX);
 
             this.clickCross?.setTime(timeMs);
             this.clickCross?.update(timeMs);
@@ -183,6 +187,14 @@ export class WebGPUOverlays {
         } catch (error) {
             console.warn("[webgpu] overlays update failed", error);
         }
+    }
+
+    /** The canvas is at device pixel ratio; size sprites/text like WebGL's overlay scale sync (frame/render.ts). */
+    private syncScale(scale: number): void {
+        for (const layer of [this.overheadText, this.hitsplats, this.overheadPrayer, this.clickCross, this.groundItemLabels, this.tileText]) {
+            if (layer) layer.scale = scale;
+        }
+        if (this.healthBars) this.healthBars.scale = scale * RENDER_CONSTANTS.HEALTH_BAR_VISUAL_SCALE;
     }
 
     /** World pass (depth available): ground item meshes and depth-aware tile markers. */

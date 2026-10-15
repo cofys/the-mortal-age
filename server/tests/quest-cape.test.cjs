@@ -4,8 +4,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const QuestRuntime = require('../plugins/quests/QuestRuntime');
-const { DIARIES, TIERS } = require('../plugins/diaries/DiaryData');
-const attachQuestCape = require('../plugins/quests/quest-cape/QuestCape.QuestCape');
+const attachQuestCape = require('../plugins/quests/QuestCape.QuestCape');
 
 const answers = { quests: true, diaries: true };
 const eventHandlers = new Map();
@@ -13,7 +12,7 @@ const api = new Proxy({
   core: PluginManager.getCoreApi(),
   emitCustomEvent(name, request) {
     if (name === 'quest:is-complete') request.complete = answers.quests;
-    else if (name === 'diary:is-complete') request.complete = answers.diaries;
+    else if (name === 'diary:all-complete') request.complete = answers.diaries;
     else for (const handler of eventHandlers.get(name) ?? []) handler(request);
   },
   onCustomEvent(name, handler) {
@@ -60,7 +59,7 @@ function playerWithInventory(coins = 99000, freeSlots = 1) {
   };
 }
 
-test('cape eligibility fails closed for a missing quest and checks every diary tier for trim', () => {
+test('cape eligibility fails closed for a missing quest and asks whether every diary is complete for trim', () => {
   assert.equal(allQuestsComplete({}), true);
   const removed = registered.pop();
   assert.equal(allQuestsComplete({}), false);
@@ -71,7 +70,6 @@ test('cape eligibility fails closed for a missing quest and checks every diary t
   assert.equal(allDiariesComplete({}), true);
   answers.diaries = false;
   assert.equal(allDiariesComplete({}), false);
-  assert.equal(DIARIES.length * TIERS.length > 0, true);
   answers.diaries = true;
 });
 

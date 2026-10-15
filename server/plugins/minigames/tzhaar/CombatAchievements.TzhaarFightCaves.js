@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The Fight Caves' Combat Achievements (plugins/combatachievements/). A run is watched from its
+ * The Fight Caves' Combat Achievements (plugins/achievements/combatachievements/). A run is watched from its
  * first wave: the player's hits (melee only?), their prayer (any point lost?), Tz-Kih attacks,
  * Yt-MejKot heals, Yt-HurKot healing Jad and a Jad hit taken without the right protection prayer.
  * Winning counts for TzTok-Jad and decides the tasks. A run resumed after a logout is not

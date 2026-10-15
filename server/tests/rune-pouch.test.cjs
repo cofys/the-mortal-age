@@ -517,3 +517,33 @@ test("login moves runes from an old pouch's meta onto the player and sends the v
   assert.equal(pouch.getMetaValue(Pouch.LEGACY_META_KEY), undefined);
   assert.deepEqual(varbitSlots(player), [[Items.AIR_RUNE, 500], [Items.LAW_RUNE, 3]]);
 });
+
+test("utility magic pays alchemy costs from inventory and the carried rune pouch", () => {
+  const { MagicOnItemPacketListener } = require("../dist/net/packet/impl/MagicOnItemPacketListener");
+  const target = new Item(Items.RUNE_PLATEBODY, 1);
+  target.isTradeable = () => true;
+  target.isSellable = () => true;
+  target.getDefinition = () => ({ getHighAlchValue: () => 100, getLowAlchValue: () => 60 });
+  const player = createPlayer([target, new Item(Items.DIVINE_RUNE_POUCH, 1), new Item(Items.FIRE_RUNE, 2)]);
+  const inventory = player.getInventory();
+  inventory.capacity = () => 28;
+  inventory.adds = (id, amount) => inventory.add(new Item(id, amount));
+  player.getEquipment = () => ({ getWeapon: () => null });
+  player.getSkillManager = () => ({ getCurrentLevel: () => 99, addExperiences() {} });
+  player.performAnimation = () => {};
+  player.performGraphic = () => {};
+  player.getPacketSender().sendTab = () => {};
+  pouchWith(player, [[Items.NATURE_RUNE, 1], [Items.FIRE_RUNE, 2]]);
+  const listener = new MagicOnItemPacketListener();
+  listener.castOnItem(player, 1178, target.getId(), 0);
+  assert.equal(inventory.getAmount(target.getId()), 1, "a shortfall leaves the target and all runes intact");
+  assert.equal(Pouch.amountOf(player, Items.NATURE_RUNE), 1);
+  assert.equal(inventory.getAmount(Items.FIRE_RUNE), 2);
+  Pouch.store(player, Items.FIRE_RUNE, 1);
+  listener.castOnItem(player, 1178, target.getId(), 0);
+  assert.equal(inventory.getAmount(target.getId()), 0);
+  assert.equal(inventory.getAmount(Items.FIRE_RUNE), 0);
+  assert.equal(Pouch.amountOf(player, Items.NATURE_RUNE), 0);
+  assert.equal(Pouch.amountOf(player, Items.FIRE_RUNE), 0);
+  assert.ok(inventory.getAmount(Items.COINS) > 0);
+});

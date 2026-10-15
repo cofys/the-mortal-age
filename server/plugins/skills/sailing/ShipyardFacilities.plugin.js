@@ -5,10 +5,10 @@
 // (docs/sailing-osrs-reference.md); what a hotspot allows, levels and materials are the cache's.
 const { BoatManager } = require("../../../src/main/typescript/elvarg/game/content/sailing/BoatManager");
 const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
-const { setVarbit, playSound } = require("./sailingContent");
-const { HOTSPOT_VARBITS } = require("./sidepanel");
-const { sendBoatVarbits } = require("./boatVarbits");
-const facilities = require("./boatFacilities");
+const { setVarbit, playSound } = require("./SailingContent.Sailing");
+const { HOTSPOT_VARBITS } = require("./Sidepanel.Sailing");
+const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
+const facilities = require("./BoatFacilities.Sailing");
 const {
   aboardVisit,
   ownedBoat,

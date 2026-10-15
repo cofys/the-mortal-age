@@ -79,7 +79,7 @@ const charting = require("./SailingCharting.plugin.js");
 const rowing = require("./SailingRowing.plugin.js");
 const waypoints = require("./SailingWaypoints.plugin.js");
 const construction = require("./SailingConstruction.plugin.js");
-const { content } = require("./sailingContent.js");
+const { content } = require("./SailingContent.Sailing");
 
 // ---------------------------------------------------------------------------
 // Mock player.

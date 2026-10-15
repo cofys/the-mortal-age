@@ -10,7 +10,7 @@ const { CombatType } = require("../dist/game/content/combat/CombatType");
 const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { ItemIds } = require("../dist/util/IdEnums");
 
-const registerJusticiar = require("../plugins/combat/effects/JusticiarArmour");
+const registerJusticiar = require("../plugins/combat/effects/JusticiarArmour.EquipmentEffects");
 
 let modifier;
 registerJusticiar({ registerIncomingDamageModifier: (value) => { modifier = value; } });

@@ -343,6 +343,19 @@ export class WeaponProfiles {
         // chinchompas have their own seq (human_chinchompa_attack_pvn).
         this.register({ itemIds: [ItemIdentifiers.CHINCHOMPA_2, ItemIdentifiers.RED_CHINCHOMPA_2], ...chinchompa });
         this.register({ itemIds: [ItemIdentifiers.BLACK_CHINCHOMPA], ...chinchompa, attackAnimation: 7618 });
+        // Wiki: Blisterwood stakes have 6-tile range (8 on Longrange); the cache
+        // capture records their NPC attack animation and projectile.
+        this.register({
+            itemIds: [ItemIdentifiers.BLISTERWOOD_STAKE],
+            attackAnimation: 7617,
+            npcAttackAnimation: 7617,
+            attackDistance: 6,
+            longRangeDistance: 8,
+            longRangeFightType: FightType.DART_LONGRANGE,
+            hitDelays: [STANDARD_HIT],
+            projectiles: [THROWN_PROJECTILE],
+            fireSound: Sound.THROW_DART,
+        });
         return true;
     })();
 }

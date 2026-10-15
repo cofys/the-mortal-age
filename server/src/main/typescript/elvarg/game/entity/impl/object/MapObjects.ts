@@ -10,8 +10,48 @@ import { GameObject } from "./GameObject";
 export class MapObjects {
 
     public static mapObjects: Map<number, GameObject[]> = new Map<number, GameObject[]>();
+    private static readonly ownerObjects = new WeakMap<Player, Map<number, GameObject[]>>();
+
+    private static addOwnerObject(player: Player, object: GameObject): void {
+        let objects = this.ownerObjects.get(player);
+        if (!objects) this.ownerObjects.set(player, objects = new Map());
+        const hash = this.getHash(object.getLocation().getX(), object.getLocation().getY(), object.getLocation().getZ());
+        let atTile = objects.get(hash);
+        if (!atTile) objects.set(hash, atTile = []);
+        if (!atTile.includes(object)) atTile.push(object);
+    }
+
+    private static removeOwnerObject(player: Player, object: GameObject): void {
+        const objects = this.ownerObjects.get(player);
+        if (!objects) return;
+        const hash = this.getHash(object.getLocation().getX(), object.getLocation().getY(), object.getLocation().getZ());
+        const atTile = objects.get(hash);
+        if (!atTile) return;
+        const index = atTile.indexOf(object);
+        if (index >= 0) atTile.splice(index, 1);
+        if (atTile.length === 0) objects.delete(hash);
+    }
+
+    public static ownerObjectsInScene(player: Player, baseX: number, baseY: number, size: number): GameObject[] {
+        const objects = this.ownerObjects.get(player);
+        if (!objects) return [];
+        const result: GameObject[] = [];
+        for (const atTile of objects.values()) {
+            for (const object of atTile) {
+                const location = object.getLocation();
+                if (location.getX() >= baseX && location.getX() < baseX + size
+                    && location.getY() >= baseY && location.getY() < baseY + size) result.push(object);
+            }
+        }
+        return result;
+    }
 
     public static getPrivateArea(player: Player, id: number, location: Location): GameObject {
+        const hash = this.getHash(location.getX(), location.getY(), location.getZ());
+        const owned = this.ownerObjects.get(player)?.get(hash)?.find((entry) =>
+            entry.getLocation().equals(location) && ObjectDefinition.forPlayer(entry.getId(), player)?.id === id
+        ) ?? null;
+        if (owned) return owned;
         let object = this.get(id, location, player.getPrivateArea());
         if (!object) {
             const candidates = player.getPrivateArea()?.getObjects() ?? [];
@@ -20,7 +60,7 @@ export class MapObjects {
                 && ObjectDefinition.forPlayer(entry.getId(), player)?.id === id) ?? null;
         }
         if (!object) {
-            object = player.getPrivateArea()?.resolveObject(id, location) ?? null;
+            object = player.getPrivateArea()?.resolveObject(id, location, player) ?? null;
         }
         // Locs on bridge tiles are loaded one plane down (RegionManager), but the player
         // standing beside them - on a castle wall, say - is still on the plane above.
@@ -113,6 +153,10 @@ export class MapObjects {
     }
 
     static add(object: GameObject) {
+        if (object.getOwner()) {
+            this.addOwnerObject(object.getOwner()!, object);
+            return;
+        }
         if (!object.getPrivateArea()) {
 
             const hash = this.getHash(object.getLocation().getX(), object.getLocation().getY(), object.getLocation().getZ());
@@ -138,6 +182,10 @@ export class MapObjects {
     }
 
     static remove(object: GameObject) {
+        if (object.getOwner()) {
+            this.removeOwnerObject(object.getOwner()!, object);
+            return;
+        }
         if (!object.getPrivateArea()) {
             const hash = this.getHash(object.getLocation().getX(), object.getLocation().getY(), object.getLocation().getZ());
 

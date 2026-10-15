@@ -1365,6 +1365,8 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             if (wAny._absLogicalY !== logicalY) wAny._absLogicalY = logicalY;
             if (wAny._absWidth !== width) wAny._absWidth = width;
             if (wAny._absHeight !== height) wAny._absHeight = height;
+            wAny._absScaleX = rootScaleX;
+            wAny._absScaleY = rootScaleY;
         } catch {}
         if (profileWidgetRender) {
             boundsMs += performance.now() - boundsStartMs;
@@ -3841,7 +3843,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 if (interfaceParentGroup !== undefined && widgetManager) {
                     const roots = widgetManager.getAllGroupRoots(interfaceParentGroup);
                     for (const root of roots) {
-                        if (root != null) {
+                        if (root != null && !root.__renderSeparately) {
                             const interfaceParentDispatchStartMs = profileWidgetRender
                                 ? performance.now()
                                 : 0;

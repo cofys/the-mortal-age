@@ -103,4 +103,19 @@ assert.equal(click([cancelButton, viewTasksLayer])[0], cancelButton);
 // With its flag, the same op takes the click.
 assert.equal(click([cancelButton, { ...viewTasksLayer, flags: 2 }])[0].fileId, 36);
 
+// A widget that is only draggable offers no op, so the click runs the op beneath it: the
+// gravestone window (672) puts invisible resize handles (draggable script children of 672:0)
+// over its corners, and the top-right one lies over the Close button (672:3).
+const closeButton = {
+    uid: (672 << 16) | 3, groupId: 672, fileId: 3, childIndex: -1,
+    x: 0, y: 0, width: 26, height: 23, actions: ["Close"], flags: 2, eventHandlers: { onOp: {} },
+};
+const resizeHandle = {
+    uid: 672 << 16, groupId: 672, fileId: -1, childIndex: 2,
+    x: 0, y: 0, width: 40, height: 40, isDraggable: true,
+};
+assert.equal(click([closeButton, resizeHandle])[0], closeButton, "the resize handle doesn't take Close's click");
+// With nothing beneath offering an op, the handle still takes the click (to be dragged).
+assert.equal(click([{ ...closeButton, actions: undefined, flags: 0, eventHandlers: undefined }, resizeHandle])[0], resizeHandle);
+
 console.log("widget click cleared ops test passed");

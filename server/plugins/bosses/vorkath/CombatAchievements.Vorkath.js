@@ -1,5 +1,5 @@
 /**
- * Vorkath's Combat Achievements (plugins/combatachievements/) that her fight decides. A fight is
+ * Vorkath's Combat Achievements (plugins/achievements/combatachievements/) that her fight decides. A fight is
  * timed from her waking (the speed tasks); her specials' damage (acid pools, rapid fire, the
  * zombified spawn's explosion) and the player's prayer are watched through it; kills in a row
  * without leaving her area count for Extended Encounter and, with no special damage, Dodging the
@@ -53,7 +53,7 @@ function acidEnded(player) {
 /** onPlayerDealtDamage: hits on her during the acid phase. */
 function dealt({ player, target }) {
   const walk = states.get(player)?.walk;
-  if (!walk || walk.spoiled || target?.getId?.() !== Shared.AWAKE_ID) return;
+  if (!walk || walk.spoiled || !Shared.isAwakeNpc(target)) return;
   walk.hits++;
   if (walk.hits >= THE_WALK_HITS) {
     walk.spoiled = true;

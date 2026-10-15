@@ -7,8 +7,8 @@
  * Wiki: https://oldschool.runescape.wiki/w/Path_of_Het#Puzzle_room
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 const Mining = require("../../skills/Mining.plugin");
 
 // Cache locs: walls rise as the id above their settled form, which is what they become.

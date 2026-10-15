@@ -4,6 +4,14 @@ export default defineConfig({
     title: 'XRSPS',
     description: 'Build gamemodes and extrascripts for OSRS in the browser',
     base: '/',
+    // Quoted OSRS markup and placeholders are text, not Vue/HTML elements.
+    markdown: {
+        html: false,
+        config(md) {
+            md.renderer.rules.code_inline = (tokens, idx) =>
+                `<code v-pre>${md.utils.escapeHtml(tokens[idx].content)}</code>`;
+        },
+    },
     head: [
         ['meta', { property: 'og:title', content: 'XRSPS' }],
         ['meta', { property: 'og:description', content: 'Build gamemodes and extrascripts for OSRS in the browser' }],

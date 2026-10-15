@@ -16,6 +16,8 @@ let core;
 let eat;
 const tasks = [];
 let canEat = true;
+let foodAreaAllowed = false;
+const customEvents = [];
 
 /**
  * Items with an Eat option that aren't in food.json, and why. Anything else the cache lets a
@@ -27,7 +29,7 @@ const NOT_FOOD = {
     "Abyssal potato", "Araxyte venom sac", "Bologano fruit", "Bruised banana", "Cave nightshade",
     "Chocolate strawberry", "Corrupted shark", "Dwarven rock cake", "Fishlike thing", "Golovanova fruit",
     "Infernal eel", "Jar of congealed blood", "Leechfin", "Logavano fruit", "Melted easter egg", "Mint cake",
-    "Mysterious jerky", "Mystery fruit", "Nightshade", "Poison karambwan", "Rations", "Rock cake",
+    "Mystery fruit", "Nightshade", "Poison karambwan", "Rock cake",
     "Rotten apple", "Rotten potato", "Sacred eel", "Seaweed sandwich", "Shrunk ogleroot",
     "Slice of birthday cake", "Special super hot kebab", "Spicy stew", "Sweetcorn", "Tchiki nut paste",
     "Servery cooked meat", "Servery meat pie", "Servery pineapple pizza", "Servery plain pizza",
@@ -55,7 +57,10 @@ before(async () => {
     onPlayerLogin() {},
     onItemAction: (handler) => { eat = handler; },
     emitCanEat: () => canEat,
-    emitCustomEvent() {},
+    emitCustomEvent(name, request) {
+      customEvents.push({ name, request });
+      if (name === "food:area") request.inside = foodAreaAllowed;
+    },
   });
 });
 
@@ -129,7 +134,7 @@ test("the data: every food and bite is an Eat item in the cache, and every Eat i
     if (!core.CacheDefinitions.hasItem(itemId)) continue;
     const definition = core.CacheDefinitions.getItem(itemId);
     if (definition.noteTemplate >= 0 || definition.placeholderTemplate >= 0) continue;
-    if ((definition.inventoryActions ?? []).includes("Eat")) eatNames.add(definition.name);
+    if ((definition.inventoryActions ?? []).some(option => option === "Eat" || (option === "Consume" && DATA.foods.some(food => food.name === definition.name && food.option === "Consume")))) eatNames.add(definition.name);
   }
   const foodNames = new Set();
   for (const food of DATA.foods) {
@@ -353,4 +358,32 @@ test("strange fruit restores energy and cures poison, without healing", () => {
   assert.equal(player.hp, 40);
   assert.equal(player.energy, 80);
   assert.deepEqual(player.messages, ["You eat the fruit. It tastes great, some of your energy is restored!"]);
+});
+
+test('quest supplies restore bounded Prayer and share stamina, with their real cache actions and scene gates', () => {
+  const ration = createPlayer();
+  ration.getSkillManager().decreaseCurrentLevel(core.Skill.PRAYER, 50, 0);
+  ration.give(0, id('RATIONS'));
+  ration.eat(0);
+  assert.equal(ration.hp, 50, 'the outside scene does not consume prison supplies');
+  assert.ok(ration.slots[0]);
+  foodAreaAllowed = true;
+  try {
+    ration.eat(0);
+    assert.equal(ration.hp, 65);
+    assert.equal(ration.level(core.Skill.PRAYER), 25, '25% of base Prayer is added and bounded by its maximum');
+    assert.equal(ration.slots[0], null);
+    assert.ok(customEvents.some(event => event.name === 'potions:apply-stamina' && event.request.player === ration && event.request.energy === 20));
+    const scraps = createPlayer();
+    scraps.give(0, id('SCARRED_SCRAPS'));
+    scraps.eat(0);
+    assert.equal(scraps.hp, 65, 'Consume works through the canonical food handler');
+    assert.equal(scraps.level(core.Skill.PRAYER), 60, 'full Prayer cannot be overhealed');
+    for (const [item, healed] of [['MYSTERIOUS_JERKY', 22], ['SMELLY_KEBAB', 18]]) {
+      const player = createPlayer();
+      player.give(0, id(item));
+      player.eat(0);
+      assert.equal(player.hp, 50 + healed);
+    }
+  } finally { foodAreaAllowed = false; }
 });

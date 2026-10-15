@@ -24,8 +24,8 @@
  *   rows for these units).
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 const INVENTORY = { PRIVATE: 583, SHARED: 582, PLAYER: 93 };
 const COMPONENT = {

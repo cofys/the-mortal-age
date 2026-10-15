@@ -554,6 +554,7 @@ export function findDropTarget(
                 const mountRoots = getInterfaceParentRoots(uid);
                 if (Array.isArray(mountRoots) && mountRoots.length > 0) {
                     for (const mr of mountRoots) {
+                        if (mr.__renderSeparately) continue;
                         const found = visit(mr, x, y, childClip);
                         if (found) result = found;
                     }
@@ -724,7 +725,9 @@ export function collectWidgetsAtPoint(
             if (t === 0 && typeof getInterfaceParentRoots === "function") {
                 const mountRoots = getInterfaceParentRoots(uid);
                 if (Array.isArray(mountRoots) && mountRoots.length > 0) {
-                    for (const mr of mountRoots) visit(mr, x, y, childClip);
+                    for (const mr of mountRoots) {
+                        if (!mr.__renderSeparately) visit(mr, x, y, childClip);
+                    }
                 }
             }
         }

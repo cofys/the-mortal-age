@@ -32,8 +32,8 @@
  *   grubs (as 3).
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 const Supplies = require("./Supplies.ChambersOfXeric");
 
 const OBJECT = { CHEST: 29742, CHEST_EMPTY: 29743, CHEST_GRUBS: 29745, TROUGH: 29746, TROUGH_FULL: 29874, KEEPER: 29875 };

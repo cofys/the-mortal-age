@@ -10,17 +10,17 @@ const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
-const Shared = require('../plugins/minigames/colosseum/ColosseumShared');
-const Waves = require('../plugins/minigames/colosseum/ColosseumWaves');
-const Modifiers = require('../plugins/minigames/colosseum/ColosseumModifiers');
-const Run = require('../plugins/minigames/colosseum/ColosseumRun');
+const Shared = require('../plugins/minigames/colosseum/Shared.Colosseum');
+const Waves = require('../plugins/minigames/colosseum/Waves.Colosseum');
+const Modifiers = require('../plugins/minigames/colosseum/Modifiers.Colosseum');
+const Run = require('../plugins/minigames/colosseum/Run.Colosseum');
 const Lobby = require('../plugins/minigames/colosseum/Lobby.Colosseum');
 const Arena = require('../plugins/minigames/colosseum/Arena.Colosseum');
 const Enemies = require('../plugins/minigames/colosseum/Enemies.Colosseum');
 const Effects = require('../plugins/minigames/colosseum/ModifierEffects.Colosseum');
-const Hazards = require('../plugins/minigames/colosseum/ColosseumHazards');
+const Hazards = require('../plugins/minigames/colosseum/Hazards.Colosseum');
 const Sol = require('../plugins/minigames/colosseum/SolHeredit.Colosseum');
-const Patterns = require('../plugins/minigames/colosseum/SolPatterns');
+const Patterns = require('../plugins/minigames/colosseum/SolPatterns.Colosseum');
 
 const hooks = { objects: {}, npcs: {}, buttons: [], prompts: [], dialogues: [], variants: [], custom: {}, login: [], death: [], drops: [], attack: [] };
 const spawned = [];
@@ -915,7 +915,7 @@ test('the grapple: defending in time blocks it, on the last tick it is a perfect
 // ------------------------------------------------------------------ rewards and Glory
 
 const Rewards = require('../plugins/minigames/colosseum/Rewards.Colosseum');
-const Loot = require('../plugins/minigames/colosseum/ColosseumLoot');
+const Loot = require('../plugins/minigames/colosseum/Loot.Colosseum');
 
 test('the loot tables add up to the Wiki\'s odds', () => {
   const totals = Object.fromEntries(Object.entries(Loot.TABLES).map(([wave, table]) => [wave, table.reduce((sum, row) => sum + row[2], 0)]));

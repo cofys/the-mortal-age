@@ -1,5 +1,5 @@
 {
-  "disabledPlugins": ["VoiceChat", "TutorialIsland"],
+  "plugins": { "TutorialIsland": false },
   "experienceMultiplier": 1,
   "spawn": {
     "x": 3089,

@@ -63,7 +63,7 @@ From `server/`:
 
 ```powershell
 npx.cmd tsc --noEmit
-node -r ts-node/register/transpile-only plugins/skills/farming/Model.Farming.test.js
+node --test tests/farming-model.test.cjs
 ```
 
 The second command checks the state machine and mocked hooks without server startup

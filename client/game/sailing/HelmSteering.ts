@@ -1,7 +1,10 @@
+import {
+    INTERACTION_WORLD_ROOT,
+    TileInteractionMode,
+    interactionModes,
+} from "../InteractionModes";
 import type { WorldEntity } from "../worldview/WorldEntity";
 
-/** sailing_sidepanel_player_at_helm: set by the server while the player steers. */
-const VARBIT_PLAYER_AT_HELM = 19205;
 const FINE_UNITS_PER_TILE = 128;
 /** Helm headings are 16 steps of 128 angle units. */
 const HEADING_STEP = 128;
@@ -13,7 +16,10 @@ const HEADING_STEP = 128;
 export const DECK_SCENE_MARGIN = 32;
 
 export interface HelmSteeringDeps {
-    getVarbit(varbitId: number): number;
+    /** The world a clicked tile belongs to: a world entity index, or -1 for the root world. */
+    getClickedWorldId(tileX: number, tileY: number): number;
+    /** The tile interaction mode the server set for a world (InteractionModes). */
+    getTileMode(worldId: number): number;
     /** World view (boat) the local player stands in, or -1. */
     getLocalWorldViewId(): number;
     getWorldEntity(entityIndex: number): WorldEntity | undefined;
@@ -30,18 +36,29 @@ export interface HelmSteeringDeps {
 }
 
 /**
- * While the player is at a helm, a walk click steers instead: like the OSRS client in heading
- * interaction mode, the heading is worked out from the boat as it is drawn and sent as
- * SET_HEADING. Returns false when the click should walk as normal.
+ * A walk click does what the server's interaction mode for the clicked world says (OSRS
+ * set_interaction_mode): walk, nothing, or steer. At a helm live sets heading for every world but
+ * the boat's own, so the sea steers and the deck walks. Returns false when the click should walk.
  */
-export function steerFromHelm(deps: HelmSteeringDeps, tileX: number, tileY: number): boolean {
+export function handleTileClick(deps: HelmSteeringDeps, tileX: number, tileY: number): boolean {
+    const mode = deps.getTileMode(deps.getClickedWorldId(tileX, tileY));
+    if (mode === TileInteractionMode.Walk) return false;
+    if (mode === TileInteractionMode.Heading) steerFromHelm(deps, tileX, tileY);
+    return true;
+}
+
+/**
+ * Steers the boat the player stands on toward a clicked tile: like the OSRS client in heading
+ * interaction mode, the heading is worked out from the boat as it is drawn and sent as
+ * SET_HEADING. Does nothing off a boat.
+ */
+export function steerFromHelm(deps: HelmSteeringDeps, tileX: number, tileY: number): void {
     const debug = (globalThis as { __helmDebug?: boolean }).__helmDebug === true;
-    const atHelm = deps.getVarbit(VARBIT_PLAYER_AT_HELM) | 0;
     const entityIndex = deps.getLocalWorldViewId();
     const boat = entityIndex >= 0 ? deps.getWorldEntity(entityIndex) : undefined;
-    if (atHelm !== 1 || entityIndex < 0 || !boat?.hasPosition) {
-        if (debug) console.log("[helm] not steering", JSON.stringify({ tileX, tileY, atHelm, entityIndex }));
-        return false;
+    if (entityIndex < 0 || !boat?.hasPosition) {
+        if (debug) console.log("[helm] not steering", JSON.stringify({ tileX, tileY, entityIndex }));
+        return;
     }
 
     let targetX = tileX * FINE_UNITS_PER_TILE + FINE_UNITS_PER_TILE / 2;
@@ -53,7 +70,7 @@ export function steerFromHelm(deps: HelmSteeringDeps, tileX: number, tileY: numb
         const world =
             deps.pickClickedSeaPoint(entityIndex) ??
             deps.projectDeckToWorld(entityIndex, targetX, targetY);
-        if (!world) return true;
+        if (!world) return;
         targetX = world.x;
         targetY = world.y;
     }
@@ -72,7 +89,6 @@ export function steerFromHelm(deps: HelmSteeringDeps, tileX: number, tileY: numb
         }));
     }
     if (heading !== undefined) deps.sendSetHeading(heading);
-    return true;
 }
 
 /** Packed heading (0-15) from one fine position to another; undefined when they coincide. */
@@ -94,7 +110,6 @@ export function headingIndexToward(
 
 /** The pieces of the client the helm steering needs. */
 export interface HelmSteeringClient {
-    varManager: { getVarbit(varbitId: number): number };
     controlledPlayerServerId: number;
     playerEcs: {
         getIndexForServerId(serverId: number): number | undefined;
@@ -102,12 +117,31 @@ export interface HelmSteeringClient {
     };
     worldViewManager: {
         getWorldEntity(entityIndex: number): WorldEntity | undefined;
-        getWorldView(
-            entityIndex: number,
-        ): { baseX: number; baseY: number; sizeX: number; sizeY: number } | undefined;
+        getWorldView(entityIndex: number): DeckView | undefined;
+        findWorldViewAt(tileX: number, tileY: number): (DeckView & { id: number }) | undefined;
     };
     renderer?: unknown;
     inputManager?: { leftClickX: number; leftClickY: number };
+}
+
+interface DeckView {
+    baseX: number;
+    baseY: number;
+    sizeX: number;
+    sizeY: number;
+    /** [plane][zoneX][zoneY] packed template chunk, -1 where the scene has none. */
+    templateChunks: number[][][];
+}
+
+/**
+ * Whether a tile of a world entity's scene is part of the entity: one of the zones its template
+ * fills, as the OSRS world entity covers whole zones. The rest of the scene is drawn sea.
+ */
+export function isInEntityZones(view: DeckView, tileX: number, tileY: number): boolean {
+    if (tileX < view.baseX || tileY < view.baseY) return false;
+    const zoneX = (tileX - view.baseX) >> 3;
+    const zoneY = (tileY - view.baseY) >> 3;
+    return view.templateChunks.some((plane) => (plane?.[zoneX]?.[zoneY] ?? -1) !== -1);
 }
 
 export function createHelmSteeringDeps(
@@ -115,7 +149,12 @@ export function createHelmSteeringDeps(
     sendSetHeading: (heading: number) => void,
 ): HelmSteeringDeps {
     return {
-        getVarbit: (varbitId) => client.varManager.getVarbit(varbitId),
+        getClickedWorldId: (tileX, tileY) => {
+            const view = client.worldViewManager.findWorldViewAt(tileX, tileY);
+            if (!view || view.id < 0 || !isInEntityZones(view, tileX, tileY)) return INTERACTION_WORLD_ROOT;
+            return view.id;
+        },
+        getTileMode: (worldId) => interactionModes.tileMode(worldId),
         getLocalWorldViewId: () => {
             const index = client.playerEcs.getIndexForServerId(client.controlledPlayerServerId);
             return index === undefined ? -1 : client.playerEcs.getWorldViewId(index) | 0;

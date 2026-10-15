@@ -12,6 +12,9 @@ const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
 const { Location } = require('../dist/game/model/Location');
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { World } = require('../dist/game/World');
+const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+const { PluginManager } = require('../dist/plugins/PluginManager');
+const { Sounds } = require('../dist/game/Sounds');
 
 const target = { level: 0, destX: 100, destY: 100, srcSize: 1, privateArea: null };
 
@@ -48,6 +51,107 @@ test('large actors can reach walls and decorations inside their footprint', () =
       assert.equal(route.reachedAbsolute({ ...target, srcX: 99, srcY: 99, srcSize: 2, locShape: shape, locAngle: angle }), true);
     }
   }
+});
+
+test('ground-item routes can stop on a reachable tile beside a blocked item tile', (t) => {
+  const options = [];
+  const checkpoints = [];
+  const queue = {
+    reset() { return this; },
+    setRoute() { return this; },
+    setPathX() { return this; },
+    setPathY() { return this; },
+    syncDestinationFlagToRoute() {},
+    addCheckpoint(location) { checkpoints.push(location); },
+  };
+  const player = {
+    isPlayer: () => false,
+    getLocation: () => new Location(2598, 7842, 0),
+    getSize: () => 1,
+    getPrivateArea: () => null,
+    getMovementQueue: () => queue,
+  };
+  const oldRoute = PathFinder.rsmodRouteFinding;
+  PathFinder.rsmodRouteFinding = {
+    findRoute(request) {
+      options.push(request);
+      return request.moveNear
+        ? { success: true, alternative: false, endX: 2602, endY: 7848, waypoints: [{ x: 2602, y: 7848, z: 0 }] }
+        : { success: false, alternative: false, waypoints: [] };
+    },
+  };
+  t.after(() => { PathFinder.rsmodRouteFinding = oldRoute; });
+
+  assert.equal(PathFinder.calculateGroundItemRoute(player, new Location(2603, 7847, 0)), 1);
+  assert.equal(options[0].moveNear, true);
+  assert.equal(options[0].locShape, -1);
+  assert.deepEqual(checkpoints.map(({ x, y, z }) => [x, y, z]), [[2602, 7848, 0]]);
+});
+
+test('ground-item pickup accepts only a collision-reachable adjacent tile on the same plane', (t) => {
+  const oldRoute = PathFinder.rsmodRouteFinding;
+  const oldItems = World.getItems;
+  const oldPickup = PluginManager.emitGroundItemPickup;
+  const oldDeregister = ItemOnGroundManager.deregister;
+  const oldSound = Sounds.sendSound;
+  let location = new Location(99, 100, 0);
+  let inventoryAdds = 0;
+  let resets = 0;
+  let removed = 0;
+  const groundItem = {
+    getItem: () => ({ getId: () => 33788, getAmount: () => 1 }),
+    getPosition: () => new Location(100, 100, 0),
+    getPrivateArea: () => null,
+    isPendingRemoval: () => false,
+  };
+  const player = {
+    getLocation: () => location,
+    getSize: () => 1,
+    getPrivateArea: () => null,
+    getMovementQueue: () => ({ reset: () => { resets++; } }),
+    getInventory: () => ({
+      getFreeSlots: () => 1,
+      getAmount: () => 0,
+      addItem: () => { inventoryAdds++; },
+    }),
+    getLastItemPickup: () => ({ reset() {} }),
+  };
+  World.getItems = () => [groundItem];
+  PluginManager.emitGroundItemPickup = () => false;
+  ItemOnGroundManager.deregister = () => { removed++; };
+  Sounds.sendSound = () => {};
+  let wallMask = 0;
+  PathFinder.rsmodRouteFinding = new RsmodRouteFinding((x, y) =>
+    x === 100 && y === 100 ? 0x100 : x === 99 && y === 100 ? wallMask : 0);
+  t.after(() => {
+    PathFinder.rsmodRouteFinding = oldRoute;
+    World.getItems = oldItems;
+    PluginManager.emitGroundItemPickup = oldPickup;
+    ItemOnGroundManager.deregister = oldDeregister;
+    Sounds.sendSound = oldSound;
+  });
+
+  // The item occupies a blocked tile, but the player can still take it from a
+  // reachable side of the tile.
+  ItemOnGroundManager.pickup(player, groundItem);
+  assert.equal(inventoryAdds, 1);
+  assert.equal(removed, 1);
+
+  // A wall between the player and item makes that same adjacent-looking tile
+  // unreachable; move-near pathing must not turn it into a pickup.
+  wallMask = 8;
+  ItemOnGroundManager.pickup(player, groundItem);
+  assert.equal(inventoryAdds, 1);
+
+  wallMask = 0;
+  location = new Location(99, 100, 1);
+  ItemOnGroundManager.pickup(player, groundItem);
+  assert.equal(inventoryAdds, 1, 'a ground item on another plane cannot be picked up');
+
+  location = new Location(95, 100, 0);
+  ItemOnGroundManager.pickup(player, groundItem);
+  assert.equal(inventoryAdds, 1, 'a distant item is not within pickup reach');
+  assert.equal(resets, 3, 'all rejected attempts clear their stale movement action');
 });
 
 test('ladder click waits for arrival before animating and changes plane one tick later', (t) => {

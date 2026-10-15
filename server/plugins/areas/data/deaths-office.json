@@ -1,0 +1,18 @@
+{
+  "//": "Death's Office. 'instance': the cache map chunks a visit copies, as captured (x 3160-3191, y 5720-5735, planes 0-1). Tiles are the office's own (static) coordinates. Death spawns facing south (6), as captured; his model faces his desk to the west. 'entrances': each Death's Domain loc (by gameval) and where the exit portal puts a player who came in through it; Lumbridge and Civitas from captures, Ferox Enclave from the Wiki, the rest the tile in front of the loc (UNVERIFIED).",
+  "instance": { "sourceChunkX": 395, "sourceChunkY": 715, "widthChunks": 4, "heightChunks": 2, "planes": 2 },
+  "death": { "tile": [3179, 5726, 0], "face": 6 },
+  "arrival": [3171, 5726, 0],
+  "loginArrival": [3173, 5726, 0],
+  "desk": [3176, 5726, 0],
+  "entrances": [
+    { "loc": "death_office_access_grave", "place": "Lumbridge", "exit": [3238, 3194, 0] },
+    { "loc": "civitas_death_entrance", "place": "Civitas illa Fortis", "exit": [1653, 3135, 0] },
+    { "loc": "wildhub_death_entrance", "place": "Ferox Enclave", "exit": [3126, 3629, 0] },
+    { "loc": "death_office_access_coffin", "place": "Edgeville", "exit": [3096, 3475, 0] },
+    { "loc": "death_office_access_browngrave", "place": "Seers' Village", "exit": [2715, 3466, 0] },
+    { "loc": "death_office_access_prif", "place": "Prifddinas", "exit": [3256, 6118, 0] },
+    { "loc": "kourend_death_entrance", "place": "Kourend", "exit": [1622, 3663, 0] },
+    { "loc": "death_office_access_whitecoffin", "place": "Falador", "exit": [2976, 9737, 0] }
+  ]
+}

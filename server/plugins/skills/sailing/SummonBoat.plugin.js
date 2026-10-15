@@ -10,11 +10,11 @@
 // "Last boat" isn't captured: it plays as Break's choice does; its refusals and the same-dock and
 // no-focus messages are ours.
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
-const { content, dockNear } = require("./sailingContent");
-const { teleportFocusOf } = require("./boatFacilities");
+const { content, dockNear } = require("./SailingContent.Sailing");
+const { teleportFocusOf } = require("./BoatFacilities.Sailing");
 const { openBoatSelection, MODE } = require("./BoatSelection.plugin");
-const { dropLostOnRecovery } = require("./cargo");
-const { sendBoatVarbits } = require("./boatVarbits");
+const { dropLostOnRecovery } = require("./Cargo.Sailing");
+const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
 
 const LAST_SUMMONED_ATTRIBUTE = "sailing:last-summoned-boat";
 const SUMMON_RANGE = 16;

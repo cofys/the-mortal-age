@@ -24,8 +24,8 @@ let PluginManager, core, Player, NPCClass, TaskManager;
 before(async () => {
   await require("../dist/game/cache/CachePipeline").CachePipeline.initialize(ROOT);
   ({ PluginManager } = require("../dist/plugins/PluginManager"));
-  // world.json ships the tutorial disabled; load every plugin for these tests.
-  PluginManager.loadDisabledPluginNames = () => new Set();
+  // world.json ships the tutorial off; drop its switches so every default-on plugin loads.
+  PluginManager.loadPluginSwitches = () => ({ switches: new Map() });
   const quiet = [console.log, console.info, console.debug, console.warn];
   console.log = console.info = console.debug = console.warn = () => {};
   try {

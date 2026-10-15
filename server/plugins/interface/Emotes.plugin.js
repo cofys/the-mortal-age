@@ -219,6 +219,9 @@ module.exports = {
             player.getMovementQueue().reset();
             player.setFollowing(null);
             player.performAnimation(new Animation(emote.sequence));
+            // Quest actions may depend on a real emote at the player's current
+            // tile. Emit only after the normal busy/combat/slot gates pass.
+            api.emitCustomEvent("player:emote", { player, slot, sequence: emote.sequence });
             if (emote.graphic !== undefined) {
                 player.performGraphic(new Graphic(emote.graphic));
             }

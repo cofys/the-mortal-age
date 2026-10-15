@@ -1,4 +1,4 @@
-const { buildPresetsInterfaceDefinition } = require("../plugins/modes/pvp/presetsWidget");
+const { buildPresetsInterfaceDefinition } = require("../plugins/modes/pvp/PresetsWidget.PvpMode");
 
 const plugins = [
   "Commands",

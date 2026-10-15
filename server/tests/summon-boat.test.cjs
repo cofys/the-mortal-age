@@ -27,7 +27,7 @@ before(async () => {
   });
 });
 
-const { facilityNamed, setFacility } = require("../plugins/skills/sailing/boatFacilities");
+const { facilityNamed, setFacility } = require("../plugins/skills/sailing/BoatFacilities.Sailing");
 
 function clearTasks() {
   while (TaskManager.pendingTasks.shift() != null);

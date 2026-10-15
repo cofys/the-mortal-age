@@ -21,6 +21,7 @@ import path = require("path");
 import { CachePipeline } from "../src/main/typescript/elvarg/game/cache/CachePipeline";
 import { CacheDefinitions } from "../src/main/typescript/elvarg/game/cache/CacheDefinitions";
 import { RegionManager } from "../src/main/typescript/elvarg/game/collision/RegionManager";
+import { getTemplateRegion } from "../src/main/typescript/elvarg/game/collision/TemplateRegionData";
 
 type Placement = { id: number; x: number; y: number; z: number; shape: number; rotation: number };
 
@@ -60,7 +61,7 @@ async function main() {
         process.exit(1);
     }
 
-    const found: Placement[] = [];
+    const found: Array<Placement & { template?: boolean }> = [];
     const addObject = RegionManager.addObject;
     RegionManager.addObject = (id: number, x: number, y: number, z: number, shape: number, rotation: number) => {
         if (ids.has(id)) found.push({ id, x, y, z, shape, rotation });
@@ -68,6 +69,27 @@ async function main() {
     try {
         for (const regionId of RegionManager.regions.keys()) {
             RegionManager.loadMapFiles(((regionId >> 8) & 0xff) * 64, (regionId & 0xff) * 64, false);
+        }
+        // Instance maps copy these source regions directly; they are intentionally absent
+        // from the normal world placement pass above.
+        for (const regionId of RegionManager.regions.keys()) {
+            const template = getTemplateRegion(regionId);
+            if (!template) continue;
+            const regionX = ((regionId >> 8) & 0xff) * 64;
+            const regionY = (regionId & 0xff) * 64;
+            for (const chunk of template.chunks) {
+                for (const loc of chunk) {
+                    if (ids.has(loc.id)) found.push({
+                        id: loc.id,
+                        x: regionX + loc.localX,
+                        y: regionY + loc.localY,
+                        z: loc.plane,
+                        shape: loc.type,
+                        rotation: loc.face,
+                        template: true,
+                    });
+                }
+            }
         }
     } finally {
         RegionManager.addObject = addObject;
@@ -83,6 +105,7 @@ async function main() {
         }
         console.log(
             `loc ${placement.id} "${locName(placement.id)}" ${placement.x},${placement.y},${placement.z}` +
+            `${placement.template ? " template-source" : ""}` +
             ` shape=${placement.shape} rotation=${placement.rotation} size=${definition?.sizeX ?? 1}x${definition?.sizeY ?? 1}` +
             ` ops=${ops.join("|") || "-"}`,
         );

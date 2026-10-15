@@ -8,7 +8,7 @@
  *
  * Stages (varbit 18317 "quest_pry", varp 4960 bits 0-6; the Wiki lists no values, so
  * the quest-helper stage map is the authority, corroborated in-cache by the cargo
- * hold's crowbar tool unlock at value 20 - sailing/cargo.js): 5 courier task accepted
+ * hold's crowbar tool unlock at value 20 - sailing/Cargo.Sailing.js): 5 courier task accepted
  * (Steve writes it into the captain's log), 10 looty delivered, 15 Steve asks for a
  * 'special key', 20 crowbar made by Thurgo, 25 'key' shown to Steve (test the grog),
  * 30 complete. Sibling bits 18318 quest_pry_steve_log / 18319 quest_pry_thurgo_met /

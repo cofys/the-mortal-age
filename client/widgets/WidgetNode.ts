@@ -95,6 +95,10 @@ export interface WidgetNode {
     rawHeight?: number;
     widthMode?: number; // widthAlignment in Java
     heightMode?: number; // heightAlignment in Java
+    /** Fit a server-defined interface inside the scene viewport in Fixed mode. */
+    fitToViewport?: boolean;
+    /** Rendered as its own root so drawing and input share the fitted transform. */
+    __renderSeparately?: boolean;
 
     // Visibility / State
     isHidden: boolean;

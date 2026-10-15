@@ -7,8 +7,8 @@
  * Wiki: https://oldschool.runescape.wiki/w/Path_of_Crondis#Puzzle_room
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 const CONTAINER = 27295; // Water container
 const WATERFALL_FULL = 45398;

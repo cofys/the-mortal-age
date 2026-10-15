@@ -26,8 +26,8 @@
  *   832, sound 1657, "Your keystone glows as it is absorbed into the barrier, which disperses.".
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 const NPC = { RANGER: 7559, MAGE: 7560 };
 const OBJECT = { TIGHTROPE: 29750, KEYSTONE: 29751, BARRIER: 29749 };

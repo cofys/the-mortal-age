@@ -232,7 +232,7 @@ test('attacker route variants spread over the whole pool, not just the stone cro
 
 test('a lobby tier pins each bot to a loadout archetype inside its combat band', () => {
   const { pickTierChoice, tierCombatLevel, TIER_BANDS, TIER_PROFILE_IDS, ROLES } = Bots._test;
-  const { getPvpProfile } = require('../plugins/bots/behaviours/pvp/PvpProfileRegistry');
+  const { getPvpProfile } = require('../plugins/bots/behaviours/pvp/PvpProfileRegistry.PlayerBots');
   for (const tier of Object.keys(TIER_BANDS)) {
     const profile = getPvpProfile(TIER_PROFILE_IDS[tier]);
     const band = TIER_BANDS[tier];

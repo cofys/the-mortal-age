@@ -11,8 +11,8 @@
  * their party on logging in if it can (otherwise it's a full death).
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 const Retrieval = require("./Retrieval.TheatreOfBlood");
 
 const { OBJECT, NPC } = Shared;

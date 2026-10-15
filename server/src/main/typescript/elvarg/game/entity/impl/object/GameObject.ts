@@ -14,6 +14,7 @@ export class GameObject extends Entity {
     private type: number;
     private face: number;
     private privateArea: PrivateArea;
+    private owner: Player | null = null;
     /**
      * Stands for an object of the cache's map (loaded with the region, or put back in place of
      * one). Only these are remembered once removed, so a reloaded scene keeps them hidden.
@@ -66,6 +67,15 @@ export class GameObject extends Entity {
 
     public getFace(): number {
         return this.face;
+    }
+
+    public getOwner(): Player | null {
+        return this.owner;
+    }
+
+    public setOwner(owner: Player | null): this {
+        this.owner = owner;
+        return this;
     }
 
     public setFace(face: number): void {
@@ -122,6 +132,6 @@ export class GameObject extends Entity {
             this.getType(),
             this.getFace(),
             this.getPrivateArea()!
-        );
+        ).setOwner(this.getOwner());
     }
 }

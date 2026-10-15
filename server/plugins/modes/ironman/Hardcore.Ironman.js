@@ -14,6 +14,7 @@ function death(event) {
   if (Common.modeOf(player) !== "hardcore" || itemsLost === false) return;
   player.setAttribute(Common.HARDCORE_DEAD_ATTRIBUTE, Math.floor((Date.now() - DAY_ZERO) / 86400000));
   Common.setMode(player, "ironman");
+  Common.api.emitCustomEvent("persistence:save", { player, reason: "hardcore-death" });
   player.sendMessage(Common.message("hardcoreDeath"));
 }
 

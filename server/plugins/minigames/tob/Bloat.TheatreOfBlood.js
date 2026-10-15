@@ -23,8 +23,8 @@
  * length and the odds of turning round.
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const BLOAT = 8359;
 /** The loop's corners (south-west tiles), walked NW -> SW -> SE -> NE (estimate). */

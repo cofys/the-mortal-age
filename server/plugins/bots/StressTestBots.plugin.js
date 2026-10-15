@@ -6,20 +6,20 @@ const { Animation } = require("../../src/main/typescript/elvarg/game/model/Anima
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { ChatPacketListener } = require("../../src/main/typescript/elvarg/net/packet/impl/ChatPacketListener");
-const { createBotPlayer } = require("./behaviours/spawn/BotPlayerFactory");
-const { randomInRange } = require("./behaviours/navigation/BotNavigation");
-const { ATTR_SKIP_PERSISTENCE } = require("./runtime/BotPersistenceConstants");
+const { createBotPlayer } = require("./behaviours/spawn/PlayerFactory.PlayerBots");
+const { randomInRange } = require("./behaviours/navigation/Navigation.PlayerBots");
+const { ATTR_SKIP_PERSISTENCE } = require("./runtime/PersistenceConstants.PlayerBots");
 const {
   buildRoamingPvpMetadata,
-} = require("./behaviours/pvp/PvpAssignment");
+} = require("./behaviours/pvp/PvpAssignment.PlayerBots");
 const {
   applyGeneratedPvpLoadout,
-} = require("./behaviours/policies/PvpLoadoutPolicy");
+} = require("./behaviours/policies/PvpLoadoutPolicy.PlayerBots");
 const {
   nextStressBotActivityTick,
   randomClippedStepWithinBounds,
   shouldTakeStressBotStep,
-} = require("./StressTestBotMovement");
+} = require("./Movement.StressTestBots");
 
 const GRAND_EXCHANGE_BOUNDS = Object.freeze({
   minX: 3152,

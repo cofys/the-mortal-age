@@ -244,7 +244,9 @@ module.exports = {
       };
       api.core?.PluginManager?.emitItemDropPolicy(event);
       if (!event.handled) {
+        const discarded = item.clone();
         player.getInventory().deleteAtSlot(pending.slot, pending.amount);
+        api.emitCustomEvent("item:discarded", { player, item: discarded });
       }
       close(player);
     });

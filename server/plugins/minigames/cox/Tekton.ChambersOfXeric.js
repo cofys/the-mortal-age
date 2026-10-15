@@ -38,9 +38,9 @@
  *   hits; the exit crystal 30017.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
-const Monsters = require("./CoxMonsters");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
+const Monsters = require("./Monsters.ChambersOfXeric");
 
 const FORM = { IDLE: 7540, WALKING: 7541, FIGHTING: 7542, ENRAGED_WALKING: 7543, ENRAGED_FIGHTING: 7544, ANVIL: 7545 };
 const OBJECT = { CRYSTAL: 30017, FIRE: 30021, BLOCK: 30023 };

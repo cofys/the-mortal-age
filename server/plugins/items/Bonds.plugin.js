@@ -58,6 +58,7 @@ function redeem(player, bonds, days) {
   const current = Number(player.getAttribute(MEMBERSHIP_ATTRIBUTE)) || 0;
   const expiry = Math.max(now, current) + days * DAY_MS;
   player.setAttribute(MEMBERSHIP_ATTRIBUTE, expiry);
+  pluginApi.emitCustomEvent("persistence:save", { player, reason: "bond-redemption" });
   const total = Math.ceil((expiry - now) / DAY_MS);
   player.sendMessage(
     `You redeem ${bonds} bond${bonds === 1 ? "" : "s"} for ${days} days of membership. You have ${total} days of membership remaining.`
@@ -120,6 +121,7 @@ function convertBond(event) {
     return;
   }
   inventory.setItem(slot, new Item(TRADEABLE_BOND)).refreshItems();
+  pluginApi.emitCustomEvent("persistence:save", { player, reason: "bond-conversion" });
   player.sendMessage(
     `You convert the bond into a tradeable bond for ${fee.toLocaleString("en-US")} coins.`
   );
@@ -174,6 +176,8 @@ function donateBond(event) {
   }
   player.getInventory().deleteNumber(TRADEABLE_BOND, 1).refreshItems();
   target.getInventory().adds(UNTRADEABLE_BOND, 1);
+  pluginApi.emitCustomEvent("persistence:save", { player, reason: "bond-transfer" });
+  pluginApi.emitCustomEvent("persistence:save", { player: target, reason: "bond-transfer" });
   player.sendMessage(`You give ${target.getUsername()} a bond.`);
   target.sendMessage(`${player.getUsername()} gives you a bond.`);
   event.handled = true;

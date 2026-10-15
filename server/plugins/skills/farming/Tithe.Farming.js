@@ -218,6 +218,7 @@ function titheNpc(event) {
             : Patches.give(player, itemId, amount ?? 1);
         if (!received) return;
         score.points -= cost;
+        core.PluginManager.emitCustomEvent("persistence:save", { player, reason: "reward-shop" });
         sync(player);
         core.PluginManager.emitCustomEvent("collection-log:obtain", { player, itemId, amount: amount ?? 1 });
     }]);
@@ -225,6 +226,7 @@ function titheNpc(event) {
         if (!player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
         if (!score.autoWeedUnlocked && score.points < 50) { player.sendMessage("You need 50 points."); return; }
         if (!score.autoWeedUnlocked) { score.points -= 50; score.autoWeedUnlocked = true; }
+        core.PluginManager.emitCustomEvent("persistence:save", { player, reason: "reward-shop" });
         Patches.farmFor(player).autoWeed = !Patches.farmFor(player).autoWeed;
         player.sendMessage(`Auto-weed is ${Patches.farmFor(player).autoWeed ? "enabled" : "disabled"}.`); sync(player);
     }]);

@@ -12,10 +12,10 @@ const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../src/main/typescript/elvarg/game/task/TaskManager");
 const { NpcIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
-const Mine = require("./motherlode/MotherlodeState");
-const Veins = require("./motherlode/MotherlodeVeins");
-const Machine = require("./motherlode/MotherlodeMachine");
-const Rockfalls = require("./motherlode/MotherlodeRockfalls");
+const Mine = require("./motherlode/State.MotherlodeMine");
+const Veins = require("./motherlode/Veins.MotherlodeMine");
+const Machine = require("./motherlode/Machine.MotherlodeMine");
+const Rockfalls = require("./motherlode/Rockfalls.MotherlodeMine");
 
 /** The mine's map square, where the HUD shows. */
 const MINE_ZONE = { ...Mine.MINE, levels: [Mine.MINE.z] };
@@ -219,7 +219,7 @@ module.exports = {
   _test: { tick, start, crawl, climb, squeezeThrough, percyCondition, percyPays, enterMine },
   register(api) {
     Machine.init(api);
-    api.persistAttribute(Mine.STATE_ATTRIBUTE);
+    api.persistAttribute(Mine.STATE_ATTRIBUTE, { sack: {}, machine: [], held: [] });
     api.onServerStartup(start);
     api.onPlayerLogin(login);
     api.onPlayerLogout(logout);

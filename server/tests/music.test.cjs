@@ -7,9 +7,8 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { PlayerSession } = require('../dist/net/PlayerSession');
 const { PacketSender } = require('../dist/net/packet/PacketSender');
 const { Location } = require('../dist/game/model/Location');
-const Progress = require('../plugins/world/Music.Progress');
+const Progress = require('../plugins/world/Progress.Music');
 const MusicPlugin = require('../plugins/world/Music.plugin');
-const { DIARIES } = require('../plugins/diaries/DiaryData');
 
 const handlers = new Map();
 const loginHandlers = [];
@@ -29,7 +28,7 @@ const api = new Proxy({
       if (questAnswer !== undefined) request.canUse = questAnswer;
       return;
     }
-    if (name === 'diary:is-complete') {
+    if (name === 'diary:all-complete') {
       if (diaryAnswer !== undefined) request.complete = diaryAnswer;
       return;
     }
@@ -213,7 +212,6 @@ test('music progress refuses an empty catalogue and uses all cache-defined nativ
   await setup();
   const player = makePlayer();
   assert.equal(Progress.allUnlocked(player, []), false);
-  assert.equal(DIARIES.length > 0, true);
   assert.equal(catalog.allTrackIds.length > 800, true);
   assert.equal(Object.keys(catalog.slotByTrackId).length > catalog.allTrackIds.length, true);
 });

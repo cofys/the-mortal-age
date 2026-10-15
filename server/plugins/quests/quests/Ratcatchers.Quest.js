@@ -49,9 +49,44 @@
  *  - Lighting a pot of weeds uses a short functional message, not transcript text.
  *  - Felkrash names the cat and turns it wily in OSRS; no wily-cat item exists here,
  *    so completion only checks for an overgrown cat.
- *  - The "Do you have any more kittens?" option in Gertrude's start branch has no
- *    body in the dump.
+ *  - The Ratcatchers page omits the kitten option body; the shared Gertrude page
+ *    provides its canonical 100-coin purchase branch.
  */
+const NPC_TRANSCRIPTS = require("../../../data/definitions/npc-dialogues.json");
+const KITTEN_OPTION = "Do you have any more kittens?";
+
+function findTranscriptOption(steps, text) {
+  for (const step of steps ?? []) {
+    for (const option of step.options ?? []) {
+      if (option.text === text && option.steps?.length) return option;
+      const nested = findTranscriptOption(option.steps, text);
+      if (nested) return nested;
+    }
+    const nested = findTranscriptOption(step.steps, text);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function restoreGertrudeKittenOption(steps) {
+  const source = findTranscriptOption(
+    NPC_TRANSCRIPTS.Gertrude?.variants?.["standard-dialogue-on-pay-to-play-worlds"],
+    KITTEN_OPTION
+  );
+  if (!source) return steps;
+  const replace = (entries) => (entries ?? []).map((step) => ({
+    ...step,
+    options: step.options?.map((option) => ({
+      ...option,
+      steps: option.text === KITTEN_OPTION && !option.steps?.length
+        ? JSON.parse(JSON.stringify(source.steps))
+        : replace(option.steps),
+    })),
+    steps: step.steps ? replace(step.steps) : step.steps,
+  }));
+  return replace(steps);
+}
+
 module.exports = function registerRatcatchersQuest(api) {
   const { Equipment, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, Skill } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
@@ -651,7 +686,8 @@ module.exports = function registerRatcatchersQuest(api) {
       PAGE,
       stage === 0
         ? "talking-to-gertrude"
-        : "talking-to-gertrude-talking-to-gertrude-again-after-starting-the-quest"
+        : "talking-to-gertrude-talking-to-gertrude-again-after-starting-the-quest",
+      restoreGertrudeKittenOption
     );
   }
 
@@ -1251,3 +1287,5 @@ module.exports = function registerRatcatchersQuest(api) {
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
 };
+
+module.exports._test = { restoreGertrudeKittenOption };

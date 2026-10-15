@@ -97,6 +97,7 @@ an update. What to do with each source:
 | `item-gameplay.json` | an old export, no generator | `ItemDefinitionLoader` skips an entry whose name differs from the cache's (ignoring case), so list the entries that match the old cache's name but not the new one's and fix them by hand, checking the item against the cache (a rename can be a different item: check its params) |
 | `monsters-complete`, `npc-drops`, `npc-dialogues`, `npc-dialogue-index`, `shops` | [osrsreboxed-db](https://github.com/DayV-git/osrsreboxed-db), built from the live Wiki | Usually already on the new revision; refresh only to pick up new content |
 | `item-prices.json` | live Wiki prices | `yarn fetch:prices` if it predates the revision |
+| `npc-combat-defs`, `npc-captured-animations`, `npc-animations` | hand edits; [rsprox.net captures](https://rsprox.net/database) (`rsprox_index.py npc-anims` in osrs-captures, after its `link-cache` reads the new ids); an old RuneLite export | Nothing required: `NpcDefinitionLoader` takes each animation's role from its gameval name in the cache, and fills attackable NPCs nothing covers from their stand animation's family, so new NPCs get animations on their own. Regenerate `npc-captured-animations` to pick up new captures, and compare the startup line `service animations captured=..., guessed=..., by family=...` with the old cache's |
 | `npc-spawns`, `object-spawns`, plugin data | captures and hand edits | Check NPCs whose name moved into a transform (below); a `npc-spawns` entry may name an `NpcIdentifiers` constant with `key` instead of a raw `id`, which follows identifier regeneration |
 Data matched by name is what breaks: the loader check above, and strings in plugins. Most of 241's
 1,133 item renames are capitalisation ("Staff of the Dead"), which the loader's check ignores.
@@ -152,7 +153,7 @@ NPC whose name moved into a transform (see below).
 | Bank components +6/+7; chatbox `chatmodal` 567 → 568, `chatdisplay` 56 → 57 | Bank buttons, chat dialogs | `Bank.ts` named constants, literals |
 | Varbit 4398 `ge_newoffer_price` → long varp 5753 | GE price 0, confirm shows "---" | new `VARP_LONG` packet (id 44): `PacketSender.sendVarpLong`, client `VarManager.setVarpLong` |
 | Varbit 12377 `mouseover_text_enabled` → varbit 10035 `mouseover_text_disabled` (inverted) | HUD overlays under the hover text; an aerial fishing option switched on | Settings plugin sends 10035 = 0 |
-| DB table 166 gained a column at 27; table 179 lost three | Sailing parts and facilities | `boatParts.js`, `boatFacilities.js` |
+| DB table 166 gained a column at 27; table 179 lost three | Sailing parts and facilities | `BoatParts.Sailing.js`, `BoatFacilities.Sailing.js` |
 | Display names moved into NPC transforms (Morgan 3479, Dr Harlow 3480: name `null`, a varbit picks the named variant) | none: hooks resolve the variant | — |
 | 431 object and 23 item names gone or reused | compile errors | identifiers regenerated; plugins renamed (e.g. "Scythe of Vitur") |
 | Eight items renamed outright: 9487–9490 "Wizard blizzard" → "Cocktail glass", 9735/9738 "Desert goat horn" → "Goat horn", 23595/23596 "Berserker ring" → "Berserker ring (i)" | Their `item-gameplay.json` entries were skipped (23595 lost its bonuses) | names updated; 23595 takes the imbued +8 its cache params give |

@@ -161,6 +161,16 @@ export class CacheDefinitions {
         return this.idByName(GamevalKind.SEQ).get(name) ?? null;
     }
 
+    /** An animation's gameval name (`human_pickupfloor`), or null when the cache has none for it. */
+    static getSeqName(id: number): string | null {
+        return this.getGamevals().namesOf(GamevalKind.SEQ).get(id) ?? null;
+    }
+
+    /** Every named animation: id -> gameval name. */
+    static getSeqNames(): ReadonlyMap<number, string> {
+        return this.getGamevals().namesOf(GamevalKind.SEQ);
+    }
+
     /** A graphic's id by its gameval name, or null. */
     static getSpotanimId(name: string): number | null {
         return this.idByName(GamevalKind.SPOTANIM).get(name) ?? null;

@@ -6,8 +6,8 @@
  * damage; and the invocations that change eating, drinking and prayer.
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 const ABANDON_TEXT = "You are about to <col=ad2800>abandon the raid</col>. If you do this, you <col=ad2800>will not</col> be able to return to your current run.";
 

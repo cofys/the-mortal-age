@@ -12,9 +12,9 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
 const { Item } = require('../dist/game/model/Item');
-const Shared = require('../plugins/minigames/tob/TobShared');
-const Parties = require('../plugins/minigames/tob/TobParties');
-const Raid = require('../plugins/minigames/tob/TobRaid');
+const Shared = require('../plugins/minigames/tob/Shared.TheatreOfBlood');
+const Parties = require('../plugins/minigames/tob/Parties.TheatreOfBlood');
+const Raid = require('../plugins/minigames/tob/RaidState.TheatreOfBlood');
 const Lobby = require('../plugins/minigames/tob/Lobby.TheatreOfBlood');
 const RaidUnit = require('../plugins/minigames/tob/Raid.TheatreOfBlood');
 const Retrieval = require('../plugins/minigames/tob/Retrieval.TheatreOfBlood');
@@ -426,7 +426,7 @@ test('supplies: points buy, one stamina per chest, and never below zero', () => 
 });
 
 test('the Nylocas room runs the Wiki\'s 31 waves from three lanes', () => {
-  const { WAVES, parse } = require('../plugins/minigames/tob/NylocasWaves');
+  const { WAVES, parse } = require('../plugins/minigames/tob/NylocasWaves.TheatreOfBlood');
   assert.equal(WAVES.length, 31);
   for (const wave of WAVES) {
     for (const lane of ['east', 'south', 'west']) {

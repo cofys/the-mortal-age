@@ -15,6 +15,7 @@ import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
 import type { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
 import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
 import { multiLocVarps } from "../render/loc/MultiLocVarps";
+import { getMapSquareId } from "../rs/map/MapFileIndex";
 
 /** Optional details of a LOC change (moves, rotations, shape changes). */
 export type LocChangeOptions = {
@@ -532,12 +533,23 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         for (const map of this.mapManager.mapSquares.values()) {
             const varps = multiLocVarps((map as { tileLocIdsByLevel?: Int32Array[] }).tileLocIdsByLevel, client.locTypeLoader, varbitLoader);
             if (![...changed].some((varp) => varps.has(varp))) continue;
-            this.reloadMultiLocSquare(map.mapX, map.mapY);
+            // A boat's deck is built from its template chunks, not loaded as a map square: a
+            // plain reload of its square built an empty one in its place and the boat vanished
+            // (boarding sets the sailing varbits its multilocs read).
+            const mapId = getMapSquareId(map.mapX, map.mapY);
+            const deck = this.mapManager.worldEntityMapIds.has(mapId)
+                ? client.worldViewManager.getWorldViewByOverlayMapId(mapId)
+                : undefined;
+            if (deck) this.scheduleWorldEntityLocRebuild(deck.id);
+            else this.reloadMultiLocSquare(map.mapX, map.mapY);
         }
     }
 
     /** Rebuilds one loaded square's locs (backends override). */
     protected reloadMultiLocSquare(_mapX: number, _mapY: number): void {}
+
+    /** Rebuilds a world entity's deck scene after its locs changed (backends override). */
+    scheduleWorldEntityLocRebuild(_entityIndex: number): void {}
 
     // Instanced areas (REBUILD_REGION): the scene is one built map square while active.
     /** True while an instance scene replaces normal map streaming. */

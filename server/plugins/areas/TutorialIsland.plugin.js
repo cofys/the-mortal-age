@@ -12,7 +12,7 @@
  *  - Paths: doors, gates, ladders, the bank and the poll booth
  *  - Leave: starting, the skip offer, the Home Teleport off the island and the starter kit
  *
- * Enable/disable through world.json "disabledPlugins".
+ * Off in the shipped world.json ("plugins"); a world turns it on in its world.local.json.
  */
 const Common = require("./tutorialisland/Common.TutorialIsland");
 

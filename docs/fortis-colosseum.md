@@ -17,18 +17,18 @@ The Fortis Colosseum, built from the OSRS Wiki, a live rsprox capture (the lobby
 
 | File | What it owns |
 | --- | --- |
-| `ColosseumShared.js` | Ids, tiles, Glory titles and helpers such as the fade. |
-| `ColosseumWaves.js` | What each wave sends in and where it spawns. |
-| `ColosseumModifiers.js` | The modifiers from the cache, their tiers, and what Minimus offers. |
-| `ColosseumRun.js` | One player's run: the arena, Minimus, the intermission, waves, leaving. |
+| `Shared.Colosseum.js` | Ids, tiles, Glory titles and helpers such as the fade. |
+| `Waves.Colosseum.js` | What each wave sends in and where it spawns. |
+| `Modifiers.Colosseum.js` | The modifiers from the cache, their tiers, and what Minimus offers. |
+| `Run.Colosseum.js` | One player's run: the arena, Minimus, the intermission, waves, leaving. |
 | `Enemies.*` | The seven enemy types' attacks, their spawn delays, the warband's movement and the Minotaur's healing. |
 | `ModifierEffects.*` | Modifiers that change blows or the player: Blasphemy, Doom, Frailty, Myopia, Relentless, Mantimayhem's venom. |
-| `ColosseumHazards.js` | Modifiers that put something in the arena: Bees!, Solarflare, Totemic, Volatility, Reentry's molten sand. |
+| `Hazards.Colosseum.js` | Modifiers that put something in the arena: Bees!, Solarflare, Totemic, Volatility, Reentry's molten sand. |
 | `Lobby.*` | The way down and back up, Minimus's introduction, the bank chest and the tunnel. |
 | `Arena.*` | Minimus's Start-wave and Leave, the intermission buttons, death and login. |
 | `SolHeredit.*` | Wave 12: Sol Heredit's greeting, landing, attacks, phases, sand and light crystals. |
-| `SolPatterns.js` | The tiles Sol's attacks cover, the barricade, and where his sand falls. |
-| `ColosseumLoot.js` | The rewards chest's tables (from the Wiki) and the rolls. |
+| `SolPatterns.Colosseum.js` | The tiles Sol's attacks cover, the barricade, and where his sand falls. |
+| `Loot.Colosseum.js` | The rewards chest's tables (from the Wiki) and the rolls. |
 | `Rewards.*` | The run's loot and Glory, and the rewards chest. |
 | `Commands.*` | Developer commands. |
 
@@ -264,7 +264,7 @@ Enraged (150 HP): 5 pools at once, then one more every 3 ticks, and the crystals
 ## Rewards and Glory
 
 **Loot** (Wiki, "Rewards Chest (Fortis Colosseum)"):
-- Each wave's loot is one roll on its table in `ColosseumLoot.js`; wave 1 is always 80 sunfire splinters.
+- Each wave's loot is one roll on its table in `Loot.Colosseum.js`; wave 1 is always 80 sunfire splinters.
 - The roll happens before the wave, so the intermission screen shows it (capture).
 - Sunfire fanatic pieces have duplicate protection: a piece the player has had fewest of comes first, counted once the wave is cleared (attribute `colosseum:fanatic-pieces`).
 - Wave 12 adds Dizana's quiver (uncharged) and rolls Smol Heredit at 1/200. The pet goes through the Pets plugin's `npc-drops:roll`, which now knows Smol Heredit (follower 12857).

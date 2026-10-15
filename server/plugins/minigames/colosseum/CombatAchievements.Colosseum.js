@@ -1,12 +1,12 @@
 "use strict";
 
 /**
- * The Fortis Colosseum's Combat Achievements (plugins/combatachievements/) that the run decides:
+ * The Fortis Colosseum's Combat Achievements (plugins/achievements/combatachievements/) that the run decides:
  * Sol Heredit's defeats (his own kill count), the run's total time (its waves added up), the
  * modifiers he was beaten with, and wave 11 cleared with a modifier the task names.
  */
 
-const Shared = require("./ColosseumShared");
+const Shared = require("./Shared.Colosseum");
 const Sol = require("./SolHeredit.Colosseum");
 
 const SPEED = [["Colosseum Speed-Chaser", 28 * 60], ["Colosseum Speed-Runner", 24 * 60]];

@@ -4,7 +4,7 @@
  * Wave 3: the Nylocas, then Nylocas Vasilias.
  *
  * Wiki ("Theatre of Blood/Strategies", The Nylocas; its Nylocas page; Nylocas Vasilias):
- * - 31 fixed waves (NylocasWaves.js) come out of the east, south and west lanes. Each nylocas
+ * - 31 fixed waves (NylocasWaves.TheatreOfBlood.js) come out of the east, south and west lanes. Each nylocas
  *   takes damage only from its own style. Most go for the four supports; the aggressive ones
  *   (8348-8353) go for the team. Some flicker through other styles first, usually twice.
  * - Small ones: 11 hitpoints, max hit 17; big ones (2x2): 22 and 24, splitting into two small
@@ -28,9 +28,9 @@
  * ticks; the explosions hitting anyone within a tile.
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
-const { WAVES, parse } = require("./NylocasWaves");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
+const { WAVES, parse } = require("./NylocasWaves.TheatreOfBlood");
 
 const IDS = {
   small: { melee: 8342, ranged: 8343, magic: 8344 },

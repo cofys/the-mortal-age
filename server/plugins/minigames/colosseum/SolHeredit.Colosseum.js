@@ -29,9 +29,9 @@
  * docs/fortis-colosseum.md.
  */
 
-const Shared = require("./ColosseumShared");
-const Patterns = require("./SolPatterns");
-const Hazards = require("./ColosseumHazards");
+const Shared = require("./Shared.Colosseum");
+const Patterns = require("./SolPatterns.Colosseum");
+const Hazards = require("./Hazards.Colosseum");
 const Effects = require("./ModifierEffects.Colosseum");
 const DIALOGUES = require("../../../data/definitions/npc-dialogues.json")["Sol Heredit"].variants;
 
@@ -300,7 +300,7 @@ function tearOff(player, slot) {
 
 /** A slot clicked while he grapples: the item stays on, and the click is his answer. */
 function defend(event) {
-  const run = require("./ColosseumRun").runOf(event.player);
+  const run = require("./Run.Colosseum").runOf(event.player);
   const grip = run?.solFight?.grapple;
   if (!grip) return;
   event.allow = false;

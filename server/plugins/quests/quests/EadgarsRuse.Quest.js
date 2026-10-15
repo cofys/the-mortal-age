@@ -880,6 +880,9 @@ module.exports = function registerEadgarsRuseQuest(api) {
       return;
     }
     if (objectId === STOREROOM_DOOR_LOC_ID) {
+      // Once unlocked, let the shared Doors plugin toggle the actual cache loc
+      // into its open variant; the quest handler only owns the lock check.
+      if (quest.getStage(player) >= STAGE_STOREROOM_OPEN) return;
       event.handled = true;
       useStoreroomDoor(player);
       return;

@@ -1,4 +1,5 @@
 import { ClientState } from "../../../game/ClientState";
+import { interactionModes } from "../../../game/InteractionModes";
 import {
     VARP_AREA_SOUNDS_VOLUME,
     VARP_COMBAT_TARGET_PLAYER_INDEX,
@@ -48,6 +49,15 @@ export function handleInboundWorld(msg: any): boolean {
             else ClientState.playerOptions.delete(slot);
             for (const listener of ClientState.playerOptionsChangedListeners) listener(slot - 1);
         }
+        return true;
+    }
+    if (msg.type === "set_interaction_mode") {
+        const { worldId, tileMode, entityMode } = msg.payload;
+        interactionModes.set(worldId, tileMode, entityMode);
+        return true;
+    }
+    if (msg.type === "reset_interaction_mode") {
+        interactionModes.reset(msg.payload.worldId);
         return true;
     }
     if (msg.type === "region_replacement") {

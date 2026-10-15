@@ -22,7 +22,7 @@ assert(drawer);
 const labels = [...drawer.querySelectorAll("label")];
 assert.deepEqual(labels.map((label) => label.textContent), [
     "Save objects to object-spawns.json", "Render all Height Levels", "Show map icons",
-    "PvP zones", "Multi zones", "Duel zones", "Safe zones",
+    "PvP zones", "Multi zones", "Duel zones", "Safe zones", "F2P zones",
 ]);
 const checkboxes = labels.map((label) => label.querySelector("input")!);
 for (const label of labels) {
@@ -52,7 +52,7 @@ standalone.attach({
 } as any);
 const unmountStandalone = mountEditorUi(standalone);
 (document.querySelector('button[aria-label="Editor settings"]') as HTMLButtonElement).click();
-assert.deepEqual([...document.querySelectorAll('[data-map-editor="settings"] label')].map(label => label.textContent), ["Render all Height Levels", "Show map icons", "PvP zones", "Multi zones", "Duel zones", "Safe zones"], "host-only setting is absent standalone");
+assert.deepEqual([...document.querySelectorAll('[data-map-editor="settings"] label')].map(label => label.textContent), ["Render all Height Levels", "Show map icons", "PvP zones", "Multi zones", "Duel zones", "Safe zones", "F2P zones"], "host-only setting is absent standalone");
 standalone.setConfig({ edits: [{ kind: "place", locId: 1, tileX: 64, tileY: 64, plane: 0, shape: 10, rotation: 0 }] });
 // Avoid downloading a file; assert the mode at the point the normal export path runs.
 standalone.exportModifiedRegionPacks = () => {

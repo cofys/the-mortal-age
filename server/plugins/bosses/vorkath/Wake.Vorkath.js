@@ -58,6 +58,8 @@ function pokeVorkath({ player, npc }) {
     npc.performAnimation(new core.Animation(WAKE_ANIMATION));
     for (const [sound, delay] of WAKE_SOUNDS) player.getPacketSender().sendSoundEffect(sound, 1, delay);
     const cycle = core.World.getProcessCycle();
+    const awakeId = Shared.awakeIdForPlayer(player);
+    npc.setAttribute(Shared.ATTR_AWAKE_ID, awakeId);
     npc.setAttribute(Shared.ATTR_ATTACKS, Shared.FIRST_SPECIAL_HEAD_START);
     npc.setAttribute(Shared.ATTR_NEXT_SPECIAL, Math.random() < 0.5 ? Shared.SPECIAL_ACID : Shared.SPECIAL_SPAWN);
     npc.setAttribute(Shared.ATTR_PHASE, Shared.PHASE_ACTIVE);
@@ -65,12 +67,13 @@ function pokeVorkath({ player, npc }) {
     npc.setAttribute(Shared.ATTR_FIRST_ATTACK_AT, cycle + Shared.FIRST_ATTACK_TICKS);
     later(Shared.WAKE_TICKS, () => {
       if (!alive(npc) || npc.getId() !== Shared.WAKING_ID) return;
-      npc.setNpcTransformationId(Shared.AWAKE_ID);
-      npc.setHitpoints?.(Shared.MAX_HITPOINTS);
+      npc.setNpcTransformationId(awakeId);
+      npc.setMaxHitpoints?.(Shared.maxHitpointsForId(awakeId));
+      npc.setHitpoints?.(Shared.maxHitpointsForId(awakeId));
       if (alive(player)) Hud.show(npc, player);
     });
     later(Shared.FIRST_ATTACK_TICKS, () => {
-      if (!alive(npc) || npc.getId() !== Shared.AWAKE_ID || !alive(player)) return;
+      if (!alive(npc) || !Shared.isAwakeNpc(npc) || !alive(player)) return;
       npc.getCombat?.().attack?.(player);
     });
   });
@@ -88,7 +91,7 @@ function denySleepingAttack(event) {
 
 function denyWakeAttack(event) {
   const target = event.target;
-  if (!target?.isNpc?.() || target.getId() !== Shared.AWAKE_ID) return;
+  if (!target?.isNpc?.() || !Shared.isAwakeNpc(target)) return;
   const until = target.getAttribute?.(Shared.ATTR_WAKE_UNTIL) ?? 0;
   if (core.World.getProcessCycle() < until) {
     event.allow = false;
@@ -96,7 +99,7 @@ function denyWakeAttack(event) {
 }
 
 function vorkathDied({ npc }) {
-  if (!npc || npc.getId() !== Shared.AWAKE_ID) return;
+  if (!npc || !Shared.isAwakeNpc(npc)) return;
   Specials.endFight(npc);
   Hud.killed(npc);
 }
@@ -116,7 +119,7 @@ function lootTile(base, player, isWalkable, random = Math.random) {
 }
 
 function placeLoot(where) {
-  if (where.npcId !== Shared.AWAKE_ID && where.npc?.getId?.() !== Shared.AWAKE_ID) return;
+  if (!Shared.isAwakeId(where.npcId) && !Shared.isAwakeNpc(where.npc)) return;
   const base = where.npc?.getLocation?.();
   if (!base) return;
   const z = base.getZ();

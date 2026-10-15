@@ -61,9 +61,9 @@
  *   spell set to autocast (casting spells on NPCs has no hook here).
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
-const Monsters = require("./CoxMonsters");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
+const Monsters = require("./Monsters.ChambersOfXeric");
 
 const NPC = { HEAD: 7554, RIGHT_CLAW: 7553, LEFT_CLAW: 7555, FIRE: 7558 };
 const OBJECT = {

@@ -3,10 +3,10 @@
  * plugins/areas/data/stronghold-of-security.json: its doors and security questions, ladders,
  * portals and reward rooms, as captured. See docs/stronghold-of-security.md.
  */
-const Data = require("./SosData");
-const Doors = require("./SosDoors");
-const Rewards = require("./SosRewards");
-const Travel = require("./SosTravel");
+const Data = require("./Data.StrongholdOfSecurity");
+const Doors = require("./Doors.StrongholdOfSecurity");
+const Rewards = require("./Rewards.StrongholdOfSecurity");
+const Travel = require("./Travel.StrongholdOfSecurity");
 
 module.exports = {
   name: "StrongholdOfSecurity",

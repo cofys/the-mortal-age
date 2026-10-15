@@ -12,9 +12,9 @@ const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
-const { content, setVarbit, playSound, animateDeckLoc } = require("./sailingContent");
-const facilities = require("./boatFacilities");
-const shipwrecks = require("./shipwrecks");
+const { content, setVarbit, playSound, animateDeckLoc } = require("./SailingContent.Sailing");
+const facilities = require("./BoatFacilities.Sailing");
+const shipwrecks = require("./Shipwrecks.Salvaging");
 
 let pluginApi = null;
 

@@ -12,7 +12,7 @@
  * rotation - check them in game.
  */
 
-const { Anim } = require("../../skills/agility/constants");
+const { Anim } = require("../../skills/agility/Constants.Agility");
 
 const ROPE_OBJECT_TYPE = 4;
 const COORD_OFFSETS = [[-1, 0], [0, 1], [1, 0], [0, -1]];

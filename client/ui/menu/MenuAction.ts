@@ -64,7 +64,10 @@ let spellSelectionResolver: SpellSelectionResolver = null;
 type NpcExamineIdResolver = ((serverId: number) => number | undefined) | null;
 let npcExamineIdResolver: NpcExamineIdResolver = null;
 
-/** Steers the boat instead of walking while at a helm; returns true when it handled the click. */
+/**
+ * Applies the server's tile interaction mode to a walk click (steer at a helm, or nothing while
+ * disabled); returns true when it handled the click.
+ */
 type HelmSteeringHandler = ((worldX: number, worldY: number) => boolean) | null;
 let helmSteeringHandler: HelmSteeringHandler = null;
 

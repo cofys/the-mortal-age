@@ -23,17 +23,17 @@ The Doom's items (Eye of Ayak, avernic treads, Mokhaiotl cloth, Dom) are a separ
 
 | File | What it owns |
 | --- | --- |
-| `DoomShared.js` | Ids, tiles, the two arenas, varps and helpers. |
-| `DoomDelves.js` | What changes with the delve level (the Wiki's table). |
-| `DoomRun.js` | A player's run: the instance, delves, the HUD, the burrow hole, varps and messages, leaving. |
-| `DoomBoss.js` | The Doom's attacks, the melee charge, shockwaves and the rotation. |
-| `DoomHazards.js` | Larvae, rocks, volatile earth and the earthen shield. |
-| `DoomAcid.js` | Acid blood (delve 3+). |
-| `DoomHolyWater.js` | The holy water after a melee-punish kill. |
-| `DoomShield.js` | The demonic shield (delve 3+). |
-| `DoomBurrow.js` | The burrowed "car" phase (delve 5+). |
-| `DoomLoot.js` | The loot table and its delve scaling. |
-| `DoomRecords.js` | Personal and world records (`data/saves/doom-scoreboard.json`). |
+| `Shared.DoomOfMokhaiotl.js` | Ids, tiles, the two arenas, varps and helpers. |
+| `Delves.DoomOfMokhaiotl.js` | What changes with the delve level (the Wiki's table). |
+| `Run.DoomOfMokhaiotl.js` | A player's run: the instance, delves, the HUD, the burrow hole, varps and messages, leaving. |
+| `Boss.DoomOfMokhaiotl.js` | The Doom's attacks, the melee charge, shockwaves and the rotation. |
+| `Hazards.DoomOfMokhaiotl.js` | Larvae, rocks, volatile earth and the earthen shield. |
+| `Acid.DoomOfMokhaiotl.js` | Acid blood (delve 3+). |
+| `HolyWater.DoomOfMokhaiotl.js` | The holy water after a melee-punish kill. |
+| `Shield.DoomOfMokhaiotl.js` | The demonic shield (delve 3+). |
+| `Burrow.DoomOfMokhaiotl.js` | The burrowed "car" phase (delve 5+). |
+| `Loot.DoomOfMokhaiotl.js` | The loot table and its delve scaling. |
+| `Records.DoomOfMokhaiotl.js` | Personal and world records (`data/saves/doom-scoreboard.json`). |
 | `Rewards.*` | The burrow hole's reward screen, claiming, the lobby's chest. |
 | `Scoreboard.*` | The lobby's scoreboard. |
 | `Lobby.*` | The ruins' entrance, the lobby's exit and the gap. |

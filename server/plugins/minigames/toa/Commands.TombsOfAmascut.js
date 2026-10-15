@@ -1,7 +1,7 @@
 "use strict";
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 function skipPuzzle({ player }) {
   const raid = Raid.raidOf(player);

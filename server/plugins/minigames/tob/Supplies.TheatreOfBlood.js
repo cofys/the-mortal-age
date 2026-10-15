@@ -13,8 +13,8 @@
  * buy messages.
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const { OBJECT, INTERFACE, VARBIT } = Shared;
 
@@ -124,6 +124,7 @@ function buy(player, entry, amount) {
       break;
     }
     member.supplyPoints -= entry.cost;
+    Shared.api().emitCustomEvent("persistence:save", { player, reason: "reward-shop" });
     if (entry.id === STAMINA) member.staminaBought = true;
   }
   const sender = player.getPacketSender();

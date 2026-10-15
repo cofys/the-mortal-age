@@ -51,7 +51,7 @@ export abstract class Spell {
     }
 
     /** The part of `items` the inventory cannot fully supply, aggregated per item. */
-    private static inventoryShortfall(player: Player, items: Item[]): Item[] {
+    public static inventoryShortfall(player: Player, items: Item[]): Item[] {
         const required = new Map<number, number>();
         for (const item of items) {
             if (item == null) {

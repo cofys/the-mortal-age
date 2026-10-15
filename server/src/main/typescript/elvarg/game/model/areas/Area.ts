@@ -69,6 +69,11 @@ export abstract class Area {
         return null;
     }
 
+    /** Explicitly allows or refuses spell targeting, including non-combat puzzle NPCs. */
+    canCastOnNpc(player: Player, npc: NPC, spell: any): boolean | null {
+        return null;
+    }
+
     canTeleport(player: Player, wildernessLevelLimit: number, destination?: any): boolean | null {
         return null;
     }

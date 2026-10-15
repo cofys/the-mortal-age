@@ -2252,7 +2252,7 @@
      ]
     }
    ],
-   "source": "plugins/bosses/zulrah/ZulrahShared.js SHRINE"
+   "source": "plugins/bosses/zulrah/Shared.Zulrah.js SHRINE"
   }
  ]
 }

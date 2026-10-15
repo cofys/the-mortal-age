@@ -10,7 +10,7 @@ const {
 const { PluginManager } = require('../dist/plugins/PluginManager');
 
 const f2pZone = { minX: 3200, maxX: 3263, minY: 3200, maxY: 3263, z: 0, tags: ['f2p'] };
-const world = (extra) => ({ spawn: { x: 3222, y: 3219, z: 0 }, zones: [{ tags: [] }], disabledPlugins: [], ...extra });
+const world = (extra) => ({ spawn: { x: 3222, y: 3219, z: 0 }, zones: [{ tags: [] }], ...extra });
 
 test('membersWorld defaults to true', () => {
   assert.equal(parseWorldDefinition(world()).membersWorld, true);

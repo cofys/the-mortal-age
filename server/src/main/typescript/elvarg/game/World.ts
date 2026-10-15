@@ -99,6 +99,8 @@ export class World {
      * The collection of {@link Players}s waiting to be removed from the game.
      */
     private static removePlayerQueue = new Array<Player>();
+    /** Logout button presses waiting for the next tick to answer them. */
+    private static logoutRequests = new Set<Player>();
 
     /**
      * The collection of {@link Players}s waiting to be added to the game.
@@ -209,6 +211,7 @@ export class World {
                 return;
             }
             try {
+                GameConstants.PLAYER_PERSISTENCE.cancelRequestedSave(player);
                 GameConstants.PLAYER_PERSISTENCE.save(player, reason);
                 saved++;
             } catch (err) {
@@ -219,6 +222,7 @@ export class World {
         if (saved > 0 || failed > 0) {
             console.info(`[world] savePlayers queued: saved=${saved}, failed=${failed}`);
         }
+        return { saved, failed };
     }
 
     public static getPlayers(): MobileList<Player> {
@@ -771,7 +775,8 @@ export class World {
     public static refreshActiveRegions(): void {
         const snapshot = World.activeRegionIndex.update(
             World.players,
-            (player) => World.shouldRunNetworkUpdates(player),
+            // A player held in the world after a disconnect still keeps their region awake.
+            (player) => World.shouldRunNetworkUpdates(player) || World.removePlayerQueue.includes(player),
             World.processCycle,
             Date.now()
         );
@@ -977,6 +982,23 @@ export class World {
         return this.addPlayerQueue;
     }
 
+    /** Queues a logout button press for the next tick. */
+    public static queueLogoutRequest(player: Player): void {
+        World.logoutRequests.add(player);
+    }
+
+    private static answerLogoutRequest(player: Player): void {
+        if (World.removePlayerQueue.includes(player) || !World.isPlayerSessionConnected(player)) return;
+        const refusal = PluginManager.emitCanLogout(player) ?? player.logoutRefusal();
+        if (refusal) {
+            player.getSession().refuseLogout(refusal);
+            return;
+        }
+        player.setDisconnectSource("logout");
+        World.removePlayerQueue.push(player);
+        player.getSession().logout();
+    }
+
     public static getRemovePlayerQueue(): Player[] {
         return this.removePlayerQueue;
     }
@@ -1084,8 +1106,14 @@ export class World {
             }
         });
 
-        // Deregister queued players.
-        // If a player's transport is already closed, force removal immediately.
+        // Logout button presses are answered on the tick, as in live OSRS.
+        timed("logout_requests", () => {
+            for (const player of World.logoutRequests) World.answerLogoutRequest(player);
+            World.logoutRequests.clear();
+        });
+
+        // Deregister queued players. A player hit in combat stays in the world after
+        // their connection is gone until combat ends or the hold runs out.
         timed("queue_remove_players", () => {
             let amount = 0;
             let activeRegionsChanged = false;
@@ -1098,10 +1126,17 @@ export class World {
                     World.removePlayerQueue.splice(index, 1);
                     continue;
                 }
-                const disconnected = !World.isPlayerSessionConnected(player);
-                if (disconnected || player.canLogout() || player.forcedLogoutTimer.finished() || Server.isUpdating()) {
+                if (Server.isUpdating() || player.readyToLeaveWorld()) {
                     if (player.isPlayerBot?.() !== true) {
                         activeRegionsChanged = true;
+                    }
+                    // A socket closing after its player already left queues them again.
+                    if (player.isPlayerBot?.() !== true && player.isRegistered()) {
+                        PluginManager.emitPlayerDisconnect({
+                            player,
+                            username: player.getUsername(),
+                            source: player.getDisconnectSource() ?? "removed",
+                        });
                     }
                     try {
                         World.players.remove(player);

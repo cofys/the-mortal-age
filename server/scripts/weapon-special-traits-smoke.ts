@@ -297,6 +297,7 @@ assert.equal(
         getAsNpc: () => npc,
         getRollFactor: () => 1,
         getDefenceLevel: () => 10,
+        getDefenceBonus: () => 0,
         getCurrentDefinition: () => ({ getStats: () => [0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }),
     };
     const attacks = fakePlayer({ attack: 99, style: FightStyle.AGGRESSIVE, bonusType: 0, attackBonus: [100, 0, 0, 0, 0] });
@@ -416,7 +417,7 @@ assert.equal(
         impact(bot);
         assert.equal(defence, 70, "player Defence drains too");
         assert.ok(AccuracyFormulasDpsCalc.defenseMeleeRoll(bot, BonusManager.ATTACK_CRUSH) < before);
-        const { MaintainCombatBoostsActionNode } = require("../plugins/bots/behaviours/nodes/actions/MaintainCombatBoostsActionNode");
+        const { MaintainCombatBoostsActionNode } = require("../plugins/bots/behaviours/nodes/actions/MaintainCombatBoostsActionNode.PlayerBots");
         const boosts = new MaintainCombatBoostsActionNode(new Map([[bot.getUsername(), { mode: "pvp", pvp: { profileId: "standard" } }]]));
         boosts.tick({ player: bot });
         assert.equal(defence, 70, "PvP maintenance cannot erase the drain mid-fight");

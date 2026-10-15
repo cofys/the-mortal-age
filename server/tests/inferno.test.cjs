@@ -11,7 +11,7 @@ const { CombatType } = require('../dist/game/content/combat/CombatType');
 const { NpcIdentifiers: Npcs } = require('../dist/util/NpcIdentifiers');
 const { ItemIdentifiers: Items } = require('../dist/util/ItemIdentifiers');
 const { ObjectIdentifiers: Objects } = require('../dist/util/ObjectIdentifiers');
-const { waveAt, FINAL_WAVE } = require('../plugins/minigames/inferno/InfernoWaves');
+const { waveAt, FINAL_WAVE } = require('../plugins/minigames/inferno/Waves.Inferno');
 
 const HITPOINTS = {
   [Npcs.JAL_NIB]: 10, [Npcs.JAL_MEJRAH]: 25, [Npcs.JAL_AK]: 40, [Npcs.JAL_AKREK_MEJ]: 15,
@@ -231,8 +231,8 @@ function createWorld() {
 // One plugin load per file: its modules keep their state at module scope.
 const { world, api } = createWorld();
 require('../plugins/minigames/Inferno.plugin').register(api);
-const run = require('../plugins/minigames/inferno/InfernoRun');
-const entry = require('../plugins/minigames/inferno/InfernoEntry');
+const run = require('../plugins/minigames/inferno/Run.Inferno');
+const entry = require('../plugins/minigames/inferno/Entry.Inferno');
 
 function tick(player, ticks = 1) {
   for (let count = 0; count < ticks; count++) {
@@ -575,7 +575,7 @@ test('Jal-Xil keeps range between melee swings and reaches further on the Zuk wa
 });
 
 test('the chasm is jumped into from the tip of the walkway, as its pit has no walkable edge', () => {
-  const { routeToChasm } = require('../plugins/minigames/inferno/InfernoEntry');
+  const { routeToChasm } = require('../plugins/minigames/inferno/Entry.Inferno');
   const route = (x) => {
     const event = { objectId: 30352, player: { getLocation: () => new Location(x, 5110, 0) } };
     routeToChasm(event);
@@ -658,7 +658,7 @@ test('the cave exit, a map loc, can be walked to from inside the arena, and Quic
   assert.equal(valid(at(0, { other: true })), false, "another private area's loc");
   assert.equal(valid(at(1, null)), false, 'another plane');
 
-  const entry = require('../plugins/minigames/inferno/InfernoEntry');
+  const entry = require('../plugins/minigames/inferno/Entry.Inferno');
   assert.equal(entry.quickExit({ player }), true);
   assert.equal(run.sessionOf(player), null, 'out without being asked');
 });

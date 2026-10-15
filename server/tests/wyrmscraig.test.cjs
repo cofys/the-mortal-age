@@ -23,7 +23,7 @@ const AreaCommon = require("../plugins/areas/wyrmscraig/Common.Wyrmscraig");
 const MadAngel = require("../plugins/bosses/MadAngel.plugin");
 const Common = require("../plugins/bosses/madangel/Common.MadAngel");
 const { Fight, quarter } = require("../plugins/bosses/madangel/Fight.MadAngel");
-const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts");
+const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts/Shortcuts.Agility");
 
 const core = PluginManager.getCoreApi();
 const objectHooks = new Map();

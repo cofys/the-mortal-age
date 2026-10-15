@@ -9,8 +9,8 @@
  * during a run forfeits it. This server has no graves, so what would drop lands in the lobby.
  */
 
-const Shared = require("./ColosseumShared");
-const Run = require("./ColosseumRun");
+const Shared = require("./Shared.Colosseum");
+const Run = require("./Run.Colosseum");
 
 const MOD_BUTTONS = Shared.COMPONENT.MOD_BUTTONS.map((component) => (Shared.INTERFACE.INTERMISSION << 16) | component);
 const CONFIRM_BUTTON = (Shared.INTERFACE.INTERMISSION << 16) | Shared.COMPONENT.CONFIRM;

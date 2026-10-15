@@ -232,31 +232,31 @@ function craftPerfectJewellery(player, recipe) {
   player.sendMessage(`You craft a ${recipe.name}.`);
 }
 
-/**
- * Wiki (Glassblowing): a glassblowing pipe used on molten glass shapes an
- * unpowered orb, 46 Crafting, 52.5 XP; the pipe is kept. Legends' Quest needs
- * one for the trial magic gate.
- */
+/** Wiki glassblowing recipes needed by Legends' Quest and While Guthix Sleeps. */
 const GLASSBLOWING = [
   { name: "unpowered orb", itemId: ItemIds.UNPOWERED_ORB, level: 46, xp: 52.5 },
+  { name: "lantern lens", itemId: ItemIds.LANTERN_LENS, level: 49, xp: 55 },
 ];
 
-function blowGlass(event) {
-  const { player, usedItemId, usedWithItemId } = event;
-  const ids = new Set([usedItemId, usedWithItemId]);
-  if (!ids.has(ItemIds.GLASSBLOWING_PIPE) || !ids.has(ItemIds.MOLTEN_GLASS)) return;
-  const recipe = GLASSBLOWING[0];
-  event.handled = true;
+function shapeGlass(player, recipe) {
+  const inventory = player.getInventory();
+  if (!inventory.contains(ItemIds.GLASSBLOWING_PIPE) || !inventory.contains(ItemIds.MOLTEN_GLASS)) return;
   if (player.getSkillManager().getCurrentLevel(Skill.CRAFTING) < recipe.level) {
     player.sendMessage(`You need a Crafting level of at least ${recipe.level} to make this.`);
     return;
   }
-  const inventory = player.getInventory();
-  if (!inventory.contains(ItemIds.MOLTEN_GLASS)) return;
   inventory.deleteNumber(ItemIds.MOLTEN_GLASS, 1);
   inventory.addItem(new Item(recipe.itemId, 1));
   player.getSkillManager().addExperiences(Skill.CRAFTING, recipe.xp);
-  player.sendMessage(`You shape the glass into an ${recipe.name}.`);
+  player.sendMessage(`You shape the glass into ${recipe.name}.`);
+}
+
+function blowGlass(event) {
+  const ids = new Set([event.usedItemId, event.usedWithItemId]);
+  if (!ids.has(ItemIds.GLASSBLOWING_PIPE) || !ids.has(ItemIds.MOLTEN_GLASS)) return;
+  event.handled = true;
+  pluginApi.sendMultiChatboxPrompt(event.player, "What would you like to make?",
+    ...GLASSBLOWING.flatMap(recipe => [recipe.name, () => shapeGlass(event.player, recipe)]));
 }
 
 /** Using a 'perfect' gold bar on a furnace, with a ruby and a mould, makes the jewellery. */

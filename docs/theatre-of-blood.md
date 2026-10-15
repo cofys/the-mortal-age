@@ -22,14 +22,14 @@ Normal mode only. The party carries a `mode` and `TobShared.MODES` holds the per
 
 | File | What it owns |
 | --- | --- |
-| `TobShared.js` | Ids, tiles, the room table, modes and helpers. |
-| `TobParties.js` | Parties: members, applicants, the declined, preferences. |
-| `TobRaid.js` | `Raid` and the `Room` base: instancing (its Area blocks teleports, and attacks by the jailed and by scripted NPCs), rooms in order, barriers, the HUD, deaths and the jail, wipes, leaving and logouts. |
+| `Shared.TheatreOfBlood.js` | Ids, tiles, the room table, modes and helpers. |
+| `Parties.TheatreOfBlood.js` | Parties: members, applicants, the declined, preferences. |
+| `RaidState.TheatreOfBlood.js` | `Raid` and the `Room` base: instancing (its Area blocks teleports, and attacks by the jailed and by scripted NPCs), rooms in order, barriers, the HUD, deaths and the jail, wipes, leaving and logouts. |
 | `Lobby.*` | The notice board's party list (364) and party information (50), the HUD in Ver Sinhaza, the entrance. |
 | `Raid.*` | Barrier, passage and orator objects; deaths, escape crystals and logging back in. |
 | `Retrieval.*` | The retrieval chests in Ver Sinhaza. |
 | `Supplies.*` | The supply chests and their interface (405). |
-| `Maiden.*`, `Bloat.*`, `Nylocas.*`, `Sotetseg.*`, `Xarpus.*`, `Verzik.*` | One room each. `NylocasWaves.js` holds the Nylocas waves. |
+| `Maiden.*`, `Bloat.*`, `Nylocas.*`, `Sotetseg.*`, `Xarpus.*`, `Verzik.*` | One room each. `NylocasWaves.TheatreOfBlood.js` holds the Nylocas waves. |
 | `Rewards.*` | Verzik's vault, the loot interface (23) and the Rewards Chest in Ver Sinhaza. |
 | `Commands.*` | Developer commands. |
 
@@ -167,7 +167,7 @@ Normal-mode numbers (Wiki) unless marked otherwise; see [Captured](#captured) an
 
 ### The Nylocas
 - Thirty-one fixed waves from the east, south and west lanes come every 4 ticks. Waves stall while 12 nylocas are alive (24 from wave 20).
-- **The waves** (`NylocasWaves.js`) come from the Wiki's table. Its colours give each flickering nylocas's styles in order; it shows the first two, 4 ticks each, then fights as the worded style. In wave 21's west lane the words disagree with the colours; the colours are used.
+- **The waves** (`NylocasWaves.TheatreOfBlood.js`) come from the Wiki's table. Its colours give each flickering nylocas's styles in order; it shows the first two, 4 ticks each, then fights as the worded style. In wave 21's west lane the words disagree with the colours; the colours are used.
 - **Each nylocas** takes damage only from its own style.
   - Small: 11 hitpoints, max hit 17. Big: 22 and 24, splitting into two small ones of any style.
   - They blow up 30 seconds after appearing (up to 18 or 21).

@@ -11,7 +11,7 @@
  * Stages (varbit 18314 "sailing_intro", varp 4959 bits 0-5). The Wiki lists no
  * stage values; the cache's own complete value is 50 (docs/sailing-osrs-reference.md
  * records the shipyard Build scripts and the tools table needing 18314 >= 50, and
- * sailing/cargo.js unlocks the captain's log tool at 50), so 50 is complete and the
+ * sailing/Cargo.Sailing.js unlocks the captain's log tool at 50), so 50 is complete and the
  * intermediate values are this plugin's own:
  *   1 started (interview accepted)
  *   2 boarded the ship

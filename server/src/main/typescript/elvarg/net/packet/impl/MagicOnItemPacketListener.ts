@@ -15,6 +15,7 @@ import { ItemIdentifiers } from "../../../util/ItemIdentifiers";
 import { World } from "../../../game/World";
 import { PluginManager } from "../../../plugins/PluginManager";
 import { CombatRange } from "../../../game/content/combat/CombatRange";
+import { Spell } from "../../../game/content/combat/magic/Spell";
 import { ArceuusItemSpells } from "../../../game/content/combat/magic/ArceuusItemSpells";
 
 export class MagicOnItemPacketListener {
@@ -66,23 +67,22 @@ export class MagicOnItemPacketListener {
     return MagicOnItemPacketListener.FIRE_STAVES.has(weaponId);
   }
 
-  private hasTelegrabRunes(player: any): boolean {
-    const inventory = player.getInventory();
-    if (!inventory.contains(ItemIdentifiers.LAW_RUNE)) {
-      return false;
-    }
-    if (this.hasInfiniteAirRune(player)) {
-      return true;
-    }
-    return inventory.contains(ItemIdentifiers.AIR_RUNE);
+  private runeCosts(player: any, spellId: number, costs: Item[]): Item[] {
+    return costs.filter(item => PluginManager.emitSpellRuneBypass(
+      player, MagicSpellbook.NORMAL, spellId, item.getId()
+    ) !== true && !(item.getId() === ItemIdentifiers.AIR_RUNE && this.hasInfiniteAirRune(player))
+      && !(item.getId() === ItemIdentifiers.FIRE_RUNE && this.hasInfiniteFireRune(player)));
   }
 
-  private consumeTelegrabRunes(player: any): void {
-    const inventory = player.getInventory();
-    inventory.deletes(new Item(ItemIdentifiers.LAW_RUNE, 1));
-    if (!this.hasInfiniteAirRune(player)) {
-      inventory.deletes(new Item(ItemIdentifiers.AIR_RUNE, 1));
-    }
+  private hasRunes(player: any, costs: Item[]): boolean {
+    const missing = Spell.inventoryShortfall(player, costs);
+    return missing.length === 0 || PluginManager.checkSpellRuneSource(player, missing);
+  }
+
+  private consumeRunes(player: any, costs: Item[]): void {
+    const missing = Spell.inventoryShortfall(player, costs);
+    for (const item of costs) player.getInventory().deleteNumber(item.getId(), item.getAmount());
+    if (missing.length) PluginManager.consumeSpellRuneSource(player, missing);
   }
 
   private canReceiveGroundItem(player: any, itemId: number): boolean {
@@ -110,7 +110,10 @@ export class MagicOnItemPacketListener {
       );
       return;
     }
-    if (!this.hasTelegrabRunes(player)) {
+    const runes = this.runeCosts(player, spellId, [
+      new Item(ItemIdentifiers.LAW_RUNE, 1), new Item(ItemIdentifiers.AIR_RUNE, 1)
+    ]);
+    if (!this.hasRunes(player, runes)) {
       player.sendMessage("You do not have the required items to cast this spell.");
       return;
     }
@@ -138,7 +141,7 @@ export class MagicOnItemPacketListener {
       return;
     }
 
-    this.consumeTelegrabRunes(player);
+    this.consumeRunes(player, runes);
     player.getSkillManager().stopSkillable();
 
     player.setPositionToFace(position);
@@ -159,6 +162,7 @@ export class MagicOnItemPacketListener {
 
     ItemOnGroundManager.deregister(groundItem);
     player.getInventory().addItem(groundItem.getItem().clone());
+    PluginManager.emitCustomEvent("magic:telekinetic-grab", { player, itemId: groundItemId, position });
     player.getSkillManager().addExperiences(Skill.MAGIC, MagicOnItemPacketListener.TELEKINETIC_GRAB_XP);
     player.getClickDelay().reset();
   }
@@ -188,21 +192,18 @@ export class MagicOnItemPacketListener {
       player.sendMessage(`You need a Magic level of ${requiredLevel} to cast this spell.`);
       return;
     }
-    if (
-      !item?.isTradeable?.() ||
-      !item?.isSellable?.() ||
-      itemId === ItemIdentifiers.COINS ||
-      definition.getHighAlchValue() <= 0 ||
-      definition.getLowAlchValue() <= 0
-    ) {
+    const policy = { player, itemId, spellId, allowed: !!item?.isTradeable?.() && !!item?.isSellable?.()
+      && definition.getHighAlchValue() > 0 && definition.getLowAlchValue() > 0,
+      coins: isHighAlch ? definition.getHighAlchValue() : definition.getLowAlchValue() };
+    PluginManager.emitCustomEvent("magic:alchemy-policy", policy);
+    if (itemId === ItemIdentifiers.COINS || !policy.allowed || !Number.isSafeInteger(policy.coins) || policy.coins < 0) {
       player.sendMessage("This spell can not be cast on this item.");
       return;
     }
-    if (!inventory.contains(ItemIdentifiers.NATURE_RUNE)) {
-      player.sendMessage("You do not have the required items to cast this spell.");
-      return;
-    }
-    if (!this.hasInfiniteFireRune(player) && inventory.getAmount(ItemIdentifiers.FIRE_RUNE) < fireRunesRequired) {
+    const runes = this.runeCosts(player, spellId, [
+      new Item(ItemIdentifiers.NATURE_RUNE, 1), new Item(ItemIdentifiers.FIRE_RUNE, fireRunesRequired)
+    ]);
+    if (!this.hasRunes(player, runes)) {
       player.sendMessage("You do not have the required items to cast this spell.");
       return;
     }
@@ -211,18 +212,12 @@ export class MagicOnItemPacketListener {
     }
 
     inventory.deleteNumber(itemId, 1);
-    inventory.deleteNumber(ItemIdentifiers.NATURE_RUNE, 1);
-    if (!this.hasInfiniteFireRune(player)) {
-      inventory.deleteNumber(ItemIdentifiers.FIRE_RUNE, fireRunesRequired);
-    }
+    this.consumeRunes(player, runes);
 
     player.performAnimation(new Animation(712));
     Sounds.sendSound(player, isHighAlch ? Sound.HIGH_ALCHEMY : Sound.LOW_ALCHEMY);
-    if (isHighAlch) {
-      inventory.adds(ItemIdentifiers.COINS, definition.getHighAlchValue());
-    } else {
-      inventory.adds(ItemIdentifiers.COINS, definition.getLowAlchValue());
-    }
+    if (policy.coins > 0) inventory.adds(ItemIdentifiers.COINS, policy.coins);
+    PluginManager.emitCustomEvent("magic:alchemy-completed", { player, itemId, spellId });
     player.performGraphic(new Graphic(112, GraphicHeight.HIGH));
     player.getSkillManager().addExperiences(Skill.MAGIC, experience);
     player.getPacketSender().sendTab(6);

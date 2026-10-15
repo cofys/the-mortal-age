@@ -10,7 +10,7 @@ const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
 const { RangedWeapon } = require('../dist/game/content/combat/ranged/RangedData');
 const { BOW_OF_FAERDHINEN_IDS } = require('../dist/game/content/combat/ranged/CrystalBow');
 const Scythe = require('../plugins/items/ScytheOfVitur.plugin');
-const CrystalArmour = require('../plugins/combat/effects/CrystalArmour');
+const CrystalArmour = require('../plugins/combat/effects/CrystalArmour.EquipmentEffects');
 
 const NAMES = new Map();
 let nextId = 90000;

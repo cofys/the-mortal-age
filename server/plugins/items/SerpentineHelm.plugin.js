@@ -111,7 +111,7 @@ function checkCharges({ player, item }) {
 
 function chargeHelm(event) {
   const { player, usedItem, usedWithItem, usedItemId, usedWithItemId } = event;
-  const helm = chargedIds.has(usedItemId) || chargedFromUncharged.has(usedItemId) ? usedItem : usedWithItem;
+  const helm = chargedIds.has(usedItemId) || chargedFromUncharged.has(usedItemId) ? usedItem : chargedIds.has(usedWithItemId) || chargedFromUncharged.has(usedWithItemId) ? usedWithItem : null;
   const otherId = helm === usedItem ? usedWithItemId : usedItemId;
   if (!helm || Number(otherId) !== core.ItemIdentifiers.ZULRAHS_SCALES) {
     return;
@@ -167,7 +167,7 @@ module.exports = {
     chargedFromUncharged = new Map([[unchargedId, chargedIdsList[0]]]);
     guaranteedWeaponIds = new Set([I.TOXIC_BLOWPIPE, I.TRIDENT_OF_THE_SWAMP, I.TOXIC_STAFF_OF_THE_DEAD]);
 
-    api.persistAttribute(COMBAT_CHARGE_TICK_ATTRIBUTE);
+    api.persistAttribute(COMBAT_CHARGE_TICK_ATTRIBUTE, null);
     api.onItemAction((event) => {
       if (chargedIds.has(event.itemId)) {
         const option = String(event.option ?? "").toLowerCase();

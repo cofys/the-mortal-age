@@ -9,8 +9,8 @@
  * Wiki: https://oldschool.runescape.wiki/w/Ba-Ba
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 const SPAWN = { x: 3815, y: 5406, z: 0 };
 const BOULDER_STARTS = [{ x: 3813, y: 5401 }, { x: 3813, y: 5404 }, { x: 3813, y: 5407 }, { x: 3813, y: 5410 }, { x: 3813, y: 5413 }];

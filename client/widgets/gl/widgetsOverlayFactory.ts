@@ -14,6 +14,7 @@ import { ItemIconRenderer } from "../../ui/item/ItemIconRenderer";
 import { WidgetsOverlay, WidgetsContext } from "../../ui/devoverlay/WidgetsOverlay";
 import { Model2DRenderer } from "../../ui/model/Model2DRenderer";
 import { layoutWidgets } from "../../widgets/layout/WidgetLayout";
+import { prepareViewportFittedRoots } from "../../widgets/layout/fitWidgetToBounds";
 import { WidgetManager } from "../../widgets/WidgetManager";
 
 export interface WidgetsOverlayRenderMetrics {
@@ -303,6 +304,10 @@ export function createWidgetsOverlay(host: WidgetsOverlayHost): WidgetsOverlay {
                                 }
                             }
 
+                            if (manager) roots.push(...prepareViewportFittedRoots(manager, {
+                                scaleX: widgetRenderScaleX, scaleY: widgetRenderScaleY,
+                                offsetX: widgetRenderOffsetX, offsetY: widgetRenderOffsetY,
+                            }));
                             return roots;
                         };
 

@@ -1,14 +1,14 @@
 "use strict";
 
 /**
- * Zulrah's Combat Achievements (plugins/combatachievements/): its kill count and best time are
+ * Zulrah's Combat Achievements (plugins/achievements/combatachievements/): its kill count and best time are
  * the shrine's own, the speed tasks are timed by the fight when the player is not on a slayer
  * task for it, Perfect Zulrah counts the damage the task names (snakelings, venom clouds, its
  * green form's attacks and its crimson form's tail) and three snakelings killed on one tick is a
  * task of its own.
  */
 
-const Shared = require("./ZulrahShared");
+const Shared = require("./Shared.Zulrah");
 
 const SPEED = [["Zulrah Speed-Trialist", 80], ["Zulrah Speed-Chaser", 60], ["Zulrah Speed-Runner", 54]];
 const SNAKELINGS_AT_ONCE = 3;

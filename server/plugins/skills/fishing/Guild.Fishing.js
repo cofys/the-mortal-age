@@ -2,7 +2,7 @@
  * Fishing Guild (OSRS Wiki): level 68 Fishing to go through the front door, and temporary boosts
  * count. Inside, an invisible +7 Fishing boost applies to catch rolls.
  */
-const ObstacleRunner = require("../agility/ObstacleRunner");
+const ObstacleRunner = require("../agility/ObstacleRunner.Agility");
 
 const GUILD_LEVEL = 68;
 const INVISIBLE_BOOST = 7;

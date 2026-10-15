@@ -13,9 +13,9 @@
  * the theatre and the Mysterious Stranger sells them, so the entrance offers his shop.
  */
 
-const Shared = require("./TobShared");
-const Parties = require("./TobParties");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Parties = require("./Parties.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const { INTERFACE, SCRIPT, VARP, VARBIT } = Shared;
 const { RIGHTS } = Parties;
@@ -438,6 +438,7 @@ module.exports = function registerTheatreLobby(api) {
   api.onZoneExit(Shared.VER_SINHAZA, leaveVerSinhaza);
   api.onPlayerLogout(logoutFromLobby);
   Shared.onObject(api, Shared.OBJECT.NOTICE_BOARD, readNoticeBoard);
+  api.onCustomEvent("tob:normal-party", readNoticeBoard);
   Shared.onObject(api, Shared.OBJECT.ENTRANCE, useEntrance);
   api.onInterfaceActionClick(resumeButton);
   api.onInterfaceActionButton(LIST_ROW_UIDS, selectRow);

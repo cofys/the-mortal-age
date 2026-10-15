@@ -5,8 +5,8 @@
  * second and fourth paths, and the way down to the Wardens once all four paths are done.
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 const Supplies = require("./Supplies.TombsOfAmascut");
 
 const { INTERFACE, EVENT, PATHS, PATH_BY_KEY } = Shared;

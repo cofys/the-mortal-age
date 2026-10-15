@@ -15,12 +15,13 @@ const skill = { getName: () => "Woodcutting" };
 const clientMessages: string[] = [];
 const varbits = new Map<number, number>();
 const packetSender = {
+    sendGraphic: (_graphic: any, _location: any) => packetSender,
     getChatboxGroupId: () => 231,
     sendMessage: (message: string) => clientMessages.push(message),
     sendVarbit: (id: number, value: number) => { varbits.set(id, value); return packetSender; },
     getVarbit: (id: number) => varbits.get(id) ?? 0,
     getVarp: () => 0,
-    sendInterfaceDisplayState: () => packetSender,
+    sendInterfaceDisplayState: (_uid: number, _hidden: boolean) => packetSender,
 };
 class NpcDialogue {
     constructor(private npcId: number, private text: string) {}
@@ -45,13 +46,14 @@ let bankOpen = false;
 let prompt: { title: string; options: string[] } | null = null;
 let movingTicks = 0;
 let rights = "NONE";
+let observedPrivateArea: any = null;
 const player = {
     getUsername: () => "Agent1",
     getIndex: () => 1,
     getRights: () => rights,
     setRights: (next: string) => { rights = next; },
     getArea: () => ({ getName: () => "Wilderness", pluginName: "Wilderness" }),
-    getPrivateArea: () => null,
+    getPrivateArea: () => observedPrivateArea,
     getMovementQueue: () => ({ hasPendingWork: () => movingTicks-- > 0 }),
     getDialogueManager: () => dialogueManager,
     getInterfaceId: () => -1,
@@ -67,17 +69,25 @@ const player = {
 const npc = {
     getIndex: () => 7,
     getId: () => 3106,
+    getHitpoints: () => 7,
+    getMaxHitpoints: () => 10,
+    getAnimation: (): any => ({ getId: () => 8082 }),
+    performAnimation: (_animation: any) => {},
+    forceChat: (_text: string) => {},
     getLocation: () => location(3225, 3220),
     getCurrentDefinition: () => ({ getName: () => "Man", getActions: () => ["Talk-to", null, "Attack", "Pickpocket"] }),
 };
 const rival = { getUsername: () => "Agent2", getIndex: () => 2, getLocation: () => location(3223, 3218), getPacketSender: () => ({ sendMessage: () => {} }) };
-const tree = { getId: () => 1276, getLocation: () => location(3220, 3216) };
+const foreignNpc = { ...npc, getIndex: () => 8, getLocation: () => location(3222, 3218), isOwnerOnly: () => true, getOwner: () => rival };
+const tree = { getType: () => 10, getId: () => 1276, getLocation: () => location(3220, 3216) };
 const dispatched: any[] = [];
 
 let pluginProfiling = false;
+const normalPlayerRequests: any[] = [];
 // Headless load players: online until requestLogout.
 const loadOnline = new Map<string, any>();
 const connectHeadlessClient = async (username: string) => {
+    if (username.toLowerCase() === "agent1") return { player };
     const loadPlayer = {
         attributes: new Map<string, unknown>(),
         location: null as any,
@@ -91,9 +101,10 @@ const connectHeadlessClient = async (username: string) => {
 
 const advanced: any[] = [];
 const commandRights: string[] = [];
+const loadedMapRegions: any[] = [];
 const core = {
     connectHeadlessClient,
-    PlayerRights: { DEVELOPER: "DEVELOPER" },
+    PlayerRights: { NONE: "NONE", DEVELOPER: "DEVELOPER" },
     CanAttackResponse: { CAN_ATTACK: 0, CANT_ATTACK_IN_AREA: 1, 0: "CAN_ATTACK", 1: "CANT_ATTACK_IN_AREA" },
     CombatFactory: {
         canAttackPermission: (attacker: any, target: any) => {
@@ -107,12 +118,13 @@ const core = {
     },
     PluginManager: {
         emitCustomEvent: (name: string, event: any) => {
+            if (name === "agent-mcp:normal-player") { normalPlayerRequests.push(event.player); event.player.setRights("NONE"); return; }
             advanced.push([name, event.ms]);
             if (name === "agent:advance-time") event.handledBy.push("Farming");
         },
     },
     Location: class { constructor(private x: number, private y: number, private z: number) {} getX() { return this.x; } getY() { return this.y; } getZ() { return this.z; } },
-    RegionManager: { blocked: () => false },
+    RegionManager: { blocked: () => false, loadMapFiles: (x: number, y: number, surroundings: boolean) => loadedMapRegions.push([Math.floor(x / 64), Math.floor(y / 64), surroundings]) },
     ServerPerf: {
         getSummary: (ticks: number) => ({
             ticks, avgTickMs: 12.34567, maxTickMs: 40, avgDriftMs: 0, maxDriftMs: 1, lastTickNumber: 9,
@@ -133,14 +145,22 @@ const core = {
         getProcessCycle: () => Date.now(),
         getPlayerByName: (name: string) => (name.toLowerCase() === "agent1" ? player : name.toLowerCase() === "agent2" ? rival : loadOnline.get(name)),
         getPlayers: () => ({ stream: () => [player, ...loadOnline.values()] }),
-        getNpcs: () => ({ stream: () => [npc, null], get: (index: number) => (index === 7 ? npc : undefined) }),
+        getNpcsNear: (_location: any, _radius: number, privateArea: any) => privateArea ? [] : [npc, foreignNpc],
+        getNpcs: () => ({ stream: () => [npc, foreignNpc, null], get: (index: number) => (index === 7 ? npc : undefined) }),
+        getRemovedObjects: () => [],
         getItems: () => [{ getItem: () => item(526), getPosition: () => location(3223, 3218) }],
     },
     MapObjects: {
         mapObjects: new Map([["3220,3216,0", [tree]]]),
         getHash: (x: number, y: number, z: number) => `${x},${y},${z}`,
     },
-    ObjectDefinition: { forPlayer: () => ({ getName: () => "Tree", getInteractions: () => ["Chop down", null] }) },
+    ObjectDefinition: { forPlayer: (id: number) => id === 2284
+        ? ({ id, getName: () => "Plinth", getInteractions: () => null })
+        : id === 2283
+            ? ({ id, getName: () => "Acid pool", getInteractions: () => [] })
+            : id === 49488
+                ? ({ id: 48295, getName: () => "Drain", getInteractions: () => ["Enter"] })
+                : ({ id, getName: () => "Tree", getInteractions: () => ["Chop down", null] }) },
     ItemDefinition: { forId: (id: number) => ({ getName: () => `item ${id}` }) },
     NpcDefinition: { forId: () => ({ getName: () => "Man" }) },
     MultiChatboxPrompt: { OPTIONS_WIDGET_ID: (219 << 16) | 1, getPending: () => prompt },
@@ -152,6 +172,9 @@ const core = {
     Bank: {
         MAIN_INTERFACE_ID: 12,
         SIDE_INTERFACE_ID: 15,
+        ITEMS_CHILD: 12,
+        SIDE_ITEMS_CHILD: 3,
+        DEPOSIT_INVENTORY_CHILD: 47,
         isOpen: () => bankOpen,
         layout: () => [{ tab: 0, slot: 0, item: item(995, 23) }],
         displayItemId: (bankItem: any) => bankItem.getId(),
@@ -182,6 +205,25 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     return { error: !!result.isError, text, value: result.isError ? null : JSON.parse(text) };
 };
 
+// Even an existing staff test account plays as a normal player until logout.
+const agentPlugin = require("../plugins/agent/AgentMcp.plugin.js");
+const sessionHooks: Record<string, any> = {};
+const previousMcpFlag = process.env.AGENT_MCP;
+process.env.AGENT_MCP = "0";
+agentPlugin.register({ core, onServerShutdown() {}, onPlayerLogin() {}, onPlayerLogout() {},
+    onCustomEvent: (name: string, handler: any) => { sessionHooks[name] = handler; }, emitCustomEvent() {} });
+process.env.AGENT_MCP = "1";
+rights = "MODERATOR";
+agentPlugin._test.grantDeveloperRights({ player });
+assert.equal(rights, "DEVELOPER");
+sessionHooks["agent-mcp:normal-player"]({ player });
+assert.equal(rights, "NONE", "staff ranks must not make headless combat immune");
+agentPlugin._test.restoreRights({ player });
+assert.equal(rights, "MODERATOR", "the real account rank survives logout");
+rights = "NONE";
+if (previousMcpFlag === undefined) delete process.env.AGENT_MCP;
+else process.env.AGENT_MCP = previousMcpFlag;
+
 (async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await buildMcpServer(core).connect(serverTransport);
@@ -191,6 +233,11 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     const { tools } = await client.listTools();
     assert.ok(tools.some((tool: any) => tool.name === "observe"));
 
+    rights = "DEVELOPER";
+    await call(client, "login", { username: "Agent1", password: "test" });
+    assert.equal(rights, "NONE", "headless playthroughs take normal damage instead of developer immunity");
+    assert.deepEqual(normalPlayerRequests, [player]);
+
     // Game messages are recorded once an agent has touched the player, and still reach the client.
     let { value: snapshot } = await call(client, "observe", { player: "agent1" });
     player.getPacketSender().sendMessage("You swing your axe at the tree.");
@@ -199,14 +246,65 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     const observed = await call(client, "observe", { player: "agent1" });
     if (observed.error) throw new Error(observed.text);
     snapshot = observed.value;
+    assert.equal(typeof snapshot.worldTick, "number", "observe exposes a read-only process-cycle counter for timing live mechanics");
     assert.equal(snapshot.x, 3222);
     assert.deepEqual(snapshot.skills.Woodcutting, { level: 1, max: 1, xp: 0 });
     assert.deepEqual(snapshot.inventory[0], { slot: 0, id: 1351, name: "item 1351", amount: 1 });
+    assert.equal(snapshot.npcs.length, 1, "another player’s owned NPC is not a menu target");
+    assert.equal(snapshot.npcs[0].hitpoints, 7);
+    assert.equal(snapshot.npcs[0].maxHitpoints, 10);
+    assert.equal(snapshot.npcs[0].animation, 8082, "boss animations are observable warning cues");
     assert.deepEqual(snapshot.npcs[0].options, ["Talk-to", "Attack", "Pickpocket"]);
     assert.deepEqual(snapshot.objects, [{ id: 1276, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 }]);
     assert.equal(snapshot.groundItems[0].id, 526);
     assert.deepEqual(snapshot.messages, ["You swing your axe at the tree."]);
+    loadedMapRegions.length = 0;
+    await call(client, "observe", { player: "agent1", radius: 32 });
+    assert.deepEqual(loadedMapRegions.sort((a, b) => a[0] - b[0] || a[1] - b[1]), [
+        [49, 49, false], [49, 50, false], [50, 49, false], [50, 50, false],
+    ], "scene observations load each intersecting map region once");
     assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.messages, []);
+
+    npc.performAnimation({ getId: () => 8080 });
+    npc.getAnimation = () => null;
+    assert.equal((await call(client, "observe", { player: "agent1" })).value.npcs[0].animation, 8080, "warnings survive the engine clearing its update flags");
+    npc.forceChat("Now!");
+    assert.equal((await call(client, "observe", { player: "agent1" })).value.npcs[0].chat, "Now!", "boss chat cues survive cleared update flags");
+    const originalDefinition = npc.getCurrentDefinition;
+    npc.getCurrentDefinition = () => ({ ...originalDefinition(), getId: () => 10789 });
+    assert.equal((await call(client, "observe", { player: "agent1" })).value.npcs[0].id, 10789, "boss style transforms expose their visible ID");
+    npc.getCurrentDefinition = originalDefinition;
+
+    packetSender.sendGraphic({ getId: () => 1560 }, location(3222, 3218));
+    assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.client.graphics, [{ id: 1560, x: 3222, y: 3218, z: 0 }]);
+    assert.equal((await call(client, "observe", { player: "agent1" })).value.client.graphics, undefined, "graphics are reported once");
+
+    observedPrivateArea = {
+        countsAsMainWorld: () => false,
+        getTemplateObjects: (at: any) => at.getX() === 3224 && at.getY() === 3219
+            ? [{ getType: () => 10, getId: () => 2282, getLocation: () => location(3224, 3219) }]
+            : at.getX() === 3224 && at.getY() === 3220
+                ? [{ getType: () => 10, getId: () => 2284, getLocation: () => location(3224, 3220) }]
+                : at.getX() === 3224 && at.getY() === 3221
+                    ? [{ getType: () => 10, getId: () => 49488, getLocation: () => location(3224, 3221) }] : [],
+        getObjects: () => [{ getType: () => 10, getId: () => 2280, getLocation: tree.getLocation },
+            { getType: () => 22, getId: () => 2283, getLocation: () => location(3223, 3219) }],
+    };
+    const instanced = (await call(client, "observe", { player: "agent1" })).value;
+    assert.deepEqual(instanced.objects, [
+        { id: 2280, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 },
+        { id: 2282, name: "Tree", options: ["Chop down"], x: 3224, y: 3219 },
+        { id: 2284, name: "Plinth", options: [], x: 3224, y: 3220 },
+        { id: 48295, name: "Drain", options: ["Enter"], x: 3224, y: 3221 },
+        { id: 2283, name: "Acid pool", options: [], x: 3223, y: 3219 },
+    ], "private replacements and template scenery are actual menu targets");
+    assert.deepEqual(instanced.npcs, [], "world NPCs are hidden in the instance");
+    dispatched.length = 0;
+    await call(client, "interact", { player: "agent1", target: "Drain", option: "Enter" });
+    assert.deepEqual(dispatched, [{ type: "object_option", id: 48295, x: 3224, y: 3221, action: "Enter" }],
+        "interactions send the visible cache transform ID rather than the inert parent ID");
+    dispatched.length = 0;
+    observedPrivateArea = null;
 
     // The mock player never moves, so a walk elsewhere reports stuck and a walk to its own tile arrives.
     assert.equal((await call(client, "walk_to", { player: "agent1", x: 3230, y: 3230, run: true })).value.result, "stuck");
@@ -222,7 +320,7 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     await call(client, "interact", { player: "agent1", target: "Tree", option: "chop down" });
     await call(client, "interact", { player: "agent1", target: "item 526", option: "Take" });
     assert.deepEqual(dispatched, [
-        { type: "move", worldX: 3230, worldY: 3230, modifierFlags: 2 },
+        { type: "move", worldX: 3230, worldY: 3230, modifierFlags: 0, run: true },
         { type: "move", worldX: 3222, worldY: 3218, modifierFlags: 0 },
         { type: "npc_option", index: 7, clickType: 4 },
         { type: "object_option", id: 1276, x: 3220, y: 3216, action: "Chop down" },

@@ -27,8 +27,8 @@
  * spawns' wander, the trails' life.
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const NPC = { FORMS: [8360, 8361, 8362, 8363], DYING: 8364, MATOMENOS: 8366, BLOOD_SPAWN: 8367 };
 const OBJECT = { WAITING: 32972, POOL: 32973, TRAIL: 32984 };

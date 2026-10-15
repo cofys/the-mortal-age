@@ -18,10 +18,10 @@
  * player the scroll lands, and the scroll-reading animation and graphic.
  */
 
-const Shared = require("./ZulrahShared");
+const Shared = require("./Shared.Zulrah");
 const CombatAchievements = require("./CombatAchievements.Zulrah");
-const Fight = require("./ZulrahFight");
-const { MeleeSnakeling, MagicSnakeling } = require("./ZulrahHazards");
+const Fight = require("./Fight.Zulrah");
+const { MeleeSnakeling, MagicSnakeling } = require("./Hazards.Zulrah");
 
 const DAMAGE_CAP = 50;
 const HALBERD_REACH = 2;

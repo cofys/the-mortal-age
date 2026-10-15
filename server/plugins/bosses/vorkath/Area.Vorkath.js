@@ -6,6 +6,7 @@
  */
 const Shared = require("./Shared.Vorkath");
 const Hud = require("./Hud.Vorkath");
+const Specials = require("./Specials.Vorkath");
 
 /** Crater interior: the wall line y=4053 stays outside so climbers arrive cleanly. */
 const CRATER = { minX: 2258, maxX: 2286, minY: 4054, maxY: 4078 };
@@ -45,6 +46,7 @@ function defineAreaClass() {
           continue;
         }
         const npc = entity.getAsNpc();
+        Specials.endFight(npc);
         for (let index = addQueue.indexOf(npc); index !== -1; index = addQueue.indexOf(npc)) {
           addQueue.splice(index, 1);
         }
@@ -57,7 +59,7 @@ function defineAreaClass() {
 
     postLeave(mobile, logout) {
       if (mobile?.isPlayer?.()) {
-        clearArea(mobile.getAsPlayer(), this);
+        destroyArea(mobile.getAsPlayer());
       }
       super.postLeave(mobile, logout);
     }
@@ -108,7 +110,7 @@ function ensureSleeper(area) {
   const awake = (area.entities ?? []).some((entity) => {
     if (!entity?.isNpc?.() || !entity?.getAsNpc) return false;
     const id = entity.getAsNpc().getId?.();
-    return id === Shared.SLEEPING_ID || id === Shared.WAKING_ID || id === Shared.AWAKE_ID;
+    return id === Shared.SLEEPING_ID || id === Shared.WAKING_ID || Shared.isAwakeId(id);
   });
   if (awake) return;
   const location = new core.Location(Shared.SPAWN_TILE[0], Shared.SPAWN_TILE[1], Shared.SPAWN_TILE[2]);
@@ -156,5 +158,5 @@ module.exports = {
   areaOf,
   ensureSleeper,
   destroyArea,
-  _test: { insideCrater },
+  _test: { insideCrater, getAreaClass: () => VorkathPrivateArea },
 };

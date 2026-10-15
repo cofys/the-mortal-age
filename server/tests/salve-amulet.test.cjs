@@ -11,8 +11,8 @@ const { ItemIds } = require("../dist/util/IdEnums");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
-const registerSalve = require("../plugins/combat/effects/SalveAmulet");
-const registerJusticiar = require("../plugins/combat/effects/JusticiarArmour");
+const registerSalve = require("../plugins/combat/effects/SalveAmulet.EquipmentEffects");
+const registerJusticiar = require("../plugins/combat/effects/JusticiarArmour.EquipmentEffects");
 
 // Gear is matched by item name; no cache is loaded here.
 const NAMES = new Map([

@@ -1,4 +1,5 @@
 import type { TileHighlightRenderEntry } from "../../../game/highlights/TileHighlightManager";
+import type { OverlayTriangleBatch } from "../../../game/sailing/HeadingIndicator";
 import { GPU_BUFFER_USAGE, GPU_SHADER_STAGE, SCENE_DEPTH_FORMAT } from "../bindings";
 import { createScenePipeline, withSampleCount } from "../multisample";
 import { WORLD_OVERLAY_WGSL } from "../shaders/overlay.wgsl";
@@ -59,6 +60,7 @@ export class TileMarkerLayer {
         label: string;
     }>;
     private tileHighlights?: ReadonlyArray<TileHighlightRenderEntry>;
+    private headingIndicator?: ReadonlyArray<OverlayTriangleBatch>;
 
     hoverColor = [1, 1, 0, 1];
     hoverFillColor = [1, 1, 0, 0.25];
@@ -165,6 +167,7 @@ export class TileMarkerLayer {
         this.hoverEnabled = !!state.hoverEnabled;
         this.actorServerTiles = state.actorServerTiles;
         this.tileHighlights = state.tileHighlights;
+        this.headingIndicator = state.headingIndicator;
 
         const resolvePlane = (tile: { x: number; y: number; plane?: number }): number => {
             if (typeof tile.plane === "number" && Number.isFinite(tile.plane)) return tile.plane | 0;
@@ -242,6 +245,10 @@ export class TileMarkerLayer {
             }
         }
 
+        if (this.headingIndicator) {
+            for (const batch of this.headingIndicator) this.pushTriangles(batch, this.worldSegments);
+        }
+
         if (this.hoverEnabled && this.actorServerTiles && this.actorServerTiles.length > 0) {
             for (const t of this.actorServerTiles) {
                 const effPlane = this.host.getEffectivePlaneForTile(t.x | 0, t.y | 0, t.plane | 0);
@@ -305,6 +312,14 @@ export class TileMarkerLayer {
         this.pushVertex(tileX, c3, tileY + 1, color);
         this.pushVertex(tileX, c0, tileY, color);
         target.push({ first, count: 5, kind: "line", depth: target === this.worldSegments });
+    }
+
+    /** World triangles already in tile units (the helm's heading arrows). */
+    private pushTriangles(batch: OverlayTriangleBatch, target: DrawSegment[]): void {
+        const first = this.floats / FLOATS_PER_VERTEX;
+        const p = batch.positions;
+        for (let i = 0; i < p.length; i += 3) this.pushVertex(p[i], p[i + 1], p[i + 2], batch.rgba);
+        target.push({ first, count: p.length / 3, kind: "fill", depth: target === this.worldSegments });
     }
 
     private pushVertex(x: number, y: number, z: number, color: number[]): void {

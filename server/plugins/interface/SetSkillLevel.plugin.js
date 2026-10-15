@@ -2,7 +2,7 @@ const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { CombatFactory } = require("../../src/main/typescript/elvarg/game/content/combat/CombatFactory");
 const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wilderness/Wilderness");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
-const Presets = require("../modes/pvp/Presets");
+const Presets = require("../modes/pvp/Presets.PvpMode");
 
 // Skills keyed by their component in the Skills tab (interface 320).
 const SKILLS = new Map([

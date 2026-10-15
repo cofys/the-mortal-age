@@ -47,8 +47,8 @@ test("DB table gamevals name every column; rev 241 inserted sail_pattern_option 
 });
 
 test("sailing reads its DB tables at the columns the cache names", () => {
-  const parts = require("../plugins/skills/sailing/boatParts");
-  const facilities = require("../plugins/skills/sailing/boatFacilities");
+  const parts = require("../plugins/skills/sailing/BoatParts.Sailing");
+  const facilities = require("../plugins/skills/sailing/BoatFacilities.Sailing");
   const column = (table, name) => gamevals.tableColumn(table, name);
   // sailing_boat (166): each part's option list, the recovery fee and the hotspots.
   assert.deepEqual(

@@ -3,7 +3,7 @@
 // Mechanics only — no questlines (quest-content HOLD).
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
-const { content } = require("./sailingContent");
+const { content } = require("./SailingContent.Sailing");
 const { notorietyOf, decayNotoriety } = require("./navalNotoriety");
 const {
   KRAKEN,

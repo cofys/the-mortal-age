@@ -6,7 +6,7 @@
  * stepping stones hop one stone per click.
  */
 
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
 let game;
 let core;

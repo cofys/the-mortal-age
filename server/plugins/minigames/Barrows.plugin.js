@@ -19,7 +19,7 @@ const { ForceMovementTask } = require("../../src/main/typescript/elvarg/game/tas
 const { MagicCombatMethod } = require("../../src/main/typescript/elvarg/game/content/combat/method/impl/MagicCombatMethod");
 const { CombatSpells } = require("../../src/main/typescript/elvarg/game/content/combat/magic/CombatSpells");
 const { MOBILE_CLIENT_ATTRIBUTE } = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
-const { decodeRegionObjects, initRegionBuildingAnalysisCoreAccess } = require("../world/RegionBuildingAnalysisUtil");
+const { decodeRegionObjects, initRegionBuildingAnalysisCoreAccess } = require("../world/procedural/RegionBuildingAnalysisUtil.ProceduralRegionStream");
 
 const REGION_ID = 14231;
 const ATTRIBUTE = "barrows";
@@ -571,7 +571,7 @@ function searchChest(player, clickType) {
 const MELEE_BROTHERS = new Set([1, 2, 4, 5]); // Dharok, Guthan, Torag and Verac
 const ALL_BROTHERS = BROTHERS.length;
 
-/** The chest looted: its count, and the run's tasks (plugins/combatachievements/). */
+/** The chest looted: its count, and the run's tasks (plugins/achievements/combatachievements/). */
 function combatAchievementsAtChest(player, run) {
   const complete = (task) => pluginApi.emitCustomEvent("combat-achievements:complete", { player, task });
   pluginApi.emitCustomEvent("combat-achievements:kill", { player, monster: "Barrows", count: run.chests });

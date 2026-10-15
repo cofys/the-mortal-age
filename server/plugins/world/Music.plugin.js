@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const Progress = require("./Music.Progress");
+const Progress = require("./Progress.Music");
 
 const COINS = 995;
 const CAPE_PRICE = 99000;
@@ -14,7 +14,6 @@ const MUSIC_JUKEBOX_ROW_FLAGS = 62;
 const MUSIC_NOW_PLAYING_FLAGS = 60;
 const WELCOME_PLAY_BUTTON_UID = (378 << 16) | 72;
 const HOLIDAY_TRACKS = new Set(JSON.parse(fs.readFileSync(path.join(__dirname, "data", "music-holiday-tracks.json"), "utf8")));
-const DIARY_TIERS = ["easy", "medium", "hard", "elite"];
 let core;
 let pluginApi;
 let trackNames;
@@ -91,9 +90,9 @@ function unlockTrack({ player, trackId }) {
   Progress.refreshCapeUnlock(player, nonHolidayTrackIds);
 }
 
-function isDiaryComplete(player, diary, tier) {
-  const request = { player, diary, tier, complete: null };
-  pluginApi.emitCustomEvent("diary:is-complete", request);
+function allDiariesComplete(player) {
+  const request = { player, complete: false };
+  pluginApi.emitCustomEvent("diary:all-complete", request);
   return request.complete === true;
 }
 
@@ -102,10 +101,7 @@ function canTrim(player) {
   const quests = { player, canUse: false };
   pluginApi.emitCustomEvent("quest-cape:can-use", quests);
   if (quests.canUse !== true) return false;
-  const { DIARIES } = require("../diaries/DiaryData");
-  return DIARIES.every((diary) =>
-    DIARY_TIERS.every((tier) => isDiaryComplete(player, diary.key, tier))
-  );
+  return allDiariesComplete(player);
 }
 
 function buyMusicCape(player) {
@@ -255,11 +251,9 @@ module.exports = {
       .filter((entries) => entries.some(({ autoUnlock }) => autoUnlock))
       .map((entries) => entries[0].id);
 
-    for (const attribute of [
-      Progress.UNLOCKED_TRACKS_ATTRIBUTE,
-      Progress.CAPE_OWNED_ATTRIBUTE,
-      Progress.AIR_GUITAR_UNLOCKED_ATTRIBUTE,
-    ]) api.persistAttribute(attribute);
+    api.persistAttribute(Progress.UNLOCKED_TRACKS_ATTRIBUTE);
+    api.persistAttribute(Progress.CAPE_OWNED_ATTRIBUTE);
+    api.persistAttribute(Progress.AIR_GUITAR_UNLOCKED_ATTRIBUTE, false);
     api.onPlayerLogin(onMusicLogin);
     api.onInterfaceActionButton(WELCOME_PLAY_BUTTON_UID, onMusicWelcomeAction);
     api.onCustomEvent("audio:play-song", onTrackPlayed);
@@ -270,7 +264,7 @@ module.exports = {
     api.onCanEquip(canEquipMusicCape);
   },
   _test: {
-    unlockTrack, syncMusicVarps, isDiaryComplete, canTrim, buyMusicCape, talkToOlaf, capeAction,
+    unlockTrack, syncMusicVarps, allDiariesComplete, canTrim, buyMusicCape, talkToOlaf, capeAction,
     enableMusicActions, removeInvalidEquippedCape,
     getCatalog: () => ({ allTrackIds, nonHolidayTrackIds, slotByTrackId, canonicalTrackBySlot, autoUnlockTrackIds }),
     canEquipMusicCape, onMusicLogin, onMusicWelcomeAction, answerAirGuitarUnlock,

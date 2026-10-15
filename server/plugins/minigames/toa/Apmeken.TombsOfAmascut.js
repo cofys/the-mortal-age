@@ -8,8 +8,8 @@
  * Wiki: https://oldschool.runescape.wiki/w/Path_of_Apmeken#Puzzle_room
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 const SPAWNS = [{ x: 3800, y: 5288 }, { x: 3808, y: 5288 }, { x: 3816, y: 5288 }, { x: 3816, y: 5272 }, { x: 3808, y: 5272 }, { x: 3800, y: 5272 }];
 const VENTS = [{ x: 3800, y: 5284 }, { x: 3816, y: 5284 }, { x: 3816, y: 5276 }, { x: 3800, y: 5276 }];

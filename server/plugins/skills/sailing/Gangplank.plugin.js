@@ -6,8 +6,8 @@ const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
-const { content, dockAtGangplank, dockAtBuoy, fade, playSound } = require("./sailingContent");
-const { sendBoatVarbits } = require("./boatVarbits");
+const { content, dockAtGangplank, dockAtBuoy, fade, playSound } = require("./SailingContent.Sailing");
+const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
 const { MODE, openBoatSelection } = require("./BoatSelection.plugin");
 
 const SOUND_BOARD_BOAT = 10754;

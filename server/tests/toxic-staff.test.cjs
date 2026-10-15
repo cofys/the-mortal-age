@@ -138,3 +138,12 @@ test("scales charge the staff and uncharging returns them", () => {
   assert.equal(staff.getId(), ItemIds.TOXIC_STAFF_UNCHARGED_);
   assert.equal(ToxicStaff._test.charges(staff), 0);
 });
+
+
+test('charging leaves unrelated target items and their materials untouched', () => {
+  const target=item(12924),material=item(ItemIds.ZULRAHS_SCALES),player=createPlayer();
+  player.getInventory=()=>({getAmount:()=>100,deleteNumber:()=>{throw Error('unrelated charge consumed material');}});
+  const event={player,usedItem:material,usedWithItem:target,usedItemId:material.getId(),usedWithItemId:target.getId()};
+  ToxicStaff._test.chargeStaff(event);
+  assert.equal(event.handled,undefined);assert.deepEqual(target.meta,{});
+});

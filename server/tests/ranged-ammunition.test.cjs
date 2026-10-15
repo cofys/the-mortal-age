@@ -21,6 +21,41 @@ test('dragon bolts, plain and gem-tipped, are ammunition for the dragon-tier cro
   }
 });
 
+test('dragon hunter crossbow variants resolve to the dragon crossbow ranged profile', () => {
+  const variants = [
+    Items.DRAGON_HUNTER_CROSSBOW, Items.DRAGON_HUNTER_CROSSBOW_2, Items.DRAGON_HUNTER_CROSSBOW_3,
+    Items.DRAGON_HUNTER_CROSSBOW_T_, Items.DRAGON_HUNTER_CROSSBOW_T__2,
+    Items.DRAGON_HUNTER_CROSSBOW_B_, Items.DRAGON_HUNTER_CROSSBOW_B__2,
+  ];
+  for (const id of variants) {
+    const player = { getEquipment: () => ({ getItems: () => Array.from({ length: 14 }, (_, slot) => ({
+      getId: () => slot === 3 ? id : slot === 13 ? Items.DRAGONSTONE_BOLTS_E_ : -1,
+    })) }) };
+    assert.equal(RangedWeapon.getFor(player), RangedWeapon.DRAGON_CROSSBOW, `weapon ${id}`);
+    assert.equal(Ammunition.getFor(player), Ammunition.ENCHANTED_DRAGON_BOLT, `ammo ${id}`);
+  }
+});
+
+test('Blisterwood stakes resolve as stackable self-ammunition with their captured range and projectile', () => {
+  const { WeaponProfiles } = require('../dist/game/content/combat/WeaponProfile');
+  const { WeaponInterfaces } = require('../dist/game/content/combat/WeaponInterfaces');
+  const { FightType } = require('../dist/game/content/combat/FightType');
+  const items = Array.from({ length: 14 }, () => ({ getId: () => -1 }));
+  items[3] = { getId: () => Items.BLISTERWOOD_STAKE };
+  const player = {
+    getEquipment: () => ({ getItems: () => items }),
+    getWeapon: () => WeaponInterfaces.DART,
+    getFightType: () => FightType.DART_LONGRANGE,
+  };
+  assert.equal(RangedWeapon.getFor(player), RangedWeapon.BLISTERWOOD_STAKE);
+  assert.equal(Ammunition.getFor(player), Ammunition.BLISTERWOOD_STAKE);
+  assert.equal(RangedWeapon.getSelfAmmo(Items.BLISTERWOOD_STAKE), Ammunition.BLISTERWOOD_STAKE);
+  assert.equal(Ammunition.BLISTERWOOD_STAKE.getStrength(), 14);
+  assert.equal(Ammunition.BLISTERWOOD_STAKE.getProjectileId(), 3987);
+  assert.equal(WeaponProfiles.attackDistance(player, 6), 8, 'longrange extends the stake to 8 tiles');
+  assert.equal(WeaponProfiles.get(player).npcAttackAnimation, 7617);
+});
+
 test('an enchanted dragon bolt has its gem effect: ruby (e) is Blood Forfeit', () => {
   assert.equal(Ammunition.effectOf(Ammunition.ENCHANTED_RUBY_DRAGON_BOLT), Ammunition.ENCHANTED_RUBY_BOLT);
   assert.equal(Ammunition.effectOf(Ammunition.ENCHANTED_ONYX_DRAGON_BOLT), Ammunition.ENCHANTED_ONYX_BOLT);
@@ -167,6 +202,21 @@ test('training arrows fire the aide arrow visuals, not bronze', () => {
   assert.equal(Ammunition.TRAINING_ARROWS.getProjectileId(), 805);
   assert.equal(Ammunition.TRAINING_ARROWS.getStartGraphic().getId(), 806);
   assert.deepEqual(RangedWeapon.TRAINING_BOW.getAmmunitionData(), [Ammunition.TRAINING_ARROWS]);
+});
+
+test('amethyst arrows resolve with their cache visuals and only fit magic-tier bows or better', () => {
+  const ammo = Ammunition.getForItem(Items.AMETHYST_ARROW);
+  assert.equal(ammo, Ammunition.AMETHYST_ARROW);
+  assert.equal(ammo.getStrength(), 55, 'amethyst arrows give +55 Ranged strength (Wiki)');
+  assert.equal(ammo.getStartGraphic().getId(), 1385, 'AMETHYST_ARROW_LAUNCH');
+  assert.equal(ammo.getProjectileId(), 1384, 'AMETHYST_ARROW_TRAVEL');
+
+  for (const bow of [
+    RangedWeapon.MAGIC_LONGBOW, RangedWeapon.MAGIC_SHORTBOW, RangedWeapon.MAGIC_COMP_BOW,
+    RangedWeapon.SEERCULL, RangedWeapon.THIRD_AGE_BOW, RangedWeapon.ZARYTE_BOW,
+    RangedWeapon.GODBOW, RangedWeapon.TWISTED_BOW, RangedWeapon.SCORCHING_BOW, RangedWeapon.DARK_BOW,
+  ]) assert.ok(bow.getAmmunitionData().includes(ammo), 'magic-tier or higher bow can fire amethyst arrows');
+  assert.ok(!RangedWeapon.YEW_SHORTBOW.getAmmunitionData().includes(ammo), 'yew bows cannot fire amethyst arrows');
 });
 
 test('projectiles use the OSRS projanim flight times', () => {

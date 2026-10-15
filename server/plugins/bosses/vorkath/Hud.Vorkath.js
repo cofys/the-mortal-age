@@ -18,9 +18,9 @@ const bars = new Map();
 function values(npc, player) {
   return {
     player,
-    npcId: Shared.AWAKE_ID,
+    npcId: npc.getId?.() ?? Shared.AWAKE_ID,
     current: Math.max(0, npc.getHitpoints?.() ?? 0),
-    maximum: Shared.MAX_HITPOINTS,
+    maximum: Shared.maxHitpointsForNpc(npc),
   };
 }
 

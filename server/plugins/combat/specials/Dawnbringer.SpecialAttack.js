@@ -18,9 +18,9 @@ module.exports = function registerDawnbringerSpecialAttack(api) {
     }
 
     canAttack(character, target) {
-      // TODO: Pulsate is only usable within the Theatre of Blood; no zone/area
-      // check for it is exposed to plugins yet.
-      return true;
+      const request = { specialId: "dawnbringer", attacker: character, target, allow: false };
+      api.emitCustomEvent("combat-special:can-use", request);
+      return request.allow === true;
     }
 
     start(character, target) {

@@ -12,10 +12,10 @@ const { Location } = require("../dist/game/model/Location");
 const { Skill } = require("../dist/game/model/Skill");
 const { ItemIds } = require("../dist/util/IdEnums");
 
-const Mine = require("../plugins/areas/motherlode/MotherlodeState");
-const Veins = require("../plugins/areas/motherlode/MotherlodeVeins");
-const Machine = require("../plugins/areas/motherlode/MotherlodeMachine");
-const Rockfalls = require("../plugins/areas/motherlode/MotherlodeRockfalls");
+const Mine = require("../plugins/areas/motherlode/State.MotherlodeMine");
+const Veins = require("../plugins/areas/motherlode/Veins.MotherlodeMine");
+const Machine = require("../plugins/areas/motherlode/Machine.MotherlodeMine");
+const Rockfalls = require("../plugins/areas/motherlode/Rockfalls.MotherlodeMine");
 
 const hooks = { objects: {}, conditions: [], events: {} };
 const spawned = [];

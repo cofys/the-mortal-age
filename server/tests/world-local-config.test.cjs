@@ -9,7 +9,7 @@ const modulePath = require.resolve('../dist/game/definition/WorldDefinition');
 const shipped = {
   spawn: { x: 3222, y: 3219, z: 0 },
   zones: [{ tags: [] }],
-  disabledPlugins: ['VoiceChat', 'TutorialIsland'],
+  plugins: { TutorialIsland: false, PvpMode: false },
   experienceMultiplier: 1,
   pluginConfig: { a: 1, b: 2 },
 };
@@ -38,17 +38,17 @@ function loadWorld(local) {
 test('without world.local.json the shipped world.json applies', () => {
   const { definition } = loadWorld();
   assert.equal(definition.experienceMultiplier, 1);
-  assert.deepEqual(definition.disabledPlugins, ['VoiceChat', 'TutorialIsland']);
+  assert.deepEqual(definition.plugins, { TutorialIsland: false, PvpMode: false });
 });
 
-test('world.local.json replaces top-level keys and merges pluginConfig', () => {
+test('world.local.json replaces top-level keys and merges pluginConfig and plugins', () => {
   const { config, definition } = loadWorld({
     experienceMultiplier: 10,
-    disabledPlugins: ['VoiceChat'],
+    plugins: { TutorialIsland: true },
     pluginConfig: { b: 3 },
   });
   assert.equal(definition.experienceMultiplier, 10);
-  assert.deepEqual(definition.disabledPlugins, ['VoiceChat']);
+  assert.deepEqual(definition.plugins, { TutorialIsland: true, PvpMode: false });
   assert.deepEqual(config.pluginConfig, { a: 1, b: 3 });
   assert.deepEqual(definition.spawn, shipped.spawn, 'keys it does not set stay as shipped');
 });

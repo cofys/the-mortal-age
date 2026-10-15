@@ -17,7 +17,7 @@ function run(combatType: CombatType, skillIndices: number[], damage: number, pre
                 if (xp > 0) grants.push({ skill, xp });
             },
         }),
-        getCombat: () => ({ getPreviousCast: () => previousCast }),
+        getCombat: () => ({ getCastSpell: () => null, getPreviousCast: () => previousCast }),
     };
     const hit = {
         getTotalDamage: () => damage,

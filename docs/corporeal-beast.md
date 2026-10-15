@@ -16,10 +16,10 @@ The Corporeal Beast, built from the OSRS Wiki, a live rsprox capture (a games ne
 
 | File | What it owns |
 | --- | --- |
-| `CorpShared.js` | Ids, tiles, the two copies of the lair, helpers. |
+| `Shared.CorporealBeast.js` | Ids, tiles, the two copies of the lair, helpers. |
 | `Lair.*` | The cave, its exit, the passage, and the room's overlay. |
 | `Beast.*` | The Beast: its respawn, stomp, regeneration, damage reduction and the overlay's count. |
-| `CorpAttacks.js` | The Beast's four attacks. |
+| `Attacks.CorporealBeast.js` | The Beast's four attacks. |
 | `DarkCore.*` | The dark energy core. |
 | `SpiritShields.*` | Blessing spirit shields and attaching sigils. |
 

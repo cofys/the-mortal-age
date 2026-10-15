@@ -1331,10 +1331,10 @@ module.exports = function registerCabinFeverQuest(api) {
   // Registration
   // ==========================================================================
 
-  api.persistAttribute(FLAGS_ATTRIBUTE);
-  api.persistAttribute(VARP_CANNON_ATTRIBUTE);
-  api.persistAttribute(VARP_EXTRA_ATTRIBUTE);
-  api.persistAttribute(VARP_STORAGE_ATTRIBUTE);
+  api.persistAttribute(FLAGS_ATTRIBUTE, 0);
+  api.persistAttribute(VARP_CANNON_ATTRIBUTE, 0);
+  api.persistAttribute(VARP_EXTRA_ATTRIBUTE, 0);
+  api.persistAttribute(VARP_STORAGE_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
     key: "cabin_fever",

@@ -77,6 +77,9 @@ export class WidgetInteractionController {
     getUiRenderScale(): [number, number] {
         const canvas = this.deps.getInputManager()?.element as HTMLCanvasElement | undefined;
         const widgetManager = this.deps.getWidgetManager();
+        const widgetScaleX = Number(this.clickedWidget?._absScaleX);
+        const widgetScaleY = Number(this.clickedWidget?._absScaleY);
+        if (widgetScaleX > 0 && widgetScaleY > 0) return [widgetScaleX, widgetScaleY];
         // The renderer records the scale it drew the gameframe at on its root. Canvas over
         // layout size is not that in fixed mode, which is centred and can stretch unevenly.
         const root = widgetManager?.getAllGroupRoots?.(widgetManager.rootInterface)?.[0] as any;

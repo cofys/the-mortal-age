@@ -8,8 +8,8 @@
  * Wiki: https://oldschool.runescape.wiki/w/Kephri
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 const SPAWN = { x: 3549, y: 5406, z: 0 };
 const CENTRE = { x: 3551, y: 5408, z: 0 };

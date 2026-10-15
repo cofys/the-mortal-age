@@ -2,9 +2,9 @@
 // to recover at a shipwright. Packets follow live captures (docs/sailing-osrs-reference.md):
 // the mode varbit, the current dock's db row, the cargo holds, script 2524, the modal, init
 // script 8621 and 934:5's events; a choice resumes 934:5 with the boat's slot (from 1).
-const { content, setVarbit } = require("./sailingContent");
-const { sendBoatVarbits } = require("./boatVarbits");
-const cargo = require("./cargo");
+const { content, setVarbit } = require("./SailingContent.Sailing");
+const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
+const cargo = require("./Cargo.Sailing");
 
 const SELECTION = 934;
 const BOATS = 5;

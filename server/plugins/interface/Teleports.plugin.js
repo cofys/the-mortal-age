@@ -4,7 +4,7 @@ const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameCon
 const {
   createHotspotAnchorLocation,
   getEnabledWildernessHotspots,
-} = require("../bots/behaviours/pvp/WildernessHotspotRegistry.js");
+} = require("../bots/behaviours/pvp/WildernessHotspotRegistry.PlayerBots.js");
 
 const HOME_TELEPORT_BUTTON_IDS = new Set([19210, 21741]);
 const TRAINING_TELEPORT_BUTTON_IDS = new Set([1164, 13035, 30064]);

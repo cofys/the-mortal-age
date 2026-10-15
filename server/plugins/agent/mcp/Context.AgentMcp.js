@@ -12,9 +12,31 @@ const MAX_CLICKS = 50;
 // Skilling plugins replay their animation every 4-5 ticks, so one this recent means still at it.
 const ANIMATION_TICKS = 5;
 const tracked = new WeakMap();
+const npcAnimations = new WeakMap();
+
+function lastNpcAnimation(npc, World) {
+  let animation = npcAnimations.get(npc);
+  if (!animation) {
+    animation = { id: npc.getAnimation?.()?.getId?.() ?? null, tick: World.getProcessCycle(), chat: npc.forcedChat ?? null, chatTick: World.getProcessCycle() };
+    npcAnimations.set(npc, animation);
+    const perform = npc.performAnimation?.bind(npc);
+    if (perform) npc.performAnimation = (next) => {
+      animation.id = next?.getId?.() ?? null;
+      animation.tick = World.getProcessCycle();
+      return perform(next);
+    };
+    const chat = npc.forceChat?.bind(npc);
+    if (chat) npc.forceChat = (text) => {
+      animation.chat = text;
+      animation.chatTick = World.getProcessCycle();
+      return chat(text);
+    };
+  }
+  return animation;
+}
 
 // Records game messages, animation timing and what the client was told (varbits, varps,
-// interfaces) for players an agent has touched; the client still receives everything.
+// interfaces, interaction modes) for players an agent has touched; the client still receives everything.
 function track(player, World) {
   let state = tracked.get(player);
   if (state) return state;
@@ -38,10 +60,10 @@ function track(player, World) {
   return state;
 }
 
-const emptyClientLog = () => ({ varbits: {}, varps: {}, interfaces: [] });
+const emptyClientLog = () => ({ varbits: {}, varps: {}, interfaces: [], graphics: [], interactionModes: [] });
 
 // Wraps the PacketSender calls a test asserts on. Varbits and varps keep their latest value;
-// interface events keep their order.
+// interface and interaction mode events keep their order.
 function recordClient(sender, state) {
   const wrap = (name, record) => {
     const original = sender[name]?.bind(sender);
@@ -49,9 +71,14 @@ function recordClient(sender, state) {
     sender[name] = (...args) => {
       record(...args);
       if (state.client.interfaces.length > MAX_MESSAGES) state.client.interfaces.shift();
+      if (state.client.interactionModes.length > MAX_MESSAGES) state.client.interactionModes.shift();
       return original(...args);
     };
   };
+  wrap("sendGraphic", (graphic, at) => {
+    state.client.graphics.push({ id: graphic.getId(), x: at.getX(), y: at.getY(), z: at.getZ() });
+    if (state.client.graphics.length > MAX_MESSAGES) state.client.graphics.shift();
+  });
   wrap("sendVarbit", (id, value) => { state.client.varbits[id] = value; });
   wrap("sendConfig", (id, value) => { state.client.varps[id] = value; });
   wrap("sendInterface", (id) => state.client.interfaces.push(`open ${id}`));
@@ -59,13 +86,15 @@ function recordClient(sender, state) {
   wrap("closeSubInterface", (target) => state.client.interfaces.push(`close ${target >>> 16}:${target & 0xffff}`));
   wrap("sendInterfaceRemoval", () => state.client.interfaces.push("close main"));
   wrap("sendInterfaceDisplayState", (uid, hide) => state.client.interfaces.push(`${hide ? "hide" : "show"} ${uid >>> 16}:${uid & 0xffff}`));
+  wrap("sendInteractionMode", (world, tile, entity) => state.client.interactionModes.push(`set ${world} tile=${tile} entity=${entity}`));
+  wrap("sendResetInteractionMode", (world) => state.client.interactionModes.push(`reset ${world}`));
 }
 
 const tile = (location) => ({ x: location.getX(), y: location.getY(), z: location.getZ() });
 
 function createContext(core, server) {
   const {
-    World, MapObjects, ObjectDefinition, ItemDefinition, GameConstants, TaskManager, MultiChatboxPrompt,
+    World, MapObjects, ObjectDefinition, ItemDefinition, GameConstants, TaskManager, MultiChatboxPrompt, RegionManager,
   } = core;
 
   const find = (username) => {
@@ -152,24 +181,57 @@ function createContext(core, server) {
     const near = (loc) => loc.getZ() === here.getZ()
       && Math.abs(loc.getX() - here.getX()) <= radius && Math.abs(loc.getY() - here.getY()) <= radius;
 
-    const objects = [];
+    const privateArea = p.getPrivateArea?.() ?? null;
+    const viewedArea = privateArea?.countsAsMainWorld() ? null : privateArea;
+    const sceneObjects = new Map();
+    const keyOf = object => { const at = object.getLocation(); return `${at.getX()},${at.getY()},${at.getZ()},${object.getType()}`; };
+    const loadedRegions = new Set();
     for (let x = here.getX() - radius; x <= here.getX() + radius; x++) {
+      const regionX = Math.floor(x / 64);
       for (let y = here.getY() - radius; y <= here.getY() + radius; y++) {
-        for (const object of MapObjects.mapObjects.get(MapObjects.getHash(x, y, here.getZ())) ?? []) {
-          const loc = object.getLocation();
-          if (loc.getX() !== x || loc.getY() !== y || loc.getZ() !== here.getZ()) continue;
-          const definition = ObjectDefinition.forPlayer(object.getId(), p);
-          const options = definition?.getInteractions()?.filter(Boolean);
-          if (options?.length) objects.push({ id: object.getId(), name: definition.getName(), options, x, y });
+        const regionY = Math.floor(y / 64);
+        const regionKey = `${regionX},${regionY}`;
+        if (!loadedRegions.has(regionKey)) {
+          RegionManager?.loadMapFiles?.(x, y, false);
+          loadedRegions.add(regionKey);
+        }
+        const tile = new core.Location(x, y, here.getZ());
+        for (const object of [...(MapObjects.mapObjects.get(MapObjects.getHash(x, y, here.getZ())) ?? []), ...(viewedArea?.getTemplateObjects?.(tile) ?? [])]) {
+          const at = object.getLocation();
+          if (at.getX() === x && at.getY() === y && at.getZ() === here.getZ()) sceneObjects.set(keyOf(object), object);
         }
       }
     }
+    const privateObjects = new Set(viewedArea?.getObjects() ?? []);
+    for (const object of privateObjects) {
+      if (near(object.getLocation())) sceneObjects.set(keyOf(object), object);
+    }
+    for (const object of MapObjects.ownerObjectsInScene?.(p, here.getX() - radius, here.getY() - radius, radius * 2 + 1) ?? []) {
+      if (near(object.getLocation())) sceneObjects.set(keyOf(object), object);
+    }
+    for (const removed of World.getRemovedObjects()) {
+      if (removed.getPrivateArea() === viewedArea && sceneObjects.get(keyOf(removed))?.getId() === removed.getId()) sceneObjects.delete(keyOf(removed));
+    }
+    const objects = [];
+    for (const object of sceneObjects.values()) {
+      if (object.getId() < 0) continue;
+      const definition = ObjectDefinition.forPlayer(object.getId(), p);
+      const options = definition?.getInteractions()?.filter(Boolean);
+      const at = object.getLocation();
+      // Private encounter effects (pools, beams) are visible even without menu actions.
+      const name = definition?.getName?.();
+      if (options?.length || privateObjects.has(object) || (name && name !== "null")) objects.push({ id: definition?.id ?? object.getId(), name, options: options ?? [], x: at.getX(), y: at.getY() });
+    }
 
     return {
-      npcs: World.getNpcs().stream().filter((npc) => npc && near(npc.getLocation())).map((npc) => {
+      npcs: World.getNpcsNear(here, radius, viewedArea).filter((npc) => !npc.isOwnerOnly?.() || npc.getOwner?.() === p).map((npc) => {
         const definition = npc.getCurrentDefinition(p);
+        const animation = lastNpcAnimation(npc, World);
         return {
-          index: npc.getIndex(), id: npc.getId(), name: definition?.getName(),
+          index: npc.getIndex(), id: npc.getContentId?.(p) ?? definition?.getId?.() ?? npc.getId(), name: definition?.getName(),
+          hitpoints: npc.getHitpoints(), maxHitpoints: npc.getMaxHitpoints(), headIcon: npc.getHeadIcon?.() ?? -1,
+          animation: animation.id, animationTick: animation.tick,
+          chat: animation.chat, chatTick: animation.chatTick,
           options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),
         };
       }),

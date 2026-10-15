@@ -6,7 +6,9 @@
  */
 module.exports = {
   name: "TheatreOfBlood",
+  members: true,
   register(api) {
+    require("./tob/Entry.TheatreOfBlood")(api);
     require("./tob/Lobby.TheatreOfBlood")(api);
     require("./tob/Raid.TheatreOfBlood")(api);
     require("./tob/Retrieval.TheatreOfBlood")(api);

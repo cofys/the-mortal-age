@@ -14,8 +14,8 @@
  *   Its "don't ask again" answer skips both next time.
  */
 
-const Shared = require("./ColosseumShared");
-const Run = require("./ColosseumRun");
+const Shared = require("./Shared.Colosseum");
+const Run = require("./Run.Colosseum");
 
 const LOBBY_STAIRS_ID = 50750;
 const TUNNEL_ID = 50751;

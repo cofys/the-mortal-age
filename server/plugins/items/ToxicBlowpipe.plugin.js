@@ -344,7 +344,8 @@ class ToxicBlowpipeCombatMethod extends RangedCombatMethod {
 
   attackSpeed(character) {
     const target = character?.getCombat?.()?.getTarget?.() ?? null;
-    return target?.isPlayer?.() ? 4 : 3;
+    const baseSpeed = target?.isPlayer?.() ? 4 : 3;
+    return character?.getFightType?.()?.isRapid?.() === true ? Math.max(1, baseSpeed - 1) : baseSpeed;
   }
 
   hits(character, target) {

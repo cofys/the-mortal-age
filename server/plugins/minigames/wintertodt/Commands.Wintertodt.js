@@ -1,10 +1,10 @@
 "use strict";
 
-const Shared = require("./WintertodtShared");
-const Round = require("./WintertodtRound");
-const Corners = require("./WintertodtCorners");
-const Warmth = require("./WintertodtWarmth");
-const Attacks = require("./WintertodtAttacks");
+const Shared = require("./Shared.Wintertodt");
+const Round = require("./Round.Wintertodt");
+const Corners = require("./Corners.Wintertodt");
+const Warmth = require("./Warmth.Wintertodt");
+const Attacks = require("./Attacks.Wintertodt");
 
 /** ::wintertodt - to the camp, outside the Doors of Dinh. */
 function toCamp({ player }) {

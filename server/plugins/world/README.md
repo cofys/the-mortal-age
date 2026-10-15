@@ -20,21 +20,21 @@ This is plugin-based and developer-only (commands require developer/owner rights
   - Command entrypoints.
   - Procedural payload creation (`heights`, `overlays`, `underlays`, `flags`).
   - Chunked streaming to client over opcode `12`.
-- `BuildingUtil.js`
+- `procedural/BuildingUtil.ProceduralRegionStream.js`
   - Core procedural building/house generation.
   - House replay helpers and style/type resolution.
   - Interior, roof, windows, doors, ladders.
-- `TownUtil.js`
+- `procedural/TownUtil.ProceduralRegionStream.js`
   - Street-level generation (houses on both sides of a road gap).
   - Street overlays and doorway connectors.
-- `RegionBuildingAnalysisUtil.js`
+- `procedural/RegionBuildingAnalysisUtil.ProceduralRegionStream.js`
   - House boundary detection.
   - `::dumphouse`, `::checkhouse`, structure scan + preset learning.
-- `ObjectType.js`
+- `procedural/ObjectType.ProceduralRegionStream.js`
   - Shared object type enum values.
-- `LadderUtil.js`
+- `procedural/LadderUtil.ProceduralRegionStream.js`
   - Ladder chain parsing/placement logic for multi-floor houses.
-- `ProceduralDataPaths.js`
+- `procedural/ProceduralDataPaths.ProceduralRegionStream.js`
   - Shared data output paths.
 - `ReplaceMapRegions.plugin.js`
   - Startup hook for runtime region replacement via plugin API.

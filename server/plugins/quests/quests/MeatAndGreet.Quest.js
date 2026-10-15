@@ -83,7 +83,7 @@ module.exports = function registerMeatAndGreetQuest(api) {
   const STAGE_MINOTAUR = 6;
   const STAGE_COMPLETE = 7;
 
-  // Wired around the Colosseum map (plugins/minigames/colosseum/ColosseumShared.js).
+  // Wired around the Colosseum map (plugins/minigames/colosseum/Shared.Colosseum.js).
   const LELIA_SPAWN = { x: 1820, y: 9485 }; // Wiki map pin for Lelia
   const COLOSSEUM_ARENA = { x: 1824, y: 3094 }; // ARENA_START
   const MINOTAUR_SPAWN = { x: 1832, y: 3100 };

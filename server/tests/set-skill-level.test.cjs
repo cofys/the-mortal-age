@@ -6,7 +6,7 @@ const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const { Skill } = require("../dist/game/model/Skill");
-const Presets = require("../plugins/modes/pvp/Presets");
+const Presets = require("../plugins/modes/pvp/Presets.PvpMode");
 
 Presets.register({
   persistAttribute() {},

@@ -9,7 +9,7 @@
  * - the dungeon's roots are stepped over (1603), to the tile across.
  * Going in completes "Enter the Woodcutting Guild", and a redwood log "Chop some Redwood logs".
  */
-const ObstacleRunner = require("../agility/ObstacleRunner");
+const ObstacleRunner = require("../agility/ObstacleRunner.Agility");
 const GuildData = require("./GuildData.Woodcutting");
 
 const GUILD_LEVEL = 60;

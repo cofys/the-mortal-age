@@ -7,18 +7,18 @@ const { test } = require("node:test");
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
-const { readAiBotConfig } = require("../plugins/bots/ai/AiBotConfig");
-const { AiBotCallLimiter, AiBotChatRouter, addresses } = require("../plugins/bots/ai/AiBotChat");
-const { AiBotMind } = require("../plugins/bots/ai/AiBotMind");
-const { AiBotPresence, SPAWN_GAP_MS } = require("../plugins/bots/ai/AiBotPresence");
-const { AiBotTrade, containerValue } = require("../plugins/bots/ai/AiBotTrade");
-const { buildTools, validateCall } = require("../plugins/bots/ai/AiBotTools");
-const { buildSystemPrompt, buildSituation } = require("../plugins/bots/ai/AiBotPrompt");
-const { chooseName, realisticName } = require("../plugins/bots/ai/AiBotNames");
-const { AnthropicProvider } = require("../plugins/bots/ai/providers/AnthropicProvider");
-const { OllamaProvider } = require("../plugins/bots/ai/providers/OllamaProvider");
-const { createProviders, providerFor } = require("../plugins/bots/ai/AiBotProviders");
-const { BotBrain } = require("../plugins/bots/brain/BotBrain");
+const { readAiBotConfig } = require("../plugins/bots/ai/Config.PlayerBots");
+const { AiBotCallLimiter, AiBotChatRouter, addresses } = require("../plugins/bots/ai/Chat.PlayerBots");
+const { AiBotMind } = require("../plugins/bots/ai/Mind.PlayerBots");
+const { AiBotPresence, SPAWN_GAP_MS } = require("../plugins/bots/ai/Presence.PlayerBots");
+const { AiBotTrade, containerValue } = require("../plugins/bots/ai/Trade.PlayerBots");
+const { buildTools, validateCall } = require("../plugins/bots/ai/Tools.PlayerBots");
+const { buildSystemPrompt, buildSituation } = require("../plugins/bots/ai/Prompt.PlayerBots");
+const { chooseName, realisticName } = require("../plugins/bots/ai/Names.PlayerBots");
+const { AnthropicProvider } = require("../plugins/bots/ai/providers/AnthropicProvider.PlayerBots");
+const { OllamaProvider } = require("../plugins/bots/ai/providers/OllamaProvider.PlayerBots");
+const { createProviders, providerFor } = require("../plugins/bots/ai/Providers.PlayerBots");
+const { BotBrain } = require("../plugins/bots/brain/Brain.PlayerBots");
 const { Misc } = require("../src/main/typescript/elvarg/util/Misc");
 
 const location = (x, y, z = 0) => ({ getX: () => x, getY: () => y, getZ: () => z });
@@ -558,7 +558,7 @@ test("with pacing, a brain pauses after an action and before a new activity", ()
 });
 
 test("with pacing, a bot drops a slot or two a tick instead of all at once", () => {
-  const { createDropItemsAction } = require("../plugins/bots/brain/actions/DropItems");
+  const { createDropItemsAction } = require("../plugins/bots/brain/actions/DropItems.PlayerBots");
   const items = Array.from({ length: 6 }, () => ({ getId: () => 1511, getDefinition: () => ({ isStackable: () => false }) }));
   const inventory = {
     getItems: () => items,

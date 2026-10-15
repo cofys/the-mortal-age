@@ -14,6 +14,9 @@ const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Player } = require("../dist/game/entity/impl/player/Player");
 const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
+const { RsmodRouteFinding } = require("../dist/game/model/movement/path/RsmodRouteFinding");
+const { ObjectActionPacketListener } = require("../dist/net/packet/impl/ObjectActionPacketListener");
+const npcSpawns = require("../data/definitions/npc-spawns.json");
 
 const { choose, isNetwork, refusals, toEntry, requirementFor } = require("../scripts/loc-teleport-matching.cjs");
 const LocTeleports = require("../plugins/world/LocTeleports.plugin");
@@ -95,6 +98,334 @@ test("every entry is a placed loc with that option in the rev 241 cache, once pe
   }
   // Left to their own work: the shipyard, spirit trees, the magic mushtree.
   assert.ok(!data.locs.some((entry) => /^(sailing_|spirittree|fossil_magic_mushtree)/.test(entry.name)));
+});
+
+test("the SOTE supply cave Exit returns to a walkable tile beside its surface entrance", () => {
+  const entry = data.locs.find(loc => loc.name === 'sote_supply_cave_exit');
+  const object = locAt(35845, 2200, 9671, 0);
+  const visit = explorer([2201, 9673, 0]);
+  const request = { player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false };
+  hooks.object(request);
+  assert.equal(request.handled, true);
+  runTicks(visit, 1);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+  assert.ok(locAt(35846, 2200, 3262, 0), 'the cache surface entrance is paired with the exit');
+  const route = new RsmodRouteFinding((x, y, z, area) => core.RegionManager.getClipping(x, y, z, area));
+  const path = route.findRoute({ level: 0, srcX: 2200, srcY: 3261, srcSize: 1,
+    destX: 2194, destY: 3258, privateArea: null, moveNear: true });
+  assert.equal(path.success, true, 'the landing connects to the camp by ordinary walking');
+});
+
+test("the Well of Voyage enters Iban's temple beside its real well and door", () => {
+  const entry = data.locs.find((loc) => loc.id === 4005);
+  assert.deepEqual([entry.x, entry.y, entry.z, entry.op, entry.to], [2341, 9622, 0, 1, [2138, 4647, 1]]);
+  const source = CacheDefinitions.getObject(entry.id);
+  assert.equal(source.actions[entry.op - 1], "Climb-down");
+
+  // QH puts the temple well at 2136,4647. Its 2x2 cache footprint is not a valid landing tile,
+  // and its only action is Search. The inferred landing is the first clear tile east of it.
+  const well = CacheDefinitions.getObject(3359);
+  assert.deepEqual([well.sizeX, well.sizeY, well.actions[0]], [2, 2, "Search"]);
+  const [x, y, z] = entry.to;
+  assert.ok(x >= 2138 && y >= 4647 && x <= 2139 && y <= 4648, "landing is beside the temple well footprint");
+
+  core.RegionManager.loadMapFiles(x, y);
+  const doorApproach = [[2138, 4647], [2139, 4647], [2140, 4647], [2141, 4647], [2142, 4647]];
+  for (let i = 1; i < doorApproach.length; i++) {
+    const [fromX, fromY] = doorApproach[i - 1];
+    const [toX, toY] = doorApproach[i];
+    assert.equal(core.RegionManager.canMove(fromX, fromY, toX, toY, z, 1, 1, null), true,
+      `clear path from the landing to the temple door at ${toX},${toY}`);
+  }
+  const doorIds = new Set([3333, 3334]);
+  const doors = [];
+  for (let dx = 2138; dx <= 2145; dx++) for (let dy = 4645; dy <= 4650; dy++) {
+    for (const id of doorIds) {
+      const object = MapObjects.get(id, new core.Location(dx, dy, z), null);
+      if (object) doors.push(object);
+    }
+  }
+  assert.ok(doors.some((door) => door.getLocation().getX() === 2143 && door.getLocation().getY() >= 4647 && door.getLocation().getY() <= 4648),
+    "the reachable route ends at the cache-placed Iban temple doors");
+});
+
+test("Blood Hunt's keyed bank trapdoor enters the recorded altar room", () => {
+  const entry = data.locs.find((loc) => loc.name === "bmr_bank_trapdoor");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [61848, 2579, 7830, 0, "Climb-through", [2581, 7844, 0]]);
+  const parent = CacheDefinitions.getObject(entry.id);
+  assert.equal(parent.transformVarbit, 15585);
+  assert.deepEqual(parent.transforms.slice(0, 2).map((id) => CacheDefinitions.getObject(id).actions[0]), ["Open", "Climb-through"]);
+});
+
+test("the Underground Pass south-wall cave links to the dwarf camp and back", () => {
+  const down = data.locs.find((loc) => loc.name === "underground_pass_dwarf_camp_down");
+  const up = data.locs.find((loc) => loc.name === "underground_pass_dwarf_camp_up");
+  assert.deepEqual([down.id, down.x, down.y, down.z, down.option, down.to], [3222, 2150, 4545, 1, "Descend", [2336, 9795, 0]]);
+  assert.deepEqual([up.id, up.x, up.y, up.z, up.option, up.to], [3223, 2336, 9793, 0, "Ascend", [2150, 4546, 1]]);
+  assert.equal(CacheDefinitions.getObject(down.id).actions[down.op - 1], down.option);
+  assert.equal(CacheDefinitions.getObject(up.id).actions[up.op - 1], up.option);
+
+  core.RegionManager.loadMapFiles(2150, 4545);
+  core.RegionManager.loadMapFiles(2336, 9795);
+  assert.equal(core.RegionManager.getClipping(2150, 4546, 1, null), 0, "upper arrival is a clear tile beside Cave3222");
+  assert.equal(core.RegionManager.getClipping(2336, 9795, 0, null), 0, "lower arrival is an open floor tile");
+  const queue = [[2336, 9795]];
+  const seen = new Set(["2336,9795"]);
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+  let reachesNiloof = false;
+  for (let i = 0; i < queue.length; i++) {
+    const [x, y] = queue[i];
+    if (Math.max(Math.abs(x - 2315), Math.abs(y - 9806)) <= 1) { reachesNiloof = true; break; }
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+      if (nx < 2304 || nx > 2352 || ny < 9760 || ny > 9840) continue;
+      if (!seen.has(key) && core.RegionManager.canMove(x, y, nx, ny, 0, 1, 1, null)) {
+        seen.add(key);
+        queue.push([nx, ny]);
+      }
+    }
+  }
+  assert.equal(reachesNiloof, true, "the lower arrival can reach Niloof's cache spawn");
+
+  const upper = explorer([2150, 4546, 1]);
+  const downObject = locAt(down.id, down.x, down.y, down.z);
+  hooks.object({ player: upper.player, object: downObject, objectId: down.id, clickType: 1, handled: false });
+  runTicks(upper, 2);
+  assert.deepEqual([upper.player.getLocation().getX(), upper.player.getLocation().getY(), upper.player.getLocation().getZ()], down.to);
+
+  const lower = explorer(up.to);
+  const upObject = locAt(up.id, up.x, up.y, up.z);
+  hooks.object({ player: lower.player, object: upObject, objectId: up.id, clickType: 1, handled: false });
+  runTicks(lower, 2);
+  assert.deepEqual([lower.player.getLocation().getX(), lower.player.getLocation().getY(), lower.player.getLocation().getZ()], up.to);
+});
+
+test("the Ancient Cavern whirlpool requires Barbarian firemaking and pyre-ship training", () => {
+  const entry = data.locs.find((loc) => loc.name === "ancient_cavern_whirlpool");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.to], [25274, 2510, 3506, 0, [1765, 5365, 1]]);
+  assert.deepEqual(entry.requires?.map(({ varbit, atLeast }) => [varbit, atLeast]), [[3759, 3], [3764, 1]]);
+  const object = locAt(entry.id, entry.x, entry.y, entry.z);
+  const visit = explorer([2511, 3508, 0]);
+  let firemaking = 0;
+  let pyreShips = 0;
+  const messages = [];
+  const sender = visit.player.getPacketSender();
+  visit.player.getPacketSender = () => new Proxy(sender, {
+    get: (target, key) => key === "getVarbit"
+      ? (id) => id === 3759 ? firemaking : id === 3764 ? pyreShips : 0
+      : target[key],
+  });
+  visit.player.sendMessage = (message) => messages.push(message);
+  const click = () => {
+    const event = { player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false };
+    hooks.object(event);
+    assert.equal(event.handled, true);
+  };
+  click();
+  assert.deepEqual(messages, [entry.requires[0].refuse.message]);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], [2511, 3508, 0]);
+  firemaking = 3;
+  click();
+  assert.equal(messages.at(-1), entry.requires[1].refuse.message, "pyre-ship access also requires Otto's firemaking instruction");
+  pyreShips = 1;
+  click();
+  runTicks(visit, 3);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+});
+
+test("the DS2 fleet rope ladder reaches the cache-backed upper wreckage route", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_rope_ladder_upper");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [32322, 1673, 5710, 0, "Climb-up", [1673, 5710, 2]]);
+  assert.equal(CacheDefinitions.getObject(entry.id).actions[entry.op - 1], entry.option);
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  assert.equal(core.RegionManager.getClipping(...entry.to, null) & 0x200000, 0,
+    "the QH landing is a clear tile on the upper deck");
+
+  const visit = explorer([1672, 5710, 0]);
+  const object = locAt(entry.id, entry.x, entry.y, entry.z);
+  const event = { player: visit.player, object, objectId: entry.id, clickType: 1, handled: false };
+  hooks.object(event);
+  assert.equal(event.handled, true);
+  runTicks(visit, 2);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+});
+
+test("the DS2 cache lift boards the upper deck beside Galvek", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_lift_to_galvek");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [4942, 1631, 5735, 0, "Go-up", [1630, 5735, 2]]);
+  assert.equal(CacheDefinitions.getObject(entry.id).actions[entry.op - 1], entry.option);
+  const galvek = CacheDefinitions.getNpc(8095);
+  assert.equal(galvek.size, 7, "the arrival must sit outside Galvek's 7x7 footprint");
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  assert.equal(core.RegionManager.canMove(entry.to[0], entry.to[1], entry.to[0], entry.to[1], entry.to[2], 1, 1, null), true,
+    "the inferred upper landing is a clear cache tile");
+  assert.equal(core.RegionManager.canProjectileAttackBounds(new core.Location(...entry.to),
+    new core.Location(1631, 5735, 2), 1, 1, galvek.size, galvek.size, null), true,
+  "the landing can reach Galvek's real cache footprint");
+
+  const visit = explorer([1631, 5735, 0]);
+  const object = locAt(entry.id, entry.x, entry.y, entry.z);
+  const event = { player: visit.player, object, objectId: entry.id, clickType: 1, handled: false };
+  hooks.object(event);
+  assert.equal(event.handled, true);
+  runTicks(visit, entry.tick);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+});
+
+test("the DS2 main-ship ladder reaches the cache-backed upper deck", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_main_ship_ladder");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [32325, 1655, 5688, 0, "Climb-up", [1655, 5688, 2]]);
+  assert.equal(CacheDefinitions.getObject(entry.id).actions[entry.op - 1], entry.option);
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  assert.equal(core.RegionManager.canMove(entry.to[0], entry.to[1], entry.to[0], entry.to[1], entry.to[2], 1, 1, null), true,
+    "the QH upper-deck landing is clear in cache collision");
+  const visit = explorer([1655, 5688, 0]);
+  const object = locAt(entry.id, entry.x, entry.y, entry.z);
+  const event = { player: visit.player, object, objectId: entry.id, clickType: 1, handled: false };
+  hooks.object(event);
+  assert.equal(event.handled, true);
+  runTicks(visit, entry.tick);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+});
+
+test("the west-return cache rope climbs onto Galvek's main deck", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_main_deck_rope");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [32324, 1637, 5706, 0, "Climb-up", [1630, 5735, 2]]);
+  assert.equal(CacheDefinitions.getObject(entry.id).actions[entry.op - 1], entry.option);
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  assert.equal(core.RegionManager.canMove(entry.to[0], entry.to[1], entry.to[0], entry.to[1], entry.to[2], 1, 1, null), true,
+    "the rope landing is a walkable main-deck tile");
+  const galvek = CacheDefinitions.getNpc(8095);
+  const approach = new core.Location(...entry.to);
+  assert.equal(core.RegionManager.canProjectileAttackBounds(approach,
+    new core.Location(1631, 5735, 2), 1, 1, galvek.size, galvek.size, null), true,
+  "the main-deck route reaches Galvek's real footprint");
+
+  const visit = explorer([entry.x, entry.y, entry.z]);
+  const object = locAt(entry.id, entry.x, entry.y, entry.z);
+  const event = { player: visit.player, object, objectId: entry.id, clickType: 1, handled: false };
+  hooks.object(event);
+  assert.equal(event.handled, true);
+  runTicks(visit, entry.tick);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+});
+
+test("an agent object action without a numeric clickType resolves its cached option", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_main_ship_ladder");
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  const visit = explorer([entry.x, entry.y, entry.z]);
+  visit.player.getMovementQueue = () => ({ reset() {}, walkToReset() {}, walkToObject(_object, { execute }) { execute(); } });
+  visit.player.setPositionToFace = () => {};
+  const original = PluginManager.emitObjectInteraction;
+  let observed;
+  PluginManager.emitObjectInteraction = (event) => { observed = event; return true; };
+  try {
+    new ObjectActionPacketListener().executeAction(visit.player, entry.id, entry.x, entry.y, undefined, entry.option);
+  } finally {
+    PluginManager.emitObjectInteraction = original;
+  }
+  assert.equal(observed?.clickType, entry.op, "the option string resolves against cached action order");
+  assert.equal(observed?.option, entry.option.toLowerCase(), "the plugin event carries its cache-derived option");
+});
+
+test("the Ancient Cavern's cache stairs link the arrival room, mithril floor and forge", () => {
+  const expected = [
+    [25338, 1769, 5365, 1, "Climb-down", [1772, 5366, 0]],
+    [25339, 1778, 5344, 0, "Climb-up", [1779, 5345, 1]],
+    [25340, 1778, 5344, 1, "Climb-down", [1778, 5346, 0]],
+    [32212, 1744, 5323, 0, "Climb-up", [1744, 5321, 1]],
+    [32211, 1744, 5322, 1, "Climb-down", [1746, 5324, 0]],
+  ];
+  for (const [id, x, y, z, option, to] of expected) {
+    const entry = data.locs.find((loc) => loc.id === id && loc.x === x && loc.y === y && loc.z === z);
+    assert.ok(entry, `cache loc ${id} at ${x},${y},${z} has a captured stair route`);
+    assert.deepEqual([entry.option, entry.to], [option, to]);
+    assert.ok(locAt(id, x, y, z), `cache loc ${id} has the matching ${option} option`);
+  }
+
+  const route = new RsmodRouteFinding((x, y, z, area) => core.RegionManager.getClipping(x, y, z, area));
+  const lowerLanding = [1772, 5366];
+  assert.equal(core.RegionManager.getClipping(...lowerLanding, 0, null) & 0x200000, 0,
+    "the landing sits beside, not inside, the blocked stair footprint");
+  const toMithrilStairs = route.findRoute({
+    level: 0, srcX: lowerLanding[0], srcY: lowerLanding[1], srcSize: 1,
+    destX: 1778, destY: 5344, privateArea: null, moveNear: true,
+  });
+  assert.equal(toMithrilStairs.success, true,
+    "the live landing has a collision-valid route to the cache Mithril stairs");
+
+  const forgeUpLanding = [1744, 5321];
+  assert.equal(core.RegionManager.getClipping(...forgeUpLanding, 1, null) & 0x200000, 0,
+    "the forge upstairs arrival is outside the blocked 2x2 stair footprint");
+  const toCachedAnvil = route.findRoute({
+    level: 1, srcX: forgeUpLanding[0], srcY: forgeUpLanding[1], srcSize: 1,
+    destX: 1748, destY: 5288, privateArea: null, moveNear: true,
+  });
+  assert.equal(toCachedAnvil.success, true,
+    "the forge upstairs arrival has a collision-valid route to a cache anvil");
+
+  const forgeDownLanding = [1746, 5324];
+  assert.equal(core.RegionManager.getClipping(...forgeDownLanding, 0, null) & 0x200000, 0,
+    "the forge downstairs arrival is outside the blocked 2x2 stair footprint");
+  const backToMithrilFloor = route.findRoute({
+    level: 0, srcX: forgeDownLanding[0], srcY: forgeDownLanding[1], srcSize: 1,
+    destX: 1778, destY: 5344, privateArea: null, moveNear: true,
+  });
+  assert.equal(backToMithrilFloor.success, true,
+    "the forge downstairs arrival connects back to the upper cavern's cache stairs");
+});
+
+test("the DS2 Mithril door enters the orb room and its return door reaches the upper cavern", () => {
+  const enter = data.locs.find((loc) => loc.name === "ds2_mithril_door_enter_orb_room");
+  const leave = data.locs.find((loc) => loc.name === "ds2_mithril_door_leave_orb_room");
+  assert.deepEqual([enter.id, enter.x, enter.y, enter.z, enter.to], [25341, 1759, 5343, 1, [1555, 4876, 0]]);
+  assert.deepEqual([leave.id, leave.x, leave.y, leave.z, leave.to], [32208, 1555, 4875, 0, [1759, 5341, 1]]);
+  assert.deepEqual(enter.requires, [{ item: 22093, refuse: { message: "You need the ancient key to open the Mithril door." } }]);
+  assert.ok(locAt(enter.id, enter.x, enter.y, enter.z));
+  assert.ok(locAt(leave.id, leave.x, leave.y, leave.z));
+
+  const roomRoute = new RsmodRouteFinding((x, y, z, area) => core.RegionManager.getClipping(x, y, z, area));
+  assert.equal(core.RegionManager.getClipping(...enter.to, null) & 0x200000, 0,
+    "the arrival is a collision-valid tile inside the RuneLite orb-room zone");
+  for (const id of [7506, 7507, 7508]) {
+    const npc = npcSpawns.find((spawn) => spawn.id === id);
+    assert.ok(npc, `the cache NPC spawn for dragon head ${id} exists`);
+    assert.equal(roomRoute.findRoute({
+      level: 0, srcX: enter.to[0], srcY: enter.to[1], srcSize: 1,
+      destX: npc.x, destY: npc.y, privateArea: null, moveNear: true,
+    }).success, true, `the arrival has a natural route to dragon head ${id}`);
+  }
+  assert.equal(roomRoute.findRoute({
+    level: 1, srcX: leave.to[0], srcY: leave.to[1], srcSize: 1,
+    destX: 1779, destY: 5345, privateArea: null, moveNear: false,
+  }).success, true, "the return landing connects to the mithril dragon area");
+
+  const portal = locAt(enter.id, enter.x, enter.y, enter.z);
+  const visit = explorer([1759, 5341, 1]);
+  const messages = [];
+  visit.player.sendMessage = (message) => messages.push(message);
+  const click = (object) => {
+    const event = { player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false };
+    hooks['door:toggle'](event);
+    assert.equal(event.handled, true);
+  };
+  click(portal);
+  assert.deepEqual(messages, [enter.requires[0].refuse.message], "the room requires the ancient key");
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], [1759, 5341, 1]);
+
+  visit.player.getInventory().add(new core.Item(22093, 1), false);
+  click(portal);
+  runTicks(visit, 6);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], enter.to);
+
+  click(locAt(leave.id, leave.x, leave.y, leave.z));
+  runTicks(visit, 6);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], leave.to);
 });
 
 /** A real player whose packets are recorded per tick. */
@@ -181,6 +512,29 @@ test("a staircase used from either end takes the side the player stands on", () 
   const { destinationFor } = LocTeleports._test;
   assert.deepEqual(destinationFor(entry, new core.Location(3549, 10468, 0)), [3549, 10473, 0]);
   assert.deepEqual(destinationFor(entry, new core.Location(3549, 10473, 0)), [3549, 10468, 0]);
+});
+
+test("Lletya's north and south tree passes cross the western wall from either side", () => {
+  for (const [name, x, y, inside, outside] of [
+    ["lletya_tree_pass_west_north", 2305, 3191, [2306, 3192, 0], [2304, 3192, 0]],
+    ["lletya_tree_pass_west_south", 2305, 3195, [2306, 3195, 0], [2304, 3195, 0]],
+  ]) {
+    const entry = data.locs.find((loc) => loc.name === name);
+    assert.deepEqual(entry?.sides.map((side) => [side.from, side.to]), [[inside, outside], [outside, inside]]);
+    const object = locAt(8742, x, y, 0);
+    for (const [start, destination] of [[inside, outside], [outside, inside]]) {
+      const visit = explorer(start);
+      const event = { player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false };
+      hooks.object(event);
+      assert.equal(event.handled, true, `${name} claims Pass from ${start}`);
+      runTicks(visit, 2);
+      assert.deepEqual(
+        [visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()],
+        destination,
+        `${name} moves to the tile on the opposite side`,
+      );
+    }
+  }
 });
 
 test("trapdoor swaps: each loc has its option, and becomes the other state", () => {
@@ -303,4 +657,42 @@ test("a ladder that asks up or down: the captured way goes there, the other is L
   prompts.pop().pick("Climb Up.");
   runTicks(visit, 1);
   assert.equal(visit.player.getLocation().getZ(), 2);
+});
+
+
+test('The White Knights Castle west stairs connect every floor to the WGS herb patch', () => {
+ const stairs=data.locs.filter(e=>e.name.startsWith('fai_falador_castle_spiralstairs'));
+ assert.equal(stairs.length,6);
+ for(const [z,up] of [[0,true],[1,true],[2,true],[1,false],[2,false],[3,false]]){
+  const e=stairs.find(e=>e.z===z&&e.option===(up?'Climb-up':'Climb-down'));assert.ok(e);
+  assert.equal(e.to[2],z+(up?1:-1));
+ }
+});
+
+
+test("Tears of Guthix northern rocks let both cave shelves cross in either direction", () => {
+  const { RegionManager } = core;
+  RegionManager.loadMapFiles(3240, 9524);
+  for (const y of [9524, 9525]) {
+    const object = locAt(6673, 3240, y, 2);
+    for (const [from, to] of [[[3241, y, 2], [3239, y, 2]], [[3239, y, 2], [3241, y, 2]]]) {
+      const visit = explorer(from);
+      const event = { player: visit.player, object, objectId: 6673, clickType: 1, handled: false };
+      hooks.object(event); assert.equal(event.handled, true); runTicks(visit, 3);
+      assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], to);
+      const outward = to[0] < 3240 ? -1 : 1;
+      assert.equal(RegionManager.canMove(to[0], to[1], to[0] + outward, to[1], 2, 1, 1), true, 'landing is on a walkable shelf');
+    }
+  }
+});
+
+
+test("Araxyte cave reverse tunnels return to the quest nest", () => {
+  const { destinationFor } = LocTeleports._test;
+  const east = data.locs.find(loc => loc.id === 54272 && loc.x === 3693);
+  const south = data.locs.find(loc => loc.id === 54272 && loc.x === 3681);
+  const north = data.locs.find(loc => loc.id === 54273);
+  assert.deepEqual(destinationFor(east, new core.Location(3696, 9839, 0)), [3689, 9837, 0]);
+  assert.deepEqual(destinationFor(south, new core.Location(3684, 9822, 0)), [3677, 9822, 0]);
+  assert.deepEqual(destinationFor(north, new core.Location(3680, 9849, 0)), [3680, 9842, 0]);
 });

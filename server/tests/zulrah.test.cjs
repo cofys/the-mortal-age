@@ -11,10 +11,10 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
 const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
-const Shared = require('../plugins/bosses/zulrah/ZulrahShared');
-const Rotations = require('../plugins/bosses/zulrah/ZulrahRotations');
-const Fight = require('../plugins/bosses/zulrah/ZulrahFight');
-const Hazards = require('../plugins/bosses/zulrah/ZulrahHazards');
+const Shared = require('../plugins/bosses/zulrah/Shared.Zulrah');
+const Rotations = require('../plugins/bosses/zulrah/Rotations.Zulrah');
+const Fight = require('../plugins/bosses/zulrah/Fight.Zulrah');
+const Hazards = require('../plugins/bosses/zulrah/Hazards.Zulrah');
 const Shrine = require('../plugins/bosses/zulrah/Shrine.Zulrah');
 const NpcDrops = require('../plugins/npcs/NpcDrops.plugin');
 

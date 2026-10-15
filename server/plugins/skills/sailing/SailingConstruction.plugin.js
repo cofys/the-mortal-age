@@ -13,7 +13,7 @@ const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
 const { ItemIdentifiers } = require("../../../src/main/typescript/elvarg/util/ItemIdentifiers");
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
-const { content, boatName, randomBoatName } = require("./sailingContent");
+const { content, boatName, randomBoatName } = require("./SailingContent.Sailing");
 
 const BUILD_ATTRIBUTE = "sailing:boat-build";
 const BRIG_BLUEPRINT = 50006;

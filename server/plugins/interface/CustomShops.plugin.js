@@ -97,6 +97,7 @@ function buildInterface() {
   const root = add(COMPONENT.ROOT, -1, {
     rawWidth: 680, rawHeight: 320,
     width: 680, height: 320, xPositionMode: 1, yPositionMode: 1,
+    fitToViewport: true,
   });
   add(COMPONENT.LEFT_PANEL, root, {
     type: TYPE_RECTANGLE, rawY: 20, rawWidth: 164, rawHeight: 300, width: 164, height: 300,

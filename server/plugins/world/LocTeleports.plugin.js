@@ -196,7 +196,9 @@ function tied(player) {
 function meets(player, entry, requirement) {
   if (requirement.totalLevel !== undefined) return player.getSkillManager().getTotalLevel() >= requirement.totalLevel;
   if (requirement.wornAny) return requirement.wornAny.some((set) => set.every((id) => player.getEquipment().contains(id)));
+  if (requirement.item !== undefined) return player.getInventory().contains(requirement.item);
   if (requirement.tied !== undefined) return tied(player).includes(entry.name);
+  if (requirement.varbit !== undefined) return player.getPacketSender().getVarbit(requirement.varbit) >= (requirement.atLeast ?? 1);
   return true;
 }
 
@@ -283,9 +285,15 @@ function claimLadder(request) {
   if (play(request.player, request.object, request.clickType)) request.handled = true;
 }
 
+/** Let a captured portal keep its transition semantics instead of swinging it as a local door. */
+function claimDoorToggle(request) {
+  if (request.handled) return;
+  if (play(request.player, request.object, request.clickType)) request.handled = true;
+}
+
 module.exports = {
   name: "LocTeleports",
-  _test: { entryFor, destinationFor, play, useItemOnLoc, get entries() { return entries; }, get swaps() { return swaps; } },
+  _test: { entryFor, destinationFor, play, useItemOnLoc, claimDoorToggle, get entries() { return entries; }, get swaps() { return swaps; } },
   register(api) {
     core = api.core;
     pluginApi = api;
@@ -295,5 +303,6 @@ module.exports = {
     api.onObjectInteraction(useLoc);
     api.onItemOnObject(useItemOnLoc);
     api.onCustomEvent("ladders:climb", claimLadder);
+    api.onCustomEvent("door:toggle", claimDoorToggle);
   },
 };

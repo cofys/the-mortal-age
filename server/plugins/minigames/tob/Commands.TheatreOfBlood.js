@@ -2,8 +2,8 @@
 
 /** Developer commands for testing the Theatre of Blood. */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 /** ::tob - to Ver Sinhaza, by the notice board. */
 function toVerSinhaza({ player }) {

@@ -8,6 +8,25 @@ Server.installProductionPathResolver();
 const { Player } = require("../dist/game/entity/impl/player/Player");
 const { PlayerSave } = require("../dist/game/entity/impl/player/persistence/PlayerSave");
 
+test("a snapshot retains trade escrow without changing the live trade", () => {
+  const { Item } = require("../dist/game/model/Item");
+  const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
+  const original = ItemDefinition.forId;
+  ItemDefinition.forId = () => ({ isStackable: () => true });
+  try {
+    const player = new Player(null);
+    player.getTrading().getContainer().setItem(0, new Item(995, 100, { source: "escrow" }));
+    const save = PlayerSave.fromPlayer(player);
+    const coins = save.getInventory().find(item => item.getId() === 995);
+    assert.equal(coins.getAmount(), 100);
+    assert.deepEqual(coins.getMeta(), { source: "escrow" });
+    assert.equal(player.getInventory().getAmount(995), 0);
+    assert.equal(player.getTrading().getContainer().getAmount(995), 100);
+  } finally {
+    ItemDefinition.forId = original;
+  }
+});
+
 test("an older save's player fields load as attributes and are saved back as attributes", () => {
   const save = Object.assign(PlayerSave.fromPlayer(new Player(null)), {
     pcPoints: 250,
@@ -50,4 +69,20 @@ test("camelCase attribute keys from older saves migrate to kebab-case", () => {
 
   const resaved = PlayerSave.fromPlayer(player);
   assert.deepEqual(resaved.attributes, { "warriors-guild:defender": true });
+});
+
+test("an attribute equal to its default isn't saved, and loads as the default when missing", () => {
+  PlayerSave.persistAttribute("test:keybind", 1);
+  const player = new Player(null);
+  player.setAttribute("test:keybind", 1);
+  const save = PlayerSave.fromPlayer(player);
+  assert.equal("test:keybind" in save.attributes, false);
+
+  const loaded = new Player(null);
+  save.applyToPlayer(loaded);
+  assert.equal(loaded.getAttribute("test:keybind"), 1);
+
+  loaded.setAttribute("test:keybind", 0);
+  const resaved = PlayerSave.fromPlayer(loaded);
+  assert.equal(resaved.attributes["test:keybind"], 0, "an empty value that isn't the default is kept");
 });

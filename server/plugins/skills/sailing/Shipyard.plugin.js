@@ -14,12 +14,12 @@ const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/T
 const { DialogueChainBuilder } = require("../../../src/main/typescript/elvarg/game/model/dialogues/builders/DialogueChainBuilder");
 const { StatementDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/StatementDialogue");
 const { EndDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/EndDialogue");
-const { VARBIT, content, boatType, setVarbit, fade } = require("./sailingContent");
-const { describeBoat, boatVarps, clearBoatVarps, openSidepanel, DESCRIPTION_VARBITS } = require("./sidepanel");
-const { sendBoatVarbits } = require("./boatVarbits");
-const { sendToolUnlocks } = require("./cargo");
-const parts = require("./boatParts");
-const facilities = require("./boatFacilities");
+const { VARBIT, content, boatType, setVarbit, fade } = require("./SailingContent.Sailing");
+const { describeBoat, boatVarps, clearBoatVarps, openSidepanel, DESCRIPTION_VARBITS } = require("./Sidepanel.Sailing");
+const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
+const { sendToolUnlocks } = require("./Cargo.Sailing");
+const parts = require("./BoatParts.Sailing");
+const facilities = require("./BoatFacilities.Sailing");
 const { MODE, openBoatSelection } = require("./BoatSelection.plugin");
 
 /** Where the player and their boat stand in the shipyard (map square 32, 42), as captured. */

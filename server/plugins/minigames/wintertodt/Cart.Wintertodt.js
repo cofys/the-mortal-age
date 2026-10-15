@@ -11,9 +11,9 @@
  * fewer are owed).
  */
 
-const Shared = require("./WintertodtShared");
-const Round = require("./WintertodtRound");
-const Rewards = require("./WintertodtRewards");
+const Shared = require("./Shared.Wintertodt");
+const Round = require("./Round.Wintertodt");
+const Rewards = require("./Rewards.Wintertodt");
 
 const SEARCH_TICKS = 3;
 const BIG_SEARCH = 10;

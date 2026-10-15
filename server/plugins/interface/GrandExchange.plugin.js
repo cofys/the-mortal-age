@@ -510,7 +510,7 @@ module.exports = {
   name: "GrandExchange",
   register(api) {
     pluginApi = api;
-    api.persistAttribute("grand-exchange-offers");
+    api.persistAttribute("grand-exchange-offers", {});
     api.onPlayerLogin(({ player }) => {
       for (const offer of Object.values(completedOffers(player))) scheduleCompletion(player, offer);
     });

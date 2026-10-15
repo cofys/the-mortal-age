@@ -1526,6 +1526,13 @@
       "note": "Crater wall at 2272,4053 (dump:loc); fixed ends keep the crossing straight. As rsprox captures show both ways: 839 over a 2-tick exact move (0-60 cycles), then \"You climb over the ice.\"."
     },
     {
+      "name": "Ice chunks (Ungael, north)",
+      "object": 25337,
+      "level": 1,
+      "between": {"ends":[[2272,4076,0],[2272,4078,0]],"cross":[{"use":"climbOver","args":["to","CLIMB_OVER",2]},{"msg":"You climb over the ice."}]},
+      "note": "Loc 25337 at 2272,4077 morphs to climb-over loc 31992 at Vorkath exit varbit 6108 value 30; the normal child 31991 has no operation."
+    },
+    {
       "name": "Broken fence (Rellekka)",
       "object": 544,
       "level": 57,

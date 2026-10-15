@@ -1,10 +1,10 @@
 "use strict";
 
-const Shared = require("./ColosseumShared");
-const Run = require("./ColosseumRun");
-const Loot = require("./ColosseumLoot");
+const Shared = require("./Shared.Colosseum");
+const Run = require("./Run.Colosseum");
+const Loot = require("./Loot.Colosseum");
 const Effects = require("./ModifierEffects.Colosseum");
-const { MODIFIERS } = require("./ColosseumModifiers");
+const { MODIFIERS } = require("./Modifiers.Colosseum");
 
 /** ::colosseum - to the lobby under the Colosseum. */
 function toLobby({ player }) {

@@ -3,7 +3,7 @@
 // port master). Talk-to is the Wiki dialogue in npc-dialogues.json. A cancelled task's crates
 // go too, from the player's hands and their boats' cargo holds.
 const common = require("./Common.PortTasks");
-const cargo = require("../cargo");
+const cargo = require("../Cargo.Sailing");
 
 let pluginApi;
 

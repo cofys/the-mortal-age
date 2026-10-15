@@ -118,24 +118,29 @@ function sail(player, port, fare) {
 }
 
 function openMenu(event) {
-  const { player, object } = event;
-  const from = currentPort(object);
+  const { player, npc } = event;
+  const from = currentPort(npc);
   const destinations = [...portsByName.values()].filter((port) => port.name !== from?.name);
-  const options = [];
-  for (const port of destinations) {
-    const fare = fareFor(player, from?.name, port.name);
-    options.push(`${port.name}${fare == null ? "" : ` (${fare} coins)`}`, () => {
-      if (fare == null) {
-        player.sendMessage("There is no route to that port.");
-        return;
-      }
-      sail(player, port, fare);
-    });
-  }
-  // Return the prompt's success: when the destination list is too long for the
-  // chatbox the click is not handled, so another plugin (a quest's Trader
-  // Crewmember) can own the Talk-to instead.
-  return pluginApi.sendMultiChatboxPrompt(player, "Where would you like to sail to?", ...options);
+  const showPage = (offset) => {
+    const options = [];
+    for (const port of destinations.slice(offset, offset + 4)) {
+      const fare = fareFor(player, from?.name, port.name);
+      options.push(`${port.name}${fare == null ? "" : ` (${fare} coins)`}`, () => {
+        if (fare == null) {
+          player.sendMessage("There is no route to that port.");
+          return;
+        }
+        sail(player, port, fare);
+      });
+    }
+    if (offset + 4 < destinations.length) {
+      options.push("More destinations...", () => showPage(offset + 4));
+    }
+    return pluginApi.sendMultiChatboxPrompt(player, "Where would you like to sail to?", ...options);
+  };
+  // Return the prompt's success so a quest's Trader Crewmember can own Talk-to
+  // when this handler cannot open its destination list.
+  return showPage(0);
 }
 module.exports = {
   name: "CharterShips",

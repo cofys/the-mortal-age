@@ -174,6 +174,7 @@ module.exports = {
       try {
         const passwordHash = await PasswordUtil.generatePasswordHashWithSalt(pass);
         player.setPasswordHashWithSalt(passwordHash);
+        api.emitCustomEvent("persistence:save", { player, reason: "password-change" });
         player.sendMessage(`Your password is now: ${pass}`);
       } catch (err) {
         console.error(err);

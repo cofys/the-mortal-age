@@ -33,7 +33,7 @@ your server's rules or privacy notice.
 
 ## Settings
 
-All of them live under `"PlayerBots:ai"`; see `AiBotConfig.js` for the defaults.
+All of them live under `"PlayerBots:ai"`; see `Config.PlayerBots.js` for the defaults.
 
 | Setting | Default | |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ A bot asks its model only when there's a reason: it's spoken to, it's idle, ther
 it logged in, or a check-in comes due. Each call is a single request: a system prompt that is
 the same for every bot (cached by Claude), and the bot's situation. The situation covers where
 it is, what it's doing, its stats, items and notes, nearby players, recent chat and events.
-The model answers with tool calls (`AiBotTools.js`): `say`, `reply_private`, `start_activity`,
+The model answers with tool calls (`Tools.PlayerBots.js`): `say`, `reply_private`, `start_activity`,
 `follow_player`, `hang_around`, `trade_request`, `trade_offer`, `trade_accept`,
 `trade_decline` and `remember`. Every call is checked again before it runs. Calls run in the
 background and their results are applied on a later tick, so the game loop never waits on a model.
@@ -77,7 +77,7 @@ Bots log in one every 1.5 seconds, at startup too.
 
 ## Who answers chat
 
-Every AI bot within `chat.radius` hears public chat, but `AiBotChat.js` picks who answers:
+Every AI bot within `chat.radius` hears public chat, but `Chat.PlayerBots.js` picks who answers:
 
 1. A bot named in the message ("hey lazy", "dave83 what lvl").
 2. Else the bot the speaker was just talking with (`chat.conversationSeconds`).
@@ -93,7 +93,7 @@ their bot, and a bot answers privately only someone who messaged it.
 ## Trading and gifts
 
 Players trade with AI bots as with anyone. The model decides what to offer and whether to
-accept, and `AiBotTrade.js` enforces rules it can't talk its way past:
+accept, and `Trade.PlayerBots.js` enforces rules it can't talk its way past:
 
 - No trade that loses the bot more than `gifts.perTrade`, nor more than `gifts.perPlayerPerDay`
   to one player in a day (in memory: resets on restart).
@@ -113,5 +113,5 @@ formats a real player's, so they never stand out.
 
 A provider is a class with `static isConfigured(env)` and
 `generate({ system, prompt, tools }) -> { calls: [{ name, input }], text, usage }`, listed in
-`AiBotProviders.js`. Tools come as `{ name, description, parameters }` with flat JSON schemas.
+`Providers.PlayerBots.js`. Tools come as `{ name, description, parameters }` with flat JSON schemas.
 OpenAI and Gemini adapters are the next ones planned.

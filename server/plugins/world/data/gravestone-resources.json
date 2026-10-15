@@ -1,0 +1,16 @@
+{
+  "//": "Resources a grave won't stockpile (Wiki: Grave): \"unpowered orb, pure essence, bones, ores, planks\". On a second death they go from the grave to Death's Office. By cache item name.",
+  "names": [
+    "Unpowered orb",
+    "Pure essence",
+    "Bones", "Wolf bones", "Burnt bones", "Monkey bones", "Bat bones", "Big bones", "Jogre bones",
+    "Zogre bones", "Shaikahan bones", "Babydragon bones", "Wyrmling bones", "Dragon bones",
+    "Wyvern bones", "Drake bones", "Fayrg bones", "Raurg bones", "Ourg bones", "Dagannoth bones",
+    "Hydra bones", "Lava dragon bones", "Superior dragon bones", "Wyrm bones", "Frost dragon bones",
+    "Sun-kissed bones",
+    "Copper ore", "Tin ore", "Iron ore", "Silver ore", "Gold ore", "Mithril ore", "Adamantite ore",
+    "Runite ore", "Coal", "Blurite ore", "Elemental ore", "Daeyalt ore", "Lovakite ore",
+    "Plank", "Oak plank", "Teak plank", "Mahogany plank", "Camphor plank", "Ironwood plank",
+    "Rosewood plank"
+  ]
+}

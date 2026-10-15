@@ -323,6 +323,17 @@ module.exports = function registerMourningsEndPartIQuest(api) {
   const give = (player, itemId, amount = 1) => player.getInventory().adds(itemId, amount);
   const take = (player, itemId, amount = 1) => player.getInventory().deleteNumber(itemId, amount);
 
+  function activateTeleportCrystal(event) {
+    const { player, itemId } = event ?? {};
+    if (!player || !TELEPORT_CRYSTALS.has(itemId) || itemId === ItemIdentifiers.CRYSTAL_TELEPORT_SEED) return;
+    event.handled = true;
+    take(player, itemId, 1);
+    if (itemId < ItemIdentifiers.TELEPORT_CRYSTAL_1_) give(player, itemId + 1, 1);
+    else give(player, ItemIdentifiers.CRYSTAL_TELEPORT_SEED, 1);
+    player.moveTo(new Location(LLETYA_SQUARE.x, LLETYA_SQUARE.y, LLETYA_SQUARE.z));
+    player.sendMessage("You activate the teleport crystal and arrive in Lletya.");
+  }
+
   function advance(player, stage) {
     if (quest.getStage(player) < stage) quest.setStage(player, stage);
   }
@@ -1392,6 +1403,10 @@ module.exports = function registerMourningsEndPartIQuest(api) {
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject(handleItemOnObject, { noted: false });
+  for (const name of [
+    "Teleport crystal (4)", "Teleport crystal (3)",
+    "Teleport crystal (2)", "Teleport crystal (1)",
+  ]) api.onItemAction(name, { Lletya: activateTeleportCrystal });
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcDeath(handleNpcDeath);
   api.onCustomEvent("ladders:climb", claimHqLadder);

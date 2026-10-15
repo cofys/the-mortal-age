@@ -1466,6 +1466,17 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             };
         }
 
+        case ServerPacketId.SET_INTERACTION_MODE: {
+            const worldId = reader.readSignedShort();
+            const tileMode = reader.readByte() & 0xff;
+            const entityMode = reader.readByte() & 0xff;
+            return { type: "set_interaction_mode", payload: { worldId, tileMode, entityMode } };
+        }
+
+        case ServerPacketId.RESET_INTERACTION_MODE: {
+            return { type: "reset_interaction_mode", payload: { worldId: reader.readSignedShort() } };
+        }
+
         case ServerPacketId.LOC_ANIM: {
             const locId = reader.readShort();
             const tile = { x: reader.readShort(), y: reader.readShort() };

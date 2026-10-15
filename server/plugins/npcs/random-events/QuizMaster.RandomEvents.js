@@ -163,6 +163,7 @@ module.exports = function attach(api, Events) {
     const rewards = MysteryBox.roll(api);
     for (const reward of rewards) player.getInventory().addItem(new api.core.Item(reward.id, reward.amount));
     player.sendMessage("You open the mystery box.");
+    api.emitCustomEvent("persistence:save", { player, reason: "mystery-box" });
     return true;
   }
 };

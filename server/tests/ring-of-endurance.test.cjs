@@ -98,3 +98,12 @@ test("uncharging drops the charges without refunding them", () => {
   assert.equal(ring.getId(), ItemIds.RING_OF_ENDURANCE_UNCHARGED_);
   assert.equal(RingOfEndurance._test.charges(ring), 0);
 });
+
+
+test('charging leaves unrelated target items and their materials untouched', () => {
+  const target=item(12924),material=item(ItemIds.STAMINA_POTION_4_),player=createPlayer();
+  player.getInventory=()=>({getAmount:()=>100,deleteNumber:()=>{throw Error('unrelated charge consumed material');}});
+  const event={player,usedItem:material,usedWithItem:target,usedItemId:material.getId(),usedWithItemId:target.getId()};
+  RingOfEndurance._test.chargeRing(event);
+  assert.equal(event.handled,undefined);assert.deepEqual(target.meta,{});
+});

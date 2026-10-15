@@ -1,6 +1,6 @@
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
-const Presets = require("./pvp/Presets");
+const Presets = require("./pvp/Presets.PvpMode");
 
 function openPresets({ player }) {
   if (player.busy?.()) {

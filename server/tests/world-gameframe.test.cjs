@@ -9,7 +9,7 @@ const {
   WORLD_GAMEFRAMES,
 } = require('../dist/game/definition/WorldDefinition');
 
-const world = (extra) => ({ spawn: { x: 3222, y: 3219, z: 0 }, zones: [{ tags: [] }], disabledPlugins: [], ...extra });
+const world = (extra) => ({ spawn: { x: 3222, y: 3219, z: 0 }, zones: [{ tags: [] }], ...extra });
 
 test('gameframe is optional and left out when absent', () => {
   assert.equal('gameframe' in parseWorldDefinition(world()), false);
@@ -31,8 +31,74 @@ test('an unknown gameframe is rejected', () => {
   assert.throws(() => parseWorldDefinition(world({ gameframe: 'classic-resizable' })), WorldDefinitionValidationError);
 });
 
-test('voice plugin is disabled in the default world', () => {
-  assert.ok(require('../data/definitions/world.json').disabledPlugins.includes('VoiceChat'));
+test('voice plugin is off by default', () => {
+  assert.equal(require('../plugins/interface/VoiceChat.plugin.js').enabled, false);
+});
+
+test('plugins is carried so the map editor saves it back', () => {
+  const plugins = { TutorialIsland: false };
+  assert.deepEqual(parseWorldDefinition(world({ plugins })).plugins, plugins);
+});
+
+/** Loads `files` as a plugin directory under `world`; returns console output and loaded names. */
+function loadPlugins(world, files, env = {}) {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'tsps-plugin-switch-'));
+  const cwd = process.cwd();
+  const originalInfo = console.info;
+  const originalWarn = console.warn;
+  const output = { info: [], warn: [] };
+  try {
+    for (const [name, contents] of Object.entries({ 'data/definitions/world.json': JSON.stringify(world), ...files })) {
+      fs.mkdirSync(path.dirname(path.join(directory, name)), { recursive: true });
+      fs.writeFileSync(path.join(directory, name), contents);
+    }
+    process.chdir(directory);
+    console.info = (message) => output.info.push(message);
+    console.warn = (message) => output.warn.push(message);
+    PluginManager.loadFromDirectory(path.join(directory, 'plugins'));
+    return { ...output, loaded: [...PluginManager.loadedPlugins] };
+  } finally {
+    console.info = originalInfo;
+    console.warn = originalWarn;
+    process.chdir(cwd);
+    PluginManager.initialized = false;
+    PluginManager.loadedPlugins = [];
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+const plugin = (name, extra = '') => `module.exports = { name: '${name}', ${extra} register() {} };`;
+const switchFiles = {
+  'plugins/On.plugin.js': plugin('On'),
+  'plugins/Off.plugin.js': plugin('Off', 'enabled: false,'),
+  'plugins/Other.plugin.js': plugin('Other'),
+};
+
+test('plugins left out of world.json keep their own default', () => {
+  const { loaded, warn } = loadPlugins({}, switchFiles);
+  assert.deepEqual(loaded.sort(), ['On', 'Other']);
+  assert.deepEqual(warn, []);
+});
+
+test('world.json plugins turns plugins on and off over their default, and warns on unknown names', () => {
+  const { loaded, warn } = loadPlugins({ plugins: { Off: true, other: false, Typo: false } }, switchFiles);
+  assert.deepEqual(loaded.sort(), ['Off', 'On']);
+  assert.deepEqual(warn, ['[plugins] world.json names a plugin that does not exist: typo']);
+});
+
+test('the older disabledPlugins list still decides alone, with a deprecation warning', () => {
+  const { loaded, warn } = loadPlugins({ plugins: { On: false }, disabledPlugins: ['Other'] }, switchFiles);
+  assert.deepEqual(loaded.sort(), ['Off', 'On']);
+  assert.equal(warn.length, 1);
+  assert.match(warn[0], /disabledPlugins is deprecated/);
+});
+
+test('malformed plugins is rejected', () => {
+  assert.throws(() => loadPlugins({ plugins: { On: 'no' } }, switchFiles), /must map plugin names to true or false/);
 });
 
 test('plugin loading counts disabled files and logs only the final persistence override', () => {
@@ -56,7 +122,7 @@ test('plugin loading counts disabled files and logs only the final persistence o
   };
   try {
     write('data/definitions/world.json', JSON.stringify({
-      disabledPlugins: ['VoiceChat', 'DisabledAlias', 'NotInstalled'],
+      plugins: { VoiceChat: false, DisabledAlias: false },
     }));
     // Disabled filenames must be filtered before require(), including VoiceChat.
     write('plugins/VoiceChat.plugin.js', 'throw new Error("voice was evaluated");');

@@ -18,6 +18,7 @@ Plugin.register({
   onPlayerLogin: handler => { hooks.login = handler; },
   onPlayerLogout: handler => { hooks.logout = handler; },
   emitCustomEvent: (name, event) => events.push([name, event.player]),
+  onCustomEvent: () => {},
 });
 process.env.AGENT_MCP = "1";
 after(() => {

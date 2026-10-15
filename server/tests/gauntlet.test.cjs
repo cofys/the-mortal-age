@@ -9,8 +9,8 @@ const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Location } = require('../dist/game/model/Location');
-const Shared = require('../plugins/minigames/gauntlet/GauntletShared');
-const GauntletMap = require('../plugins/minigames/gauntlet/GauntletMap');
+const Shared = require('../plugins/minigames/gauntlet/Shared.Gauntlet');
+const GauntletMap = require('../plugins/minigames/gauntlet/Map.Gauntlet');
 
 before(() => {
   CachePipeline.initialize();
@@ -113,7 +113,7 @@ test('rooms are found from their tiles', () => {
 // ------------------------------------------------------------------ runs
 
 const { TaskManager } = require('../dist/game/task/TaskManager');
-const Run = require('../plugins/minigames/gauntlet/GauntletRun');
+const Run = require('../plugins/minigames/gauntlet/RunState.Gauntlet');
 const Lobby = require('../plugins/minigames/gauntlet/Lobby.Gauntlet');
 const RunHooks = require('../plugins/minigames/gauntlet/Run.Gauntlet');
 const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
@@ -123,7 +123,7 @@ const hooks = { objects: {}, items: {}, death: [], drops: [], teleports: [], log
 const os = require('node:os');
 const fs = require('node:fs');
 const path = require('node:path');
-const Scoreboard = require('../plugins/minigames/gauntlet/GauntletScoreboard');
+const Scoreboard = require('../plugins/minigames/gauntlet/Scoreboard.Gauntlet');
 const scoreboardFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gauntlet-')), 'scoreboard.json');
 Scoreboard.useFile(scoreboardFile);
 
@@ -456,8 +456,8 @@ test('passing the barrier from its corridor starts the fight and lands on the ar
 
 // ------------------------------------------------------------------ preparing
 
-const Items = require('../plugins/minigames/gauntlet/GauntletItems');
-const Resources = require('../plugins/minigames/gauntlet/GauntletResources');
+const Items = require('../plugins/minigames/gauntlet/Items.Gauntlet');
+const Resources = require('../plugins/minigames/gauntlet/Resources.Gauntlet');
 const Prep = require('../plugins/minigames/gauntlet/Prep.Gauntlet');
 
 function bindPrep() {
@@ -620,7 +620,7 @@ test('the teleport crystal works only away from the start room and before the fi
 
 // ------------------------------------------------------------------ monsters
 
-const Monsters = require('../plugins/minigames/gauntlet/GauntletMonsters');
+const Monsters = require('../plugins/minigames/gauntlet/Monsters.Gauntlet');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
 
@@ -724,7 +724,7 @@ test('nothing attacks into the start room', () => {
 
 // ------------------------------------------------------------------ the Hunllef
 
-const Hunllef = require('../plugins/minigames/gauntlet/GauntletHunllef');
+const Hunllef = require('../plugins/minigames/gauntlet/Hunllef.Gauntlet');
 const Weapons = require('../plugins/minigames/gauntlet/Weapons.Gauntlet');
 const Commands = require('../plugins/minigames/gauntlet/Commands.Gauntlet');
 const { PrayerHandler } = require('../dist/game/content/PrayerHandler');
@@ -930,7 +930,7 @@ test('the Hunllef faces its challenger and walks in until they are within 5 tile
 
 // ------------------------------------------------------------------ rewards
 
-const Rewards = require('../plugins/minigames/gauntlet/GauntletRewards');
+const Rewards = require('../plugins/minigames/gauntlet/Rewards.Gauntlet');
 
 test('the reward follows the Wiki: completion, else the run\'s points; the platform gives nothing', () => {
   const run = { points: 0 };

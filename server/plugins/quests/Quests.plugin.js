@@ -7,10 +7,13 @@
  * (King Roald, Reldo, ...) fall back to it after the other quests' handlers.
  */
 const QUESTS = [
+  "RecipeForDisaster",
+  "WhileGuthixSleeps",
+  "ANightAtTheTheatre",
   // Sins of the Father is the last Myreque chapter, so it registers before the
   // earlier ones (In Search of/In Aid/Darkness of Hallowvale, A Taste of Hope):
   // its stage window wins the shared Myreque NPCs and it defers outside it.
-  "SinsOfTheFather",
+  "SinsOfTheFather", "TheBloodMoonRises",
   "AKingdomDivided", "AnimalMagnetism", "AnotherSliceOfHAM", "ARuffSituation", "AscentOfArceuus",
   "AtFirstLight", "BelowIceMountain", "BeneathCursedSands", "BetweenARock",
   "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "BloodOnTheSwamp", "BoneVoyage",
@@ -18,8 +21,8 @@ const QUESTS = [
   "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
-  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI",
-  "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer",
+  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI", "DesertTreasureII",
+  "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer", "DragonSlayerII",
   "DreamMentor", "DruidicRitual", "DwarfCannon", "EadgarsRuse",
   "EaglesPeak", "ElementalWorkshopI", "ElementalWorkshopII", "EnakhrasLament",
   "EnlightenedJourney", "ErnestTheChicken", "EthicallyAcquiredAntiquities", "EyesOfGlouphrie",
@@ -44,7 +47,7 @@ const QUESTS = [
   "RibbitingTale", "RomeoAndJuliet", "RovingElves", "RoyalTrouble",
   "RumDeal", "RuneMysteries", "ScorpionCatcher", "Scrambled",
   "SeaSlug", "SecretsOfTheNorth", "ShadesOfMortton", "ShadowOfTheStorm",
-  "ShadowsOfCustodia", "SheepHerder", "SheepShearer", "ShieldOfArrav",
+  "ShadowsOfCustodia", "SheepHerder", "SheepShearer", "ShieldOfArrav", "SongOfTheElves",
   "ShiloVillage", "SleepingGiants", "SlugMenace", "SoulsBane",
   "SpiritsOfTheElid", "SwanSong", "TaiBwoWannaiTrio", "TailOfTwoCats",
   "TaleOfTheRighteous", "TasteOfHope", "TearsOfGuthix", "TempleOfIkov", "TempleOfTheEye",

@@ -289,7 +289,10 @@ import { InteractHighlightPlugin } from "./plugins/interacthighlight/InteractHig
 import { NotesPlugin } from "./plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin";
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
-import { createHelmSteeringDeps, steerFromHelm } from "./sailing/HelmSteering";
+import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
+import { headingIndicator } from "./sailing/HeadingIndicator";
+import { retryOnMissingGroup } from "../rs/cache/js5/retryOnMissingGroup";
+import { interactionModes } from "./InteractionModes";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
 import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
@@ -1126,8 +1129,11 @@ export class OsrsClient {
             ),
         );
         setNpcExamineIdResolver((serverId) => this.resolveNpcExamineTypeId(serverId));
-        const helmSteering = createHelmSteeringDeps(this, sendSetHeading);
-        setHelmSteeringHandler((worldX, worldY) => steerFromHelm(helmSteering, worldX, worldY));
+        const helmSteering = createHelmSteeringDeps(this, (heading) => {
+            sendSetHeading(heading);
+            headingIndicator.onHeadingSet(heading, performance.now());
+        });
+        setHelmSteeringHandler((worldX, worldY) => handleTileClick(helmSteering, worldX, worldY));
         const globalState = globalThis as typeof globalThis & {
             DEBUG_PROJECTILES?: boolean;
             DEBUG_PROJECTILES_VERBOSE?: boolean;
@@ -6726,6 +6732,22 @@ export class OsrsClient {
             } catch (e) {
                 console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
             }
+            // The helm's heading arrows. Read apart from the above, waiting for the group to
+            // stream in: on a fresh browser cache it isn't there yet, and the arrows would be
+            // missing for the whole session.
+            const cacheInfo = cache.info;
+            headingIndicator.loadStatus = "loading";
+            void retryOnMissingGroup(() =>
+                require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
+            ).then((defaults) => {
+                headingIndicator.loadStatus = defaults
+                    ? `loaded ${JSON.stringify(defaults.headingIndicatorModels)} (${cacheInfo.game} ${cacheInfo.revision}, index 17 ${this.cacheSystem.indexExists(17) ? "present" : "missing"})`
+                    : "gave up: the group never streamed in";
+                if (defaults) headingIndicator.setModels(defaults.headingIndicatorModels);
+            }).catch((e) => {
+                headingIndicator.loadStatus = `error: ${e?.message ?? e}`;
+                console.warn("[OsrsClient] Failed to load the heading indicator models:", e);
+            });
 
             this.startClientTickLoop();
             this.renderer.initCache();
@@ -8407,6 +8429,8 @@ export class OsrsClient {
                 console.warn("[OsrsClient] ChatHistory clear error:", err);
             }
             this.splitPrivateChatPlugin.clear();
+            // Live sets walk again before every logout; a dropped connection doesn't get that far.
+            interactionModes.clear();
 
             // Clear the last account's varps and transient varcs, keeping persistent client
             // preferences loaded: the next login only sends its non-zero varps, so anything

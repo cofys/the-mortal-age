@@ -17,7 +17,7 @@ export function buildWidgetInputFrame(
     // Get ALL roots in the same stacking order as rendering.
     // Base roots (rootInterface) first, then session-managed roots (bank/dialogs/etc.).
     const allRoots: any[] = [];
-    const baseRoots = widgetManager.getAllGroupRoots(widgetManager.rootInterface);
+    const baseRoots = widgetManager.getInputRoots();
     allRoots.push(...baseRoots);
     if (allRoots.length === 0) return null;
 

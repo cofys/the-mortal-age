@@ -60,6 +60,7 @@ module.exports = function registerGertrudesCatQuest(api) {
   const START_HOOK = "quest:gertrude-s-cat:start";
   const COINS_ACTION_ID = "YQId7G";
   const COMPLETE_ACTION_ID = "Rf4BAK";
+  const REPLACEMENT_KITTEN_ACTION_ID = "Q44J0B";
 
   let quest;
 
@@ -144,8 +145,8 @@ module.exports = function registerGertrudesCatQuest(api) {
       return null;
     }
     const value = String(text).toLowerCase();
-    if (value.includes("does not have at least 100 coins")) return !hasItem(player, COINS_ITEM_ID);
-    if (value.includes("at least 100 coins")) return hasItem(player, COINS_ITEM_ID);
+    if (value.includes("does not have at least 100 coins")) return player.getInventory().getAmount(COINS_ITEM_ID) < 100;
+    if (value.includes("at least 100 coins")) return player.getInventory().getAmount(COINS_ITEM_ID) >= 100;
     if (value.includes("no free inventory space")) return player.getInventory().isFull();
     if (value.includes("free inventory space")) return !player.getInventory().isFull();
     return null;
@@ -187,6 +188,22 @@ module.exports = function registerGertrudesCatQuest(api) {
       if (!quest.isComplete(player) && stage >= STAGE_RESCUED) quest.complete(player);
       event.handled = true;
       event.end = true;
+      return;
+    }
+    if (stepId === REPLACEMENT_KITTEN_ACTION_ID) {
+      event.handled = true;
+      if (player.getInventory().getAmount(COINS_ITEM_ID) < 100) {
+        player.sendMessage("You need 100 coins to buy another kitten.");
+        event.end = true;
+        return;
+      }
+      if (player.getInventory().isFull()) {
+        player.sendMessage("You need a free inventory slot.");
+        event.end = true;
+        return;
+      }
+      player.getInventory().deleteNumber(COINS_ITEM_ID, 100);
+      player.getInventory().adds(ItemIdentifiers.PET_KITTEN, 1);
     }
   }
 

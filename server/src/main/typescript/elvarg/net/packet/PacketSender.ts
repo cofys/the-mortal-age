@@ -36,6 +36,8 @@ import {
   encodeCameraShake,
   encodeWidgetSetColour, encodeAttackTimer,
   encodeCameraReset,
+  encodeSetInteractionMode,
+  encodeResetInteractionMode,
   encodeChatFilterSettings,
   encodeRunEnergy,
   encodeSkillsDelta,
@@ -861,6 +863,21 @@ export class PacketSender {
     return this;
   }
 
+  /**
+   * Sets what tile and entity clicks do in a world: a world entity index, -1 for the root world
+   * or -2 for the default of every world (net/protocol/InteractionMode.ts).
+   */
+  sendInteractionMode(worldId: number, tileMode: number, entityMode: number): this {
+    this.player.getSession().sendClientPacket(encodeSetInteractionMode(worldId, tileMode, entityMode));
+    return this;
+  }
+
+  /** Drops a world's own interaction mode, so it follows the default again. */
+  sendResetInteractionMode(worldId: number): this {
+    this.player.getSession().sendClientPacket(encodeResetInteractionMode(worldId));
+    return this;
+  }
+
   /** Resets the camera, ending any shake. */
   sendCameraReset(): this {
     this.player.getSession().sendClientPacket(encodeCameraReset());
@@ -1205,6 +1222,11 @@ export class PacketSender {
 
   isWorldMapOpen(): boolean {
     return this.subInterfaceTargets.has(WORLD_MAP_GROUP_ID);
+  }
+
+  /** Whether `groupId` is mounted as a sub-interface (modal or overlay) right now. */
+  isSubInterfaceOpen(groupId: number): boolean {
+    return this.subInterfaceTargets.has(groupId);
   }
 
   /** The last position sendWorldMapPosition sent, packed; -1 before any. */

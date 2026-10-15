@@ -71,7 +71,7 @@ function checkCharges({ player, item }) {
 
 function chargeRing(event) {
   const { player, usedItem, usedWithItem, usedItemId, usedWithItemId } = event;
-  const ring = chargedIds.has(usedItemId) || chargedByUncharged.has(usedItemId) ? usedItem : usedWithItem;
+  const ring = chargedIds.has(usedItemId) || chargedByUncharged.has(usedItemId) ? usedItem : chargedIds.has(usedWithItemId) || chargedByUncharged.has(usedWithItemId) ? usedWithItem : null;
   const otherId = ring === usedItem ? usedWithItemId : usedItemId;
   const doses = DOSE_BY_ITEM.get(Number(otherId));
   if (!ring || !doses) {

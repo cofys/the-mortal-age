@@ -17,9 +17,9 @@
  * Not ported: choosing which layouts a party gets, or a daily advert quota; OSRS has neither.
  */
 
-const Shared = require("./CoxShared");
-const Parties = require("./CoxParties");
-const { Raid } = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Parties = require("./Parties.ChambersOfXeric");
+const { Raid } = require("./RaidState.ChambersOfXeric");
 const Storage = require("./Storage.ChambersOfXeric");
 
 // rsprox captures: the board's buttons (contents, 0-1) and party rows (list, 0-39) and the party

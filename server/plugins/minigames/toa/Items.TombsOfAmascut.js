@@ -6,7 +6,7 @@
  * rune pouch and the keris partisan's jewels. Tumeken's shadow is plugins/items/TumekensShadow.plugin.js.
  */
 
-const Shared = require("./ToaShared");
+const Shared = require("./Shared.TombsOfAmascut");
 
 const ANIMATION = { FORTIFY: 3676, CHISEL: 8833, FUSE: 791 };
 const WARD_SOUL_RUNES = 10000;

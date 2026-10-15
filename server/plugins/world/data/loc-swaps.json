@@ -1,6 +1,8 @@
 {
   "$comment": "Trapdoors that open and close by swapping the loc for its other state, played by plugins/world/LocTeleports.plugin.js. From the rsprox capture database (https://rsprox.net/database), one entry per loc and option; docs/loc-teleports.md. Ticks count from the player arriving at the loc, as the captures count them: the message, the animation and sound, then the swap.",
   "swaps": [
+    {"name":"wgs_falador_drawers_closed","id":53306,"option":"Open","op":1,"becomes":53307,"tick":0,"source":"https://oldschool.runescape.wiki/w/While_Guthix_Sleeps/Quick_guide"},
+    {"name":"wgs_falador_drawers_open","id":53307,"option":"Shut","op":3,"becomes":53306,"tick":0,"source":"https://oldschool.runescape.wiki/w/While_Guthix_Sleeps/Quick_guide"},
     {"name":"vampire_trap1","id":6434,"option":"Open","op":1,"becomes":6435,"message":"You open the trapdoor.","messageTick":1,"anim":536,"animTick":2,"sound":91,"tick":3,"recordings":4},
     {"name":"trapdoor","id":1579,"option":"Open","op":1,"becomes":1581,"message":"The trapdoor opens...","messageTick":1,"sound":62,"tick":1,"recordings":2},
     {"name":"trapdoor_open","id":1581,"option":"Close","op":2,"becomes":1579,"message":"You close the trapdoor.","messageTick":1,"sound":60,"tick":1,"recordings":1},

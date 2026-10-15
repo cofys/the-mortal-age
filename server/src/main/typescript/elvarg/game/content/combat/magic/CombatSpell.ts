@@ -1,3 +1,4 @@
+import { PluginManager } from "../../../../plugins/PluginManager";
 
 import { Spell } from "./Spell";
 import { Mobile } from "../../../entity/impl/Mobile";
@@ -79,7 +80,9 @@ export abstract class CombatSpell extends Spell {
     if (!hit.isAccurate()) {
       return;
     }
-    this.spellEffectOnHitCalc(hit.getAttacker(), hit.getTarget(), hit.getTotalDamage());
+    const effect = { attacker: hit.getAttacker(), target: hit.getTarget(), spell: this, hit, allowed: true };
+    PluginManager.emitCustomEvent("magic:hit-effects", effect);
+    if (effect.allowed) this.spellEffectOnHitCalc(effect.attacker, effect.target, hit.getTotalDamage());
   }
 
   public spellEffectOnHitCalc(cast: Mobile, castOn: Mobile, damage: number): void { }

@@ -299,7 +299,7 @@ function collectionLogCount(request) {
   if (request.category === "Kalphite Queen") request.count = Math.max(0, Number(request.player.getAttribute(KILL_COUNT_ATTRIBUTE)) || 0);
 }
 
-/** Combat Achievements at login: the kill count kept here (plugins/combatachievements/). */
+/** Combat Achievements at login: the kill count kept here (plugins/achievements/combatachievements/). */
 function combatAchievementsKillCount({ player, counts }) {
   const kills = Math.max(0, Number(player.getAttribute(KILL_COUNT_ATTRIBUTE)) || 0);
   if (kills > 0) counts["Kalphite Queen"] = kills;

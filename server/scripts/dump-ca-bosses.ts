@@ -1,4 +1,4 @@
-// Writes plugins/combatachievements/data/bosses.json: for each Combat Achievements monster (enum
+// Writes plugins/achievements/combatachievements/data/bosses.json: for each Combat Achievements monster (enum
 // 3970), the kill-count varps the boss pages show (script 4778, summed where it adds several) and
 // the varbit holding how many of its tasks are done (script 4780). Both scripts are one switch on
 // the monster key; the cache gives no other way to read the pairing.
@@ -18,7 +18,7 @@ const TASK_COUNT_SCRIPT = 4780;
 const GET_VARP = 1;
 const GET_VARBIT = 25;
 const ISTORE = 34;
-const OUT = path.resolve(__dirname, "../plugins/combatachievements/data/bosses.json");
+const OUT = path.resolve(__dirname, "../plugins/achievements/combatachievements/data/bosses.json");
 
 /** Monster key -> the vars one case of the script's switch reads before storing its result. */
 function switchReads(scriptId: number, opcode: number): Map<number, number[]> {

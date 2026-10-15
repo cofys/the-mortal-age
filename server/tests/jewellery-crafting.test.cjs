@@ -4,6 +4,8 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const { Spell } = require('../dist/game/content/combat/magic/Spell');
+const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
 let core;
 const crafting = {};
 const tasks = [];
@@ -66,6 +68,26 @@ function playerWith(entries = []) {
 function cast(player,name,itemId,slot = player.getInventory().getItems().findIndex(item => item.id === itemId)) {
   return PluginManager.emitSpellOnItem({player,spellName:name,itemId,slot,handled:false});
 }
+test('equipped elemental staffs bypass only the elemental runes they supply for spells', () => {
+  const player = playerWith();
+  const spell = { getSpellbook: () => core.MagicSpellbook.NORMAL, spellId: () => 1 };
+  const windSurgeRunes = [
+    new core.Item(ItemIdentifiers.AIR_RUNE, 7),
+    new core.Item(ItemIdentifiers.WRATH_RUNE, 1),
+  ];
+
+  player.weapon = ItemIdentifiers.STAFF_OF_AIR;
+  assert.deepEqual(
+    Spell.prototype.itemsToConsume.call(spell, player, windSurgeRunes).map(item => item.id),
+    [ItemIdentifiers.WRATH_RUNE],
+  );
+
+  player.weapon = ItemIdentifiers.STAFF_OF_WATER;
+  assert.deepEqual(
+    Spell.prototype.itemsToConsume.call(spell, player, windSurgeRunes).map(item => item.id),
+    [ItemIdentifiers.AIR_RUNE, ItemIdentifiers.WRATH_RUNE],
+  );
+});
 const enchantRecipes = [
   ['Lvl-1 Enchant', [[1637,2550],[1656,3853],[1694,1727]], [[564,1],[555,1]],17.5,719,114,136],
   ['Lvl-2 Enchant', [[1639,2552],[1658,5521],[1696,1729]], [[564,1],[556,3]],37,720,115,141],

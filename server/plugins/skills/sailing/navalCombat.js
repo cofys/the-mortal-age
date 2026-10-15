@@ -9,10 +9,10 @@ const { BoatMoveMode } = require("../../../src/main/typescript/elvarg/game/conte
 const { World } = require("../../../src/main/typescript/elvarg/game/World");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
 const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
-const { boatStats } = require("./boatParts");
-const { facilitiesOf, facilityAt, FACILITY } = require("./boatFacilities");
+const { boatStats } = require("./BoatParts.Sailing");
+const { facilitiesOf, facilityAt, FACILITY } = require("./BoatFacilities.Sailing");
 const { CacheDefinitions } = require("../../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
-const { content } = require("./sailingContent");
+const { content } = require("./SailingContent.Sailing");
 const { notorietyOf, addNotoriety } = require("./navalNotoriety");
 
 /** Broadside range in tiles (design doc). */

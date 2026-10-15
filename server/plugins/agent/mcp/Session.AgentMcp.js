@@ -11,6 +11,7 @@ module.exports = function registerSessionTools(ctx) {
       const { player: p, error } = await core.connectHeadlessClient(username, password);
       if (!p) throw new Error(error);
       await sleepTicks(1);
+      core.PluginManager.emitCustomEvent("agent-mcp:normal-player", { player: p });
       return { username: p.getUsername(), ...status(find(p.getUsername())) };
     }
   );
@@ -24,6 +25,18 @@ module.exports = function registerSessionTools(ctx) {
       await sleepTicks(2);
       const p = World.getPlayerByName(username);
       return p ? { loggedOut: false, ...status(p) } : { loggedOut: true };
+    }
+  );
+
+  tool(
+    "disconnect",
+    "Drop a player's connection without logging out, as a closed tab or lost connection does. A player hit in the last 10 seconds stays in the world (and can still be attacked) until combat ends or 60 seconds pass.",
+    { player },
+    async ({ player: username }) => {
+      find(username).getSession().getChannel().close();
+      await sleepTicks(2);
+      const p = World.getPlayerByName(username);
+      return p ? { inWorld: true, ...status(p) } : { inWorld: false };
     }
   );
 };

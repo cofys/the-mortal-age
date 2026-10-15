@@ -18,7 +18,7 @@ import { createRequire } from "node:module";
 import { DatabaseSync } from "node:sqlite";
 
 const require = createRequire(import.meta.url);
-const { SqliteSaveHistory, PRE_ROLLBACK_REASON, ROLLBACK_REASON } = require("../plugins/persistence/SqliteSaveHistory.js");
+const { SqliteSaveHistory, PRE_ROLLBACK_REASON, ROLLBACK_REASON } = require("../plugins/persistence/SaveHistory.SqlitePlayerPersistence.js");
 
 function parseArgs(argv) {
   const args = { apply: false, before: null, player: null, database: null };

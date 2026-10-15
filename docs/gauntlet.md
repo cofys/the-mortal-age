@@ -8,19 +8,19 @@ Status: done so far are the maze, the lobby, the run (entry, timer, exits, death
 
 | File | What it owns |
 | --- | --- |
-| `GauntletShared.js` | Ids, varbits, tiles and helpers such as fades and dialogues. |
-| `GauntletMap.js` | The maze: its layout, the room templates and turns, and lighting rooms. |
-| `GauntletRun.js` | One player's run: the starting kit, the preparation timer, the boss phase, ending a run, and stats. |
+| `Shared.Gauntlet.js` | Ids, varbits, tiles and helpers such as fades and dialogues. |
+| `Map.Gauntlet.js` | The maze: its layout, the room templates and turns, and lighting rooms. |
+| `RunState.Gauntlet.js` | One player's run: the starting kit, the preparation timer, the boss phase, ending a run, and stats. |
 | `Lobby.*` | The Gauntlet Portal in Prifddinas, the lobby's teleport platform, Bryn and the entrance. |
 | `Run.*` | Nodes, the exit platform, the teleport crystal, the barrier, death, teleports and login recovery. |
-| `GauntletItems.js` | Item ids per mode and the singing bowl's recipes. |
-| `GauntletResources.js` | Stocking lit rooms with resources, and gathering. |
+| `Items.Gauntlet.js` | Item ids per mode and the singing bowl's recipes. |
+| `Resources.Gauntlet.js` | Stocking lit rooms with resources, and gathering. |
 | `Prep.*` | The start room's stations, gathering hooks and Egniol potions. |
-| `GauntletMonsters.js` | Monsters in lit rooms, demi-bosses, and the run's drop rules. |
-| `GauntletHunllef.js` | The Hunllef fight. |
+| `Monsters.Gauntlet.js` | Monsters in lit rooms, demi-bosses, and the run's drop rules. |
+| `Hunllef.Gauntlet.js` | The Hunllef fight. |
 | `Weapons.*` | The halberds, bows and staffs in combat. |
-| `GauntletRewards.js` | Run points, the reward chest and its loot tables. |
-| `GauntletScoreboard.js` | The lobby scoreboard and the world's totals. |
+| `Rewards.Gauntlet.js` | Run points, the reward chest and its loot tables. |
+| `Scoreboard.Gauntlet.js` | The lobby scoreboard and the world's totals. |
 | `Commands.*` | Developer commands. |
 
 ## The maze

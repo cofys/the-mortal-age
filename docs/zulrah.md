@@ -8,10 +8,10 @@ It is one plugin, `server/plugins/bosses/Zulrah.plugin.js`, which delegates to t
 
 | File | What it owns |
 | --- | --- |
-| `ZulrahShared.js` | Ids, tiles, the access varbit and helpers such as the fade and dialogues. |
-| `ZulrahRotations.js` | The four rotations as data, and the order phases come in. |
-| `ZulrahFight.js` | One player's fight: the shrine, Zulrah rising, its attacks, the tail, the dives. |
-| `ZulrahHazards.js` | Venom clouds, snakelings and the snakelings' attacks. |
+| `Shared.Zulrah.js` | Ids, tiles, the access varbit and helpers such as the fade and dialogues. |
+| `Rotations.Zulrah.js` | The four rotations as data, and the order phases come in. |
+| `Fight.Zulrah.js` | One player's fight: the shrine, Zulrah rising, its attacks, the tail, the dives. |
+| `Hazards.Zulrah.js` | Venom clouds, snakelings and the snakelings' attacks. |
 | `Shrine.*` | The boat, the teleport scrolls, kills and loot, the damage cap, deaths and Zul-Gwenwynig's retrieval. |
 | `Commands.*` | Developer commands. |
 
@@ -99,7 +99,7 @@ Zulrah's south-west tile (Near-Reality):
 
 ### Rotations
 
-`ZulrahRotations.js` holds the Wiki's four rotations phase by phase: place, form, and what Zulrah does, in order. The test checks them against the Wiki's list.
+`Rotations.Zulrah.js` holds the Wiki's four rotations phase by phase: place, form, and what Zulrah does, in order. The test checks them against the Wiki's list.
 
 **The cycle:**
 - The fight always opens in the middle in green form with four venom cloud barrages.
@@ -187,7 +187,6 @@ Near-Reality's tables were checked against the Wiki and corrected:
 **Not done:**
 - The Wiki's item-retrieval interface: Collect gives the items straight back.
 - The Western Provinces elite diary's daily resurrection.
-- A gravestone system. That would be its own piece of work.
 
 ## Sounds
 

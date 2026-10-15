@@ -8,8 +8,8 @@ const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 before(() => CachePipeline.initialize());
 
 const { MagicSpellbook } = require("../dist/game/model/MagicSpellbook");
-const { GROUP_ID, GLOBAL_ROW_COUNT, PRESET_ROW_START, uid } = require("../plugins/modes/pvp/presetsWidget");
-const presets = require("../plugins/modes/pvp/Presets");
+const { GROUP_ID, GLOBAL_ROW_COUNT, PRESET_ROW_START, uid } = require("../plugins/modes/pvp/PresetsWidget.PvpMode");
+const presets = require("../plugins/modes/pvp/Presets.PvpMode");
 
 function playerWithAttributes(attributes = new Map()) {
   const strings = [];
@@ -44,7 +44,7 @@ function playerWithAttributes(attributes = new Map()) {
 test("disabled presets leave bot inventory and equipment lootable on the ground or in keys", () => {
   const { Location } = require("../dist/game/model/Location");
   const lootKeys = require("../plugins/items/LootKeys.plugin");
-  const botDeathLoot = require("../plugins/bots/runtime/BotDeathLoot");
+  const botDeathLoot = require("../plugins/bots/runtime/DeathLoot.PlayerBots");
   const ground = [];
   const location = new Location(3090, 3600);
   botDeathLoot.initBotDeathLootCoreAccess({
@@ -415,6 +415,7 @@ test("deposit booth slot actions reach Bank.deposit", () => {
   let onInterfaceActionClick;
   booth.register({
     onObjectInteraction() {},
+    onCustomEvent() {},
     onInterfaceActionClick(handler) { onInterfaceActionClick = handler; },
     onInterfaceActionButton() {},
     onItemOnObject() {},
@@ -444,8 +445,33 @@ test("deposit booth slot actions reach Bank.deposit", () => {
   }
 });
 
+test("quest-owned deposit boxes open the native bank deposit interface", () => {
+  const booth = require("../plugins/objects/BankDepositBooth.plugin");
+  let openQuestDeposit;
+  const calls = [];
+  booth.register({
+    onObjectInteraction() {},
+    onInterfaceActionClick() {},
+    onInterfaceActionButton() {},
+    onItemOnObject() {},
+    onCustomEvent(name, handler) {
+      if (name === "bank:open-deposit-box") openQuestDeposit = handler;
+    },
+    emitCanBank: () => null,
+  });
+  const player = {
+    setInterfaceId: (id) => calls.push(["interface", id]),
+    getInventory: () => ({ getItems: () => [] }),
+    getPacketSender: () => new Proxy({}, { get: () => (...args) => calls.push(args) }),
+  };
+  assert.equal(typeof openQuestDeposit, "function");
+  openQuestDeposit({ player });
+  assert.deepEqual(calls[0], ["interface", 192]);
+  assert.ok(calls.some((call) => call[0] === (161 << 16 | 16)), "the native deposit modal is opened");
+});
+
 test("a player preset bot announces its suppressed drops once", () => {
-  const botDeathLoot = require("../plugins/bots/runtime/BotDeathLoot");
+  const botDeathLoot = require("../plugins/bots/runtime/DeathLoot.PlayerBots");
   const messages = [];
   const killer = {
     isRegistered: () => true,

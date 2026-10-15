@@ -18,8 +18,8 @@
  * Wiki: you can't teleport out; deaths are safe (CoxRaid.onDeath); damage gives points.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 const ANIM = { CLIMB_DOWN: 827, CLIMB_UP: 828 };
 const TAB = { REFRESH: 2, START: 14 };

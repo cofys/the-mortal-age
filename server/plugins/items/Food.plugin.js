@@ -155,8 +155,12 @@ function healBy(player, amount, overheal = 0) {
 function applyStats(player, effect) {
   for (const [name, amount] of Object.entries(effect.boost ?? {})) boostSkill(player, skill(name), amount, 0);
   for (const [name, amount] of Object.entries(effect.drain ?? {})) lowerSkillByMax(player, skill(name), amount, 0, 1);
-  for (const [name, amount] of Object.entries(effect.restore ?? {})) restoreSkillToBaseWithFormula(player, skill(name), amount, 0);
+  for (const [name, amount] of Object.entries(effect.restore ?? {})) {
+    restoreSkillToBaseWithFormula(player, skill(name), typeof amount === "number" ? amount : amount.flat ?? 0,
+      typeof amount === "number" ? 0 : amount.percent ?? 0);
+  }
   if (effect.runEnergy) restoreRunEnergy(player, effect.runEnergy);
+  if (effect.stamina) pluginApi.emitCustomEvent("potions:apply-stamina", { player, energy: 20 });
   if (effect.curePoison) curePoisonAndVenom(player);
 }
 
@@ -204,6 +208,14 @@ function mayEat(player, itemId, food) {
   if (pluginApi.emitCanEat(player, itemId) === false) {
     player.sendMessage("You cannot eat here.");
     return false;
+  }
+  if (food.area) {
+    const request = { player, area: food.area, inside: false };
+    pluginApi.emitCustomEvent("food:area", request);
+    if (!request.inside) {
+      player.sendMessage("You cannot eat these supplies here.");
+      return false;
+    }
   }
   const timers = player.getTimers();
   if (timers.has(core.TimerKey.STUN)) {
@@ -274,7 +286,7 @@ function eatMessage(food, bite, itemId) {
 function eat(event) {
   const { player, itemId, slot, clickType } = event;
   const found = foodBite(itemId);
-  if (!found || core.CacheDefinitions.getItem(itemId).inventoryActions[clickType - 1] !== EAT_OPTION) return;
+  if (!found || core.CacheDefinitions.getItem(itemId).inventoryActions[clickType - 1] !== (found.food.option ?? EAT_OPTION)) return;
   event.handled = true;
   const { food, bite } = found;
   if (food.refuse) {

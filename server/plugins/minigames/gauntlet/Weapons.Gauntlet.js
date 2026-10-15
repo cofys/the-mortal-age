@@ -11,8 +11,8 @@
  * 1722 / 1723 / 1724).
  */
 
-const Shared = require("./GauntletShared");
-const Items = require("./GauntletItems");
+const Shared = require("./Shared.Gauntlet");
+const Items = require("./Items.Gauntlet");
 
 const HALBERDS = [...Items.MODES.regular.halberd, ...Items.MODES.corrupted.halberd];
 const BOWS = [...Items.MODES.regular.bow, ...Items.MODES.corrupted.bow];

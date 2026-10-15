@@ -168,14 +168,16 @@ export class BoatManager {
     }
 
     /**
-     * Points the boat at a clicked tile if the player is at its helm. Deck clicks are mapped
-     * to the world first. The heading snaps to the 16 helm directions.
+     * A walk click from the helm. A sea tile points the boat at it (a client steering by the
+     * heading interaction mode sends SET_HEADING instead); the heading snaps to the 16 helm
+     * directions. A deck tile does nothing: the boat's own world stays in walk mode at the helm,
+     * and live neither steers nor walks the helmsman for those clicks (rsprox).
      */
     public static steerToward(player: Mobile, x: number, y: number): boolean {
         const boat = BoatManager.getBoatAboard(player);
         if (!boat || boat.helmPlayerId !== player.getIndex()) return false;
-        const target = boat.containsDeckTile(x, y) ? boat.deckTileToWorld(x, y) : { x, y };
-        const heading = boat.helmHeadingToward(target.x, target.y);
+        if (boat.containsDeckTile(x, y)) return true;
+        const heading = boat.helmHeadingToward(x, y);
         if (heading !== undefined) BoatManager.applyHelmHeading(player, boat, heading);
         return true;
     }

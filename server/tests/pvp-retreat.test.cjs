@@ -22,7 +22,7 @@ before(async () => {
     core: PluginManager.getCoreApi(), persistAttribute() {}, onPlayerLogin() {}, onItemAction() {},
   });
 });
-const filename = path.resolve(__dirname, '../plugins/bots/behaviours/nodes/pvp/PvpDefensiveActionNode.js');
+const filename = path.resolve(__dirname, '../plugins/bots/behaviours/nodes/pvp/PvpDefensiveActionNode.PlayerBots.js');
 const localRequire = createRequire(filename);
 
 test('PvP retreat starts when actual food runs out at any HP, runs first, then respects depth/teleblock/freeze', () => {
@@ -39,13 +39,13 @@ test('PvP retreat starts when actual food runs out at any HP, runs first, then r
   vm.runInNewContext(fs.readFileSync(filename, 'utf8'), {
     module, require: (name) => {
       if (name.endsWith('/WorldDefinition')) return { hasGlobalWorldTag: () => globalPvp };
-      if (name.endsWith('/BotNavigation')) return {
+      if (name.endsWith('/Navigation.PlayerBots')) return {
         queueRouteAndFlagAppearance: (_, x, y) => routes.push({ x, y }),
         clearMovementRequest: () => {},
         peekMovementRequest: () => null,
         randomInRange: () => 2,
       };
-      if (name.endsWith('/PvpLoadoutPolicy')) return {
+      if (name.endsWith('/PvpLoadoutPolicy.PlayerBots')) return {
         applyGeneratedPvpLoadout: () => { loads++; hp = 99; return true; },
       };
       return localRequire(name);
@@ -105,7 +105,7 @@ test('PvP retreat starts when actual food runs out at any HP, runs first, then r
     tick();
     assert.equal(teleports.length, 1, 'teleports once the run grace elapses');
     assert.equal(loads, 0);
-    const { getEnabledWildernessHotspots } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry');
+    const { getEnabledWildernessHotspots } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry.PlayerBots');
     assert.ok(getEnabledWildernessHotspots().some(({ anchor }) =>
       teleports[0].equals(new Location(anchor.x, anchor.y, anchor.z))), 'destination is a known Wilderness location');
     tick();
@@ -199,7 +199,7 @@ test('PvP retreat starts when actual food runs out at any HP, runs first, then r
 });
 
 test('retreat blocks southbound ditch crossings, including queued crossings, but allows returning north', () => {
-  const { maybeCrossDitch } = require('../plugins/bots/brain/DitchCrossing');
+  const { maybeCrossDitch } = require('../plugins/bots/brain/DitchCrossing.PlayerBots');
   let location = new Location(3100, 3525, 0), pending, crossings = 0;
   const player = {
     getLocation: () => location, getUsername: () => 'retreat-test', setPositionToFace: () => {},

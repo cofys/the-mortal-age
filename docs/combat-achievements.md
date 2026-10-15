@@ -1,11 +1,11 @@
 # Combat Achievements
 
-Combat Achievements live in `server/plugins/combatachievements/`. The 655 tasks, their tiers, points, monsters and the tier rewards are read from the cache. A player's finished tasks, claimed tiers, kill counts and the interfaces' last view are persisted per player.
+Combat Achievements live in `server/plugins/achievements/combatachievements/`. The 655 tasks, their tiers, points, monsters and the tier rewards are read from the cache. A player's finished tasks, claimed tiers, kill counts and the interfaces' last view are persisted per player.
 
 ## What finishes a task
 
 - **Kill-count tasks finish themselves.** A task whose description is only a target and a count ("Kill the King Black Dragon 10 times.", "Open Obor's chest once.", "Kill a Black Dragon.") gets its target from the description. 160 tasks work this way. A kill counts for its monster when an NPC of that name dies with the player as killer. Content that isn't one NPC's death (Barrows chests, the Wintertodt, the Gauntlet, raids, the Fight Caves) is counted by its plugin through `combat-achievements:kill`.
-- **Fight rules derived from the descriptions.** For the phrasings the cache repeats, the rule comes from the description too: "Kill Vorkath in less than 54 seconds.", "... without a slayer task.", "Kill Skotizo without taking any damage.", "... without taking any damage from her.", "... with only magical attacks.", "... with the Protect from Melee prayer activated.", "... solo.", "... using only special attacks.", "... without equipping any weapon.", "... with a stab weapon." The description has to be exactly one of these. A fight is timed from the first hit either way to the death (`CaFights.js`, `CaDerivedRules.js`); this covers 35 tasks.
+- **Fight rules derived from the descriptions.** For the phrasings the cache repeats, the rule comes from the description too: "Kill Vorkath in less than 54 seconds.", "... without a slayer task.", "Kill Skotizo without taking any damage.", "... without taking any damage from her.", "... with only magical attacks.", "... with the Protect from Melee prayer activated.", "... solo.", "... using only special attacks.", "... without equipping any weapon.", "... with a stab weapon." The description has to be exactly one of these. A fight is timed from the first hit either way to the death (`Fights.CombatAchievements.js`, `DerivedRules.CombatAchievements.js`); this covers 35 tasks.
 - **Hand-written fight rules** for a few bosses, in `combatachievements/tasks/<Unit>.CombatAchievements.js`: the Barrows brothers, Bryophyta, Obor, the Kalphite Queen, the Giant Mole, the Dagannoth Kings and Vorkath (melee only, fists only, the zombified spawn without magic).
 - **Content plugins finish their own tasks**, as diaries do with `diary:task`, from a `CombatAchievements.<Plugin>.js` unit in their folder:
 
@@ -54,7 +54,7 @@ Monster names are the cache's (enum 3970): "Zulrah", "DK: Rex", "Nightmare, The"
 | Tier rewards | Enum 3980 → struct: 1330 name, 1333 antique lamp, 1335 Ghommal's hilt, 1337–1339 the unlocks it shows |
 | Bosses list | Enum 3987 → struct: 1313 name, 1315 monster, 1317 its coordinate (Locate) |
 | Completion | Task N is bit N % 32 of `ca_task_completed_0..20` (varps 3116–3128, 3387, 3718, 3773, 3774, 4204, 4496, 4721, 5673; script 4834) |
-| Boss kill counts, tasks done per boss | Scripts 4778 and 4780, one switch on the monster each: `yarn dump:ca-bosses` writes them to `plugins/combatachievements/data/bosses.json` |
+| Boss kill counts, tasks done per boss | Scripts 4778 and 4780, one switch on the monster each: `yarn dump:ca-bosses` writes them to `plugins/achievements/combatachievements/data/bosses.json` |
 
 A task is worth its tier in points. A tier unlocks at all the points of its own tasks and the tiers below: 41 / 169 / 436 / 1100 / 1965 / 2697 in our rev 241 cache, the same values live sent at login in the capture. Grandmaster is every task.
 

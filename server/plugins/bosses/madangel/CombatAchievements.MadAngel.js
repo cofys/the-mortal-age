@@ -1,7 +1,7 @@
 /**
- * The Mad Angel's Combat Achievements (plugins/combatachievements/): its kill count and best
+ * The Mad Angel's Combat Achievements (plugins/achievements/combatachievements/): its kill count and best
  * fight time are the plugin's own (Kills.MadAngel). Its death counts through the NPC's name; the
- * fight rules are in plugins/combatachievements/tasks/.
+ * fight rules are in plugins/achievements/combatachievements/tasks/.
  */
 const Common = require("./Common.MadAngel");
 

@@ -685,6 +685,7 @@ export class WebGPUMapSquare implements MapSquare {
      */
     initAnimatedLocs(mapData: SdMapData, seqTypeLoader: SeqTypeLoader, cycle: number): void {
         if (!this.locRanges) return;
+        const previous = this.locsAnimated;
         this.locsAnimated = mapData.locsAnimated.map(
             (loc) =>
                 new LocAnimated(
@@ -707,6 +708,7 @@ export class WebGPUMapSquare implements MapSquare {
                     loc.rotation,
                 ),
         );
+        LocAnimated.carryOver(previous, this.locsAnimated);
     }
 
     /** Advances animated locs (Client.cycle timing) and points their ranges at the frame (draw2.ts). */

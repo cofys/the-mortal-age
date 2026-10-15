@@ -681,12 +681,18 @@ function attach(api) {
     api.onCustomEvent("player:world-input", Hespori.hesporiInput);
     api.onCustomEvent("player:world-input", cancelWork);
     api.onCustomEvent("npc-drops:generated", Hespori.hesporiLoot);
+    api.onCustomEvent("hespori:quest-challenge", Hespori.challengeHespori);
+    api.onCustomEvent("hespori:quest-process", Hespori.hesporiProcess);
+    api.onCustomEvent("hespori:quest-can-attack", Hespori.hesporiCanAttack);
+    api.onCustomEvent("hespori:quest-leave", Hespori.hesporiLogout);
+    api.onNpcDeath(Hespori.questHesporiDeath);
     api.onCombatHitRoll(Hespori.hesporiHitRoll);
     api.onCombatHitResolved(Hespori.hesporiHit);
     api.onPlayerDealtDamage(Hespori.hesporiDamage);
     api.onPlayerDeathItemDrop(Hespori.hesporiDeathDrop);
     api.onPlayerDeath(Hespori.hesporiPlayerDeath);
     api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI, Hespori.HesporiCombat, { singleton: false });
+    api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI_2, Hespori.HesporiCombat, { singleton: false });
 }
 
 /**

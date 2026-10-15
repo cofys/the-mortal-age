@@ -42,7 +42,8 @@ need no id lists. Tests: `server/tests/food-effects.test.cjs` and `eat-attack-de
 | `eatDelay` | Ticks until the next bite, per bite or for all (default 3). |
 | `combo` | A combo food. |
 | `leaves` | The item left after the last bite (`Pie dish`, `Bowl`). |
-| `boost`, `drain`, `restore` | Skills by name and amount: a boost to base + amount, a drain from it, a restore up to base. |
+| `boost`, `drain`, `restore` | Skills by name and amount: a boost to base + amount, a drain from it, a restore up to base. Restore amounts may be `{ "flat", "percent" }` of the base level. |
+| `stamina`, `area`, `option` | Apply the shared stamina effect, require a `food:area` scene check, or consume via a cache action other than Eat. |
 | `runEnergy`, `curePoison`, `poisonImmunity` | Run energy restored, poison and venom cured, seconds of poison immunity. |
 | `then` | A second heal `ticks` later, with its own effects (hunter meats, 7 ticks). A newer one replaces a pending one. |
 | `outcomes` | A table of results by `weight`, each with its heal, boosts, drains, `drainRandom` (a random skill but Hitpoints) and messages (kebabs). |
@@ -52,6 +53,10 @@ need no id lists. Tests: `server/tests/food-effects.test.cjs` and `eat-attack-de
 | `refuse` | The item can't be eaten; this is the message. |
 
 ## Ours, not live
+
+- **Ration amounts:** the Wiki describes prison rations as similar to Scarred scraps without
+  giving numerical Hitpoints/Prayer amounts. Their 15 HP and 25% base Prayer follow that
+  comparison; calibrate them when a numerical prison capture is available.
 
 - **Inferred messages:** the pies, pizzas and cakes with no recording use the pattern of the
   recorded ones ("You eat half the meat pie.", "You eat the remaining Wild pie."); the
@@ -66,5 +71,5 @@ need no id lists. Tests: `server/tests/food-effects.test.cjs` and `eat-attack-de
 Items with an Eat option that aren't in the data, each listed with its reason in the test:
 handled by another plugin (Poisoned cheese, White pearl, ToA's Honey locust, Castle Wars bandages
 use Heal); quest, event and minigame items with their own effects (rock cakes, poison karambwan,
-nightshade, Servery food, the Vampyrium foods); event sweets and candy; food only eaten in one
+nightshade, Servery food); event sweets and candy; food only eaten in one
 fight (Moons of Peril); unobtainable items; and the whole watermelon, which is sliced first.

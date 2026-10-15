@@ -365,6 +365,7 @@ export class Bank extends ItemContainer {
             player.getPacketSender().sendVarbit(4150, 0);
         }
         player.getBank(0).refreshItems();
+        GameConstants.PLAYER_PERSISTENCE.requestSave(player, "bank-tab-collapse");
     }
 
     /** Removes the placeholders in `tab`, or in every tab for "all items" (0). */
@@ -379,6 +380,7 @@ export class Bank extends ItemContainer {
             }
         }
         player.getBank(0).refreshItems();
+        GameConstants.PLAYER_PERSISTENCE.requestSave(player, "bank-placeholder-clear");
     }
 
     /**
@@ -413,6 +415,7 @@ export class Bank extends ItemContainer {
         } else if (fromBank && targetGroup === Bank.MAIN_INTERFACE_ID && targetChild === Bank.ITEMS_CHILD) {
             Bank.moveItem(player, drag.sourceSlot, drag.sourceItemId, drag.targetSlot);
         }
+        GameConstants.PLAYER_PERSISTENCE.requestSave(player, "container-reorder");
         return true;
     }
 

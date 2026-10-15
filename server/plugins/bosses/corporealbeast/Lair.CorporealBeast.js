@@ -16,7 +16,7 @@
  * Peek and the exit's warning (not in the capture or the Wiki).
  */
 
-const Shared = require("./CorpShared");
+const Shared = require("./Shared.CorporealBeast");
 
 const PASSAGE_WIDTH = 3;
 const PET_ATTRIBUTE = "pets:current";

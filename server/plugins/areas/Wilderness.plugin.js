@@ -348,7 +348,7 @@ function isRealPlayer(mobile) {
 
 // Only real players in the area get here - bots never reach any of it, which is why the
 // combat rules derive a level from the tile instead of trusting the stored one.
-function processPlayer(state, player) {
+function processPlayer(state, player, api) {
   const facts = tileFactsOf(player);
   if (!facts) {
     return;
@@ -366,6 +366,7 @@ function processPlayer(state, player) {
   const wasInWilderness = previous?.inWilderness === true;
   if (facts.inWilderness) {
     enterWilderness(player, facts, wasInWilderness);
+    if (!wasInWilderness) api.emitCustomEvent("persistence:save", { player, reason: "wilderness-entry" });
   } else {
     leaveWilderness(player, facts, wasInWilderness);
   }
@@ -509,7 +510,11 @@ function npcAggressionTolerance(player) {
 function createWildernessArea(api, state) {
   class WildernessArea extends api.core.Area {
     process(mobile) {
-      if (isRealPlayer(mobile)) processPlayer(state, mobile);
+      if (isRealPlayer(mobile)) processPlayer(state, mobile, api);
+    }
+
+    postEnter(mobile) {
+      if (isRealPlayer(mobile)) processPlayer(state, mobile, api);
     }
 
     postLeave(mobile, logout) {

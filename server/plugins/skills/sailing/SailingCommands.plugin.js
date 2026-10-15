@@ -5,11 +5,11 @@ const { BoatMoveMode } = require("../../../src/main/typescript/elvarg/game/conte
 const { packedHeadingToAngle } = require("../../../src/main/typescript/elvarg/game/content/sailing/HeadingUtils");
 const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
-const { content, boatName, randomBoatName } = require("./sailingContent");
-const { sendBoatVarbits } = require("./boatVarbits");
-const { TOOLS_UNLOCKED_ATTRIBUTE, sendToolUnlocks } = require("./cargo");
-const { PARTS, partOptions, requirementsOf } = require("./boatParts");
-const { facilityNamed, facilityRequirements, hotspotsOf, setFacility, FACILITY } = require("./boatFacilities");
+const { content, boatName, randomBoatName } = require("./SailingContent.Sailing");
+const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
+const { TOOLS_UNLOCKED_ATTRIBUTE, sendToolUnlocks } = require("./Cargo.Sailing");
+const { PARTS, partOptions, requirementsOf } = require("./BoatParts.Sailing");
+const { facilityNamed, facilityRequirements, hotspotsOf, setFacility, FACILITY } = require("./BoatFacilities.Sailing");
 const { CacheDefinitions } = require("../../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 const { visitedBoat, refreshShownBoat } = require("./Shipyard.plugin");
 

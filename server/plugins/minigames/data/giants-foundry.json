@@ -1,0 +1,36 @@
+{
+  "_source": "OSRS Wiki, Giants' Foundry (crucible metals, item values) and Smelting (furnace levels); metal order is the crucible's varbits 13931-13936",
+  "crucibleCapacity": 28,
+  "metals": [
+    { "prefix": "Bronze", "bar": "Bronze bar", "tier": 1, "level": 1 },
+    { "prefix": "Iron", "bar": "Iron bar", "tier": 2, "level": 15 },
+    { "prefix": "Steel", "bar": "Steel bar", "tier": 3, "level": 30 },
+    { "prefix": "Mithril", "bar": "Mithril bar", "tier": 4, "level": 50 },
+    { "prefix": "Adamant", "bar": "Adamantite bar", "tier": 5, "level": 70 },
+    { "prefix": "Rune", "bar": "Runite bar", "tier": 6, "level": 85 }
+  ],
+  "_items": "Smithed equipment is worth its smithing cost minus one bar",
+  "items": {
+    "scimitar": 1,
+    "longsword": 1,
+    "full helm": 1,
+    "sq shield": 1,
+    "claws": 1,
+    "warhammer": 2,
+    "battleaxe": 2,
+    "chainbody": 2,
+    "kiteshield": 2,
+    "2h sword": 2,
+    "platelegs": 2,
+    "plateskirt": 2,
+    "platebody": 4
+  },
+  "_orePack": "Ore pack (Giants' Foundry): each of its 30 ores, by the Wiki's rates from 1,913 opened packs",
+  "orePack": [
+    { "name": "Coal", "weight": 81.64 },
+    { "name": "Iron ore", "weight": 10.11 },
+    { "name": "Mithril ore", "weight": 6.45 },
+    { "name": "Adamantite ore", "weight": 1.52 },
+    { "name": "Runite ore", "weight": 0.28 }
+  ]
+}

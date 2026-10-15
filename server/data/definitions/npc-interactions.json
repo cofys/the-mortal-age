@@ -62,5 +62,11 @@
       "method": "core.shops.open",
       "args": { "shopId": 4 }
     }
+  },
+  "3837": {
+    "third_click": {
+      "method": "core.shops.open",
+      "args": { "shopId": 1032 }
+    }
   }
 }

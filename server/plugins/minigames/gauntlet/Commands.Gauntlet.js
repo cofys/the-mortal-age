@@ -1,10 +1,10 @@
 "use strict";
 
-const Shared = require("./GauntletShared");
-const GauntletMap = require("./GauntletMap");
-const Run = require("./GauntletRun");
-const Items = require("./GauntletItems");
-const Rewards = require("./GauntletRewards");
+const Shared = require("./Shared.Gauntlet");
+const GauntletMap = require("./Map.Gauntlet");
+const Run = require("./RunState.Gauntlet");
+const Items = require("./Items.Gauntlet");
+const Rewards = require("./Rewards.Gauntlet");
 
 /**
  * ::gauntletmap [corrupted] [all] - builds a maze (no run) and puts you in its start room, to

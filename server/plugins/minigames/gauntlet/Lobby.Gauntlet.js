@@ -10,10 +10,10 @@
  * completed (varp 2353, the entrance's multiloc).
  */
 
-const Shared = require("./GauntletShared");
-const Run = require("./GauntletRun");
-const Rewards = require("./GauntletRewards");
-const Scoreboard = require("./GauntletScoreboard");
+const Shared = require("./Shared.Gauntlet");
+const Run = require("./RunState.Gauntlet");
+const Rewards = require("./Rewards.Gauntlet");
+const Scoreboard = require("./Scoreboard.Gauntlet");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 

@@ -1,4 +1,4 @@
-import { moveContinuous, WALK_SPEED, MAX_PREDICTION_MS } from "../../../server/plugins/movement/ContinuousMotion.js";
+import { moveContinuous, WALK_SPEED, MAX_PREDICTION_MS } from "../../../server/plugins/world/ContinuousMotion.FreeMovement.js";
 import type { ContinuousMovementInput, ContinuousMovementPosition } from "../../common/movement/ContinuousMovementTypes";
 import { CollisionFlag } from "../../common/CollisionFlag";
 import { deltaToDirection } from "../../common/Direction";

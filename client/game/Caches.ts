@@ -211,6 +211,10 @@ function getRequiredIndexIds(info: CacheInfo): number[] {
             IndexType.OSRS.worldMapGeography,
             IndexType.OSRS.worldMap,
             IndexType.OSRS.worldMapGround,
+            // Graphics defaults (a few hundred bytes): the compass and other default sprites,
+            // and the models of the helm's heading indicator, which have no name to fall
+            // back on (GraphicsDefaults.load).
+            IndexType.OSRS.graphicDefaults,
         );
     }
     // RS newer indices for content types

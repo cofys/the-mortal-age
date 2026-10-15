@@ -16,7 +16,7 @@ Server.installProductionPathResolver();
 
 const { Player } = require("../dist/game/entity/impl/player/Player");
 const { PluginManager } = require("../dist/plugins/PluginManager");
-const { idsToPrune } = require("../plugins/persistence/SqliteSaveHistory");
+const { idsToPrune } = require("../plugins/persistence/SaveHistory.SqlitePlayerPersistence");
 const Autosave = require("../plugins/persistence/Autosave.plugin");
 const SaveHistory = require("../plugins/commands/SaveHistory.plugin");
 
@@ -178,7 +178,7 @@ test("::snapshots and ::rollback on a player who is online log them out", async 
 });
 
 test("autosave: each player is due once per interval, staggered by name, within a per-tick budget", async () => {
-  const { saveDuePlayers: tick, schedule, forget, offsetOf, dueAt, INTERVAL_TICKS, MAX_SAVES_PER_TICK } = Autosave._test;
+  const { saveDuePlayers: tick, schedule, forget, offsetOf, intervalOf, dueAt, INTERVAL_TICKS, MIN_INTERVAL_TICKS, MAX_SAVES_PER_TICK } = Autosave._test;
   const saved = [];
   Autosave.register({
     core: { GameConstants: { PLAYER_PERSISTENCE: { save: (p, reason) => saved.push([p.getUsername(), reason]) } } },
@@ -186,15 +186,18 @@ test("autosave: each player is due once per interval, staggered by name, within 
     onPlayerLogin() {},
     onPlayerLogout() {},
   });
-  assert.equal(INTERVAL_TICKS, 1500, "15 minutes");
+  assert.equal(MIN_INTERVAL_TICKS, 500, "5 minutes minimum");
+  assert.equal(INTERVAL_TICKS, 1000, "10 minutes maximum");
 
   const one = player("Erin");
   const skipped = player("Bot 2");
   skipped.setAttribute("bot-skip-persistence", true);
   schedule({ player: one });
+  assert.ok(dueAt.get(one) - Autosave._test.tick >= MIN_INTERVAL_TICKS);
+  assert.ok(dueAt.get(one) - Autosave._test.tick <= INTERVAL_TICKS);
   schedule({ player: skipped });
   for (let i = 0; i < INTERVAL_TICKS * 2; i++) tick();
-  assert.deepEqual(saved, [["Erin", "autosave"], ["Erin", "autosave"]], "twice in two intervals; a skipped bot never");
+  assert.deepEqual(saved, Array.from({ length: Math.floor(INTERVAL_TICKS * 2 / intervalOf(one)) }, () => ["Erin", "autosave"]));
   forget({ player: one });
   forget({ player: skipped });
 
@@ -278,4 +281,64 @@ test("a writer that dies is restarted, and the saves it hadn't written are sent 
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.notEqual(persistence.writer, old, "a new writer");
   assert.equal(await savedGold("Iris"), 11);
+});
+
+test("critical saves coalesce after the operation and flush drains them before shutdown", async () => {
+  const p = player("Jade");
+  setGold(p, 100);
+  persistence.requestSave(p, "quest-completion");
+  persistence.requestSave(p, "collection-log-unlock");
+  setGold(p, 200);
+  assert.equal(persistence.exists("Jade"), false, "no partial state is snapshotted during the operation");
+  await persistence.flush();
+  assert.equal(await savedGold("Jade"), 200);
+  assert.deepEqual(await historyRows("jade"), ["quest-completion,collection-log-unlock"]);
+  setGold(p, 300);
+  persistence.requestSave(p, "death");
+  persistence.cancelRequestedSave(p);
+  persistence.save(p, "logout");
+  await persistence.flush();
+  assert.deepEqual(await historyRows("jade"), ["quest-completion,collection-log-unlock", "logout"]);
+});
+
+test("offline purchases write the updated account and keep a history entry", async () => {
+  const p = player("Kara");
+  setGold(p, 50);
+  persistence.save(p, "logout");
+  await persistence.flush();
+  assert.equal(await persistence.updateOffline("Kara", save => {
+    save.getInventory()[0].setAmount(75);
+  }), true);
+  assert.equal(await savedGold("Kara"), 75);
+  assert.deepEqual(await historyRows("kara"), ["logout", "offline-purchase"]);
+});
+
+test("offline delivery refuses an online account without applying the purchase", async () => {
+  const { World } = require("../dist/game/World");
+  const lookup = World.getPlayerByName;
+  World.getPlayerByName = () => player("Online");
+  let changed = false;
+  try {
+    await assert.rejects(persistence.updateOffline("Online", () => { changed = true; }), /online account/);
+    assert.equal(changed, false);
+  } finally {
+    World.getPlayerByName = lookup;
+  }
+});
+
+test("repeated writer failures never fall back to synchronous game-thread writes", async () => {
+  const p = player("Lina");
+  persistence.save(p, "logout");
+  await persistence.flush();
+  persistence.writerFailures = 2;
+  setGold(p, 20);
+  persistence.save(p, "valuable-item-discard");
+  await persistence.writer.terminate();
+  assert.equal(persistence.writer, null);
+  await assert.rejects(persistence.flush(), /writer unavailable/);
+  assert.ok(persistence.unwritten.has("lina"));
+  setGold(p, 30);
+  persistence.save(p, "logout");
+  assert.ok(persistence.writer, "a new save retries the worker with the queued snapshots");
+  assert.equal(await savedGold("Lina"), 30);
 });

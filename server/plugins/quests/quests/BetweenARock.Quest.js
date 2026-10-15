@@ -1055,10 +1055,10 @@ module.exports = function registerBetweenARockQuest(api) {
 
   api.persistAttribute(GOLD_SHOWN_ATTRIBUTE);
   api.persistAttribute(SOLVED_ATTRIBUTE);
-  api.persistAttribute(INSIDE_ATTRIBUTE);
+  api.persistAttribute(INSIDE_ATTRIBUTE, false);
   api.persistAttribute(FIRED_ATTRIBUTE);
   api.persistAttribute(AVATAR_KILLED_ATTRIBUTE);
-  api.persistAttribute(MINE_TICKS_ATTRIBUTE);
+  api.persistAttribute(MINE_TICKS_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
     key: "between_a_rock",

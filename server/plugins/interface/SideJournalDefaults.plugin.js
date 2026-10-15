@@ -131,7 +131,7 @@ module.exports = {
           mountSideJournalContent(player, INTERFACE_ACHIEVEMENT_DIARY_ID, SIDE_JOURNAL_ACHIEVEMENT_DIARY_TAB);
           return true;
         case ROW_COLLECTION_LOG:
-          // The collection log plugin owns the log (plugins/collectionlog/).
+          // The collection log plugin owns the log (plugins/achievements/collectionlog/).
           pluginApi?.emitCustomEvent("collection-log:open", { player });
           return true;
         case ROW_PLAYTIME: {
@@ -146,7 +146,7 @@ module.exports = {
           return true;
         }
         case ROW_COMBAT_TASKS:
-          // Combat Achievements own their screens (plugins/combatachievements/).
+          // Combat Achievements own their screens (plugins/achievements/combatachievements/).
           pluginApi?.emitCustomEvent("combat-achievements:open", { player });
           return true;
         default:

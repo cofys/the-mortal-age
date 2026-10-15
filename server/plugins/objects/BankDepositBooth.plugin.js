@@ -175,6 +175,9 @@ module.exports = {
     pluginApi = api;
     api.onObjectInteraction("Bank deposit box", { Deposit: openDepositBox });
     api.onObjectInteraction("Bank Deposit Box", { Deposit: openDepositBox });
+    // Quest-owned deposit boxes can open the same native bank-deposit modal
+    // after validating their own scene and progression gates.
+    api.onCustomEvent("bank:open-deposit-box", openDepositBox);
 
     api.onInterfaceActionClick((event) => {
       if (handleDepositContainerAction(event.player, event.buttonId, event.itemId, event.slot, event.action)) {

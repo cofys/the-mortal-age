@@ -1,7 +1,7 @@
 # Agility
 
 `Agility.plugin.js` plays the courses (`courses/`, code) and the shortcuts
-(`plugins/skills/data/agility-shortcuts.json`, data) through `ObstacleRunner.js`, a step list run one
+(`plugins/skills/data/agility-shortcuts.json`, data) through `ObstacleRunner.Agility.js`, a step list run one
 game tick at a time.
 
 ## Shortcuts
@@ -28,7 +28,7 @@ and one way to play it:
 | `steps` | A step list (below) |
 | `between` | A two-way crossing: `ends` (two tiles), optional `via` (tiles in between, listed from the first end) and `cross`, the steps from one end to the other, or `{ "forward": [...], "back": [...] }` when the two directions differ |
 | `stile` | A two-tile stile: `axis` (`"x"`/`"y"`), `before`, `after`, `anim` |
-| `script` | A named script from `shortcuts/<Region>.js` or `shortcuts/Common.js`, given the entry's `params`, for what a template can't say (which way the player faces, which rock they clicked). Its `route`, `precondition` and `steps` replace the data's |
+| `script` | A named script from `shortcuts/<Region>.Agility.js` or `shortcuts/Common.Agility.js`, given the entry's `params`, for what a template can't say (which way the player faces, which rock they clicked). Its `route`, `precondition` and `steps` replace the data's |
 | `refuse` | A message: the loc can't be used from there |
 
 ### Requirements
@@ -53,10 +53,10 @@ With `low` and `high`, success is the OSRS skilling roll the Wiki's success char
 
 ### Steps
 
-The runner's steps (see the top of `ObstacleRunner.js`): `anim`, `render`, `walk`, `move`, `tele`,
+The runner's steps (see the top of `ObstacleRunner.Agility.js`): `anim`, `render`, `walk`, `move`, `tele`,
 `wait`, `face`, `faceDir`, `hit`, `msg`, `sound`, `gfx`, `objAnim`, `varbit`. In the data:
 
-- **Animations by name**, from `constants.js` (`Anim`) and `shortcuts/builders.js` (`ShortcutAnim`):
+- **Animations by name**, from `Constants.Agility.js` (`Anim`) and `shortcuts/Builders.Agility.js` (`ShortcutAnim`):
   `{ "anim": "CLIMB_ROCKS" }`; `-1` resets.
 - **Builders as macros**: `{ "use": "hops", "args": ["object", "to"] }`. `climbOver`, `jump`,
   `hops`, `pipe`, `tunnel`, `crevice`, `crawlDown`, `crawlUp`, `ropeSwing`, `hurdle`, `climb`.

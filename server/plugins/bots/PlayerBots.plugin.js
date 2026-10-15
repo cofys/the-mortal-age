@@ -5,20 +5,20 @@ const { ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const {
   resetMovementState,
   initPlayerBotStateCoreAccess,
-} = require("./behaviours/state/PlayerBotState");
-const { registerBotCommands } = require("./runtime/registerBotCommands");
-const { registerBotEvents } = require("./runtime/registerBotEvents");
-const { createBotPluginLogging } = require("./runtime/BotPluginLogging");
-const { bootPlayerBotsRuntime } = require("./runtime/BotPluginBoot");
-const { createBotBenchmark } = require("./runtime/BotBenchmark");
-const { startBotSites } = require("./brain/BotSiteSpawner");
-const { setActiveBotRuntime } = require("./runtime/BotRuntimeRegistry");
-const { PVP_BOT_SETTINGS } = require("./behaviours/pvp/WildernessHotspotRegistry");
+} = require("./behaviours/state/State.PlayerBots");
+const { registerBotCommands } = require("./runtime/RegisterBotCommands.PlayerBots");
+const { registerBotEvents } = require("./runtime/RegisterBotEvents.PlayerBots");
+const { createBotPluginLogging } = require("./runtime/PluginLogging.PlayerBots");
+const { bootPlayerBotsRuntime } = require("./runtime/PluginBoot.PlayerBots");
+const { createBotBenchmark } = require("./runtime/Benchmark.PlayerBots");
+const { startBotSites } = require("./brain/SiteSpawner.PlayerBots");
+const { setActiveBotRuntime } = require("./runtime/RuntimeRegistry.PlayerBots");
+const { PVP_BOT_SETTINGS } = require("./behaviours/pvp/WildernessHotspotRegistry.PlayerBots");
 const {
   registerBotStatusInteractions,
-} = require("./runtime/registerBotStatusInteractions");
-const { registerAiBots } = require("./ai/registerAiBots");
-const { AI_BOT_ATTRIBUTE } = require("./ai/AiBotConfig");
+} = require("./runtime/RegisterBotStatusInteractions.PlayerBots");
+const { registerAiBots } = require("./ai/RegisterAiBots.PlayerBots");
+const { AI_BOT_ATTRIBUTE } = require("./ai/Config.PlayerBots");
 
 const BOT_BEHAVIOR_MODE = Object.freeze({
   ROAMING: "roaming",

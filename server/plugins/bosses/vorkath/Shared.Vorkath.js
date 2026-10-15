@@ -24,6 +24,8 @@
 const SLEEPING_ID = 8059;
 /** vorkath_sleeping_noop: what she is while she rises, between the poke and waking. */
 const WAKING_ID = 8058;
+/** Dragon Slayer II quest form; Vorkath's post-quest form is stronger. */
+const QUEST_AWAKE_ID = 8060;
 const AWAKE_ID = 8061;
 const SPAWN_ID = 8063;
 
@@ -31,6 +33,7 @@ const SIZE = 7;
 const SPAWN_TILE = [2269, 4062, 0];
 const TELEPORT_TILE = [2272, 4054];
 const MAX_HITPOINTS = 750;
+const QUEST_MAX_HITPOINTS = 460;
 const SPAWN_HITPOINTS = 38;
 
 const ATTACK_SPEED_TICKS = 5;
@@ -80,6 +83,33 @@ const ATTR_NEXT_SPECIAL = "vorkath:next-special";
 const ATTR_PHASE = "vorkath:phase";
 const ATTR_WAKE_UNTIL = "vorkath:wake-until";
 const ATTR_FIRST_ATTACK_AT = "vorkath:first-attack-at";
+const ATTR_AWAKE_ID = "vorkath:awake-id";
+
+function awakeIdForPlayer(player) {
+  return Number(player?.getAttribute?.("quest.dragon_slayer_ii.stage") ?? 0) >= 14
+    ? AWAKE_ID
+    : QUEST_AWAKE_ID;
+}
+
+function awakeIdForNpc(npc) {
+  return Number(npc?.getAttribute?.(ATTR_AWAKE_ID) ?? AWAKE_ID);
+}
+
+function isAwakeId(id) {
+  return id === QUEST_AWAKE_ID || id === AWAKE_ID;
+}
+
+function isAwakeNpc(npc) {
+  return isAwakeId(npc?.getId?.());
+}
+
+function maxHitpointsForId(id) {
+  return id === QUEST_AWAKE_ID ? QUEST_MAX_HITPOINTS : MAX_HITPOINTS;
+}
+
+function maxHitpointsForNpc(npc) {
+  return maxHitpointsForId(awakeIdForNpc(npc));
+}
 
 const PHASE_ACTIVE = "active";
 const PHASE_ACID = "acid";
@@ -320,12 +350,14 @@ function acidPoolTiles(bossX, bossY, playerX, playerY, isWalkable, pick) {
 module.exports = {
   SLEEPING_ID,
   WAKING_ID,
+  QUEST_AWAKE_ID,
   AWAKE_ID,
   SPAWN_ID,
   SIZE,
   SPAWN_TILE,
   TELEPORT_TILE,
   MAX_HITPOINTS,
+  QUEST_MAX_HITPOINTS,
   SPAWN_HITPOINTS,
   ATTACK_SPEED_TICKS,
   ATTACK_DISTANCE,
@@ -355,6 +387,13 @@ module.exports = {
   ATTR_PHASE,
   ATTR_WAKE_UNTIL,
   ATTR_FIRST_ATTACK_AT,
+  ATTR_AWAKE_ID,
+  awakeIdForPlayer,
+  awakeIdForNpc,
+  isAwakeId,
+  isAwakeNpc,
+  maxHitpointsForId,
+  maxHitpointsForNpc,
   PHASE_ACTIVE,
   PHASE_ACID,
   PHASE_SPAWN,

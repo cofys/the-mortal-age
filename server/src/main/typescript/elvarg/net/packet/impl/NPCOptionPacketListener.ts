@@ -103,8 +103,13 @@ export class NPCOptionPacketListener {
     if (index < 0 || index >= World.getNpcs().capacityReturn()) return false;
     const npc = World.getNpcs().get(index);
     const spell = CombatSpells.getCombatSpell(spellId);
-    if (!npc || !spell || !player.getLocation().isWithinDistance(npc.getLocation(), 24) ||
-        !npc.getCurrentDefinition?.(player)?.isAttackable?.() || npc.getHitpoints?.() <= 0) {
+    if (!npc || !spell || !player.getLocation().isWithinDistance(npc.getLocation(), 24) || npc.getHitpoints?.() <= 0) {
+      player.getMovementQueue().reset();
+      return false;
+    }
+    const areaPermission = (npc.getPrivateArea?.() ?? npc.getArea?.())?.canCastOnNpc?.(player, npc, spell);
+    const allowed = areaPermission ?? !!npc.getCurrentDefinition?.(player)?.isAttackable?.();
+    if (!allowed) {
       player.getMovementQueue().reset();
       return false;
     }

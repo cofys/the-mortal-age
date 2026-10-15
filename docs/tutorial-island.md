@@ -5,7 +5,7 @@
 - **Data:** `server/plugins/areas/data/tutorial-island.json`.
 - **Ironman tutor:** `server/plugins/modes/ironman/Setup.Ironman.js` (see [ironman.md](ironman.md)).
 
-The plugin is off in the shipped `world.json` (`disabledPlugins`). A world turns it on in its `world.local.json`.
+The plugin is off in the shipped `world.json` (`"plugins": { "TutorialIsland": false }`). A world turns it on with `"plugins": { "TutorialIsland": true }` in its `world.local.json`.
 
 ## Progress
 

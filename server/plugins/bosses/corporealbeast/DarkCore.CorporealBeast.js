@@ -18,7 +18,7 @@
  * Estimate (the Wiki only says "very slowly"): a stunned core leeches every 10 ticks.
  */
 
-const Shared = require("./CorpShared");
+const Shared = require("./Shared.CorporealBeast");
 
 const SPAWN = { chance: 8, minHit: 32, lowHitpoints: 1000, attackDelay: 4 };
 const LEECH = { min: 5, max: 13, every: 2, stunnedEvery: 10 };

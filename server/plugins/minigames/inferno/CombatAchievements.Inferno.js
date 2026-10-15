@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The Inferno's Combat Achievements (plugins/combatachievements/). A run is watched from wave 1:
+ * The Inferno's Combat Achievements (plugins/achievements/combatachievements/). A run is watched from wave 1:
  * Jal-ImKot digging, a pillar brought down before the Jad waves, the player's hitpoints, a
  * twisted bow worn, the player's spells and ranged or magic attacks before Zuk's wave, TzKal-Zuk
  * attacking them, JalTok-Jad damage, the Jads of wave 68 and the one Zuk summons. Winning counts
@@ -9,7 +9,7 @@
  * logout is not watched from its start, so only its completion counts.
  */
 
-const { JAD_WAVE, TRIPLE_JAD_WAVE, ZUK_WAVE } = require("./InfernoWaves");
+const { JAD_WAVE, TRIPLE_JAD_WAVE, ZUK_WAVE } = require("./Waves.Inferno");
 
 const WASNT_EVEN_CLOSE_HITPOINTS = 50;
 const SPEED_RUNNER_SECONDS = 65 * 60;
@@ -102,7 +102,7 @@ function finish(player, won, completions) {
 /** At login: the completion count, so earlier runs finish their kill-count tasks. */
 function answerKillCount({ player, counts }) {
   // Required here: the run requires this unit.
-  const completions = require("./InfernoRun").completions(player);
+  const completions = require("./Run.Inferno").completions(player);
   if (completions > 0) counts["TzKal-Zuk"] = completions;
 }
 

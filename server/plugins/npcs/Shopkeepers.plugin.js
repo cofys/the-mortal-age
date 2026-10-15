@@ -37,7 +37,6 @@ const POINT_CURRENCIES = [
   "Bounty Hunter Points",
   "Deadman Points",
   "event points",
-  "Foundry Reputation",
   "Honour points",
   "Last Man Standing Points",
   "League Points",

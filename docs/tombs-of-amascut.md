@@ -6,10 +6,10 @@ The whole raid, from the Jaltevas pyramid lobby to Osmumten's burial chamber. It
 
 | File | What it owns |
 | --- | --- |
-| `ToaShared.js` | Room table (spawns, challenge floors, bounds), path table, ids, varbits, and helpers such as fades, tile graphics, projectiles and knockback. |
-| `ToaInvocations.js` | Invocation bitmaps read from cache structs (params 1159/1161/1162), raid level, mode, team lives, time limit and supply factor. |
-| `ToaParties.js` | Lobby parties: applications, kicks, the party list and party settings. |
-| `ToaRaid.js` | `Raid` and the `Room` base class: instancing, scaling, points, deaths, team wipes, the HUD and completion. |
+| `Shared.TombsOfAmascut.js` | Room table (spawns, challenge floors, bounds), path table, ids, varbits, and helpers such as fades, tile graphics, projectiles and knockback. |
+| `Invocations.TombsOfAmascut.js` | Invocation bitmaps read from cache structs (params 1159/1161/1162), raid level, mode, team lives, time limit and supply factor. |
+| `Parties.TombsOfAmascut.js` | Lobby parties: applications, kicks, the party list and party settings. |
+| `RaidState.TombsOfAmascut.js` | `Raid` and the `Room` base class: instancing, scaling, points, deaths, team wipes, the HUD and completion. |
 | `Lobby.*` | Pyramid entry and exit, the grouping obelisk (772/774), the invocation board (776) and invocation presets. |
 | `Raid.*` | Barriers, entries, exits, teleport crystals, Osmumten, safe deaths, ghosts, damage points and the invocation punishments. |
 | `Nexus.*` | Path choice and path levels, the helpful spirit's supplies (777) and the supplies bag (778). |
@@ -18,8 +18,8 @@ The whole raid, from the Jaltevas pyramid lobby to Osmumten's burial chamber. It
 | `Het.*`, `Akkha.*` | Path of Het: the beam and mirror puzzle and Akkha. |
 | `Crondis.*`, `Zebak.*` | Path of Crondis: the palm-watering puzzle and Zebak. |
 | `Apmeken.*`, `BaBa.*` | Path of Apmeken: Apmeken's Sight and Ba-Ba. |
-| `Wardens.*`, `ToaWardensData.js` | The Wardens: obelisk and core phases (WARDENS_P1) and the final phase (WARDENS_P3). |
-| `Rewards.*`, `ToaRewards.js` | The burial chamber, loot rolls, the loot interface (771) and the lobby retrieval chest. |
+| `Wardens.*`, `WardensData.TombsOfAmascut.js` | The Wardens: obelisk and core phases (WARDENS_P1) and the final phase (WARDENS_P3). |
+| `Rewards.*`, `Loot.TombsOfAmascut.js` | The burial chamber, loot rolls, the loot interface (771) and the lobby retrieval chest. |
 | `Items.*` | Masori fortifying, Armadyl to Armadylean plates, Elidinis' ward (f), Thread of Elidinis and keris jewels. |
 
 Tumeken's shadow is a weapon used everywhere, so it lives in `plugins/items/TumekensShadow.plugin.js` ([tumekens-shadow.md](tumekens-shadow.md)). The raid only answers its `toa:in-tombs` question (`Raid.*`), for the passive's ×4.
@@ -55,7 +55,7 @@ These follow the wiki's *Tombs of Amascut* mechanics:
 
 The OSRS Wiki and the cache weren't reachable when this was first written, so Near-Reality's ToA code was the behaviour oracle. The following still come from it alone, where the Wiki gives no numbers (see *Checked against the Wiki and the cache*):
 
-- Every boss's attack timings, special-attack cycles, tile patterns and base damage numbers. This includes the Wardens' orb paths, rotating-blade tiles, wheel, isolation, skull-bomb and floor-collapse tables (`ToaWardensData.js`), and Akkha's orb paths and quadrants.
+- Every boss's attack timings, special-attack cycles, tile patterns and base damage numbers. This includes the Wardens' orb paths, rotating-blade tiles, wheel, isolation, skull-bomb and floor-collapse tables (`WardensData.TombsOfAmascut.js`), and Akkha's orb paths and quadrants.
 - Wardens phase two: only the Warden's current style (magic or ranged) breaks its shield. Core damage passes through ×5, and the core stays out for 21/29/37/45/53 ticks depending on remaining health.
 - Points multipliers on Warden NPCs: obelisk 1.5, Warden 2, final Warden 2.5.
 - The common loot table's items and divisors, fossilised dung below 1,500 points, and the deathless kits and remnants. (The quantity factor above raid level 300 matches the Wiki.)

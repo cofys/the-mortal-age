@@ -7,7 +7,7 @@ const { BoatManager } = require("../../../src/main/typescript/elvarg/game/conten
 const { BoatMoveMode } = require("../../../src/main/typescript/elvarg/game/content/sailing/Boat");
 const { World } = require("../../../src/main/typescript/elvarg/game/World");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
-const { VARBIT, MOVE_MODE, content, setVarbit } = require("./sailingContent");
+const { VARBIT, MOVE_MODE, content, setVarbit } = require("./SailingContent.Sailing");
 const { currentWind, windXpFactor } = require("./SailingWind.plugin");
 
 const WAYPOINT_ATTRIBUTE = "sailing:waypoint";

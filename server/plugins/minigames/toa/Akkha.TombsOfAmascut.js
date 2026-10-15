@@ -10,8 +10,8 @@
  * Wiki: https://oldschool.runescape.wiki/w/Akkha
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 const UNSTABLE_ORB_PATHS = [
   [3670, 5405, "NORTH_EAST"], [3670, 5406, "NORTH_EAST"], [3670, 5406, "EAST"], [3670, 5407, "NORTH_EAST"],

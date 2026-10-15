@@ -20,7 +20,7 @@ const Flares = require("./Flares.Yama");
 const Hazards = require("./Hazards.Yama");
 const Attacks = require("./Attacks.Yama");
 const Domain = require("./Domain.Yama");
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
 const OVERLAY_ATMOSPHERE_UID = (161 << 16) | 1;
 const FADE_OVERLAY = 174;

@@ -8,9 +8,9 @@
  */
 
 const Shared = require("./Shared.BrimhavenAgilityArena");
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
-/** Animation ids as server/plugins/skills/agility/constants.js names them. */
+/** Animation ids as server/plugins/skills/agility/Constants.Agility.js names them. */
 const ANIM = {
   BALANCE_WALK: 762,
   LEDGE_WALK: 756,

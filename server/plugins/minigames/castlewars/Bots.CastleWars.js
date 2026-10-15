@@ -21,10 +21,10 @@
 
 const { ActionNode, BotController, SelectorNode } = require("../../../src/main/typescript/elvarg/game/bot/BehaviorTree");
 const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
-const { buildRoamingPvpMetadata } = require("../../bots/behaviours/pvp/PvpAssignment");
-const { applyGeneratedPvpLoadout } = require("../../bots/behaviours/policies/PvpLoadoutPolicy");
-const { PVP_LOADOUT_DEFINITIONS, isLoadoutAvailable } = require("../../bots/behaviours/pvp/PvpLoadoutRegistry");
-const { getPvpProfile } = require("../../bots/behaviours/pvp/PvpProfileRegistry");
+const { buildRoamingPvpMetadata } = require("../../bots/behaviours/pvp/PvpAssignment.PlayerBots");
+const { applyGeneratedPvpLoadout } = require("../../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
+const { PVP_LOADOUT_DEFINITIONS, isLoadoutAvailable } = require("../../bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots");
+const { getPvpProfile } = require("../../bots/behaviours/pvp/PvpProfileRegistry.PlayerBots");
 const FoodPlugin = require("../../items/Food.plugin");
 
 

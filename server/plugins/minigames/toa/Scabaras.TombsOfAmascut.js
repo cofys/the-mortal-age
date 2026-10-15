@@ -7,8 +7,8 @@
  * Wiki: https://oldschool.runescape.wiki/w/Path_of_Scabaras#Puzzle_room
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 const PUZZLE = { LIGHT: "LIGHT", SUM: "SUM", PILLAR: "PILLAR", MEMORY: "MEMORY" };
 const PUZZLE_TYPES = Object.values(PUZZLE);

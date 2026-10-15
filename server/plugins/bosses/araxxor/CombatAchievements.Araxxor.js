@@ -1,5 +1,5 @@
 /**
- * Araxxor's Combat Achievements (plugins/combatachievements/) that her fight decides. The kill
+ * Araxxor's Combat Achievements (plugins/achievements/combatachievements/) that her fight decides. The kill
  * count is Combat Achievements' own: a kill is reported with "combat-achievements:kill", and the
  * total it answers is what the kill message shows (and the boss page's varp). Each fight is
  * watched from her spawn: the damage Perfect Araxxor forbids, hits on her while enraged, venom

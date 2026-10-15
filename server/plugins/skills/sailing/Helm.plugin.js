@@ -25,11 +25,16 @@ const {
   isHelm,
   boatAnim,
   boatType,
-} = require("./sailingContent");
-const { windFor, canTrim, trimSails, isTrimmed } = require("./trim");
+} = require("./SailingContent.Sailing");
+const { windFor, canTrim, trimSails, isTrimmed } = require("./Trim.Helm");
 const { reportWind } = require("./SailingWind.plugin");
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
+const {
+  INTERACTION_WORLD_DEFAULT,
+  TileInteractionMode,
+  EntityInteractionMode,
+} = require("../../../src/main/typescript/elvarg/net/protocol/InteractionMode");
 
 const HELM_LOCKED_IN = 3;
 /** While navigating, the helm and the helmsman replay their loop every 10 ticks (rsprox). */
@@ -138,11 +143,32 @@ function faceBow(player) {
   player.setPositionToFace(new Location(at.getX(), at.getY() - 3, at.getZ()));
 }
 
+/**
+ * At the helm a click on the sea steers: live sets heading as the default interaction mode and
+ * walk for the boat's own world, on the tick the helm is taken (rsprox, every revision since 235).
+ */
+function steerByClicks(player, boat) {
+  player.getPacketSender()
+    .sendInteractionMode(INTERACTION_WORLD_DEFAULT, TileInteractionMode.Heading, EntityInteractionMode.All)
+    .sendInteractionMode(boat.entityIndex, TileInteractionMode.Walk, EntityInteractionMode.All);
+}
+
+/**
+ * Leaving the helm resets the boat's world and sets walk again, before the helm's varbits (live
+ * sends the same set twice in a row; once does the same).
+ */
+function walkByClicks(player, boat) {
+  player.getPacketSender()
+    .sendResetInteractionMode(boat.entityIndex)
+    .sendInteractionMode(INTERACTION_WORLD_DEFAULT, TileInteractionMode.Walk, EntityInteractionMode.All);
+}
+
 function takeHelm(player, boat) {
   boat.helmPlayerId = player.getIndex();
   boat.heading = boat.angle;
   const sender = player.getPacketSender();
   setVarbit(player, VARBIT.FACILITY_LOCKEDIN, HELM_LOCKED_IN);
+  steerByClicks(player, boat);
   playHelm(player, boat, "active");
   faceBow(player);
   loopHelm(player, boat);
@@ -163,6 +189,7 @@ function leaveHelm(player, boat) {
   boat.helmPlayerId = undefined;
   boat.moveMode = BoatMoveMode.Stopped;
   boat.heading = boat.angle;
+  walkByClicks(player, boat);
   setVarbit(player, VARBIT.FACILITY_LOCKEDIN, 0);
   const inactive = boatAnim(boat, "helm")?.inactive;
   if (inactive !== undefined) animateDeckLocs(player, boat, isHelm, inactive);
@@ -266,6 +293,14 @@ function toggleHelm({ player, object }) {
   }
 }
 
+/**
+ * Leaving the boat from the helm (Escape, a teleport) never calls leaveHelm; a logout is set back
+ * to walk with every other logout (PlayerSession.logout).
+ */
+function walkAfterLeaving({ player, boat, reason, atHelm }) {
+  if (atHelm && reason !== "logout") walkByClicks(player, boat);
+}
+
 /** Escape sinks the boat, so it asks first; the choice is checked again in case they left. */
 function escapeBoat(api, { player }) {
   if (!Sailing.instanceAboard(player)) return;
@@ -327,7 +362,7 @@ function keepFacingBow(player, boat) {
   if (boat.helmPlayerId === player.getIndex()) faceBow(player);
 }
 
-/** The sail cloth's Trim: catches a gust for whoever is at the helm (trim.js). */
+/** The sail cloth's Trim: catches a gust for whoever is at the helm (Trim.Helm.js). */
 function trim({ player }) {
   const boat = Sailing.instanceAboard(player);
   if (!boat) return;
@@ -360,6 +395,7 @@ module.exports = {
     });
     api.onObjectInteraction("Sails", { Trim: trim, Set: adjustSails("full"), "Un-set": adjustSails("stop") });
     api.onObjectRoute(routeOnDeck);
+    api.onCustomEvent("sailing:left", walkAfterLeaving);
     api.onInterfaceActionClick(clickSailButton);
     BoatManager.onHeadingSet(raiseSailForHeading);
   },

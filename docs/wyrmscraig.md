@@ -2,7 +2,7 @@
 
 Three plugins cover Wyrmscraig's content:
 - **`Wyrmscraig`** (`server/plugins/areas/Wyrmscraig.plugin.js`, units in `wyrmscraig/`, data in `wyrmscraig.json`): open access to Fallen From Grace's finished state, and the cave under Ardeaglais.
-- **Agility's shortcuts** (`server/plugins/skills/agility/shortcuts/Wyrmscraig.js`): the basalt stepping stones and the rocks up to the cathedral.
+- **Agility's shortcuts** (`server/plugins/skills/agility/shortcuts/Wyrmscraig.Agility.js`): the basalt stepping stones and the rocks up to the cathedral.
 - **`MadAngel`** (`server/plugins/bosses/MadAngel.plugin.js`, units in `madangel/`, data in `mad-angel.json`): the cathedral's doors and broken pew, a cathedral instance per player, the fight and the kill.
 
 ## Sources

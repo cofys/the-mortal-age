@@ -35,8 +35,6 @@ const PRAYERS_DISABLED_MESSAGE = "<col=ff3045>Your prayers have been disabled!</
 const IMMUNE_MESSAGE = "The dragon is currently immune to your attacks.";
 const IMMUNE_TOLD_ATTRIBUTE = "vorkath:immune-told";
 const IMMUNE_MESSAGE_SPACING = 5;
-/** CombatSpells.CRUMBLE_UNDEAD spell id: the spawn's instant kill. */
-const CRUMBLE_UNDEAD_SPELL_ID = 1169;
 /** Multi-hour poison immunity: Vorkath is immune outright (Wiki) and the engine has no
  * innate NPC immunity, so hits keep the timer topped up (see modifyHit). */
 const POISON_IMMUNITY_SECONDS = 3600;
@@ -193,7 +191,7 @@ function modifyHit(event) {
     crumbleSpawn(npc, hit);
     return;
   }
-  if (npcId !== Shared.AWAKE_ID) return;
+  if (!Shared.isAwakeId(npcId)) return;
   keepPoisonImmune(npc);
   const hits = hit.getHits?.() ?? [];
   if (hits.length === 0) return;
@@ -256,7 +254,7 @@ function crumbleSpawn(npc, hit) {
   const attacker = hit.getAttacker?.();
   if (!attacker?.isPlayer?.()) return;
   const spellId = attacker.getCombat?.().getCastSpell?.()?.spellId?.() ?? null;
-  if (spellId !== CRUMBLE_UNDEAD_SPELL_ID) return;
+  if (spellId !== core.CombatSpells.CRUMBLE_UNDEAD.spellId()) return;
   const hits = hit.getHits?.() ?? [];
   if (hits.length === 0) return;
   const hp = npc.getHitpoints?.() ?? 0;
@@ -303,7 +301,7 @@ function combatClass() {
       this.attack = null;
       if (!character || !target) return;
       const npc = character.getAsNpc();
-      if (!npc || npc.getId() !== Shared.AWAKE_ID) return;
+      if (!npc || !Shared.isAwakeNpc(npc)) return;
       // Her first attack comes 6 ticks after she wakes (captured), even if hit sooner.
       if (core.World.getProcessCycle() < (npc.getAttribute(Shared.ATTR_FIRST_ATTACK_AT) ?? 0)) {
         character.getCombat().setAttackDelay(1);
@@ -381,7 +379,7 @@ function attach(pluginApi) {
   CombatFactory = pluginApi.getCombatFactory();
   pluginApi.onNpcHitModify(modifyHit);
   pluginApi.registerNpcCombatMethodProvider(
-    [core.NpcIdentifiers.VORKATH_5],
+    [core.NpcIdentifiers.VORKATH_4, core.NpcIdentifiers.VORKATH_5],
     combatClass(),
     { singleton: false },
   );

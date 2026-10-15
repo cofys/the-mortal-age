@@ -99,6 +99,7 @@ export interface PluginObjectInteractionEvent {
   definition?: ObjectDefinition;
   objectId: number;
   clickType: number;
+  option?: string;
   location: { x: number; y: number; z: number };
   sourceLocation?: { x: number; y: number; z: number };
   handled: boolean;
@@ -112,6 +113,12 @@ export interface PluginObjectRouteEvent {
   clickType: number;
   sourceLocation: { x: number; y: number; z: number };
   destination: { x: number; y: number; z: number } | null;
+}
+
+export interface PluginWalkRouteEvent {
+  player: any;
+  destination: { x: number; y: number; z: number };
+  handled: boolean;
 }
 
 export interface PluginNpcInteractionEvent {
@@ -387,6 +394,22 @@ export interface PluginPlayerDeathItemDropEvent {
   /** Prevent the normal floor-item spawn without stopping later death-drop hooks. */
   suppressDefaultDrop: boolean;
   handled: boolean;
+}
+
+/**
+ * Everything a death is about to lose, once, after the per-item `onPlayerDeathItemDrop` hooks
+ * (also when that is nothing).
+ * A plugin takes items by removing them from `items` (headed for the floor) or `untradeables`
+ * (otherwise kept); whatever is left falls to the floor or is kept, as without the hook.
+ */
+export interface PluginPlayerDeathDropsEvent {
+  player: any;
+  killer: any;
+  location: any;
+  items: any[];
+  untradeables: any[];
+  /** Item ids per slot before the death emptied them (-1 for an empty slot). */
+  layout: { inventory: number[]; equipment: number[] };
 }
 
 export interface PluginCanEquipEvent {
@@ -788,6 +811,7 @@ export interface PluginApi {
   onPathBlocked(handler: (event: PluginPathBlockedEvent) => void): void;
   onPlayerPathBlocked(handler: (event: PluginPlayerPathBlockedEvent) => void): void;
   onObjectRoute(handler: (event: PluginObjectRouteEvent) => void): void;
+  onWalkRoute(handler: (event: PluginWalkRouteEvent) => void): void;
   onObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   /** Exact, case-sensitive object name and option matching. Return false to fall through. */
   onObjectInteraction(
@@ -861,6 +885,7 @@ export interface PluginApi {
   onPlayerDeathItemDrop(
     handler: (event: PluginPlayerDeathItemDropEvent) => void
   ): void;
+  onPlayerDeathDrops(handler: (event: PluginPlayerDeathDropsEvent) => void): void;
   onCanEquip(handler: (event: PluginCanEquipEvent) => void): void;
   onCanUseItem(handler: (event: PluginCanUseItemEvent) => void): void;
   onCanGainExperience(handler: (event: PluginCanGainExperienceEvent) => void): void;
@@ -1046,8 +1071,11 @@ export interface PluginApi {
     itemId: number,
     options?: { name?: string; aliases?: string[] }
   ): void;
-  /** Save and restore this player attribute; values must be JSON-compatible. */
-  persistAttribute(key: string): void;
+  /**
+   * Save and restore this player attribute; values must be JSON-compatible.
+   * With a default, a value equal to it isn't saved, and a save without the key loads it.
+   */
+  persistAttribute(key: string, defaultValue?: unknown): void;
   setPlayerPersistence(persistence: PlayerPersistence): void;
   setExperienceRate(rate: number): void;
   getActiveRegionSnapshot(): PluginActiveRegionsEvent;
@@ -1229,6 +1257,7 @@ export interface PluginCoreApi {
   ForceMovement: any;
   ForceMovementTask: any;
   TaskManager: any;
+  NPCRespawnTask: any;
   ItemIdentifiers: any;
   ItemIds: any;
   NpcIdentifiers: any;
@@ -1316,5 +1345,7 @@ export interface PluginModule {
   dependsOn?: string[];
   /** Members content: not loaded when world.json sets membersWorld false. */
   members?: boolean;
+  /** False keeps the plugin off unless world.json `plugins` turns it on. */
+  enabled?: boolean;
   register(api: PluginApi): void;
 }

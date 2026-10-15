@@ -59,6 +59,20 @@ export class DialogueManager {
         return this.isActive() && this.player.getPacketSender().isChatboxInterface(widgetId >>> 16);
     }
 
+    /** Native option resumes carry their one-based choice in the child index. */
+    public handleResume(widgetId: number, childIndex: number): boolean {
+        const current = this.getCurrent();
+        if (current instanceof OptionDialogue) {
+            if (widgetId !== OptionDialogue.OPTIONS_WIDGET_ID || !Number.isInteger(childIndex)
+                || childIndex < 1 || childIndex > current.getOptions().length) return false;
+            this.handleOption(childIndex as DialogueOption);
+            return true;
+        }
+        if (!this.canContinue(widgetId)) return false;
+        this.advance();
+        return true;
+    }
+
     /**
      * Advances, starting the next dialogue.
      */

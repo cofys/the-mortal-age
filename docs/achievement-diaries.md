@@ -1,6 +1,6 @@
 # Achievement diaries
 
-The diary framework lives in `server/plugins/diaries/`, and its data is `server/plugins/diaries/data/achievement-diaries.json`. It covers:
+The diary framework lives in `server/plugins/achievements/diaries/`, and its data is `server/plugins/achievements/diaries/data/achievement-diaries.json`. It covers:
 - progress and the diary tab;
 - every diary's task list;
 - claiming rewards from all 12 diary NPCs;
@@ -18,6 +18,10 @@ api.emitCustomEvent("diary:task", { player, diary: "ardougne", task: "steal-a-ca
 // For effects: is a tier finished?
 const request = { player, diary: "ardougne", tier: "hard" };
 api.emitCustomEvent("diary:is-complete", request); // request.complete
+
+// For capes that need them all: is every tier of every diary finished?
+const all = { player };
+api.emitCustomEvent("diary:all-complete", all); // all.complete
 ```
 
 - **Diary keys:** `karamja`, `ardougne`, `falador`, `fremennik`, `kandarin`, `desert`, `lumbridge`, `morytania`, `varrock`, `wilderness`, `western`, `kourend`.

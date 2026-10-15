@@ -476,7 +476,7 @@ function feedbackPlayer(core) {
   const p = {
     counts, sent, animations, messages, graphics, inventory, menu: () => menu,
     getLocation: () => location, moveTo(value) { location = value; },
-    getInventory: () => inventory, getPacketSender: () => sender,
+    getInventory: () => inventory, getEquipment: () => ({ contains: () => false }), getPacketSender: () => sender,
     getMovementQueue: () => ({ size: () => 0 }), getForceMovement: () => null,
     isRegistered: () => true, getHitpoints: () => 99,
     getUsername: () => "feedback-test", isPlayerBot: () => false,
@@ -492,9 +492,20 @@ function feedbackPlayer(core) {
 }
 
 function registerFeedbackPlugin(name, core, extra = {}) {
-  const hooks = {};
+  // Like the plugin API, every handler a hook name gets runs until one handles the event.
+  const handlers = {}, hooks = {};
   const api = new Proxy({ core, log() {}, ...extra }, {
-    get: (target, key) => target[key] ?? ((...args) => { hooks[key] = args.find(arg => typeof arg === "function"); }),
+    get: (target, key) => target[key] ?? ((...args) => {
+      (handlers[key] ??= []).push(args.find(arg => typeof arg === "function"));
+      hooks[key] ??= (event, ...rest) => {
+        let result;
+        for (const handler of handlers[key]) {
+          result = handler(event, ...rest);
+          if (result || event?.handled) break;
+        }
+        return result;
+      };
+    }),
   });
   require(`../plugins/${name}.plugin`).register(api);
   return hooks;

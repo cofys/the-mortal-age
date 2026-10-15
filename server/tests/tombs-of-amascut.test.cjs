@@ -28,7 +28,7 @@ test("Tombs of Amascut NPCs don't block or die with the player's animations", ()
 });
 
 test('the chest follows the Wiki: unique and pet chances, and the unique weights by raid level', () => {
-  const Rewards = require('../plugins/minigames/toa/ToaRewards');
+  const Rewards = require('../plugins/minigames/toa/Loot.TombsOfAmascut');
   // 1% per 10,500 - 20 x RL points, RL scaled at 310 (a third) and 430 (a sixth).
   assert.equal(Rewards.uniqueChancePercent(20000, 300).toFixed(2), (20000 / 4500).toFixed(2));
   assert.equal(Rewards.uniqueChancePercent(20000, 430).toFixed(4), (20000 / (10500 - 20 * 350)).toFixed(4));
@@ -38,7 +38,7 @@ test('the chest follows the Wiki: unique and pet chances, and the unique weights
 });
 
 test('reward points: a 5,000 start, room points capped and added on completion, and the MVP bonus (Wiki)', () => {
-  const { Raid } = require('../plugins/minigames/toa/ToaRaid');
+  const { Raid } = require('../plugins/minigames/toa/RaidState.TombsOfAmascut');
   const a = { name: 'a' };
   const b = { name: 'b' };
   const room = { def: { key: 'CRONDIS_PUZZLE', puzzle: true, path: 'CRONDIS' } };
@@ -60,7 +60,7 @@ test('returning from a path lands on free Nexus floor, never inside its doorway'
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   const { Location } = require('../dist/game/model/Location');
   const { PluginManager } = require('../dist/plugins/PluginManager');
-  const Shared = require('../plugins/minigames/toa/ToaShared');
+  const Shared = require('../plugins/minigames/toa/Shared.TombsOfAmascut');
   CachePipeline.initialize();
   RegionManager.init();
   Shared.bind({ core: PluginManager.getCoreApi() });
@@ -75,8 +75,8 @@ test('returning from a path lands on free Nexus floor, never inside its doorway'
 test('::toaskiptoreward can force a unique and the pet to one player', () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
-  const Shared = require('../plugins/minigames/toa/ToaShared');
-  const Rewards = require('../plugins/minigames/toa/ToaRewards');
+  const Shared = require('../plugins/minigames/toa/Shared.TombsOfAmascut');
+  const Rewards = require('../plugins/minigames/toa/Loot.TombsOfAmascut');
   Shared.bind({ core: PluginManager.getCoreApi(), emitCustomEvent: () => {} });
   const playerStub = () => {
     const attributes = new Map();
@@ -115,8 +115,8 @@ test('::toaskiptoreward can force a unique and the pet to one player', () => {
 test('the collection log gets the loot when it is claimed (as in OSRS), once; the pet winner rolls only the pet', () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
-  const Shared = require('../plugins/minigames/toa/ToaShared');
-  const Rewards = require('../plugins/minigames/toa/ToaRewards');
+  const Shared = require('../plugins/minigames/toa/Shared.TombsOfAmascut');
+  const Rewards = require('../plugins/minigames/toa/Loot.TombsOfAmascut');
   const events = [];
   Shared.bind({ core: PluginManager.getCoreApi(), emitCustomEvent: (name, event) => events.push({ name, ...event, drops: event.drops && [...event.drops] }) });
   const playerStub = () => {
@@ -172,8 +172,8 @@ test('floor decorations block only with blockWalk 1, so the Scabaras pressure pl
 
 test("boss drops (Wiki): the capture book for those without it, the trophy for the top damager", () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
-  const Shared = require('../plugins/minigames/toa/ToaShared');
-  const { Room } = require('../plugins/minigames/toa/ToaRaid');
+  const Shared = require('../plugins/minigames/toa/Shared.TombsOfAmascut');
+  const { Room } = require('../plugins/minigames/toa/RaidState.TombsOfAmascut');
   const core = PluginManager.getCoreApi();
   const dropped = [];
   Shared.bind({
@@ -208,7 +208,7 @@ test("boss drops (Wiki): the capture book for those without it, the trophy for t
 test("the party panel's buttons follow the cache: Accept 36-43, Decline 44-51, invocations from 52", () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const Lobby = require('../plugins/minigames/toa/Lobby.TombsOfAmascut');
-  const Parties = require('../plugins/minigames/toa/ToaParties');
+  const Parties = require('../plugins/minigames/toa/Parties.TombsOfAmascut');
   CachePipeline.initialize();
   const buttons = new Map();
   const noop = () => {};
@@ -270,7 +270,7 @@ test('struct reads decode the struct archive once, so the first party (44 invoca
 });
 
 test('raid scaling rounds hitpoints as the Wiki DPS calculator does; Zebak matches the checkpoints', () => {
-  const { Raid } = require('../plugins/minigames/toa/ToaRaid');
+  const { Raid } = require('../plugins/minigames/toa/RaidState.TombsOfAmascut');
   const scaled = (base, raidLevel, size) => {
     const raid = Object.assign(Object.create(Raid.prototype), { settings: { raidLevel }, original: { size } });
     let hp = 0;
@@ -285,7 +285,7 @@ test('raid scaling rounds hitpoints as the Wiki DPS calculator does; Zebak match
 test("Zebak (Wiki, OpenRune): rocks wear down, clouds pay for moving, the barrage heals twice, enrage and his Defence floor", () => {
   CachePipeline.initialize();
   const { PluginManager } = require('../dist/plugins/PluginManager');
-  const Raid = require('../plugins/minigames/toa/ToaRaid');
+  const Raid = require('../plugins/minigames/toa/RaidState.TombsOfAmascut');
   let ZebakRoom = null;
   const register = Raid.registerRoom;
   Raid.registerRoom = (key, Room) => { if (key === 'CRONDIS_BOSS') ZebakRoom = Room; };

@@ -138,3 +138,12 @@ test("scales charge the helm and uncharging returns them", () => {
   SerpentineHelm._test.uncharge({ player, item: helm });
   assert.equal(helm.getId(), ItemIds.SERPENTINE_HELM_UNCHARGED_);
 });
+
+
+test('charging leaves unrelated target items and their materials untouched', () => {
+  const target=item(12924),material=item(ItemIds.ZULRAHS_SCALES),player=createPlayer();
+  player.getInventory=()=>({getAmount:()=>100,deleteNumber:()=>{throw Error('unrelated charge consumed material');}});
+  const event={player,usedItem:material,usedWithItem:target,usedItemId:material.getId(),usedWithItemId:target.getId()};
+  SerpentineHelm._test.chargeHelm(event);
+  assert.equal(event.handled,undefined);assert.deepEqual(target.meta,{});
+});

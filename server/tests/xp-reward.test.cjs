@@ -90,3 +90,16 @@ test("the server checks the lamp's level too; refusing or closing clears busy", 
   XpReward._test.closed({ player: walked, interfaceId: 240 });
   assert.deepEqual(walked.log, ["varbit 12393=0"]);
 });
+
+test("a restricted combat lamp offers and accepts only its allowed skills", () => {
+  const player = createPlayer();
+  let chosen = null;
+  const skills = [Skill.ATTACK, Skill.HITPOINTS];
+  XpReward._test.open({ player, skills, minLevel: 50, onConfirm: (skill) => { chosen = skill; return null; } });
+  assert.ok(player.log.includes(`varp 262=${XpReward._test.availableMask(skills)}`));
+  assert.notEqual(XpReward._test.availableMask(skills), XpReward._test.availableMask());
+  XpReward._test.confirm({ player, buttonId: 240 << 16, action: 11 });
+  assert.equal(chosen, null, "a forged Runecraft confirmation is refused");
+  XpReward._test.confirm({ player, buttonId: 240 << 16, action: 0 });
+  assert.equal(chosen, Skill.ATTACK);
+});

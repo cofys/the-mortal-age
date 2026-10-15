@@ -53,3 +53,19 @@ test("blowpipe hits land 1 + distance / 6 ticks after the attack (Wiki: Hit dela
     assert.equal(hits[0].getDelay(), ticks, `distance ${distance}`);
   }
 });
+
+test("blowpipe attack speed applies the Rapid style reduction in PvM and PvP", () => {
+  for (const [againstPlayer, rapid, expected] of [
+    [false, false, 3],
+    [false, true, 2],
+    [true, false, 4],
+    [true, true, 3],
+  ]) {
+    const player = holding(3200, 3200);
+    const target = { isPlayer: () => againstPlayer };
+    player.getCombat = () => ({ getTarget: () => target });
+    player.getFightType = () => ({ isRapid: () => rapid });
+    assert.equal(blowpipeMethod(player).attackSpeed(player), expected,
+      `${againstPlayer ? "PvP" : "PvM"} ${rapid ? "Rapid" : "non-Rapid"}`);
+  }
+});

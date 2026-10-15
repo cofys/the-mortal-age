@@ -104,7 +104,7 @@ function checkCharges({ player, item }) {
 
 function chargeStaff(event) {
   const { player, usedItem, usedWithItem, usedItemId, usedWithItemId } = event;
-  const staff = (chargedIds.has(usedItemId) || chargedByUncharged.has(usedItemId)) ? usedItem : usedWithItem;
+  const staff = (chargedIds.has(usedItemId) || chargedByUncharged.has(usedItemId)) ? usedItem : chargedIds.has(usedWithItemId) || chargedByUncharged.has(usedWithItemId) ? usedWithItem : null;
   const otherId = staff === usedItem ? usedWithItemId : usedItemId;
   if (!staff || Number(otherId) !== zulrahScalesId) {
     return;
@@ -166,7 +166,7 @@ module.exports = {
       core.ItemIdentifiers.SERPENTINE_HELM_2,
     ]);
 
-    api.persistAttribute(COMBAT_CHARGE_AT_ATTRIBUTE);
+    api.persistAttribute(COMBAT_CHARGE_AT_ATTRIBUTE, null);
     api.onItemAction((event) => {
       if (!chargedIds.has(event.itemId) && !unchargedByCharged.has(event.itemId)) {
         return;

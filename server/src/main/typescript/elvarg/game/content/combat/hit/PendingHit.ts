@@ -13,6 +13,7 @@ import { CombatSpecial } from "../CombatSpecial";
 import { DamageFormulas } from "../formula/DamageFormulas";
 import type { SpecialDamageBounds } from "../CombatFactory";
 import type { WeaponSpecialTraits } from "../WeaponSpecialTraits";
+import type { CombatSpell } from "../magic/CombatSpell";
 
 type PendingHitConfig = {
     delay?: number;
@@ -36,6 +37,8 @@ export class PendingHit {
     private experience = true;
     /** Optional per-hitsplat extra reveal delays (from `hitDelayTicks`). */
     private hitDelays?: number[];
+    /** Spell selected when this hit was launched; the caster may clear it before impact. */
+    private spell: CombatSpell | null = null;
 
     constructor(attacker: Mobile, target: Mobile, method: CombatMethod, delayOrConfig?: number | PendingHitConfig, handleAfterHitEffects?: boolean) {
         this.attacker = attacker;
@@ -86,6 +89,15 @@ export class PendingHit {
 
     public getCombatMethod(): CombatMethod {
         return this.method;
+    }
+
+    public getSpell(): CombatSpell | null {
+        return this.spell;
+    }
+
+    public setSpell(spell: CombatSpell | null): PendingHit {
+        this.spell = spell;
+        return this;
     }
 
     public getHits(): HitDamage[] {

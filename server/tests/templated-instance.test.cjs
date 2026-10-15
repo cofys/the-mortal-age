@@ -10,7 +10,7 @@ const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const { Location } = require('../dist/game/model/Location');
 const {
-  TemplatedInstanceArea, rotateChunkTile,
+  TemplatedInstanceArea, rotateChunkTile, MAX_INSTANCE_CHUNKS,
 } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
 
 before(() => {
@@ -23,9 +23,86 @@ const ROOM = { chunkX: 232, chunkY: 704, plane: 1 };
 // Steps a 1x1 walker can take: [dx, dy].
 const STEPS = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
+test('copied multi-locs resolve the visible child id and keep the original scene loc', () => {
+  const area = new TemplatedInstanceArea(1, 1);
+  area.setChunk(2, 0, 0, { sourceChunkX: 370, sourceChunkY: 803, sourcePlane: 2, rotation: 0 });
+  const location = area.tile(0, 3, 2); // Ghorrock crevice parent 49517 at 2960,6427.
+  let unlocked = 0;
+  const player = { getPacketSender: () => ({ getVarbit: () => unlocked, getVarp: () => 0 }) };
+  try {
+    const blocked = area.resolveObject(49110, location, player);
+    assert.equal(blocked?.getId(), 49517);
+    assert.equal(area.resolveObject(49109, location, player), null, 'an unseen child is not interactable');
+    unlocked = 1;
+    assert.equal(area.resolveObject(49109, location, player)?.getId(), 49517);
+    assert.equal(area.resolveObject(49110, location, player), null, 'the old child stops resolving after the morph');
+  } finally { area.destroy(); }
+});
+
 function canStep(x, y, z, [dx, dy], area) {
   return RegionManager.canMove(x, y, x + dx, y + dy, z, 1, 1, area);
 }
+
+test('Entry treasure trapdoor is adjacent to a cache-reachable tile after Verzik', () => {
+  const tile = require('../plugins/minigames/tob/Entry.TheatreOfBlood')._test.TREASURE_ENTRANCE_TILE;
+  const [tx, ty, z] = tile;
+  const steps = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  const start = [3167, 4313];
+  const visited = new Set([start.join(',')]);
+  const pending = [start];
+  while (pending.length) {
+    const [x, y] = pending.pop();
+    for (const [dx, dy] of steps) {
+      const next = [x + dx, y + dy];
+      const key = next.join(',');
+      if (!visited.has(key) && canStep(x, y, z, [dx, dy], null)) {
+        visited.add(key);
+        pending.push(next);
+      }
+    }
+  }
+  assert.deepEqual(tile, [3167, 4323, 0], 'the interaction sits on the throne in the cache');
+  assert.ok(visited.has(`${tx},${ty - 1}`), 'the south-side approach remains reachable from the final arena');
+  const formerEntrance = [3170, 4327];
+  assert.ok(!steps.some(([dx, dy]) => visited.has(`${formerEntrance[0] + dx},${formerEntrance[1] + dy}`)),
+    'the former interaction location is behind the cache wall');
+});
+
+test('Entry treasure room places its reward chest on reachable cache floor', () => {
+  const { TREASURE_ROOM_ENTRY_TILE, REWARD_CHEST_TILE } = require('../plugins/minigames/tob/Entry.TheatreOfBlood')._test;
+  const [sx, sy, z] = TREASURE_ROOM_ENTRY_TILE;
+  const [cx, cy] = REWARD_CHEST_TILE;
+  RegionManager.loadMapFiles(cx, cy, true);
+  const steps = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  const visited = new Set([`${sx},${sy}`]);
+  const pending = [[sx, sy]];
+  while (pending.length) {
+    const [x, y] = pending.pop();
+    for (const [dx, dy] of steps) {
+      const next = [x + dx, y + dy], key = next.join(',');
+      if (visited.has(key) || Math.abs(next[0] - sx) > 24 || Math.abs(next[1] - sy) > 24) continue;
+      if (canStep(x, y, z, [dx, dy], null)) { visited.add(key); pending.push(next); }
+    }
+  }
+  assert.ok(visited.has(`${sx},${sy}`), 'the treasure room arrival tile is reachable');
+  assert.ok(steps.some(([dx, dy]) => visited.has(`${cx + dx},${cy + dy}`)), 'the chest has a reachable adjacent tile');
+  assert.equal(RegionManager.blocked(new Location(3244, 4307, 0), null), true, 'the former chest location is inside blocked cache geometry');
+});
+
+test('SOTE library teleport arrivals are clear, walkable tiles beside their seal anchors', () => {
+  const anchors = [[2623, 6135, 1], [2676, 6101, 1], [2622, 6097, 0], [2576, 6171, 1],
+    [2614, 6157, 0], [2580, 6163, 2], [2562, 6129, 2], [2646, 6143, 2], [2650, 6167, 1]];
+  const arrivals = [[2623, 6134, 1], [2675, 6102, 1], [2623, 6098, 0], [2577, 6172, 1],
+    [2613, 6158, 0], [2581, 6162, 2], [2563, 6130, 2], [2647, 6144, 2], [2651, 6168, 1]];
+  for (let i = 0; i < arrivals.length; i++) {
+    const [x, y, z] = arrivals[i], [sx, sy] = anchors[i];
+    RegionManager.loadMapFiles(x, y, true);
+    assert.equal(RegionManager.blocked(new Location(x, y, z), null), false, `arrival ${i} is not blocked`);
+    assert.equal(Math.max(Math.abs(x - sx), Math.abs(y - sy)), 1, `arrival ${i} is beside its seal`);
+    const exits = STEPS.filter(([dx, dy]) => canStep(x, y, z, [dx, dy], null));
+    assert.ok(exits.length > 0, `arrival ${i} has a cache-valid outgoing step`);
+  }
+});
 
 /** Turns a step clockwise with its chunk: north becomes east, as the client turns tiles. */
 function rotateStep([dx, dy], rotation) {
@@ -130,11 +207,15 @@ test('tiles no chunk was copied to are blocked, and copying one opens it and bum
 });
 
 test('allocations do not overlap and are freed on destroy', () => {
-  const a = new TemplatedInstanceArea(16, 16);
-  const b = new TemplatedInstanceArea(16, 16);
+  const a = new TemplatedInstanceArea(MAX_INSTANCE_CHUNKS, MAX_INSTANCE_CHUNKS);
+  const b = new TemplatedInstanceArea(MAX_INSTANCE_CHUNKS, MAX_INSTANCE_CHUNKS);
   try {
-    assert.ok(a.baseChunkX + 16 <= b.baseChunkX || a.baseChunkY + 16 <= b.baseChunkY);
+    assert.ok(a.baseChunkX + MAX_INSTANCE_CHUNKS <= b.baseChunkX || a.baseChunkY + MAX_INSTANCE_CHUNKS <= b.baseChunkY);
     assert.equal(rotateChunkTile(0, 0, 1)[1], 7);
+    assert.throws(() => new TemplatedInstanceArea(MAX_INSTANCE_CHUNKS + 1, 1), /outside/);
+    const prison = new TemplatedInstanceArea(24, 17);
+    prison.destroy();
+    assert.ok(a.getBaseX() + MAX_INSTANCE_CHUNKS * 8 < 9600, 'template slots remain west of boat decks');
   } finally {
     const slotX = a.baseChunkX;
     a.destroy();

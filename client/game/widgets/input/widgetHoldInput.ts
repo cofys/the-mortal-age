@@ -15,9 +15,12 @@ export function processWidgetHoldInput(
     // onHoldListener is processed independently of drag state.
     // hold events are suppressed while a widget drag is active.
     if (widgetInteraction.clickedWidget && isHolding && !widgetInteraction.isDraggingWidget) {
+        const widget = widgetInteraction.clickedWidget;
+        const eventScaleX = widget._absScaleX ?? 1;
+        const eventScaleY = widget._absScaleY ?? 1;
         const holdCtx: Partial<ScriptEvent> = {
-            mouseX: mx - (widgetInteraction.clickedWidget._absX ?? widgetInteraction.clickedWidget.x ?? 0),
-            mouseY: my - (widgetInteraction.clickedWidget._absY ?? widgetInteraction.clickedWidget.y ?? 0),
+            mouseX: ((mx - (widget._absX ?? widget.x ?? 0)) / eventScaleX) | 0,
+            mouseY: ((my - (widget._absY ?? widget.y ?? 0)) / eventScaleY) | 0,
         };
 
         // onClickRepeat requires isClicked (set by onClick on the previous frame).

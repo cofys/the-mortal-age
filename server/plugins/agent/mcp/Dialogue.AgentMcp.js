@@ -29,7 +29,7 @@ function readDialogue(core, p) {
 
 module.exports = function registerDialogueTools(ctx) {
   const { core, tool, z, player, find, send, status, sleepTicks } = ctx;
-  const { MultiChatboxPrompt } = core;
+  const { MultiChatboxPrompt, OptionDialogue } = core;
 
   tool(
     "dialogue",
@@ -67,7 +67,7 @@ module.exports = function registerDialogueTools(ctx) {
       if (!dialogue.options[index]) throw new Error(`No option "${option}"; options: ${dialogue.options.join(" | ")}`);
       const prompt = MultiChatboxPrompt.getPending(p);
       const groupId = p.getPacketSender().getChatboxGroupId();
-      send(p, prompt
+      send(p, (prompt || groupId === (OptionDialogue.OPTIONS_WIDGET_ID >>> 16))
         ? { type: "dialogue_continue", widgetId: MultiChatboxPrompt.OPTIONS_WIDGET_ID, childIndex: index + 1 }
         : { type: "widget_action", widgetId: groupId << 16, groupId, childId: 0, buttonNum: index + 1 });
       await sleepTicks(1);

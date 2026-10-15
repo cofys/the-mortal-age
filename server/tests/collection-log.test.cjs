@@ -7,10 +7,10 @@ const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const { Sounds } = require("../dist/game/Sounds");
-const Clog = require("../plugins/collectionlog/CollectionLog.plugin");
-const Data = require("../plugins/collectionlog/ClogData");
-const Progress = require("../plugins/collectionlog/ClogProgress");
-const Interface = require("../plugins/collectionlog/ClogInterface");
+const Clog = require("../plugins/achievements/CollectionLog.plugin");
+const Data = require("../plugins/achievements/collectionlog/Data.CollectionLog");
+const Progress = require("../plugins/achievements/collectionlog/Progress.CollectionLog");
+const Interface = require("../plugins/achievements/collectionlog/Interface.CollectionLog");
 
 const ZULRAH_SCALES = 12934;
 const TANZANITE_FANG = 12922;
@@ -25,7 +25,13 @@ const fakeApi = new Proxy({
   getTaskManager: () => ({ submit: (task) => { task.setRunning(true); tasks.push(task); } }),
   onCustomEvent: (name, handler) => customEvents.set(name, [...(customEvents.get(name) ?? []), handler]),
   emitCustomEvent: (name, request) => (customEvents.get(name) ?? []).forEach((handler) => handler(request)),
-  core: { Task: require("../dist/game/task/Task").Task },
+  core: {
+    Task: require("../dist/game/task/Task").Task,
+    CacheDefinitions: require("../dist/game/cache/CacheDefinitions").CacheDefinitions,
+    Sound: require("../dist/game/Sound").Sound,
+    Sounds,
+    PlayerRights: require("../dist/game/model/rights/PlayerRights").PlayerRights,
+  },
 }, { get: (target, key) => target[key] ?? (() => {}) });
 Clog.register(fakeApi);
 // The popup goes through the shared notifications queue.
@@ -236,7 +242,7 @@ test("reward-shop purchases log quantities, but unrelated shops and resold stock
 
 test("every configured reward shop exists in canonical shop data", () => {
   const shops = require("../data/definitions/shops.json");
-  for (const name of require("../plugins/collectionlog/data/reward-shops.json")) {
+  for (const name of require("../plugins/achievements/collectionlog/data/reward-shops.json")) {
     assert.ok(shops.some((shop) => shop.name === name), name);
   }
 });

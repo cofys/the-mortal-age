@@ -28,10 +28,10 @@
  * any order (III), as the Wiki describes; Reentry's sand is in ColosseumHazards.
  */
 
-const Shared = require("./ColosseumShared");
-const Waves = require("./ColosseumWaves");
+const Shared = require("./Shared.Colosseum");
+const Waves = require("./Waves.Colosseum");
 const Effects = require("./ModifierEffects.Colosseum");
-const Hazards = require("./ColosseumHazards");
+const Hazards = require("./Hazards.Colosseum");
 
 const ENEMY = {
   berserker: { max: 29, speed: 6, range: 1, style: "MELEE", anim: 10856 },

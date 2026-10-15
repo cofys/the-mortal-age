@@ -51,9 +51,9 @@ Agility.register({
   log() {},
 });
 
-const { COURSES } = require("../plugins/skills/agility/courses");
-const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts");
-const { build } = require("../plugins/skills/agility/shortcuts/ShortcutData");
+const { COURSES } = require("../plugins/skills/agility/courses/Courses.Agility");
+const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts/Shortcuts.Agility");
+const { build } = require("../plugins/skills/agility/shortcuts/ShortcutData.Agility");
 const SHORTCUT_DATA = require("../plugins/skills/data/agility-shortcuts.json");
 
 function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] } = {}) {
@@ -520,7 +520,7 @@ test("teleports are refused while crossing an obstacle", () => {
 });
 
 test("a climb faces the loc: across a wall decoration's edge, or the loc's tile", () => {
-  const { faceLoc } = require("../plugins/skills/agility/steps");
+  const { faceLoc } = require("../plugins/skills/agility/Steps.Agility");
   // Ardougne's wooden beams: a wall decoration (shape 5) on the start tile's north edge (rotation 1).
   const beams = { x: 2673, y: 3298, z: 0, face: 1, type: 5, id: ObjectIds.WOODEN_BEAMS };
   assert.deepEqual(faceLoc(beams), { face: [2673, 3299] });

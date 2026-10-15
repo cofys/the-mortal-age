@@ -26,9 +26,9 @@
  * Not from a source: Challenge Mode hitpoints +50%, as the Wiki's scaling for other monsters.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
-const Monsters = require("./CoxMonsters");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
+const Monsters = require("./Monsters.ChambersOfXeric");
 
 const NPC = { GUARDIANS: [7569, 7570] };
 const OBJECT = { BLOCKER: 26209 };

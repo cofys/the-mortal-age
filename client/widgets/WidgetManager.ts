@@ -1907,6 +1907,16 @@ export class WidgetManager {
         return this.groupToContainerUid.get(groupId | 0);
     }
 
+    /** The same root stacking order used by the overlay renderer. */
+    getInputRoots(): WidgetNode[] {
+        const roots = [...this.getAllGroupRoots(this.rootInterface)];
+        for (const { group } of this.interfaceParents.values()) {
+            roots.push(...this.getAllGroupRoots(group).filter(root =>
+                root.__renderSeparately && !this.isEffectivelyHidden(root.uid)));
+        }
+        return roots;
+    }
+
     /**
      * Trigger onSubChange handlers on all loaded interfaces.
      * Called when sub-interfaces are opened or closed.

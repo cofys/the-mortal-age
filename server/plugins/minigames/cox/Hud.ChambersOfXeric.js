@@ -9,8 +9,8 @@
  * leaves its room.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 /** NPC ids (and forms) that get the bar. */
 const BOSSES = new Set([

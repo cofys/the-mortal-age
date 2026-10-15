@@ -26,9 +26,9 @@
  *   (the surface shaman's).
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
-const Monsters = require("./CoxMonsters");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
+const Monsters = require("./Monsters.ChambersOfXeric");
 
 const NPC = { SHAMANS: [7573, 7574], SPAWN: 7575 };
 const OBJECT = { TENDRIL: 29768 };

@@ -344,11 +344,11 @@ function sendQuestVarps({ player }) {
     // Bitfield stages must write their varbit: writing the whole parent varp
     // clobbers sibling bits (X Marks/Client of Kourend share veos_quest).
     if (quest.varbitId !== undefined) {
-      sender.sendVarbit(quest.varbitId, quest.getStage(player));
+      sender.sendVarbit(quest.varbitId, quest.varbitValue(quest.getStage(player), player));
       continue;
     }
     if (!Number.isInteger(quest.varpId) || quest.varpId < 0) continue;
-    sender.sendConfig(quest.varpId, quest.varpValue(quest.getStage(player)));
+    sender.sendConfig(quest.varpId, quest.varpValue(quest.getStage(player), player));
   }
 }
 
@@ -360,23 +360,26 @@ function sendQuestVarps({ player }) {
  * Registers a quest and returns a handle with stage/complete helpers.
  *
  * @param api  the plugin api
- * @param def  { key, name, varpId, startedValue, completionValue, questPoints,
+ * @param def  { key, name, varpId, varbitId, varbitValue, startedValue, completionValue, questPoints,
  *               xpRewards?, rewardItemId?, rewardItemLabel?, otherRewards?,
  *               buildJournal?(player, quest), onReward?(player, quest),
- *               varpValue?(stage) }
+ *               varpValue?(stage, player) }
  */
 function registerQuest(api, def) {
   if (!def || !def.key || !def.name) throw new Error("registerQuest requires a key and name");
   registerQuestWidgets(api);
-  api.persistAttribute(stageAttribute(def.key));
-  api.persistAttribute(QUEST_POINTS_ATTRIBUTE);
+  api.persistAttribute(stageAttribute(def.key), 0);
+  api.persistAttribute(QUEST_POINTS_ATTRIBUTE, 0);
 
   const stageKey = stageAttribute(def.key);
   const quest = {
     ...def,
     /** The varp value the client sees for a stage; def.varpValue maps stages the cache keys on. */
-    varpValue(stage) {
-      return def.varpValue ? def.varpValue(stage) | 0 : stage;
+    varpValue(stage, player) {
+      return def.varpValue ? def.varpValue(stage, player) | 0 : stage;
+    },
+    varbitValue(stage, player) {
+      return def.varbitValue ? def.varbitValue(stage, player) | 0 : quest.varpValue(stage, player);
     },
     getStage(player) {
       const value = Number(player.getAttribute(stageKey));
@@ -387,9 +390,9 @@ function registerQuest(api, def) {
       // Quests whose stage lives in a varbit of a shared varp (most post-2007
       // quests) set the varbit, so sibling bits in the same varp survive.
       if (def.varbitId !== undefined) {
-        player.getPacketSender().sendVarbit(def.varbitId, value | 0);
+        player.getPacketSender().sendVarbit(def.varbitId, quest.varbitValue(value | 0, player));
       } else {
-        player.getPacketSender().sendConfig(def.varpId, quest.varpValue(value | 0));
+        player.getPacketSender().sendConfig(def.varpId, quest.varpValue(value | 0, player));
       }
       refreshQuestList(player);
       // Quests whose progress shows in more than their varp (a varbit the cache reads) follow it.
@@ -493,6 +496,7 @@ function startDialogue(api, player, context, steps) {
 // ============================================================================
 
 let transcriptCache = null;
+let transcriptSpeakers = null;
 
 function loadTranscripts(api) {
   if (transcriptCache) return transcriptCache;
@@ -501,23 +505,6 @@ function loadTranscripts(api) {
   const file = path.join(api.core.GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
   transcriptCache = JSON.parse(fs.readFileSync(file, "utf8"));
   return transcriptCache;
-}
-
-/** Wiki multi-speaker lines -> generic NPC lines so one chathead renders them. */
-function flattenSpeakers(steps) {
-  if (!Array.isArray(steps)) return [];
-  return steps.map((step) => {
-    const copy = { ...step };
-    if (copy.type === "line" && typeof copy.speaker === "string") {
-      copy.npc = copy.text;
-      delete copy.speaker;
-    }
-    if (Array.isArray(copy.steps)) copy.steps = flattenSpeakers(copy.steps);
-    if (Array.isArray(copy.options)) {
-      copy.options = copy.options.map((option) => ({ ...option, steps: flattenSpeakers(option.steps) }));
-    }
-    return copy;
-  });
 }
 
 /**
@@ -532,11 +519,18 @@ function startTranscript(api, player, npcId, page, variant, select) {
   if (!Array.isArray(raw)) return false;
   const steps = typeof select === "function" ? select(raw) : raw;
   if (!Array.isArray(steps) || steps.length === 0) return false;
-  const { startDialogue: playDialogue } = require("../npcs/NpcDialogues.plugin.js");
+  const { startDialogue: playDialogue, speakerIdIndex, collectPageOptions, collectPageLines, collectMenuBefore } = require("../npcs/NpcDialogues.plugin.js");
+  if (!transcriptSpeakers) {
+    const fs = require("fs"), path = require("path");
+    const index = JSON.parse(fs.readFileSync(path.join(api.core.GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json"), "utf8"));
+    transcriptSpeakers = speakerIdIndex(index, api.core.NpcDefinition);
+  }
   const definition = api.core.NpcDefinition.forId(npcId);
   const event = { player, npcId, npc: null, definition };
-  const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }] };
-  playDialogue(api, event, flattenSpeakers(steps), record.branches, context);
+  const options = collectPageOptions(record);
+  const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }], speakerIdByName: transcriptSpeakers,
+    pageOptions: options.byText, pageOptionList: options.list, pageLines: collectPageLines(record), pageMenuBefore: collectMenuBefore(record, variant) };
+  playDialogue(api, event, steps, record.branches, context);
   return true;
 }
 

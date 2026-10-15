@@ -9,6 +9,7 @@ const PROJECTILE = { RANGE: 1639, MAGIC: 1640, VINES: 1642 };
 const EXIT = new core.Location(1232, 3728, 0);
 class HesporiArea extends core.PrivateArea {
     constructor() { super([new core.Boundary(1216, 1279, 10048, 10111, 0)]); }
+    isMulti() { return true; }
     process(mobile) { if (mobile.isPlayer?.()) hesporiProcess({ player: mobile.getAsPlayer() }); }
     postLeave(mobile, logout) {
         if (mobile.isPlayer?.()) hesporiLogout({ player: mobile.getAsPlayer() });
@@ -34,8 +35,20 @@ function spawn(fight, id, x, y) {
 function flowers(fight) {
     for (const flower of fight.flowers) core.World.getRemoveNPCQueue().push(flower);
     fight.flowers = [[-3, -3], [-3, 5], [5, -3], [5, 5]].map(([x, y]) =>
-        spawn(fight, core.NpcIdentifiers.FLOWER, fight.patch.x + x, fight.patch.y + y));
+        spawn(fight, fight.quest ? core.NpcIdentifiers.FLOWER_2 : core.NpcIdentifiers.FLOWER, fight.patch.x + x, fight.patch.y + y));
     fight.phase++;
+}
+// The wild quest Hespori shares the farming boss's attacks and flower shields.
+function challengeHespori(event) {
+    if (FIGHTS.has(event.player)) { event.handled = true; return; }
+    const fight = { player: event.player, patch: event.location, area: event.area, quest: true,
+        boss: null, flowers: [], phase: 0, attacks: 0, vinesUntil: 0, escapeClicks: 0 };
+    FIGHTS.set(fight.player, fight);
+    fight.boss = spawn(fight, core.NpcIdentifiers.HESPORI_2, fight.patch.x, fight.patch.y);
+    fight.maxHitpoints = fight.boss.getMaxHitpoints();
+    flowers(fight);
+    fight.boss.getCombat().attack(fight.player);
+    event.handled = true;
 }
 function harvestHespori(player, patch) {
     if (!Patches.requireTool(player, "Spade")) return;
@@ -61,6 +74,7 @@ function harvestHespori(player, patch) {
     FIGHTS.set(player, fight);
     fight.boss = spawn(fight, core.NpcIdentifiers.HESPORI, patch.x, patch.y);
     fight.boss.setHitpoints(300);
+    fight.maxHitpoints = 300;
     fight.boss.performAnimation(new core.Animation(ANIMATION.SPAWN));
     flowers(fight);
     fight.boss.getCombat().attack(player);
@@ -122,15 +136,15 @@ function hesporiCanAttack(event) {
 function hesporiHit(event) {
     const fight = NPC_FIGHTS.get(event.target);
     if (!fight) return;
-    if (fight.flowers.includes(event.target)) event.target.setHitpoints(0);
+    if (fight.flowers.includes(event.target) && !fight.quest) event.target.setHitpoints(0);
     else if (event.target === fight.boss && fight.phase < 3) {
         const remaining = fight.boss.getHitpoints() - fight.boss.getCombat().getHitQueue().getQueuedDamage();
-        if (remaining > 0 && remaining <= 300 - fight.phase * 100) flowers(fight);
+        if (remaining > 0 && remaining <= fight.maxHitpoints * (1 - fight.phase / 3)) flowers(fight);
     }
 }
 function hesporiDamage(event) {
     const fight = NPC_FIGHTS.get(event.target);
-    if (fight?.flowers.includes(event.target)) event.hit.setTotalDamage(event.target.getHitpoints());
+    if (fight?.flowers.includes(event.target) && !fight.quest) event.hit.setTotalDamage(event.target.getHitpoints());
 }
 function hesporiInput(event) {
     const fight = FIGHTS.get(event.player);
@@ -148,15 +162,25 @@ function hesporiProcess({ player }) {
     const fight = FIGHTS.get(player);
     if (!fight) return;
     if (player.getArea() !== fight.area) { hesporiLogout({ player }); return; }
+    if (fight.quest) keepQuestHesporiEngaged(fight);
     if (fight.vinesUntil && core.World.getProcessCycle() >= fight.vinesUntil) {
         releaseVines(fight);
         player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(40 + Math.floor(Math.random() * 11), core.HitMask.RED)]);
     }
 }
+function keepQuestHesporiEngaged(fight) {
+    if (!fight?.quest || !fight.boss || fight.boss.getHitpoints() <= 0) return false;
+    fight.boss.getCombat().getLastAttack().reset();
+    return true;
+}
 function hesporiLoot(event) {
     const fight = NPC_FIGHTS.get(event.npc);
     if (!fight || fight.boss !== event.npc) return;
     event.handled = true;
+    if (fight.quest) {
+        finishQuestHespori(fight);
+        return;
+    }
     // The existing drop table supplies the main roll. Anima is one guaranteed roll, not three independent rolls.
     const anima = ["Attas seed", "Iasor seed", "Kronos seed"].map(Data.itemId);
     const loot = event.drops.filter((d) => !anima.includes(d.itemId) && d.itemId !== Data.itemId("Tangleroot"));
@@ -172,17 +196,28 @@ function hesporiLoot(event) {
     Patches.syncPatch(fight.player, fight.patch);
     fight.player.sendMessage("The Hespori is defeated. Clear the patch to collect your harvest.");
 }
+function finishQuestHespori(fight) {
+    if (!FIGHTS.has(fight.player)) return;
+    releaseVines(fight);
+    for (const flower of fight.flowers) core.World.getRemoveNPCQueue().push(flower);
+    FIGHTS.delete(fight.player);
+    core.PluginManager.emitCustomEvent("hespori:quest-defeated", { player: fight.player });
+}
+function questHesporiDeath({ npc }) {
+    const fight = NPC_FIGHTS.get(npc);
+    if (fight?.quest && fight.boss === npc) finishQuestHespori(fight);
+}
 function hesporiLogout({ player }) {
     const fight = FIGHTS.get(player);
     if (!fight) return;
-    Patches.stateFor(player, fight.patch).hesporiFight = false;
+    if (!fight.quest) Patches.stateFor(player, fight.patch).hesporiFight = false;
     releaseVines(fight);
     for (const npc of [fight.boss, ...fight.flowers]) core.World.getRemoveNPCQueue().push(npc);
     FIGHTS.delete(player);
 }
 function hesporiDeathDrop(event) {
     const fight = FIGHTS.get(event.player);
-    if (!fight || !event.dropEligible) return;
+    if (!fight || fight.quest || !event.dropEligible) return;
     const farm = Patches.farmFor(event.player);
     if (!fight.deathCaptured) { farm.deathbank = []; farm.deathbankPaid = false; fight.deathCaptured = true; }
     farm.deathbank.push({ id: event.item.getId(), amount: event.item.getAmount(), meta: core.Item.cloneMeta(event.item.getMeta()) });
@@ -231,4 +266,4 @@ function hesporiCave(event) {
     }
 }
 
-Object.assign(module.exports, { harvestHespori, HesporiCombat, hesporiHitRoll, hesporiCanAttack, hesporiHit, hesporiDamage, hesporiInput, hesporiProcess, hesporiLoot, hesporiLogout, hesporiDeathDrop, hesporiPlayerDeath, hesporiNpc, hesporiCave });
+Object.assign(module.exports, { questHesporiDeath, challengeHespori, harvestHespori, HesporiCombat, hesporiHitRoll, hesporiCanAttack, hesporiHit, hesporiDamage, hesporiInput, hesporiProcess, keepQuestHesporiEngaged, hesporiLoot, hesporiLogout, hesporiDeathDrop, hesporiPlayerDeath, hesporiNpc, hesporiCave });

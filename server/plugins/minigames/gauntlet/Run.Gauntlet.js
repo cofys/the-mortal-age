@@ -5,10 +5,10 @@
  * and what happens on death, teleporting and logging back in.
  */
 
-const Shared = require("./GauntletShared");
-const GauntletMap = require("./GauntletMap");
-const Run = require("./GauntletRun");
-const Monsters = require("./GauntletMonsters");
+const Shared = require("./Shared.Gauntlet");
+const GauntletMap = require("./Map.Gauntlet");
+const Run = require("./RunState.Gauntlet");
+const Monsters = require("./Monsters.Gauntlet");
 
 // Instances sit at tile 8192+ (TemplatedInstanceArea); a player saved there was in a run.
 

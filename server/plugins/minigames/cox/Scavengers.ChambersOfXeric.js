@@ -20,8 +20,8 @@
  * - Clearing the rocks: the rubble (29739) with sound 360 (range 4).
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 const NPC = { SCAVENGERS: [7548, 7549] };
 const OBJECT = { SAPLING: 29736, STUMP: 29737, ROCKS: 29738, RUBBLE: 29739, BOULDER: 29740 };

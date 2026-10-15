@@ -41,6 +41,12 @@ function restoreRights({ player }) {
   savedRights.delete(player);
 }
 
+// Headless playthroughs need normal damage and death; command temporarily elevates itself.
+function normalPlayer(event) {
+  event.player.setRights(pluginApi.core.PlayerRights.NONE);
+  pluginApi.emitCustomEvent("account:refresh-chat-icons", { player: event.player });
+}
+
 function buildMcpServer(core) {
   const server = new McpServer({ name: "tsps-agent", version: "1.0.0" });
   const ctx = createContext(core, server);
@@ -110,6 +116,7 @@ module.exports = {
     api.onServerShutdown(stopMcpServer);
     api.onPlayerLogin(grantDeveloperRights);
     api.onPlayerLogout(restoreRights);
+    api.onCustomEvent("agent-mcp:normal-player", normalPlayer);
   },
   _test: { grantDeveloperRights, restoreRights, mcpEnabled },
 };

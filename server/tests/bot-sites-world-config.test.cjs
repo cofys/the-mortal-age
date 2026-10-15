@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/bot-sites-world-config.test.cjs
 // world.json / world.local.json pluginConfig "PlayerBots:sites" overrides bot-sites.json sites and adds new ones
-// (plugins/bots/brain/BotSites.js, server/docs/bot-combat-training.md).
+// (plugins/bots/brain/Sites.PlayerBots.js, server/docs/bot-combat-training.md).
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test } = require("node:test");
@@ -8,7 +8,7 @@ const { test } = require("node:test");
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
-const { readBotSites, siteOverrides, applySiteOverrides } = require("../plugins/bots/brain/BotSites");
+const { readBotSites, siteOverrides, applySiteOverrides } = require("../plugins/bots/brain/Sites.PlayerBots");
 
 const SITES = path.resolve(__dirname, "..", "data", "definitions", "bot-sites.json");
 

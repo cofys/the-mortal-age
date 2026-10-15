@@ -10,13 +10,13 @@
  *   attaches it: 90 Prayer (not boostable) and 85 Smithing (boostable), for 1,800 Smithing XP.
  *   Arcane, spectral and elysian sigils make the arcane, spectral and elysian spirit shields.
  * - The spectral shield halves most prayer-draining attacks; here that is the Corporeal Beast's
- *   drain (CorpAttacks.js) - other prayer drains don't share a path to hook yet.
+ *   drain (Attacks.CorporealBeast.js) - other prayer drains don't share a path to hook yet.
  *   (The elysian shield's damage reduction is already in core combat.)
  * Estimates (no transcript): the sigil's message and the level messages.
  * Not done: Abbot Langley's paid service.
  */
 
-const Shared = require("./CorpShared");
+const Shared = require("./Shared.CorporealBeast");
 
 const ITEM = {
   SPIRIT_SHIELD: 12829,

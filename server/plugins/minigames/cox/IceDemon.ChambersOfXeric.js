@@ -48,8 +48,8 @@
  *   and 33% (magic) through; a freeze lasting 3 ticks; fuelling (anim 832; never recorded).
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 const NPC = { FROZEN: 7584, DEMON: 7585, ICEFIEND: 7586 };
 const OBJECT = { BRAZIER: 29747, LIT_BRAZIER: 29748, STORM: 29876 };

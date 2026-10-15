@@ -11,7 +11,7 @@ const { PluginManager } = require("../dist/plugins/PluginManager");
 const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
 
 const SlayerTower = require("../plugins/areas/SlayerTower.plugin");
-const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts");
+const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts/Shortcuts.Agility");
 
 const T = SlayerTower._test;
 let core;

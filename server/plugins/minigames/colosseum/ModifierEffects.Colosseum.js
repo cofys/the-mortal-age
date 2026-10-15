@@ -16,7 +16,7 @@
  * RuneLite (HitsplatID.DOOM): the Doom hitsplat is 73.
  */
 
-const Shared = require("./ColosseumShared");
+const Shared = require("./Shared.Colosseum");
 
 const BLASPHEMY_DRAIN = [0, 0.2, 0.4, 0.6];
 const DOOM_LIMIT = [Infinity, 15, 10, 5];
@@ -29,7 +29,7 @@ const RELENTLESS_MAX_HIT = [0, 1, 3, 6];
 const VENOM_SEVERITY = 6;
 
 function runOf(player) {
-  return require("./ColosseumRun").runOf(player);
+  return require("./Run.Colosseum").runOf(player);
 }
 
 function tier(run, id) {

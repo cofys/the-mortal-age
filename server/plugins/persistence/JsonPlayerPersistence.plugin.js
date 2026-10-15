@@ -126,11 +126,14 @@ class JsonPlayerPersistence extends PlayerPersistence {
       return;
     }
 
-    const save = PlayerSave.fromPlayer(player);
+    this.saveOffline(player.getUsername(), PlayerSave.fromPlayer(player));
+  }
+
+  saveOffline(username, save) {
     const serialized = JSON.stringify(save, this.replacer.bind(this), 2);
-    this.validateSerializedSave(serialized, player.getUsername());
-    const filePath = this.resolveFilePath(player.getUsername());
-    this.enqueueSerializedWrite(filePath, serialized, player.getUsername());
+    this.validateSerializedSave(serialized, username);
+    const filePath = this.resolveFilePath(username);
+    this.enqueueSerializedWrite(filePath, serialized, username);
   }
 
   exists(username) {
@@ -139,6 +142,7 @@ class JsonPlayerPersistence extends PlayerPersistence {
   }
 
   async flush() {
+    await super.flush();
     await this.pendingWriteChain.catch(() => undefined);
     if (this.failedWrites.size > 0) {
       throw this.failedWrites.values().next().value;

@@ -12,10 +12,10 @@ const { DialogueChainBuilder } = require("../../../src/main/typescript/elvarg/ga
 const { NpcDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/NpcDialogue");
 const { PlayerDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/PlayerDialogue");
 const { EndDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/EndDialogue");
-const { content, playSound } = require("./sailingContent");
-const { dropLostOnRecovery } = require("./cargo");
-const { sendBoatVarbits } = require("./boatVarbits");
-const { recoveryFee } = require("./boatParts");
+const { content, playSound } = require("./SailingContent.Sailing");
+const { dropLostOnRecovery } = require("./Cargo.Sailing");
+const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
+const { recoveryFee } = require("./BoatParts.Sailing");
 const { MODE, openBoatSelection } = require("./BoatSelection.plugin");
 
 const COINS = 995;

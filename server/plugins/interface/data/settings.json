@@ -10,7 +10,9 @@
     "54": { "name": "Modern Layout - Side panel can be closed by the hotkeys", "varbit": 4611 },
     "81": { "name": "Last Man Standing fog colour", "varbit": 11865 },
     "82": { "name": "Enable precise timing", "varbit": 11866 },
+    "84": { "name": "Food/Potions can form supply piles on death", "varbit": 11893 },
     "160": { "name": "Combat Achievement Tasks - Repeat completion", "varbit": 12456 },
+    "278": { "name": "Display a warning on login if there are items stored in an item retrieval service", "varbit": 13113 },
     "279": { "name": "Max hit hitsplats", "varbit": 14196 },
     "299": { "name": "Show enemy name on health overlay", "varbit": 14706 },
     "300": { "name": "Compact boss health overlay", "varbit": 14707 },
@@ -24,6 +26,7 @@
         { "varbits": { "20157": 0, "4371": 1 } }
       ]
     },
+    "371": { "name": "Auto-equip & sort items from gravestone", "varbit": 9776 },
     "372": { "name": "Player Report options", "varbit": 1334 },
     "374": { "name": "Beginner clue scroll warning", "varbit": 10693 },
     "375": { "name": "Easy clue scroll warning", "varbit": 10694 },

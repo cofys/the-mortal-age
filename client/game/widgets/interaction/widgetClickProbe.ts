@@ -41,7 +41,7 @@ export function getWorldClickBlockingWidgetAtPoint(
         return null;
     }
 
-    const allRoots = widgetManager.getAllGroupRoots(widgetManager.rootInterface);
+    const allRoots = widgetManager.getInputRoots();
     if (allRoots.length === 0) {
         return null;
     }

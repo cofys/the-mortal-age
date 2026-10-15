@@ -54,6 +54,8 @@ export class Combat {
     private target: Mobile | null = null;
     private autoRetaliating = false;
     private attacker: Mobile | null = null;
+    /** Cycle of the last hit an attacker landed on this character, -1 when combat was cleared. */
+    private lastAttackedCycle = -1;
     private specialAttackQueued = false;
     private method: CombatMethod | null = null;
     private castSpell: CombatSpell | null = null;
@@ -169,7 +171,8 @@ export class Combat {
         }
 
         if (this.attacker && this.lastAttack.elapsedTime(6000)) {
-            this.setUnderAttack(null);
+            // Only the attacker expires here: the logout timer runs on to its own 16 ticks.
+            this.clearAttacker();
         }
 
         const target = this.target;
@@ -533,6 +536,17 @@ export class Combat {
     public getHitQueue(): HitQueue { return this.hitQueue; }
     public getAttacker(): Mobile | null { return this.attacker; }
     public setUnderAttack(attacker: Mobile | null): void {
+        this.lastAttackedCycle = attacker ? World.getProcessCycle() : -1;
+        this.applyAttacker(attacker);
+    }
+    /** Ticks since an attacker last hit this character, or Infinity when it was never hit or combat was cleared. */
+    public ticksSinceAttacked(): number {
+        return this.lastAttackedCycle < 0 ? Infinity : World.getProcessCycle() - this.lastAttackedCycle;
+    }
+    private clearAttacker(): void {
+        this.applyAttacker(null);
+    }
+    private applyAttacker(attacker: Mobile | null): void {
         this.attacker = attacker;
         this.lastAttack.reset();
         if (this.character.isNpc()) {

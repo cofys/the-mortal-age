@@ -3,6 +3,33 @@ import * as fs from "fs";
 import * as path from "path";
 
 export class PlayerPunishment {
+    private static writes: Promise<void> = Promise.resolve();
+    private static readonly writeErrors = new Map<string, Error>();
+
+    public static async flush(): Promise<void> {
+        await this.writes;
+        if (this.writeErrors.size) throw this.writeErrors.values().next().value;
+    }
+
+    private static saveOnlineAccount(username: string): void {
+        const { World } = require("../game/World") as typeof import("../game/World");
+        const { GameConstants } = require("../game/GameConstants") as typeof import("../game/GameConstants");
+        const player = World.getPlayerByName(username);
+        if (player) GameConstants.PLAYER_PERSISTENCE.requestSave(player, "staff-punishment");
+    }
+
+    private static enqueue(file: string, write: () => Promise<unknown>): void {
+        this.writes = this.writes.then(async () => {
+            try {
+                await fs.promises.mkdir(path.dirname(file), { recursive: true });
+                await write();
+                this.writeErrors.delete(file);
+            } catch (error) {
+                this.writeErrors.set(file, error instanceof Error ? error : new Error(String(error)));
+                console.error(`[punishments] Failed to persist ${file}`, error);
+            }
+        });
+    }
     private static readonly BAN_DIRECTORY = "./data/saves/";
     private static readonly MUTE_DIRECTORY = "./data/saves/";
 
@@ -60,6 +87,7 @@ export class PlayerPunishment {
             this.addToFile(`${this.BAN_DIRECTORY}Bans.txt`, p);
         }
         this.AccountsBanned.push(p);
+        this.saveOnlineAccount(p);
     }
 
     public static mute(p: string) {
@@ -68,6 +96,7 @@ export class PlayerPunishment {
             this.addToFile(`${this.MUTE_DIRECTORY}Mutes.txt`, p);
         }
         this.AccountsMuted.push(p);
+        this.saveOnlineAccount(p);
     }
 
     public static banned(player: string): boolean {
@@ -112,12 +141,14 @@ export class PlayerPunishment {
         player = Misc.formatPlayerName(player.toLowerCase());
         this.deleteFromFile(`${this.BAN_DIRECTORY}Bans.txt`, player);
         this.AccountsBanned = this.AccountsBanned.filter(p => p !== player);
+        this.saveOnlineAccount(player);
     }
 
     public static unmute(player: string) {
         player = Misc.formatPlayerName(player.toLowerCase());
         this.deleteFromFile(`${this.MUTE_DIRECTORY}Mutes.txt`, player);
         this.AccountsMuted = this.AccountsMuted.filter(p => p !== player);
+        this.saveOnlineAccount(player);
     }
 
     public static reloadIPBans() {
@@ -131,20 +162,16 @@ export class PlayerPunishment {
     }
 
     public static deleteFromFile(file: string, player: string) {
-        try {
-            let data = fs.readFileSync(file, 'utf8');
-            data = data.split('\n').filter(p => p !== player).join('\n');
-            fs.writeFileSync(file, data);
-        } catch (e) {
-            console.error(e);
-        }
+        this.enqueue(file, async () => {
+            const data = await fs.promises.readFile(file, 'utf8').catch((error) => {
+                if (error.code === "ENOENT") return "";
+                throw error;
+            });
+            await fs.promises.writeFile(file, data.split('\n').filter(p => p !== player).join('\n'));
+        });
     }
 
     public static addToFile(file: string, player: string) {
-        try {
-            fs.appendFileSync(file, player + '\n');
-        } catch (e) {
-            console.error(e);
-        }
+        this.enqueue(file, () => fs.promises.appendFile(file, player + '\n'));
     }
 }

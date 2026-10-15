@@ -360,12 +360,12 @@ module.exports = function registerTowerOfLifeQuest(api) {
   const crateEmpty = new WeakMap();
   const pendingQuestion = new WeakMap();
 
-  api.persistAttribute(FLAGS_ATTRIBUTE);
-  api.persistAttribute(PRESSURE_ATTRIBUTE);
-  api.persistAttribute(PIPE_ATTRIBUTE);
-  api.persistAttribute(CAGE_ATTRIBUTE);
-  api.persistAttribute(MIND_ALIGN_ATTRIBUTE);
-  api.persistAttribute(MIND_STEP_ATTRIBUTE);
+  api.persistAttribute(FLAGS_ATTRIBUTE, 0);
+  api.persistAttribute(PRESSURE_ATTRIBUTE, 0);
+  api.persistAttribute(PIPE_ATTRIBUTE, 0);
+  api.persistAttribute(CAGE_ATTRIBUTE, 0);
+  api.persistAttribute(MIND_ALIGN_ATTRIBUTE, 0);
+  api.persistAttribute(MIND_STEP_ATTRIBUTE, 0);
 
   let quest;
 

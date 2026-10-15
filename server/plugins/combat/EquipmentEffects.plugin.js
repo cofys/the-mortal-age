@@ -1,13 +1,14 @@
-const registerCrystalArmourEffects = require("./effects/CrystalArmour");
-const registerDharoksArmourEffects = require("./effects/DharoksArmour");
-const registerObsidianEffects = require("./effects/ObsidianArmour");
-const registerInquisitorsArmourEffects = require("./effects/InquisitorsArmour");
-const registerChaosGauntletsEffects = require("./effects/ChaosGauntlets");
-const registerLeafBladedBattleaxeEffects = require("./effects/LeafBladedBattleaxe");
-const registerJusticiarEffects = require("./effects/JusticiarArmour");
-const registerSalveAmuletEffects = require("./effects/SalveAmulet");
-const registerDragonHunterEffects = require("./effects/DragonHunter");
-const registerDemonbaneEffects = require("./effects/Demonbane");
+const registerCrystalArmourEffects = require("./effects/CrystalArmour.EquipmentEffects");
+const registerDharoksArmourEffects = require("./effects/DharoksArmour.EquipmentEffects");
+const registerObsidianEffects = require("./effects/ObsidianArmour.EquipmentEffects");
+const registerInquisitorsArmourEffects = require("./effects/InquisitorsArmour.EquipmentEffects");
+const registerChaosGauntletsEffects = require("./effects/ChaosGauntlets.EquipmentEffects");
+const registerLeafBladedBattleaxeEffects = require("./effects/LeafBladedBattleaxe.EquipmentEffects");
+const registerJusticiarEffects = require("./effects/JusticiarArmour.EquipmentEffects");
+const registerSalveAmuletEffects = require("./effects/SalveAmulet.EquipmentEffects");
+const registerDragonHunterEffects = require("./effects/DragonHunter.EquipmentEffects");
+const registerDemonbaneEffects = require("./effects/Demonbane.EquipmentEffects");
+const registerVampyrebaneEffects = require("./effects/Vampyrebane.EquipmentEffects");
 
 module.exports = {
   name: "EquipmentEffects",
@@ -23,5 +24,6 @@ module.exports = {
     registerSalveAmuletEffects(api);
     registerDragonHunterEffects(api);
     registerDemonbaneEffects(api);
+    registerVampyrebaneEffects(api);
   },
 };

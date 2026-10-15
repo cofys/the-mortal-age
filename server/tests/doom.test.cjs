@@ -14,19 +14,19 @@ const { Location } = require('../dist/game/model/Location');
 const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
 const { World } = require('../dist/game/World');
 const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
-const Shared = require('../plugins/bosses/doom/DoomShared');
-const Delves = require('../plugins/bosses/doom/DoomDelves');
-const Boss = require('../plugins/bosses/doom/DoomBoss');
-const Hazards = require('../plugins/bosses/doom/DoomHazards');
-const Run = require('../plugins/bosses/doom/DoomRun');
-const Lobby = require('../plugins/bosses/doom/Lobby.Doom');
-const Delve = require('../plugins/bosses/doom/Delve.Doom');
-const Rewards = require('../plugins/bosses/doom/Rewards.Doom');
-const Scoreboard = require('../plugins/bosses/doom/Scoreboard.Doom');
-const Loot = require('../plugins/bosses/doom/DoomLoot');
-const Records = require('../plugins/bosses/doom/DoomRecords');
-const Burrow = require('../plugins/bosses/doom/DoomBurrow');
-const { chargeTicks } = require('../plugins/bosses/doom/DoomShield');
+const Shared = require('../plugins/bosses/doom/Shared.DoomOfMokhaiotl');
+const Delves = require('../plugins/bosses/doom/Delves.DoomOfMokhaiotl');
+const Boss = require('../plugins/bosses/doom/Boss.DoomOfMokhaiotl');
+const Hazards = require('../plugins/bosses/doom/Hazards.DoomOfMokhaiotl');
+const Run = require('../plugins/bosses/doom/Run.DoomOfMokhaiotl');
+const Lobby = require('../plugins/bosses/doom/Lobby.DoomOfMokhaiotl');
+const Delve = require('../plugins/bosses/doom/Delve.DoomOfMokhaiotl');
+const Rewards = require('../plugins/bosses/doom/Rewards.DoomOfMokhaiotl');
+const Scoreboard = require('../plugins/bosses/doom/Scoreboard.DoomOfMokhaiotl');
+const Loot = require('../plugins/bosses/doom/Loot.DoomOfMokhaiotl');
+const Records = require('../plugins/bosses/doom/Records.DoomOfMokhaiotl');
+const Burrow = require('../plugins/bosses/doom/Burrow.DoomOfMokhaiotl');
+const { chargeTicks } = require('../plugins/bosses/doom/Shield.DoomOfMokhaiotl');
 
 const hooks = { objects: [], prompts: [], hitModify: [], beforeDeath: [], attack: [], timing: [], roll: [], buttons: {} };
 let nextIndex = 1;
@@ -895,7 +895,7 @@ test('the burrowed eye: compass direction, as far as the player plus four (captu
 });
 
 test('acid goes one way for a whole delve, with 2 blobs at delve 3 and 3 from delve 4 (capture)', () => {
-  const Acid = require('../plugins/bosses/doom/DoomAcid');
+  const Acid = require('../plugins/bosses/doom/Acid.DoomOfMokhaiotl');
   assert.deepEqual([3, 4, 7, 8].map(Acid.extraBlobs), [1, 2, 2, 3]);
   const { player, run } = runAt(4);
   run.attacks.active = true;
@@ -1032,7 +1032,7 @@ test('a larva reaching the Doom shows its heal as a heal splat (6)', () => {
 });
 
 test('killing it with a melee punish throws holy water: acid where it lands goes; only a player in a splash is restored', () => {
-  const HolyWater = require('../plugins/bosses/doom/DoomHolyWater');
+  const HolyWater = require('../plugins/bosses/doom/HolyWater.DoomOfMokhaiotl');
   const { player, run } = runAt(3);
   run.attacks.active = true;
   const centre = { x: run.boss.location.getX() + 2, y: run.boss.location.getY() + 2 };

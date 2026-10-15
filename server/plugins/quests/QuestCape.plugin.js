@@ -1,4 +1,4 @@
-const attachQuestCape = require("./quest-cape/QuestCape.QuestCape");
+const attachQuestCape = require("./QuestCape.QuestCape");
 
 module.exports = {
   name: "QuestCape",

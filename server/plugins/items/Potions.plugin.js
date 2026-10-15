@@ -193,6 +193,35 @@ function applySaradominBrew(player) {
   lowerSkillByCurrent(player, Skill.MAGIC, 2, 0.1, 0);
 }
 
+/** Vampyrium supplies follow the same stat formulas as their Wiki equivalents. */
+function applyRankFrothyPotion(player) {
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]) {
+    boostSkill(player, skill, 5, 0.15);
+  }
+}
+
+function applyFoulChunkyPotion(player) {
+  applySuperRestore(player);
+  applyPrayerRegeneration(player);
+}
+
+function applyRancidSlimyPotion(player) {
+  const hpBoost = Math.floor(2 + getMaxLevel(player, Skill.HITPOINTS) * 0.15);
+  boostSkill(player, Skill.DEFENCE, 2, 0.2);
+  heal(player, hpBoost, hpBoost);
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.MAGIC, Skill.RANGED]) {
+    lowerSkillByCurrent(player, skill, 1, 0);
+  }
+}
+
+function applyJarOfCongealedBlood(player) {
+  for (const skill of [Skill.HITPOINTS, Skill.PRAYER]) {
+    const max = getMaxLevel(player, skill);
+    if (getCurrentLevel(player, skill) < max) setCurrentLevel(player, skill, max);
+  }
+  restoreRunEnergy(player, 100);
+}
+
 function applyZamorakBrew(player) {
   boostSkill(player, Skill.ATTACK, 2, 0.2);
   boostSkill(player, Skill.STRENGTH, 2, 0.12);
@@ -363,8 +392,12 @@ function startStamina(player) {
 }
 
 function applyStamina(player) {
+  applyStaminaRequest({player});
+}
+
+function applyStaminaRequest({player,energy=20,durationMs=STAMINA_DURATION_MS}) {
   // Ring of endurance doubles this by mutating the payload (Wiki).
-  const request = { player, energy: 20, durationMs: STAMINA_DURATION_MS };
+  const request = { player, energy, durationMs };
   pluginApi.emitCustomEvent("potions:stamina-effect", request);
   restoreRunEnergy(player, request.energy);
   player.setAttribute(ATTR_STAMINA_END, Date.now() + request.durationMs);
@@ -588,6 +621,34 @@ registerPotion({
     boostSkill(player, Skill.STRENGTH, 5, 0.15);
     boostSkill(player, Skill.DEFENCE, 5, 0.15);
   },
+});
+registerPotion({
+  name: "Rank frothy potion",
+  chains: [doseChain("RANK_FROTHY_POTION_4_", "RANK_FROTHY_POTION_3_", "RANK_FROTHY_POTION_2_", "RANK_FROTHY_POTION_1_")],
+  emptyItemId: null,
+  area: "vampyrium",
+  effect: applyRankFrothyPotion,
+});
+registerPotion({
+  name: "Foul chunky potion",
+  chains: [doseChain("FOUL_CHUNKY_POTION_4_", "FOUL_CHUNKY_POTION_3_", "FOUL_CHUNKY_POTION_2_", "FOUL_CHUNKY_POTION_1_")],
+  emptyItemId: null,
+  area: "vampyrium",
+  effect: applyFoulChunkyPotion,
+});
+registerPotion({
+  name: "Rancid slimy potion",
+  chains: [doseChain("RANCID_SLIMY_POTION_4_", "RANCID_SLIMY_POTION_3_", "RANCID_SLIMY_POTION_2_", "RANCID_SLIMY_POTION_1_")],
+  emptyItemId: null,
+  area: "vampyrium",
+  effect: applyRancidSlimyPotion,
+});
+registerPotion({
+  name: "Jar of congealed blood",
+  chains: [[Items.JAR_OF_CONGEALED_BLOOD]],
+  emptyItemId: null,
+  area: "vampyrium",
+  effect: applyJarOfCongealedBlood,
 });
 registerPotion({
   name: "Ranging potion",
@@ -1286,6 +1347,7 @@ module.exports = {
   _test: {
     applyPrayerRestore, applySanfewRestore, applyAncientBrew, restorePrayerOverheal, applyDivine, processDivine,
     applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration, clearPrayerRegeneration,
+    applyRankFrothyPotion, applyFoulChunkyPotion, applyRancidSlimyPotion, applyJarOfCongealedBlood,
     processBoostDecay, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
     findPotionEntry: (itemId) => POTION_BY_ITEM_ID.get(itemId) ?? null,
     cureFromHealthOrb,
@@ -1294,9 +1356,11 @@ module.exports = {
     return POTION_BY_ITEM_ID.get(itemId)?.potion?.name ?? null;
   },
   register(api) {
+    api.onCustomEvent("potions:apply-stamina", applyStaminaRequest);
     pluginApi = api;
     initDragonfireProtectionCoreAccess(api);
     PERSISTED_ATTRIBUTES.forEach((key) => api.persistAttribute(key));
+    api.persistAttribute(ATTR_PRAYER_REGEN_STATE, null);
     api.onPlayerLogout(pauseTimedEffects);
     api.onPlayerLogin(resumeTimedEffects);
     api.onPlayerDeath(clearPrayerRegeneration);

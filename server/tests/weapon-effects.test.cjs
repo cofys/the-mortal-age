@@ -10,7 +10,7 @@ const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 
-const registerLeafBladed = require("../plugins/combat/effects/LeafBladedBattleaxe");
+const registerLeafBladed = require("../plugins/combat/effects/LeafBladedBattleaxe.EquipmentEffects");
 
 function fakePlayer(weaponId, targetName) {
   return {

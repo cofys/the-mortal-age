@@ -1,15 +1,15 @@
 // The Inferno: 69 single-player waves under Mor Ul Rek, ending in TzKal-Zuk.
 // Rules: https://oldschool.runescape.wiki/w/The_Inferno
 //
-//   inferno/InfernoWaves.js     the wave table
-//   inferno/InfernoMonsters.js  combat for each creature
-//   inferno/InfernoRun.js       a run: arena, waves, rocky supports, Jads, rewards
-//   inferno/InfernoZuk.js       wave 69
-//   inferno/InfernoEntry.js     TzHaar-Ket-Keh's fire cape, the chasm and the exit
-const registerInfernoMonsters = require("./inferno/InfernoMonsters");
-const run = require("./inferno/InfernoRun");
-const zuk = require("./inferno/InfernoZuk");
-const entry = require("./inferno/InfernoEntry");
+//   inferno/Waves.Inferno.js     the wave table
+//   inferno/Monsters.Inferno.js  combat for each creature
+//   inferno/Run.Inferno.js       a run: arena, waves, rocky supports, Jads, rewards
+//   inferno/Zuk.Inferno.js       wave 69
+//   inferno/Entry.Inferno.js     TzHaar-Ket-Keh's fire cape, the chasm and the exit
+const registerInfernoMonsters = require("./inferno/Monsters.Inferno");
+const run = require("./inferno/Run.Inferno");
+const zuk = require("./inferno/Zuk.Inferno");
+const entry = require("./inferno/Entry.Inferno");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 
 module.exports = {

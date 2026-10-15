@@ -24,7 +24,7 @@ test("Tumeken's shadow: its own spell, the x3 (x4 in the tombs) passive and char
   const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
   const { Location } = require('../dist/game/model/Location');
   const { Item } = require('../dist/game/model/Item');
-  const Shared = require('../plugins/minigames/toa/ToaShared');
+  const Shared = require('../plugins/minigames/toa/Shared.TombsOfAmascut');
   const Shadow = require('../plugins/items/TumekensShadow.plugin');
   const resolvers = [];
   const providers = [];

@@ -13,9 +13,9 @@
  * inventory and banking; the opened sarcophagus's Search reopens it.
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
-const Rewards = require("./ToaRewards");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
+const Rewards = require("./Loot.TombsOfAmascut");
 
 /** The departing spirit and the burial chamber's chests: unnamed in the cache, no constants. */
 const SPIRIT = 11829;

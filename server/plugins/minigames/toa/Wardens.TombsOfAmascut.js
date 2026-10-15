@@ -15,9 +15,9 @@
  * collapses under thunder. Its defeat completes the raid and raises the teleport crystal.
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
-const Data = require("./ToaWardensData");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
+const Data = require("./WardensData.TombsOfAmascut");
 
 const Z = 1;
 

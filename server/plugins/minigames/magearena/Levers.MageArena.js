@@ -17,7 +17,7 @@
  *   that (graphic 68, 804, sound 1658) and lands beside the counterpart pool two ticks later.
  *   Pools are not a teleport, so teleblock does not bar them.
  */
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
 const ARENA_LEVER_TO_INSIDE = 9706;
 const ARENA_LEVER_TO_OUTSIDE = 9707;

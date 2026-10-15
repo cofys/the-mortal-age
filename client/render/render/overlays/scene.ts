@@ -190,6 +190,7 @@ import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRenderer } from "../../WebGLOsrsRenderer";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
 import { RENDER_CONSTANTS } from "../constants";
+import { headingIndicatorTriangles } from "../../../game/sailing/HeadingIndicator";
 
 export function ensureOverlayUpdateArgs(host: WebGLOsrsRendererHost, scenePass: boolean): OverlayUpdateArgs {
 
@@ -290,6 +291,7 @@ export function populateTileMarkerOverlayState(host: WebGLOsrsRendererHost,
             })
             : nativeTileHighlights;
         state.tileHighlights = visibleTileHighlights.length > 0 ? visibleTileHighlights : undefined;
+        state.headingIndicator = headingIndicatorTriangles(host as any, performance.now());
 
         if (!tileMarkersConfig.enabled) {
             return;
@@ -374,7 +376,7 @@ export function drawSceneTileOverlays(host: WebGLOsrsRendererHost, time: number,
             // updating every other overlay (the main pass updates them) and bail when idle.
             args.state.hoverEnabled = false;
             args.state.hoverTile = undefined;
-            if (!args.state.destTile && !args.state.currentTile && !args.state.tileHighlights) {
+            if (!args.state.destTile && !args.state.currentTile && !args.state.tileHighlights && !args.state.headingIndicator) {
                 return;
             }
             host.tileMarkerOverlay.update(args);

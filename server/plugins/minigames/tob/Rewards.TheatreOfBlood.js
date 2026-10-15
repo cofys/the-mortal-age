@@ -28,8 +28,8 @@
  * 1 loot waiting); loot left behind is kept on the player rather than lost on logout.
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const ATTR_LOOT = "tob:loot";
 const ATTR_COMPLETIONS = "tob:completions";

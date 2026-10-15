@@ -312,6 +312,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const SWAMP_TREE_OBJECT_ID = 38005; // "Swamp tree branch" Swing-from
   const HIDEOUT_CRATE_OBJECT_ID = 17987; // "Crate" Search (silver sickle (b))
   const LAB_ESCAPE_GATE_ID = 37992; // "Gate" Escape (Kroy's lab)
+  const SLEPE_ROWBOAT_OBJECT_ID = 32602; // cache "Row boat" Travel at Slepe
 
   // ---------------------------------------------------------------------------
   // Tiles
@@ -344,9 +345,14 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     { x: 3424, y: 3388, z: 0 },
   ];
   const BURGH_DOCKS = { x: 3523, y: 3169, z: 0 };
+  // The boat is anchored in the water, so its map anchor cannot be used as a
+  // player landing tile.  The first clear shore tile east of the dock connects
+  // to Burgh de Rott's normal paths.
+  const BURGH_LANDING = { x: 3529, y: 3169, z: 0 };
   const IVAN_BOATHOUSE_TILE = { x: 3530, y: 3169, z: 0 };
   const VELIAF_BOATHOUSE_TILE = { x: 3529, y: 3168, z: 0 };
   const ICYENE_DOCK = { x: 3696, y: 3198, z: 0 };
+  const ICYENE_LANDING = { x: 3696, y: 3199, z: 0 };
   const GRAVEYARD_VELIAF_TILE = { x: 3689, y: 3182, z: 0 };
   const GRAVEYARD_SAFALAAN_TILE = { x: 3707, y: 3186, z: 0 };
   const GRAVEYARD_VANESCULA_TILE = { x: 3705, y: 3189, z: 0 };
@@ -359,6 +365,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const MAUSOLEUM_INSIDE = { x: 3704, y: 3192, z: 0 };
   const SAFALAAN_WALK_TILE = { x: 3696, y: 3204, z: 0 };
   const HIDEOUT_VERTIDA_TILE = { x: 3629, y: 9643, z: 0 };
+  const HIDEOUT_IVAN_TILE = { x: 3598, y: 9613, z: 0 };
   const HIDEOUT_POLMAFI_TILE = { x: 3601, y: 9612, z: 0 };
   const LAB_SAFALAAN_TILE = { x: 3611, y: 9737, z: 0 };
   const LAB_BLOODVELD_TILE = { x: 3600, y: 9740, z: 0 };
@@ -601,7 +608,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   // ---------------------------------------------------------------------------
 
   function spawnKey(player, key, npcId, tile) {
-    if (!player || player.isPlayerBot?.() === true) return;
+    if (!player) return;
     let map = spawnedByPlayer.get(player);
     if (!map) {
       map = new Map();
@@ -674,7 +681,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
 
   /** Keeps exactly the quest NPCs the current stage needs present. */
   function applyStageSpawns(player) {
-    if (!player || player.isPlayerBot?.() === true) return;
+    if (!player) return;
     const stage = quest.getStage(player);
     spawnAt(player, "veliaf_slepe_start", VELIAF_ID, VELIAF_SLEPE_TILE, STAGE_UNSTARTED, STAGE_VELIAF_REPORTED);
     spawnAt(player, "veliaf_pater", VELIAF_ID, VELIAF_PATERDOMUS_TILE, STAGE_VELIAF_REPORTED, STAGE_PATERDOMUS);
@@ -693,7 +700,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     spawnAt(player, "ivan_escape", IVAN_ID, BURGH_HIDEOUT, STAGE_VANSTROM_DEAD, STAGE_COMPLETE);
     // The wiki item page: lost tomes are reclaimed from Ivan in Old Man Ral's
     // house in Meiyerditch once the quest is done.
-    if (quest.isComplete(player)) spawnKey(player, "ivan_post", IVAN_ID, HIDEOUT_VERTIDA_TILE);
+    if (quest.isComplete(player)) spawnKey(player, "ivan_post", IVAN_ID, HIDEOUT_IVAN_TILE);
     else despawnKey(player, "ivan_post");
     spawnAt(player, "hameln", HAMELN_ID, HAMELN_CHURCH_TILE, STAGE_STARTED, STAGE_FOLLOWING);
     spawnAt(player, "carl", CARL_ID, CARL_PUB_TILE, STAGE_HAMELN, STAGE_LAB_DESTROYED);
@@ -1235,7 +1242,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
         teleport(player, TREK_START);
         return;
       case "uD7Qcw": // Ivan departs towards the boathouse.
-        teleport(player, BURGH_DOCKS);
+        teleport(player, BURGH_LANDING);
         if (quest.getStage(player) < STAGE_ESCORT_DONE) advance(player, STAGE_ESCORT_DONE);
         else applyStageSpawns(player);
         return;
@@ -1315,6 +1322,19 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
         return;
       case "UPl9kU": // recovering a lost tome from Ivan
         if (!held(player, TOME_ITEM_ID)) give(player, TOME_ITEM_ID, 1);
+        return;
+      case "ZoWCuH": // Ivan's post-Sins Drakan's medallion reclaim interface
+      case "R8U1L0":
+        if (!IVAN_IDS.has(event.npcId) || !quest.isComplete(player)) return;
+        if (held(player, DRAKANS_MEDALLION_ITEM_ID)) {
+          player.sendMessage("You already have a Drakan's medallion.");
+          return;
+        }
+        if (freeSlots(player) < 1) {
+          player.sendMessage("You need an empty inventory slot to reclaim a Drakan's medallion.");
+          return;
+        }
+        give(player, DRAKANS_MEDALLION_ITEM_ID, 1);
         return;
       default:
         return;
@@ -2203,29 +2223,36 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       player,
       "Where would you like to sail?",
       "Burgh de Rott.",
-      () => teleport(player, BURGH_DOCKS),
+      () => teleport(player, BURGH_LANDING),
       "Slepe.",
       () => teleport(player, SLEPE_DOCK),
       "Icyene Graveyard.",
-      () => teleport(player, ICYENE_DOCK)
+      () => teleport(player, ICYENE_LANDING)
     );
   }
 
   function handleBoat(event) {
-    const { player } = event;
+    const { player, objectId } = event;
+    const location = event.location ?? event.object?.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z;
+    if (objectId === SLEPE_ROWBOAT_OBJECT_ID && (x !== SLEPE_DOCK.x - 4 || y !== SLEPE_DOCK.y || z !== SLEPE_DOCK.z)) return false;
+    if (objectId !== BOAT_OBJECT_ID && objectId !== SLEPE_ROWBOAT_OBJECT_ID) return false;
     event.handled = true;
     const stage = quest.getStage(player);
     if (quest.isComplete(player)) {
       openBoatMenu(player);
       return true;
     }
-    if (near(player, BURGH_DOCKS, 4) && stage >= STAGE_ESCORT_DONE) {
-      teleport(player, ICYENE_DOCK);
+    // The player stands on the shore beside the water-anchored boat object.
+    if (near(player, BURGH_LANDING, 8) && stage >= STAGE_ESCORT_DONE) {
+      teleport(player, ICYENE_LANDING);
       if (stage < STAGE_GRAVEYARD) advance(player, STAGE_GRAVEYARD);
       return true;
     }
     if (near(player, ICYENE_DOCK, 4) && stage >= STAGE_GRAVEYARD) {
-      teleport(player, BURGH_DOCKS);
+      teleport(player, BURGH_LANDING);
       return true;
     }
     return true;
@@ -2242,7 +2269,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       handleCrackedWall(event);
       return;
     }
-    if (objectId === BOAT_OBJECT_ID) {
+    if (objectId === BOAT_OBJECT_ID || objectId === SLEPE_ROWBOAT_OBJECT_ID) {
       handleBoat(event);
       return;
     }
@@ -2537,15 +2564,22 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     const { player, itemId } = event;
     if (itemId !== DRAKANS_MEDALLION_ITEM_ID) return false;
     if (!quest.isComplete(player)) return false;
+    const destinations = [
+      { label: "Ver Sinhaza.", tile: VER_SINHAZA },
+      { label: "Slepe.", tile: SLEPE_DOCK },
+      { label: "Darkmeyer.", tile: DARKMEYER },
+    ];
+    // Later Myreque chapters can add a destination unlocked by their own
+    // world interaction without replacing this shared medallion menu.
+    api.emitCustomEvent("drakan-medallion:destinations", { player, destinations });
+    const options = destinations.flatMap(({ label, tile, onTeleport }) => [label, () => {
+      teleport(player, tile);
+      onTeleport?.();
+    }]);
     api.sendMultiChatboxPrompt(
       player,
       "Where would you like to teleport?",
-      "Ver Sinhaza.",
-      () => teleport(player, VER_SINHAZA),
-      "Slepe.",
-      () => teleport(player, SLEPE_DOCK),
-      "Darkmeyer.",
-      () => teleport(player, DARKMEYER)
+      ...options
     );
     return true;
   }

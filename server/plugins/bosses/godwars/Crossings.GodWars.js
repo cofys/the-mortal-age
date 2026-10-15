@@ -14,7 +14,7 @@
  *   area's evil drains Prayer.
  */
 const Common = require("./Common.GodWars");
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
 function level(player, skill) {
   return player.getSkillManager().getCurrentLevel(Common.core.Skill[skill]);

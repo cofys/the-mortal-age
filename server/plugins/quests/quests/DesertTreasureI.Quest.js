@@ -231,6 +231,8 @@ module.exports = function registerDesertTreasureIQuest(api) {
   const setAttr = (player, key, value) => player.setAttribute(key, value | 0);
   const wearingRing = (player) =>
     player.getEquipment().get(Equipment.RING_SLOT)?.getId?.() === RING_OF_VISIBILITY;
+  const hasRingAnywhere = (player) => has(player, RING_OF_VISIBILITY) || wearingRing(player)
+    || player.getBanks?.().some((bank) => bank?.contains?.(RING_OF_VISIBILITY)) === true;
 
   function questHandle(key) {
     return getRegisteredQuests().find((entry) => entry.key === key);
@@ -413,6 +415,7 @@ module.exports = function registerDesertTreasureIQuest(api) {
 
   function rasoloVariant(player) {
     const stage = quest.getStage(player);
+    if (stage >= STAGE_COMPLETE) return "standard-dialogue-after-desert-treasure-i";
     if (stage < STAGE_HUNT) return null;
     if (has(player, SHADOW_DIAMOND)) return "shadow-diamond-talking-to-rasolo-again";
     if (stage < STAGE_PLACED && has(player, GILDED_CROSS)) {
@@ -531,7 +534,15 @@ module.exports = function registerDesertTreasureIQuest(api) {
     if (value.includes("translation")) return has(player, TRANSLATION);
     if (value.includes("has a silver bar")) return has(player, SILVER_BAR);
     if (value.includes("doesn't have a silver bar")) return !has(player, SILVER_BAR);
-    if (value.includes("lost the ring")) return !has(player, RING_OF_VISIBILITY) && !wearingRing(player);
+    if (value.includes("ring of visibility") && value.includes("inventory or bank")) {
+      const hasRing = hasRingAnywhere(player);
+      if (value.includes("does not have")) {
+        const inventoryFull = player.getInventory().isFull?.() === true;
+        return value.includes("inventory is full") ? !hasRing && inventoryFull : !hasRing && !inventoryFull;
+      }
+      return hasRing;
+    }
+    if (value.includes("lost the ring")) return !hasRingAnywhere(player);
     if (value.includes("ring of charos")) return false;
     if (value.includes("blood moon rises")) return value.includes("not completed");
     if (value.includes("vampyre slayer")) {
@@ -586,14 +597,18 @@ module.exports = function registerDesertTreasureIQuest(api) {
       take(player, ETCHINGS);
       return;
     }
-    if (npcId === RASOLO_NPC_ID && /lost the ring/i.test(String(text ?? ""))) {
-      if (!has(player, RING_OF_VISIBILITY)) give(player, RING_OF_VISIBILITY);
-      player.sendMessage("Rasolo gives you another Ring of Visibility.");
-    }
   }
 
   function handleAction(actionEvent) {
     const { player, npcId, stepId } = actionEvent;
+    if (npcId === RASOLO_NPC_ID && stepId === "RdQo2r") {
+      if (!hasRingAnywhere(player) && player.getInventory().isFull?.() !== true) {
+        give(player, RING_OF_VISIBILITY);
+        player.sendMessage("Rasolo gives you another Ring of Visibility.");
+      }
+      actionEvent.handled = true;
+      return;
+    }
     if (stepId === "n513zs" || stepId === "PoD0Nh") {
       if (!has(player, ETCHINGS)) give(player, ETCHINGS);
       actionEvent.handled = true;

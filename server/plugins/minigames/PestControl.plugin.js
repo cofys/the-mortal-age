@@ -21,10 +21,10 @@ const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
 const { ObjectIdentifiers } = require("../../src/main/typescript/elvarg/util/ObjectIdentifiers");
-const { createBotPlayer } = require("../bots/behaviours/spawn/BotPlayerFactory");
-const { buildRoamingPvpMetadata } = require("../bots/behaviours/pvp/PvpAssignment");
-const { applyGeneratedPvpLoadout } = require("../bots/behaviours/policies/PvpLoadoutPolicy");
-const { ATTR_SKIP_PERSISTENCE } = require("../bots/runtime/BotPersistenceConstants");
+const { createBotPlayer } = require("../bots/behaviours/spawn/PlayerFactory.PlayerBots");
+const { buildRoamingPvpMetadata } = require("../bots/behaviours/pvp/PvpAssignment.PlayerBots");
+const { applyGeneratedPvpLoadout } = require("../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
+const { ATTR_SKIP_PERSISTENCE } = require("../bots/runtime/PersistenceConstants.PlayerBots");
 const { ShopManager } = require("../../src/main/typescript/elvarg/game/model/container/shop/ShopManager");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";

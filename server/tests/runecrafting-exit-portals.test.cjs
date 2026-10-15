@@ -199,3 +199,27 @@ test("altar entry lands beside the portal on a walkable cache tile", () => {
     assert.equal(RegionManager.blocked(new Location(x, y, z), null), false, name);
   }
 });
+
+
+test('Named item-on-object hooks match the player-visible multiloc and reject its hidden state', () => {
+  const hooks = PluginManager.itemOnObjectHooks;
+  let state = 0, calls = 0;
+  try {
+    PluginManager.itemOnObjectHooks = [];
+    const player = { getPacketSender: () => ({ getVarbit: () => state, getVarp: () => 0 }) };
+    const object = { getDefinition: () => ObjectDefinition.forId(54089) };
+    assert.equal(object.getDefinition().getName(), 'null');
+    PluginManager.createApi('VisibleObjectTest').onItemOnObject('Air rune', 'Old battered door', () => { calls++; });
+    const event = { player, objectId: 54089, object, itemId: 556, handled: false };
+    assert.equal(PluginManager.emitItemOnObject(event), true);
+    assert.equal(calls, 1);
+    state = 2;
+    event.handled = false;
+    assert.equal(PluginManager.emitItemOnObject(event), true);
+    assert.equal(calls, 2);
+    state = 6;
+    event.handled = false;
+    assert.equal(PluginManager.emitItemOnObject(event), false);
+    assert.equal(calls, 2);
+  } finally { PluginManager.itemOnObjectHooks = hooks; }
+});

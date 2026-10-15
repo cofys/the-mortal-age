@@ -4,7 +4,7 @@
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
 const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
-const { content, dockNear } = require("./sailingContent");
+const { content, dockNear } = require("./SailingContent.Sailing");
 const { currentWind, windXpFactor } = require("./SailingWind.plugin");
 
 const TRADE_VOYAGE_ATTRIBUTE = "sailing:trade-voyage";

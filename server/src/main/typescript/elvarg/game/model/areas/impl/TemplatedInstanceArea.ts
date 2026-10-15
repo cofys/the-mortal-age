@@ -7,6 +7,7 @@ import { RegionManager } from '../../../collision/RegionManager';
 import { getTemplateRegion, templateChunkKey } from '../../../collision/TemplateRegionData';
 import { CachePipeline } from '../../../cache/CachePipeline';
 import { encodeRebuildRegion } from '../../../../net/protocol/ClientProtocol';
+import type { Player } from '../../../entity/impl/player/Player';
 
 /** An 8x8 chunk of the cache map that an instance copies, turned clockwise `rotation` times. */
 export interface TemplateChunk {
@@ -19,13 +20,13 @@ export interface TemplateChunk {
 const PLANES = 4;
 const SCENE_CHUNKS = 13;
 /** The largest instance, in chunks a side, and the spacing between allocations. */
-export const MAX_INSTANCE_CHUNKS = 16;
-const SLOT_STRIDE = 20;
+export const MAX_INSTANCE_CHUNKS = 24;
+const SLOT_STRIDE = MAX_INSTANCE_CHUNKS + 4;
 /** Instances live where the cache has no map (tile 8192+), clear of houses and boat decks. */
 const FIRST_SLOT_CHUNK_X = 1024;
 const FIRST_SLOT_CHUNK_Y = 200;
-const SLOT_COLUMNS = 7;
-const SLOT_ROWS = 60;
+const SLOT_COLUMNS = 6;
+const SLOT_ROWS = 70;
 const usedSlots = new Array<boolean>(SLOT_COLUMNS * SLOT_ROWS).fill(false);
 
 /** Settings bits (cache terrain) and the collision flags they set. */
@@ -236,8 +237,9 @@ export class TemplatedInstanceArea extends PrivateArea {
         return this.locsAt(location).map((loc) => this.objectFor(loc));
     }
 
-    public override resolveObject(id: number, location: Location): GameObject | null {
-        const loc = this.locsAt(location).find((entry) => entry.id === id);
+    public override resolveObject(id: number, location: Location, player?: Player): GameObject | null {
+        const loc = this.locsAt(location).find((entry) => entry.id === id
+            || (player && ObjectDefinition.forPlayer(entry.id, player)?.id === id));
         return loc ? this.objectFor(loc) : null;
     }
 

@@ -10,6 +10,7 @@ import {
 } from "picogl";
 
 import type { TileHighlightRenderEntry } from "../../game/highlights/TileHighlightManager";
+import type { OverlayTriangleBatch } from "../../game/sailing/HeadingIndicator";
 import { Overlay, OverlayInitArgs, OverlayUpdateArgs, RenderPhase } from "./Overlay";
 
 export class TileMarkerOverlay implements Overlay {
@@ -43,6 +44,12 @@ export class TileMarkerOverlay implements Overlay {
     private currentLineArray?: VertexArray;
     private currentLineDrawCall?: DrawCall;
     private tileHighlights?: ReadonlyArray<TileHighlightRenderEntry>;
+    private headingIndicator?: ReadonlyArray<OverlayTriangleBatch>;
+    private trianglePositions?: VertexBuffer;
+    private triangleArray?: VertexArray;
+    private triangleDrawCall?: DrawCall;
+    private triangleCapacity = 0;
+    private triangleColor: vec4 = vec4.fromValues(1.0, 1.0, 1.0, 1.0);
     private scratchLineColor: vec4 = vec4.fromValues(1.0, 1.0, 1.0, 1.0);
     private scratchFillColor: vec4 = vec4.fromValues(1.0, 1.0, 1.0, 0.0);
 
@@ -139,6 +146,37 @@ export class TileMarkerOverlay implements Overlay {
             .uniformBlock("SceneUniforms", this.sceneUniforms!)
             .uniform("u_color", this.currentColor)
             .primitive(PicoGL.LINE_STRIP);
+
+        this.ensureTriangleCapacity(64);
+    }
+
+    /** Grows the world-triangle buffer (the helm's heading arrows) to hold `vertices`. */
+    private ensureTriangleCapacity(vertices: number): void {
+        if (!this.app || vertices <= this.triangleCapacity) return;
+        let capacity = Math.max(64, this.triangleCapacity);
+        while (capacity < vertices) capacity *= 2;
+        this.deleteGpuObject(this.trianglePositions);
+        this.deleteGpuObject(this.triangleArray);
+        this.trianglePositions = this.app.createVertexBuffer(PicoGL.FLOAT, 3, new Float32Array(capacity * 3));
+        this.triangleArray = this.app.createVertexArray().vertexAttributeBuffer(0, this.trianglePositions);
+        this.triangleDrawCall = this.app
+            .createDrawCall(this.program, this.triangleArray)
+            .uniformBlock("SceneUniforms", this.sceneUniforms!)
+            .primitive(PicoGL.TRIANGLES);
+        this.triangleCapacity = capacity;
+    }
+
+    private drawTriangleBatches(batches: ReadonlyArray<OverlayTriangleBatch>): void {
+        this.app!.enable(PicoGL.BLEND);
+        for (const batch of batches) {
+            const count = batch.positions.length / 3;
+            if (count === 0) continue;
+            this.ensureTriangleCapacity(count);
+            this.trianglePositions!.data(new Float32Array(batch.positions));
+            vec4.set(this.triangleColor, batch.rgba[0], batch.rgba[1], batch.rgba[2], batch.rgba[3]);
+            this.triangleDrawCall!.uniform("u_color", this.triangleColor).drawRanges([0, count]).draw();
+        }
+        this.app!.disable(PicoGL.BLEND);
     }
 
     setDestinationColor(colorRgb: number): void {
@@ -158,6 +196,7 @@ export class TileMarkerOverlay implements Overlay {
         this.cachedEffectivePlaneFn = args.helpers.getEffectivePlaneForTile;
         this.actorServerTiles = args.state.actorServerTiles;
         this.tileHighlights = args.state.tileHighlights;
+        this.headingIndicator = args.state.headingIndicator;
         const getHeightSamplePlaneForTile = (
             args.helpers as OverlayUpdateArgs["helpers"] & {
                 getHeightSamplePlaneForTile?: (
@@ -370,6 +409,8 @@ export class TileMarkerOverlay implements Overlay {
             }
         }
 
+        if (this.headingIndicator) this.drawTriangleBatches(this.headingIndicator);
+
         this.app!.depthMask(true);
     }
 
@@ -396,6 +437,12 @@ export class TileMarkerOverlay implements Overlay {
         this.deleteGpuObject(this.destLineArray);
         this.deleteGpuObject(this.destFillArray);
         this.deleteGpuObject(this.currentLineArray);
+        this.deleteGpuObject(this.trianglePositions);
+        this.deleteGpuObject(this.triangleArray);
+        this.trianglePositions = undefined;
+        this.triangleArray = undefined;
+        this.triangleDrawCall = undefined;
+        this.triangleCapacity = 0;
         this.hoverLinePositions = undefined;
         this.hoverFillPositions = undefined;
         this.destLinePositions = undefined;

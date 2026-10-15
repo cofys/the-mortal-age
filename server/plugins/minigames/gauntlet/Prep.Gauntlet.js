@@ -12,11 +12,11 @@
  * Near-Reality's, as the Wiki gives neither.
  */
 
-const Shared = require("./GauntletShared");
-const Run = require("./GauntletRun");
-const Items = require("./GauntletItems");
-const Resources = require("./GauntletResources");
-const Rewards = require("./GauntletRewards");
+const Shared = require("./Shared.Gauntlet");
+const Run = require("./RunState.Gauntlet");
+const Items = require("./Items.Gauntlet");
+const Resources = require("./Resources.Gauntlet");
+const Rewards = require("./Rewards.Gauntlet");
 
 const ANIMATION = { FILL: 827, COOK: 896, GRIND: 364, MIX: 363 };
 /** A weapon made at this tier is attuned (0 basic, 2 perfected). */

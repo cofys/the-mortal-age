@@ -38,9 +38,9 @@
  *   points a chop; the felled tree 30013; the exit crystal.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
-const Monsters = require("./CoxMonsters");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
+const Monsters = require("./Monsters.ChambersOfXeric");
 
 const NPC = { SUBMERGED: 7561, SMALL: 7562, LARGE: 7563, TREE: 7564 };
 const OBJECT = { TENDRILS: 29767, ROCKS: 30012, FELLED_TREE: 30013 };

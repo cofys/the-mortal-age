@@ -31,8 +31,8 @@
  * the portal stands.
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const NPC = { WAITING: 8387, FIGHTING: 8388, TORNADO: 8389 };
 const OBJECT = { LIGHT: 33033, DARK: 33034, RED: 33035, WRONG: 33036, PORTAL: 33037 };

@@ -3,7 +3,7 @@ name: Deploy Docs
 on:
     push:
         branches: [main]
-        paths: ['docs/**']
+        paths: ['docs/**', '.github/workflows/docs.yml']
 
 permissions:
     contents: read
@@ -22,9 +22,12 @@ jobs:
             - uses: actions/setup-node@v4
               with:
                   node-version: 22
-            - run: yarn install --frozen-lockfile
+            - uses: actions/configure-pages@v5
+              id: pages
+            - run: corepack enable
+            - run: corepack yarn install --frozen-lockfile
               working-directory: docs
-            - run: yarn build
+            - run: corepack yarn build --base "${{ steps.pages.outputs.base_path }}/"
               working-directory: docs
             - uses: actions/upload-pages-artifact@v3
               with:

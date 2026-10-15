@@ -7,6 +7,7 @@ export class CombatEquipment {
         const shieldId = player.getEquipment().get(SHIELD_SLOT).getId();
         return shieldId == ItemIdentifiers.ANTI_DRAGON_SHIELD
             || shieldId == ItemIdentifiers.DRAGONFIRE_SHIELD
+            || shieldId == ItemIdentifiers.DRAGONFIRE_SHIELD_2
             || shieldId == ItemIdentifiers.DRAGONFIRE_WARD;
     }
 }

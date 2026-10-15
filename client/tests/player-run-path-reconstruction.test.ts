@@ -407,8 +407,8 @@ function checkFreeMovement() {
     const { decodeServerPacket } = require("../network/packet/ServerBinaryDecoder");
     const { decodeClientPackets, encodeFinePosition } = require("../../server/src/main/typescript/elvarg/net/protocol/ClientProtocol");
     const { Location } = require("../../server/src/main/typescript/elvarg/game/model/Location");
-    const plugin = require("../../server/plugins/movement/FreeMovement.plugin.js");
-    const { RADIUS, moveContinuous, WALK_SPEED, MAX_PREDICTION_MS } = require("../../server/plugins/movement/ContinuousMotion.js");
+    const plugin = require("../../server/plugins/world/FreeMovement.plugin.js");
+    const { RADIUS, moveContinuous, WALK_SPEED, MAX_PREDICTION_MS } = require("../../server/plugins/world/ContinuousMotion.FreeMovement.js");
     const originalNow = Object.getOwnPropertyDescriptor(performance, "now");
     let now = 1000;
     Object.defineProperty(performance, "now", { configurable: true, value: () => now });

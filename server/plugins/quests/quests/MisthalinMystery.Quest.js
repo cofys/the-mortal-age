@@ -32,7 +32,7 @@
 module.exports = function registerMisthalinMysteryQuest(api) {
   const { Skill, Location, ObjectDefinition, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
-  const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+  const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
   ObstacleRunner.init(api);
 

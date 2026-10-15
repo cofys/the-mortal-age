@@ -7,7 +7,7 @@
  * through while its open leaves show for a moment, then it is closed again (data `passages`).
  */
 const T = require("./Common.TutorialIsland");
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
 const { STEP } = T;
 /** Step a door or gate completes -> the step after it. The door is the one the step's arrow marks. */

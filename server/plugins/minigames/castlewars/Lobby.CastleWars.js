@@ -8,8 +8,8 @@
  */
 
 const FoodPlugin = require("../../items/Food.plugin");
-const { createBotPlayer } = require("../../bots/behaviours/spawn/BotPlayerFactory");
-const { ATTR_SKIP_PERSISTENCE } = require("../../bots/runtime/BotPersistenceConstants");
+const { createBotPlayer } = require("../../bots/behaviours/spawn/PlayerFactory.PlayerBots");
+const { ATTR_SKIP_PERSISTENCE } = require("../../bots/runtime/PersistenceConstants.PlayerBots");
 const { ShopManager } = require("../../../src/main/typescript/elvarg/game/model/container/shop/ShopManager");
 
 const CASTLE_WARS_TICKET_EXCHANGE_SHOP = 1432;

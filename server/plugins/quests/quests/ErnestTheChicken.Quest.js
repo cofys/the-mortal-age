@@ -733,7 +733,7 @@ module.exports = function registerErnestTheChickenQuest(api) {
   });
 
   api.persistAttribute(FOUNTAIN_ATTRIBUTE);
-  api.persistAttribute(LEVERS_ATTRIBUTE);
+  api.persistAttribute(LEVERS_ATTRIBUTE, 0);
 
   api.onNpcDialogueVariant(selectVariant);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);

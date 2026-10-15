@@ -141,6 +141,7 @@ function clearSession(player, sourceArea) {
 }
 
 function destroyArea(player, area = player.getAttribute?.(ATTR_AREA)) {
+  if (!area && !sessions.has(player)) return;
   Hud.dropFor(player);
   clearSession(player, area);
   if (area instanceof AraxxorPrivateArea && area.isDestroyed?.() !== true) {

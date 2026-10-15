@@ -9,7 +9,7 @@
  * A logout during a fight whose raid has ended by the time the player returns counts the same.
  */
 
-const Shared = require("./TobShared");
+const Shared = require("./Shared.TheatreOfBlood");
 
 const ATTR_STORED = "tob:retrieval";
 const FEE = 100000;

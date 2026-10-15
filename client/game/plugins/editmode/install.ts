@@ -297,11 +297,6 @@ export function parseEditModeWorldDefinition(value: unknown): EditModeWorldDefin
     if (raw.experienceMultiplier !== undefined && (typeof raw.experienceMultiplier !== "number" || !Number.isFinite(raw.experienceMultiplier) || raw.experienceMultiplier <= 0)) {
         throw new Error("World API returned invalid experienceMultiplier");
     }
-    if (raw.disabledPlugins !== undefined && (
-        !Array.isArray(raw.disabledPlugins) || raw.disabledPlugins.some(
-            (name) => typeof name !== "string" || name.trim().length === 0,
-        )
-    )) throw new Error("World API returned invalid disabledPlugins");
     const spawn = raw.spawn as Record<string, unknown>;
     const zones: EditModeWorldZone[] = raw.zones.map((value, index) => {
         if (!value || Array.isArray(value) || typeof value !== "object") {
@@ -333,7 +328,7 @@ export function parseEditModeWorldDefinition(value: unknown): EditModeWorldDefin
         return parsed;
     });
     return {
-        // Keys the editor does not edit (pluginConfig, gameframe, membersWorld, ...) pass
+        // Keys the editor does not edit (plugins, pluginConfig, gameframe, membersWorld, ...) pass
         // through untouched, so saving world.json never drops settings it doesn't know.
         ...raw,
         spawn: {
@@ -342,7 +337,6 @@ export function parseEditModeWorldDefinition(value: unknown): EditModeWorldDefin
             z: worldPlane(spawn.z, "World API spawn.z"),
         },
         zones,
-        disabledPlugins: (raw.disabledPlugins ?? []).map((name) => (name as string).trim()),
         experienceMultiplier: raw.experienceMultiplier === undefined ? 1 : raw.experienceMultiplier,
     };
 }
@@ -355,7 +349,6 @@ export function parseBrowserHostWorldSpawn(value: string | null): EditModeWorldD
     return parseEditModeWorldDefinition({
         spawn: { x: spawn[0], y: spawn[1], z: spawn[2] },
         zones: [],
-        disabledPlugins: [],
         experienceMultiplier: 1,
     });
 }

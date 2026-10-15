@@ -33,7 +33,10 @@ against live OSRS, never against another private server.
 13. **No one-offs.** No single-item special cases, override layers or abstractions for one
     value. Edit the canonical data (`data/definitions/items.json`, `shops.json`) instead.
 14. **Attribute keys** are kebab-case and namespaced (`warriors-guild:basement-unlocked`),
-    declared once in a `*_ATTRIBUTE` constant.
+    declared once in a `*_ATTRIBUTE` constant. A saved attribute passes the value a new player
+    starts with: `api.persistAttribute(KEY, 0)`. Values equal to it aren't saved, and a save
+    without the key loads it. Leave it out only when there is no fixed starting value (a
+    per-player random offset, a timestamp).
 15. **Plugin data lives with the plugin.** Data that only drives one plugin's own behaviour
     goes in a `data/` directory in its plugin directory (`plugins/world/data/`,
     `plugins/skills/sailing/data/`), loaded relative to the plugin file. World data stays in

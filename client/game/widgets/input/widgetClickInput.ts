@@ -14,6 +14,16 @@ import type { WidgetInputControllerDeps, WidgetInputFrame, WidgetInputState } fr
 import type { PrimaryWidgetAction } from "./widgetPrimaryAction";
 import { isCombatSkillWidgetAction } from "../widgetActionPayload";
 
+/** Whether a widget offers a menu op of its own: an op with text, shown by its flags or onOp. */
+function offersMenuOp(w: any, getWidgetFlags: (w: any) => number): boolean {
+    if (!Array.isArray(w?.actions)) return false;
+    const flags = getWidgetFlags(w) | 0;
+    const hasOnOpHandler = !!(w.eventHandlers?.onOp || w.onOp);
+    return w.actions.some(
+        (action: any, index: number) => !!sanitizeText(action) && shouldShowMenuOption(flags, index, hasOnOpHandler),
+    );
+}
+
 export function processWidgetClickInput(
     deps: WidgetInputControllerDeps,
     state: WidgetInputState,
@@ -116,6 +126,23 @@ export function processWidgetClickInput(
                     (!isDynamicWidget && hasTransmitOps && !opsCleared) ||
                     hasSpellAction
                 );
+                // A widget that is only draggable (an interface's invisible resize handles) offers
+                // no menu op, so a left-click runs the top menu entry beneath it, as OSRS does:
+                // the gravestone window's corner handle lies over its Close button.
+                const dragOnly =
+                    hasHandlers &&
+                    !!(w.isDraggable || w.eventHandlers?.onDrag || w.onDrag) &&
+                    !hasActions &&
+                    !hasOnOpHandler &&
+                    !hasInventoryItem &&
+                    !isPauseButtonWidget &&
+                    !hasSpellAction &&
+                    !(!isDynamicWidget && hasTransmitOps && !opsCleared) &&
+                    !(w.eventHandlers?.onClick || w.eventHandlers?.onClickRepeat || w.eventHandlers?.onHold ||
+                        w.eventHandlers?.onRelease || w.onClick || w.onClickRepeat || w.onHold || w.onRelease);
+                if (dragOnly && clickHits.slice(0, i).some((below: any) => offersMenuOp(below, getWidgetFlags))) {
+                    continue;
+                }
                 if (hasHandlers) {
                     widgetInteraction.clickedWidget = w;
                     widgetInteraction.clickedWidgetParent = widgetInteraction.resolveClickedWidgetParent(w);
@@ -361,9 +388,11 @@ export function processWidgetClickInput(
                     // Non-draggable widgets: Fire onClick immediately on press
                     const meslayerBeforePrimaryClick =
                         widgetManager?.meslayerContinueWidget ?? null;
+                    const eventScaleX = w._absScaleX ?? 1;
+                    const eventScaleY = w._absScaleY ?? 1;
                     const clickCtx: Partial<ScriptEvent> = {
-                        mouseX: widgetInteraction.clickedWidgetX,
-                        mouseY: widgetInteraction.clickedWidgetY,
+                        mouseX: (widgetInteraction.clickedWidgetX / eventScaleX) | 0,
+                        mouseY: (widgetInteraction.clickedWidgetY / eventScaleY) | 0,
                         opIndex: primaryAction.opIndex ?? 1,
                         targetName: primaryAction.target,
                     };

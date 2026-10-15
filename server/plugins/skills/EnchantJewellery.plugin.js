@@ -1,6 +1,6 @@
 module.exports = {
   name: "EnchantJewellery",
   register(api) {
-    require("./enchant/Spells.EnchantJewellery")(api);
+    require("./Spells.EnchantJewellery")(api);
   },
 };

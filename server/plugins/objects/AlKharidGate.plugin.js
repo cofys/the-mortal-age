@@ -18,7 +18,7 @@
  * leaves (METALGATEOPENL/R); 44052/44053/44050/44051 resolved closed variants.
  */
 const { startTranscript } = require("../quests/QuestRuntime");
-const ObstacleRunner = require("../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../skills/agility/ObstacleRunner.Agility");
 
 const GATE_LEAF_IDS = new Set([44598, 44599]);
 const OPEN_LEFT_ID = 1571;

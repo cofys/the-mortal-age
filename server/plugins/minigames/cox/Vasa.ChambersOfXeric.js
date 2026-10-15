@@ -37,9 +37,9 @@
  *   3x3; stomps 1-5; "The crystal is currently invulerable to damage."; prayers blocked 8 ticks.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
-const Monsters = require("./CoxMonsters");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
+const Monsters = require("./Monsters.ChambersOfXeric");
 
 const NPC = { ROCKS: 7565, VASA: 7566, SIPHONING: 7567, CRYSTAL: 7568 };
 const OBJECT = { LIT: 29774, DARK: 29775, EXIT: 30016, FIRE: 30019 };

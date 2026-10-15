@@ -127,6 +127,7 @@ import type { WebGLMapSquare } from "../../WebGLMapSquare";
 import { shouldRenderServerNpc } from "../actors/actorPacking";
 import { isMapWithinRenderDistance, getMapZoneDistanceFromPoint } from "../../render/draw2";
 import { computeWebGPURoofPlaneLimit, resolveWebGPURenderDistance } from "../frameConfig";
+import { headingIndicatorTriangles } from "../../../game/sailing/HeadingIndicator";
 
 const PLAYER_DEFAULT_HEIGHT_FALLBACK = 200 / 128;
 
@@ -1665,6 +1666,7 @@ export class OverlayHost {
               })
             : nativeTileHighlights;
         state.tileHighlights = visibleTileHighlights.length > 0 ? visibleTileHighlights : undefined;
+        state.headingIndicator = headingIndicatorTriangles(this.renderer as any, performance.now());
 
         if (!config?.enabled) return;
 

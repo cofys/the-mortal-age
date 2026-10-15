@@ -82,10 +82,9 @@ export type EditModeWorldZone = EditModeBoundedWorldZone | {
 export interface EditModeWorldDefinition {
     spawn: { x: number; y: number; z: number };
     zones: EditModeWorldZone[];
-    disabledPlugins: string[];
     experienceMultiplier: number;
     /**
-     * Every other world.json key (pluginConfig, gameframe, membersWorld, ...) is opaque to
+     * Every other world.json key (plugins, pluginConfig, gameframe, membersWorld, ...) is opaque to
      * the editor and carried through unchanged so saving never drops it.
      */
     [key: string]: unknown;

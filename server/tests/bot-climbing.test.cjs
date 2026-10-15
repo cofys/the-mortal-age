@@ -7,7 +7,7 @@ Server.installProductionPathResolver();
 
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
-const { findStairs } = require('../plugins/bots/brain/Climbing');
+const { findStairs } = require('../plugins/bots/brain/Climbing.PlayerBots');
 
 before(async () => {
     await CachePipeline.initialize(path.resolve(__dirname, '..'));

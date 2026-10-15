@@ -2,7 +2,7 @@
 
 /**
  * The Corporeal Beast: its stomp, regeneration, damage reduction and the damage overlay's count.
- * The attacks themselves are in CorpAttacks.js; the dark energy core in DarkCore.*, which a
+ * The attacks themselves are in Attacks.CorporealBeast.js; the dark energy core in DarkCore.*, which a
  * big hit here or an attack below 1,000 hitpoints can send out.
  *
  * Wiki ("Corporeal Beast/Strategies", Mechanics; the infobox):
@@ -20,8 +20,8 @@
  * "You get trampled under the Beast's massive legs." is the stomp's message.
  */
 
-const Shared = require("./CorpShared");
-const Attacks = require("./CorpAttacks");
+const Shared = require("./Shared.CorporealBeast");
+const Attacks = require("./Attacks.CorporealBeast");
 const DarkCore = require("./DarkCore.CorporealBeast");
 
 const RESPAWN_TICKS = 50;

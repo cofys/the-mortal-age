@@ -32,7 +32,7 @@ CharterShips.register({
     },
     TeleportType: { NORMAL: "NORMAL" },
   },
-  sendMultiChatboxPrompt: (player, title, ...options) => { prompt = { title, options }; },
+  sendMultiChatboxPrompt: (player, title, ...options) => { prompt = { title, options }; return true; },
   onNpcInteraction: (name, actions) => npcHooks.push({ name, actions }),
   emitCustomEvent,
   log() {},
@@ -107,10 +107,31 @@ test("the menu identifies the current port and lists the others with fares", () 
   );
   CharterShips._test.openMenu({
     player: createPlayer({ ring: ItemIdentifiers.RING_OF_CHAROS_A_ }),
-    object: { getLocation: () => brimhaven.destination },
+    npc: { getLocation: () => brimhaven.destination },
   });
   const labels = prompt.options.filter((option) => typeof option === "string");
   assert.ok(labels.some((label) => label.startsWith("Catherby (240 coins)")));
   assert.ok(!labels.some((label) => label.startsWith("Brimhaven")));
   assert.equal(npcHooks.filter((hook) => hook.name.toLowerCase().includes("trader")).length >= 2, true);
+});
+
+test("charter destinations page within the five-option chatbox and still sail to Port Phasmatys", () => {
+  teleports.length = 0;
+  quests = [{ key: "priest_in_peril", isComplete: () => true }];
+  const player = createPlayer();
+  const { ports } = CharterShips._test.loadData();
+  const sarim = ports.find((port) => port.name === "Port Sarim");
+  assert.equal(CharterShips._test.openMenu({ player, npc: { getLocation: () => sarim.destination } }), true);
+  let labels = prompt.options.filter((option) => typeof option === "string");
+  assert.equal(labels.length, 5);
+  assert.ok(labels.includes("More destinations..."));
+  assert.ok(!labels.some((label) => label.startsWith("Port Phasmatys")));
+
+  prompt.options[prompt.options.indexOf("More destinations...") + 1]();
+  labels = prompt.options.filter((option) => typeof option === "string");
+  assert.ok(labels.includes("Port Phasmatys (1300 coins)"));
+  prompt.options[prompt.options.indexOf("Port Phasmatys (1300 coins)") + 1]();
+  assert.equal(player.balance, 8700);
+  assert.equal(teleports.length, 1);
+  assert.deepEqual(teleports[0].destination, ports.find((port) => port.name === "Port Phasmatys").destination);
 });

@@ -8,11 +8,11 @@
  * initialised by 6729 with the invocation bitmaps) follows the cache interfaces.
  */
 
-const Shared = require("./ToaShared");
-const Parties = require("./ToaParties");
-const Invocations = require("./ToaInvocations");
-const Raid = require("./ToaRaid");
-const Rewards = require("./ToaRewards");
+const Shared = require("./Shared.TombsOfAmascut");
+const Parties = require("./Parties.TombsOfAmascut");
+const Invocations = require("./Invocations.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
+const Rewards = require("./Loot.TombsOfAmascut");
 
 const { INTERFACE, SCRIPT, VARBIT, VARP, EVENT } = Shared;
 
@@ -793,6 +793,6 @@ module.exports = function registerTombsLobby(api) {
   api.onInterfaceActionButton(MANAGEMENT_BUTTONS_UID, clickManagementButton);
   api.onInterfaceActionButton(MANAGEMENT_REWARD_INFO_UID, showRewardPotential);
   api.onInterfaceActionButton(MANAGEMENT_PRESETS_UID, clickPreset);
-  api.persistAttribute("toa:invocation-presets");
+  api.persistAttribute("toa:invocation-presets", Array.from({ length: 5 }, () => [0, 0, 0]));
   api.persistAttribute("toa:completions");
 };

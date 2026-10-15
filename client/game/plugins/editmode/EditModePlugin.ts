@@ -53,6 +53,7 @@ const TOOLS: ReadonlySet<string> = new Set<EditModeTool>([
     "delete",
     "terrain",
     "path",
+    "wall",
 ]);
 /** Keeps a stray drag from placing half a map square. */
 const MAX_DRAW_TILES = 512;

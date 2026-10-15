@@ -40,8 +40,8 @@
  * ball's bounces, the lines she says.
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const NPC = {
   WAITING: 8369, PHASE1: 8370,

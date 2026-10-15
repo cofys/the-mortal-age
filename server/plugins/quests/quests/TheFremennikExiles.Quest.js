@@ -878,6 +878,9 @@ module.exports = function registerTheFremennikExilesQuest(api) {
     const stage = stageOf(player);
 
     if (BRUNDT_NPC_IDS.has(npcId)) {
+      if (npcId === BRUNDT_LONGHALL && stage <= 0 &&
+          hasQuestCompleted(player, QUEST_KEYS.lunar_diplomacy) &&
+          !hasItem(player, ItemIdentifiers.SEAL_OF_PASSAGE)) return false;
       const choice = brundtVariant(player, npcId, stage);
       const variant = typeof choice === "string" ? choice : choice?.variant;
       if (!variant) return false;

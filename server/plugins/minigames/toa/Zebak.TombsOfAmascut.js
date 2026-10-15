@@ -26,8 +26,8 @@
  *   (named so in RuneLite's gameval; OpenRune uses the enraged melee only).
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 const SPAWN = { x: 3918, y: 5404, z: 0 };
 const TAIL_SPAWN = { x: 3909, y: 5403, z: 0 };

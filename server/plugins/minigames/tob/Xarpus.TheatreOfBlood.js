@@ -25,8 +25,8 @@
  * Not done: the exhumed it absorbs don't raise its stats or poison damage.
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const NPC = { WAITING: 8338, FEEDING: 8339, FIGHTING: 8340 };
 const OBJECT = { EXHUMED: 32743, MIASMA: 32744 };

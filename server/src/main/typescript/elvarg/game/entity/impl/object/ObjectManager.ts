@@ -69,6 +69,7 @@ export class ObjectManager {
             && a.getType() === b.getType()
             && a.getFace() === b.getFace()
             && a.getPrivateArea() === b.getPrivateArea()
+            && a.getOwner() === b.getOwner()
             && a.getLocation().equals(b.getLocation());
     }
 
@@ -114,6 +115,9 @@ export class ObjectManager {
         for (let regionX = baseX >> 6; regionX <= (baseX + this.SCENE_SIZE - 1) >> 6; regionX++) {
             for (let regionY = baseY >> 6; regionY <= (baseY + this.SCENE_SIZE - 1) >> 6; regionY++) {
                 for (const object of ObjectManager.objectsByRegion.get(`${regionX},${regionY}`) ?? []) {
+                    if (object.getOwner() && object.getOwner() !== player) {
+                        continue;
+                    }
                     if (viewedArea !== object.getPrivateArea()) {
                         continue;
                     }
@@ -129,12 +133,16 @@ export class ObjectManager {
                 }
             }
         }
+        for (const object of MapObjects.ownerObjectsInScene(player, baseX, baseY, this.SCENE_SIZE)) {
+            player.getPacketSender().sendObject(object);
+        }
     }
 
     public static register(object: GameObject, playerUpdate: boolean) {
         // Check for matching object on this tile.
         for (const o of [...ObjectManager.objectsAt(object.getLocation())]) {
-            if (o.getType() === object.getType() && object.getPrivateArea() == o.getPrivateArea()) {
+            if (o.getType() === object.getType() && object.getPrivateArea() == o.getPrivateArea()
+                && object.getOwner() === o.getOwner()) {
                 ObjectManager.removeFromWorld(o);
             }
         }
@@ -235,6 +243,7 @@ export class ObjectManager {
             case OperationType.SPAWN:
             case OperationType.DESPAWN:
                 World.forEachNetworkPlayer((player) => {
+                    if (object.getOwner() && object.getOwner() !== player) return;
                     if (this.viewedArea(player) != object.getPrivateArea()) {
                         return;
                     }

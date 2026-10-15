@@ -21,9 +21,9 @@
  * RuneLite (gameval): the chest's appearing animation 10825.
  */
 
-const Shared = require("./ColosseumShared");
-const Loot = require("./ColosseumLoot");
-const { byKey } = require("./ColosseumModifiers");
+const Shared = require("./Shared.Colosseum");
+const Loot = require("./Loot.Colosseum");
+const { byKey } = require("./Modifiers.Colosseum");
 
 const INVENTORY = { REWARDS: 843, FUTURE: 844, PREVIOUS: 845 };
 const INVENTORY_SIZE = 28;
@@ -41,7 +41,7 @@ const OP10 = 1 << 10;
 const GLORY = { completion: 100, noDamage: 100, timeStart: 500 };
 
 function runOf(player) {
-  return require("./ColosseumRun").runOf(player);
+  return require("./Run.Colosseum").runOf(player);
 }
 
 function valueOf(items) {

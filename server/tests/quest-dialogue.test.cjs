@@ -152,7 +152,11 @@ for (const name of questFiles()) {
             return obj[prop];
           },
         });
-        const choice = quest.selectVariant({ npcId, player: stagePlayer, npc: null, definition: null, pages: [] });
+        const availablePages = pages.map((page) => ({
+          page,
+          variants: Object.keys(data[page]?.variants || {}),
+        }));
+        const choice = quest.selectVariant({ npcId, player: stagePlayer, npc: null, definition: null, pages: availablePages });
         if (choice === null || choice === undefined) continue;
         const variant = typeof choice === 'string' ? choice : choice.variant;
         const page = typeof choice === 'string' ? null : choice.page;

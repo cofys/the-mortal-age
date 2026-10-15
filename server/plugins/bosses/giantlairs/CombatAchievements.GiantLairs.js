@@ -1,10 +1,10 @@
 "use strict";
 
 /**
- * Obor's and Bryophyta's Combat Achievements (plugins/combatachievements/): their kill-count
+ * Obor's and Bryophyta's Combat Achievements (plugins/achievements/combatachievements/): their kill-count
  * tasks count chests opened ("Open Obor's chest 5 times."), the lairs' own count, and beating
  * either on a free-to-play world is a task of its own. The rest are fight rules
- * (plugins/combatachievements/tasks/).
+ * (plugins/achievements/combatachievements/tasks/).
  */
 
 const Common = require("./Common.GiantLairs");

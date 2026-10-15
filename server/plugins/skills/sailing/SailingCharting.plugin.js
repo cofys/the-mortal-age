@@ -7,7 +7,7 @@ const { BoatManager } = require("../../../src/main/typescript/elvarg/game/conten
 const { World } = require("../../../src/main/typescript/elvarg/game/World");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
 const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
-const { content, dockNear } = require("./sailingContent");
+const { content, dockNear } = require("./SailingContent.Sailing");
 const { currentWind, windXpFactor } = require("./SailingWind.plugin");
 
 const CHARTED_ATTRIBUTE = "sailing:charted-regions";

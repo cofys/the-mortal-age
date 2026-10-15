@@ -106,7 +106,7 @@ function damagePlayer(player, amount) {
 
 function healNpc(npc, amount) {
   if (!alive(npc) || amount <= 0) return;
-  npc.setHitpoints?.(Math.min(Shared.MAX_HITPOINTS, (npc.getHitpoints?.() ?? 0) + amount));
+  npc.setHitpoints?.(Math.min(Shared.maxHitpointsForNpc(npc), (npc.getHitpoints?.() ?? 0) + amount));
 }
 
 function unfreeze(player) {

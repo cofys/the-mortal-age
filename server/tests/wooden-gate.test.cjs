@@ -1,3 +1,4 @@
+
 // Run after `yarn build`: node --test tests/wooden-gate.test.cjs
 //
 // Wooden gates are two locs (hinge 12986 + extension 12987) that must swing together around
@@ -13,10 +14,23 @@ const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const { Sounds } = require('../dist/game/Sounds');
 const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
+const { RegionManager } = require('../dist/game/collision/RegionManager');
+const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
+const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
 
 const tileKey = (id, x, y, z) => `${id}@${x},${y},${z}`;
+let mapCollisionInitialized = false;
 
-function buildHarness() {
+async function initializeMapCollisionOnce() {
+  if (mapCollisionInitialized) return;
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(process.cwd());
+  RegionManager.init();
+  mapCollisionInitialized = true;
+}
+
+function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {}) {
   const world = new Map();
   const ops = [];
   const sounds = [];
@@ -29,17 +43,21 @@ function buildHarness() {
   MapObjects.get = (id, location) =>
     world.get(tileKey(id, location.getX(), location.getY(), location.getZ())) ?? null;
   Sounds.sendSound = (...args) => sounds.push(args);
-  CacheDefinitions.getObject = (id) => id === 3743
+  CacheDefinitions.getObject = (id) => cacheObjects?.get(id) ?? (id === 3743
     ? { name: 'Large door', actions: ['Open'], models: [[14930], [14931]] }
-    : id === 3747
-    ? { name: 'Door', actions: ['Open'], models: [[14928], [14929]] }
-    : (id === 2394
+    : id === 3747 ? { name: 'Door', actions: ['Open'], models: [[14928], [14929]] }
+    : id === 2394
     ? { name: 'Gate', actions: ['Open'], models: [[1298]] }
-    : { name: 'Gate' });
-  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: 3749 });
+    : id === 2606 ? { name: 'Wall', actions: ['Open'], models: [[633]] }
+    : id === 8738 || id === 8739
+      ? { name: 'Ardougne Wall Door', actions: ['Open'], models: [[1298]] }
+      : { name: 'Gate' });
+  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: cacheObjects ? 62522 : 8740 });
 
   const handlers = new Map();
-  const objectManager = {
+  let doorToggleHandler = null;
+  const visibleObjectIds = new Map();
+  const objectManager = suppliedObjectManager ?? {
     register: (o) => ops.push(['register', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
     deregister: (o) => ops.push(['deregister', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
   };
@@ -50,6 +68,7 @@ function buildHarness() {
     core: {
       CacheDefinitions, GameObject, Location, MapObjects, Sounds,
       ObjectIdentifiers: require('../dist/util/ObjectIdentifiers').ObjectIdentifiers,
+      ObjectDefinition: { forPlayer: (id) => ({ id: visibleObjectIds.get(id) ?? id }) },
       Sound: require('../dist/game/Sound').Sound,
       Task: require('../dist/game/task/Task').Task,
       ObjectManager: objectManager,
@@ -57,11 +76,14 @@ function buildHarness() {
     },
     getObjectManager: () => objectManager,
     getTaskManager: () => taskManager,
-    emitCustomEvent: () => {},
+    emitCustomEvent: (name, event) => {
+      if (name === 'door:toggle') doorToggleHandler?.(event);
+    },
     onObjectInteraction: (name, actions) => handlers.set(name, actions),
     onRegionLoaded: () => {},
     onPlayerProcess: () => {},
   };
+  delete require.cache[require.resolve('../plugins/objects/Doors.plugin')];
   require('../plugins/objects/Doors.plugin').register(api);
 
   const place = (id, x, y, face) => {
@@ -69,13 +91,13 @@ function buildHarness() {
     world.set(tileKey(id, x, y, 0), object);
   };
 
-  const click = (id, x, y, face, action = 'Open', name = 'Gate', type = 0) => {
-    const object = new GameObject(id, new Location(x, y, 0), type, face, null);
+  const click = (id, x, y, face, action = 'Open', name = 'Gate', type = 0, privateArea = null, z = 0) => {
+    const object = new GameObject(id, new Location(x, y, z), type, face, privateArea);
     const location = object.getLocation();
     const player = {
       getUsername: () => 'tester',
       isPlayerBot: () => false,
-      getPrivateArea: () => null,
+      getPrivateArea: () => privateArea,
       getLocation: () => location,
       getAttribute: () => 0,
       setAttribute: () => {},
@@ -84,7 +106,7 @@ function buildHarness() {
       getPacketSender: () => ({}),
     };
     ops.length = 0;
-    handlers.get(name)[action]({ player, object, objectId: id, location: { x, y, z: 0 } });
+    handlers.get(name)[action]({ player, object, objectId: id, clickType: action === 'Open' ? 1 : 2, location: { x, y, z } });
     return ops.splice(0);
   };
 
@@ -95,8 +117,213 @@ function buildHarness() {
     CacheDefinitions.getCounts = originalGetCounts;
   };
 
-  return { place, click, sounds, ops, submitted, restore };
+  return { place, click, sounds, ops, submitted, handlers, visibleObjectIds, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
 }
+
+test('captured door portals can hand off before the ordinary door swing', () => {
+  const h = buildHarness({ cacheObjects: new Map([
+    [25341, { name: 'Mithril door', actions: ['Open'], models: [[26771]] }],
+    [32208, { name: 'Mithril door', actions: ['Open'], models: [[26771]] }],
+  ]) });
+  try {
+    assert.ok(h.handlers.get('Mithril door')?.Open,
+      'the cache-specific door name enters the ordinary toggle path');
+    const claimed = [];
+    h.setDoorToggleHandler((request) => {
+      if (request.objectId === 25341 && request.object.getLocation().getX() === 1759 && request.clickType === 1) {
+        request.handled = true;
+        claimed.push('entry');
+      }
+    });
+    assert.deepEqual(h.click(25341, 1759, 5343, 3, 'Open', 'Mithril door', 0, null, 1), [],
+      'a loc-teleport route claims the portal before local swing behavior');
+    assert.deepEqual(claimed, ['entry']);
+    h.setDoorToggleHandler(null);
+    assert.deepEqual(h.click(25341, 1631, 5343, 3, 'Open', 'Mithril door', 0, null, 1), [],
+      'an unrelated cache placement is not given a speculative DS2 door override');
+  } finally {
+    h.restore();
+  }
+});
+
+test('Lassar blue-key room door uses its cache Close variant after the unused loc id', async () => {
+  await initializeMapCollisionOnce();
+  const closed = CacheDefinitions.getObject(48274);
+  const open = CacheDefinitions.getObject(48276);
+  assert.equal(closed.name, 'Door');
+  assert.equal(closed.actions[0], 'Open');
+  assert.equal(open.name, 'Door');
+  assert.equal(open.actions[0], 'Close');
+
+  const h = buildHarness({ cacheObjects: new Map([[48274, closed], [48276, open]]) });
+  try {
+    h.place(48274, 2422, 6442, 3);
+    const operations = h.click(48274, 2422, 6442, 3, 'Open', 'Door');
+    assert.ok(operations.some(([action, id]) => action === 'deregister' && id === 48274),
+      'opening replaces the closed cache loc');
+    assert.ok(operations.some(([action, id]) => action === 'register' && id === 48276),
+      'opening uses the real Close-action partner, skipping actionless 48275');
+  } finally {
+    h.restore();
+  }
+});
+
+test('Ghorrock Prison’s keyed western gate uses its cache-supported self-opening swing', async () => {
+  await initializeMapCollisionOnce();
+  const id = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers.GATE_282;
+  const definition = CacheDefinitions.getObject(id);
+  assert.equal(definition.name, 'Gate');
+  assert.equal(definition.actions[0], 'Open');
+  assert.equal(CacheDefinitions.getObject(id + 1)?.name, 'Crate', 'the gate has no cache open partner');
+  const h = buildHarness({ cacheObjects: new Map([[id, definition]]) });
+  try {
+    const opened = h.click(id, 8343, 1689, 3);
+    assert.deepEqual(opened, [
+      ['register', id, 8343, 1688, 0],
+      ['deregister', id, 8343, 1689, 3],
+    ], 'opening rotates the same loc out of the doorway');
+    const closed = h.click(id, 8343, 1688, 0);
+    assert.deepEqual(closed, [
+      ['register', id, 8343, 1689, 3],
+      ['deregister', id, 8343, 1688, 0],
+    ], 'the open gate can swing shut again through the normal door plugin');
+  } finally {
+    h.restore();
+  }
+});
+
+test('the DT2 final-cell Gate swings to its actionless same-model loc after the lock opens', async () => {
+  await initializeMapCollisionOnce();
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const closed = CacheDefinitions.getObject(O.GATE_270);
+  const open = CacheDefinitions.getObject(O.GATE_271);
+  assert.equal(closed.name, 'Gate');
+  assert.equal(closed.actions[0], 'Open');
+  assert.ok(open.actions.every(action => !action), 'the open cache variant has no Close action');
+  assert.deepEqual(open.models, closed.models, 'both locs use the cache model for this swinging Gate');
+
+  const h = buildHarness({ cacheObjects: new Map([[O.GATE_270, closed], [O.GATE_271, open]]) });
+  try {
+    assert.deepEqual(h.click(O.GATE_270, 3107, 9248, 1), [
+      ['register', O.GATE_270, 3107, 9249, 2],
+      ['deregister', O.GATE_270, 3107, 9248, 1],
+    ], 'the normal door handler rotates the same Gate out of the doorway');
+  } finally {
+    h.restore();
+  }
+});
+
+test('Slepe church crypt gate opens through its actionless cache partner', async () => {
+  await initializeMapCollisionOnce();
+  const { GATE_210: closedId, GATE_211: openId } = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const closed = CacheDefinitions.getObject(closedId);
+  const opened = CacheDefinitions.getObject(openId);
+  assert.equal(closed.name, 'Gate');
+  assert.deepEqual(closed.actions.slice(0, 1), ['Open']);
+  assert.equal(opened.name, 'Gate');
+  assert.ok(opened.actions.every(action => !action), 'the open cache loc has no action for auto-pair discovery');
+  assert.deepEqual(opened.models, closed.models);
+
+  const h = buildHarness({ cacheObjects: new Map([[closedId, closed], [openId, opened]]) });
+  try {
+    // The placed loc's cache rotation is 1; opening swings its replacement north.
+    assert.deepEqual(h.click(closedId, 3728, 9752, 1), [
+      ['register', openId, 3728, 9753, 2],
+      ['deregister', closedId, 3728, 9752, 1],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
+test('Kourend Crypt cached Large doors keep their real double-leaf geometry and clear the plane-1 threshold', async () => {
+  await initializeMapCollisionOnce();
+  const cachedDoors = new Map([32404, 32405, 32406, 32407].map((id) => [
+    id,
+    CacheDefinitions.getObject(id),
+  ]));
+  for (const id of cachedDoors.keys()) {
+    const definition = cachedDoors.get(id);
+    assert.equal(definition.name, 'Large doors');
+    assert.equal(definition.actions[0], 'Open');
+    assert.deepEqual(definition.models, [[6623]]);
+  }
+
+  const area = new TemplatedInstanceArea(12, 8);
+  for (let chunkX = 0; chunkX < 12; chunkX++) {
+    for (let chunkY = 0; chunkY < 8; chunkY++) {
+      area.setChunk(1, chunkX, chunkY, { sourceChunkX: 184 + chunkX, sourceChunkY: 1240 + chunkY, sourcePlane: 1, rotation: 0 });
+    }
+  }
+  const x = area.getBaseX() + 31;
+  const y = area.getBaseY() + 36;
+  const upperY = area.getBaseY() + 24;
+  const closedLowerCrossing = RegionManager.canMove(x, y, x, y + 1, 1, 1, 1, area);
+  const closedUpperCrossing = RegionManager.canMove(x + 1, upperY - 1, x + 1, upperY, 1, 1, 1, area);
+  const h = buildHarness({ cacheObjects: cachedDoors, objectManager: ObjectManager });
+  const routes = new RsmodRouteFinding();
+  const route = (startY, endY) => routes.findRoute({
+    level: 1, srcX: x, srcY: startY, srcSize: 1, destX: x, destY: endY, privateArea: area, moveNear: false,
+  });
+  try {
+    assert.ok(h.handlers.get('Large doors')?.Open, 'the plural cache name must be registered');
+    const crossing = () => RegionManager.canMove(x, y, x, y + 1, 1, 1, 1, area);
+    assert.equal(closedLowerCrossing, false, 'the closed shape-0 leaves block the real source-map approach edge');
+    assert.equal(RegionManager.canMove(x, y - 2, x, y + 2, 1, 1, 1, area), false,
+      'the closed lower leaves block the complete south-to-north route');
+    assert.equal(RegionManager.canMove(x, y + 2, x, y - 2, 1, 1, 1, area), false,
+      'the closed lower leaves block the complete north-to-south route');
+    const westLeaf = area.resolveObject(32406, new Location(x, y, 1));
+    assert.ok(westLeaf, 'the west cached leaf is resolved from the template, not MapObjects');
+    const player = { getPrivateArea: () => area, getUsername: () => 'tester' };
+    h.handlers.get('Large doors').Open({ player, object: westLeaf, objectId: 32406, location: westLeaf.getLocation() });
+    assert.equal(crossing(), true, 'opening both cached leaves removes their original clipping and leaves the route walkable');
+    const lowerApproach = y - 2;
+    const lowerExit = y + 2;
+    assert.equal(area.getClip(new Location(x, lowerExit, 1)) & RegionManager.BLOCKED_TILE, 0,
+      'the cache terrain tile beyond the swung row at source y=9958 is not itself blocked');
+    assert.equal(RegionManager.canMove(x, lowerApproach, x, lowerExit, 1, 1, 1, area), true,
+      'the complete four-step south-to-north approach stays open beyond the swung leaves');
+    assert.equal(RegionManager.canMove(x, lowerExit, x, lowerApproach, 1, 1, 1, area), true,
+      'the complete four-step north-to-south return route also stays open');
+    assert.equal(route(lowerApproach, lowerExit).success, true,
+      'the normal route finder can reach beyond the swung lower leaves from the south');
+    assert.equal(route(lowerExit, lowerApproach).success, true,
+      'the normal route finder can return beyond the swung lower leaves from the north');
+
+    const movedLeaves = area.getObjects().filter((object) => [32406, 32407].includes(object.getId()));
+    assert.deepEqual(movedLeaves.map((object) => [object.getId(), object.getLocation().getX(), object.getLocation().getY(), object.getFace()]).sort(), [
+      [32406, x, y + 1, 0],
+      [32407, x + 1, y + 1, 2],
+    ]);
+    assert.ok(movedLeaves.every((object) => object.getPrivateArea() === area), 'open panels remain private to this crypt instance');
+
+    const upperCrossing = () => RegionManager.canMove(x + 1, upperY - 1, x + 1, upperY, 1, 1, 1, area);
+    assert.equal(closedUpperCrossing, false, 'the rotation-3 upper pair blocks the opposite approach edge');
+    assert.equal(RegionManager.canMove(x + 1, upperY - 2, x + 1, upperY + 2, 1, 1, 1, area), false,
+      'the closed upper leaves block the complete south-to-north route');
+    assert.equal(RegionManager.canMove(x + 1, upperY + 2, x + 1, upperY - 2, 1, 1, 1, area), false,
+      'the closed upper leaves block the complete north-to-south route');
+    const upperWestLeaf = area.resolveObject(32405, new Location(x, upperY, 1));
+    h.handlers.get('Large doors').Open({ player, object: upperWestLeaf, objectId: 32405, location: upperWestLeaf.getLocation() });
+    assert.equal(upperCrossing(), true, 'the rotation-3 pair also opens its template collision gap');
+    assert.equal(RegionManager.canMove(x + 1, upperY - 2, x + 1, upperY + 2, 1, 1, 1, area), true,
+      'the complete four-step south-to-north upper approach stays open beyond the swung leaves');
+    assert.equal(RegionManager.canMove(x + 1, upperY + 2, x + 1, upperY - 2, 1, 1, 1, area), true,
+      'the complete upper north-to-south return route also stays open');
+
+    const closeTask = h.submitted.at(-1);
+    closeTask.execute();
+    assert.equal(upperCrossing(), false, 'the ordinary auto-close restores both cached leaves and their collision');
+    const closedLeaves = area.getObjects().filter((object) => [32404, 32405].includes(object.getId()));
+    assert.equal(closedLeaves.length, 2);
+    assert.ok(closedLeaves.every((object) => object.getPrivateArea() === area), 'auto-close keeps both leaves in the private instance');
+  } finally {
+    area.destroy();
+    h.restore();
+  }
+});
+
 
 test('Tree Gnome Stronghold doors use their nameless open variants and restore on auto-close', () => {
   const h = buildHarness();
@@ -112,6 +339,21 @@ test('Tree Gnome Stronghold doors use their nameless open variants and restore o
         ['deregister', open, openX, 3492, openFace], ['register', closed, x, 3492, face],
       ]);
     }
+  } finally {
+    h.restore();
+  }
+});
+
+test('Ardougne Wall Doors are registered and swing by rotating the same loc', () => {
+  const h = buildHarness();
+  try {
+    h.place(8738, 2557, 3299, 0);
+    assert.deepEqual(h.click(8738, 2557, 3299, 0, 'Open', 'Ardougne Wall Door'), [
+      ['register', 8738, 2556, 3299, 1], ['deregister', 8738, 2557, 3299, 0],
+    ]);
+    assert.deepEqual(h.click(8738, 2557, 3299, 0, 'Open', 'Ardougne Wall Door'), [
+      ['register', 8738, 2557, 3299, 0], ['deregister', 8738, 2556, 3299, 1],
+    ]);
   } finally {
     h.restore();
   }
@@ -300,6 +542,29 @@ test('Castle Wars large doors swing both leaves to the open ids and back', () =>
       ['register', 4428, 2372, 3119, 1],
       ['register', 4427, 2373, 3119, 1],
     ]);
+  } finally {
+    h.restore();
+  }
+});
+
+test('Paterdomus chapel entrance swings both cached leaves into its nameless open locs', () => {
+  const ids = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const cacheObjects = new Map([
+    [ids.LARGE_DOOR_21, { name: 'Large door', actions: ['Open'], models: [[3544]] }],
+    [ids.LARGE_DOOR_22, { name: 'Large door', actions: ['Open'], models: [[3544]] }],
+    [3491, { name: null, actions: [null], models: [[3544]] }],
+    [3492, { name: null, actions: [null], models: [[3544]] }],
+  ]);
+  const h = buildHarness({ cacheObjects });
+  try {
+    h.place(3490, 3408, 3488, 2);
+    h.place(3489, 3408, 3489, 2);
+    assert.deepEqual(h.click(3490, 3408, 3488, 2, 'Open', 'Large door'), [
+      ['deregister', 3489, 3408, 3489, 2],
+      ['deregister', 3490, 3408, 3488, 2],
+      ['register', 3491, 3409, 3489, 1],
+      ['register', 3492, 3409, 3488, 3],
+    ], 'the north and south leaves swing east into their real cache open variants');
   } finally {
     h.restore();
   }
@@ -706,6 +971,221 @@ test('the Gnome Ball pitch gate 2394 rotates in place and closes back onto its w
   }
 });
 
+test('the Blood Moon Vitur food-shop door opens through the normal door handler', () => {
+  const id = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers.VITUR_DOOR_4;
+  const h = buildHarness({ cacheObjects: new Map([[id, {
+    name: 'Vitur door', actions: ['Open'], models: [[60959]],
+  }]]) });
+  try {
+    assert.ok(h.handlers.get('Vitur door')?.Open, 'the cache name is registered by the shared Doors plugin');
+    assert.deepEqual(h.click(id, 2598, 7843, 3, 'Open', 'Vitur door'), [
+      ['register', id, 2598, 7842, 0],
+      ['deregister', id, 2598, 7843, 3],
+    ], 'the self-opening door rotates away from the door tile just as recorded');
+  } finally {
+    h.restore();
+  }
+});
+
+test('a transformed Blood Moon door opens its visible child instead of treating the parent as a closed loc', () => {
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const h = buildHarness({ cacheObjects: new Map([
+    [O.DOOR_837, { name: 'Door', actions: ['Open'], models: [[60956]] }],
+    [O.DOOR_838, { name: 'Door', actions: ['Close'], models: [[60957]] }],
+  ]) });
+  try {
+    const rawParent = 61840;
+    const player = {
+      getUsername: () => 'tester',
+      getPrivateArea: () => null,
+      getPacketSender: () => ({ getVarbit: () => 1, getVarp: () => 0 }),
+    };
+    const object = new GameObject(rawParent, new Location(2590, 7818, 0), 0, 1, null);
+    h.visibleObjectIds.set(rawParent, O.DOOR_837);
+    h.handlers.get('Door').Open({
+      player, object, objectId: rawParent, definition: { id: O.DOOR_837 },
+      location: object.getLocation(),
+    });
+    assert.deepEqual(h.ops, [
+      ['register', O.DOOR_838, 2590, 7819, 2],
+      ['deregister', rawParent, 2590, 7818, 1],
+    ], 'the transformed closed parent is replaced with the cache-backed open child');
+  } finally {
+    h.restore();
+  }
+});
+
+test('the Blood Hunt Myrmel pub door swings from its cache Open-only definition', () => {
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const h = buildHarness({ cacheObjects: new Map([[O.MYRMEL_DOOR, {
+    name: 'Myrmel door', actions: ['Open'], models: [[60962]],
+  }]]) });
+  try {
+    assert.ok(h.handlers.get('Myrmel door')?.Open);
+    assert.deepEqual(h.click(O.MYRMEL_DOOR, 2599, 7826, 3, 'Open', 'Myrmel door'), [
+      ['register', O.MYRMEL_DOOR, 2599, 7825, 0],
+      ['deregister', O.MYRMEL_DOOR, 2599, 7826, 3],
+    ], 'the unlocked pub doorway clears its recorded south approach');
+  } finally {
+    h.restore();
+  }
+});
+
+
+test('the catacomb outer jail gate uses its actionless open cache variant and auto-closes', () => {
+ const h=buildHarness();try{
+  assert.deepEqual(h.click(53441,4126,4788,2),[
+   ['register',53442,4127,4788,3],['deregister',53441,4126,4788,2],
+  ]);
+  h.submitted.at(-1).execute();assert.deepEqual(h.ops.splice(0),[
+   ['deregister',53442,4127,4788,3],['register',53441,4126,4788,2],
+  ]);
+ }finally{h.restore();}
+});
+
+test('the Lassar cistern gate opens into its actionless cache variant', () => {
+  const h = buildHarness({ cacheObjects: new Map([
+    [48301, { name: 'Gate', actions: ['Open'], models: [[609]] }],
+    [48302, { name: 'Gate', actions: [], models: [[609]] }],
+  ]) });
+  try {
+    assert.deepEqual(h.click(48301, 2784, 6287, 0, 'Open', 'Gate', 0, null, 1), [
+      ['register', 48302, 2783, 6287, 1],
+      ['deregister', 48301, 2784, 6287, 0],
+    ], 'opening uses the actual same-model open loc and clears the closed gate footprint');
+  } finally {
+    h.restore();
+  }
+});
+
+
+
+test('Dragon Slayer secret wall opens with the normal door interaction', () => {
+  const h = buildHarness();
+  try {
+    assert.ok(h.handlers.get('Wall')?.Open, 'the cache calls the Dragon Slayer passage a Wall');
+    h.place(2606, 2836, 9600, 3);
+    assert.deepEqual(h.click(2606, 2836, 9600, 3, 'Open', 'Wall'), [
+      ['register', 2606, 2836, 9599, 0],
+      ['deregister', 2606, 2836, 9600, 3],
+    ], 'opening rotates the wall out of the doorway so ordinary pathfinding can cross');
+  } finally {
+    h.restore();
+  }
+});
+
+
+test('the Shantay pass crosses the desert fence in the right direction', () => {
+  assert.deepEqual(shantayCrossingFor({ x: 3303, y: 3117, z: 0 }), {
+    desert: true,
+    path: [[3303, 3116], [3303, 3115]],
+  });
+  assert.deepEqual(shantayCrossingFor({ x: 3303, y: 3115, z: 0 }), {
+    desert: false,
+    path: [[3303, 3116], [3303, 3117]],
+  });
+  assert.equal(shantayCrossingFor({ x: 3303, y: 3115, z: 1 }), null);
+});
+
+
+test('Sophanem north gate opens and closes both nameless gate leaves', () => {
+  const h = buildHarness();
+  try {
+    h.place(44036, 3283, 2809, 1);
+    h.place(44038, 3284, 2809, 1);
+    assert.deepEqual(h.click(44036, 3283, 2809, 1), [
+      ['deregister', 44036, 3283, 2809, 1],
+      ['deregister', 44038, 3284, 2809, 1],
+      ['register', 44037, 3283, 2810, 0],
+      ['register', 44039, 3284, 2810, 2],
+    ]);
+
+    h.place(44037, 3283, 2810, 0);
+    h.place(44039, 3284, 2810, 2);
+    assert.deepEqual(h.click(44037, 3283, 2810, 0, 'Close'), [
+      ['deregister', 44037, 3283, 2810, 0],
+      ['deregister', 44039, 3284, 2810, 2],
+      ['register', 44036, 3283, 2809, 1],
+      ['register', 44038, 3284, 2809, 1],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
+test('Lassar residential shadow doors use their canonical open and close locs', () => {
+  const h = buildHarness();
+  try {
+    // Cache locs 48278/48279 are the adjacent Open leaves; their Close variants
+    // are 48282/48283. The two actionless 48280/48281 locs are not used.
+    h.place(48278, 2417, 6414, 2);
+    h.place(48279, 2417, 6413, 2);
+    assert.deepEqual(h.click(48279, 2417, 6413, 2, 'Open', 'Doors'), [
+      ['deregister', 48278, 2417, 6414, 2],
+      ['deregister', 48279, 2417, 6413, 2],
+      ['register', 48282, 2418, 6414, 1],
+      ['register', 48283, 2418, 6413, 3],
+    ]);
+    assert.deepEqual(h.click(48282, 2418, 6414, 1, 'Close', 'Doors'), [
+      ['deregister', 48282, 2418, 6414, 1],
+      ['deregister', 48283, 2418, 6413, 3],
+      ['register', 48278, 2417, 6414, 2],
+      ['register', 48279, 2417, 6413, 2],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
+test('Lassar pub gate opens into its cache Close leaves and can be closed again', async () => {
+  await initializeMapCollisionOnce();
+  const closedWest = CacheDefinitions.getObject(48289);
+  const closedEast = CacheDefinitions.getObject(48290);
+  const openWest = CacheDefinitions.getObject(48291);
+  const openEast = CacheDefinitions.getObject(48292);
+  assert.deepEqual([closedWest.actions[0], closedEast.actions[0], openWest.actions[0], openEast.actions[0]],
+    ['Open', 'Open', 'Close', 'Close']);
+  assert.deepEqual([closedWest.models, closedEast.models], [openWest.models, openEast.models]);
+
+  const h = buildHarness({ cacheObjects: new Map([
+    [48289, closedWest], [48290, closedEast], [48291, openWest], [48292, openEast],
+  ]) });
+  try {
+    h.place(48289, 2385, 6427, 0);
+    h.place(48290, 2385, 6428, 0);
+    const opened = h.click(48289, 2385, 6427, 0, 'Open', 'Doors');
+    assert.ok(opened.some(([action, id]) => action === 'deregister' && id === 48289));
+    assert.ok(opened.some(([action, id]) => action === 'deregister' && id === 48290));
+    assert.ok(opened.some(([action, id]) => action === 'register' && id === 48291));
+    assert.ok(opened.some(([action, id]) => action === 'register' && id === 48292));
+
+    for (const [, id, x, y, face] of opened.filter(([action]) => action === 'register')) h.place(id, x, y, face);
+    const [, firstOpenId, firstOpenX, firstOpenY, firstOpenFace] = opened.find(([action, id]) => action === 'register' && id === 48291);
+    const closed = h.click(firstOpenId, firstOpenX, firstOpenY, firstOpenFace, 'Close', 'Doors');
+    assert.ok(closed.some(([action, id]) => action === 'register' && id === 48289), JSON.stringify(closed));
+    assert.ok(closed.some(([action, id]) => action === 'register' && id === 48290), JSON.stringify(closed));
+  } finally {
+    h.restore();
+  }
+});
+
+test('Lassar residential house door opens through its nonconsecutive cache Close loc', () => {
+  const h = buildHarness();
+  try {
+    h.place(48262, 2688, 6429, 2);
+    assert.deepEqual(h.click(48262, 2688, 6429, 2, 'Open', 'Door'), [
+      ['register', 48264, 2689, 6429, 3],
+      ['deregister', 48262, 2688, 6429, 2],
+    ]);
+    assert.deepEqual(h.click(48264, 2689, 6429, 3, 'Close', 'Door'), [
+      ['register', 48262, 2688, 6429, 2],
+      ['deregister', 48264, 2689, 6429, 3],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
 
 test("Harold's bedroom door rotates without needing a separate open cache loc", () => {
   const h = buildHarness();
@@ -734,4 +1214,68 @@ test('Death Plateau equipment door swings open after the quest unlocks it', () =
       ['deregister', 3743, 2894, 3567, 2],
     ]);
   } finally { h.restore(); }
+});
+
+
+test('Elena’s cabinet house opens into its nameless cache door variant', async () => {
+  await initializeMapCollisionOnce();
+  const closed = CacheDefinitions.getObject(2054), opened = CacheDefinitions.getObject(2055);
+  assert.equal(closed.name, 'Door');
+  assert.deepEqual(closed.actions.filter(Boolean), ['Open']);
+  assert.ok(opened.name === null || opened.name === 'null');
+  assert.deepEqual(closed.models, opened.models);
+  const h = buildHarness({ cacheObjects: new Map([[2054, closed], [2055, opened]]) });
+  try {
+    h.place(2054, 2592, 3339, 3);
+    const ops = h.click(2054, 2592, 3339, 3, 'Open', 'Door');
+    assert.ok(ops.some(op => op[0] === 'deregister' && op[1] === 2054));
+    assert.ok(ops.some(op => op[0] === 'register' && op[1] === 2055));
+  } finally { h.restore(); }
+});
+
+
+test('Elena house door leaves a real collision path to her chemical cabinet', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([2054, 2055].map(id => [id, CacheDefinitions.getObject(id)]));
+  const area = new TemplatedInstanceArea(3, 3);
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let plane = 0; plane < 4; plane++) {
+    area.setChunk(plane, x, y, { sourceChunkX: 323 + x, sourceChunkY: 415 + y, sourcePlane: plane, rotation: 0 });
+  }
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager });
+  try {
+    const location = area.tile(8, 19, 0), door = area.resolveObject(2054, location);
+    assert.ok(door);
+    assert.equal(door.getFace(), 3);
+    const player = { getUsername: () => 'elena-house-test', isPlayerBot: () => false,
+      getPrivateArea: () => area, getLocation: () => area.tile(8, 20, 0), getPacketSender: () => ({}),
+      getAttribute: () => null, setAttribute() {}, isNeedsPlacement: () => false, isAllowRegionChangePacket: () => false };
+    h.handlers.get('Door').Open({ player, object: door, objectId: 2054, location });
+    const route = new RsmodRouteFinding().findRoute({ level: 0, srcX: area.getBaseX() + 8,
+      srcY: area.getBaseY() + 20, srcSize: 1, destX: area.getBaseX() + 7, destY: area.getBaseY() + 18,
+      privateArea: area, moveNear: false });
+    assert.equal(route.success, true, 'opening must connect the courtyard to the cabinet’s eastern approach');
+  } finally { area.destroy(); h.restore(); }
+});
+
+test('Rehnison door opens a real path past the entrance chair to the hidden bed', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([2537, 2538].map(id => [id, CacheDefinitions.getObject(id)]));
+  const area = new TemplatedInstanceArea(3, 3);
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let plane = 0; plane < 4; plane++) {
+    area.setChunk(plane, x, y, { sourceChunkX: 315 + x, sourceChunkY: 415 + y, sourcePlane: plane, rotation: 0 });
+  }
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager });
+  try {
+    const location = area.tile(11, 8, 0), door = area.resolveObject(2537, location);
+    assert.ok(door);
+    assert.equal(door.getFace(), 1);
+    const player = { getUsername: () => 'rehnison-door-test', isPlayerBot: () => false,
+      getPrivateArea: () => area, getLocation: () => area.tile(11, 7, 0), getPacketSender: () => ({}),
+      getAttribute: () => null, setAttribute() {}, isNeedsPlacement: () => false, isAllowRegionChangePacket: () => false };
+    h.handlers.get('Door').Open({ player, object: door, objectId: 2537, location });
+    const route = new RsmodRouteFinding().findRoute({ level: 0, srcX: area.getBaseX() + 11,
+      srcY: area.getBaseY() + 7, srcSize: 1, destX: area.getBaseX() + 12, destY: area.getBaseY() + 11,
+      privateArea: area, moveNear: false });
+    assert.equal(route.success, true, 'the entrance must connect to the clear tile south-west of the bed');
+  } finally { area.destroy(); h.restore(); }
 });

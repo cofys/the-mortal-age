@@ -8,6 +8,7 @@ import { ItemOnGroundManager } from '../../../entity/impl/grounditem/ItemOnGroun
 import { GameObject } from '../../../entity/impl/object/GameObject';
 import { Mobile } from '../../../entity/impl/Mobile';
 import { Location } from '../../Location';
+import type { Player } from '../../../entity/impl/player/Player';
 
 export abstract class PrivateArea extends Area {
     public entities: Entity[];
@@ -93,7 +94,7 @@ export abstract class PrivateArea extends Area {
     }
 
     /** Allows an instance to validate client-only dynamic locs on demand. */
-    public resolveObject(_id: number, _location: Location): GameObject | null {
+    public resolveObject(_id: number, _location: Location, _player?: Player): GameObject | null {
         return null;
     }
 

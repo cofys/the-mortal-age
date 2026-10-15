@@ -10,9 +10,10 @@ const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 
 const Potions = require("../plugins/items/Potions.plugin");
 const { Item } = require("../dist/game/model/Item");
-let combinePotions;
+let combinePotions, staminaFromHook;
 Potions.register(new Proxy({}, {
   get: (_, key) => key === "core" ? { Item } : (...args) => {
+    if (key === "onCustomEvent" && args[0] === "potions:apply-stamina") staminaFromHook = args[1];
     if (key === "onItemOnItem") {
       combinePotions = args[0];
       assert.deepEqual(args[1], { noted: false });
@@ -79,6 +80,7 @@ test("combining never mixes potion variants, notes or the same slot", () => {
 function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] } = {}) {
   const levels = new Map(Skill.values().map((skill) => [skill, current]));
   const attributes = new Map();
+  let runEnergy = 0;
   const poisonImmunity = {
     seconds: 0,
     startedAt: 0,
@@ -97,11 +99,13 @@ function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] }
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => ({ contains: (id) => inventory.includes(id) }),
     getEquipment: () => ({ contains: (id) => equipment.includes(id) }),
-    getPacketSender: () => ({ sendSound() { return this; }, sendPoisonType() {} }),
+    getPacketSender: () => ({ sendSound() { return this; }, sendPoisonType() {}, sendRunEnergy() {} }),
     getSession: () => ({ sendClientPacket() {} }),
     setHitpoints(value) { levels.set(Skill.HITPOINTS, value); },
     setPoisonDamage(value) { player.poisonDamage = value; },
     setVenomed(value) { player.venomed = value; },
+    getRunEnergy: () => runEnergy,
+    setRunEnergy(value) { runEnergy = value; },
     sendMessage() {},
     getCombat: () => ({ getPoisonImmunityTimer: () => poisonImmunity }),
     getSkillManager: () => ({
@@ -164,7 +168,12 @@ let allowTeleport = true;
 let breakTablet;
 SpellTeleports.register({
   core: {
-    ItemDefinition: { forId: (id) => ({ getName: () => (id === ItemIdentifiers.VARROCK_TELEPORT ? "Varrock teleport" : "Teleport to house") }) },
+    Location: require("../dist/game/model/Location").Location,
+    ItemDefinition: { forId: (id) => ({ getName: () => (
+      id === ItemIdentifiers.VARROCK_TELEPORT ? "Varrock teleport" :
+      id === ItemIdentifiers.RELLEKKA_TELEPORT ? "Rellekka teleport" :
+      id === ItemIdentifiers.NARDAH_TELEPORT ? "Nardah teleport" : "Teleport to house"
+    ) }) },
     TeleportHandler: {
       checkReqs: () => allowTeleport,
       teleport: (player, destination, type, warning, onArrival, onMiddle) =>
@@ -200,6 +209,41 @@ test("breaking a tablet teleports to its spell's destination and uses one tablet
   assert.equal(player.items.length, 1);
   assert.deepEqual([teleports[0].destination.getX(), teleports[0].destination.getY()], [3213, 3424]);
   assert.equal(teleports[0].type, "TELE_TAB");
+});
+
+test("a redirected Rellekka house tablet goes to the portal outside the Fremennik gates", () => {
+  teleports.length = 0;
+  allowTeleport = true;
+  const player = tabletHolder(1);
+  const event = { player, itemId: ItemIdentifiers.RELLEKKA_TELEPORT, option: "Break", handled: false };
+  player.items[0] = ItemIdentifiers.RELLEKKA_TELEPORT;
+  breakTablet(event);
+  assert.equal(event.handled, true);
+  assert.equal(teleports.length, 1);
+  assert.deepEqual(
+    [teleports[0].destination.getX(), teleports[0].destination.getY(), teleports[0].destination.getZ()],
+    [2670, 3632, 0]
+  );
+  assert.equal(teleports[0].type, "TELE_TAB");
+});
+
+test("a Nardah scroll uses its Teleport action and consumes only after teleport starts", () => {
+  teleports.length = 0;
+  allowTeleport = true;
+  const player = tabletHolder(1);
+  player.items[0] = ItemIdentifiers.NARDAH_TELEPORT;
+  const event = { player, itemId: ItemIdentifiers.NARDAH_TELEPORT, option: "Teleport", handled: false };
+  breakTablet(event);
+  assert.equal(event.handled, true);
+  assert.equal(teleports.length, 1);
+  assert.deepEqual(
+    [teleports[0].destination.getX(), teleports[0].destination.getY(), teleports[0].destination.getZ()],
+    [3401, 2918, 0]
+  );
+  assert.equal(teleports[0].type, "TELE_TAB");
+  assert.equal(player.items.length, 1, "scroll is consumed two ticks into the teleport");
+  teleports[0].onMiddle();
+  assert.equal(player.items.length, 0);
 });
 
 test("a refused tablet (teleblock, deep Wilderness, busy) is not used up", () => {
@@ -318,6 +362,54 @@ test("alcohol registrations load and apply their Wiki boosts", () => {
   assert.equal(stout.levels.get(Skill.SMITHING), 100);
 });
 
+test("Vampyrium supplies use the shared potion registry and their documented effects", () => {
+  const I = ItemIdentifiers;
+  const rank = Potions._test.findPotionEntry(I.RANK_FROTHY_POTION_4_);
+  const foul = Potions._test.findPotionEntry(I.FOUL_CHUNKY_POTION_4_);
+  const rancid = Potions._test.findPotionEntry(I.RANCID_SLIMY_POTION_4_);
+  const jar = Potions._test.findPotionEntry(I.JAR_OF_CONGEALED_BLOOD);
+  for (const entry of [rank, foul, rancid, jar]) {
+    assert.ok(entry, "each cache item is a registered consumable");
+    assert.equal(entry.potion.area, "vampyrium", "the supplies are limited to Vampyrium");
+  }
+  assert.equal(rank.replacementId, I.RANK_FROTHY_POTION_3_);
+  assert.equal(foul.replacementId, I.FOUL_CHUNKY_POTION_3_);
+  assert.equal(rancid.replacementId, I.RANCID_SLIMY_POTION_3_);
+  assert.equal(jar.replacementId, -1, "the one-use jar leaves no vial");
+
+  const boosted = createPlayer({ base: 99, current: 99 });
+  rank.potion.effect(boosted);
+  assert.deepEqual([Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE].map((skill) => boosted.levels.get(skill)), [118, 118, 118]);
+
+  const restored = createPlayer({ base: 99, current: 50 });
+  restored.levels.set(Skill.ATTACK, 80);
+  restored.levels.set(Skill.PRAYER, 1);
+  const hpBefore = restored.levels.get(Skill.HITPOINTS);
+  foul.potion.effect(restored);
+  assert.equal(restored.levels.get(Skill.ATTACK), 99, "foul chunky restores lowered stats");
+  assert.equal(restored.levels.get(Skill.PRAYER), 33, "it restores prayer like a super restore");
+  assert.equal(restored.levels.get(Skill.HITPOINTS), hpBefore, "it does not heal Hitpoints");
+  assert.ok(restored.getAttribute("potions:prayer-regen:state"), "it starts prayer regeneration");
+
+  const brew = createPlayer({ base: 99, current: 99 });
+  rancid.potion.effect(brew);
+  assert.equal(brew.levels.get(Skill.HITPOINTS), 115, "rancid slimy overheals by 15% + 2");
+  assert.equal(brew.levels.get(Skill.DEFENCE), 120, "it boosts Defence by 20% + 2");
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.MAGIC, Skill.RANGED]) {
+    assert.equal(brew.levels.get(skill), 98, "it drains each offensive stat by only one level");
+  }
+
+  const wounded = createPlayer({ base: 99, current: 59 });
+  rancid.potion.effect(wounded);
+  assert.equal(wounded.levels.get(Skill.HITPOINTS), 75, "a wounded player heals by 15% + 2 instead of jumping to the boosted cap");
+
+  const healed = createPlayer({ base: 99, current: 1 });
+  jar.potion.effect(healed);
+  assert.equal(healed.levels.get(Skill.HITPOINTS), 99);
+  assert.equal(healed.levels.get(Skill.PRAYER), 99);
+  assert.equal(healed.getRunEnergy(), 100, "the edible jar also restores run energy");
+});
+
 test("curing poison also clears the sticky venom flag", () => {
   const player = createPlayer({ current: 99 });
   player.setPoisonDamage(20);
@@ -424,4 +516,12 @@ test("Overload needs more than 50 Hitpoints and a Saradomin brew may over-heal",
   Potions._test.findPotionEntry(ItemIdentifiers.SARADOMIN_BREW_4_).potion.effect(brewed);
   assert.equal(brewed.levels.get(Skill.HITPOINTS), 50 + Math.floor(2 + 99 * 0.15), "the brew may heal over max");
   assert.equal(brewed.levels.get(Skill.ATTACK), 50 - (2 + Math.floor(50 * 0.1)));
+});
+
+
+test("shared stamina requests support timed restorative food without consuming a potion",()=>{
+ const attrs=new Map();let energy=10;const player={getRunEnergy:()=>energy,setRunEnergy:n=>energy=n,getPacketSender:()=>({sendRunEnergy(){}}),setAttribute:(k,v)=>attrs.set(k,v)};
+ const now=Date.now();staminaFromHook({player,energy:20,durationMs:60000});
+ assert.equal(energy,30);assert.equal(attrs.get("potions:stamina:acc"),0);
+ assert.ok(attrs.get("potions:stamina:end")>=now+60000&&attrs.get("potions:stamina:end")<=Date.now()+60000);
 });

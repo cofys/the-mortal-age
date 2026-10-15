@@ -24,6 +24,7 @@ module.exports = function registerWorldTools(ctx) {
       const sender = p.getPacketSender();
       const skills = p.getSkillManager();
       return {
+        worldTick: World.getProcessCycle(),
         ...tile(p.getLocation()),
         area: area(p),
         hitpoints: p.getHitpoints(),
@@ -50,7 +51,7 @@ module.exports = function registerWorldTools(ctx) {
       maxTicks: z.number().int().min(1).max(MAX_WAIT_TICKS).default(MAX_WAIT_TICKS),
     },
     async ({ player: username, x, y, run, maxTicks }) => {
-      send(find(username), { type: "move", worldX: x, worldY: y, modifierFlags: run ? 2 : 0 });
+      send(find(username), { type: "move", worldX: x, worldY: y, modifierFlags: 0, ...(run ? { run: true } : {}) });
       return settle(username, maxTicks, { x, y });
     }
   );

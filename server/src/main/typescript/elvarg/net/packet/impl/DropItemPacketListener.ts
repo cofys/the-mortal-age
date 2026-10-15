@@ -70,8 +70,13 @@ export class DropItemPacketListener {
       dropToGround: true,
       handled: false,
     };
+    const discardedItem = item.clone();
     const pluginHandled = PluginManager.emitItemDropPolicy(dropEvent);
     if (pluginHandled) {
+      const remaining = player.getInventory().getItems()[itemSlot];
+      if (remaining?.getId() !== id || remaining?.getAmount() < discardedItem.getAmount()) {
+        PluginManager.emitCustomEvent("item:discarded", { player, item: discardedItem });
+      }
       Sounds.sendSound(player, Sound.DROP_ITEM);
       return;
     }
@@ -87,6 +92,7 @@ export class DropItemPacketListener {
       }
 
       player.getInventory().setItem(itemSlot, new Item(-1, 0)).refreshItems();
+      PluginManager.emitCustomEvent("item:discarded", { player, item });
       Sounds.sendSound(player, Sound.DROP_ITEM);
     } else {
       DropItemPacketListener.destroyItemInterface(player, item);

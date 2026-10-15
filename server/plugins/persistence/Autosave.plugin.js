@@ -1,10 +1,9 @@
 /**
- * Saves every online player every 15 minutes (OSRS: a crashed world puts players back to their
- * save from up to 15 minutes before). Staggered: each player's first save falls somewhere in
- * their first interval, spread by their name, so a mass login after a restart doesn't save
+ * Saves every online player every 5-10 minutes. Intervals are spread by name so a mass login doesn't save
  * everyone on one tick; and no more than a few are saved on any tick. See docs/player-saves.md.
  */
-const INTERVAL_TICKS = Number(process.env.AUTOSAVE_INTERVAL_TICKS) > 0 ? Math.floor(Number(process.env.AUTOSAVE_INTERVAL_TICKS)) : 1500;
+const INTERVAL_TICKS = Number(process.env.AUTOSAVE_INTERVAL_TICKS) > 0 ? Math.floor(Number(process.env.AUTOSAVE_INTERVAL_TICKS)) : 1000;
+const MIN_INTERVAL_TICKS = process.env.AUTOSAVE_INTERVAL_TICKS ? INTERVAL_TICKS : 500;
 const MAX_SAVES_PER_TICK = 10;
 const REASON = "autosave";
 /** Bots that are never saved (World.savePlayers skips them too). */
@@ -23,7 +22,11 @@ function offsetOf(username, interval) {
 }
 
 function schedule({ player }) {
-  if (player) dueAt.set(player, tick + 1 + offsetOf(player.getUsername?.(), INTERVAL_TICKS));
+  if (player) dueAt.set(player, tick + intervalOf(player));
+}
+
+function intervalOf(player) {
+  return MIN_INTERVAL_TICKS + offsetOf(player.getUsername?.(), INTERVAL_TICKS - MIN_INTERVAL_TICKS + 1);
 }
 
 function forget({ player }) {
@@ -40,7 +43,7 @@ function saveDuePlayers() {
       dueAt.set(player, tick + 1);
       continue;
     }
-    dueAt.set(player, tick + INTERVAL_TICKS);
+    dueAt.set(player, tick + intervalOf(player));
     if (player.getAttribute?.(SKIP_PERSISTENCE_ATTRIBUTE) === true) continue;
     saved++;
     try {
@@ -69,7 +72,7 @@ function bind(api) {
 
 module.exports = {
   name: "Autosave",
-  _test: { saveDuePlayers, schedule, forget, offsetOf, dueAt, INTERVAL_TICKS, MAX_SAVES_PER_TICK, get tick() { return tick; } },
+  _test: { saveDuePlayers, schedule, forget, offsetOf, intervalOf, dueAt, INTERVAL_TICKS, MIN_INTERVAL_TICKS, MAX_SAVES_PER_TICK, get tick() { return tick; } },
   register(api) {
     bind(api);
     api.onServerStartup(start);

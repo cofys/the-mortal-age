@@ -14,14 +14,6 @@ const tsx = join(clientDir, "node_modules", ".bin", process.platform === "win32"
 // Tests that are known to fail, each with the reason. Keep this short: a test belongs here only
 // until someone fixes it, and the summary lists every skipped test so none is forgotten.
 const SKIPPED = new Map([
-    [
-        "edit-mode-plugin.test.ts",
-        "expects a 'safe' zone tag to be rejected (any tag is allowed since 2d27d62c); the wall tool's one-tile preview check fails too",
-    ],
-    [
-        "edit-mode-settings.test.ts",
-        "settings list predates the 'F2P zones' option (1be97079); a host-only setting also shows standalone",
-    ],
 ]);
 
 const filters = process.argv.slice(2);

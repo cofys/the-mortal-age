@@ -13,7 +13,7 @@ const { PluginManager } = require("../dist/plugins/PluginManager");
 const { TaskManager } = require("../dist/game/task/TaskManager");
 const { World } = require("../dist/game/World");
 const { NPCDeathTask } = require("../dist/game/task/impl/NPCDeathTask");
-const ObstacleRunner = require("../plugins/skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../plugins/skills/agility/ObstacleRunner.Agility");
 const Guild = require("../plugins/skills/woodcutting/Guild.Woodcutting");
 const EntTrunk = require("../plugins/skills/woodcutting/EntTrunk.Woodcutting");
 const Shrine = require("../plugins/skills/woodcutting/Shrine.Woodcutting");
@@ -292,12 +292,13 @@ test("core: an npc whose death handler leaves remains stays, then goes and respa
   const killer = createPlayer(1590, 9890);
   const npc = {
     getMovementQueue: () => ({ setBlockMovement() { return { reset() {} }; } }),
-    getCombat: () => ({ getKiller: () => killer, reset() {}, setUnderAttack() {} }),
+    getCombat: () => ({ getKiller: () => killer, getRecentDamagers: () => [killer], reset() {}, setUnderAttack() {} }),
     performAnimation() {},
     getCurrentDefinition: () => ({ getDeathAnim: () => 12508, getDeathSound: () => 0, getDeathTicks: () => 2 }),
     getDefinition: () => ({ getRespawn: () => 25 }),
     setMobileInteraction() {},
     getId: () => 7234,
+    getContentId: () => 7234,
     getLocation: () => new Location(1590, 9890, 0),
     getArea: () => null,
     setDying() {},

@@ -20,13 +20,13 @@ Status:
 
 | File | What it owns |
 | --- | --- |
-| `WintertodtShared.js` | Ids, varbits, tiles, zones, the safe area, and helpers such as the fade and the one-per-player skilling action. |
-| `WintertodtRound.js` | The world's one round: energy, the break, points, the HUD, the end of a round. |
-| `WintertodtCorners.js` | Each corner's brazier state and pyromancer health, chatter and green bolts. |
-| `WintertodtWarmth.js` | The warmth meter, warm clothing, damage formulas, regeneration and the cold's kill. |
-| `WintertodtAttacks.js` | The Wintertodt's five attacks and their timing. |
-| `WintertodtEffects.js` | Temporary locs, projectiles and graphics for everyone in the prison. |
-| `WintertodtRewards.js` | One search of the reward cart. |
+| `Shared.Wintertodt.js` | Ids, varbits, tiles, zones, the safe area, and helpers such as the fade and the one-per-player skilling action. |
+| `Round.Wintertodt.js` | The world's one round: energy, the break, points, the HUD, the end of a round. |
+| `Corners.Wintertodt.js` | Each corner's brazier state and pyromancer health, chatter and green bolts. |
+| `Warmth.Wintertodt.js` | The warmth meter, warm clothing, damage formulas, regeneration and the cold's kill. |
+| `Attacks.Wintertodt.js` | The Wintertodt's five attacks and their timing. |
+| `Effects.Wintertodt.js` | Temporary locs, projectiles and graphics for everyone in the prison. |
+| `Rewards.Wintertodt.js` | One search of the reward cart. |
 | `Doors.*` | The Doors of Dinh, the HUD zones, leaving the prison, login and logout. |
 | `Braziers.*` | Lighting, fixing and feeding braziers. |
 | `Supplies.*` | Roots, kindling, herbs, the crates, rejuvenation potions, Brew'ma, and supplies shattering when dropped. |

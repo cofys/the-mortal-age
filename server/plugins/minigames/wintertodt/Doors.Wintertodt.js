@@ -10,9 +10,9 @@
  * or logging out mid-round loses every point earned in it.
  */
 
-const Shared = require("./WintertodtShared");
-const Round = require("./WintertodtRound");
-const Warmth = require("./WintertodtWarmth");
+const Shared = require("./Shared.Wintertodt");
+const Round = require("./Round.Wintertodt");
+const Warmth = require("./Warmth.Wintertodt");
 
 function enter(event) {
   const { player } = event;

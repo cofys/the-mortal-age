@@ -33,7 +33,7 @@ assert.throws(() => parseBrowserHostShops('[{"id":1,"name":"Bad","originalStock"
 const parsedWorld = {
     spawn: { x: 3089, y: 3524, z: 0 },
     zones: [{ minX: 1, maxX: 2, minY: 3, maxY: 4, z: 0, tags: ["pvp"] }],
-    disabledPlugins: ["PvpMode"],
+    plugins: { PvpMode: false },
     experienceMultiplier: 5,
 };
 for (const tags of [[], ["custom:arena", "__proto__"], ["duel"], ["pvp"], ["pvp", "multi-combat"], ["pvp", "all-buildings-safe"]]) {

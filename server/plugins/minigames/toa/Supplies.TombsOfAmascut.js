@@ -5,8 +5,8 @@
  * Wiki: https://oldschool.runescape.wiki/w/Tombs_of_Amascut#Supplies
  */
 
-const Shared = require("./ToaShared");
-const Raid = require("./ToaRaid");
+const Shared = require("./Shared.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
 
 const CONSUME_ANIMATION = 829;
 const ATTR_EFFECTS = "toa:supply-effects";

@@ -9,7 +9,7 @@ PvP alike. A site is a place (`x`, `y`, optional `z`/`radius`), an `enabled` fla
 until /host controls sites) and its `bots`. Skilling sites ship **disabled** (no skilling or
 combat-training crowd on a fresh world); set `"enabled": true` on one to spawn it. Each
 enabled skilling site spawns its bots around its anchor at startup, a few per game tick
-(`BotSpawnPacing.js`: 8 per 600 ms, round-robin over the sites, so 1000 bots take ~75 s). Without `switchMinutes` each
+(`SpawnPacing.PlayerBots.js`: 8 per 600 ms, round-robin over the sites, so 1000 bots take ~75 s). Without `switchMinutes` each
 bot is dedicated to one mode's activity: it never switches, and a failed activity waits out its
 cooldown and resumes. With `"switchMinutes": [15, 25]` each bot rolls its own timer in that range
 and then changes to another mode of its tier at the site, weighted by the site's counts for that
@@ -17,7 +17,7 @@ tier so the mix stays near the configured one (a Varrock novice never becomes a 
 Varrock only has expert woodcutters). Switches wait for a safe point: never mid-fight or under a
 bank-trip/fight-back overlay, and a switch with no free capacity slot retries 30 s later.
 
-**Per deployment:** a world chooses its own sites in `data/definitions/world.local.json` (gitignored; or `world.json`) with `pluginConfig` `"PlayerBots:sites"`, a map of site id to an object of site properties (`plugins/bots/brain/BotSites.js`). For a site `bot-sites.json` has, the properties replace its own, each top-level property whole, so `bots` sets every count at the site; sites and properties the map doesn't name keep theirs. Any other id is a new site and needs `x` and `y`. A world updates from main by fast-forward without touching `bot-sites.json`. For example, skilling and combat-training bots on, the PvP pens off, Lumbridge cut down to woodcutters, and a Draynor fishing site:
+**Per deployment:** a world chooses its own sites in `data/definitions/world.local.json` (gitignored; or `world.json`) with `pluginConfig` `"PlayerBots:sites"`, a map of site id to an object of site properties (`plugins/bots/brain/Sites.PlayerBots.js`). For a site `bot-sites.json` has, the properties replace its own, each top-level property whole, so `bots` sets every count at the site; sites and properties the map doesn't name keep theirs. Any other id is a new site and needs `x` and `y`. A world updates from main by fast-forward without touching `bot-sites.json`. For example, skilling and combat-training bots on, the PvP pens off, Lumbridge cut down to woodcutters, and a Draynor fishing site:
 
 ```json
 "pluginConfig": {
@@ -62,7 +62,7 @@ combat training per-tier counts with no advanced or expert trainers; East Ardoug
 
 Stages give an NPC combat-level band - no names, coordinates or areas. Opponents are any
 attackable NPC in the band; `excludeNames` (`Duck`, `Duckling`) drops ones that cannot be
-fought where they stand. The NPC cluster index (`plugins/bots/brain/NpcClusterIndex.js`)
+fought where they stand. The NPC cluster index (`plugins/bots/brain/NpcClusterIndex.PlayerBots.js`)
 groups the live world's spawns by combat level into 32x32-tile cells (spawn tiles, so
 wandering does not move a cluster), skipping the surface Wilderness, instances and, on a F2P
 world, members land. A trainer picks the cluster with the lowest `trainers per NPC +
@@ -192,9 +192,9 @@ back to its activity:
   "orElse": { "type": "sellItems", "itemIds": ["$bar"], "orElse": { "type": "dropItems", "itemIds": ["$bar"] } } }
 ```
 
-- `choose` (`actions/Choose.js`): `{ "type": "choose", "options": [{ "weight": 2, "actions": [...] }] }`,
+- `choose` (`actions/Choose.PlayerBots.js`): `{ "type": "choose", "options": [{ "weight": 2, "actions": [...] }] }`,
   usable at any step of any activity.
-- `sellItems` (`actions/SellItems.js`) walks to the nearest general store keeper (stores matched by
+- `sellItems` (`actions/SellItems.PlayerBots.js`) walks to the nearest general store keeper (stores matched by
   name in `shops.json`, keepers located through the NPC cluster index) and sells the listed items
   through the normal shop code; anything unsellable stays in the inventory.
 - `dropItems` / `sellItems` take `itemIds` from the activity's fields: `resources` (what it gathers)
@@ -224,7 +224,7 @@ stops and not dropped on NPC deaths, so they never reach banks, shops or the gro
 The in-game route finder only sees a 128x128 window, so straight-line staged walking could not
 find detours: miners for Varrock's mine walked into the fenced Lumbridge cow field, the
 Champions' mine needed a loop back out of the far-west cow field. Long walks now follow a
-planned route (`behaviours/navigation/LongRoutePlanner.js`, wired in by `BotLongRoutes.js`):
+planned route (`behaviours/navigation/LongRoutePlanner.PlayerBots.js`, wired in by `LongRoutes.PlayerBots.js`):
 
 - A* over tile collision flags, 4-directional, using the route finder's own blocking rules. A
   step through a wall is allowed only at a closed door/gate (resolved per player, so the Al
@@ -244,7 +244,7 @@ planned route (`behaviours/navigation/LongRoutePlanner.js`, wired in by `BotLong
 ## Other floors (stairs and ladders)
 
 A walk whose target is on another plane (Lumbridge castle's top-floor bank) goes by the stairs
-(`brain/Climbing.js`), using the cache-backed links from `plugins/objects/ClimbLinks.js`; no
+(`brain/Climbing.PlayerBots.js`), using the cache-backed links from `plugins/objects/ClimbLinks.js`; no
 coordinate lists. Stairs are searched near the bot and near the target; one counts only if the
 bot can get to it (door-aware) and its landing leads on: to the target, or to further stairs that
 do. That passes over Lumbridge castle's tower ladders, whose top rooms do not reach the bank.
@@ -328,7 +328,7 @@ the combat stats are rolled to land in (hitpoints at least 10):
 ``` 
 Sites never list content: per mode, a tier does the highest-level activity its band's lowest
 level can do (a 60 woodcutter chops yews, not normal trees). Spawn radius defaults in
-`BotActivityRegistry.js`. Gear — combat kit and the best usable axe/pickaxe —
+`ActivityRegistry.PlayerBots.js`. Gear — combat kit and the best usable axe/pickaxe —
 follows from the levels. Trees, rocks, banks, stores and NPC clusters are found from wherever
 the bot is, so the same activities work in every town. Activity capacities are global
 (shared by all towns).

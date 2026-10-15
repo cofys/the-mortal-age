@@ -1,6 +1,6 @@
 "use strict";
 
-const Shared = require("./CorpShared");
+const Shared = require("./Shared.CorporealBeast");
 
 /** The living Beast in the same copy of the room as the player, if any. */
 function beastNear(player) {

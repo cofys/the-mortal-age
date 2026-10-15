@@ -832,6 +832,7 @@ module.exports = {
           player.getBank(i).add(item, false);
         }
       }
+      api.emitCustomEvent("persistence:save", { player, reason: "bank-copy" });
       return true;
     }, PlayerRights.OWNER, "Copy player bank");
 
@@ -1398,6 +1399,7 @@ module.exports = {
     api.registerCommand("clearinv", ({ player }) => {
       player.getInventory().resetItems().refreshItems();
       player.sendMessage("Your inventory has been cleared.");
+      api.emitCustomEvent("persistence:save", { player, reason: "inventory-clear" });
       return true;
     }, PlayerRights.ADMINISTRATOR, "Clear your inventory");
 

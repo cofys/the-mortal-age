@@ -8,8 +8,8 @@
 // 8997); which one live sends here isn't captured: the dock the player is near, else their last
 // dock, else the first boat's.
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
-const { content, dockNear, dockById } = require("./sailingContent");
-const { teleportFocusOf } = require("./boatFacilities");
+const { content, dockNear, dockById } = require("./SailingContent.Sailing");
+const { teleportFocusOf } = require("./BoatFacilities.Sailing");
 const { openBoatSelection, MODE } = require("./BoatSelection.plugin");
 
 const NEAR_DOCK_RANGE = 16;

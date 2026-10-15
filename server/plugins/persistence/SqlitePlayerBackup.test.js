@@ -20,7 +20,7 @@ const {
   uniqueBackupPath,
   rotateBackups,
   BACKUP_KEEP,
-} = require("./SqliteSaveWorker");
+} = require("./SaveWorker.SqlitePlayerPersistence");
 
 const SKILL_COUNT = 24;
 const PLAYER_SAVES_DDL = `

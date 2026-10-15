@@ -4,7 +4,7 @@ import { Player } from "../../../../entity/impl/player/Player";
 import { DialogueOptionAction} from '../../DialogueOptionAction'
 
 export class OptionDialogue extends Dialogue {
-    private static readonly CHATBOX_INTERFACES = [13760, 2461, 2471, 2482, 2494];
+    public static readonly OPTIONS_WIDGET_ID = (219 << 16) | 1;
     private action: DialogueOptionAction;
     private title: string;
     private options: string[];
@@ -35,11 +35,11 @@ export class OptionDialogue extends Dialogue {
     }
 
     public static send(player: Player, title: string, options: string[]): void {
-        const firstChildId = OptionDialogue.CHATBOX_INTERFACES[options.length - 1];
-        player.getPacketSender().sendString(title, firstChildId - 1,);
-        for (let i = 0; i < options.length; i++) {
-            player.getPacketSender().sendString( options[i], firstChildId + i,);
-        }
-        player.getPacketSender().sendConfiguredInterface(firstChildId - 2);
+        const sender = player.getPacketSender();
+        sender.sendInterfaceScript(2379);
+        sender.sendVarbit(10670, 1);
+        sender.sendChatboxInterface(219);
+        sender.sendClientScript(58, title || "Select an Option", options.join("|"));
+        sender.sendInterfaceFlagsRange(OptionDialogue.OPTIONS_WIDGET_ID, 1, options.length, 1);
     }
 }

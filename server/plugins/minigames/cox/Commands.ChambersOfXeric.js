@@ -1,7 +1,7 @@
 "use strict";
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 /** ::cox - to Mount Quidamortem, by the recruiting board. */
 function toMount({ player }) {

@@ -12,7 +12,7 @@
  * is face + 1 and the panel moves one tile in the closed face's direction.
  */
 
-const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
 /** The panel stays open this long after the last crossing player arrives. */
 const GATE_CLOSE_DELAY_TICKS = 2;

@@ -22,18 +22,18 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 | File | What it owns |
 | --- | --- |
-| `CoxShared.js` | Ids, tiles, vars, the chat-channel bridge and helpers. |
-| `CoxLayout.js` | The 26 layout patterns, the combat rotations, room generation, laying floors out, Challenge Mode's floors. |
-| `CoxMap.js` | The raid's instance: rooms copied and turned, wall chunks between them, the Olm's chamber, tiles inside rooms. |
-| `CoxParties.js` | Parties: one per chat-channel, the advertised list, leaders. |
-| `CoxRaid.js` | A raid: entering, starting, stages, points, deaths, leaving; the `Room` base class rooms extend. |
+| `Shared.ChambersOfXeric.js` | Ids, tiles, vars, the chat-channel bridge and helpers. |
+| `Layout.ChambersOfXeric.js` | The 26 layout patterns, the combat rotations, room generation, laying floors out, Challenge Mode's floors. |
+| `Map.ChambersOfXeric.js` | The raid's instance: rooms copied and turned, wall chunks between them, the Olm's chamber, tiles inside rooms. |
+| `Parties.ChambersOfXeric.js` | Parties: one per chat-channel, the advertised list, leaders. |
+| `RaidState.ChambersOfXeric.js` | A raid: entering, starting, stages, points, deaths, leaving; the `Room` base class rooms extend. |
 | `Lobby.*` | The recruiting board, the party page, the entrance. |
 | `Raid.*` | The party tab, steps, passages, holes and ropes, deaths, damage points, the raid's rules. |
 | `Storage.*` | Private and shared storage, building and upgrading the units, the mountain's unit. |
 | `Resources.*` | Resource rooms: fishing and the cave snake, bats, herb patches, weeds, gourds and geysers, saplings, tools, the energy well. |
 | `Herblore.*` | Cleaning the raid's herbs, mixing its potions. |
 | `Supplies.*` | Points for food and potions to their makers; answers `potions:area`. |
-| `CoxMonsters.js` | The monsters' base stats and the Wiki DPS calculator's scaling. |
+| `Monsters.ChambersOfXeric.js` | The monsters' base stats and the Wiki DPS calculator's scaling. |
 | `IceDemon.*`, `Thieving.*`, `Tightrope.*`, `Crabs.*` | The puzzle rooms. |
 | `Tekton.*`, `Muttadiles.*`, `Vanguards.*`, `Vasa.*`, `Vespula.*`, `Guardians.*`, `Shamans.*`, `Mystics.*` | The combat rooms. |
 | `Scavengers.*` | Scavenger rooms and the large room's shortcut. |
@@ -152,7 +152,7 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 ## Monsters and rooms
 
-**Scaling** (`CoxMonsters.js`): base stats and bonuses from the Wiki's DPS calculator data, scaled as its Chambers of Xeric code does (checked against its tests): levels by the party's highest Hitpoints level, hitpoints by its highest combat level, both by party size, +50% in Challenge Mode (Tekton's defence +20%/+35%). Scavengers and vespine soldiers scale as solo monsters; the Olm's hitpoints follow its own formula. Core gives an NPC its own stats and max hit with `NPC.setCombatOverride` (core change). Max hits grow with the scaled offence (a derived rule; the Wiki gives them at base scale).
+**Scaling** (`Monsters.ChambersOfXeric.js`): base stats and bonuses from the Wiki's DPS calculator data, scaled as its Chambers of Xeric code does (checked against its tests): levels by the party's highest Hitpoints level, hitpoints by its highest combat level, both by party size, +50% in Challenge Mode (Tekton's defence +20%/+35%). Scavengers and vespine soldiers scale as solo monsters; the Olm's hitpoints follow its own formula. Core gives an NPC its own stats and max hit with `NPC.setCombatOverride` (core change). Max hits grow with the scaled offence (a derived rule; the Wiki gives them at base scale).
 
 **Rooms** share the `Room` base: exit crystals (`blockExit`/`clearExit`), the room's raiders, template objects, and death, before-death and hit hooks dispatched from `Raid.ChambersOfXeric`. Each room's header comment lists what comes from the Wiki and what is unverified. In short:
 

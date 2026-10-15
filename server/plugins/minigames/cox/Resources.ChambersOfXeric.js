@@ -32,8 +32,8 @@
  *   2734, and its growing back 54-64 ticks later.
  */
 
-const Shared = require("./CoxShared");
-const Raid = require("./CoxRaid");
+const Shared = require("./Shared.ChambersOfXeric");
+const Raid = require("./RaidState.ChambersOfXeric");
 
 const ITEM = {
   ROD: [307, 22846], CAVE_WORM: 20853, NET: 10010, RAKE: 5341, SPADE: 952, DIBBER: 5343,

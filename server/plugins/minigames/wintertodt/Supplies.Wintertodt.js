@@ -16,9 +16,9 @@
  * message, and roots, kindling, herbs and potions shattering when dropped.
  */
 
-const Shared = require("./WintertodtShared");
-const Round = require("./WintertodtRound");
-const Warmth = require("./WintertodtWarmth");
+const Shared = require("./Shared.Wintertodt");
+const Round = require("./Round.Wintertodt");
+const Warmth = require("./Warmth.Wintertodt");
 const Woodcutting = require("../../skills/Woodcutting.plugin");
 
 const CHOP_TICKS = 3;

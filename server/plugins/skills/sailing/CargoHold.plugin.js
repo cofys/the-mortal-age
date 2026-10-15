@@ -4,8 +4,8 @@
 const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
 const { ItemDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ItemDefinition");
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
-const { VARBIT, content, setVarbit, playSound, boatName } = require("./sailingContent");
-const cargo = require("./cargo");
+const { VARBIT, content, setVarbit, playSound, boatName } = require("./SailingContent.Sailing");
+const cargo = require("./Cargo.Sailing");
 const portTasks = require("./porttasks/Common.PortTasks");
 
 const HOLD = 943;

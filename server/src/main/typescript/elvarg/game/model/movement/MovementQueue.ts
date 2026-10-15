@@ -352,6 +352,11 @@ export class MovementQueue {
         }
         this.reset();
         this.walkToReset();
+        if (this.player && require("../../../plugins/PluginManager").PluginManager.emitWalkRoute({
+            player: this.player,
+            destination: { x: destination.getX(), y: destination.getY(), z: destination.getZ() },
+            handled: false,
+        })) return;
         PathFinder.calculateWalkRoute(this.player, destination.getX(), destination.getY());
     }
 

@@ -2,7 +2,7 @@
 // plugins/skills/sailing/data/port-tasks.json (cache table 197 and the OSRS Wiki's XP); the flow, varbits
 // and messages follow the rsprox.net recordings (docs/port-tasks.md).
 const DATA = require("../data/port-tasks.json");
-const { content } = require("../sailingContent");
+const { content } = require("../SailingContent.Sailing");
 
 /** A player's task slots (persisted): `{ id, taken, delivered }` or null, slot 0 first. */
 const SLOTS_ATTRIBUTE = "port-tasks:slots";

@@ -138,6 +138,7 @@ export class LunarSpells {
     }
 
     private static handleUtility(player: Player, key: string): boolean {
+        if (key === "astral contact") key = "npc contact";
         const definitions: Record<string, SpellData> = {
             "bake pie": { level: 65, experience: 60, runes: [rune(9075), rune(554, 5), rune(555, 4)] },
             "humidify": { level: 68, experience: 65, runes: [rune(9075), rune(555, 3), rune(563)] },
@@ -147,7 +148,7 @@ export class LunarSpells {
             "tan leather": { level: 78, experience: 81, runes: [rune(9075, 2), rune(561, 5), rune(563)] },
             "plank make": { level: 86, experience: 90, runes: [rune(9075, 2), rune(557, 15), rune(561)] },
             "magic imbue": { level: 82, experience: 86, runes: [rune(9075, 2), rune(554, 7), rune(556, 7)] },
-            "npc contact": { level: 67, experience: 63, runes: [rune(9075, 2), rune(564), rune(563)] },
+            "npc contact": { level: 67, experience: 63, runes: [rune(9075), rune(564), rune(556, 2)] },
         };
         const data = definitions[key];
         if (!data) return false;
@@ -367,13 +368,25 @@ export class LunarSpells {
 
     private static openNpcContact(player: Player): void {
         const contacts = ["Nieve", "Duradel", "Konar quo Maten", "Mazchna"];
-        const builder = new DialogueChainBuilder();
-        builder.add(new OptionDialogue(0, { executeOption: (option: DialogueOption) => {
-            const contact = contacts[(option as number) - 1];
-            player.getPacketSender().sendInterfaceRemoval();
-            if (contact) player.sendMessage(`You contact ${contact}.`);
-        } }, ...contacts));
-        player.getDialogueManager().startDialogues(builder);
+        PluginManager.emitCustomEvent("magic:npc-contact", { player, contacts });
+        const openPage = (offset: number) => {
+            const page = contacts.slice(offset, offset + 4);
+            const more = contacts.length > offset + 4;
+            const options = more ? [...page, "More contacts..."] : page;
+            const builder = new DialogueChainBuilder();
+            builder.add(new OptionDialogue(0, { executeOption: (option: DialogueOption) => {
+                const index = (option as number) - 1;
+                player.getPacketSender().sendInterfaceRemoval();
+                if (more && index === page.length) { openPage(offset + 4); return; }
+                const contact = page[index];
+                if (!contact) return;
+                const event = { player, name: contact, handled: false };
+                PluginManager.emitCustomEvent("magic:npc-contact-selected", event);
+                if (!event.handled) player.sendMessage(`You contact ${contact}.`);
+            } }, ...options));
+            player.getDialogueManager().startDialogues(builder);
+        };
+        openPage(0);
     }
 
     private static openSpellbookSwap(player: Player): void {

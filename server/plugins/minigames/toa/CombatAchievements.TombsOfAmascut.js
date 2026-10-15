@@ -1,13 +1,13 @@
 "use strict";
 
 /**
- * The Tombs of Amascut's Combat Achievements (plugins/combatachievements/) that the raid's end
+ * The Tombs of Amascut's Combat Achievements (plugins/achievements/combatachievements/) that the raid's end
  * decides: the completion counts per mode (Entry's tasks count every mode, "Entry mode (or
  * above)"), the raid level, the deaths, the party size, the time and the invocations. The room
  * tasks (Perfect Het and the rest) need the rooms to say how they went and are not done yet.
  */
 
-const Shared = require("./ToaShared");
+const Shared = require("./Shared.TombsOfAmascut");
 
 const MONSTER = { entry: "EM: Tombs of Amascut", normal: "Tombs of Amascut", expert: "XM: Tombs of Amascut" };
 /** "Complete the Tombs of Amascut in Entry mode (or above)": completions of any mode. */
@@ -40,7 +40,7 @@ function completed(raid, player, mode, counts) {
 /** At login: the completion counts, so earlier raids finish their kill-count tasks. */
 function answerKillCount({ player, counts }) {
   // Required here: the raid requires this unit.
-  const saved = player.getAttribute(require("./ToaRaid").ATTR_KILL_COUNTS) ?? {};
+  const saved = player.getAttribute(require("./RaidState.TombsOfAmascut").ATTR_KILL_COUNTS) ?? {};
   for (const [key, monster] of Object.entries(MONSTER)) if (Number(saved[key]) > 0) counts[monster] = Number(saved[key]);
   const total = Object.values(saved).reduce((sum, count) => sum + (Number(count) || 0), 0);
   for (const [task, needed] of ANY_MODE) {

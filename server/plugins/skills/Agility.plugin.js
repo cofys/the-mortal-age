@@ -1,6 +1,6 @@
-const ObstacleRunner = require("./agility/ObstacleRunner");
-const { COURSES } = require("./agility/courses");
-const { SHORTCUTS } = require("./agility/shortcuts");
+const ObstacleRunner = require("./agility/ObstacleRunner.Agility");
+const { COURSES } = require("./agility/courses/Courses.Agility");
+const { SHORTCUTS } = require("./agility/shortcuts/Shortcuts.Agility");
 
 /** Attribute holding { course, index } for the lap in progress. */
 const PROGRESS_ATTRIBUTE = "agility.progress";
