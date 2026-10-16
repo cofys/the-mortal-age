@@ -153,7 +153,8 @@ module.exports = function registerScorpionCatcherQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (npcId !== THORMAC_NPC_ID && npcId !== SEER_NPC_ID) return null;
     const value = String(text).toLowerCase();
     if (value.includes("full inventory")) return false;
     void player;

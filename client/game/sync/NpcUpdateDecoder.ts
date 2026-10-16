@@ -214,7 +214,7 @@ export class NpcUpdateDecoder {
             const rotIdx = stream.readBits(3) | 0;
             const defaultRot = DIRECTION_TO_ORIENTATION[rotIdx & 7];
             const rot = (typeof defaultRot === "number" ? defaultRot : 0) & 2047;
-            const typeId = stream.readBits(14) | 0;
+            const typeId = stream.readBits(16) | 0;
 
             // Deck NPCs are relative to the player's deck tile, main-world NPCs to the root tile.
             const inMainWorld = worldViewId < 0;

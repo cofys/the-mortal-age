@@ -296,7 +296,8 @@ module.exports = function registerHazeelCultQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (![CERIL_IDS, CLIVET_IDS, ALOMONE_IDS, JONES_IDS, GUARD_IDS, HENRYETA_IDS, CULTIST_IDS].some(ids => ids.has(npcId))) return null;
     const value = String(text).toLowerCase();
     if (value.includes("below level 10 combat")) return null;
     if (value.includes("full inventory")) return player.getInventory().isFull?.() === true;

@@ -470,7 +470,8 @@ module.exports = function registerNatureSpiritQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (![DREZEL_NPC_ID, FILLIMAN_NPC_ID, NATURE_SPIRIT_NPC_ID].includes(npcId)) return null;
     const value = String(text).toLowerCase();
     const inventory = player.getInventory();
     if (value.includes("does not meet the requirements")) return false;

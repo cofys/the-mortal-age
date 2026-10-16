@@ -367,6 +367,11 @@ function inspect(player, patch) {
         : state.scarecrow ? "A scarecrow protects nearby sweetcorn." : state.weeds ? "This patch needs weeding." : "This patch is ready for planting.");
     player.sendMessage(`Soil: ${["untreated", "compost", "supercompost", "ultracompost"][state.compost]}.${state.watered ? " The crop is watered." : ""}`);
 }
+function canUsePatch(player, patch) {
+    const request = { player, patch, allowed: true };
+    core.PluginManager.emitCustomEvent("farming:can-use-patch", request);
+    return request.allowed !== false;
+}
 function objectInteraction(event) {
     const { player, object, location } = event;
     WORK.delete(player);
@@ -383,6 +388,7 @@ function objectInteraction(event) {
     const patch = findPatch(object.getId(), location);
     if (!patch) return;
     event.handled = true;
+    if (!canUsePatch(player, patch)) return;
     Model.advanceFarm(farmFor(player), Date.now());
     if (!gate(player)) return;
     const action = core.ObjectDefinition.forPlayer(object.getId(), player)?.getInteractions()?.[event.clickType - 1]?.toLowerCase() ?? "";
@@ -437,6 +443,7 @@ function itemOnObject(event) {
         return;
     }
     event.handled = true;
+    if (!canUsePatch(player, patch)) return;
     if (!gate(player) || !player.getInventory().contains(id)) return;
     Model.advanceFarm(farmFor(player), Date.now());
     const state = stateFor(player, patch);
@@ -482,7 +489,9 @@ function itemOnNpc(event) {
 function spellOnObject(event) {
     WORK.delete(event.player);
     const patch = findPatch(event.object.getId(), event.location);
-    if (patch) Spells.farmingSpell(event, patch);
+    if (!patch) return;
+    if (!canUsePatch(event.player, patch)) { event.handled = true; return; }
+    Spells.farmingSpell(event, patch);
 }
 /** A grown tree's Travel opens the spirit tree network's menu (SpiritTrees). */
 function spiritTravel(player, patch) {

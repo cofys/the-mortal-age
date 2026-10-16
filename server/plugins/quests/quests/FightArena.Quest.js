@@ -126,6 +126,12 @@ module.exports = function registerFightArenaQuest(api) {
   ]);
 
   const KHAZARD_BARMAN_NPC_ID = NpcIdentifiers.KHAZARD_BARMAN;
+  const DIALOGUE_NPC_IDS = new Set([
+    ...KHAZARD_GUARD_IDS, HEAD_GUARD_NPC_ID, ...DOOR_GUARD_NPC_IDS,
+    ...JOE_KELVIN_NPC_IDS, ...SLAVE_NPC_IDS, ...SAMMY_NPC_IDS,
+    ...LADY_SERVIL_NPC_IDS, ...HENGRAD_NPC_IDS, ...JUSTIN_NPC_IDS,
+    ...SPECTATOR_NPC_IDS, ...GENERAL_KHAZARD_NPC_IDS, KHAZARD_BARMAN_NPC_ID,
+  ]);
 
   const PAGE = "Fight Arena";
   const START_HOOK = "quest:fight-arena:start";
@@ -426,7 +432,8 @@ module.exports = function registerFightArenaQuest(api) {
   }
 
   /** Answers the Fight Arena page's prose conditions. */
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase();
     if (value.includes("full inventory")) return player.getInventory().isFull?.() === true;
     if (

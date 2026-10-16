@@ -1,54 +1,16 @@
-/**
- * Sleeping Giants (members).
- *
- * The words come from the "Sleeping Giants" transcript page; this plugin
- * supplies the variant selector for Kovac, the Strike start on the Giants'
- * Plateau Hill Giant, the prose-condition answers, the tool-repair loop, the
- * supply crate and the hand-in reward. The tutorial sword itself is made on
- * the Giants' Foundry plugin's crucible, mould jig, tools and HUD: this quest
- * hands out its Flat Broad commission ("giants-foundry:start-commission") and
- * follows the sword through "giants-foundry:step".
- *
- * Stages (attribute; the client sees them mapped to live OSRS's values of
- * varbit 13902 "sleeping_giants", varp 3428 bits 0-5, rsprox recording 96):
- * 1 accepted and repairing the tools (live 15), 2 all three tools repaired
- * (20), 3 Kovac gave the Flat Broad commission (25), 4 crate looted,
- * 5 crucible full, 6 mould set, 7 metal poured, 9 preform taken,
- * 10 hammered, 11 ground, 12 sword finished (all 25), 13 handed in (30).
- * Stage 8 (metal cooled) is no longer used: the preform is cooled as it is
- * picked up. The foundry's Kovac (cache NPC 11560, spawned by the Giants'
- * Foundry plugin) only shows Hand-in, Commission and Shop at 30.
- *
- * The tutorial's own steps are varbit 13903 "sleeping_giants_tutorial" (live:
- * 10 commission given, 15 crate looted, 20 first metal in, 25 crucible full,
- * 30 told about the mould, 35 mould set, 40 checked by Kovac, 45 poured,
- * 50 preform taken, 65 handed in). The supply crate (multiloc 44779) shows by
- * it: full up to 10, empty from 15. The repair varbits 13904-13906 read 2 once
- * a tool is repaired.
- *
- * Source: https://oldschool.runescape.wiki/w/Sleeping_Giants and
- * https://oldschool.runescape.wiki/w/Transcript:Sleeping_Giants
- * Rewards per the OSRS Wiki: 1 Quest point, 6,000 Smithing experience and
- * access to the Giants' Foundry.
- *
- * Gaps / approximations:
- *   - The tutorial's workshop is an instance in OSRS. Here the static
- *     Giants' Foundry room (reached by the real 44635 Cave Enter / 44636 Exit)
- *     is the workshop, with the minigame's own crucible, jig, storage and crate.
- *   - The broken tool ids (43857/43860/43862, "Repair") are not in the map
- *     either, so the static repaired tools' "Use" option (44619/44620/44621)
- *     runs the wiki repair transcript while a tool is unrepaired.
- *   - The transcript's "Stop!" lines for a wrong tool or heat are not played:
- *     the foundry's machines damage the preform as they do in the minigame.
- *   - "Obor kill count" is read from the GiantLairs plugin's persisted
- *     "giant-lairs:obor-chests-opened" attribute (no kill-count attribute
- *     exists); no Obor chests means the 0-kill branch.
- *   - 11467 (surface Kovac) is missing from npc-spawns.json, so the plugin
- *     spawns it once. The foundry Kovac is npc-spawns.json's 11560, which shows
- *     11470 during the quest and 11472 (the Giants' Foundry's Kovac) after it.
- */
+/** Sleeping Giants. Recording 96 evidence: docs/p2p-skilling-parity.md. */
 module.exports = function registerSleepingGiantsQuest(api) {
   const {
+    Animation,
+    Boundary,
+    PrivateArea,
+    Task,
+    TaskManager,
+    ForceMovement,
+    ForceMovementTask,
+    GameObject,
+    ObjectManager,
+    Equipment,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -80,6 +42,8 @@ module.exports = function registerSleepingGiantsQuest(api) {
   const EXIT_OBJECT_ID = ObjectIdentifiers.EXIT_21; // 44636, ops Exit
   /** giants_foundry_supply_box_multi: a nameless multiloc, so no generated identifier. */
   const SUPPLY_BOX_OBJECT_ID = 44779;
+
+  const REPAIR_OBJECT_IDS = new Map([[43857, TRIP_HAMMER_OBJECT_ID], [44773, TRIP_HAMMER_OBJECT_ID], [43860, GRINDSTONE_OBJECT_ID], [44774, GRINDSTONE_OBJECT_ID], [43862, POLISHING_WHEEL_OBJECT_ID], [44775, POLISHING_WHEEL_OBJECT_ID]]);
 
   const TOOL_OBJECT_IDS = new Set([
     TRIP_HAMMER_OBJECT_ID,
@@ -155,11 +119,11 @@ module.exports = function registerSleepingGiantsQuest(api) {
   const STAGE_COMPLETE = 13;
 
   /** What the client sees for a stage (live varbit 13902). */
-  function liveStage(stage) {
+  function liveStage(stage, player) {
     if (stage >= STAGE_COMPLETE) return 30;
     if (stage >= STAGE_COMMISSION) return 25;
-    if (stage >= STAGE_TOOLS_REPAIRED) return 20;
-    if (stage >= STAGE_STARTED) return 15;
+    if (stage >= STAGE_TOOLS_REPAIRED) return hasBit(player, BIT_BRIEFED) ? 20 : 15;
+    if (stage >= STAGE_STARTED) return Number(player.getAttribute(INTRO_ATTRIBUTE)) || 15;
     return 0;
   }
 
@@ -177,7 +141,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
   };
 
   /** The Flat Broad sword (commission words Broad 4 and Flat 3, enum 4372). */
-  const TUTORIAL_COMMISSION = [4, 3];
+  const TUTORIAL_COMMISSION = [3, 4];
 
   const BIT_TRIP_REPAIRED = 1;
   const BIT_GRIND_REPAIRED = 2;
@@ -187,6 +151,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
   const BIT_CRATE_LOOTED = 32;
   const BIT_MOULD_CHECKED = 64; // Kovac looked over the mould
 
+  const INTRO_ATTRIBUTE = "sleeping-giants:introduction";
   const BITS_ATTRIBUTE = "quest.sleeping_giants.bits";
   const TUTORIAL_ATTRIBUTE = "quest.sleeping_giants.tutorial";
   const OBOR_CHESTS_ATTRIBUTE = "giant-lairs:obor-chests-opened";
@@ -194,7 +159,6 @@ module.exports = function registerSleepingGiantsQuest(api) {
   const OP_1 = 1;
   const OP_2 = 2;
 
-  const HILL_GIANT_SPAWN_TILE = { x: 3362, y: 3146 };
   /** rsprox: entering the cave lands the player here. */
   const FOUNDRY_LANDING_TILE = { x: 3366, y: 11483 };
   const SURFACE_RETURN_TILE = { x: 3368, y: 3152 };
@@ -218,9 +182,10 @@ module.exports = function registerSleepingGiantsQuest(api) {
   /** Transient dialogue context (never persisted). */
   const repairTool = new WeakMap();
   const repairHadMaterials = new WeakMap();
+  const pendingRepair = new WeakMap();
+  const workshops = new WeakMap();
 
   let quest;
-  let worldInstalled = false;
 
   // ==========================================================================
   // Persisted state helpers
@@ -269,7 +234,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
 
   function hasHammer(player) {
     for (const itemId of HAMMER_ITEM_IDS) if (held(player, itemId)) return true;
-    return false;
+    return HAMMER_ITEM_IDS.has(player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.());
   }
 
   function nails(player) {
@@ -307,7 +272,6 @@ module.exports = function registerSleepingGiantsQuest(api) {
       return;
     }
     if (toolId === GRINDSTONE_OBJECT_ID) {
-      player.getInventory().deleteNumber(CHISEL_ITEM_ID, 1);
       return;
     }
     player.getInventory().deleteNumber(OAK_LOGS_ITEM_ID, 2);
@@ -330,30 +294,155 @@ module.exports = function registerSleepingGiantsQuest(api) {
   function resetProgress(player) {
     player.setAttribute(BITS_ATTRIBUTE, 0);
     player.setAttribute(TUTORIAL_ATTRIBUTE, 0);
+    player.setAttribute(INTRO_ATTRIBUTE, 5);
   }
 
-  // ==========================================================================
-  // World setup (spawns the surface Hill Giant once)
-  // ==========================================================================
+  function later(key, ticks, callback) {
+    class SleepingTask extends Task { constructor() { super(ticks, key, false); } execute() { this.stop(); callback(); } }
+    TaskManager.submit(new SleepingTask());
+  }
 
-  function ensureQuestSpawns() {
-    const npcs = api.getWorld()?.getNpcs ? [...api.getWorld().getNpcs()] : [];
-    const ids = new Set(npcs.map((npc) => npc?.getId?.()));
-    if (!ids.has(HILL_GIANT_NPC_ID)) {
-      api.spawnNpc({
-        id: HILL_GIANT_NPC_ID,
-        x: HILL_GIANT_SPAWN_TILE.x,
-        y: HILL_GIANT_SPAWN_TILE.y,
-        z: 0,
-        wanderRadius: 0,
-      });
+  function controls(player, active) {
+    player.getMovementQueue().setBlockMovement(active); player.setUntargetable(active);
+    player.getPacketSender().sendVarbit(6719, active ? 2 : 0).sendVarbit(12393, active ? 1 : 0);
+  }
+
+  function camera(player, move, look) {
+    const sender = player.getPacketSender();
+    if (move) sender.sendCameraMoveTo(...move.slice(0, 3), { rate: move[3], rate2: move[4] });
+    if (look) sender.sendCameraLookAt(...look.slice(0, 3), { rate: look[3], rate2: look[4] });
+  }
+
+  class SleepingWorkshop extends PrivateArea {
+    constructor(player) { super([new Boundary(3328, 3391, 11456, 11519, 0)]); this.owner = player; this.scene = false; }
+    canAttack() { return false; }
+    canTeleport() { return this.scene ? false : null; }
+    process(mobile) { if (mobile === this.owner) api.emitCustomEvent("giants-foundry:process", { player: mobile }); }
+    postLeave(mobile, logout) {
+      if (mobile === this.owner) {
+        workshops.delete(mobile); TaskManager.cancelTasks(this); pendingRepair.delete(mobile);
+        api.emitCustomEvent("giants-foundry:leave", { player: mobile });
+        controls(mobile, false); mobile.setForceMovement(null); mobile.performAnimation(new Animation(-1)); mobile.getPacketSender().sendCameraReset();
+      }
+      super.postLeave(mobile, logout);
     }
   }
 
-  function installWorld() {
-    if (worldInstalled) return;
-    worldInstalled = true;
-    ensureQuestSpawns();
+  function placeTools(player, workshop) {
+    for (const [id, x, y, face, parent] of [[TRIP_HAMMER_OBJECT_ID, 3363, 11496, 3, 44773], [GRINDSTONE_OBJECT_ID, 3361, 11491, 0, 44774], [POLISHING_WHEEL_OBJECT_ID, 3362, 11484, 0, 44775]]) {
+      ObjectManager.register(new GameObject(hasBit(player, REPAIR_BIT_BY_TOOL.get(id)) ? id : parent, new Location(x, y, 0), 10, face, workshop), true);
+    }
+  }
+
+  function enterWorkshop(player) {
+    let workshop = workshops.get(player);
+    if (workshop && !workshop.isDestroyed()) return workshop;
+    workshop = new SleepingWorkshop(player); workshops.set(player, workshop); workshop.enter(player);
+    const stage = quest.getStage(player);
+    const npcId = stage >= STAGE_COMMISSION ? NpcIdentifiers.KOVAC_3 : NpcIdentifiers.KOVAC;
+    workshop.kovac = api.spawnNpc({ id: npcId, x: 3368, y: 11483, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+    if (workshop.kovac) workshop.add(workshop.kovac);
+    placeTools(player, workshop);
+    return workshop;
+  }
+
+  function sceneWalk(player, x, y, ticks) {
+    const start = player.getLocation().clone(), dx = x - start.getX(), dy = y - start.getY();
+    const direction = Math.abs(dx) > Math.abs(dy) ? dx > 0 ? 1 : 3 : dy > 0 ? 0 : 2;
+    TaskManager.submit(new ForceMovementTask(player, ticks, new ForceMovement(start, new Location(dx, dy, 0), 0, ticks * 30, direction, 819)));
+  }
+
+  function workshopIntroduction(player) {
+    const workshop = enterWorkshop(player); workshop.scene = true; workshop.kovac?.setNpcTransformationId(NpcIdentifiers.KOVAC_2); player.getDialogueManager().reset(); controls(player, true);
+    player.moveTo(new Location(FOUNDRY_LANDING_TILE.x, FOUNDRY_LANDING_TILE.y, 0));
+    player.setAttribute(INTRO_ATTRIBUTE, 10); quest.setStage(player, STAGE_STARTED);
+    later(workshop, 3, () => sceneWalk(player, 3367, 11484, 1));
+    later(workshop, 4, () => sceneWalk(player, 3367, 11489, 5));
+    later(workshop, 1, () => camera(player, [3367, 11487, 500, 232, 232], [3367, 11479, 300, 232, 232]));
+    later(workshop, 2, () => camera(player, [3367, 11492, 500, 4, 4], [3367, 11484, 280, 3, 3]));
+    later(workshop, 7, () => camera(player, [3369, 11477, 700, 4, 4], [3364, 11493, 300, 4, 4]));
+    later(workshop, 15, () => { camera(player, [3384, 11490, 700, 4, 4], [3364, 11491, 400, 4, 4]); player.performAnimation(new Animation(857)); });
+    later(workshop, 23, () => { camera(player, [3380, 11504, 900, 4, 4], [3366, 11489, 400, 2, 2]); player.performAnimation(new Animation(857)); });
+    later(workshop, 31, () => startTranscript(api, player, DIALOGUE_NPC_ID, PAGE, "starting-out-talking-to-kovac", steps => {
+      const yes = steps.find(step => step.type === "choice").options.find(option => option.text === "Yes.").steps;
+      return yes.slice(yes.findIndex(step => step.id === "Y4oYGg") + 1);
+    }));
+  }
+
+  function handleDialogueLine(event) {
+    if (!KOVAC_NPC_IDS.has(event.npcId) && event.npcId !== HILL_GIANT_NPC_ID) return;
+    const { player, text } = event;
+    if (text === "Kovac agree. Ready to make sword?") event.before = () => { setBit(player, BIT_BRIEFED); quest.setStage(player, STAGE_TOOLS_REPAIRED); };
+    if (text === "then we can start.") event.after = () => {
+      quest.setStage(player, STAGE_COMMISSION);
+      const workshop = workshops.get(player); if (!workshop) return;
+      player.getPacketSender().sendSubInterface((161 << 16) | 1, 174, 1).sendString("", (174 << 16) | 4).sendClientScript(948, [0, 255, 0, 0, 50]);
+      later(workshop, 2, () => {
+        workshop.leave(player, false); player.moveTo(new Location(3366, 11495, 0));
+        player.getPacketSender().sendSubInterface((161 << 16) | 1, 174, 1).sendClientScript(948, [0, 0, 0, 255, 50]);
+        later(player, 2, () => player.getPacketSender().closeSubInterface((161 << 16) | 1));
+      });
+    };
+    if (text === "Kovac need a Flat Broad sword.") event.before = () => startTutorialSword(player);
+    if (text === "Load metals into crucible until it looks full.") event.before = () => setTutorial(player, TUTORIAL.COMMISSION);
+    if (text === "a forte, a blade and a tip.") event.before = () => { setBit(player, BIT_MOULD_BRIEFED); setTutorial(player, TUTORIAL.MOULD_BRIEFED); };
+    if (text === "Well done little one. We are ready.") event.before = () => { setBit(player, BIT_MOULD_CHECKED); setTutorial(player, TUTORIAL.MOULD_CHECKED); };
+
+    if (text === "Woah... What is this place?" && workshops.get(player)?.scene) event.after = () => {
+      const workshop = workshops.get(player); player.getDialogueManager().reset();
+      camera(player, [3371, 11493, 700, 232, 232], [3368, 11486, 400, 232, 232]);
+      sceneWalk(player, 3367, 11485, 4);
+      later(workshop, 2, () => startTranscript(api, player, DIALOGUE_NPC_ID, PAGE, "starting-out-talking-to-kovac", steps => {
+        const yes = steps.find(step => step.type === "choice").options.find(option => option.text === "Yes.").steps;
+        return yes.slice(yes.findIndex(step => step.player === "Did you build this?"));
+      }));
+    };
+    if (text === "We fix tools...") event.after = () => {
+      const workshop = workshops.get(player); if (workshop) { workshop.scene = false; workshop.kovac?.setNpcTransformationId(NpcIdentifiers.KOVAC); }
+      player.setAttribute(INTRO_ATTRIBUTE, 15); quest.setStage(player, STAGE_STARTED);
+      controls(player, false); player.getPacketSender().sendCameraReset();
+    };
+    const repair = pendingRepair.get(player);
+    if (repair && ["That looks like it'll do the trick. What do you think?", "Well that required a bit of elbow grease. It should be good to go now.", "Not my finest work, but I think it will do."].includes(text)) {
+      event.before = () => performRepair(player, repair);
+    }
+    if (text === "Kovac take care of it.") event.before = () => {
+      api.emitCustomEvent("giants-foundry:discard-preform", { player });
+      setTutorial(player, 60);
+    };
+  }
+
+  function performRepair(player, toolId) {
+    pendingRepair.delete(player); player.getDialogueManager().reset();
+    if (!hasRepairMaterials(player, toolId)) { player.sendMessage(toolId === GRINDSTONE_OBJECT_ID ? "You need a chisel to repair the grindstone." : "You do not have the materials to repair this tool."); return; }
+    const workshop = enterWorkshop(player); controls(player, true);
+    player.getPacketSender().sendVarbit(REPAIR_VARBIT_BY_TOOL.get(toolId), 1);
+    const grind = toolId === GRINDSTONE_OBJECT_ID;
+    const ticks = grind ? 12 : toolId === TRIP_HAMMER_OBJECT_ID ? 5 : 8;
+    later(workshop, grind ? 3 : 1, () => player.performAnimation(new Animation(grind ? 827 : 7197)));
+    if (grind) later(workshop, 7, () => player.performAnimation(new Animation(9442)));
+    later(workshop, ticks, () => {
+      if (!hasRepairMaterials(player, toolId)) { controls(player, false); return; }
+      consumeRepairMaterials(player, toolId); markRepaired(player, toolId); placeTools(player, workshop);
+      controls(player, false); player.performAnimation(new Animation(-1));
+      startTranscript(api, player, DIALOGUE_NPC_ID, PAGE, REPAIR_VARIANT_BY_TOOL.get(toolId), steps => steps.find(step => step.type === "choice").options.find(option => option.text === "Yes.").steps.slice(1));
+    });
+  }
+
+  function handlePlayerGone({ player }) { workshops.get(player)?.leave(player, true); }
+
+  function answerToolCheck(event) {
+    if (quest.getStage(event.player) < STAGE_PREFORM_TAKEN || quest.isComplete(event.player)) return;
+    if (event.rightTool && event.rightTemperature) return;
+    const player = event.player;
+    let variant;
+    if (!event.rightTool) {
+      variant = event.requiredTool === 0 ? "make-a-sword-using-a-preform-that-has-not-been-completely-hammered-on-the-grindstone-or-polishing-wheel" : event.requiredTool === 1 ? "make-a-sword-using-a-preform-on-the-trip-hammer-after-its-been-hammered-enough" : "make-a-sword-using-a-preform-on-the-grindstone-after-its-been-ground-enough";
+    } else {
+      const tool = ["trip-hammer", "grindstone", "polishing-wheel"][event.tool];
+      variant = `make-a-sword-using-a-preform-that-is-too-${event.temperature < event.minimum ? "cold" : "hot"}-on-the-${tool}`;
+    }
+    event.stop = true; startKovacVariant(player, variant);
   }
 
   // ==========================================================================
@@ -362,11 +451,16 @@ module.exports = function registerSleepingGiantsQuest(api) {
 
   function startTutorialSword(player) {
     quest.setStage(player, STAGE_COMMISSION);
-    setTutorial(player, TUTORIAL.COMMISSION);
+    workshops.get(player)?.kovac?.setNpcTransformationId(NpcIdentifiers.KOVAC_3);
+    setTutorial(player, 5);
     api.emitCustomEvent("giants-foundry:start-commission", { player, words: TUTORIAL_COMMISSION, tutorial: true });
   }
 
   /** The foundry lets the player work once Kovac has given the Flat Broad commission. */
+  function answerMouldAccess(request) {
+    if (quest.isStarted(request.player) && !quest.isComplete(request.player) && tutorial(request.player) < TUTORIAL.MOULD_BRIEFED) request.allowed = false;
+  }
+
   function answerAccess(request) {
     if (request.player && quest.getStage(request.player) >= STAGE_COMMISSION) request.allowed = true;
   }
@@ -421,14 +515,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
     if (stage === STAGE_STARTED) {
       return "what-is-this-a-workshop-for-giants-talking-to-kovac";
     }
-    if (stage === STAGE_TOOLS_REPAIRED) {
-      if (!hasBit(player, BIT_BRIEFED)) {
-        setBit(player, BIT_BRIEFED);
-        return "what-is-this-a-workshop-for-giants-talking-to-kovac-after-all-the-tools-are-repaired";
-      }
-      startTutorialSword(player);
-      return "make-a-sword-talking-to-kovac";
-    }
+    if (stage === STAGE_TOOLS_REPAIRED) return "what-is-this-a-workshop-for-giants-talking-to-kovac-after-all-the-tools-are-repaired";
     if (stage === STAGE_COMMISSION) return "make-a-sword-talking-to-kovac";
     if (stage === STAGE_CRATE_LOOTED) {
       return crucibleTotal(player) > 0
@@ -437,15 +524,11 @@ module.exports = function registerSleepingGiantsQuest(api) {
     }
     if (stage === STAGE_CRUCIBLE_FULL) {
       if (!hasBit(player, BIT_MOULD_BRIEFED)) {
-        setBit(player, BIT_MOULD_BRIEFED);
-        setTutorial(player, TUTORIAL.MOULD_BRIEFED);
         return "make-a-sword-talking-to-kovac-after-filling-the-crucible";
       }
       return "make-a-sword-talking-to-kovac-before-setting-the-mould";
     }
     if (stage === STAGE_MOULD_SET) {
-      setBit(player, BIT_MOULD_CHECKED);
-      setTutorial(player, TUTORIAL.MOULD_CHECKED);
       return "make-a-sword-talking-to-kovac-after-setting-the-mould";
     }
     if (stage === STAGE_POURED) return "make-a-sword-before-picking-up-the-preform";
@@ -500,7 +583,10 @@ module.exports = function registerSleepingGiantsQuest(api) {
     const { player, npcId, clickType } = event;
     if (npcId !== HILL_GIANT_NPC_ID || clickType !== OP_1) return;
     event.handled = true;
-    if (quest.getStage(player) !== 0) return;
+    if (quest.getStage(player) !== 0) {
+      if (quest.getStage(player) === STAGE_STARTED) startTranscript(api, player, HILL_GIANT_NPC_ID, PAGE, "starting-out-talking-to-kovac", steps => steps.find(step => step.type === "choice").options.find(option => option.text === "Yes.").steps);
+      return;
+    }
     if (player.getSkillManager().getMaxLevel(Skill.SMITHING) < 15) {
       player.sendMessage("You need a Smithing level of 15 to help Kovac.");
       return;
@@ -530,11 +616,17 @@ module.exports = function registerSleepingGiantsQuest(api) {
     const hadMaterials = hasRepairMaterials(player, toolId);
     repairHadMaterials.set(player, hadMaterials);
     if (!hadMaterials) return; // the transcript's condition message plays
-    consumeRepairMaterials(player, toolId);
-    markRepaired(player, toolId);
+    pendingRepair.set(player, toolId);
   }
 
   function startRepair(player, toolId) {
+    const workshop = enterWorkshop(player);
+    if (toolId === TRIP_HAMMER_OBJECT_ID && workshop.kovac) {
+      workshop.kovac.getMovementQueue().reset();
+      workshop.kovac.getMovementQueue().addSteps(new Location(3368, 11490, 0));
+      workshop.kovac.getMovementQueue().addSteps(new Location(3365, 11493, 0));
+    }
+    player.getPacketSender().sendVarbit(REPAIR_VARBIT_BY_TOOL.get(toolId), 1);
     repairTool.set(player, toolId);
     startTranscript(api, player, DIALOGUE_NPC_ID, PAGE, REPAIR_VARIANT_BY_TOOL.get(toolId));
   }
@@ -547,6 +639,11 @@ module.exports = function registerSleepingGiantsQuest(api) {
     const { player, npcId, stepId, kind } = event;
     if (!KOVAC_NPC_IDS.has(npcId) && npcId !== HILL_GIANT_NPC_ID) return;
     if (kind === "message") {
+      event.box = { statement: true };
+      if (stepId === "RydkiD") {
+        api.emitCustomEvent("giants-foundry:discard-preform", { player, preserveQuality: true });
+        setTutorial(player, 55);
+      }
       // BkbGGN ("You take a selection of bars and weapons...") still shows the
       // transcript message; the items are the side effect.
       if (stepId === "BkbGGN") takeCrateItems(player);
@@ -556,7 +653,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
       case "Y4oYGg": // "A cutscene plays..." -> into the workshop
         event.handled = true;
         if (quest.getStage(player) >= STAGE_STARTED) {
-          player.moveTo(new Location(FOUNDRY_LANDING_TILE.x, FOUNDRY_LANDING_TILE.y, 0));
+          workshopIntroduction(player);
         }
         return;
       case "Y7bMs-": // "Congratulations! Quest complete!"
@@ -564,6 +661,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
         event.end = true;
         api.emitCustomEvent("giants-foundry:discard-preform", { player });
         setTutorial(player, TUTORIAL.HANDED_IN);
+        workshops.get(player)?.leave(player, false);
         if (!quest.isComplete(player)) quest.complete(player);
         return;
       default:
@@ -580,6 +678,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
   }
 
   function pushThroughCave(player) {
+    if (quest.getStage(player) < STAGE_COMMISSION) enterWorkshop(player);
     player.moveTo(new Location(FOUNDRY_LANDING_TILE.x, FOUNDRY_LANDING_TILE.y, 0));
   }
 
@@ -608,7 +707,8 @@ module.exports = function registerSleepingGiantsQuest(api) {
   }
 
   function handleObjectInteraction(event) {
-    const { player, objectId, clickType } = event;
+    const { player, clickType } = event;
+    const objectId = REPAIR_OBJECT_IDS.get(event.objectId) ?? event.objectId;
     if (!QUEST_OBJECT_IDS.has(objectId)) return;
     if (objectId === CAVE_OBJECT_ID) {
       if (clickType !== OP_1) return;
@@ -623,6 +723,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
     if (objectId === EXIT_OBJECT_ID) {
       if (clickType !== OP_1) return;
       event.handled = true;
+      workshops.get(player)?.leave(player, false);
       player.moveTo(new Location(SURFACE_RETURN_TILE.x, SURFACE_RETURN_TILE.y, 0));
       return;
     }
@@ -750,7 +851,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
   function handleLogin({ player }) {
     sendTutorialVarbits(player);
     refreshQuestList(player);
-    installWorld();
+    if (player.getLocation().getY() >= 11456 && player.getLocation().getY() <= 11519 && quest.isStarted(player) && quest.getStage(player) < STAGE_COMMISSION) enterWorkshop(player);
   }
 
   quest = registerQuest(api, {
@@ -768,6 +869,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
     onReward: grantRewards,
   });
 
+  api.persistAttribute(INTRO_ATTRIBUTE, 0);
   api.persistAttribute(BITS_ATTRIBUTE);
   api.persistAttribute(TUTORIAL_ATTRIBUTE);
 
@@ -777,9 +879,14 @@ module.exports = function registerSleepingGiantsQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
+  api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
+  api.onCustomEvent("giants-foundry:tool-check", answerToolCheck);
   api.onCustomEvent("giants-foundry:access", answerAccess);
+  api.onCustomEvent("giants-foundry:mould-access", answerMouldAccess);
   api.onCustomEvent("giants-foundry:step", handleFoundryStep);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handlePlayerGone);
+  api.onPlayerDeath(handlePlayerGone);
 };

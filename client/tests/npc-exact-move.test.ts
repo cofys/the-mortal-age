@@ -132,7 +132,37 @@ function crawlAndFaceTile(): void {
     assert.equal(ecs.getTargetRot(id), 1024, "north");
 }
 
+
+/** Current-cache NPCs exceed14 bits: Labrador16433 must never become humanoid49. */
+function currentCacheNpcTypesRoundTrip(): void {
+    const local = { x: 3200, y: 3200, level: 0 };
+    for (const distance of [3, 40]) {
+        const state = createNpcSyncState();
+        const decoder = new NpcUpdateDecoder();
+        const types = [49, 16383, 16433, 16538];
+        const views = types.map((typeId, offset) => ({
+            index: 7 + offset, typeId, x: 3200 + distance + offset, y: 3200 - distance,
+            level: 0, rotation: offset, walkDirection: -1, runDirection: -1,
+            forcedChat: `npc-${typeId}`,
+        }));
+        let decoded = decodeNpcs(encodeNpcSync(1, local, views, state), decoder, 0);
+        assert.deepEqual(decoded.spawns.map(npc => npc.typeId), types);
+        assert.deepEqual(decoded.spawns.map(npc => npc.npcId), [7, 8, 9, 10], "NPC indices remain16 bits");
+        assert.deepEqual(decoded.spawns.map(npc => [npc.tileX, npc.tileY]), views.map(npc => [npc.x, npc.y]));
+        for (const npc of views) assert.equal(decoded.updateBlocks.get(npc.index)?.say, npc.forcedChat,
+            "the spawn sentinel and following update blocks stay aligned");
+
+        const changed = views.map((npc, offset) => ({ ...npc, typeId: types[(offset + 1) % types.length] }));
+        decoded = decodeNpcs(encodeNpcSync(2, local, changed, state), decoder, 30);
+        assert.deepEqual(decoded.removals, [7, 8, 9, 10]);
+        assert.deepEqual(decoded.spawns.map(npc => npc.typeId), changed.map(npc => npc.typeId));
+        decoded = decodeNpcs(encodeNpcSync(3, local, [], state), decoder, 60);
+        assert.deepEqual(decoded.removals, [7, 8, 9, 10], "ordinary removal after a high-id spawn stays aligned");
+    }
+}
+
 roundTrip();
+currentCacheNpcTypesRoundTrip();
 glide();
 crawlAndFaceTile();
 console.log("NPC exact move tests passed");

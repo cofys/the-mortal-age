@@ -1,27 +1,6 @@
-/**
- * The Restless Ghost.
- *
- * Words come from npc-dialogues.json. The "The Restless Ghost" page mixes every
- * NPC of the quest, so each branch is selected by the speaker's cache id:
- *   Father Aereck, Father Urhney and the Restless ghost.
- *
- * This plugin supplies the variant selector, the condition answers, the start
- * hook, the amulet hand-over actions and the coffin / skull-altar interactions.
- * The ghost is not a static world spawn: it rises from the graveyard coffin
- * when the player opens or searches it and vanishes when the skull is returned,
- * matching the reference's runtime spawn. The coffin placement and the
- * attacking skeleton are server content added separately.
- *
- * Gaps (no transcript support, see summary):
- *   - Aereck while carrying the skull but without it (reference has a lost-skull
- *     line the dump lacks) falls back to the found-skull branch.
- *   - Ghost after completion has no "not interested" variant; falls back to the
- *     pre-quest "Wooooo!" conversation.
- *   - The bank / Death's Office / Item Retrieval storage check for the lost
- *     amulet cannot be answered, so it always reads as "not stored".
- */
+/** The Restless Ghost: captured quest state, coffin/skull encounter and river scene. See docs/f2p-varrock-parity.md. */
 module.exports = function registerRestlessGhostQuest(api) {
-  const { Skill, Equipment, Location, GameObject, ObjectManager, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Equipment, Location, GameObject, ObjectManager, Animation, TemplatedInstanceArea, TaskManager, CountdownTask, DialogueChainBuilder, ItemStatementDialogue, ActionDialogue, StatementDialogue, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest } = require("../QuestRuntime");
 
   const VARP_RESTLESS_GHOST = 107;
@@ -45,25 +24,23 @@ module.exports = function registerRestlessGhostQuest(api) {
   /** Lost-amulet "ghostspeak amulet" action, on both Urhney pages. */
   const URHNEY_GIVE_AMULET_ACTION_IDS = new Set(["TkNeQZ", "z2bQM2"]);
   /** Where the ghost rises: the tile just south of the graveyard coffin (3249, 3192). */
-  const GHOST_SPAWN_X = 3249;
-  const GHOST_SPAWN_Y = 3194;
+  const GHOST_SPAWN_X = 3250;
+  const GHOST_SPAWN_Y = 3195;
   const GHOST_WANDER_RADIUS = 2;
-  /** Accepting the skull task sets the spoken-to-ghost stage (the reference's stage write). */
-  const GHOST_SKULL_TASK_LINE =
-    "Ok. I will try and get the skull back for you, then you can rest in peace.";
-  /**
-   * The "No, you sound like..." and "Wow, this amulet works!" branches commit to
-   * the explanation through these nested choices; their transcript jumps replay
-   * the option body instead of reaching the task text, so the stage is set here.
-   */
-  const GHOST_SKULL_TASK_CHOICES = new Set([
-    "Yes, ok. Do you know WHY you're a ghost?",
-    "Yes, ok. Do you know why you're a ghost?",
-  ]);
-
+  const OPEN_COFFIN_ID = 15061; // cache restless_coffin_open, transforms on varbit2129
+  const SKULL_TAKEN_VARBIT = 2130;
+  const COFFIN_SKULL_VARBIT = 2129;
+  const SKELETON_HIDDEN_VARBIT = 2128;
+  const FINISH_ATTRIBUTE = "restless-ghost:release-pending";
+  const ghostByPlayer = new Map(), scenes = new Map(), opening = new WeakMap();
+  let skeleton = null;
   let quest;
-  const ghostByPlayer = new Map();
 
+  function later(key, ticks, fn) { TaskManager.submit(new CountdownTask(key, ticks, fn)); }
+  function statement(player, text, item) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(item === undefined ? new StatementDialogue(0, text) : new ItemStatementDialogue(0, item, text)));
+  }
+  const bankedAmulet = player => (player.getBanks?.() ?? []).some(bank => bank.getAmount(GHOSTSPEAK_AMULET_ID) > 0);
   const ownsGhostspeakAmulet = (player) => {
     if (player.getInventory().getAmount(GHOSTSPEAK_AMULET_ID) > 0) return true;
     return player.getEquipment().get(Equipment.AMULET_SLOT)?.getId?.() === GHOSTSPEAK_AMULET_ID;
@@ -73,13 +50,13 @@ module.exports = function registerRestlessGhostQuest(api) {
     player.getEquipment().get(Equipment.AMULET_SLOT)?.getId?.() === GHOSTSPEAK_AMULET_ID;
 
   function giveGhostspeakAmulet(player) {
-    if (ownsGhostspeakAmulet(player)) return;
+    if (ownsGhostspeakAmulet(player) || bankedAmulet(player)) return false;
     if (player.getInventory().isFull()) {
       player.sendMessage("You need some free inventory space before Father Urhney can give you the amulet.");
-      return;
+      return false;
     }
     player.getInventory().adds(GHOSTSPEAK_AMULET_ID, 1);
-    player.sendMessage("Father Urhney hands you an amulet.");
+    return true;
   }
 
   /** Rise the ghost from the coffin for this player, once, until the quest ends. */
@@ -95,19 +72,30 @@ module.exports = function registerRestlessGhostQuest(api) {
       owner: player,
       ownerOnly: true,
     });
-    if (npc) ghostByPlayer.set(player, npc);
+    if (npc) {
+      ghostByPlayer.set(player, npc);
+      npc.performAnimation(new Animation(4019));
+      player.getPacketSender().sendSoundEffect(1595, 1, 0);
+      later(npc, 100, () => { if (ghostByPlayer.get(player) === npc) removeGhost(player); });
+    }
   }
 
   function removeGhost(player) {
     const npc = ghostByPlayer.get(player);
     if (!npc) return;
     ghostByPlayer.delete(player);
+    TaskManager.cancelTasks(npc);
     api.removeNpc(npc);
   }
 
   /** The private ghost follows its owner; drop it on logout like the other quest NPCs. */
   function handleLogout({ player }) {
-    if (player) removeGhost(player);
+    if (!player) return;
+    removeGhost(player);
+    const scene = scenes.get(player);
+    if (scene) { scenes.delete(player); scene.leave(player, true); }
+    const pending = opening.get(player); if (pending) TaskManager.cancelTasks(pending);
+    opening.delete(player);
   }
 
   /** Swap a coffin object for another id in place (the reference's loc change). */
@@ -216,7 +204,7 @@ module.exports = function registerRestlessGhostQuest(api) {
       if (stage === STAGE_STARTED) {
         return { page: "The Restless Ghost", variant: "talking-to-father-urhney" };
       }
-      if (stage >= STAGE_SPOKEN_URHNEY && stage < STAGE_COMPLETE && !ownsGhostspeakAmulet(player)) {
+      if (stage >= STAGE_SPOKEN_URHNEY) {
         return { page: "The Restless Ghost", variant: "talking-to-father-urhney-if-the-ghostspeak-amulet-is-ever-lost" };
       }
       if (stage >= STAGE_SPOKEN_URHNEY) {
@@ -254,11 +242,17 @@ module.exports = function registerRestlessGhostQuest(api) {
     if (npcId !== NpcIdentifiers.FATHER_URHNEY) return null;
     const value = String(text).toLowerCase();
     if (value.includes("currently has it in their inventory")) return ownsGhostspeakAmulet(player);
-    // ponytail: no bank/Death's Office/retrieval lookup; treat as not stored.
-    if (value.includes("stored in a bank")) return false;
+    // shortcut: Death's Office/retrieval storage has no common lookup; add it here when exposed.
+    if (value.includes("stored in a bank")) return bankedAmulet(player);
     if (value.includes("does not have inventory space")) return player.getInventory().isFull();
     if (value.includes("has inventory space")) return !player.getInventory().isFull();
     return null;
+  }
+
+  function warnBeforeStart(event) {
+    if (event.npcId === NpcIdentifiers.FATHER_AERECK && event.prompt === "Start The Restless Ghost quest?" && event.player.getSkillManager().getCombatLevel() < 10) {
+      event.warning = "Before starting this quest, be aware that your combat level is lower than the recommended level of 10.";
+    }
   }
 
   function handleStartHook({ player, npcId, hook }) {
@@ -270,105 +264,156 @@ module.exports = function registerRestlessGhostQuest(api) {
   function handleAction(event) {
     const { player, npcId, stepId } = event;
     if (npcId !== NpcIdentifiers.FATHER_URHNEY) return;
-
-    if (stepId === URHNEY_GIVE_AMULET_MESSAGE_ID) {
-      giveGhostspeakAmulet(player);
-      if (quest.getStage(player) < STAGE_SPOKEN_URHNEY) {
-        quest.setStage(player, STAGE_SPOKEN_URHNEY);
+    if (stepId === "d7Bg2n") { event.text = "Father Urhney sighs."; event.box = { statement: true }; return; }
+    if (stepId === URHNEY_GIVE_AMULET_MESSAGE_ID || stepId === "xk28r_" || URHNEY_GIVE_AMULET_ACTION_IDS.has(stepId)) {
+      event.handled = true;
+      if (stepId === "xk28r_") event.text = "Father Urhney hands you an amulet of ghostspeak.";
+      if (giveGhostspeakAmulet(player)) {
+        if (quest.getStage(player) === STAGE_STARTED) quest.setStage(player, STAGE_SPOKEN_URHNEY);
+        event.box = { items: [GHOSTSPEAK_AMULET_ID] };
       }
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
-      return;
     }
-
-    if (URHNEY_GIVE_AMULET_ACTION_IDS.has(stepId)) {
-      giveGhostspeakAmulet(player);
-      event.handled = true;
-    }
-  }
-
-  /** The skull conversation is the only write to the spoken-to-ghost stage. */
-  function advanceToSpokenGhost(player) {
-    if (quest.getStage(player) !== STAGE_SPOKEN_URHNEY) return;
-    quest.setStage(player, STAGE_SPOKEN_GHOST);
   }
 
   function handleDialogueLine(event) {
-    if (event.npcId !== NpcIdentifiers.RESTLESS_GHOST) return;
-    if (event.text !== GHOST_SKULL_TASK_LINE) return;
-    advanceToSpokenGhost(event.player);
+    if (event.npcId !== NpcIdentifiers.RESTLESS_GHOST || event.text !== "Ooh, thank you. That would be such a great relief!") return;
+    event.after = () => { if (quest.getStage(event.player) === STAGE_SPOKEN_URHNEY) quest.setStage(event.player, STAGE_SPOKEN_GHOST); };
   }
 
-  function handleDialogueChoice(event) {
-    if (event.npcId !== NpcIdentifiers.RESTLESS_GHOST) return;
-    if (!GHOST_SKULL_TASK_CHOICES.has(event.option)) return;
-    advanceToSpokenGhost(event.player);
+  function atCoffin(event) {
+    const at = event.object.getLocation();
+    return at.getX() === 3249 && at.getY() === 3192 && at.getZ() === 0;
   }
-
   function openCoffin(event) {
-    ensureGhost(event.player);
-    event.player.sendMessage("You open the coffin.");
-    replaceObject(event.object, ObjectIdentifiers.COFFIN_12);
+    if (!atCoffin(event) || opening.has(event.player)) return;
+    const { player } = event;
+    const pending = {}; opening.set(player, pending);
+    player.sendMessage("You open the coffin.");
+    player.getMovementQueue().setBlockMovement(true);
+    later(pending, 1, () => { player.performAnimation(new Animation(536)); player.getPacketSender().sendSoundEffect(54, 1, 0); });
+    later(pending, 2, () => { replaceObject(event.object, OPEN_COFFIN_ID); player.getPacketSender().sendSoundEffect(1743, 1, 0); });
+    later(pending, 4, () => { opening.delete(player); player.getMovementQueue().setBlockMovement(false); if (player.isRegistered()) ensureGhost(player); });
   }
-
   function searchOpenCoffin(event) {
+    if (!atCoffin(event)) return;
     ensureGhost(event.player);
-    const stage = quest.getStage(event.player);
-    if (stage >= STAGE_COMPLETE) {
-      event.player.sendMessage("There's a nice and complete skeleton in here!");
-    } else if (stage >= STAGE_STARTED) {
-      event.player.sendMessage("There's a skeleton without a skull in here.");
-    } else {
-      event.player.sendMessage("You search the coffin and find some human remains.");
-    }
+    statement(event.player, quest.isComplete(event.player) ? "There's a nice and complete skeleton in here!" : "There's a skeleton without a skull in here.");
   }
-
   function closeCoffin(event) {
+    if (!atCoffin(event)) return;
     event.player.sendMessage("You close the coffin.");
     replaceObject(event.object, ObjectIdentifiers.COFFIN_4);
   }
-
-  function inspectCompletedCoffin(event) {
-    event.player.sendMessage("The skull is back in there.");
-  }
-
-  function takeSkullFromAltar(event) {
-    const { player } = event;
+  function takeSkullFromAltar({ player }) {
     const stage = quest.getStage(player);
-    if (player.getInventory().getAmount(GHOSTS_SKULL_ID) > 0) {
-      player.sendMessage("You already have the Ghost's skull.");
-      return;
-    }
-    if (stage < STAGE_SPOKEN_GHOST || stage >= STAGE_COMPLETE) {
-      player.sendMessage("That skull looks scary. You have no reason to take it.");
-      return;
-    }
-    if (player.getInventory().isFull()) {
-      player.sendMessage("You don't have enough inventory space for the skull.");
-      return;
-    }
+    if (player.getInventory().getAmount(GHOSTS_SKULL_ID) > 0) { statement(player, "You already have the Ghost's skull."); return; }
+    if (stage >= STAGE_COMPLETE) { statement(player, "Surprisingly, this altar is empty. Probably because you took the skull off it earlier."); return; }
+    if (stage < STAGE_SPOKEN_GHOST) { statement(player, "That skull looks scary. You have no reason to take it."); return; }
+    if (player.getInventory().isFull()) { player.sendMessage("You don't have enough inventory space for the skull."); return; }
     player.getInventory().adds(GHOSTS_SKULL_ID, 1);
     quest.setStage(player, STAGE_OBTAINED_SKULL);
-    player.sendMessage("You take the Ghost's skull from the altar.");
+    player.getPacketSender().sendVarbit(SKULL_TAKEN_VARBIT, 1).sendVarbit(SKELETON_HIDDEN_VARBIT, 1).sendSoundEffect(1746, 1, 0);
+    player.sendMessage("The skeleton in the corner suddenly comes to life!");
+    if (skeleton) api.removeNpc(skeleton);
+    skeleton = api.spawnNpc({ id: NpcIdentifiers.SKELETON_16, x: 3120, y: 9569, z: 0, wanderRadius: 0 });
+    if (!skeleton) return;
+    const npc = skeleton;
+    npc.__skipDefaultRespawn = true;
+    npc.setCombatXpMultiplier(0.025);
+    npc.performAnimation(new Animation(4017));
+    later(npc, 2, () => { if (npc.isRegistered()) npc.getCombat().attack(player); });
+    later(npc, 100, () => { if (skeleton === npc) { api.removeNpc(npc); skeleton = null; } });
   }
 
-  function putSkullInCoffin(event) {
-    if (event.itemId !== GHOSTS_SKULL_ID) return;
-    if (event.objectId === ObjectIdentifiers.COFFIN_4) {
-      event.player.sendMessage("Maybe I should open it first.");
-      event.handled = true;
-      return;
+  class ReleaseScene extends TemplatedInstanceArea {
+    constructor(player) {
+      super(4, 4); this.owner = player;
+      for (let x = 0; x < 4; x++) for (let y = 0; y < 4; y++) this.setChunk(0, x, y, { sourceChunkX: 404 + x, sourceChunkY: 397 + y, sourcePlane: 0, rotation: 0 });
     }
-    if (event.objectId !== ObjectIdentifiers.COFFIN_12) return;
-    if (quest.getStage(event.player) !== STAGE_OBTAINED_SKULL) return;
-    if (event.player.getInventory().getAmount(GHOSTS_SKULL_ID) <= 0) return;
-    event.player.getInventory().deleteNumber(GHOSTS_SKULL_ID, 1);
-    event.player.sendMessage("You put the skull in the coffin.");
-    replaceObject(event.object, ObjectIdentifiers.COFFIN_13);
-    event.player.sendMessage("The spirit flies into the River Lum.");
-    quest.complete(event.player);
-    removeGhost(event.player);
+    sourceTile(x, y) { return this.tile(x - 3232, y - 3176, 0); }
+    canTeleport() { return false; }
+    canAttack() { return false; }
+    destroy() { if (this.ghost) api.removeNpc(this.ghost); super.destroy(); }
+    postLeave(actor, logout) {
+      if (actor === this.owner) {
+        scenes.delete(actor); TaskManager.cancelTasks(this);
+        actor.getMovementQueue().setBlockMovement(false); actor.setUntargetable(false);
+        actor.getPacketSender().sendVarbit(6719, 0).sendVarbit(12393, 0).sendCameraUnlock(false).sendCameraReset().closeSubInterface((161 << 16) | 1);
+      }
+      super.postLeave(actor, logout);
+    }
+  }
+  function sceneCamera(player, scene, camera, look, rate = 100) {
+    const c = scene.sourceTile(camera[0], camera[1]), l = scene.sourceTile(look[0], look[1]);
+    const options={rate,rate2:rate,heightRelative:false};
+    player.getPacketSender().sendCameraMoveTo(c.getX(), c.getY(), camera[2], options).sendCameraLookAt(l.getX(), l.getY(), look[2], options);
+  }
+  function fade(player, out) { player.getPacketSender().sendSubInterface((161 << 16) | 1, 174, 1, { postScripts: [{ scriptId: 948, args: out ? [0, 255, 0, 0, 50] : [0, 0, 0, 255, 50] }] }); }
+  function releaseSpirit(player) {
+    const scene = new ReleaseScene(player); scenes.set(player, scene);
+    player.getMovementQueue().reset().setBlockMovement(true); player.setUntargetable(true);
+    player.getPacketSender().sendVarbit(6719, 2).sendVarbit(12393, 1);
+    for(let axis=0;axis<5;axis++)player.getPacketSender().sendCameraShake(axis,0,0,0);
+    fade(player, true);
+    player.moveTo(scene.sourceTile(3248, 3192)); scene.enter(player);
+    later(scene, 2, () => {
+      const tile = scene.sourceTile(3248, 3193);
+      const ghost = api.spawnNpc({ id: NpcIdentifiers.RESTLESS_GHOST, x: tile.getX(), y: tile.getY(), z: 0, owner: player, ownerOnly: true, wanderRadius: 0 });
+      scene.ghost = ghost; if (ghost) { scene.enter(ghost); ghost.forceChat("Release! Thank you"); }
+      fade(player, false); sceneCamera(player, scene, [3252, 3193, 350], [3246, 3193, 200]);
+      player.getPacketSender().sendChatboxInterface(231).sendNpcHeadOnInterface(NpcIdentifiers.RESTLESS_GHOST, (231 << 16) | 2)
+        .sendString("Restless ghost", (231 << 16) | 4).sendString("Release! Thank you stranger..", (231 << 16) | 6)
+        .sendString("", (231 << 16) | 5).sendInterfaceFlagsRange((231 << 16) | 5, -1, -1, 0);
+    });
+    later(scene, 6, () => scene.ghost?.forceChat("stranger.."));
+    for (const [tick, from, to, cycles] of [[10, [3248,3193], [3244,3193],60], [12,[3244,3193],[3244,3190],60], [14,[3244,3190],[3253,3181],95]]) later(scene, tick, () => {
+      if (tick === 10) { scene.ghost?.performAnimation(new Animation(4018)); player.getPacketSender().sendSoundEffect(748, 1, 0); }
+      player.getPacketSender().sendProjectile(scene.sourceTile(...from), scene.sourceTile(...to), 0, cycles, 668, 50, 50, null, 0, 30, 0);
+      if (tick === 12) sceneCamera(player, scene, [3240,3193,900], [3243,3191,25]);
+      if (tick === 14) { const l=scene.sourceTile(3253,3181); player.getPacketSender().sendCameraLookAt(l.getX(),l.getY(),25,{rate:5,rate2:5,heightRelative:false}); }
+    });
+    later(scene, 19, () => {
+      if (scene.ghost) api.removeNpc(scene.ghost);
+      scene.leave(player, false); player.moveTo(new Location(3247,3193,0)); player.getPacketSender().sendInterfaceRemoval();
+      later(player, 3, () => finishRelease(player));
+    });
+  }
+  function finishRelease(player) {
+    if (!player.getAttribute(FINISH_ATTRIBUTE)) return;
+    player.setAttribute(FINISH_ATTRIBUTE, 0); quest.complete(player);
+  }
+  function putSkullInCoffin(event) {
+    if (event.itemId !== GHOSTS_SKULL_ID || !atCoffin(event)) return;
+    if (event.objectId === ObjectIdentifiers.COFFIN_4) { statement(event.player, "Maybe I should open it first."); event.handled = true; return; }
+    if (![OPEN_COFFIN_ID, ObjectIdentifiers.COFFIN_12, ObjectIdentifiers.COFFIN_13].includes(event.objectId)) return;
+    const { player } = event;
     event.handled = true;
+    if (quest.getStage(player) !== STAGE_OBTAINED_SKULL || player.getAttribute(FINISH_ATTRIBUTE) || player.getInventory().getAmount(GHOSTS_SKULL_ID) <= 0) return;
+    player.sendMessage("You put the skull in the coffin."); player.performAnimation(new Animation(832));
+    player.getPacketSender().sendSoundEffect(1744, 1, 0);
+    player.getInventory().deleteNumber(GHOSTS_SKULL_ID, 1);
+    player.setAttribute(FINISH_ATTRIBUTE, 1);
+    player.getPacketSender().sendConfig(VARP_RESTLESS_GHOST, STAGE_COMPLETE).sendVarbit(COFFIN_SKULL_VARBIT, 1);
+    removeGhost(player); later(player, 1, () => { if (player.isRegistered()) releaseSpirit(player); });
+  }
+  function inspectSkull({ player }) { statement(player, "It's the skull of the ghost that is haunting Lumbridge graveyard. Maybe I should return this back to the ghost's coffin.", GHOSTS_SKULL_ID); return true; }
+  function dropSkull(event) {
+    if (event.itemId !== GHOSTS_SKULL_ID) return;
+    event.handled = true;
+    const player=event.player;
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ItemStatementDialogue(0, GHOSTS_SKULL_ID, "Dropping this skull here will destroy it!"))
+      .add(new ActionDialogue(1, { execute: () => {
+        player.getDialogueManager().reset();
+        api.sendMultiChatboxPrompt(player, "Are you sure you want to drop the skull?", "Yes.", () => {
+          if (player.getInventory().getAmount(GHOSTS_SKULL_ID) > 0) player.getInventory().deleteNumber(GHOSTS_SKULL_ID, 1);
+          player.getPacketSender().sendVarbit(SKULL_TAKEN_VARBIT, 0).sendInterfaceRemoval();
+        }, "No.", () => player.getPacketSender().sendInterfaceRemoval());
+      } })));
+  }
+  function restoreState({ player }) {
+    player.getPacketSender().sendVarbit(SKULL_TAKEN_VARBIT, Number(quest.isComplete(player) || player.getInventory().getAmount(GHOSTS_SKULL_ID) > 0))
+      .sendVarbit(COFFIN_SKULL_VARBIT, Number(quest.isComplete(player) || Boolean(player.getAttribute(FINISH_ATTRIBUTE)))).sendVarbit(SKELETON_HIDDEN_VARBIT, 0);
+    finishRelease(player);
   }
 
   function giveSkullToGhost(event) {
@@ -385,6 +430,8 @@ module.exports = function registerRestlessGhostQuest(api) {
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
+    completionJingleId: 152,
+    varpValue: (stage, player) => player.getAttribute(FINISH_ATTRIBUTE) ? STAGE_COMPLETE : stage,
     xpRewards: [{ skillId: Skill.PRAYER.getIndex(), amount: 1125, label: "Prayer" }],
     scrollItemId: GHOSTS_SKULL_ID,
     otherRewards: ["Amulet of ghostspeak"],
@@ -395,15 +442,18 @@ module.exports = function registerRestlessGhostQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
+  api.onCustomEvent("npc-dialogue:menu", warnBeforeStart);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
-  api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
+  api.persistAttribute(FINISH_ATTRIBUTE, 0);
+  api.onPlayerLogin(restoreState);
   api.onPlayerLogout(handleLogout);
   api.onObjectFirstClick(ObjectIdentifiers.COFFIN_4, openCoffin);
-  api.onObjectFirstClick(ObjectIdentifiers.COFFIN_12, searchOpenCoffin);
-  api.onObjectSecondClick(ObjectIdentifiers.COFFIN_12, closeCoffin);
-  api.onObjectFirstClick(ObjectIdentifiers.COFFIN_13, inspectCompletedCoffin);
+  api.onObjectFirstClick([OPEN_COFFIN_ID, ObjectIdentifiers.COFFIN_12, ObjectIdentifiers.COFFIN_13], searchOpenCoffin);
+  api.onObjectSecondClick([OPEN_COFFIN_ID, ObjectIdentifiers.COFFIN_12, ObjectIdentifiers.COFFIN_13], closeCoffin);
   api.onObjectFirstClick(SKULL_ALTAR_IDS, takeSkullFromAltar);
   api.onItemOnObject(putSkullInCoffin);
   api.onItemOnNpc(giveSkullToGhost);
+  api.onItemAction("Ghost's skull", { Inspect: inspectSkull });
+  api.onItemDropPolicy(dropSkull);
 };

@@ -18,12 +18,18 @@ export interface PlayerMenuActionContext {
         attack(serverId: number, localX: number, localY: number): void;
     };
 }
+/**
+ * Insertion order of the player action slots; the menu shows the last inserted on top. OSRS
+ * inserts 7..0 with Follow in op3 and Trade with in op4, but tsps keeps Trade with in slot 2
+ * (index 1) and Follow in slot 3 (index 2), so Trade with goes in first to stay below Follow.
+ */
+const PLAYER_ACTION_INSERT_ORDER = [7, 6, 5, 4, 3, 1, 2, 0];
 /** Shared native no-selection path. Player-menu plugin arrays mutate this same packet-backed state. */
 export function buildPlayerActionEntries(context: PlayerMenuActionContext): OsrsMenuEntry[] {
     const { sid, playerLabel, targetCombatLevel, localCombatLevel, targetTeam, localTeam, targetIsClanMember, canAttackPlayers, localX, localY, actions } = context;
     const entries: OsrsMenuEntry[] = [];
-    // No selection: insert player actions in 7..0 order.
-    for (let actionIdx = 7; actionIdx >= 0; actionIdx--) {
+    // No selection: insert player actions in PLAYER_ACTION_INSERT_ORDER.
+    for (const actionIdx of PLAYER_ACTION_INSERT_ORDER) {
         const customOption = ClientState.playerOptions.get(actionIdx + 1);
         if (customOption && !customOption.option)
             continue;
@@ -44,6 +50,7 @@ export function buildPlayerActionEntries(context: PlayerMenuActionContext): Osrs
             });
         }
         else if (actionIdx === 2) {
+            // OSRS: the server sends Follow without priority, so Walk here stays above it.
             entries.push({
                 option: "Follow",
                 targetId: sid | 0,
@@ -55,7 +62,7 @@ export function buildPlayerActionEntries(context: PlayerMenuActionContext): Osrs
                 playerServerId: sid | 0,
                 actionIndex: 2, // OPPLAYER3 - Follow
                 opcode: customOption?.opcode,
-                deprioritized: customOption ? !customOption.priority : false,
+                deprioritized: customOption ? !customOption.priority : true,
                 onClick: () => actions.follow(sid | 0),
             });
         }

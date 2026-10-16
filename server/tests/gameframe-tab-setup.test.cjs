@@ -15,6 +15,8 @@ test("each tab gets back the login's flags on its own components", () => {
   assert.ok(all.includes(inventory[0]));
   assert.equal(encodeGameframeTabSetup(387).length, 1, "the equipment quiver slot");
   assert.equal(encodeGameframeTabSetup(116).length, 1, "the display settings dropdown");
+  assert.equal(encodeGameframeTabSetup(541).length, 1, "the prayer filter menu rows");
+  assert.equal(encodeGameframeTabSetup(218).length, 1, "the spellbook filter menu rows");
   assert.deepEqual(encodeGameframeTabSetup(216), [], "emotes: none from the core (Emotes.plugin sends its own)");
 });
 

@@ -11,6 +11,7 @@ import { Script } from "../rs/cs2/Script";
 import { GLRenderer } from "../widgets/gl/renderer";
 import { InputManager } from "../game/InputManager";
 import { ClientState } from "../game/ClientState";
+import { handleInboundWorld } from "../network/serverConnection/handlers/inboundWorld";
 import { dispatchMenuAction, setMenuEventHooks } from "../ui/menu/menuEvents";
 
 const vars = new VarManager({ load: () => ({ baseVar: 12, startBit: 0, endBit: 1 }) } as any);
@@ -214,3 +215,13 @@ assert.equal(clicks, 1); assert.equal(native, 2, "unregistered hooks preserve na
     assert.equal(first.w, 900);
 }
 console.log("Engine hooks: packet mirrors, actor/map lifecycle, nested scripts, input and menu cleanup passed");
+
+const followerHost = (typeof window !== "undefined" ? window : globalThis) as any;
+const previousFollowerClient = followerHost.__osrsClient;
+try {
+    followerHost.__osrsClient = { varManager: vars };
+    for (const [value, index] of [[(16433 << 16) | 123, 123], [-1, -1], [65535, -1]]) {
+        handleInboundWorld({ type: "varp", payload: { varpId: 447, value } });
+        assert.equal(ClientState.followerIndex, index, "native packed followers and both absent sentinels retain the menu contract");
+    }
+} finally { followerHost.__osrsClient = previousFollowerClient; }

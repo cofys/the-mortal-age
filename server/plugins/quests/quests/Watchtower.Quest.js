@@ -709,6 +709,7 @@ module.exports = function registerWatchtowerQuest(api) {
 
   /** Answer the page's prose conditions. */
   function answerCondition(event) {
+    if (!event.pages?.some(entry => entry.page === PAGE)) return null;
     const { player, text, stepId } = event;
     if (!player || text === undefined) return null;
     const value = String(text).toLowerCase();

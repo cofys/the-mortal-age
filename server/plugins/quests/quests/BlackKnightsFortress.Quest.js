@@ -1,47 +1,8 @@
-/**
- * Black Knights' Fortress.
- *
- * Words come from npc-dialogues.json. Sir Amik Varze (4771) is indexed to the
- * "Black Knights' Fortress" page, so his Talk-to is driven by the scripted
- * transcript and this plugin only picks the variant by stage:
- *   stage 0 -> "starting-out-starting-the-quest"      (hook starts the quest)
- *   stage 1 -> "starting-out-speaking-to-sir-amik-varze-again"
- *   stage 2 -> "reporting-back-to-sir-amik-varze"
- *   stage 3 -> "returning-to-sir-amik-varze"          (hands in, completes)
- *   stage 4 -> no BKF post-quest transcript exists in the dump (see GAPS).
- *
- * The Fortress Guards appear as four cache ids but only 4773 is in
- * npc-dialogue-index.json, so the dynamic Talk-to handler never fires for
- * 4774-4776. A specific npc hook intercepts all four and plays the disguise-
- * aware variant from the "Black Knights' Fortress" page.
- *
- * The fortress is entered through object interactions: the main door, the
- * banquet-hall door, the sturdy door, the secret wall and the listening grill.
- * When those need a spoken line we replay the dump's own variant through the
- * existing NpcDialogues player (multi-speaker wiki lines are flattened to a
- * single speaker portrait). The cabbage hole turns a normal cabbage into the
- * sabotage; the dossier is read from the inventory to begin the investigation.
- *
- * GAPS (no dump support, see summary):
- *   - Sir Amik Varze has no post-quest variant on the BKF page; the reference's
- *     "Hello, friend!" is not in the dump. At complete the selector returns null
- *     and the id index falls back to his "Sir Amik Varze"/"after-completing-wanted"
- *     page (a Wanted! line), so a human may want to add a BKF variant.
- *   - The reference gates the start on 12 Quest Points; the dump's start branch
- *     has no such condition, so the requirement is only in the journal.
- *   - The grill's "listen-at-grill-after-ruining-the-potion" variant is in the
- *     dump but the reference only plays while investigating; listening later
- *     says "You can't hear much right now." as in the reference.
- *   - The reference's post-completion flavour for the guards' meeting room and
- *     the witch/black-knight disguise lines are not used by this quest.
- */
+/** Black Knights' Fortress: revision 240 capture 20260817T005704 and the OSRS Wiki. */
 module.exports = function registerBlackKnightsFortressQuest(api) {
-  const { GameConstants, Location, Equipment, NpcDefinition, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const fs = require("fs");
-  const path = require("path");
+  const { Location, Equipment, Animation, Graphic, CountdownTask, TaskManager, TemplatedInstanceArea, StatementDialogue, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
 
-  const { registerQuest } = require("../QuestRuntime");
-  const { startDialogue } = require("../../npcs/NpcDialogues.plugin.js");
+  const { registerQuest, startTranscript, QUEST_POINTS_ATTRIBUTE } = require("../QuestRuntime");
 
   const BKF_PAGE = "Black Knights' Fortress";
 
@@ -100,7 +61,11 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
   let pluginApi;
 
   /** Which side of the banquet door the player is standing on, for the warning. */
-  const pendingCross = { player: null, location: null };
+  const pendingCross = new WeakMap();
+  const reading = new WeakSet();
+  const scenes = new WeakMap();
+  const SCENE_ATTRIBUTE = "black-knights-fortress:cutscene";
+  const FADE_UID = (161 << 16) | 1;
 
   const hasItem = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
 
@@ -157,50 +122,8 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
     player.getInventory().adds(COINS_ITEM_ID, 2500);
   }
 
-  // ---------------------------------------------------------------------------
-  // Replaying a dump variant from a non-NPC interaction.
-  //
-  // startDialogue() speaks generic `{ npc }` lines with the passed definition's
-  // id it cannot switch portrait per line. Wiki multi-speaker variants tag each
-  // line with `speaker`, so flatten those to generic NPC lines and use the
-  // variant's main speaker id.
-  // ---------------------------------------------------------------------------
-  let dialogueData = null;
-
-  function loadDialogueData() {
-    if (!dialogueData) {
-      dialogueData = JSON.parse(
-        fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json"), "utf8")
-      );
-    }
-    return dialogueData;
-  }
-
-  function flattenSpeakers(steps) {
-    if (!Array.isArray(steps)) return [];
-    return steps.map((step) => {
-      const copy = { ...step };
-      if (copy.type === "line" && typeof copy.speaker === "string") {
-        copy.npc = copy.text;
-        delete copy.speaker;
-      }
-      if (Array.isArray(copy.steps)) copy.steps = flattenSpeakers(copy.steps);
-      if (Array.isArray(copy.options)) {
-        copy.options = copy.options.map((option) => ({ ...option, steps: flattenSpeakers(option.steps) }));
-      }
-      return copy;
-    });
-  }
-
-  function playVariant(api, player, npcId, page, variant) {
-    const data = loadDialogueData();
-    const raw = data?.[page]?.variants?.[variant];
-    if (!Array.isArray(raw)) return false;
-    const definition = NpcDefinition.forId(npcId);
-    const event = { player, npcId, npc: null, definition };
-    const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }] };
-    startDialogue(api, event, flattenSpeakers(raw), data[page]?.branches, context);
-    return true;
+  function playVariant(api, player, npcId, page, variant, select) {
+    return startTranscript(api, player, npcId, page, variant, select);
   }
 
   /** Steps the player one tile through a door, landing on the opposite side. */
@@ -231,7 +154,7 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
   function selectVariant({ npcId, player }) {
     if (npcId === SIR_AMIK_VARZE_NPC_ID) {
       const stage = quest.getStage(player);
-      if (stage >= STAGE_COMPLETE) return null; // no BKF post-quest transcript (GAP)
+      if (stage >= STAGE_COMPLETE) return null;
       if (stage >= STAGE_RETURN_TO_AMIK) return { page: BKF_PAGE, variant: V_RETURN };
       if (stage >= STAGE_SABOTAGE) return { page: BKF_PAGE, variant: V_REPORT };
       if (stage >= STAGE_INVESTIGATE) return { page: BKF_PAGE, variant: V_AMIK_AGAIN };
@@ -269,15 +192,33 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== SIR_AMIK_VARZE_NPC_ID || hook !== START_HOOK) return;
     if (quest.getStage(player) >= STAGE_INVESTIGATE) return;
-    quest.setStage(player, STAGE_INVESTIGATE);
+    // The state changes with Sir Amik's dossier line, after the player's acceptance.
   }
 
   // The transcript's "dossier" actions hand the item over; the reward page's
   // "Quest complete!" action finishes the quest.
   function handleDialogueAction(event) {
     const { player, npcId, stepId } = event;
+    if (stepId === "lUsX9u" && npcId === FORTRESS_WITCH_NPC_ID) return startSabotage(event);
+    if (stepId === "Ug7RZ1" && npcId === FORTRESS_WITCH_NPC_ID) {
+      const state = scenes.get(player);
+      if (!state) { event.end = true; event.handled = true; return; }
+      later(player, state, 2, () => {
+        const from = state.area.sourceTile(3032, 3507), to = state.area.sourceTile(3031, 3507);
+        player.getPacketSender().sendProjectile(from, to, 0, 100, 772, 500, 50, null, 0, 192, 128);
+        const graphic = new Graphic(773); graphic.delay = 100;
+        player.getPacketSender().sendGraphic(graphic, to);
+      });
+      later(player, state, 7, () => player.getPacketSender().sendVarbit(2494, 1));
+      pauseSabotage(player, state, 7, stepId);
+      event.handled = true;
+      return;
+    }
+    if (stepId === "OIbGVl" || stepId === "jnrgsN") event.box = { statement: true };
     if (npcId !== SIR_AMIK_VARZE_NPC_ID) return;
     if (DOSSIER_ACTION_IDS.has(stepId)) {
+      event.handled = true;
+      if (quest.getStage(player) < STAGE_INVESTIGATE || quest.isComplete(player)) return;
       if (!hasItem(player, DOSSIER_ITEM_ID) && !player.getInventory().isFull()) {
         player.getInventory().adds(DOSSIER_ITEM_ID, 1);
       }
@@ -293,23 +234,205 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
     }
   }
 
-  // Reading Sir Amik's dossier starts the investigation and destroys the note.
-  function handleDossierRead(event) {
-    if (event.itemId !== DOSSIER_ITEM_ID) return;
-    if (!String(event.option ?? "").toLowerCase().includes("read")) return;
-    const { player } = event;
-    if (quest.getStage(player) > STAGE_INVESTIGATE) {
-      player.sendMessage("The dossier has already served its purpose.");
+  function handleAmik(event) {
+    const player = event.player;
+    if (quest.getStage(player) === 0 && (Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) < 12) {
       event.handled = true;
-      return;
+      StatementDialogue.send(player, "You need at least 12 Quest Points to start Black Knights' Fortress.");
+      return true;
     }
-    if (!hasItem(player, DOSSIER_ITEM_ID)) return;
-    player.getInventory().deleteNumber(DOSSIER_ITEM_ID, 1);
-    if (quest.getStage(player) < STAGE_INVESTIGATE) quest.setStage(player, STAGE_INVESTIGATE);
-    player.sendMessage("The Black Knights threaten Falador with a secret weapon.");
-    player.sendMessage("Infiltrate their fortress, discover the weapon, and sabotage it.");
-    player.sendMessage("The dossier crumbles to dust.");
+    if (!quest.isComplete(player)) return false;
+    const request = { player, key: "wanted", started: false };
+    api.emitCustomEvent("quest:is-started", request);
+    if (request.started) return false;
     event.handled = true;
+    playVariant(api, player, SIR_AMIK_VARZE_NPC_ID, BKF_PAGE, V_START, () => [
+      { player: "Hello Sir Amik." }, { type: "line", speaker: "Sir Amik Varze", text: "Hello, friend!" },
+      { player: "Do you have any other quests for me to do?" },
+      { type: "line", speaker: "Sir Amik Varze", text: "Nothing I can think of at the moment..." },
+    ]);
+    return true;
+  }
+
+  function handleLine(event) {
+    const { player, npcId, text } = event;
+    if (npcId === SIR_AMIK_VARZE_NPC_ID && String(text).startsWith("Good luck! Let me know how you get on.")) event.before = () => {
+      if (quest.getStage(player) === 0 && (Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) >= 12) {
+        quest.setStage(player, STAGE_INVESTIGATE);
+        player.sendMessage("You've started a new quest: <col=081190>Black Knights' Fortress</col>");
+      }
+      if (quest.getStage(player) === STAGE_INVESTIGATE && !hasItem(player, DOSSIER_ITEM_ID) && !player.getInventory().isFull()) player.getInventory().adds(DOSSIER_ITEM_ID, 1);
+    };
+    if (npcId !== FORTRESS_WITCH_NPC_ID) return;
+    if (text === "Yeth, Mithreth.") {
+      event.text = "Yeth, Mithtreth.";
+      event.after = () => {
+        if (quest.getStage(player) === STAGE_INVESTIGATE) quest.setStage(player, STAGE_SABOTAGE);
+        player.performAnimation(new Animation(4197));
+      };
+    }
+    if (text === "...not to merntion the trees!") event.text = "...not to mention the trees!";
+    const state = scenes.get(player);
+    if (!state) return;
+    if (text === "My potion!") event.after = () => state.witch?.performAnimation(new Animation(860));
+    if (text === "Oh boy, this doesn't look good!") event.after = () => state.captain?.performAnimation(new Animation(2105));
+    if (text === "Where has Greldo got to with that magic cabbage!") event.after = () => pauseSabotage(player, state, 6, text);
+    if (String(text).startsWith("Meow!")) {
+      event.text = "Meow!";
+      event.after = () => {
+        player.getDialogueManager().reset();
+        StatementDialogue.send(player, "", false);
+        later(player, state, 4, () => fade(player, true));
+        later(player, state, 6, () => { returnFromScene(player, state); fade(player, false); });
+        later(player, state, 9, () => {
+          quest.setStage(player, STAGE_RETURN_TO_AMIK);
+          scenes.delete(player);
+          player.setAttribute(SCENE_ATTRIBUTE, 0);
+          controls(player, false);
+          player.getPacketSender().sendCameraUnlock(false).sendCameraReset();
+          playVariant(api, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_CABBAGE_NORMAL,
+            steps => steps.slice(steps.findIndex(step => String(step.text).startsWith("Meow!")) + 1));
+        });
+      };
+    }
+  }
+
+  function warnBeforeStart(event) {
+    if (event.npcId === SIR_AMIK_VARZE_NPC_ID && String(event.prompt).includes("Start the Black Knights' Fortress") && event.player.getSkillManager().getCombatLevel() < 15) {
+      event.warning = "Before starting this quest, be aware that your combat level is lower than the recommended level of 15.";
+    }
+  }
+
+  function controls(player, active) {
+    player.getMovementQueue().reset().setBlockMovement(active);
+    player.setUntargetable(active);
+    for (const id of [4606, 542, 12139, 18141]) player.getPacketSender().sendVarbit(id, active ? 1 : 0);
+    player.getPacketSender().sendVarbit(6719, active ? 2 : 0).sendVarbit(12393, active ? 1 : 0);
+  }
+
+  function fade(player, out) {
+    player.getPacketSender().sendSubInterface(FADE_UID, 174, 1, { postScripts: [{ scriptId: 948, args: out ? [0, 255, 0, 0, 50] : [0, 0, 0, 255, 50] }] });
+  }
+
+  function later(player, state, ticks, callback) {
+    TaskManager.submit(new CountdownTask(player, ticks, () => {
+      if (scenes.get(player) === state && player.isRegistered?.() !== false) callback();
+    }));
+  }
+
+  class SabotageScene extends TemplatedInstanceArea {
+    constructor(owner) {
+      super(4, 4);
+      this.owner = owner;
+      for (let x = 0; x < 4; x++) for (let y = 0; y < 4; y++) this.setChunk(0, x, y, { sourceChunkX: 376 + x, sourceChunkY: 436 + y, sourcePlane: 0, rotation: 0 });
+    }
+    getName() { return "Black Knights' secret weapon"; }
+    sourceTile(x, y) { return this.tile(x - 3008, y - 3488, 0); }
+    canAttack() { return false; }
+    canTeleport() { return false; }
+    postLeave(actor, logout) {
+      super.postLeave(actor, logout);
+      if (actor === this.owner && !scenes.get(actor)?.returning) cleanup(actor);
+    }
+  }
+
+  function returnFromScene(player, state) {
+    state.returning = true;
+    if (player.getPrivateArea() === state.area) state.area.leave(player, false);
+    player.moveTo(state.returnTile);
+    state.area.destroy();
+    player.getPacketSender().sendCameraReset();
+  }
+
+  function pauseSabotage(player, state, ticks, after) {
+    player.getDialogueManager().reset();
+    StatementDialogue.send(player, "", false);
+    later(player, state, ticks, () => playVariant(api, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_CABBAGE_NORMAL,
+      steps => steps.slice(steps.findIndex(step => step.id === after || step.text === after) + 1)));
+  }
+
+  function startSabotage(event) {
+    const { player } = event;
+    event.handled = true;
+    if (quest.getStage(player) !== STAGE_SABOTAGE || !hasItem(player, CABBAGE_ITEM_ID) || scenes.has(player)) { event.end = true; return; }
+    player.getInventory().deleteNumber(CABBAGE_ITEM_ID, 1);
+    const state = { area: new SabotageScene(player), returnTile: player.getLocation().clone(), returning: false };
+    scenes.set(player, state);
+    player.setAttribute(SCENE_ATTRIBUTE, 1);
+    controls(player, true);
+    for (let axis = 0; axis < 5; axis++) player.getPacketSender().sendCameraShake(axis, 0);
+    player.performAnimation(new Animation(4553));
+    const thrown = new Graphic(771); thrown.height = 96;
+    player.performGraphic(thrown);
+    player.getPacketSender().sendProjectile(new Location(3031, 3506, 1), new Location(3031, 3507, 1), 0, 196, 772, 130, 0, null, 96, 55, 60);
+    later(player, state, 6, () => fade(player, true));
+    later(player, state, 8, () => {
+      state.area.enter(player);
+      player.moveTo(state.area.sourceTile(3017, 3497));
+      player.getPacketSender().sendJingle(5, 0);
+      for (const [key, id, x, y] of [["cat", NpcIdentifiers.BLACK_CAT, 3027, 3507], ["witch", FORTRESS_WITCH_NPC_ID, 3030, 3509], ["captain", NpcIdentifiers.BLACK_KNIGHT_CAPTAIN, 3028, 3509]]) {
+        const tile = state.area.sourceTile(x, y);
+        state[key] = api.spawnNpc({ id, x: tile.getX(), y: tile.getY(), z: 0, face: 6, wanderRadius: 0, owner: player, ownerOnly: true });
+        if (state[key]) state.area.add(state[key]);
+      }
+    });
+    later(player, state, 10, () => {
+      const at = state.area.sourceTile(3035, 3499), look = state.area.sourceTile(3032, 3505);
+      player.getPacketSender().sendCameraMoveTo(at.getX(), at.getY(), 1500, { rate: 100, rate2: 100, heightRelative: false }).sendCameraLookAt(look.getX(), look.getY(), 300, { rate: 100, rate2: 100, heightRelative: false });
+    });
+    for (const [tick, key, x, y] of [[19, "witch", 3030, 3508], [20, "witch", 3030, 3507], [22, "witch", 3030, 3508], [23, "witch", 3030, 3509], [28, "witch", 3030, 3508], [29, "witch", 3030, 3507], [30, "witch", 3030, 3506], [32, "witch", 3030, 3507], [33, "witch", 3030, 3508], [34, "witch", 3031, 3508], [38, "witch", 3030, 3508], [39, "witch", 3030, 3507], [45, "captain", 3029, 3510], [46, "captain", 3030, 3510], [53, "witch", 3030, 3506], [55, "witch", 3030, 3505], [56, "witch", 3029, 3505], [57, "witch", 3028, 3505], [58, "witch", 3027, 3505], [60, "captain", 3030, 3509], [61, "captain", 3030, 3508], [62, "captain", 3030, 3507], [63, "witch", 3028, 3505], [63, "captain", 3030, 3506], [64, "witch", 3029, 3505], [64, "captain", 3030, 3505], [66, "captain", 3031, 3505], [67, "witch", 3030, 3505], [68, "witch", 3030, 3504], [68, "captain", 3030, 3505], [69, "captain", 3031, 3505], [72, "captain", 3030, 3505], [73, "captain", 3029, 3505], [74, "captain", 3028, 3505], [75, "captain", 3027, 3505], [76, "captain", 3027, 3506], [77, "captain", 3027, 3507], [78, "witch", 3030, 3505], [79, "witch", 3030, 3506], [79, "captain", 3027, 3506], [80, "witch", 3030, 3507], [81, "witch", 3030, 3508], [82, "witch", 3031, 3508], [85, "captain", 3027, 3507]]) {
+      later(player, state, tick, () => state[key]?.getMovementQueue().addFirstStep(state.area.sourceTile(x, y)));
+    }
+    later(player, state, 14, () => fade(player, false));
+    pauseSabotage(player, state, 24, "lUsX9u");
+  }
+
+  function cleanup(player) {
+    pendingCross.delete(player);
+    reading.delete(player);
+    const state = scenes.get(player);
+    scenes.delete(player);
+    if (state) { state.returning = true; returnFromScene(player, state); }
+    player.setAttribute(SCENE_ATTRIBUTE, 0);
+    controls(player, false);
+    player.getPacketSender().sendCameraReset().closeSubInterface(FADE_UID);
+  }
+
+  function handleLogout({ player }) { cleanup(player); }
+  function handleLogin({ player }) {
+    if (!player.getAttribute(SCENE_ATTRIBUTE)) return;
+    player.moveTo(new Location(3031, 3506, 1));
+    cleanup(player);
+  }
+
+  function handleDossierRead(event) {
+    if (event.itemId !== DOSSIER_ITEM_ID || !String(event.option ?? "").toLowerCase().includes("read")) return;
+    const { player } = event;
+    event.handled = true;
+    if (!hasItem(player, DOSSIER_ITEM_ID) || reading.has(player)) return;
+    reading.add(player);
+    player.getDialogueManager().reset();
+    player.getMovementQueue().reset().setBlockMovement(true);
+    player.getPacketSender().sendVarbit(12393, 1);
+    player.performAnimation(new Animation(4549));
+    const show = n => StatementDialogue.send(player, `Infiltrate fortress...<br>sabotage secret weapon...<br>self destruct in ${n}...`, false);
+    show(3);
+    for (const [tick, count] of [[2, 3], [4, 2], [6, 1]]) TaskManager.submit(new CountdownTask(player, tick, () => {
+      if (reading.has(player) && player.isRegistered?.() !== false) show(count);
+    }));
+    TaskManager.submit(new CountdownTask(player, 8, () => {
+      if (!reading.has(player)) return;
+      player.getInventory().deleteNumber(DOSSIER_ITEM_ID, 1);
+      player.performAnimation(new Animation(4551));
+      player.performGraphic(new Graphic(770));
+    }));
+    TaskManager.submit(new CountdownTask(player, 9, () => {
+      if (!reading.has(player)) return;
+      reading.delete(player);
+      player.getPacketSender().sendInterfaceRemoval();
+      player.getMovementQueue().setBlockMovement(false);
+      player.getPacketSender().sendVarbit(12393, 0);
+    }));
   }
 
   function handleFortressObjectInteraction(event) {
@@ -343,8 +466,7 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
       if (pos.getX() >= loc.x) {
         crossDoor(player, loc);
       } else {
-        pendingCross.player = player;
-        pendingCross.location = loc;
+        pendingCross.set(player, loc);
         playVariant(pluginApi, player, FORTRESS_GUARD_DIALOGUE_NPC_ID, BKF_PAGE, V_DOOR_MEETING);
       }
       event.handled = true;
@@ -368,24 +490,27 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
 
     // Listening grill: only while investigating the weapon.
     if (!action.includes("listen")) return;
-    if (quest.getStage(player) !== STAGE_INVESTIGATE) {
-      player.sendMessage("You can't hear much right now.");
+    if (quest.getStage(player) >= STAGE_RETURN_TO_AMIK) {
+      playVariant(api, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, "sabotaging-the-potion-listen-at-grill-after-ruining-the-potion");
       event.handled = true;
       return;
     }
-    quest.setStage(player, STAGE_SABOTAGE);
-    playVariant(pluginApi, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_GRILL);
+    if (quest.getStage(player) < STAGE_INVESTIGATE) { event.handled = true; return; }
+    player.performAnimation(new Animation(4195));
+    TaskManager.submit(new CountdownTask(player, 2, () => {
+      if (player.isRegistered?.() === false) return;
+      player.performAnimation(new Animation(4552));
+      playVariant(pluginApi, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_GRILL);
+    }));
     event.handled = true;
   }
 
   // "I don't care. I'm going in anyway." walks through the banquet door.
   function handleBanquetChoice({ player, option }) {
-    if (!pendingCross.player || pendingCross.player !== player) return;
-    if (String(option ?? "").toLowerCase().includes("going in anyway")) {
-      crossDoor(player, pendingCross.location);
-    }
-    pendingCross.player = null;
-    pendingCross.location = null;
+    const location = pendingCross.get(player);
+    if (!location) return;
+    if (String(option ?? "").toLowerCase().includes("going in anyway") && player.getLocation().isWithinDistance(new Location(location.x, location.y, location.z ?? 0), 2)) crossDoor(player, location);
+    pendingCross.delete(player);
   }
 
   function handleItemOnHole(event) {
@@ -396,8 +521,6 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
       if (stage !== STAGE_SABOTAGE) {
         playVariant(pluginApi, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_CABBAGE_BEFORE);
       } else if (player.getInventory().getAmount(CABBAGE_ITEM_ID) > 0) {
-        player.getInventory().deleteNumber(CABBAGE_ITEM_ID, 1);
-        quest.setStage(player, STAGE_RETURN_TO_AMIK);
         playVariant(pluginApi, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_CABBAGE_NORMAL);
       }
       event.handled = true;
@@ -410,7 +533,10 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
         playVariant(pluginApi, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_CABBAGE_DRAYNOR);
       }
       event.handled = true;
+      return;
     }
+    playVariant(api, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_CABBAGE_BEFORE);
+    event.handled = true;
   }
 
   pluginApi = api;
@@ -421,6 +547,7 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
     startedValue: STAGE_INVESTIGATE,
     completionValue: STAGE_COMPLETE,
     questPoints: 3,
+    completionJingleId: 152,
     scrollItemId: COINS_ITEM_ID,
     rewardItemLabel: "2,500 Coins",
     buildJournal,
@@ -430,11 +557,17 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onNpcInteraction(handleGuardInteraction);
+  api.onNpcInteraction("Sir Amik Varze", { "Talk-to": handleAmik });
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onCustomEvent("npc-dialogue:menu", warnBeforeStart);
   api.onItemAction(handleDossierRead);
   api.onObjectRoute(routeFortressPassage);
   api.onObjectInteraction(handleFortressObjectInteraction);
   api.onCustomEvent("npc-dialogue:choice", handleBanquetChoice);
   api.onItemOnObject(handleItemOnHole);
+  api.onPlayerLogout(handleLogout);
+  api.onPlayerLogin(handleLogin);
+  api.persistAttribute(SCENE_ATTRIBUTE, 0);
 };

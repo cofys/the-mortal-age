@@ -566,12 +566,6 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         if (host.osrsClient.followPlayerCamera && host.osrsClient.playerEcs.size() > 0) {
             host.updateCameraFollow(deltaTime, timeSec);
         }
-        let cameraShakeApplied = false;
-        let restoreCameraX = 0;
-        let restoreCameraY = 0;
-        let restoreCameraZ = 0;
-        let restoreCameraPitchOverride: number | undefined;
-        let restoreCameraYaw = 0;
         // Ensure camera uses valid dimensions
         const camWidth = Math.max(1, host.app.width || host.canvas.width || 1);
         const camHeight = Math.max(1, host.app.height || host.canvas.height || 1);
@@ -597,43 +591,8 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             );
         } catch {}
 
-        // OSRS camera shake is applied as a temporary render perturbation, then restored.
-        try {
-            const shake = host.computeCameraShakeOffsets(clientCycle);
-            if (shake.active) {
-                restoreCameraX = camera.getPosX();
-                restoreCameraY = camera.getPosY();
-                restoreCameraZ = camera.getPosZ();
-                restoreCameraPitchOverride = camera.getScenePitchOverride();
-                restoreCameraYaw = camera.yaw | 0;
-
-                let shakenPitch = camera.getScenePitchAngle();
-                if ((shake.pitch | 0) !== 0) {
-                    shakenPitch = Math.max(
-                        128,
-                        Math.min(383, shakenPitch + (shake.pitch | 0)),
-                    );
-                }
-                const shakenYaw = (restoreCameraYaw + (shake.yaw | 0)) & 2047;
-
-                camera.snapToPosition(
-                    restoreCameraX + shake.x / 128,
-                    restoreCameraY + shake.y / 128,
-                    restoreCameraZ + shake.z / 128,
-                );
-                camera.setScenePitchOverride(shakenPitch);
-                camera.snapToYaw(shakenYaw);
-                camera.update(
-                    camWidth,
-                    camHeight,
-                    sceneViewport.x,
-                    sceneViewport.y,
-                    sceneViewport.width,
-                    sceneViewport.height,
-                );
-                cameraShakeApplied = true;
-            }
-        } catch {}
+        const restoreCamera = host.applyCameraShake(clientCycle);
+        if (restoreCamera) camera.update(camWidth, camHeight, sceneViewport.x, sceneViewport.y, sceneViewport.width, sceneViewport.height);
 
         // Boat transforms live in view space, so rebuild them for this camera.
         host.worldEntityAnimator?.compose(camera.viewMatrix as Float32Array);
@@ -856,10 +815,8 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         profiler.endPhase();
 
         // Restore baseline camera before actor2d-style overlays (OSRS drawEntities restore semantics).
-        if (cameraShakeApplied) {
-            camera.snapToPosition(restoreCameraX, restoreCameraY, restoreCameraZ);
-            camera.setScenePitchOverride(restoreCameraPitchOverride);
-            camera.snapToYaw(restoreCameraYaw);
+        if (restoreCamera) {
+            restoreCamera();
             camera.update(
                 camWidth,
                 camHeight,
@@ -953,7 +910,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                         entry.damage = state.hitSplatValues[slot] | 0;
                         entry.count = 1;
                         entry.color = undefined;
-                        entry.scale = RENDER_CONSTANTS.HITSPLAT_PLAYER_SCALE;
+                        entry.scale = RENDER_CONSTANTS.HITSPLAT_SCALE;
                         entry.variant = slot & 3;
                         entry.style = state.hitSplatTypes[slot] | 0;
                         entry.type2 = state.hitSplatTypes2[slot] | 0;
@@ -1204,7 +1161,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                             entry.damage = state.hitSplatValues[slot] | 0;
                             entry.count = 1;
                             entry.color = undefined;
-                            entry.scale = RENDER_CONSTANTS.HITSPLAT_PLAYER_SCALE;
+                            entry.scale = RENDER_CONSTANTS.HITSPLAT_SCALE;
                             entry.variant = slot & 3;
                             entry.style = state.hitSplatTypes[slot] | 0;
                             entry.type2 = state.hitSplatTypes2[slot] | 0;
@@ -1344,7 +1301,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                                 entry.damage = state.hitSplatValues[slot] | 0;
                                 entry.count = 1;
                                 entry.color = undefined;
-                                entry.scale = RENDER_CONSTANTS.HITSPLAT_NPC_SCALE;
+                                entry.scale = RENDER_CONSTANTS.HITSPLAT_SCALE;
                                 entry.variant = slot & 3;
                                 entry.style = state.hitSplatTypes[slot] | 0;
                                 entry.type2 = state.hitSplatTypes2[slot] | 0;

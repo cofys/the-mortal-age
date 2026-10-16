@@ -37,6 +37,7 @@ const ROCKS = [
   { objectName: "Clay rocks", objectIds: [9711, 9712, 9713, 15503, 15504, 15505], level: 1, xp: 5, oreId: ItemIds.CLAY, petBase: 741600, cycles: 11, respawnTicks: 2 },
   { objectName: "Copper rocks", objectIds: [7453,7484], level: 1, xp: 18, oreId: ItemIds.COPPER_ORE, petBase: 741600, cycles: 12, respawnTicks: 4 },
   { objectName: "Tin rocks", objectIds: [7485, 7486], level: 1, xp: 8, oreId: ItemIds.TIN_ORE, petBase: 741600, cycles: 12, respawnTicks: 4 },
+  { objectName: "Blurite rocks", objectIds: [ObjectIds.BLURITE_ROCKS, ObjectIds.BLURITE_ROCKS_2], level: 10, xp: 17.5, oreId: ItemIds.BLURITE_ORE, successLow: 90, successHigh: 350, respawnTicks: 42 },
   { objectName: "Iron rocks", objectIds: [7455, 7488], level: 15, xp: 35, oreId: ItemIds.IRON_ORE, petBase: 741600, cycles: 13, respawnTicks: 5 },
   { objectName: "Silver rocks", objectIds: [7457], level: 20, xp: 40, oreId: ItemIds.SILVER_ORE, petBase: 741600, cycles: 14, respawnTicks: 7 },
   { objectName: "Coal rocks", objectIds: [7456], level: 30, xp: 50, oreId: ItemIds.COAL, petBase: 290640, cycles: 15, respawnTicks: 7 },
@@ -118,6 +119,7 @@ function findBestPickaxe(player) {
 }
 
 function cyclesRequired(player, rock, pickaxe) {
+  if (rock.successLow !== undefined) return 1;
   let cycles = rock.cycles + Math.floor(Math.random() * 5);
   cycles -= getRollMiningLevel(player) * 0.1;
   cycles -= cycles * pickaxe.speed;
@@ -322,9 +324,14 @@ class MiningTask extends Task {
       }
       state.nextOreAttemptTick = this.cycle + state.attemptIntervalTicks;
 
-      state.cyclesUntilOre--;
-      if (state.cyclesUntilOre > 0) {
-        continue;
+      if (state.rock.successLow !== undefined) {
+        // Wiki skilling success chart interpolates level 1/99 values on a 256-sided roll.
+        const level = Math.max(1, Math.min(99, getRollMiningLevel(player)));
+        const chance = Math.floor(state.rock.successLow + (state.rock.successHigh - state.rock.successLow) * (level - 1) / 98);
+        if (Math.floor(Math.random() * 256) >= chance) continue;
+      } else {
+        state.cyclesUntilOre--;
+        if (state.cyclesUntilOre > 0) continue;
       }
 
       const result = awardOre(player, state);

@@ -313,7 +313,7 @@ function pour(event) {
   Shared.animate(player, ANIM_PUSH);
   Shared.sound(player, SOUND_POUR);
   player.getPacketSender().sendObjectAnimation(object, { id: LOC_ANIM_POUR });
-  const score = metalScore(counts(player));
+  const score = Shared.field(player, "tutorial", false) === true ? 5 : metalScore(counts(player));
   Shared.later(POUR_SCORE_DELAY, () => Shared.set(player, Shared.VARBIT.ALLOY_DIFFICULTY, score));
   Shared.later(POUR_ARRIVE_DELAY, () => {
     busy.delete(player);

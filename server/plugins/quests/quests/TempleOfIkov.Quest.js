@@ -215,7 +215,8 @@ module.exports = function registerTempleOfIkovQuest(api) {
   }
 
   /** Answer the page's prose conditions. */
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!LUCIEN_NPC_IDS.has(npcId) && !GUARDIAN_NPC_IDS.has(npcId) && npcId !== WINELDA_NPC_ID && npcId !== FIRE_WARRIOR_NPC_ID) return null;
     const value = String(text).toLowerCase();
     if (value.includes("inventory is full")) return false;
     if (value.includes("lost the pendant")) return !held(player, PENDANT_OF_LUCIEN_ITEM_ID);

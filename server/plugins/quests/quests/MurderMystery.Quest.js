@@ -236,7 +236,8 @@ module.exports = function registerMurderMysteryQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!GUARD_IDS.has(npcId) && !SPEAKER_FRAGMENT.has(npcId) && npcId !== POISON_SALESMAN_ID) return null;
     const value = String(text).toLowerCase();
     if (value.includes("criminal's thread is red")) return murderer(player).thread === ITEM.CRIMINALS_THREAD;
     if (value.includes("thread isn't red")) return murderer(player).thread !== ITEM.CRIMINALS_THREAD;

@@ -711,14 +711,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     // Terrain-driven minimum pitch pressure (scaled by 256).
     public cameraTerrainPitchPressure: number = 0;
 
-    // OSRS camera shake slots (0:X, 1:Y, 2:Z, 3:Yaw, 4:Pitch).
-    public readonly cameraShakeEnabled: boolean[] = [false, false, false, false, false];
-    public readonly cameraShakeRandomAmplitude: number[] = [0, 0, 0, 0, 0];
-    public readonly cameraShakeWaveAmplitude: number[] = [0, 0, 0, 0, 0];
-    public readonly cameraShakeWaveSpeed: number[] = [0, 0, 0, 0, 0];
-    public readonly cameraShakeWavePhase: number[] = [0, 0, 0, 0, 0];
-    public cameraShakeLastClientCycle: number = -1;
-
     // PERF: scratch objects for follow-cam math (avoid per-frame allocations)
     public followCamRot: mat4 = mat4.create();
     public followCamForward: vec3 = vec3.create();
@@ -1819,35 +1811,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         plane: number,
     ): number | undefined {
         return render.sampleTileVertexHeightWorldUnits(this, tileX, tileY, plane);
-    }
-
-    public setCameraShakeSlot(
-        slot: number,
-        randomAmplitude: number,
-        waveAmplitude: number,
-        waveSpeed: number,
-        phase: number = 0,
-    ): void {
-        return render.setCameraShakeSlot(this, slot, randomAmplitude, waveAmplitude, waveSpeed, phase);
-    }
-
-    public clearCameraShakeSlot(slot: number): void {
-        return render.clearCameraShakeSlot(this, slot);
-    }
-
-    public clearCameraShake(): void {
-        return render.clearCameraShake(this);
-    }
-
-    public computeCameraShakeOffsets(clientCycle: number): {
-        x: number;
-        y: number;
-        z: number;
-        yaw: number;
-        pitch: number;
-        active: boolean;
-    } {
-        return render.computeCameraShakeOffsets(this, clientCycle);
     }
 
     public updateCameraFollow(deltaTime?: number, timeSec?: number): void {

@@ -1,58 +1,21 @@
-/**
- * X Marks the Spot (free-to-play; the wiki infobox says Members = No, despite the stub header).
- *
- * The words come from the "X Marks the Spot" transcript page (npc-dialogues.json).
- * Veos is played by the plain visible cache id 8484 (VEOS, "veos_visible") at both
- * the Sheared Ram and the Port Sarim dock while the quest runs, and by 10723
- * (VEOS_4, "veos_visible_amulet") at Port Sarim after the quest, when he wears the
- * casket's amulet. npc-spawns.json's three Veos entries (1063/2147/8632) do not
- * resolve in this cache revision (name "null", no options), so they are unusable;
- * this plugin spawns ownerOnly copies at the cache positions instead.
- *
- * Stages (varp 2111 "cluequest_main", varbit 8063 "cluequest" bits 0-5, from
- * `scripts/lookup-gameval.ts varbit cluequest`): 1 first clue scroll received, 2 second
- * (map) scroll, 3 mysterious orb, 4 third (cipher) scroll, 5 ancient casket dug up,
- * 6 complete. The wiki does not publish numeric stage values; the ordering is the
- * transcript's clue order (variants "after-receiving-the-first..fourth-clue") and the
- * cache item chain 23067 -> 23068 -> 23069 -> 23070 -> 23071, lamp 23072.
- *
- * Dig spots (OSRS Wiki "Map:X Marks the Spot" pins): 3230,3210 (Bob's Brilliant Axes
- * window), 3203,3212 (Lumbridge Castle kitchen), 3108,3264 (Draynor jail / 4 north of
- * Leela's bush), 3077,3260 (Draynor pig pen). The "Dig" option is matched by item name
- * "Spade" (952); the Eastfloor spade (27873) has a different name, and 953/13876 have
- * no Dig option, so the wiki's "Eastfloor spade does not work" holds.
- *
- * Rewards per the OSRS Wiki: 1 Quest point, 200 coins, an antique lamp (23072) for
- * 300 XP in a chosen skill, and a beginner scroll box (24361).
- *
- * Gaps/approximations:
- *  - "has visited Great Kourend before" is answered from varbit 4897
- *    (zeah_playerhasvisited); no travel script in this server sets it, so the
- *    first-time wording always plays in practice.
- *  - No Great Kourend travel: post-quest Veos plays the travel small talk but the
- *    travel ids/options (8630/10724, Port Piscarilius/Land's End) are not spawned.
- *  - The mysterious orb's Feel/hot-cold readings and the Step-2 map scroll's Read
- *    (an image interface) are not implemented; 23067/23070 Read show the wiki's
- *    published clue text, 23068 Read does nothing.
- *  - The beginner scroll box and the +1 clue cap are not usable (no clue system);
- *    the box item is still awarded.
- *  - Digging the first three spots only swaps the scroll, with no flavour message
- *    (none exists in any transcript).
- *  - The stage-0 shortcut "I'm looking for a quest." loops: its wiki jump (reference
- *    "above", id yEQ3ts) is resolved by NpcDialogues' resolveJump back into the option's
- *    own body, so Veos' two lines replay until the 100-jump cap closes the chat.
- *    Jump resolution is not plugin-reachable (line/choice events cannot change it);
- *    testers should use "Who are you?" -> "Can I help?". Fix belongs in resolveJump.
- *  - Quests.plugin.js F2P_QUESTS does not list XMarksTheSpot, so it only loads on
- *    members worlds here (shared change needed; this file cannot make it).
- */
+/** X Marks the Spot. Capture evidence: docs/f2p-coastal-parity.md. */
 module.exports = function registerXMarksTheSpotQuest(api) {
-  const { Animation, ItemIdentifiers, NpcIdentifiers } = api.core;
+  const { Animation, ItemIdentifiers, NpcIdentifiers, WorldDefinition, ItemStatementDialogue, DialogueChainBuilder } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
   const VEOS_NPC_ID = NpcIdentifiers.VEOS; // 8484, "veos_visible"
   const VEOS_POST_QUEST_NPC_ID = NpcIdentifiers.VEOS_4; // 10723, "veos_visible_amulet"
 
+  const LUMBRIDGE_VISIBILITY = 12151;
+  const SARIM_VISIBILITY = 12148;
+  const PREVIOUS_DISTANCE_VARBIT = 8064;
+  const PREVIOUS_COORD_VARP = 3697;
+  const CLUE_TEXT_INTERFACE = 203;
+  const MAP_INTERFACE = 267;
+  const HOT_COLD_SCRIPT = 6473;
+  const COIN_REWARD_VARBIT = 8065;
+  const LAMP_REWARD_VARBIT = 8066;
+  const CLUE_REWARD_VARBIT = 8258;
   const VARP_X_MARKS = 2111; // "cluequest_main"
   const VARBIT_X_MARKS = 8063; // "cluequest", bits 0-5
   const ZEAH_VISITED_VARBIT = 4897; // "zeah_playerhasvisited"
@@ -118,9 +81,11 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   const COMPLETE_ACTION_ID = "03vD77";
 
   const AWAITING_SCROLL_ATTRIBUTE = "x-marks-the-spot:awaiting-scroll";
-
-  const LUMBRIDGE_NPC_TILE = { x: 3228, y: 3242 }; // The Sheared Ram (wiki map + npc-spawns)
-  const SARIM_NPC_TILE = { x: 3054, y: 3245 }; // northernmost Port Sarim dock
+  const ACCEPTED_ATTRIBUTE = "x-marks-the-spot:accepted";
+  const HANDED_CASKET_ATTRIBUTE = "x-marks-the-spot:handed-casket";
+  const PREVIOUS_DISTANCE_ATTRIBUTE = "x-marks-the-spot:previous-distance";
+  const PREVIOUS_COORD_ATTRIBUTE = "x-marks-the-spot:previous-coord";
+  const LAMP_USED_ATTRIBUTE = "x-marks-the-spot:lamp-used";
 
   // Wiki Map:X Marks the Spot pins.
   const DIG_SPOTS = new Map([
@@ -131,9 +96,8 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   ]);
   const CASKET_DIG_SPOT = { x: 3077, y: 3260 };
 
-  /** Per-player ownerOnly Veos spawns: { lumbridge?: {npc,id}, sarim?: {npc,id} }. */
-  const veosSpawns = new WeakMap();
   const lampPending = new WeakMap();
+  const endings = new WeakSet();
 
   let quest;
 
@@ -141,7 +105,7 @@ module.exports = function registerXMarksTheSpotQuest(api) {
 
   const onTile = (player, tile) => {
     const location = player.getLocation();
-    return location.getX() === tile.x && location.getY() === tile.y && location.getZ() === 0;
+    return Math.abs(location.getX() - tile.x) <= 1 && Math.abs(location.getY() - tile.y) <= 1 && location.getZ() === 0;
   };
 
   function awaitingScroll(player) {
@@ -157,66 +121,17 @@ module.exports = function registerXMarksTheSpotQuest(api) {
     return location ? location.getX() >= 3150 : null;
   }
 
-  // ==========================================================================
-  // Veos spawns
-  // ==========================================================================
-
-  function spawnVeos(player, key, npcId, tile) {
-    const npc = api.spawnNpc({
-      id: npcId,
-      x: tile.x,
-      y: tile.y,
-      z: 0,
-      wanderRadius: 0,
-      owner: player,
-      ownerOnly: true,
-    });
-    if (!npc) return;
-    const tracked = veosSpawns.get(player) ?? {};
-    tracked[key] = { npc, id: npcId };
-    veosSpawns.set(player, tracked);
+  function wireStage(stage, player) {
+    if (stage >= STAGE_COMPLETE) return 8;
+    if (stage === STAGE_CASKET) return player.getAttribute(HANDED_CASKET_ATTRIBUTE) ? 7 : 6;
+    return stage > 0 ? stage + 1 : player.getAttribute(ACCEPTED_ATTRIBUTE) ? 1 : 0;
   }
 
-  function reconcileVeos(player, key, wantedId, tile) {
-    const tracked = veosSpawns.get(player) ?? {};
-    // Store before spawning: spawnVeos mutates the same map.
-    veosSpawns.set(player, tracked);
-    const current = tracked[key];
-    if (current && current.id === wantedId) return;
-    if (current) {
-      api.removeNpc(current.npc);
-      delete tracked[key];
-    }
-    if (wantedId !== null) spawnVeos(player, key, wantedId, tile);
-  }
-
-  /** Lumbridge until the casket is dug up; Port Sarim from the first scroll on. */
   function ensureVeos(player) {
-    if (!player || player.isPlayerBot?.() === true) return;
     const stage = quest.getStage(player);
-    reconcileVeos(
-      player,
-      "lumbridge",
-      stage < STAGE_CASKET ? VEOS_NPC_ID : null,
-      LUMBRIDGE_NPC_TILE
-    );
-    reconcileVeos(
-      player,
-      "sarim",
-      stage >= STAGE_FIRST_CLUE
-        ? quest.isComplete(player)
-          ? VEOS_POST_QUEST_NPC_ID
-          : VEOS_NPC_ID
-        : null,
-      SARIM_NPC_TILE
-    );
-  }
-
-  function clearVeos(player) {
-    const tracked = veosSpawns.get(player);
-    if (!tracked) return;
-    for (const entry of Object.values(tracked)) api.removeNpc(entry.npc);
-    veosSpawns.delete(player);
+    const sender = player.getPacketSender();
+    sender.sendVarbit(LUMBRIDGE_VISIBILITY, stage < STAGE_CASKET ? 2 : 0);
+    sender.sendVarbit(SARIM_VISIBILITY, stage >= STAGE_COMPLETE ? 1 : 3);
   }
 
   // ==========================================================================
@@ -243,34 +158,45 @@ module.exports = function registerXMarksTheSpotQuest(api) {
     const { player, npcId, stepId } = event;
     if (npcId !== VEOS_NPC_ID && npcId !== VEOS_POST_QUEST_NPC_ID) return;
     if (stepId === RECEIVE_SCROLL_ACTION_ID) {
-      event.handled = true;
       giveStartScroll(player);
+      event.text = "Veos has given you a scroll.";
+      event.box = { items: [TREASURE_SCROLL_1] };
       return;
     }
     if (stepId === RECEIVE_SCROLL_MESSAGE_ID) {
       giveStartScroll(player);
+      event.box = { items: [TREASURE_SCROLL_1] };
       return;
     }
     if (stepId === LOST_ITEM_MESSAGE_ID) {
-      event.handled = true;
       const itemId = lostItemId(player);
       const name = itemId === MYSTERIOUS_ORB ? "a mysterious orb" : "a treasure scroll";
       if (!held(player, itemId) && player.getInventory().getFreeSlots() >= 1) {
         player.getInventory().adds(itemId, 1);
       }
-      player.sendMessage(`Veos has given you ${name}.`);
+      event.text = `Veos has given you ${name}.`;
+      event.box = { items: [itemId] };
       return;
     }
     if (stepId === HAND_IN_CASKET_MESSAGE_ID) {
-      if (held(player, ANCIENT_CASKET)) player.getInventory().deleteNumber(ANCIENT_CASKET, 1);
+      if (!held(player, ANCIENT_CASKET)) {
+        if (player.getAttribute(HANDED_CASKET_ATTRIBUTE)) { event.handled = true; return; }
+        event.handled = true; event.end = true; return;
+      }
+      player.getInventory().deleteNumber(ANCIENT_CASKET, 1);
+      player.setAttribute(HANDED_CASKET_ATTRIBUTE, 1);
+      quest.setStage(player, STAGE_CASKET);
+      event.box = { items: [ANCIENT_CASKET] };
       return;
     }
+    if (stepId === "TS1Ekm") { event.box = { items: [ANCIENT_CASKET] }; return; }
     if (stepId === COMPLETE_ACTION_ID) {
       event.handled = true;
-      // No re-spawn here: the dock Veos swaps to the amulet id on the next login,
-      // not while the player is still talking to him.
-      if (quest.getStage(player) >= STAGE_CASKET && !quest.isComplete(player)) {
+      if (quest.getStage(player) === STAGE_CASKET && player.getAttribute(HANDED_CASKET_ATTRIBUTE)) {
+        endings.add(player);
         quest.complete(player);
+        ensureVeos(player);
+        event.end = true;
       }
       return;
     }
@@ -297,6 +223,7 @@ module.exports = function registerXMarksTheSpotQuest(api) {
       return POST_QUEST_VARIANT;
     }
     if (stage >= STAGE_CASKET) {
+      if (player.getAttribute(HANDED_CASKET_ATTRIBUTE)) return FINISHING_VARIANT;
       if (held(player, ANCIENT_CASKET)) return FINISHING_VARIANT;
       if (held(player, TREASURE_SCROLL_3)) return CLUE_VARIANT_BY_STAGE.get(STAGE_FOURTH_CLUE);
       return LOST_ITEM_VARIANT;
@@ -324,9 +251,8 @@ module.exports = function registerXMarksTheSpotQuest(api) {
       const lumbridge = isLumbridgeNpc(npc);
       return lumbridge === null ? null : !lumbridge;
     }
-    // Travel small talk on the Veos page; this plugin only runs on members worlds.
-    if (value.includes("free-to-play world")) return false;
-    if (value.includes("members' world")) return true;
+    if (value.includes("free-to-play world")) return !WorldDefinition.isMembersWorld();
+    if (value.includes("members' world")) return WorldDefinition.isMembersWorld();
     return null;
   }
 
@@ -334,6 +260,13 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   function fillTranscriptBlanks(request) {
     if (!request?.player || typeof request.text !== "string") return;
     if (request.npcId !== VEOS_NPC_ID && request.npcId !== VEOS_POST_QUEST_NPC_ID) return;
+    if (request.text === "Sounds good, what should I do?" && quest.getStage(request.player) === 0) request.before = () => {
+      request.player.setAttribute(ACCEPTED_ATTRIBUTE, 1);
+      request.player.getPacketSender().sendVarbit(VARBIT_X_MARKS, 1);
+      request.player.sendMessage("You've started a new quest: <col=081190>X Marks the Spot</col>");
+    };
+    if (request.text.startsWith("Take this scroll.") && quest.getStage(request.player) === 0) request.before = () => giveStartScroll(request.player);
+    if (request.text.startsWith("You'll probably want a spade")) request.text = "You'll probably want a spade, I find they're pretty much always needed when it comes to hunting treasure. Check the general store if you don't have one.";
     let text = request.text;
     if (text.includes("[player name]")) {
       text = text.replace(/\[player name\]/gi, String(request.player.getUsername()));
@@ -367,36 +300,68 @@ module.exports = function registerXMarksTheSpotQuest(api) {
         player.getInventory().adds(CLUE_ITEM_BY_STAGE.get(stage + 1), 1);
         quest.setStage(player, stage + 1);
         ensureVeos(player);
-        return;
+        player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ItemStatementDialogue(0, CLUE_ITEM_BY_STAGE.get(stage + 1), stage === STAGE_SECOND_CLUE ? "You dig up a Mysterious Orb." : "You dig up a Treasure Scroll.")));
+        return true;
       }
       player.getInventory().adds(ANCIENT_CASKET, 1);
       quest.setStage(player, STAGE_CASKET);
       ensureVeos(player);
       startTranscript(api, player, VEOS_NPC_ID, PAGE, LAST_DIG_VARIANT);
-      return;
+      return true;
     }
     // Lost casket: dig the pig pen again.
     if (stage === STAGE_CASKET && onTile(player, CASKET_DIG_SPOT) && !held(player, ANCIENT_CASKET)) {
       event.handled = true;
       player.performAnimation(new Animation(DIG_ANIMATION));
+      if (player.getInventory().isFull()) { player.sendMessage("You need more inventory space."); return true; }
       player.getInventory().adds(ANCIENT_CASKET, 1);
       startTranscript(api, player, VEOS_NPC_ID, PAGE, LAST_DIG_VARIANT);
-      return;
+      return true;
     }
     return false;
   }
 
-  /** The scrolls' Read; the map scroll (23068) is an image and is left alone. */
+  function claimDig(event) {
+    if (event.itemId === SPADE && /dig/i.test(String(event.option)) && handleDig(event)) event.allow = false;
+  }
+
   function handleReadScroll(event) {
-    if (event.itemId === TREASURE_SCROLL_1) {
-      event.player.sendMessage(FIRST_CLUE_TEXT);
-      return true;
+    if (![TREASURE_SCROLL_1, TREASURE_SCROLL_2, TREASURE_SCROLL_3].includes(event.itemId) || !held(event.player, event.itemId)) return false;
+    const sender = event.player.getPacketSender();
+    if (event.itemId === TREASURE_SCROLL_2) sender.sendInterface(MAP_INTERFACE);
+    else {
+      sender.sendInterface(CLUE_TEXT_INTERFACE);
+      sender.sendString(event.itemId === TREASURE_SCROLL_1 ? FIRST_CLUE_TEXT : `The cipher reveals<br>where to dig next:<br><br>${CIPHER_TEXT}`, (CLUE_TEXT_INTERFACE << 16) | 2);
     }
-    if (event.itemId === TREASURE_SCROLL_3) {
-      event.player.sendMessage(CIPHER_TEXT);
-      return true;
-    }
-    return false;
+    return true;
+  }
+
+  function closeMap({ player }) {
+    player.getPacketSender().sendInterfaceRemoval();
+  }
+
+  function feelOrb({ player, itemId }) {
+    if (itemId !== MYSTERIOUS_ORB || !held(player, MYSTERIOUS_ORB)) return false;
+    const location = player.getLocation(), target = DIG_SPOTS.get(STAGE_THIRD_CLUE);
+    const distance = Math.max(Math.abs(location.getX() - target.x), Math.abs(location.getY() - target.y));
+    const previous = Number(player.getAttribute(PREVIOUS_DISTANCE_ATTRIBUTE)) || 0;
+    const previousCoord = Number(player.getAttribute(PREVIOUS_COORD_ATTRIBUTE)) || -1;
+    const coord = location.getZ() << 28 | location.getX() << 14 | location.getY();
+    // shortcut: unobserved category boundaries follow the standard orb bands; verify with boundary captures.
+    const temperature = distance <= 4 ? "incredibly hot" : distance <= 25 ? "very hot" : distance <= 50 ? "hot" : distance <= 90 ? "warm" : distance <= 150 ? "cold" : distance <= 500 ? "very cold" : "incredibly cold";
+    const comparison = previousCoord === -1 ? "" : distance < previous ? ", and warmer than last time" : distance > previous ? ", but colder than last time" : ", and the same temperature as last time";
+    player.sendMessage(`The orb is ${temperature}${comparison}.`);
+    player.setAttribute(PREVIOUS_DISTANCE_ATTRIBUTE, distance);
+    player.setAttribute(PREVIOUS_COORD_ATTRIBUTE, coord);
+    player.getPacketSender().sendVarbit(PREVIOUS_DISTANCE_VARBIT, distance).sendConfig(PREVIOUS_COORD_VARP, coord).sendClientScript(HOT_COLD_SCRIPT, coord, previousCoord, distance, previous);
+    return true;
+  }
+
+  function resumeHandIn(event) {
+    const { player, npcId } = event;
+    if (![VEOS_NPC_ID, VEOS_POST_QUEST_NPC_ID].includes(npcId) || quest.getStage(player) !== STAGE_CASKET || !player.getAttribute(HANDED_CASKET_ATTRIBUTE)) return;
+    event.handled = true;
+    startTranscript(api, player, npcId, PAGE, "finishing-up", (steps) => steps.slice(6));
   }
 
   function handleOpenCasket(event) {
@@ -411,6 +376,7 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   function handleLampRub(event) {
     if (event.itemId !== ANTIQUE_LAMP) return false;
     const { player, item, slot } = event;
+    if (!held(player, ANTIQUE_LAMP) || player.getAttribute(LAMP_USED_ATTRIBUTE)) return false;
     lampPending.set(player, { item, slot });
     api.emitCustomEvent("xpreward:open", {
       player,
@@ -430,7 +396,9 @@ module.exports = function registerXMarksTheSpotQuest(api) {
     manager.addExperience(skill, LAMP_XP, false);
     if (manager.getExperience(skill) === before) return null;
     inventory.deleteAtSlot(slot, 1);
-    return `You have been awarded ${LAMP_XP} ${name ?? skill.getName()} XP!`;
+    player.setAttribute(LAMP_USED_ATTRIBUTE, 1);
+    player.getPacketSender().sendVarbit(LAMP_REWARD_VARBIT, 1);
+    return `<col=0000ff>Your wish has been granted!</col> You have been awarded ${LAMP_XP} ${name ?? skill.getName()} experience!`;
   }
 
   // ==========================================================================
@@ -440,10 +408,18 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   function handleLogin({ player }) {
     ensureVeos(player);
     refreshQuestList(player);
+    player.getPacketSender().sendVarbit(PREVIOUS_DISTANCE_VARBIT, Number(player.getAttribute(PREVIOUS_DISTANCE_ATTRIBUTE)) || 0).sendConfig(PREVIOUS_COORD_VARP, Number(player.getAttribute(PREVIOUS_COORD_ATTRIBUTE)) || -1);
   }
 
   function handleLogout({ player }) {
-    clearVeos(player);
+    endings.delete(player);
+    lampPending.delete(player);
+  }
+
+  function completedScrollClosed({ player, interfaceId }) {
+    if (interfaceId !== 153 || !endings.has(player)) return;
+    endings.delete(player);
+    startTranscript(api, player, VEOS_POST_QUEST_NPC_ID, PAGE, "finishing-up", (steps) => steps.slice(12,15));
   }
 
   function buildJournal(player, questHandle) {
@@ -512,36 +488,46 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   }
 
   function grantReward(player) {
-    // registerQuest adds the first coin; top the stack up to 200.
-    player.getInventory().adds(COINS, 199);
+    player.getPacketSender().sendVarbit(COIN_REWARD_VARBIT, 1).sendVarbit(CLUE_REWARD_VARBIT, 1);
+    player.getInventory().adds(COINS, 200);
     player.getInventory().adds(ANTIQUE_LAMP, 1);
     if (!held(player, BEGINNER_SCROLL_BOX)) player.getInventory().adds(BEGINNER_SCROLL_BOX, 1);
   }
 
-  api.persistAttribute(AWAITING_SCROLL_ATTRIBUTE);
+  api.persistAttribute(AWAITING_SCROLL_ATTRIBUTE, 0);
+  api.persistAttribute(ACCEPTED_ATTRIBUTE, 0);
+  api.persistAttribute(HANDED_CASKET_ATTRIBUTE, 0);
+  api.persistAttribute(PREVIOUS_DISTANCE_ATTRIBUTE, 0);
+  api.persistAttribute(PREVIOUS_COORD_ATTRIBUTE, -1);
+  api.persistAttribute(LAMP_USED_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
     key: "x_marks_the_spot",
     name: "X Marks the Spot",
     varpId: VARP_X_MARKS,
     varbitId: VARBIT_X_MARKS,
+    varpValue: wireStage,
     startedValue: STAGE_FIRST_CLUE,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
-    rewardItemId: COINS,
-    rewardItemLabel: "200 Coins",
-    otherRewards: ["Antique lamp", "Beginner scroll box"],
+    scrollItemId: ANCIENT_CASKET,
+    completionJingleId: 154,
+    otherRewards: ["An Antique Lamp", "200 Coins", "Ability to receive Clue Scroll", "Boxes", "A Beginner Clue Scroll Box"],
     buildJournal,
     onReward: grantReward,
   });
 
+  api.onNpcInteraction(resumeHandIn);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:line", fillTranscriptBlanks);
+  api.onCustomEvent("interface:closed", completedScrollClosed);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);
-  api.onItemAction("Spade", { Dig: handleDig });
+  api.onCanUseItem(claimDig);
   api.onItemAction("Treasure scroll", { Read: handleReadScroll });
+  api.onItemAction("Mysterious orb", { Feel: feelOrb });
+  api.onInterfaceActionButton((MAP_INTERFACE << 16) | 6, closeMap);
   api.onItemAction("Ancient casket", { Open: handleOpenCasket });
   api.onItemAction("Antique lamp", { Rub: handleLampRub });
   api.onPlayerLogin(handleLogin);

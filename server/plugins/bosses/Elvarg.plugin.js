@@ -1,446 +1,183 @@
-const { Boundary } = require("../../src/main/typescript/elvarg/game/model/Boundary");
-const { NPC } = require("../../src/main/typescript/elvarg/game/entity/impl/npc/NPC");
-const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
-const { PrivateArea } = require("../../src/main/typescript/elvarg/game/model/areas/impl/PrivateArea");
-const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
-const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
-const { CombatMethod } = require("../../src/main/typescript/elvarg/game/content/combat/method/CombatMethod");
-const { CombatType } = require("../../src/main/typescript/elvarg/game/content/combat/CombatType");
-const { PendingHit } = require("../../src/main/typescript/elvarg/game/content/combat/hit/PendingHit");
-const { Projectile } = require("../../src/main/typescript/elvarg/game/model/Projectile");
-const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
-const { Graphic } = require("../../src/main/typescript/elvarg/game/model/Graphic");
-const { CombatEquipment } = require("../../src/main/typescript/elvarg/game/content/combat/CombatEquipment");
-const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
-const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
-const {
-  DragonfireProtectionTier,
-  getDragonfireProtectionTier,
-  initDragonfireProtectionCoreAccess,
-} = require("../combat/DragonfireProtection");
+const { DragonfireProtectionTier, getDragonfireProtectionTier } = require("../combat/DragonfireProtection");
 
-const ATTR_PENDING_INSTANCE = "elvarg:pending_instance";
-const ATTR_INSTANCE_AREA = "elvarg:instance_area";
+let pluginApi;
+const encounters = new WeakMap();
+const ELVARG_BASE_ID = 816;
+const ELVARG_IDS = [ELVARG_BASE_ID, 817, 8033, 6349];
+const ELVARG_KILLED_ATTRIBUTE = "dragon-slayer:elvarg-killed";
+const INSIDE_LAIR_ATTRIBUTE = "elvarg:inside-lair";
+const MELEE_ANIMATION = 80;
+const BREATH_ANIMATION = 81;
+const BREATH_PROJECTILE = 130;
+const BREATH_IMPACT = 131;
+const BREATH_SOUND = 3750;
+const BREATH_IMPACT_SOUND = 156;
+const BREATH_LAUNCH_CYCLES = [51, 56, 61, 66, 71, 75];
+const BREATH_END_CYCLES = [80, 85, 90, 95, 100, 105];
 
-// OSRS Elvarg spawn tile from the canonical Crandor lair data.
-const ELVARG_TELEPORT_LOCATION = new Location(2852, 9637, 0);
-const ELVARG_SPAWN_LOCATION = new Location(2852, 9637, 0);
-const ELVARG_LAIR_BOUNDARY = new Boundary(2844, 2863, 9628, 9646, 0);
-const ELVARG_IDS = new Set([
-  NpcIdentifiers.ELVARG,
-  NpcIdentifiers.ELVARG_2,
-  NpcIdentifiers.ELVARG_3,
-  8033,
-]);
-const ELVARG_COMBAT_PROVIDER_IDS = [...ELVARG_IDS];
-const ELVARG_SPAWN_NPC_ID = NpcIdentifiers.ELVARG_3;
+function outsideWall() {
+  return new pluginApi.core.Location(2845, 9636, 0);
+}
 
-const ELVARG_MELEE_ANIMATION = new Animation(80);
-const ELVARG_DRAGONFIRE_ANIMATION = new Animation(81);
-const ELVARG_DRAGONFIRE_PROJECTILE_ID = 393;
-const ELVARG_DRAGONFIRE_IMPACT_GFX = new Graphic(1);
-const ELVARG_ATTACK_DISTANCE = 8;
-const ELVARG_MAX_HITPOINTS = 80;
-const ELVARG_MAX_MELEE_HIT = 8;
-const ELVARG_MAX_DRAGONFIRE_HIT = 69;
-const DRAGONFIRE_PARTIAL_RESIST_MESSAGE = "You manage to resist some of the dragon fire.";
-const DRAGONFIRE_FULL_BURN_MESSAGE = "You're horribly burnt by the dragon fire!";
-const DRAGONFIRE_FULL_PROTECTION_MESSAGE = "You are completely protected from the dragon fire.";
+function insideLair(player) {
+  const at = player.getLocation();
+  return at.getZ() === 0 && at.getX() >= 2847 && at.getX() <= 2863 && at.getY() >= 9628 && at.getY() <= 9646;
+}
 
-class ElvargPrivateArea extends PrivateArea {
-  constructor(ownerName) {
-    super([ELVARG_LAIR_BOUNDARY]);
-    this.ownerName = ownerName ?? "unknown";
+function createEncounter(player) {
+  const { PrivateArea, Boundary } = pluginApi.core;
+  return new (class ElvargArea extends PrivateArea {
+    constructor() {
+      super([new Boundary(2844, 2863, 9628, 9646, 0)]);
+      this.owner = player;
+      this.npc = null;
+      this.active = false;
+      this.killed = false;
+      this.pluginName = "Elvarg";
+    }
+    process(mobile) {
+      if (mobile !== this.owner || !this.active || this.killed || !insideLair(this.owner)) return;
+      if (this.owner.getHitpoints() <= 0 || this.npc?.getHitpoints() <= 0 || !this.npc?.isRegistered()) return;
+      if (this.npc.getCombat().getTarget() !== this.owner) this.npc.getCombat().attack(this.owner);
+    }
+    canAttack(attacker, target) {
+      if (!this.active || this.killed || !insideLair(this.owner)) return false;
+      return (attacker === this.owner && target === this.npc) ||
+        (attacker === this.npc && target === this.owner) ? null : false;
+    }
+    postLeave(mobile, logout) {
+      if (mobile === this.owner) {
+        encounters.delete(this.owner);
+        this.owner.setAttribute(INSIDE_LAIR_ATTRIBUTE, false);
+        this.owner.getCombat().reset();
+      }
+      super.postLeave(mobile, logout);
+    }
+    destroy() {
+      if (this.isDestroyed() || this.destroying) return;
+      this.destroying = true;
+      if (this.npc) pluginApi.removeNpc(this.npc);
+      super.destroy();
+    }
+  })();
+}
+
+function enterLair(request) {
+  const { player } = request;
+  if (!player || request.handled || player.getAttribute(ELVARG_KILLED_ATTRIBUTE)) return;
+  let area = encounters.get(player);
+  if (!area || area.isDestroyed()) {
+    area = createEncounter(player);
+    encounters.set(player, area);
+    area.enter(player);
+    area.npc = pluginApi.spawnNpc({ id: ELVARG_BASE_ID, x: 2852, y: 9637, z: 0, owner: player, ownerOnly: true, wanderRadius: 5 });
+    if (area.npc) area.add(area.npc);
+    player.setAttribute(INSIDE_LAIR_ATTRIBUTE, true);
   }
+  area.active = request.aggressive !== false;
+  request.npc = area.npc;
+  request.handled = true;
+  area.process(player);
+}
 
-  destroy() {
-    if (this.isDestroyed?.() === true) {
-      return;
-    }
+function leaveLair({ player }) {
+  const area = encounters.get(player);
+  if (area && player.getArea() === area) area.leave(player, false);
+}
 
-    const addQueue = World.getAddNPCQueue();
-    const removeQueue = World.getRemoveNPCQueue();
-    for (const entity of this.entities) {
-      if (!entity?.isNpc?.() || !entity?.getAsNpc) {
-        continue;
-      }
-      const npc = entity.getAsNpc();
-      for (let index = addQueue.indexOf(npc); index !== -1; index = addQueue.indexOf(npc)) {
-        addQueue.splice(index, 1);
-      }
-      if (npc.isRegistered?.() && !removeQueue.includes(npc)) {
-        removeQueue.push(npc);
-      }
-    }
+function elvargDied({ npc }) {
+  const area = npc?.getArea();
+  if (!area || area.npc !== npc || encounters.get(area.owner) !== area) return;
+  area.killed = true;
+  area.active = false;
+  npc.__skipDefaultRespawn = true;
+  // Dragon Slayer keeps this area for the body and the timed head-cut sequence.
+}
 
-    super.destroy();
+function cleanupPlayer({ player }) {
+  const area = encounters.get(player);
+  if (!area) return;
+  player.setForceMovement(null);
+  player.getMovementQueue().setBlockMovement(false);
+  player.setUntargetable(false);
+  leaveLair({ player });
+  player.moveTo(outsideWall());
+}
+
+function restorePlayer({ player }) {
+  if (!player.getAttribute(INSIDE_LAIR_ATTRIBUTE)) return;
+  player.setAttribute(INSIDE_LAIR_ATTRIBUTE, false);
+  player.moveTo(outsideWall());
+}
+
+function dragonfireDamage(player) {
+  const { CombatEquipment, PrayerHandler, Misc } = pluginApi.core;
+  const shield = CombatEquipment.hasDragonProtectionGear(player);
+  const prayer = PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC);
+  const tier = getDragonfireProtectionTier(player);
+  const potion = tier >= DragonfireProtectionTier.ANTIFIRE;
+  const superPotion = tier >= DragonfireProtectionTier.SUPER_ANTIFIRE;
+  const max = superPotion ? 0 : shield ? (prayer && potion ? 4 : prayer || potion ? 7 : 10) : prayer && potion ? 40 : prayer || potion ? 55 : 70;
+  const message = shield ? "Your shield absorbs most of the dragon fire." :
+    superPotion ? "You are completely protected from the dragon fire." :
+      prayer || potion ? "You manage to resist some of the dragon fire." : "You're horribly burnt by the dragon fire!";
+  player.sendMessage(message);
+  const skills = player.getSkillManager(), prayerLevel = skills.getCurrentLevel(pluginApi.core.Skill.PRAYER);
+  if (prayerLevel >= 10) skills.setCurrentLevels(pluginApi.core.Skill.PRAYER, prayerLevel - Math.floor(prayerLevel / 10));
+  return max ? Misc.randomInclusive(0, max) : 0;
+}
+
+function breathe(character, target) {
+  const { Animation, Graphic, Projectile, Misc } = pluginApi.core;
+  character.performAnimation(new Animation(BREATH_ANIMATION));
+  for (let i = 0; i < BREATH_LAUNCH_CYCLES.length; i++) {
+    Projectile.createProjectile(character, target, BREATH_PROJECTILE,
+      BREATH_LAUNCH_CYCLES[i], BREATH_END_CYCLES[i], 70, Misc.randomInclusive(70, 109))
+      .withAngle(Misc.randomInclusive(8, 23)).withProgress(200).sendProjectile();
   }
-
-  postLeave(mobile, logout) {
-    if (mobile?.isPlayer?.()) {
-      clearInstanceAttributes(mobile.getAsPlayer(), this);
-    }
-    super.postLeave(mobile, logout);
+  target.performGraphic(new Graphic(BREATH_IMPACT, 80, 90));
+  const sender = target.getPacketSender?.();
+  if (sender) {
+    const source = character.getLocation(), at = target.getLocation();
+    sender.sendAreaSound(BREATH_SOUND, source.getX(), source.getY(), source.getZ(), 1, 0, 15);
+    sender.sendAreaSound(BREATH_IMPACT_SOUND, at.getX(), at.getY(), at.getZ(), 1, 80, 10);
   }
 }
 
-class ElvargCombatMethod extends CombatMethod {
-  constructor() {
-    super();
-    this.useDragonfire = true;
-    this.currentAttackType = CombatType.MAGIC;
-  }
-
-  start(character, target) {
-    this.selectAttack(character, target);
-    if (this.useDragonfire) {
-      character.performAnimation(ELVARG_DRAGONFIRE_ANIMATION);
-      Projectile.createProjectile(
-        character,
-        target,
-        ELVARG_DRAGONFIRE_PROJECTILE_ID,
-        40,
-        55,
-        31,
-        43
-      ).sendProjectile();
-      return;
+function installCombatMethod() {
+  const { CombatMethod, CombatType, PendingHit, Animation, Misc } = pluginApi.core;
+  class ElvargCombatMethod extends CombatMethod {
+    constructor() { super(); this.dragonfire = true; }
+    start(character, target) {
+      this.dragonfire = character.calculateDistance(target) > 1 || Misc.randomInclusive(0, 1) === 0;
+      if (this.dragonfire) breathe(character, target);
+      else character.performAnimation(new Animation(MELEE_ANIMATION));
     }
-    character.performAnimation(ELVARG_MELEE_ANIMATION);
-  }
-
-  attackSpeed() {
-    return 4;
-  }
-
-  attackDistance() {
-    return ELVARG_ATTACK_DISTANCE;
-  }
-
-  type() {
-    return this.currentAttackType;
-  }
-
-  hits(character, target) {
-    if (!this.useDragonfire) {
-      const hit = new PendingHit(character, target, this, 1);
-      hit.setTotalDamage(Math.min(ELVARG_MAX_MELEE_HIT, hit.getTotalDamage()));
+    attackSpeed() { return 4; }
+    attackDistance() { return 8; }
+    type() { return this.dragonfire ? CombatType.MAGIC : CombatType.MELEE; }
+    hits(character, target) {
+      const hit = new PendingHit(character, target, this, { delay: this.dragonfire ? 3 : 1, rollAccuracy: !this.dragonfire });
+      hit.setTotalDamage(this.dragonfire ? (target.isPlayer() ? dragonfireDamage(target.getAsPlayer()) : Misc.randomInclusive(0, 70)) : Math.min(8, hit.getTotalDamage()));
       return [hit];
     }
-
-    const hit = new PendingHit(character, target, this, {
-      delay: 1,
-      rollAccuracy: false,
-    });
-
-    if (target?.isPlayer?.()) {
-      const player = target.getAsPlayer();
-      const dragonfire = resolveElvargDragonfireDamage(player);
-      hit.setTotalDamage(dragonfire.damage);
-      if (dragonfire.message) {
-        player.getPacketSender?.().sendMessage?.(dragonfire.message);
-      }
-      drainPrayerPointsFromDragonfire(player);
-    } else {
-      hit.setTotalDamage(Misc.randomInclusive(0, ELVARG_MAX_DRAGONFIRE_HIT));
-    }
-
-    return [hit];
+    handleAfterHitEffects() {}
+    finished() {}
   }
-
-  handleAfterHitEffects(hit) {
-    if (!this.useDragonfire) {
-      return;
-    }
-    const target = hit?.getTarget?.();
-    target?.performGraphic?.(ELVARG_DRAGONFIRE_IMPACT_GFX);
-  }
-
-  finished() {}
-
-  selectAttack(character, target) {
-    const distance = character?.calculateDistance?.(target) ?? 99;
-    if (distance > 1) {
-      this.useDragonfire = true;
-      this.currentAttackType = CombatType.MAGIC;
-      return;
-    }
-
-    // Elvarg is mostly dragonfire-oriented, but can still melee in close range.
-    this.useDragonfire = Misc.randomInclusive(0, 1) === 0;
-    this.currentAttackType = this.useDragonfire ? CombatType.MAGIC : CombatType.MELEE;
-  }
+  pluginApi.registerNpcCombatMethodProvider(ELVARG_IDS, ElvargCombatMethod, { singleton: false });
 }
-
-function resolveElvargDragonfireDamage(player) {
-  if (!player) {
-    return {
-      damage: Misc.randomInclusive(0, ELVARG_MAX_DRAGONFIRE_HIT),
-      message: DRAGONFIRE_FULL_BURN_MESSAGE,
-    };
-  }
-
-  const hasShield = CombatEquipment.hasDragonProtectionGear(player);
-  const hasPrayer = PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC);
-  const tier = getDragonfireProtectionTier(player);
-  const hasSuperAntifire = tier >= DragonfireProtectionTier.SUPER_ANTIFIRE;
-  const hasAntifire = tier >= DragonfireProtectionTier.ANTIFIRE;
-
-  let maxDamage = ELVARG_MAX_DRAGONFIRE_HIT;
-
-  if (hasSuperAntifire) {
-    maxDamage = 0;
-  } else if (hasShield && hasPrayer && hasAntifire) {
-    maxDamage = 4;
-  } else if (hasShield && (hasPrayer || hasAntifire)) {
-    maxDamage = 7;
-  } else if (hasPrayer && hasAntifire) {
-    maxDamage = 40;
-  } else if (hasShield) {
-    maxDamage = 10;
-  } else if (hasPrayer || hasAntifire) {
-    maxDamage = 55;
-  }
-
-  const message = maxDamage <= 0
-    ? DRAGONFIRE_FULL_PROTECTION_MESSAGE
-    : maxDamage >= ELVARG_MAX_DRAGONFIRE_HIT
-      ? DRAGONFIRE_FULL_BURN_MESSAGE
-      : DRAGONFIRE_PARTIAL_RESIST_MESSAGE;
-
-  return {
-    damage: maxDamage <= 0 ? 0 : Misc.randomInclusive(0, maxDamage),
-    message,
-  };
-}
-
-function drainPrayerPointsFromDragonfire(player) {
-  if (!player) {
-    return;
-  }
-  const skillManager = player.getSkillManager?.();
-  if (!skillManager) {
-    return;
-  }
-
-  const currentPrayer = skillManager.getCurrentLevel?.(Skill.PRAYER);
-  if (!Number.isFinite(currentPrayer) || currentPrayer <= 0) {
-    return;
-  }
-
-  const drainedAmount = Math.floor(currentPrayer * 0.1);
-  if (drainedAmount <= 0) {
-    return;
-  }
-
-  skillManager.setCurrentLevels(Skill.PRAYER, Math.max(0, currentPrayer - drainedAmount));
-}
-
-function isElvargNpc(npc) {
-  if (!npc || typeof npc.getId !== "function") {
-    return false;
-  }
-  return ELVARG_IDS.has(npc.getId());
-}
-
-function isNearElvargTeleportLocation(player) {
-  const location = player?.getLocation?.();
-  if (!location || location.getZ?.() !== ELVARG_TELEPORT_LOCATION.getZ()) {
-    return false;
-  }
-  return location.getDistance(ELVARG_TELEPORT_LOCATION) <= 3;
-}
-
-function resolveInstanceArea(player) {
-  const existingArea = player.getAttribute(ATTR_INSTANCE_AREA);
-  if (existingArea instanceof ElvargPrivateArea && existingArea.isDestroyed?.() !== true) {
-    return existingArea;
-  }
-
-  const createdArea = new ElvargPrivateArea(player.getUsername?.());
-  player.setAttribute(ATTR_INSTANCE_AREA, createdArea);
-  return createdArea;
-}
-
-function clearInstanceAttributes(player, sourceArea) {
-  if (!player) {
-    return;
-  }
-  const assignedArea = player.getAttribute(ATTR_INSTANCE_AREA);
-  if (
-    sourceArea == null ||
-    assignedArea === sourceArea ||
-    assignedArea?.isDestroyed?.() === true
-  ) {
-    player.setAttribute(ATTR_INSTANCE_AREA, null);
-  }
-  player.setAttribute(ATTR_PENDING_INSTANCE, false);
-}
-
-function movePlayerIntoArea(player, area) {
-  const currentArea = player.getArea?.();
-  if (currentArea && currentArea !== area) {
-    currentArea.leave(player, false);
-    currentArea.postLeave(player, false);
-  }
-  if (player.getArea?.() !== area) {
-    area.enter(player);
-  }
-}
-
-function ensureElvargSpawn(area) {
-  if (!area || area.isDestroyed?.() === true) {
-    return;
-  }
-
-  const hasElvarg = (area.entities ?? []).some((entity) => {
-    if (!entity?.isNpc?.() || !entity?.getAsNpc) {
-      return false;
-    }
-    return isElvargNpc(entity.getAsNpc());
-  });
-  if (hasElvarg) {
-    return;
-  }
-
-  const npc = NPC.create(
-    ELVARG_SPAWN_NPC_ID,
-    ELVARG_SPAWN_LOCATION.clone()
-  );
-  npc.setHitpoints?.(ELVARG_MAX_HITPOINTS);
-  npc.getMovementCoordinator?.().setRadius?.(5);
-  area.add(npc);
-  World.getAddNPCQueue().push(npc);
-}
-
-function getElvargInArea(area) {
-  if (!area || area.isDestroyed?.() === true) {
-    return null;
-  }
-  for (const entity of area.entities ?? []) {
-    if (!entity?.isNpc?.() || !entity?.getAsNpc) {
-      continue;
-    }
-    const npc = entity.getAsNpc();
-    if (npc.getHitpoints?.() > ELVARG_MAX_HITPOINTS) {
-      npc.setHitpoints?.(ELVARG_MAX_HITPOINTS);
-    }
-    if (isElvargNpc(npc) && npc.getHitpoints?.() > 0) {
-      return npc;
-    }
-  }
-  return null;
-}
-
-function forceElvargAggression(area, player) {
-  if (!player || !area || area.isDestroyed?.() === true) {
-    return;
-  }
-  const npc = getElvargInArea(area);
-  if (!npc) {
-    return;
-  }
-  if (npc.getCombat?.().getTarget?.() === player) {
-    return;
-  }
-  npc.getCombat?.().attack?.(player);
-}
-
-function exitInstanceToHome(player, area) {
-  if (!player) {
-    return;
-  }
-
-  clearInstanceAttributes(player, area);
-  player.getCombat?.().reset?.();
-
-  if (area && player.getArea?.() === area) {
-    area.leave(player, false);
-    area.postLeave(player, false);
-  }
-
-  player.moveTo(GameConstants.DEFAULT_LOCATION.clone());
-}
-
-function cleanupOnLogoutOrDisconnect(player) {
-  if (!player) {
-    return;
-  }
-  const area = player.getAttribute(ATTR_INSTANCE_AREA);
-  if (!(area instanceof ElvargPrivateArea)) {
-    clearInstanceAttributes(player, null);
-    return;
-  }
-  exitInstanceToHome(player, area);
-}
-
-let World;
-let PrayerHandler;
 
 module.exports = {
   name: "Elvarg",
   register(api) {
-    World = api.getWorld();
-    PrayerHandler = api.getPrayerHandler();
-    initDragonfireProtectionCoreAccess(api);
-    api.onPlayerProcess(({ player }) => {
-      if (!player) {
-        return;
-      }
-
-      const instanceArea = player.getAttribute(ATTR_INSTANCE_AREA);
-      if (instanceArea instanceof ElvargPrivateArea && instanceArea.isDestroyed?.() === true) {
-        clearInstanceAttributes(player, instanceArea);
-      }
-
-      if (
-        player.getAttribute(ATTR_PENDING_INSTANCE) === true &&
-        isNearElvargTeleportLocation(player)
-      ) {
-        const area = resolveInstanceArea(player);
-        movePlayerIntoArea(player, area);
-        ensureElvargSpawn(area);
-        forceElvargAggression(area, player);
-        player.setAttribute(ATTR_PENDING_INSTANCE, false);
-      }
-
-      const currentArea = player.getArea?.();
-      if (!(currentArea instanceof ElvargPrivateArea)) {
-        return;
-      }
-      forceElvargAggression(currentArea, player);
-    });
-
-    api.onNpcDeath(({ npc }) => {
-      if (!isElvargNpc(npc)) {
-        return;
-      }
-
-      const area = npc.getArea?.();
-      if (!(area instanceof ElvargPrivateArea)) {
-        return;
-      }
-
-      npc.__skipDefaultRespawn = true;
-
-      const players = [...(area.getPlayers?.() ?? [])];
-      for (const player of players) {
-        exitInstanceToHome(player, area);
-      }
-    });
-
-    api.onPlayerLogout(({ player }) => {
-      cleanupOnLogoutOrDisconnect(player);
-    });
-
-    api.onPlayerDisconnect(({ player }) => {
-      cleanupOnLogoutOrDisconnect(player);
-    });
-
-    api.registerNpcCombatMethodProvider(
-      ELVARG_COMBAT_PROVIDER_IDS,
-      ElvargCombatMethod,
-      { singleton: false }
-    );
+    pluginApi = api;
+    api.persistAttribute(INSIDE_LAIR_ATTRIBUTE, false);
+    api.onServerStartup(installCombatMethod);
+    api.onCustomEvent("elvarg:enter", enterLair);
+    api.onCustomEvent("elvarg:leave", leaveLair);
+    api.onNpcDeath(elvargDied);
+    api.onPlayerLogin(restorePlayer);
+    api.onPlayerLogout(cleanupPlayer);
+    api.onPlayerDisconnect(cleanupPlayer);
   },
 };

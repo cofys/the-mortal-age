@@ -102,7 +102,8 @@ module.exports = function registerDwarfCannonQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (![NpcIdentifiers.CAPTAIN_LAWGOF, NpcIdentifiers.NULODION, NpcIdentifiers.LOLLK].includes(npcId)) return null;
     const value = String(text).toLowerCase();
     if (value.includes("does not have a hammer")) return !has(player, ItemIdentifiers.HAMMER);
     if (value.includes("does not have a railing")) return !has(player, ItemIdentifiers.RAILING);

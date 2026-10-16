@@ -4,6 +4,7 @@ import { isGroupMissingError } from "../../rs/cache/js5/GroupMissingError";
 import { retryOnMissingGroup } from "../../rs/cache/js5/retryOnMissingGroup";
 import { Opcodes } from "../../rs/cs2/Opcodes";
 import { type Script as Cs2Script, parseScriptFromBytes } from "../../rs/cs2/Script";
+import { applySortCallbacks } from "../../rs/cs2/sortCallbacks";
 
 const CHAT_INPUT_SCRIPT_ID = 73;
 
@@ -126,6 +127,7 @@ export class ClientScriptLoader {
                 script.intOperands[bankCheck + 4] = 0;
             }
         }
+        applySortCallbacks(script);
         if (this.cache.has(scriptId)) {
             this.cache.delete(scriptId);
         }

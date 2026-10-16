@@ -1,47 +1,7 @@
-/**
- * Dragon Slayer I.
- *
- * Words come from npc-dialogues.json. The "Dragon Slayer I" page mixes every
- * quest NPC, so the branch is chosen by the speaker's cache id and quest stage:
- *   Guildmaster 814, Duke Horacio 815, Elvarg 816, Ned 818/5865/824/4280/5864,
- *   Klarense 819, Wormbrain 820, Oracle 821, Oziach 822, Melzar 823.
- *
- * Stage flow (VARP 176, xrsps constants):
- *   0  not started        Guildmaster start hook (needs 32 Quest Points)
- *   1  Guildmaster        Oziach offers "slay the dragon of Crandor"
- *   2  Oziach             buy the Lady Lumbridge from Klarense
- *   3  bought ship        repair 3 holes (planks + 30 steel nails each)
- *   4/5/7 repair holes    Ned hires on with the complete map
- *   8  Ned ready          board the ship and sail to Crandor
- *   9  Crandor            kill Elvarg to complete
- *   10 complete
- *
- * Aux state is kept in persisted player attributes (the reference's varps 177,
- * 183, 184): oracle progress, whether Ned has been asked, whether Oziach has
- * seen the kill, and whether the Crandor shortcut rope is open.
- *
- * The plugin supplies the variant selector, the prose-condition answers, the
- * start hook, the map/coin/shield hand-ins and the object interactions (maze
- * doors, magic door, Melzar/Oracle chests, ship hole, gangplanks, Crandor).
- *
- * Gaps (needing content the dump/reference cannot supply, see summary):
- *   - Duke Horacio's shield conversation lives on his own flat "Duke Horacio"
- *     page (LnbjYr/igRDii, if_uB3/emj6I8 once the quest is done); the plugin
- *     claims that page while Dragon Slayer still owes the player a shield and
- *     lets Rune Mysteries own Duke the rest of the time.
- *   - Klarense has no pre-Oziach refusal variant; purchase is refused in the
- *     condition handler instead of a dedicated line.
- *   - The offered ship captains (Ahab, Seagull, Ben, Lorris/Tobias, Stan), the
- *     sawmill plank hand-out and Cabin Boy Jenkins have no NPC ids in the
- *     reference; only Ned is wired.
- *   - The sailing cutscene / Elvarg instance is not spawned here; the gangplank
- *     and Ned's "let's go" teleport the player to Crandor directly.
- *   - Maze key droppers 748-752 come from the reference; the id index maps some
- *     of them to an unrelated transcript, so no talk dialogue is added.
- */
+/** Dragon Slayer I: revision240 RSProx stages, offerings, voyage and Elvarg proof. See docs/f2p-adventure-parity.md. */
 module.exports = function registerDragonSlayerQuest(api) {
-  const { Skill, Item, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { Skill, Item, Location, Animation, Graphic, GameObject, ForceMovement, TaskManager, CountdownTask, TemplatedInstanceArea, DialogueChainBuilder, ActionDialogue, StatementDialogue, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   const GUILDMASTER_NPC_ID = NpcIdentifiers.GUILDMASTER;
   const DUKE_HORACIO_NPC_ID = NpcIdentifiers.DUKE_HORACIO;
@@ -83,6 +43,7 @@ module.exports = function registerDragonSlayerQuest(api) {
     coins: ItemIdentifiers.COINS,
     silk: ItemIdentifiers.SILK,
     plank: ItemIdentifiers.PLANK,
+    hammer: ItemIdentifiers.HAMMER,
     lobsterPot: ItemIdentifiers.LOBSTER_POT,
     wizardMindBomb: ItemIdentifiers.WIZARDS_MIND_BOMB,
     unfiredBowl: ItemIdentifiers.UNFIRED_BOWL,
@@ -148,6 +109,41 @@ module.exports = function registerDragonSlayerQuest(api) {
   const ATTR_OZIACH_CONGRATS = "dragon-slayer.oziach-congrats";
   const ATTR_SHORTCUT = "dragon-slayer.shortcut";
   const QUEST_POINTS_ATTRIBUTE = "quest.points";
+  const OFFERINGS_ATTRIBUTE = "dragon-slayer:offerings";
+  const INSTRUCTIONS_ATTRIBUTE = "dragon-slayer:instructions";
+  const NED_KNOWS_ATTRIBUTE = "dragon-slayer:ned-knows-ship-fixed";
+  const ELVARG_SEEN_ATTRIBUTE = "dragon-slayer:elvarg-seen";
+  const ELVARG_KILLED_ATTRIBUTE = "dragon-slayer:elvarg-killed";
+  const EXPLAINED_ATTRIBUTE = "dragon-slayer:champion-explained-elvarg";
+  const OFFERING_VARBITS = [3747, 3748, 3749, 3750];
+  const SHIP_VARBITS = [1835, 1836, 1837];
+  const VOYAGE = "the-dragon-of-crandor-sailing-to-crandor";
+  const NED_SCENE_ID = 824, JENKINS_SCENE_ID = 826;
+  const FIRE_SMALL = 25156, FIRE_LARGE = 25155, FIREBALL = 1155, FIRE_IMPACT_GRAPHIC = 1154;
+  const ELVARG_INTRO_NPC_ID = 817;
+  const SCENE_OVERLAY_UID = (161 << 16) | 1;
+  const SCENE_INTERFACE = { journey: 299, route: 544, clouds: 543, elvarg: 545, fly: 546, fade: 174 };
+  const ELVARG_BODY = 25202, ELVARG_HEADLESS = 25203;
+  const scenes = new WeakMap(), actions = new WeakMap(), pendingStart = new WeakSet();
+  const saved = (player, key) => Number(player.getAttribute(key)) || 0;
+  const later = (key, ticks, action) => TaskManager.submit(new CountdownTask(key, ticks, action));
+  const offerings = player => saved(player, OFFERINGS_ATTRIBUTE) || (oracleState(player) >= 3 ? 15 : 0);
+  function wireStage(stage, player) {
+    if (stage === STAGE_CRANDOR) return saved(player, ELVARG_KILLED_ATTRIBUTE) ? 9 : 8;
+    if (stage === STAGE_NED_READY) return 7;
+    if (stage === STAGE_REPAIR_3) return 6;
+    if (stage === STAGE_REPAIR_1 || stage === STAGE_REPAIR_2) return 3;
+    return stage;
+  }
+  function syncState({player}) {
+    const stage = quest.getStage(player), sender = player.getPacketSender();
+    sender.sendVarbit(1832, oracleState(player) >= 2 ? 1 : 0).sendVarbit(3751, player.getAttribute(ATTR_NED_ASKED) === true ? 1 : 0)
+      .sendVarbit(3752, saved(player, NED_KNOWS_ATTRIBUTE)).sendVarbit(18306, saved(player, EXPLAINED_ATTRIBUTE));
+    OFFERING_VARBITS.forEach((id, bit) => sender.sendVarbit(id, (offerings(player) >> bit) & 1));
+    SHIP_VARBITS.forEach((id, bit) => sender.sendVarbit(id, stage < STAGE_CRANDOR && stage >= [STAGE_REPAIR_1, STAGE_REPAIR_2, STAGE_REPAIR_3][bit] ? 1 : 0));
+    for (let bit = 0; bit < 5; bit++) sender.sendVarbit(3742 + bit, (saved(player, INSTRUCTIONS_ATTRIBUTE) >> bit) & 1);
+  }
+
 
   const PAGE = "Dragon Slayer I";
   const DUKE_PAGE = "Duke Horacio";
@@ -218,12 +214,190 @@ module.exports = function registerDragonSlayerQuest(api) {
     );
   }
 
-  function sailToCrandor(player) {
-    const stage = quest.getStage(player);
-    if (stage < STAGE_NED_READY || stage >= STAGE_COMPLETE) return;
-    if (stage < STAGE_CRANDOR) quest.setStage(player, STAGE_CRANDOR);
-    player.moveTo(TILE.crandor.clone());
-    player.sendMessage("The Lady Lumbridge crashes onto Crandor's shore.");
+  function freeze(player) {
+    player.getMovementQueue().reset().setBlockMovement(true); player.setUntargetable(true);
+    player.getDialogueManager().reset();
+    StatementDialogue.send(player, "", false);
+  }
+  function fade(player, black) {
+    player.getPacketSender().sendSubInterface(SCENE_OVERLAY_UID, SCENE_INTERFACE.fade, 1).sendClientScript(948, 0, 0, 0, black ? 0 : 255, 50);
+  }
+  class VoyageScene extends TemplatedInstanceArea {
+    constructor(player, intro = false) {
+      super(intro ? 8 : 5, intro ? 8 : 5); this.owner = player; this.returnTile = player.getLocation().clone(); this.actors = [];
+      this.origin = intro ? [2816, 9600] : [2056, 5504]; this.plane = intro ? 0 : 1;
+      for (let z = 0; z < 3; z++) for (let x = 0; x < this.widthChunks; x++) for (let y = 0; y < this.heightChunks; y++)
+        this.setChunk(z, x, y, { sourceChunkX: this.origin[0] / 8 + x, sourceChunkY: this.origin[1] / 8 + y, sourcePlane: z, rotation: 0 });
+    }
+    sourceTile(x, y, z = this.plane) { return this.tile(x - this.origin[0], y - this.origin[1], z); }
+    canTeleport() { return false; }
+    canAttack() { return false; }
+    postLeave(mobile, logout) {
+      if (mobile === this.owner) {
+        scenes.delete(mobile); TaskManager.cancelTasks(this);
+        for (const npc of this.actors) api.removeNpc(npc);
+        mobile.getMovementQueue().setBlockMovement(false); mobile.setUntargetable(false);
+        mobile.getPacketSender().sendVarbit(6719, 0).sendVarbit(542, 0).sendVarbit(4606, 0).closeSubInterface(SCENE_OVERLAY_UID);
+        if (!this.cameraReleased) mobile.getPacketSender().sendCameraUnlock(false).sendCameraReset();
+        if (logout) mobile.moveTo(this.returnTile);
+      }
+      super.postLeave(mobile, logout);
+    }
+  }
+  function sceneActor(scene, id, x, y) {
+    const at = scene.sourceTile(x, y), npc = api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), owner: scene.owner, ownerOnly: true, wanderRadius: 0 });
+    if (npc) { scene.enter(npc); scene.actors.push(npc); } return npc;
+  }
+  function camera(player, scene, move, look, rate = 232, lookFirst = false) {
+    const sender = player.getPacketSender(), options = { rate, rate2: rate, heightRelative: false };
+    const from = move && (scene ? scene.sourceTile(move[0], move[1]) : new Location(move[0], move[1], 0));
+    const to = look && (scene ? scene.sourceTile(look[0], look[1]) : new Location(look[0], look[1], 0));
+    if (lookFirst && look) sender.sendCameraLookAt(to.getX(), to.getY(), look[2], options);
+    if (move) sender.sendCameraMoveTo(from.getX(), from.getY(), move[2], options);
+    if (!lookFirst && look) sender.sendCameraLookAt(to.getX(), to.getY(), look[2], options);
+  }
+  function voyageContinue(player, anchor) {
+    startTranscript(api, player, NED_SCENE_ID, PAGE, VOYAGE, steps => steps.slice(steps.findIndex(step => step.id === anchor) + 1));
+  }
+  function beginVoyage(player) {
+    if (quest.getStage(player) !== STAGE_NED_READY || scenes.has(player) || actions.has(player)) return;
+    const scene = new VoyageScene(player); scenes.set(player, scene); freeze(player); fade(player, true);
+    player.getPacketSender().sendVarbit(6719, 2).sendVarbit(542, 1).sendVarbit(4606, 1);
+    later(scene, 2, () => {
+      for (let axis = 0; axis < 5; axis++) player.getPacketSender().sendCameraShake(axis, 0);
+      player.getPacketSender().sendInterface(SCENE_INTERFACE.journey).sendClientScript(1131, 3).sendSong(147).sendJingle(172, 0);
+    });
+    later(scene, 14, () => player.getPacketSender().sendInterface(SCENE_INTERFACE.route));
+    later(scene, 20, () => {
+      player.moveTo(scene.sourceTile(2067, 5517)); scene.enter(player);
+      scene.ned = sceneActor(scene, NED_SCENE_ID, 2066, 5517);
+      scene.jenkins = sceneActor(scene, JENKINS_SCENE_ID, 2063, 5518);
+      player.getPacketSender().sendInterfaceRemoval(); fade(player, false);
+      voyageContinue(player, "P3s5v9");
+    });
+  }
+  function fireAt(scene, source, target, delay) {
+    const at = scene.sourceTile(...target), sender = scene.owner.getPacketSender();
+    sender.sendProjectile(scene.sourceTile(...source), at, 0, 55, FIREBALL, 1000, 0, null, delay, 0);
+    sender.sendGraphic(new Graphic(FIRE_IMPACT_GRAPHIC, delay + 55), at).sendSoundEffect(3741, 1, delay + 55);
+  }
+  function sceneFire(scene, id, x, y, z = 1) {
+    const object = new GameObject(id, scene.sourceTile(x, y, z), 10, 0, scene);
+    api.getObjectManager().register(object, true); scene.add(object);
+  }
+  function handleVoyageAction(event) {
+    const {player, stepId} = event, scene = scenes.get(player);
+    if (!(scene instanceof VoyageScene)) return;
+    if (stepId === "m7RQ3q") {
+      event.handled = true; event.end = true; freeze(player);
+      StatementDialogue.send(player, "Clouds surround the ship.", false);
+      player.getPacketSender().sendSubInterface(SCENE_OVERLAY_UID, SCENE_INTERFACE.clouds, 1).sendSong(360).sendSoundEffect(3762, 1, 0);
+      later(scene, 5, () => voyageContinue(player, stepId)); return;
+    }
+    if (stepId === "yVgKdy") {
+      event.handled = true; event.end = true; freeze(player);
+      player.getPacketSender().sendSubInterface(SCENE_OVERLAY_UID, SCENE_INTERFACE.elvarg, 1).sendSoundEffect(3754, 1, 0);
+      later(scene, 1, () => { player.getPacketSender().closeSubInterface(SCENE_OVERLAY_UID); voyageContinue(player, stepId); }); return;
+    }
+    if (stepId === "1XD38w") {
+      event.handled = true; event.end = true; freeze(player);
+      player.getPacketSender().sendSoundEffect(3750, 1, 0);
+      camera(player, scene, [2072, 5517, 300], [2062, 5515, 100]);
+      camera(player, scene, [2072, 5520, 300], null, 1);
+      for (const [from, to, delay] of [[[2076, 5526], [2065, 5516], 0], [[2073, 5526], [2064, 5516], 30], [[2078, 5526], [2063, 5516], 60]]) fireAt(scene, from, to, delay);
+      later(scene, 2, () => { scene.ned?.performAnimation(new Animation(2105)); scene.jenkins?.performAnimation(new Animation(4280)); });
+      for (let i = 0; i < 3; i++) later(scene, 2 + i, () => sceneFire(scene, FIRE_SMALL, 2065 - i, 5516));
+      later(scene, 4, () => voyageContinue(player, stepId)); return;
+    }
+    if (stepId === "07qPBA") {
+      event.handled = true; event.end = true; freeze(player);
+      player.getPacketSender().sendSubInterface(SCENE_OVERLAY_UID, SCENE_INTERFACE.fly, 1).sendSoundEffect(3751, 1, 0);
+      later(scene, 2, () => scene.jenkins?.moveTo(scene.sourceTile(2066, 5518)));
+      later(scene, 1, () => { sceneFire(scene, FIRE_LARGE, 2060, 5516, 2); sceneFire(scene, FIRE_SMALL, 2061, 5518, 2); });
+      later(scene, 3, () => {
+        player.getPacketSender().closeSubInterface(SCENE_OVERLAY_UID);
+        camera(player, scene, [2068, 5518, 300], [2062, 5518, 100]); camera(player, scene, [2074, 5526, 300], null, 1);
+        player.getPacketSender().sendCameraShake(1, 0, 5, 8); scene.jenkins?.moveTo(scene.sourceTile(2066, 5518));
+        sceneFire(scene, FIRE_LARGE, 2064, 5516);
+        for (let i = 0; i < 5; i++) fireAt(scene, [2057 + i * 3, 5522], [2063 + i, 5518], i * 30);
+      });
+      later(scene, 5, () => scene.jenkins?.performAnimation(new Animation(6649, 6)));
+      later(scene, 7, () => { scene.jenkins?.performAnimation(new Animation(836)); player.getPacketSender().sendSoundEffect(513, 1, 0).sendSoundEffect(512, 1, 0); });
+      for (let i = 0; i < 5; i++) later(scene, 4 + i, () => sceneFire(scene, FIRE_SMALL, 2063 + i, 5518));
+      later(scene, 9, () => { sceneFire(scene, FIRE_LARGE, 2062, 5517); voyageContinue(player, stepId); }); return;
+    }
+    if (stepId === "9r5-VW") {
+      event.handled = true; event.end = true; freeze(player);
+      player.getPacketSender().sendCameraShake(0, 20).sendSoundEffect(3742, 1, 0); StatementDialogue.send(player, "<col=800000>CRASH!", false); fade(player, true);
+      later(scene, 3, () => { scene.cameraReleased = true; player.getPacketSender().sendCameraReset(); });
+      later(scene, 4, () => {
+        scene.returnTile = new Location(2852, 3238, 0); scene.leave(player, false); player.moveTo(scene.returnTile);
+        quest.setStage(player, STAGE_CRANDOR); syncState({player});
+        player.getMovementQueue().setBlockMovement(true); player.setUntargetable(true); player.performAnimation(new Animation(4191));
+        camera(player, null, [2854, 3241, 300], [2849, 3238, 200]); fade(player, false);
+        StatementDialogue.send(player, "You are knocked unconscious and later awake on an ash-strewn<br>beach.", false);
+        const token = {}; actions.set(player, token);
+        later(token, 5, () => { if (actions.get(player) !== token) return; actions.delete(player); player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false); player.getPacketSender().sendCameraUnlock(false).sendCameraReset().sendInterfaceRemoval().closeSubInterface(SCENE_OVERLAY_UID).sendSong(170); });
+      });
+    }
+  }
+  function cleanup({player}) {
+    pendingStart.delete(player);
+    const scene = scenes.get(player);
+    if (scene) {
+      if (player.getArea() === scene) scene.leave(player, true);
+      else { TaskManager.cancelTasks(scene); scene.destroy(); scenes.delete(player); }
+    }
+    const token = actions.get(player);
+    if (token) {
+      TaskManager.cancelTasks(token); actions.delete(player);
+      player.getPacketSender().sendCameraUnlock(false).sendCameraReset().closeSubInterface(SCENE_OVERLAY_UID);
+    }
+    player.setForceMovement(null);
+    player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false);
+  }
+  function handleLine(request) {
+    const {player, npcId} = request, text = String(request.text);
+    if (npcId === GUILDMASTER_NPC_ID && text.startsWith("You'll have to speak to Oziach")) request.before = () => {
+      if (!pendingStart.has(player) || quest.getStage(player) !== 0 || questPoints(player) < REQUIRED_QUEST_POINTS) return;
+      pendingStart.delete(player); quest.setStage(player, STAGE_GUILDMASTER);
+      player.sendMessage("You've started a new quest: <col=081190>Dragon Slayer I</col>");
+    };
+    if (npcId === OZIACH_NPC_ID && text === "Slay the dragon of Crandor!") request.before = () => {
+      if (quest.getStage(player) !== STAGE_GUILDMASTER) return;
+      player.setAttribute(INSTRUCTIONS_ATTRIBUTE, 31); quest.setStage(player, STAGE_OZIACH); syncState({player});
+    };
+    if (npcId === KLARENSE_NPC_ID && text === "Okey-dokey! She's all yours!") request.before = () => {
+      if (quest.getStage(player) !== STAGE_OZIACH || !hasItem(player, ITEM.coins, 2000)) return;
+      player.getInventory().deleteNumber(ITEM.coins, 2000); quest.setStage(player, STAGE_BOUGHT_SHIP);
+    };
+    if (npcId === ORACLE_NPC_ID && text.startsWith("The map's behind a door below")) request.before = () => {
+      setOracleState(player, Math.max(2, oracleState(player))); player.getPacketSender().sendVarbit(1832, 1);
+    };
+    if (NED_NPC_IDS.has(npcId) && text === "Crandor?") request.before = () => { player.setAttribute(ATTR_NED_ASKED, true); player.getPacketSender().sendVarbit(3751, 1); };
+    if (NED_NPC_IDS.has(npcId) && text === "Just show me the map and we can get ready to go!") request.before = () => {
+      player.setAttribute(NED_KNOWS_ATTRIBUTE, 1); player.getPacketSender().sendVarbit(3752, 1);
+    };
+    if (npcId === GUILDMASTER_NPC_ID) {
+      const clues = ["Melzar built a castle", "Thalzar was the most paranoid", "A few weeks ago", "Quite a specific one", "That part shouldn't be too difficult"];
+      const bit = clues.findIndex(prefix => text.startsWith(prefix));
+      if (bit >= 0) request.before = () => { player.setAttribute(INSTRUCTIONS_ATTRIBUTE, saved(player, INSTRUCTIONS_ATTRIBUTE) & ~(1 << bit)); player.getPacketSender().sendVarbit(3742 + bit, 0); };
+      if (text.startsWith("Thirty years ago")) request.before = () => { player.setAttribute(EXPLAINED_ATTRIBUTE, 1); player.getPacketSender().sendVarbit(18306, 1); };
+    }
+    const scene = scenes.get(player);
+    if (!(scene instanceof VoyageScene) || npcId !== NED_SCENE_ID) return;
+    if (request.speaker === "Cabin Boy Jenkins") request.speakerId = JENKINS_SCENE_ID;
+    else if (request.speaker === "Captain Ned") request.speakerId = NED_SCENE_ID;
+    if (text.startsWith("Ah, it's good to feel")) request.before = () => {
+      camera(player, scene, [2077, 5518, 100], [2069, 5517, 25], 232, true); camera(player, scene, [2074, 5516, 100], null, 1); player.getPacketSender().sendCameraShake(1, 0, 10, 8);
+    };
+    if (text.startsWith("And this is a mighty")) request.before = () => camera(player, scene, [2073, 5516, 100], [2066, 5517, 25], 1);
+    if (text.startsWith("How much longer")) request.before = () => camera(player, scene, [2069, 5513, 300], [2066, 5517, 100], 1);
+    if (text.startsWith("Looks like there's a storm")) request.before = () => {
+      player.getPacketSender().sendCameraShake(1, 0); camera(player, scene, [2074, 5525, 1500], [2064, 5520, 300], 232, true); camera(player, scene, [2064, 5525, 1500], null, 1); player.getPacketSender().closeSubInterface(SCENE_OVERLAY_UID);
+    };
+    if (text === "We're going to sink!") request.before = () => { camera(player, scene, [2074, 5526, 600], [2066, 5517, 100]); camera(player, scene, [2064, 5518, 400], null, 1); player.getPacketSender().sendCameraShake(1, 0, 10, 8); };
+    if (text === "We're going to crash!") request.before = () => camera(player, scene, [2064, 5518, 400], null, 2);
   }
 
   // ============================================================================
@@ -264,13 +438,10 @@ module.exports = function registerDragonSlayerQuest(api) {
 
     if (npcId === OZIACH_NPC_ID) {
       if (stage === STAGE_GUILDMASTER) {
-        // The reference advances once Oziach sets the challenge; the dump has
-        // no action step for it.
-        quest.setStage(player, STAGE_OZIACH);
         return { page: PAGE, variant: "a-quest-for-the-rune-platebody-talking-to-oziach" };
       }
-      if (stage >= STAGE_COMPLETE) {
-        if (player.getAttribute(ATTR_OZIACH_CONGRATS) !== true) {
+      if ((stage === STAGE_CRANDOR && saved(player, ELVARG_KILLED_ATTRIBUTE)) || stage >= STAGE_COMPLETE) {
+        if (stage < STAGE_COMPLETE || player.getAttribute(ATTR_OZIACH_CONGRATS) !== true) {
           return { page: PAGE, variant: "the-dragon-of-crandor-talking-to-oziach-after-slaying-elvarg" };
         }
         return { page: OZIACH_PAGE, variant: "after-completing-dragon-slayer-i" };
@@ -283,7 +454,6 @@ module.exports = function registerDragonSlayerQuest(api) {
 
     if (npcId === ORACLE_NPC_ID) {
       if (stage >= STAGE_OZIACH && !ownsMapPiece(player, ITEM.mapOracle)) {
-        setOracleState(player, Math.max(2, oracleState(player)));
         return { page: PAGE, variant: "thalzar-s-map-piece-talking-to-the-oracle" };
       }
       if (stage >= STAGE_OZIACH) return { page: ORACLE_PAGE, variant: "standard-dialogue" };
@@ -318,14 +488,13 @@ module.exports = function registerDragonSlayerQuest(api) {
       if (stage >= STAGE_NED_READY) {
         const loc = player.getLocation();
         const onShip =
-          loc.getZ() === 1 && Math.abs(loc.getX() - 3048) <= 3 && Math.abs(loc.getY() - 3207) <= 3;
+          loc.getZ() === 1 && Math.abs(loc.getX() - 3048) <= 5 && (Math.abs(loc.getY() - 3207) <= 5 || Math.abs(loc.getY() - 9639) <= 5);
         return onShip
           ? { page: PAGE, variant: "the-dragon-of-crandor-talking-to-ned-on-the-lady-lumbridge" }
           : { page: PAGE, variant: "the-dragon-of-crandor-talking-to-ned-after-giving-him-the-crandor-map" };
       }
       if (stage >= STAGE_OZIACH) {
         if (player.getAttribute(ATTR_NED_ASKED) !== true) {
-          player.setAttribute(ATTR_NED_ASKED, true);
           return { page: PAGE, variant: "an-old-crandorian-ship-finding-a-willing-captain-ned" };
         }
         return {
@@ -362,6 +531,7 @@ module.exports = function registerDragonSlayerQuest(api) {
 
     if (npcId === OZIACH_NPC_ID) {
       if (value.includes("murder mystery has been completed")) return false;
+      if (value.includes("elvarg's head")) return hasItem(player, ITEM.elvargsHead);
       return null;
     }
 
@@ -426,23 +596,7 @@ module.exports = function registerDragonSlayerQuest(api) {
       player.sendMessage("Only champions with at least 32 Quest Points may take this challenge.");
       return;
     }
-    quest.setStage(player, STAGE_GUILDMASTER);
-  }
-
-  // Klarense's purchase branch has no action id; do the sale when the
-  // "has enough coins" condition is the one the transcript picks.
-  function handlePurchaseCondition({ player, npcId, stepId }) {
-    if (npcId !== KLARENSE_NPC_ID || stepId !== "FSI6VP") return;
-    if (quest.getStage(player) !== STAGE_OZIACH) {
-      if (quest.getStage(player) < STAGE_OZIACH) {
-        player.sendMessage("The Lady Lumbridge is not for sale to you.");
-      }
-      return;
-    }
-    if (player.getInventory().getAmount(ITEM.coins) < 2000) return;
-    player.getInventory().deleteNumber(ITEM.coins, 2000);
-    quest.setStage(player, STAGE_BOUGHT_SHIP);
-    player.sendMessage("You buy the Lady Lumbridge for 2,000 coins.");
+    pendingStart.add(player);
   }
 
   // ============================================================================
@@ -452,11 +606,23 @@ module.exports = function registerDragonSlayerQuest(api) {
   function handleDialogueAction(event) {
     const { player, npcId, stepId } = event;
     const stage = quest.getStage(player);
+    if (npcId === GUILDMASTER_NPC_ID && stepId === "fTWupR") {
+      const combatLow = player.getSkillManager().getCombatLevel() < 45;
+      const magicLow = player.getSkillManager().getCurrentLevel(Skill.MAGIC) < 33;
+      event.text = combatLow
+        ? "Before starting this quest, be aware that your combat level is lower than the recommended level of 45." + (magicLow ? " One or more of your skill levels are also lower than recommended." : "")
+        : "One or more of your skill levels are lower than recommended.";
+      event.box = {statement:true}; return;
+    }
 
     if (npcId === WORMBRAIN_NPC_ID && stepId === "I8YYjs") {
       if (hasItem(player, ITEM.coins, 10000) && !ownsMapPiece(player, ITEM.mapWormbrain)) {
-        player.getInventory().deleteNumber(ITEM.coins, 10000);
-        giveItem(player, ITEM.mapWormbrain);
+        const inventory = player.getInventory();
+        if (inventory.isFull() && inventory.getAmount(ITEM.coins) > 10000) {
+          player.sendMessage("You need a free inventory slot for the map piece."); event.handled = true; event.end = true; return;
+        }
+        inventory.deleteNumber(ITEM.coins, 10000);
+        if (!giveItem(player, ITEM.mapWormbrain)) { inventory.adds(ITEM.coins, 10000); event.handled = true; event.end = true; }
       }
       return; // leave the transcript's own message to play
     }
@@ -490,28 +656,31 @@ module.exports = function registerDragonSlayerQuest(api) {
         } else {
           return;
         }
+        player.setAttribute(NED_KNOWS_ATTRIBUTE, 1);
+        player.getPacketSender().sendVarbit(3752, 1);
         quest.setStage(player, STAGE_NED_READY);
       }
+      event.box = { items: [ITEM.crandorMap] };
       return;
     }
 
     if (npcId === OZIACH_NPC_ID && stepId === "0KEI_n") {
-      if (quest.getStage(player) < STAGE_COMPLETE) quest.complete(player);
+      if (stage >= STAGE_COMPLETE) {
+        player.setAttribute(ATTR_OZIACH_CONGRATS, true); event.handled = true; event.end = true; return;
+      }
+      if (stage !== STAGE_CRANDOR || !saved(player, ELVARG_KILLED_ATTRIBUTE)) { event.handled = true; event.end = true; return; }
+      quest.complete(player);
       player.setAttribute(ATTR_OZIACH_CONGRATS, true);
       event.handled = true;
       event.end = true;
       return;
     }
 
-    // Ship cutscene stage directions: move the player without a spawned
-    // instance, then let the remaining narration play out.
-    if (stepId === "1nn6tK" || stepId === "9r5-VW") {
-      if (stage >= STAGE_NED_READY && stage < STAGE_COMPLETE) {
-        sailToCrandor(player);
-        event.handled = true;
-        event.end = false;
-      }
+    if (NED_NPC_IDS.has(npcId) && stepId === "1nn6tK") {
+      event.handled = true; event.end = true; beginVoyage(player);
     }
+    if (scenes.has(player) && npcId === NED_SCENE_ID) handleVoyageAction(event);
+
   }
 
   // ============================================================================
@@ -558,6 +727,31 @@ module.exports = function registerDragonSlayerQuest(api) {
       return;
     }
 
+    if (objectId === LOC.magicDoor && OFFERINGS.includes(itemId)) {
+      event.handled = true;
+      if (stage < STAGE_OZIACH || oracleState(player) < 2 || !hasItem(player, itemId)) return;
+      const bit = OFFERINGS.indexOf(itemId);
+      if (offerings(player) & (1 << bit)) { player.sendMessage("You have already put that into the opening in the door."); return; }
+      player.getInventory().deleteNumber(itemId, 1);
+      player.setAttribute(OFFERINGS_ATTRIBUTE, offerings(player) | (1 << bit));
+      player.getPacketSender().sendVarbit(OFFERING_VARBITS[bit], 1);
+      player.sendMessage([
+        "You put the silk into the opening in the door.", "You put the unfired bowl into the opening in the door.",
+        "You put the Lobster pot into the opening in the door.", "You pour the Wizard's Mind Bomb into the opening in the door.",
+      ][bit]);
+      if (offerings(player) === 15) {
+        setOracleState(player, 3);
+        const token = {}; actions.set(player, token);
+        later(token, 1, () => {
+          if (actions.get(player) !== token) return;
+          actions.delete(player); player.sendMessage("The door opens...");
+          const at = event.object.getLocation();
+          player.getPacketSender().sendObjectAnimation(event.object, new Animation(6636));
+          crossMagicDoor(player, { x: at.getX(), y: at.getY(), z: at.getZ() });
+        });
+      }
+      return;
+    }
     if (itemId === ITEM.plank && objectId === LOC.shipHole) {
       repairShip(player);
       event.handled = true;
@@ -602,45 +796,22 @@ module.exports = function registerDragonSlayerQuest(api) {
       request.player.sendMessage("The ship is not ready to sail yet.");
       return;
     }
-    if (stage < STAGE_NED_READY) {
-      // Boarding to repair the holes: leave it to the generic gangplank crossing.
-      return;
-    }
-    request.handled = true;
-    sailToCrandor(request.player);
+    // Ned waits on deck; boarding does not start the voyage.
   }
 
   function handleGangplankClick(event) {
-    const stage = quest.getStage(event.player);
-    if (stage < STAGE_BOUGHT_SHIP) {
-      event.player.sendMessage("The ship is not ready to sail yet.");
-      return;
-    }
-    if (stage < STAGE_NED_READY) {
-      // Let the generic gangplank crossing board the player onto the deck.
-      return false;
-    }
-    sailToCrandor(event.player);
+    if (quest.getStage(event.player) >= STAGE_BOUGHT_SHIP) return false;
+    event.player.sendMessage("You must buy the ship before boarding it.");
+  }
+
+  function crossMagicDoor(player, loc) {
+    const px = player.getLocation().getX();
+    player.moveTo(new Location(px <= loc.x ? loc.x + 1 : loc.x - 1, loc.y, loc.z));
   }
 
   function handleMagicDoorClick(event) {
-    const { player } = event;
-    if (oracleState(player) < 2) {
-      player.sendMessage("The magic door is locked.");
-      return;
-    }
-    if (oracleState(player) < 3) {
-      if (!OFFERINGS.every((id) => hasItem(player, id))) {
-        player.sendMessage("The door remains locked. The Oracle's four offerings are required.");
-        return;
-      }
-      for (const id of OFFERINGS) player.getInventory().deleteNumber(id, 1);
-      setOracleState(player, 3);
-    }
-    const loc = event.location;
-    const px = player.getLocation().getX();
-    player.moveTo(new Location(px <= loc.x ? loc.x + 1 : loc.x - 1, loc.y, loc.z));
-    player.sendMessage("The door swings open.");
+    if (offerings(event.player) !== 15) { event.player.sendMessage("You can't see any way to open the door."); return; }
+    crossMagicDoor(event.player, event.location);
   }
 
   function handleOracleChestClick(event) {
@@ -661,8 +832,31 @@ module.exports = function registerDragonSlayerQuest(api) {
     if (giveItem(player, ITEM.mapMelzar)) player.sendMessage("You find a piece of an old map.");
   }
 
-  function handleCrandorOpeningClick(event) {
-    event.player.moveTo(TILE.crandorLair.clone());
+  function handleCrandorOpeningClick({player}) {
+    if (scenes.has(player) || actions.has(player)) return;
+    if (saved(player, ELVARG_SEEN_ATTRIBUTE)) { player.moveTo(TILE.crandorLair.clone()); return; }
+    const scene = new VoyageScene(player, true); scene.returnTile = TILE.crandorLair.clone(); scenes.set(player, scene);
+    freeze(player); fade(player, true); player.getPacketSender().sendVarbit(6719, 2).sendVarbit(542, 1);
+    for (let axis = 0; axis < 5; axis++) player.getPacketSender().sendCameraShake(axis, 0);
+    later(scene, 4, () => {
+      player.moveTo(scene.sourceTile(2833, 9656)); scene.enter(player); sceneActor(scene, ELVARG_INTRO_NPC_ID, 2854, 9638);
+      camera(player, scene, [2848, 9639, 475], [2856, 9650, 150], 232, true); fade(player, false);
+    });
+    later(scene, 7, () => camera(player, scene, [2848, 9639, 250], [2866, 9640, 150], 2, true));
+    later(scene, 13, () => fade(player, true));
+    later(scene, 16, () => {
+      scene.cameraReleased = true;
+      player.getPacketSender().sendCameraTranslate(2816 - scene.getBaseX(), 9600 - scene.getBaseY());
+      player.setAttribute(ELVARG_SEEN_ATTRIBUTE, 1); scene.leave(player, false); player.moveTo(scene.returnTile);
+      player.getMovementQueue().setBlockMovement(true); player.setUntargetable(true);
+      const token = {}; actions.set(player, token);
+      later(token, 1, () => { if (actions.get(player) === token) fade(player, false); });
+      later(token, 4, () => {
+        if (actions.get(player) !== token) return;
+        actions.delete(player); player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false);
+        player.getPacketSender().sendCameraUnlock(false).sendCameraReset().sendInterfaceRemoval().closeSubInterface(SCENE_OVERLAY_UID);
+      });
+    });
   }
 
   /**
@@ -671,6 +865,7 @@ module.exports = function registerDragonSlayerQuest(api) {
    * on decides the destination (the generic ladder map link guessed the empty plane 1).
    */
   function climbCrandorRope(player) {
+    if (scenes.has(player) || actions.has(player)) return;
     player.setAttribute(ATTR_SHORTCUT, true);
     const inLair = player.getLocation().getY() >= 6400;
     player.moveTo((inLair ? TILE.crandorSurface : TILE.crandorLair).clone());
@@ -689,10 +884,22 @@ module.exports = function registerDragonSlayerQuest(api) {
 
   /** The low wall between the entrance rope and Elvarg's chamber. */
   function handleCrandorWallClick(event) {
-    const { player, location } = event;
-    const pos = player.getLocation();
-    const x = pos.getX() < location.x ? location.x + 1 : location.x - 1;
-    player.moveTo(new Location(x, pos.getY(), location.z));
+    const { player } = event;
+    if (scenes.has(player) || actions.has(player)) return;
+    const entering = player.getLocation().getX() < 2846;
+    if (entering && quest.getStage(player) < STAGE_OZIACH) { player.sendMessage("You have no reason to enter the dragon's lair."); return; }
+    if (entering && !saved(player, ELVARG_KILLED_ATTRIBUTE)) api.emitCustomEvent("elvarg:enter", {player, handled:false, aggressive:false});
+    const start = new Location(entering ? 2845 : 2847, 9636, 0), end = new Location(entering ? 2847 : 2845, 9636, 0);
+    const token = {}; actions.set(player, token);
+    player.moveTo(start); player.getMovementQueue().reset().setBlockMovement(true);
+    const movement = new ForceMovement(start, new Location(end.getX() - start.getX(), 0), 30, 94, entering ? 1 : 3, 839);
+    player.setForceMovement(movement); player.performAnimation(new Animation(839, 30));
+    later(token, 4, () => {
+      if (actions.get(player) !== token) return;
+      actions.delete(player); player.setForceMovement(null); player.moveTo(end); player.getMovementQueue().setBlockMovement(false);
+      if (entering && !saved(player, ELVARG_KILLED_ATTRIBUTE)) api.emitCustomEvent("elvarg:enter", {player, handled:false, aggressive:true});
+      else if (!entering) api.emitCustomEvent("elvarg:leave", {player});
+    });
   }
 
   // ============================================================================
@@ -705,13 +912,31 @@ module.exports = function registerDragonSlayerQuest(api) {
     const stage = quest.getStage(killer);
 
     if (ELVARG_NPC_IDS.has(npcId)) {
-      if (stage === STAGE_CRANDOR) {
-        // The wiki: Elvarg's head is automatically collected on the kill when
-        // there is a free inventory slot (it is a trophy, not a requirement).
-        if (!hasItem(killer, ITEM.elvargsHead)) giveItem(killer, ITEM.elvargsHead);
-        killer.sendMessage("Elvarg is slain! You have completed Dragon Slayer I.");
-        quest.complete(killer);
-      }
+      if (stage !== STAGE_CRANDOR || saved(killer, ELVARG_KILLED_ATTRIBUTE)) return;
+      const area = killer.getPrivateArea(), at = event.npc.getLocation().clone();
+      const body = new GameObject(ELVARG_BODY, at, 10, 1, area);
+      api.getObjectManager().register(body, true); if (area) area.add(body);
+      const token = {}; actions.set(killer, token);
+      killer.setAttribute(ELVARG_KILLED_ATTRIBUTE, 1);
+      killer.getMovementQueue().reset().setBlockMovement(true); killer.setUntargetable(true);
+      later(token, 1, () => {
+        killer.getPacketSender().sendConfig(VARP_DRAGON_SLAYER, 9);
+      });
+      later(token, 5, () => { if (actions.get(killer) === token) { killer.moveTo(new Location(at.getX(), at.getY() - 1, at.getZ())); killer.performAnimation(new Animation(6654)); } });
+      later(token, 11, () => {
+        if (actions.get(killer) !== token) return;
+        api.getObjectManager().deregister(body, true);
+        const headless = new GameObject(ELVARG_HEADLESS, at, 10, 1, area);
+        api.getObjectManager().register(headless, true); if (area) area.add(headless);
+        killer.performAnimation(new Animation(6655));
+        if (!hasItem(killer, ITEM.elvargsHead)) {
+          if (killer.getInventory().isFull()) dropItem(killer, ITEM.elvargsHead, {x:at.getX(),y:at.getY(),z:at.getZ()});
+          else giveItem(killer, ITEM.elvargsHead);
+        }
+        killer.sendMessage("You cut off Elvarg's head as proof of your victory!");
+        killer.getPacketSender().sendJingle(267, 0);
+        later(token, 3, () => { actions.delete(killer); killer.getMovementQueue().setBlockMovement(false); killer.setUntargetable(false); });
+      });
       return;
     }
 
@@ -738,22 +963,31 @@ module.exports = function registerDragonSlayerQuest(api) {
       player.sendMessage("You need 30 steel nails to attach the plank with.");
       return;
     }
-    player.getInventory().deleteNumber(ITEM.plank, 1);
-    player.getInventory().deleteNumber(ITEM.steelNails, 30);
-    const next =
-      stage === STAGE_BOUGHT_SHIP ? STAGE_REPAIR_1 : stage === STAGE_REPAIR_1 ? STAGE_REPAIR_2 : STAGE_REPAIR_3;
-    quest.setStage(player, next);
-    player.sendMessage(
-      next >= STAGE_REPAIR_3
+    if (!hasItem(player, ITEM.hammer)) { player.sendMessage("You need a hammer to attach the plank with."); return; }
+    if (actions.has(player)) return;
+    const token = {}; actions.set(player, token);
+    player.performAnimation(new Animation(3676));
+    player.getMovementQueue().reset().setBlockMovement(true);
+    later(token, 2, () => {
+      if (actions.get(player) !== token) return;
+      actions.delete(player); player.getMovementQueue().setBlockMovement(false);
+      if (quest.getStage(player) !== stage || !hasItem(player, ITEM.plank) || !hasItem(player, ITEM.steelNails, 30) || !hasItem(player, ITEM.hammer)) return;
+      player.getInventory().deleteNumber(ITEM.plank, 1);
+      player.getInventory().deleteNumber(ITEM.steelNails, 30);
+      const next = stage === STAGE_BOUGHT_SHIP ? STAGE_REPAIR_1 : stage === STAGE_REPAIR_1 ? STAGE_REPAIR_2 : STAGE_REPAIR_3;
+      quest.setStage(player, next); syncState({player});
+      const text = next === STAGE_REPAIR_3
         ? "You nail a final plank over the hole. You have successfully patched the hole in the ship."
-        : "You nail a plank over the hole, but you still need more planks to close it completely."
-    );
+        : `You nail a plank over the hole, but you still need ${next === STAGE_REPAIR_1 ? "more planks" : "one more plank"} to close the hole completely.`;
+      player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, text)));
+    });
   }
 
   quest = registerQuest(api, {
     key: "dragon_slayer_i",
     name: "Dragon Slayer I",
     varpId: VARP_DRAGON_SLAYER,
+    varpValue: wireStage,
     startedValue: STAGE_GUILDMASTER,
     completionValue: STAGE_COMPLETE,
     questPoints: 2,
@@ -761,16 +995,18 @@ module.exports = function registerDragonSlayerQuest(api) {
       { skillId: Skill.STRENGTH.getIndex(), amount: 18650, label: "Strength" },
       { skillId: Skill.DEFENCE.getIndex(), amount: 18650, label: "Defence" },
     ],
-    scrollItemId: ITEM.antiDragonShield,
+    scrollItemId: ITEM.elvargsHead,
+    completionJingleId: 152,
     otherRewards: [
-      "The right to wear rune platebodies and green dragonhide bodies",
-      "Access to Crandor",
+      "Ability to equip Rune and",
+      "Dragon Platebodies",
     ],
     buildJournal,
     onReward: reward,
   });
 
-  api.persistAttribute(ATTR_ORACLE);
+  for (const key of [OFFERINGS_ATTRIBUTE, INSTRUCTIONS_ATTRIBUTE, NED_KNOWS_ATTRIBUTE, ELVARG_SEEN_ATTRIBUTE, ELVARG_KILLED_ATTRIBUTE, EXPLAINED_ATTRIBUTE]) api.persistAttribute(key, 0);
+  api.persistAttribute(ATTR_ORACLE, 0);
   api.persistAttribute(ATTR_NED_ASKED);
   api.persistAttribute(ATTR_OZIACH_CONGRATS);
   api.persistAttribute(ATTR_SHORTCUT);
@@ -779,7 +1015,10 @@ module.exports = function registerDragonSlayerQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
-  api.onCustomEvent("npc-dialogue:condition", handlePurchaseCondition);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onPlayerLogin(syncState);
+  api.onPlayerLogout(cleanup);
+  api.onPlayerDisconnect(cleanup);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnObject(handleItemOnObject);

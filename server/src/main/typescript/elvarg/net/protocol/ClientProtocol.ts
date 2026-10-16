@@ -1210,6 +1210,74 @@ export function encodeCameraShake(slot: number, randomAmplitude: number, sineAmp
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
 }
 
+export type CameraMovementOptions = {
+  rate: number;
+  rate2: number;
+  heightRelative?: boolean;
+} | {
+  cycles: number;
+  easing: "linear" | "ease_in_out_sine" | "ease_out_cubic";
+  ignoreTerrain?: boolean;
+  trackTarget?: boolean;
+  heightRelative?: boolean;
+};
+
+function encodeCameraPosition(mode: number, x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
+  const captured = typeof motion !== "boolean";
+  const timed = captured && "cycles" in motion;
+  if (captured) {
+    const fields = [["x", x, 0, 65535], ["y", y, 0, 65535], ["height", height, -32768, 32767]] as const;
+    for (const [name, value, min, max] of [...fields, ...(timed
+      ? [["cycles", motion.cycles, 1, 65535]] as const
+      : [["rate", motion.rate, 0, 255], ["rate2", motion.rate2, 0, 255]] as const)]) {
+      if (!Number.isInteger(value) || value < min || value > max) throw new RangeError(`Invalid camera ${name}: ${value}`);
+    }
+    for (const flag of [motion.heightRelative, ...(timed ? [motion.ignoreTerrain, motion.trackTarget] : [])]) {
+      if (flag !== undefined && typeof flag !== "boolean") throw new TypeError("Invalid camera flag");
+    }
+    if (timed && !["linear", "ease_in_out_sine", "ease_out_cubic"].includes(motion.easing)) throw new RangeError("Invalid camera easing");
+  }
+  const payload = Buffer.alloc(timed ? 11 : captured ? 10 : 8);
+  payload[0] = timed ? mode + 7 : captured ? mode + 3 : mode;
+  payload.writeUInt16BE(x & 0xffff, 1);
+  payload.writeUInt16BE(y & 0xffff, 3);
+  payload.writeUInt16BE(height & 0xffff, 5);
+  if (timed) {
+    payload.writeUInt16BE(motion.cycles, 7);
+    payload[9] = ["linear", "ease_in_out_sine", "ease_out_cubic"].indexOf(motion.easing);
+    payload[10] = (motion.heightRelative ? 1 : 0) | (motion.ignoreTerrain ? 2 : 0) | (motion.trackTarget ? 4 : 0);
+  } else if (captured) {
+    payload[7] = motion.rate;
+    payload[8] = motion.rate2;
+    payload[9] = motion.heightRelative ? 1 : 0;
+  } else {
+    payload[7] = motion ? 1 : 0;
+  }
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
+export function encodeCameraMoveTo(x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
+  return encodeCameraPosition(1, x, y, height, motion);
+}
+
+export function encodeCameraLookAt(x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
+  return encodeCameraPosition(2, x, y, height, motion);
+}
+
+export function encodeCameraUnlock(unlock: boolean): Buffer {
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, Buffer.from([6, unlock ? 1 : 0]));
+}
+
+/** Rebase an active shot when a private scene returns to its source map. */
+export function encodeCameraTranslate(dx: number, dy: number): Buffer {
+  if (!Number.isSafeInteger(dx) || !Number.isSafeInteger(dy) || Math.abs(dx) > 0x7fffffff || Math.abs(dy) > 0x7fffffff) throw new RangeError("Invalid camera translation");
+  const payload = Buffer.alloc(9);
+  payload[0] = 7;
+  payload.writeInt32BE(dx, 1);
+  payload.writeInt32BE(dy, 5);
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
 /**
  * Sets what tile and entity clicks do in a world (set_interaction_mode): `worldId` is a world
  * entity index, -1 for the root world or -2 for the default of every world (InteractionMode.ts).
@@ -1927,6 +1995,14 @@ const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 const EQUIPMENT_QUIVER_SLOT_UID = (387 << 16) | 28;
 const EQUIPMENT_QUIVER_SLOT_FLAGS = (1 << 1) | (1 << 2) | (1 << 10);
 
+// The prayer and spellbook filter menus (prayerbook:filtermenu, magic_spellbook:filtermenu):
+// rows the cache scripts create at runtime, one per filter. Live enables op1 on each row
+// right after mounting the tab (5 prayer rows, 7 spellbook rows); plugins/interface/TabFilters.
+const PRAYERBOOK_FILTER_MENU_UID = (541 << 16) | 42;
+const PRAYERBOOK_FILTER_LAST_ROW = 4;
+const MAGIC_SPELLBOOK_FILTER_MENU_UID = (218 << 16) | 206;
+const MAGIC_SPELLBOOK_FILTER_LAST_ROW = 6;
+
 /** The login's widget flags, each with the component it is on (its interface is uid >>> 16). */
 function gameframeFlagEntries(root: number): Array<[number, Buffer]> {
   const questTabChild = QUEST_TAB_ICON_CHILD_BY_ROOT[root] ?? QUEST_TAB_ICON_CHILD_ID;
@@ -1934,6 +2010,8 @@ function gameframeFlagEntries(root: number): Array<[number, Buffer]> {
   return [
     [EQUIPMENT_QUIVER_SLOT_UID, encodeWidgetSetFlagsRange(EQUIPMENT_QUIVER_SLOT_UID, -1, -1, EQUIPMENT_QUIVER_SLOT_FLAGS)],
     [MAIN_INVENTORY_WIDGET_UID, encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS)],
+    [PRAYERBOOK_FILTER_MENU_UID, encodeWidgetSetFlagsRange(PRAYERBOOK_FILTER_MENU_UID, 0, PRAYERBOOK_FILTER_LAST_ROW, FIRST_OPTION_FLAG)],
+    [MAGIC_SPELLBOOK_FILTER_MENU_UID, encodeWidgetSetFlagsRange(MAGIC_SPELLBOOK_FILTER_MENU_UID, 0, MAGIC_SPELLBOOK_FILTER_LAST_ROW, FIRST_OPTION_FLAG)],
     [questTabIcon, encodeWidgetSetFlags(questTabIcon, QUEST_TAB_ICON_FLAGS)],
     [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1)],
     [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4))],
@@ -2896,7 +2974,7 @@ export function encodeNpcSync(
     writer.writeBits(large ? 8 : 5, signed(view.y - local.y, large ? 8 : 5));
     writer.writeBits(large ? 8 : 5, signed(view.x - local.x, large ? 8 : 5));
     writer.writeBits(3, view.rotation & 7);
-    writer.writeBits(14, view.typeId & 0x3fff);
+    writer.writeBits(16, view.typeId & 0xffff);
     nextIndices.push(view.index);
     nextSet.add(view.index);
     if (block) updateBlocks.push(writeNpcUpdateBlock(view, writeInteraction, writeHeadIcon));

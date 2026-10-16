@@ -16,8 +16,8 @@
  * completion.
  */
 module.exports = function registerRuneMysteriesQuest(api) {
-  const { Location, TeleportHandler, ItemIdentifiers, NpcIdentifiers } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { Animation, ItemIdentifiers, NpcIdentifiers } = api.core;
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   // NpcIdentifiers has no generated member for these legacy cache ids.
   const SEDRIDOR_CACHE_NPC_ID = 5034;
@@ -54,7 +54,13 @@ module.exports = function registerRuneMysteriesQuest(api) {
   const TOTE_TOWER_STAGE = 6;
   const TOTE_COMPLETE_STAGE = 26;
 
-  const RUNE_ESSENCE_MINE = new Location(2913, 4832, 0);
+  const TALISMAN_VARBIT = 13720; // cache runemysteries_talisman
+  const TALISMAN_ATTRIBUTE = "rune-mysteries:talisman-received";
+  const DOUBTED_ATTRIBUTE = "rune-mysteries:doubted-sedridor";
+  const PACKAGE_ATTRIBUTE = "rune-mysteries:package-issued";
+  const NOTES_ATTRIBUTE = "rune-mysteries:notes-issued";
+  const DELIVERED_ATTRIBUTE = "rune-mysteries:notes-delivered";
+  const pendingStart = new WeakSet();
 
   /** Transcript step ids (npc-dialogues.json action slugs). */
   const STEP_REPLACE_TALISMAN = "iRfiOS";
@@ -210,11 +216,6 @@ module.exports = function registerRuneMysteriesQuest(api) {
     ];
   }
 
-  function teleportToRuneEssence(player) {
-    player.sendMessage("Senventior disthine molenko!");
-    TeleportHandler.teleport(player, RUNE_ESSENCE_MINE, player.getSpellbook().getTeleportType(), true);
-  }
-
   /** True while Temple of the Eye is in progress at the stages where it owns
    * Sedridor's dialogue (its tower and portal stages, 6-25). */
   function templeOfTheEyeUsesSedridor(player) {
@@ -252,6 +253,9 @@ module.exports = function registerRuneMysteriesQuest(api) {
           : { page: PAGE_RUNE_MYSTERIES, variant: VARIANT_TALISMAN_RETURN };
       }
       if (stage === STAGE_GIVEN_TALISMAN) {
+        return { page: PAGE_RUNE_MYSTERIES, variant: "delivering-the-talisman-talking-to-archmage-sedridor-talking-to-sedridor-after-giving-him-the-talisman-but-before-agreeing-to-go-see-aubury" };
+      }
+      if (stage === STAGE_RECEIVED_PACKAGE && !player.getAttribute(PACKAGE_ATTRIBUTE) && !hasItem(player, RESEARCH_PACKAGE_ITEM_ID)) {
         return { page: PAGE_RUNE_MYSTERIES, variant: VARIANT_TALISMAN_BEFORE_PACKAGE };
       }
       if (stage === STAGE_RECEIVED_PACKAGE || stage === STAGE_GIVEN_PACKAGE) {
@@ -266,6 +270,9 @@ module.exports = function registerRuneMysteriesQuest(api) {
         return { page: PAGE_RUNE_MYSTERIES, variant: VARIANT_PACKAGE_DELIVER };
       }
       if (stage === STAGE_GIVEN_PACKAGE) {
+        return { page: PAGE_RUNE_MYSTERIES, variant: "delivering-the-research-package-talking-to-aubury-talking-to-aubury-after-giving-him-the-package-but-before-he-goes-through-it" };
+      }
+      if (stage === STAGE_RECEIVED_NOTES && !player.getAttribute(NOTES_ATTRIBUTE) && !hasItem(player, RESEARCH_NOTES_ITEM_ID)) {
         return { page: PAGE_RUNE_MYSTERIES, variant: VARIANT_PACKAGE_AFTER };
       }
       if (stage === STAGE_RECEIVED_NOTES) {
@@ -284,7 +291,7 @@ module.exports = function registerRuneMysteriesQuest(api) {
     const inDelivery = stage === STAGE_STARTED;
     const talisman = hasItem(player, AIR_TALISMAN_ITEM_ID);
     const pkg = hasItem(player, RESEARCH_PACKAGE_ITEM_ID);
-    const notes = hasItem(player, RESEARCH_NOTES_ITEM_ID);
+    const notes = hasItem(player, RESEARCH_NOTES_ITEM_ID) || Boolean(player.getAttribute(DELIVERED_ATTRIBUTE));
 
     if (value.includes(CONDITION_LOST_TALISMAN)) return inDelivery && !talisman;
     if (value.includes(CONDITION_NO_TALISMAN) || value.includes(CONDITION_NO_TALISMAN_APOS)) {
@@ -302,22 +309,48 @@ module.exports = function registerRuneMysteriesQuest(api) {
     if (value.includes(CONDITION_HAS_NOTES)) return stage === STAGE_RECEIVED_NOTES && notes;
 
     // Prefer the clean "end" branch over the dangling "call" continuation.
-    if (value.includes(CONDITION_WITHOUT_DOUBTING)) return false;
-    if (value.includes(CONDITION_WHILE_DOUBTING)) return true;
+    if (value.includes(CONDITION_WITHOUT_DOUBTING)) return !player.getAttribute(DOUBTED_ATTRIBUTE);
+    if (value.includes(CONDITION_WHILE_DOUBTING)) return Boolean(player.getAttribute(DOUBTED_ATTRIBUTE));
 
     return null;
   }
 
   // "Yes." on "Start the Rune Mysteries quest?" carries this slug.
-  function handleStartHook({ player, hook }) {
-    if (hook !== "quest:rune-mysteries:start") return;
-    if (quest.getStage(player) >= STAGE_STARTED) return;
-    if (player.getInventory().isFull()) {
-      player.sendMessage("You will need a free inventory space before I can give you the talisman.");
-      return;
+  function handleStartHook({ player, npcId, hook }) {
+    if (npcId === DUKE_HORACIO_NPC_ID && hook === "quest:rune-mysteries:start" && quest.getStage(player) === 0) pendingStart.add(player);
+  }
+
+  function handleChoice({ player, npcId, option }) {
+    if (SEDRIDOR_NPC_IDS.has(npcId) && String(option).startsWith("No,") && String(option).includes("Sedridor")) player.setAttribute(DOUBTED_ATTRIBUTE, 1);
+  }
+
+  function handleLine(event) {
+    const { player, npcId, text } = event;
+    if (npcId === DUKE_HORACIO_NPC_ID && text === "Sure, no problem." && pendingStart.has(player)) {
+      event.after = () => { pendingStart.delete(player); if (!quest.isStarted(player)) quest.setStage(player, STAGE_STARTED); };
     }
-    quest.setStage(player, STAGE_STARTED);
-    player.getInventory().adds(AIR_TALISMAN_ITEM_ID, 1);
+    if (SEDRIDOR_NPC_IDS.has(npcId) && text === "Yes, certainly.") {
+      event.after = () => { if (quest.getStage(player) === STAGE_GIVEN_TALISMAN) quest.setStage(player, STAGE_RECEIVED_PACKAGE); };
+    }
+    if (AUBURY_NPC_IDS.has(npcId) && text.startsWith("Here, take these notes back to Sedridor.")) {
+      event.before = () => { if (quest.getStage(player) === STAGE_GIVEN_PACKAGE) quest.setStage(player, STAGE_RECEIVED_NOTES); };
+    }
+    if (AUBURY_NPC_IDS.has(npcId) && text === "I'd love a cup of tea.") event.after = () => {
+      player.sendMessage("Aubury hands you a cup of tea.");
+      player.performAnimation(new Animation(829));
+      player.getPacketSender().sendSoundEffect(2401, 1, 0);
+    };
+  }
+
+  // Resume the actual imported conversation after interrupted handovers.
+  function tailAfter(steps, id) {
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].id === id) return [...(steps[i].steps ?? []), ...steps.slice(i + 1)];
+      for (const nested of [steps[i].steps, ...(steps[i].options ?? []).map(o => o.steps)]) {
+        const found = nested && tailAfter(nested, id); if (found) return found;
+      }
+    }
+    return null;
   }
 
   function handleAction(event) {
@@ -325,8 +358,26 @@ module.exports = function registerRuneMysteriesQuest(api) {
     const { player, stepId } = event;
     const stage = quest.getStage(player);
 
+    if (stepId === "3lxHRr") { event.box = { items: [AIR_TALISMAN_ITEM_ID] }; return; }
+    if (stepId === "EpfUcz" || stepId === "134Rji" || stepId === "5g64gx") {
+      const variant = stepId === "EpfUcz" ? VARIANT_TALISMAN_DELIVER : VARIANT_PACKAGE_DELIVER;
+      const anchor = stepId === "EpfUcz" ? "DvfTKd" : stepId === "134Rji" ? "44bs50" : "INsogy";
+      startTranscript(api, player, event.npcId, PAGE_RUNE_MYSTERIES, variant,
+        steps => stepId === "5g64gx" ? [{ type: "message", text: "Aubury hands you some research notes.", id: "INsogy" }] : tailAfter(steps, anchor));
+      event.handled = true; return;
+    }
+    if (stepId === "G8M8tV") {
+      event.handled = true;
+      if (stage !== STAGE_STARTED || hasItem(player, AIR_TALISMAN_ITEM_ID)) return;
+      if (player.getInventory().isFull()) { player.sendMessage("You need a free inventory space for the talisman."); event.end = true; return; }
+      player.getInventory().adds(AIR_TALISMAN_ITEM_ID, 1);
+      player.setAttribute(TALISMAN_ATTRIBUTE, 1);
+      player.getPacketSender().sendVarbit(TALISMAN_VARBIT, 1);
+      event.box = { items: [AIR_TALISMAN_ITEM_ID] }; return;
+    }
     // Duke replaces a lost talisman (the hand-over message still prints).
     if (stepId === STEP_REPLACE_TALISMAN) {
+      event.box = { items: [AIR_TALISMAN_ITEM_ID] };
       if (stage === STAGE_STARTED && !hasItem(player, AIR_TALISMAN_ITEM_ID)) {
         if (player.getInventory().isFull()) {
           player.sendMessage("Make some room and I will replace the talisman for you.");
@@ -339,6 +390,7 @@ module.exports = function registerRuneMysteriesQuest(api) {
 
     // Handing the talisman to Sedridor.
     if (STEP_HAND_TALISMAN.has(stepId)) {
+      event.box = { items: [AIR_TALISMAN_ITEM_ID] };
       if (stage === STAGE_STARTED && hasItem(player, AIR_TALISMAN_ITEM_ID)) {
         player.getInventory().deleteNumber(AIR_TALISMAN_ITEM_ID, 1);
         quest.setStage(player, STAGE_GIVEN_TALISMAN);
@@ -346,14 +398,22 @@ module.exports = function registerRuneMysteriesQuest(api) {
       return;
     }
 
+    if (stepId === "Lq9FZ3" || stepId === "K0zo47") {
+      event.box = { items: [AIR_TALISMAN_ITEM_ID] };
+      player.getPacketSender().sendSoundEffect(142, 1, 0); return;
+    }
+    if (stepId === "FAcf6y") { event.box = { items: [RESEARCH_PACKAGE_ITEM_ID] }; return; }
     // Sedridor hands over (or recovers) the research package.
     if (STEP_GIVE_PACKAGE.has(stepId)) {
+      if (stage < STAGE_GIVEN_TALISMAN || stage > STAGE_RECEIVED_PACKAGE) return;
+      event.box = { items: [RESEARCH_PACKAGE_ITEM_ID] };
       if (!hasItem(player, RESEARCH_PACKAGE_ITEM_ID)) {
         if (player.getInventory().isFull()) {
           player.sendMessage("Make some room in your inventory and speak to me again for the package.");
         } else {
           player.getInventory().adds(RESEARCH_PACKAGE_ITEM_ID, 1);
-          quest.setStage(player, STAGE_RECEIVED_PACKAGE);
+          player.setAttribute(PACKAGE_ATTRIBUTE, 1);
+          if (stage < STAGE_RECEIVED_PACKAGE) quest.setStage(player, STAGE_RECEIVED_PACKAGE);
         }
       }
       return;
@@ -361,6 +421,7 @@ module.exports = function registerRuneMysteriesQuest(api) {
 
     // Handing the package to Aubury.
     if (stepId === STEP_HAND_PACKAGE) {
+      event.box = { items: [RESEARCH_PACKAGE_ITEM_ID] };
       if (stage === STAGE_RECEIVED_PACKAGE && hasItem(player, RESEARCH_PACKAGE_ITEM_ID)) {
         player.getInventory().deleteNumber(RESEARCH_PACKAGE_ITEM_ID, 1);
         quest.setStage(player, STAGE_GIVEN_PACKAGE);
@@ -370,40 +431,39 @@ module.exports = function registerRuneMysteriesQuest(api) {
 
     // Aubury hands over (or recovers) his research notes.
     if (STEP_GIVE_NOTES.has(stepId)) {
+      if (stage < STAGE_GIVEN_PACKAGE || stage > STAGE_RECEIVED_NOTES || player.getAttribute(DELIVERED_ATTRIBUTE)) return;
+      event.box = { items: [RESEARCH_NOTES_ITEM_ID] };
       if (!hasItem(player, RESEARCH_NOTES_ITEM_ID)) {
         if (player.getInventory().isFull()) {
           player.sendMessage("Make some room in your inventory and speak to me again for the notes.");
         } else {
           player.getInventory().adds(RESEARCH_NOTES_ITEM_ID, 1);
-          quest.setStage(player, STAGE_RECEIVED_NOTES);
+          player.setAttribute(NOTES_ATTRIBUTE, 1);
+          if (stage < STAGE_RECEIVED_NOTES) quest.setStage(player, STAGE_RECEIVED_NOTES);
         }
       }
       return;
     }
 
-    // Sedridor takes the notes and teaches the player about the Rune Essence.
-    if (stepId === STEP_TAKE_NOTES) {
-      if (hasItem(player, RESEARCH_NOTES_ITEM_ID)) {
+    if (stepId === "XMgO9a") {
+      event.box = { items: [RESEARCH_NOTES_ITEM_ID] };
+      if (stage === STAGE_RECEIVED_NOTES && hasItem(player, RESEARCH_NOTES_ITEM_ID) && !player.getAttribute(DELIVERED_ATTRIBUTE)) {
         player.getInventory().deleteNumber(RESEARCH_NOTES_ITEM_ID, 1);
-        quest.complete(player);
+        player.setAttribute(DELIVERED_ATTRIBUTE, 1);
       }
+      return;
+    }
+    // Completion follows the entire explanation, after the notes handover.
+    if (stepId === STEP_TAKE_NOTES) {
+      if (stage === STAGE_RECEIVED_NOTES && player.getAttribute(DELIVERED_ATTRIBUTE)) quest.complete(player);
       event.handled = true;
       event.end = true;
       return;
     }
   }
 
-  // Right-click "Teleport" on Sedridor or Aubury once the quest is complete.
-  function handleNpcTeleport(event) {
-    if (!SEDRIDOR_NPC_IDS.has(event.npcId) && !AUBURY_NPC_IDS.has(event.npcId)) return;
-    const action = (event.definition?.getActions?.() ?? [])[event.clickType - 1];
-    if (String(action).toLowerCase() !== "teleport") return;
-    if (quest.getStage(event.player) < STAGE_COMPLETE) {
-      event.player.sendMessage("You need to complete Rune Mysteries before using this teleport.");
-    } else {
-      teleportToRuneEssence(event.player);
-    }
-    event.handled = true;
+  function restoreTalismanFlag({ player }) {
+    player.getPacketSender().sendVarbit(TALISMAN_VARBIT, Number(Boolean(player.getAttribute(TALISMAN_ATTRIBUTE)) || quest.isStarted(player)));
   }
 
   quest = registerQuest(api, {
@@ -413,8 +473,10 @@ module.exports = function registerRuneMysteriesQuest(api) {
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
+    completionJingleId: 154,
     rewardItemId: AIR_TALISMAN_ITEM_ID,
-    otherRewards: ["Access to the Rune Essence Mine", "The ability to train Runecraft"],
+    rewardItemLabel: "An Air Talisman",
+    otherRewards: ["Rune Essence Mine Access"],
     buildJournal,
   });
 
@@ -422,5 +484,12 @@ module.exports = function registerRuneMysteriesQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
-  api.onNpcInteraction(handleNpcTeleport);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onCustomEvent("npc-dialogue:choice", handleChoice);
+  api.onPlayerLogin(restoreTalismanFlag);
+  api.persistAttribute(TALISMAN_ATTRIBUTE, 0);
+  api.persistAttribute(DOUBTED_ATTRIBUTE, 0);
+  api.persistAttribute(PACKAGE_ATTRIBUTE, 0);
+  api.persistAttribute(NOTES_ATTRIBUTE, 0);
+  api.persistAttribute(DELIVERED_ATTRIBUTE, 0);
 };

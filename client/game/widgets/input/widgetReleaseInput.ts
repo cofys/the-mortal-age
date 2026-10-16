@@ -142,7 +142,10 @@ export function processWidgetReleaseInput(
             widgetInteraction.isDraggingWidget = false;
             widgetInteraction.clickedWidget = null;
 
-            if (sourceGroupId !== 149 && dragTarget != null) {
+            const pluginHandled =
+                dragTarget != null && deps.handlePluginWidgetDrag?.(w, dragTarget) === true;
+
+            if (sourceGroupId !== 149 && dragTarget != null && !pluginHandled) {
                 // Non-inventory drag-drop - send IF_BUTTOND packet
                 // For dynamically created children (fileId === -1),
                 // send the PARENT container's UID, not the child's own UID.

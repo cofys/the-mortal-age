@@ -1,61 +1,7 @@
-/**
- * Prince Ali Rescue.
- *
- * Words come from data/definitions/npc-dialogues.json. The quest's
- * "Prince Ali Rescue" page mixes every NPC, so the branch is selected by the
- * clicked cache id plus the quest stage:
- *
- *   Chancellor Hassan 4285:
- *     stage 0      -> "starting-out-talking-to-chancellor-hassan"   (start hook)
- *     stage 10     -> "...talking-to-him-again-before-meeting-osman"
- *     stage 20-99  -> "...talking-to-him-after-meeting-osman"
- *     stage 100+   -> "prince-ali-rescued-talking-to-chancellor-hassan" (complete)
- *     complete     -> "Chancellor Hassan" / "standard-dialogue-after-completing-..."
- *
- *   Osman 4286/6165:
- *     stage 0      -> "Osman" / "standard-dialogue-before-prince-ali-rescue"
- *     stage 10     -> "starting-out-talking-to-osman"        (advances to 20)
- *     stage 20-29  -> "starting-out-talking-to-osman-talking-to-osman-again"
- *                     (hand-in key print + bronze -> stage 21)
- *     stage 100+   -> "prince-ali-rescued-talking-to-osman"
- *
- *   Leela 4274:
- *     stage < 20   -> "Leela" / "standard-dialogue-before-the-completion-..."
- *     stage 20-21  -> "starting-out-talking-to-leela" (planning)
- *     stage 21     -> Historical "preparations-for-rescue-talking-to-leela-after-
- *                     having-all-the-required-items" (gives the key -> stage 22)
- *     stage 22-29  -> if key+disguise: main-page guard briefing (advances to 30),
- *                     if key lost: lost-key replacement, else planning
- *     stage 30     -> "executing-the-rescue-talking-to-leela-again-after-speaking-to-joe"
- *     stage 40/50  -> "executing-the-rescue-talking-to-leela-once-joe-is-drunk"
- *     stage 100+   -> "prince-ali-rescued-talking-to-leela"
- *
- *   Ned 4280:    quest active & no wig -> "preparations-for-rescue-talking-to-ned"
- *   Aggie 120/121/4284: quest active & no paste -> "preparations-for-rescue-talking-to-aggie"
- *   Lady Keli 4281/11578:
- *     stage 20-39 -> "preparations-for-rescue-talking-to-lady-keli" (imprint)
- *     stage 40+   -> "executing-the-rescue-dealing-with-lady-keli" (tie up)
- *   Joe 4275/11577:
- *     stage 20-29 -> "preparations-for-rescue-talking-to-joe"
- *     stage 30    -> "executing-the-rescue-talking-to-joe" (beer)
- *     stage 40/50 -> "executing-the-rescue-talking-to-joe-talking-to-joe-once-he-is-drunk"
- *     stage 100+  -> "executing-the-rescue-talking-to-joe-after-prince-ali-s-escape"
- *   Prince Ali 4282/11579/11580:
- *     stage 100+  -> "prince-ali-rescued-talking-to-prince-ali"
- *     otherwise   -> "executing-the-rescue-talking-to-prince-ali"
- *
- * This plugin supplies the variant selector, the prose-condition answers, the
- * start hook, the item hand-ins and the simple item-on-npc/item-on-item
- * interactions (dye the wig, make the key, drink the beers, tie Keli, escape).
- *
- * Gaps (see summary): the prison gate open + jail actor spawning (needs object
- * edits/spawns); a Leela line for stage 50; the dangling "Can you make dyes"
- * option in the quest Aggie transcript (dyes stay on her generic page); the
- * dangling Ned rope option (rope stays buyable from his generic page/shop).
- */
+/** Prince Ali Rescue. Capture evidence: docs/f2p-coastal-parity.md. */
 module.exports = function registerPrinceAliRescueQuest(api) {
-  const { ItemIdentifiers, NpcIdentifiers } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, Location, GameObject, Animation, Skill, Task, TaskManager, StatementDialogue } = api.core;
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   const VARP_PRINCE_ALI_RESCUE = 273;
   const STAGE_STARTED = 10;
@@ -63,7 +9,10 @@ module.exports = function registerPrinceAliRescueQuest(api) {
   const STAGE_KEY_MADE = 21;
   const STAGE_KEY_CLAIMED = 22;
   const STAGE_PREPARATION_COMPLETE = 30;
+  const STAGE_FIRST_BEER = 31;
   const STAGE_GUARD_DRUNK = 40;
+  const PRISON_GATE_ID = ObjectIdentifiers.PRISON_GATE_5;
+  const CELL_TILE = new Location(3123, 3243, 0);
   const STAGE_KELI_TIED = 50;
   const STAGE_PRINCE_SAVED = 100;
   const STAGE_COMPLETE = 110;
@@ -151,6 +100,10 @@ module.exports = function registerPrinceAliRescueQuest(api) {
   const PAR_HIST = (variant) => ({ page: "Prince Ali Rescue/Historical", variant });
 
   let quest;
+  const accepted = new WeakSet();
+  const pastePending = new WeakSet();
+  const tying = new WeakSet();
+  const escaping = new WeakSet();
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
   const waterItem = (player) =>
@@ -273,6 +226,9 @@ module.exports = function registerPrinceAliRescueQuest(api) {
 
   function leelaVariant(player, stage) {
     if (stage >= STAGE_PRINCE_SAVED) return PAR("prince-ali-rescued-talking-to-leela");
+    if (stage >= STAGE_SPOKEN_TO_OSMAN && stage < STAGE_PREPARATION_COMPLETE && hasDisguise(player) && held(player, BRONZE_KEY_ITEM_ID) && held(player, ROPE_ITEM_ID)) {
+      return PAR("preparations-for-rescue-talking-to-leela-after-having-all-the-required-items");
+    }
     if (stage >= STAGE_KEY_CLAIMED) {
       if (!held(player, BRONZE_KEY_ITEM_ID)) {
         return PAR(
@@ -323,7 +279,7 @@ module.exports = function registerPrinceAliRescueQuest(api) {
     if (stage === STAGE_GUARD_DRUNK || stage === STAGE_KELI_TIED) {
       return PAR("executing-the-rescue-talking-to-joe-talking-to-joe-once-he-is-drunk");
     }
-    if (stage === STAGE_PREPARATION_COMPLETE) return PAR("executing-the-rescue-talking-to-joe");
+    if (stage === STAGE_PREPARATION_COMPLETE || stage === STAGE_FIRST_BEER) return PAR("executing-the-rescue-talking-to-joe");
     if (stage >= STAGE_SPOKEN_TO_OSMAN) return PAR("preparations-for-rescue-talking-to-joe");
     return null;
   }
@@ -374,6 +330,12 @@ module.exports = function registerPrinceAliRescueQuest(api) {
     }
 
     if (npcId === NED_NPC_ID) {
+      if (value.includes("doesn't have 15 coins")) return !held(player, COINS_ITEM_ID, 15);
+      if (value.includes("has 15 coins")) return held(player, COINS_ITEM_ID, 15);
+      if (value.includes("does not have 4 balls of wool")) return !held(player, BALL_OF_WOOL_ITEM_ID, 4);
+      if (value.includes("has 4 balls of wool")) return held(player, BALL_OF_WOOL_ITEM_ID, 4);
+      if (value.includes("has not completed the the fremennik isles")) return true;
+      if (value.includes("has completed the the fremennik isles")) return false;
       if (value.includes("does not have three balls of wool")) return !held(player, BALL_OF_WOOL_ITEM_ID, 3);
       if (value.includes("has three balls of wool")) return held(player, BALL_OF_WOOL_ITEM_ID, 3);
       return null;
@@ -410,13 +372,13 @@ module.exports = function registerPrinceAliRescueQuest(api) {
     }
 
     if (JOE_NPC_IDS.has(npcId)) {
-      if (value.includes("has less than three beers")) return !held(player, BEER_ITEM_ID, 3);
-      if (value.includes("has two more beers")) return held(player, BEER_ITEM_ID, 3);
+      if (value.includes("has less than three beers")) return !held(player, BEER_ITEM_ID, 2);
+      if (value.includes("has two more beers")) return held(player, BEER_ITEM_ID, 2);
       return null;
     }
 
     if (PRINCE_ALI_NPC_IDS.has(npcId)) {
-      const ready = hasDisguise(player) && held(player, BRONZE_KEY_ITEM_ID);
+      const ready = stage >= STAGE_KELI_TIED && stage < STAGE_PRINCE_SAVED && hasDisguise(player) && held(player, BRONZE_KEY_ITEM_ID);
       if (value.includes("does not have a complete disguise and key")) return !ready;
       if (value.includes("has a complete disguise and key")) return ready;
       return null;
@@ -429,29 +391,47 @@ module.exports = function registerPrinceAliRescueQuest(api) {
   function handleStartHook({ player, hook }) {
     if (hook !== "quest:prince-ali-rescue:start") return;
     if (quest.getStage(player) >= STAGE_STARTED) return;
-    quest.setStage(player, STAGE_STARTED);
+    accepted.add(player);
   }
 
-  // Two conversations have no action slug but do end a stage.
-  function handleLine({ player, npcId, text }) {
-    const line = String(text ?? "");
-    if (OSMAN_NPC_IDS.has(npcId)) {
-      if (quest.getStage(player) === STAGE_STARTED && line.includes("Then you should get going")) {
-        quest.setStage(player, STAGE_SPOKEN_TO_OSMAN);
-      }
-      return;
-    }
-    if (npcId === LEELA_NPC_ID) {
+  function handleLine(event) {
+    const { player, npcId } = event;
+    const line = String(event.text ?? "");
+    if (npcId === HASSAN_NPC_ID && line.startsWith("You'll find our Spymaster")) event.before = () => {
+      if (!accepted.has(player) || quest.getStage(player) !== 0) return;
+      accepted.delete(player);
+      quest.setStage(player, STAGE_STARTED);
+      player.sendMessage("You've started a new quest: <col=081190>Prince Ali Rescue</col>");
+    };
+    if (OSMAN_NPC_IDS.has(npcId) && line.startsWith("Sounds like I should head on over")) event.before = () => {
+      if (quest.getStage(player) === STAGE_STARTED) quest.setStage(player, STAGE_SPOKEN_TO_OSMAN);
+    };
+    if (npcId === LEELA_NPC_ID && line.startsWith("Good work. Now, before breaking the Prince out")) event.before = () => {
       const stage = quest.getStage(player);
-      if (stage >= STAGE_KEY_CLAIMED && stage < STAGE_PREPARATION_COMPLETE && line.includes("chat to this guard")) {
-        quest.setStage(player, STAGE_PREPARATION_COMPLETE);
-      }
-    }
+      if (stage >= STAGE_SPOKEN_TO_OSMAN && stage < STAGE_PREPARATION_COMPLETE && hasDisguise(player) && held(player, BRONZE_KEY_ITEM_ID) && held(player, ROPE_ITEM_ID)) quest.setStage(player, STAGE_PREPARATION_COMPLETE);
+    };
+  }
+
+  function later(player, ticks, action) {
+    const task = new Task(ticks, player, false);
+    task.execute = () => { task.stop(); if (player.isRegistered?.() !== false) action(); };
+    TaskManager.submit(task);
+  }
+
+  function firstPreparedVisit(event) {
+    if (event.npcId !== LEELA_NPC_ID || quest.getStage(event.player) !== STAGE_SPOKEN_TO_OSMAN) return;
+    if (!hasDisguise(event.player) || !held(event.player, BRONZE_KEY_ITEM_ID) || !held(event.player, ROPE_ITEM_ID)) return;
+    event.handled = true;
+    startTranscript(api, event.player, LEELA_NPC_ID, "Prince Ali Rescue", "preparations-for-rescue-talking-to-leela-after-having-all-the-required-items", (steps) => [
+      { player: "You must be Leela. Your father sent me to help rescue Prince Ali." },
+      { npc: "Yes, he sent word ahead that you'd be coming. Are you aware of the plan?" },
+      { player: "Yes. In fact, I already have everything we need." }, ...steps.slice(2),
+    ]);
   }
 
   function handleAction(event) {
     if (!QUEST_NPC_IDS.has(event.npcId)) return;
-    const { player, stepId } = event;
+    const { player, stepId, npcId } = event;
 
     // Prose "missing"/"unavailable" markers in the mixed transcript would
     // otherwise abort the branch; skip past them.
@@ -472,8 +452,7 @@ module.exports = function registerPrinceAliRescueQuest(api) {
       }
       player.getInventory().adds(BRONZE_KEY_ITEM_ID, 1);
       quest.setStage(player, STAGE_KEY_CLAIMED);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
+      event.box = { statement: true };
       event.end = false;
       return;
     }
@@ -483,8 +462,7 @@ module.exports = function registerPrinceAliRescueQuest(api) {
         player.getInventory().deleteNumber(COINS_ITEM_ID, KEY_REPLACEMENT_COST);
         player.getInventory().adds(BRONZE_KEY_ITEM_ID, 1);
       }
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
+      event.box = { statement: true };
       event.end = false;
       return;
     }
@@ -494,9 +472,21 @@ module.exports = function registerPrinceAliRescueQuest(api) {
       player.getInventory().deleteNumber(KEY_PRINT_ITEM_ID, 1);
       player.getInventory().deleteNumber(BRONZE_BAR_ITEM_ID, 1);
       quest.setStage(player, STAGE_KEY_MADE);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
+      event.box = { statement: true };
       event.end = false;
+      return;
+    }
+
+    if (npcId === NED_NPC_ID && (stepId === "T0Ll6J" || stepId === "pCcGIe")) {
+      const currency = stepId === "T0Ll6J" ? COINS_ITEM_ID : BALL_OF_WOOL_ITEM_ID;
+      const amount = stepId === "T0Ll6J" ? 15 : 4;
+      const inventory = player.getInventory();
+      if (!held(player, currency, amount) || (inventory.isFull() && currency === COINS_ITEM_ID && inventory.getAmount(currency) > amount)) {
+        event.handled = true; event.end = true; return;
+      }
+      inventory.deleteNumber(currency, amount);
+      inventory.adds(ROPE_ITEM_ID, 1);
+      event.box = { statement: true };
       return;
     }
 
@@ -504,29 +494,23 @@ module.exports = function registerPrinceAliRescueQuest(api) {
       if (!held(player, BALL_OF_WOOL_ITEM_ID, 3)) return;
       player.getInventory().deleteNumber(BALL_OF_WOOL_ITEM_ID, 3);
       player.getInventory().adds(GREY_WIG_ITEM_ID, 1);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
+      event.box = { statement: true };
       event.end = false;
       return;
     }
 
     if (stepId === AGGIE_TAKES_INGREDIENTS) {
-      if (!hasPasteIngredients(player)) return;
-      player.getInventory().deleteNumber(waterItem(player), 1);
-      player.getInventory().deleteNumber(ASHES_ITEM_ID, 1);
-      player.getInventory().deleteNumber(POT_OF_FLOUR_ITEM_ID, 1);
-      player.getInventory().deleteNumber(REDBERRIES_ITEM_ID, 1);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
-      event.end = false;
+      if (!hasPasteIngredients(player)) { event.handled = true; event.end = true; return; }
+      pastePending.add(player);
+      event.box = { statement: true };
       return;
     }
-
     if (stepId === AGGIE_GIVES_PASTE) {
+      if (!pastePending.has(player) || !hasPasteIngredients(player)) { event.handled = true; event.end = true; return; }
+      pastePending.delete(player);
+      for (const item of [waterItem(player), ASHES_ITEM_ID, POT_OF_FLOUR_ITEM_ID, REDBERRIES_ITEM_ID]) player.getInventory().deleteNumber(item, 1);
       player.getInventory().adds(SKIN_PASTE_ITEM_ID, 1);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
-      event.end = false;
+      event.box = { items: [SKIN_PASTE_ITEM_ID] };
       return;
     }
 
@@ -551,19 +535,14 @@ module.exports = function registerPrinceAliRescueQuest(api) {
       if (!held(player, SOFT_CLAY_ITEM_ID)) return;
       player.getInventory().deleteNumber(SOFT_CLAY_ITEM_ID, 1);
       player.getInventory().adds(KEY_PRINT_ITEM_ID, 1);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
+      event.box = { statement: true };
       event.end = false;
       return;
     }
 
-    if (stepId === KELI_TIED_UP) {
-      if (!held(player, ROPE_ITEM_ID)) return;
-      player.getInventory().deleteNumber(ROPE_ITEM_ID, 1);
-      quest.setStage(player, STAGE_KELI_TIED);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
-      event.end = false;
+    if (stepId === KELI_TIED_UP || stepId === "vpUraQ") {
+      if (!tieKeli(player)) { event.handled = true; return; }
+      event.box = { statement: true };
       return;
     }
 
@@ -575,8 +554,8 @@ module.exports = function registerPrinceAliRescueQuest(api) {
         return;
       }
       player.getInventory().deleteNumber(BEER_ITEM_ID, 1);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
+      if (quest.getStage(player) === STAGE_PREPARATION_COMPLETE) quest.setStage(player, STAGE_FIRST_BEER);
+      event.box = { statement: true };
       event.end = false;
       return;
     }
@@ -585,21 +564,25 @@ module.exports = function registerPrinceAliRescueQuest(api) {
       if (!held(player, BEER_ITEM_ID, 2)) return;
       player.getInventory().deleteNumber(BEER_ITEM_ID, 2);
       quest.setStage(player, STAGE_GUARD_DRUNK);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
+      event.box = { statement: true };
       event.end = false;
       return;
     }
 
     if (stepId === PRINCE_ESCAPES) {
+      if (quest.getStage(player) !== STAGE_KELI_TIED) return;
       if (!held(player, BRONZE_KEY_ITEM_ID) || !hasDisguise(player)) return;
-      player.getInventory().deleteNumber(BRONZE_KEY_ITEM_ID, 1);
-      player.getInventory().deleteNumber(BLONDE_WIG_ITEM_ID, 1);
-      player.getInventory().deleteNumber(PINK_SKIRT_ITEM_ID, 1);
-      player.getInventory().deleteNumber(SKIN_PASTE_ITEM_ID, 1);
-      quest.setStage(player, STAGE_PRINCE_SAVED);
-      if (event.text) player.sendMessage(String(event.text));
-      event.handled = true;
+      if (escaping.has(player)) { event.handled = true; return; }
+      escaping.add(player);
+      later(player, 4, () => {
+        escaping.delete(player);
+        if (quest.getStage(player) !== STAGE_KELI_TIED || !hasDisguise(player)) return;
+        player.getInventory().deleteNumber(BLONDE_WIG_ITEM_ID, 1);
+        player.getInventory().deleteNumber(PINK_SKIRT_ITEM_ID, 1);
+        player.getInventory().deleteNumber(SKIN_PASTE_ITEM_ID, 1);
+        quest.setStage(player, STAGE_PRINCE_SAVED);
+      });
+      event.box = { statement: true };
       event.end = false;
       return;
     }
@@ -621,6 +604,7 @@ module.exports = function registerPrinceAliRescueQuest(api) {
       (usedItemId === GREY_WIG_ITEM_ID && usedWithItemId === YELLOW_DYE_ITEM_ID);
     if (!pairs) return;
     const inventory = event.player.getInventory();
+    if (!held(event.player, GREY_WIG_ITEM_ID) || !held(event.player, YELLOW_DYE_ITEM_ID)) return;
     inventory.deleteNumber(GREY_WIG_ITEM_ID, 1);
     inventory.deleteNumber(YELLOW_DYE_ITEM_ID, 1);
     inventory.adds(BLONDE_WIG_ITEM_ID, 1);
@@ -666,57 +650,75 @@ module.exports = function registerPrinceAliRescueQuest(api) {
       return;
     }
 
-    if (JOE_NPC_IDS.has(npcId) && event.itemId === BEER_ITEM_ID && stage === STAGE_PREPARATION_COMPLETE) {
-      const total = inventory.getAmount(BEER_ITEM_ID);
-      if (total <= 0) {
-        event.player.sendMessage("It seems you don't have any beer.");
-        event.handled = true;
-        return;
-      }
-      inventory.deleteNumber(BEER_ITEM_ID, 1);
-      if (total >= 3) {
-        inventory.deleteNumber(BEER_ITEM_ID, 2);
-        quest.setStage(event.player, STAGE_GUARD_DRUNK);
-        event.player.sendMessage("You hand Joe three beers. He drinks them all and slumps against the wall.");
-      } else {
-        event.player.sendMessage("One drink won't get Joe drunk; you would need a few at once.");
-      }
+    if (JOE_NPC_IDS.has(npcId) && event.itemId === BEER_ITEM_ID && (stage === STAGE_PREPARATION_COMPLETE || stage === STAGE_FIRST_BEER)) {
       event.handled = true;
-      return;
+      startTranscript(api, event.player, npcId, "Prince Ali Rescue", "executing-the-rescue-talking-to-joe");
     }
-
     if (LADY_KELI_NPC_IDS.has(npcId) && event.itemId === ROPE_ITEM_ID) {
-      if (stage >= STAGE_PRINCE_SAVED) {
-        event.player.sendMessage("You have already rescued the Prince; that plan will not work again.");
-        event.handled = true;
-        return;
-      }
-      if (stage < STAGE_GUARD_DRUNK) {
-        event.player.sendMessage("You cannot tie Keli up until the guard is disabled.");
-        event.handled = true;
-        return;
-      }
-      inventory.deleteNumber(ROPE_ITEM_ID, 1);
-      quest.setStage(event.player, STAGE_KELI_TIED);
-      event.player.sendMessage("You overpower Keli, tie her up, and put her in a cupboard.");
       event.handled = true;
-      return;
+      if (stage !== STAGE_GUARD_DRUNK || !held(event.player, ROPE_ITEM_ID)) {
+        StatementDialogue.send(event.player, "You cannot tie Keli up until you have all equipment and disabled the guard!");
+        return;
+      }
+      if (tieKeli(event.player)) StatementDialogue.send(event.player, "You overpower Keli, tie her up, and put her in a cupboard.");
     }
-
-    if (PRINCE_ALI_NPC_IDS.has(npcId) && stage >= STAGE_KELI_TIED && stage < STAGE_PRINCE_SAVED) {
-      if (![BLONDE_WIG_ITEM_ID, PINK_SKIRT_ITEM_ID, SKIN_PASTE_ITEM_ID].includes(event.itemId)) return;
-      if (!held(event.player, BRONZE_KEY_ITEM_ID) || !hasDisguise(event.player)) {
-        event.player.sendMessage("You still need the prison key and every part of the disguise.");
-        event.handled = true;
-        return;
-      }
-      inventory.deleteNumber(BRONZE_KEY_ITEM_ID, 1);
-      inventory.deleteNumber(BLONDE_WIG_ITEM_ID, 1);
-      inventory.deleteNumber(PINK_SKIRT_ITEM_ID, 1);
-      inventory.deleteNumber(SKIN_PASTE_ITEM_ID, 1);
-      quest.setStage(event.player, STAGE_PRINCE_SAVED);
-      event.player.sendMessage("You hand the disguise and key to Prince Ali. He escapes!");
+    if (PRINCE_ALI_NPC_IDS.has(npcId) && stage === STAGE_KELI_TIED && [BLONDE_WIG_ITEM_ID, PINK_SKIRT_ITEM_ID, SKIN_PASTE_ITEM_ID].includes(event.itemId)) {
       event.handled = true;
+      startTranscript(api, event.player, npcId, "Prince Ali Rescue", "executing-the-rescue-talking-to-prince-ali");
+    }
+  }
+
+  function tieKeli(player) {
+    if (quest.getStage(player) !== STAGE_GUARD_DRUNK || !held(player, ROPE_ITEM_ID) || tying.has(player)) return false;
+    tying.add(player);
+    later(player, 4, () => {
+      tying.delete(player);
+      if (quest.getStage(player) !== STAGE_GUARD_DRUNK || !held(player, ROPE_ITEM_ID)) return;
+      player.getInventory().deleteNumber(ROPE_ITEM_ID, 1);
+      quest.setStage(player, STAGE_KELI_TIED);
+    });
+    return true;
+  }
+
+  function makeKey(event) {
+    if (event.itemId !== KEY_PRINT_ITEM_ID || !String(event.definition?.getName?.() ?? event.object?.getDefinition?.()?.getName?.() ?? "").toLowerCase().includes("furnace")) return;
+    if (!held(event.player, KEY_PRINT_ITEM_ID) || quest.getStage(event.player) < STAGE_SPOKEN_TO_OSMAN) return;
+    event.handled = true;
+    api.sendMultiChatboxPrompt(event.player, "Create a key using the key print?", "Yes", () => {
+      const player = event.player;
+      if (!held(player, KEY_PRINT_ITEM_ID) || !held(player, BRONZE_BAR_ITEM_ID)) { player.sendMessage("You need a bronze bar to make the key."); return; }
+      player.performAnimation(new Animation(899));
+      later(player, 1, () => {
+        if (!held(player, KEY_PRINT_ITEM_ID) || !held(player, BRONZE_BAR_ITEM_ID)) return;
+        player.getInventory().deleteNumber(KEY_PRINT_ITEM_ID, 1);
+        player.getInventory().deleteNumber(BRONZE_BAR_ITEM_ID, 1);
+        player.getInventory().adds(BRONZE_KEY_ITEM_ID, 1);
+        player.getSkillManager().addExperiences(Skill.CRAFTING, 2);
+      });
+    }, "No", () => {});
+  }
+
+  function openCell(event) {
+    if (event.objectId !== PRISON_GATE_ID) return;
+    event.handled = true;
+    const player = event.player, at = player.getLocation();
+    if (at.getZ() !== 0 || !at.isWithinDistance(CELL_TILE, 2)) return;
+    if (quest.getStage(player) < STAGE_KELI_TIED || !held(player, BRONZE_KEY_ITEM_ID)) { player.sendMessage("The gate is locked."); return; }
+    const packet = player.getPacketSender();
+    const open = new GameObject(1548, new Location(3123, 3244, 0), 0, 2, player.getPrivateArea());
+    const closed = new GameObject(PRISON_GATE_ID, CELL_TILE, 0, 1, player.getPrivateArea());
+    packet.sendObjectRemoval(closed).sendObject(open);
+    player.moveTo(new Location(3123, at.getY() >= 3244 ? 3243 : 3244, 0));
+    later(player, 2, () => packet.sendObjectRemoval(open).sendObject(closed));
+  }
+
+  function useKeyOnCell(event) {
+    if (event.itemId === BRONZE_KEY_ITEM_ID) openCell(event);
+  }
+
+  function menuWarning(event) {
+    if (event.npcId === HASSAN_NPC_ID && quest.getStage(event.player) === 0 && String(event.prompt).includes("Start") && event.player.getSkillManager().getCombatLevel() < 10) {
+      event.warning = "Before starting this quest, be aware that your combat level is lower than the recommended level of 10.";
     }
   }
 
@@ -724,6 +726,7 @@ module.exports = function registerPrinceAliRescueQuest(api) {
     key: "prince_ali_rescue",
     name: "Prince Ali Rescue",
     varpId: VARP_PRINCE_ALI_RESCUE,
+    varpValue: (stage) => stage === STAGE_KEY_MADE || stage === STAGE_KEY_CLAIMED ? STAGE_SPOKEN_TO_OSMAN : stage,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 3,
@@ -737,9 +740,14 @@ module.exports = function registerPrinceAliRescueQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onCustomEvent("npc-dialogue:menu", menuWarning);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
+  api.onNpcInteraction(firstPreparedVisit);
+  api.onItemOnObject("Key print", "Furnace", makeKey, { noted: false });
+  api.onItemOnObject(useKeyOnCell);
+  api.onObjectInteraction("Prison Gate", { Open: openCell });
 };

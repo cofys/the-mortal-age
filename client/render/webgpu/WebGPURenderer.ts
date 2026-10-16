@@ -613,6 +613,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         const scenePreview = !loggedIn && this.osrsClient.scenePreviewEnabled && !!this.osrsClient.loadedCache;
         const drawScene = loggedIn || scenePreview;
         const sceneViewport = this.getSceneViewportWidgetRect();
+        let restoreCamera: (() => void) | undefined;
 
         if (drawScene) {
             syncCameraViewportUnitScale(this);
@@ -640,10 +641,12 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             this.osrsClient.worldViewManager.interpolateEntities(cycle, this.clientTickPhase);
             updateWorldEntityMotion(this);
             ensureWorldEntityOverlaysLoaded(this, performance.now());
+            this.osrsClient.camera.applySmoothing(deltaTime);
             if (scenePreview) {
                 this.playerPosUni[0] = this.osrsClient.camera.getPosX();
                 this.playerPosUni[1] = this.osrsClient.camera.getPosZ();
             } else updateFollowCamera(this, timeSec, deltaTime);
+            restoreCamera = this.applyCameraShake(cycle);
             this.osrsClient.camera.update(
                 width, height,
                 sceneViewport.x, sceneViewport.y, sceneViewport.width, sceneViewport.height,
@@ -821,6 +824,12 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
                 depthView: this.depthView!,
                 canvasView,
             });
+        }
+
+        if (restoreCamera) {
+            restoreCamera();
+            camera.update(width, height, sceneViewport.x, sceneViewport.y, sceneViewport.width, sceneViewport.height);
+            this.worldEntityAnimator?.compose(camera.viewMatrix as Float32Array);
         }
 
         // Overlays and UI that draw after the world, without depth (ToFrameTexture +

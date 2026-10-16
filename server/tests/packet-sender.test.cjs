@@ -107,3 +107,16 @@ test('replacing a main interface emits its close event before changing its id', 
     assert.equal(player.interfaceId, -1);
   } finally { PluginManager.emitCustomEvent = original; }
 });
+
+
+test('NPC spawn payload preserves current-cache16-bit type IDs and a16-bit index/sentinel', () => {
+  const { createNpcSyncState, encodeNpcSync } = require('../dist/net/protocol/ClientProtocol');
+  const local = { x:3200, y:3200, level:0 };
+  const views = [49,16433,16538].map((typeId, offset) => ({
+    ...local, index:7+offset, typeId, rotation:0, walkDirection:-1, runDirection:-1,
+  }));
+  const body = encodeNpcSync(1, local, views, createNpcSyncState()).subarray(3);
+  assert.equal(body.readUInt16BE(9),21);
+  // count8, three spawns(index16, flags3, offsets5+5, rotation3, type16), sentinel16.
+  assert.equal(body.subarray(11).toString('hex'),'0000070000003100080000403100090000409affff');
+});

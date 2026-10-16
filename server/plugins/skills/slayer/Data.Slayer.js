@@ -221,6 +221,11 @@ function inArea(area, location) {
   return area.boxes.some(([minX, minY, maxX, maxY]) => x >= minX && x <= maxX && y >= minY && y <= maxY);
 }
 
+/** The quests a task needs ({ any: [quest keys], started }), or null. */
+function taskQuests(taskId) {
+  return MASTERS_FILE.taskQuests[String(taskId)] ?? null;
+}
+
 /** The Slayer level a task needs. */
 function taskLevel(taskId) {
   return get().taskLevels.get(taskId) ?? 1;
@@ -240,6 +245,7 @@ module.exports = {
   isBossNpc,
   npcCountsFor,
   taskLevel,
+  taskQuests,
   inArea,
   BOSS_TASK_ID,
   config: MASTERS_FILE,

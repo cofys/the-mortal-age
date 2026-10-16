@@ -1,34 +1,11 @@
-/**
- * The Knight's Sword.
- *
- * Words come from npc-dialogues.json (page "The Knight's Sword", plus the
- * post-quest pages "Squire" and "Thurgo"). The reference branch logic lives in
- * xrsps knightsSword/{constants,interactions,journal}.ts; this plugin supplies
- * the variant selector, the prose-condition answers, the start/hand-in hooks and
- * the blurite-rock / cupboard interactions.
- *
- * Stage flow (VARP 122):
- *   0 not started            squire "talking-to-the-squire"
- *   1 find Reldo             squire/thurgo "…before-talking-to-reldo", reldo "talking-to-reldo"
- *   2 find Imcando dwarf     thurgo pie-dependent variants
- *   3 gave Thurgo pie        thurgo "...again-without-the-portrait" (pie branch inlines stage 3->4)
- *   4 ask squire for portrait
- *   5 find portrait          squire/thurgo pick portrait-aware variants
- *   6 find materials         thurgo materials-aware, squire sword-aware
- *   7 complete
- *
- * Gaps are listed at the end of the file and echoed in the port summary.
- */
+/** The Knight's Sword: revision 240 capture 20260817T113003 and the OSRS Wiki. */
 module.exports = function registerKnightsSwordQuest(api) {
-  const { Skill, Equipment, Location, GameObject, ObjectManager, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
-  const mining = require("../../skills/Mining.plugin.js");
+  const { Skill, Equipment, Location, GameObject, ObjectManager, Animation, CountdownTask, TaskManager, World, DialogueChainBuilder, ActionDialogue, StatementDialogue, ItemStatementDialogue, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   const SQUIRE_NPC_ID = NpcIdentifiers.SQUIRE_14;
   const THURGO_NPC_ID = NpcIdentifiers.THURGO;
-  // xrsps constants say 6203; the osrsreboxed cache (and therefore tsps) uses 4242/4243.
-  const LEGACY_RELDO_NPC_ID = 6203; // xrsps-only id, absent from the generated NpcIdentifiers
-  const RELDO_NPC_IDS = new Set([LEGACY_RELDO_NPC_ID, NpcIdentifiers.RELDO, NpcIdentifiers.RELDO_2]);
+  const RELDO_NPC_IDS = new Set([NpcIdentifiers.RELDO, NpcIdentifiers.RELDO_2]);
 
   const VARP_KNIGHTS_SWORD = 122;
   const STAGE_NOT_STARTED = 0;
@@ -45,12 +22,12 @@ module.exports = function registerKnightsSwordQuest(api) {
   const BLURITE_ORE_ITEM_ID = ItemIdentifiers.BLURITE_ORE;
   const REDBERRY_PIE_ITEM_ID = ItemIdentifiers.REDBERRY_PIE;
   const IRON_BAR_ITEM_ID = ItemIdentifiers.IRON_BAR;
+  const GIANT_DWARF_PIE_ATTRIBUTE = "quest.giant_dwarf.pie";
+  const SIR_VYVIN_NPC_ID = NpcIdentifiers.SIR_VYVIN;
 
   const CUPBOARD_CLOSED_ID = ObjectIdentifiers.CUPBOARD_8;
   const CUPBOARD_OPEN_ID = ObjectIdentifiers.CUPBOARD_9;
-  const BLURITE_ROCKS_NAME = "Blurite rocks";
-  const BLURITE_MINING_LEVEL = 10;
-  const BLURITE_MINING_XP = 17.5;
+
 
   const QUEST_START_HOOK = "quest:the-knight-s-sword:start";
   const PIE_HANDOVER_MESSAGE_ID = "1U_fgy"; // "You hand over the pie."
@@ -194,9 +171,7 @@ module.exports = function registerKnightsSwordQuest(api) {
         return { page: PAGE_QUESTS, variant: VARIANT_SQUIRE_EARLY };
       }
       if (stage <= STAGE_ASK_SQUIRE_FOR_PORTRAIT) {
-        // The dump has no stage-3 squire branch; the cupboard explanation is the
-        // only squire line before the portrait and advances stage 3/4 -> 5.
-        quest.setStage(player, STAGE_FIND_PORTRAIT);
+        // Keep old stage-3 saves resumable; the line callback commits the portrait request.
         return { page: PAGE_QUESTS, variant: VARIANT_SQUIRE_AFTER_PIE };
       }
       if (stage === STAGE_FIND_PORTRAIT) {
@@ -210,6 +185,7 @@ module.exports = function registerKnightsSwordQuest(api) {
     }
 
     if (npcId === THURGO_NPC_ID) {
+      if (stage === STAGE_NOT_STARTED) return null;
       if (stage >= STAGE_COMPLETE) {
         return { page: PAGE_THURGO, variant: VARIANT_AFTER_QUEST };
       }
@@ -254,13 +230,11 @@ module.exports = function registerKnightsSwordQuest(api) {
   function answerCondition({ npcId, player, text }) {
     const value = String(text).toLowerCase();
     if (npcId === SQUIRE_NPC_ID) {
-      if (value.includes(CONDITION_NOT_MET_THURGO)) return true;
-      if (value.includes(CONDITION_MET_THURGO)) return false;
+      if (value.includes(CONDITION_NOT_MET_THURGO)) return !metThurgo(player);
+      if (value.includes(CONDITION_MET_THURGO)) return metThurgo(player);
       if (value.includes(CONDITION_WITHOUT_10_MINING)) {
-        return (
-          player.getSkillManager().getCurrentLevel(Skill.MINING) < 10 ||
-          player.getSkillManager().getCombatLevel() < 20
-        );
+        if (value.includes("20 combat")) return false; // The menu hook supplies the appropriate warning once.
+        return player.getSkillManager().getCurrentLevel(Skill.MINING) < 10;
       }
       if (value.includes(CONDITION_WIELDING_SWORD)) return isWieldingSword(player);
       if (value.includes(CONDITION_SWORD_IN_INVENTORY)) {
@@ -269,10 +243,8 @@ module.exports = function registerKnightsSwordQuest(api) {
       return null;
     }
     if (npcId === THURGO_NPC_ID) {
-      // ponytail: The Giant Dwarf meeting is untracked; the "hasn't met" branch
-      // is the reference's default (xrsps has no Giant Dwarf variant either).
-      if (value.includes(CONDITION_NOT_ALREADY_MET_THURGO)) return true;
-      if (value.includes(CONDITION_MET_THURGO)) return false;
+      if (value.includes(CONDITION_NOT_ALREADY_MET_THURGO)) return !metThurgo(player);
+      if (value.includes(CONDITION_MET_THURGO)) return metThurgo(player);
       return null;
     }
     return null;
@@ -282,49 +254,99 @@ module.exports = function registerKnightsSwordQuest(api) {
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== SQUIRE_NPC_ID || hook !== QUEST_START_HOOK) return;
     if (quest.getStage(player) >= STAGE_FIND_RELDO) return;
-    quest.setStage(player, STAGE_FIND_RELDO);
+    quest.setStage(player, metThurgo(player) ? STAGE_FIND_IMCANDO_DWARF : STAGE_FIND_RELDO);
+    player.sendMessage("You've started a new quest: <col=081190>The Knight's Sword</col>");
   }
 
-  // Reldo has no action step; advance when the player takes the Imcando option.
-  function handleReldoChoice({ player, npcId, option }) {
-    if (!RELDO_NPC_IDS.has(npcId)) return;
-    if (option !== CHOICE_IMCANDO_DWARVES) return;
-    if (quest.getStage(player) !== STAGE_FIND_RELDO) return;
-    quest.setStage(player, STAGE_FIND_IMCANDO_DWARF);
+  function metThurgo(player) {
+    const request = { player, key: "the_giant_dwarf", complete: false };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete || Boolean(player.getAttribute(GIANT_DWARF_PIE_ATTRIBUTE));
   }
 
-  // Giving the pie and asking for the sword happen in one dump conversation;
-  // mirror the reference by moving to "ask squire" once Thurgo asks for a picture.
-  function handleThurgoLine(event) {
-    if (event.npcId !== THURGO_NPC_ID) return;
-    if (quest.getStage(event.player) !== STAGE_GAVE_THURGO_PIE) return;
-    if (String(event.text).includes(LINE_PICTURE_REQUEST)) {
-      quest.setStage(event.player, STAGE_ASK_SQUIRE_FOR_PORTRAIT);
+  function handleQuestLine(event) {
+    const { player, npcId, text } = event;
+    if (RELDO_NPC_IDS.has(npcId) && String(text).startsWith("Well, not totally random.") && quest.getStage(player) === STAGE_FIND_RELDO) {
+      event.before = () => quest.setStage(player, STAGE_FIND_IMCANDO_DWARF);
     }
+    if (npcId === THURGO_NPC_ID && quest.getStage(player) === STAGE_GAVE_THURGO_PIE && String(text).includes(LINE_PICTURE_REQUEST)) {
+      event.before = () => quest.setStage(player, STAGE_ASK_SQUIRE_FOR_PORTRAIT);
+    }
+    if (npcId === SQUIRE_NPC_ID && text === "Ok, I'll try and get that then." && quest.getStage(player) >= STAGE_GAVE_THURGO_PIE && quest.getStage(player) <= STAGE_ASK_SQUIRE_FOR_PORTRAIT) {
+      event.before = () => quest.setStage(player, STAGE_FIND_PORTRAIT);
+    }
+  }
+
+  function warnBeforeStart(event) {
+    if (event.npcId !== SQUIRE_NPC_ID || !String(event.prompt).includes("Start The Knight's Sword")) return;
+    const mining = event.player.getSkillManager().getCurrentLevel(Skill.MINING) < 10;
+    const combat = event.player.getSkillManager().getCombatLevel() < 20;
+    if (mining && combat) event.warning = "Before starting this quest, be aware that one or more of your skill levels are lower than what is required to fully complete it. Your combat level is also lower than the recommended level of 20.";
+    else if (mining) event.warning = "Before starting this quest, be aware that one or more of your skill levels are lower than what is required to fully complete it.";
+    else if (combat) event.warning = "Before starting this quest, be aware that your combat level is lower than the recommended level of 20.";
+  }
+
+  function findTail(steps, id) {
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].id === id) return steps.slice(i + 1);
+      for (const option of steps[i].options ?? []) {
+        const tail = findTail(option.steps ?? [], id);
+        if (tail) return tail;
+      }
+    }
+    return null;
+  }
+
+  function feedThurgo(event) {
+    const { player } = event;
+    event.handled = true;
+    if (quest.getStage(player) !== STAGE_FIND_IMCANDO_DWARF || !hasItem(player, REDBERRY_PIE_ITEM_ID)) { event.end = true; return; }
+    player.getInventory().deleteNumber(REDBERRY_PIE_ITEM_ID, 1);
+    quest.setStage(player, STAGE_GAVE_THURGO_PIE);
+    const manager = player.getDialogueManager(), chain = new DialogueChainBuilder();
+    chain.add(new ItemStatementDialogue(0, REDBERRY_PIE_ITEM_ID, "You hand over the pie.<br> <br> "));
+    manager.startDialogues(chain);
+    const current = manager.getCurrent();
+    const valid = () => player.isRegistered?.() !== false && manager.getCurrent() === current;
+    const disableContinue = () => player.getPacketSender().sendInterfaceFlagsRange((193 << 16), -1, -1, 0).sendInterfaceScript(2868, [""]);
+    disableContinue();
+    TaskManager.submit(new CountdownTask(player, 3, () => {
+      if (!valid()) return;
+      ItemStatementDialogue.send(player, REDBERRY_PIE_ITEM_ID, "You hand over the pie.<br>Thurgo eats the pie.<br> ");
+      disableContinue();
+    }));
+    TaskManager.submit(new CountdownTask(player, 9, () => {
+      if (!valid()) return;
+      const done = new DialogueChainBuilder();
+      done.add(new ItemStatementDialogue(0, REDBERRY_PIE_ITEM_ID, "You hand over the pie.<br>Thurgo eats the pie.<br>Thurgo pats his stomach."));
+      done.add(new ActionDialogue(1, { execute: () => startTranscript(api, player, THURGO_NPC_ID, PAGE_QUESTS, VARIANT_THURGO_WITH_PIE,
+        steps => findTail(steps, "QZPa_e") ?? []) }));
+      manager.startDialogues(done);
+    }));
   }
 
   function handleDialogueAction(event) {
     const { player, npcId, stepId } = event;
 
     if (npcId === THURGO_NPC_ID) {
-      if (stepId === PIE_HANDOVER_MESSAGE_ID) {
-        if (hasItem(player, REDBERRY_PIE_ITEM_ID)) {
-          player.getInventory().deleteNumber(REDBERRY_PIE_ITEM_ID, 1);
-        }
-        if (quest.getStage(player) < STAGE_GAVE_THURGO_PIE) {
-          quest.setStage(player, STAGE_GAVE_THURGO_PIE);
-        }
-        return; // leave handled false so the message still shows
+      if (stepId === PIE_HANDOVER_MESSAGE_ID) return feedThurgo(event);
+      if (stepId === "4UKOc3") { event.box = { statement: true }; return; }
+      if (stepId === "KYiD0w") {
+        if (!hasItem(player, PORTRAIT_ITEM_ID)) { event.end = true; return; }
+        event.text = "You give the portrait to Thurgo. Thurgo studies the portrait.";
+        event.box = { items: [PORTRAIT_ITEM_ID] };
+        return;
       }
       if (stepId === PORTRAIT_GIVE_ACTION_ID) {
-        if (hasItem(player, PORTRAIT_ITEM_ID)) {
-          player.getInventory().deleteNumber(PORTRAIT_ITEM_ID, 1);
-        }
+        if (quest.getStage(player) !== STAGE_FIND_PORTRAIT || !hasItem(player, PORTRAIT_ITEM_ID)) { event.end = true; event.handled = true; return; }
+        player.getInventory().deleteNumber(PORTRAIT_ITEM_ID, 1);
         quest.setStage(player, STAGE_FIND_MATERIALS);
         event.handled = true;
         return;
       }
       if (stepId === SWORD_SMITH_MESSAGE_ID) {
+        if (quest.getStage(player) !== STAGE_FIND_MATERIALS || !hasItem(player, BLURITE_ORE_ITEM_ID) || !hasItem(player, IRON_BAR_ITEM_ID, 2) || ownsSword(player)) { event.end = true; return; }
+        event.box = { items: [BLURITE_SWORD_ITEM_ID] };
         if (hasItem(player, BLURITE_ORE_ITEM_ID) && hasItem(player, IRON_BAR_ITEM_ID, 2)) {
           player.getInventory().deleteNumber(BLURITE_ORE_ITEM_ID, 1);
           player.getInventory().deleteNumber(IRON_BAR_ITEM_ID, 2);
@@ -335,7 +357,11 @@ module.exports = function registerKnightsSwordQuest(api) {
       return;
     }
 
+    if (npcId === SQUIRE_NPC_ID && stepId === "40MG6g") { event.box = { statement: true }; return; }
     if (npcId === SQUIRE_NPC_ID && stepId === SWORD_HANDIN_ACTION_ID) {
+      event.handled = true;
+      event.end = true;
+      if (quest.getStage(player) !== STAGE_FIND_MATERIALS || !hasItem(player, BLURITE_SWORD_ITEM_ID)) return;
       if (hasItem(player, BLURITE_SWORD_ITEM_ID)) {
         player.getInventory().deleteNumber(BLURITE_SWORD_ITEM_ID, 1);
       }
@@ -346,7 +372,7 @@ module.exports = function registerKnightsSwordQuest(api) {
   }
 
   function searchCupboard(player) {
-    if (quest.getStage(player) < STAGE_FIND_PORTRAIT) {
+    if (quest.getStage(player) < STAGE_FIND_PORTRAIT || quest.isComplete(player)) {
       player.sendMessage("There is just a load of junk in here.");
       return;
     }
@@ -358,48 +384,65 @@ module.exports = function registerKnightsSwordQuest(api) {
       player.sendMessage("You need a free inventory space.");
       return;
     }
-    player.getInventory().adds(PORTRAIT_ITEM_ID, 1);
-    player.sendMessage("You find a small portrait in here which you take.");
+    for (const npc of World.getNpcs()) {
+      if (npc.getId() !== SIR_VYVIN_NPC_ID) continue;
+      const at = npc.getLocation();
+      if (at.getZ() !== 2 || at.getX() < 2983 || at.getX() > 2989 || at.getY() < 3333 || at.getY() > 3337) continue;
+      const target = npc.getInteractingMobile?.()?.getLocation() ?? npc.getPositionToFace?.();
+      const face = npc.getFace?.().getDirection();
+      const dx = target ? target.getX() - at.getX() : face?.getX() ?? 0;
+      const dy = target ? target.getY() - at.getY() : face?.getY() ?? 0;
+      if ((player.getLocation().getX() - at.getX()) * dx + (player.getLocation().getY() - at.getY()) * dy >= 0) {
+        player.sendMessage("You can't search the cupboard while Sir Vyvin is watching you.");
+        return;
+      }
+    }
+    const chain = new DialogueChainBuilder();
+    chain.add(new StatementDialogue(0, "You find a small portrait in here which you take."));
+    chain.add(new ActionDialogue(1, { execute: () => {
+      if (!hasItem(player, PORTRAIT_ITEM_ID) && quest.getStage(player) >= STAGE_FIND_PORTRAIT && !quest.isComplete(player)) {
+        if (!player.getInventory().isFull()) player.getInventory().adds(PORTRAIT_ITEM_ID, 1);
+        else player.getInventory().full();
+      }
+      player.getDialogueManager().reset();
+    } }));
+    player.getDialogueManager().startDialogues(chain);
   }
 
   // Sir Vyvin's cupboard (id 2271 closed, 2272 open): open swaps the model,
   // search hands over the portrait once the squire has pointed to it.
   function openCupboard(event) {
     if (event.objectId !== CUPBOARD_CLOSED_ID) return false;
+    event.handled = true;
+    event.player.performAnimation(new Animation(536));
     replaceObject(event.object, CUPBOARD_OPEN_ID);
-    event.player.sendMessage("You open the cupboard.");
     return true;
   }
 
   function searchCupboardObject(event) {
-    if (event.objectId !== CUPBOARD_CLOSED_ID && event.objectId !== CUPBOARD_OPEN_ID) return false;
+    if (event.objectId !== CUPBOARD_OPEN_ID) return false;
+    event.handled = true;
     searchCupboard(event.player);
     return true;
   }
 
-  // Blurite rocks (11378/11379). The xrsps reference leaves mining to its core
-  // mining system, so this is a minimal port: 10 Mining, a usable pickaxe, one
-  // ore. ponytail: no rock depletion/respawn, reuse Mining's pickaxe lookup.
-  function mineBluriteRocks(event) {
-    const { player } = event;
-    if (player.getSkillManager().getCurrentLevel(Skill.MINING) < BLURITE_MINING_LEVEL) {
-      player.sendMessage("You need a Mining level of at least 10 to mine this rock.");
-      return true;
-    }
-    const pickaxe = mining.findBestPickaxe(player);
-    if (!pickaxe) {
-      player.sendMessage("You don't have a pickaxe which you can use.");
-      return true;
-    }
-    if (player.getInventory().isFull()) {
-      player.getInventory().full();
-      return true;
-    }
-    player.performAnimation(pickaxe.animation);
-    player.getInventory().adds(BLURITE_ORE_ITEM_ID, 1);
-    player.getSkillManager().addExperiences(Skill.MINING, BLURITE_MINING_XP);
-    player.sendMessage("You get some blurite ore.");
+  function shutCupboard(event) {
+    if (event.objectId !== CUPBOARD_OPEN_ID) return false;
+    event.handled = true;
+    replaceObject(event.object, CUPBOARD_CLOSED_ID);
     return true;
+  }
+
+  function handleItemOnNpc(event) {
+    const { player, npcId, itemId } = event;
+    let variant;
+    if (npcId === THURGO_NPC_ID && itemId === PORTRAIT_ITEM_ID && quest.getStage(player) === STAGE_FIND_PORTRAIT) variant = VARIANT_THURGO_GIVE_PORTRAIT;
+    if (npcId === THURGO_NPC_ID && itemId === REDBERRY_PIE_ITEM_ID && quest.getStage(player) === STAGE_FIND_IMCANDO_DWARF) variant = VARIANT_THURGO_WITH_PIE;
+    if (npcId === THURGO_NPC_ID && [BLURITE_ORE_ITEM_ID, IRON_BAR_ITEM_ID].includes(itemId) && quest.getStage(player) === STAGE_FIND_MATERIALS) variant = selectVariant({ player, npcId }).variant;
+    if (npcId === SQUIRE_NPC_ID && itemId === BLURITE_SWORD_ITEM_ID && quest.getStage(player) === STAGE_FIND_MATERIALS) variant = VARIANT_SQUIRE_GIVE_SWORD;
+    if (!variant) return;
+    event.handled = true;
+    startTranscript(api, player, npcId, PAGE_QUESTS, variant);
   }
 
   quest = registerQuest(api, {
@@ -409,6 +452,7 @@ module.exports = function registerKnightsSwordQuest(api) {
     startedValue: STAGE_FIND_RELDO,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
+    completionJingleId: 153,
     xpRewards: [{ skillId: Skill.SMITHING.getIndex(), amount: 12725, label: "Smithing" }],
     scrollItemId: BLURITE_SWORD_ITEM_ID,
     buildJournal,
@@ -418,24 +462,9 @@ module.exports = function registerKnightsSwordQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
-  api.onCustomEvent("npc-dialogue:choice", handleReldoChoice);
-  api.onCustomEvent("npc-dialogue:line", handleThurgoLine);
+  api.onCustomEvent("npc-dialogue:line", handleQuestLine);
+  api.onCustomEvent("npc-dialogue:menu", warnBeforeStart);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
-  api.onObjectInteraction("Cupboard", { Open: openCupboard, Search: searchCupboardObject });
-  api.onObjectInteraction(BLURITE_ROCKS_NAME, { Mine: mineBluriteRocks });
-  /**
-   * Gaps (not covered by the dump / reference):
-   *  - The Giant Dwarf meeting is untracked, so Thurgo/Squire always take the
-   *    "hasn't met Thurgo" branch (the reference does the same).
-   *  - No squire variant exists for stage 3 (GAVE_THURGO_PIE); stages 3 and 4 both
-   *    play the cupboard description and jump to FIND_PORTRAIT.
-   *  - Thurgo stage 3/4 without a portrait uses the "again-without-the-portrait"
-   *    line (no dedicated "ask the squire" dump variant).
-   *  - Blurite mining is not implemented in the reference; the local version has no
-   *    rock depletion/respawn.
-   *  - "Smithing the sword on Thurgo's anvil" is dialogue-driven in the reference
-   *    (no anvil object); the anvil interaction is intentionally not added.
-   *  - Option-level prose conditions ("If the player has a redberry pie:") are not
-   *    resolved by the dialogue runtime, so the pie prompt can appear without a pie.
-   */
+  api.onObjectInteraction("Cupboard", { Open: openCupboard, Search: searchCupboardObject, Shut: shutCupboard });
+  api.onItemOnNpc(handleItemOnNpc);
 };

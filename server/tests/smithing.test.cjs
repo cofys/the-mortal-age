@@ -8,11 +8,13 @@ const { Skill } = require("../dist/game/model/Skill");
 const Smithing = require("../plugins/skills/Smithing.plugin");
 
 const buttons = new Map(), objects = new Map(), tasks = [], players = [];
-let disconnect;
+let disconnect, itemOnObject;
+let denyAnvil = false;
 Smithing.register({
   getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
   onPlayerDisconnect: handler => { disconnect = handler; },
-  onCustomEvent() {}, emitCustomEvent() {}, onItemOnObject() {}, log() {},
+  onCustomEvent() {}, emitCustomEvent(name, request) { if (name === "smithing:anvil-access") request.denied = denyAnvil; },
+  onItemOnObject: handler => { itemOnObject = handler; }, log() {},
   onObjectInteraction: (name, actions) => objects.set(name, actions),
   onInterfaceActionButton: (ids, handler) => { for (const id of ids) buttons.set(id, handler); },
 });
@@ -140,4 +142,22 @@ test("missing hammer, level, or bars preserves inventory and grants no XP", () =
     assert.deepEqual(player.items, before);
     assert.equal(player.xp, 0);
   }
+});
+
+
+test("anvil access rules cover Smith and using bars without consuming anything", () => {
+  const player = playerWith(), before = new Map(player.items);
+  denyAnvil = true;
+  try {
+    open(player);
+    assert.equal(player.interfaceId, -1);
+    const event = { player, itemId: I.BRONZE_BAR, object: { getDefinition: () => ({ getName: () => "Anvil" }) } };
+    itemOnObject(event);
+    assert.equal(event.handled, true);
+    assert.equal(player.interfaceId, -1);
+    assert.deepEqual(player.items, before);
+    assert.equal(player.xp, 0);
+  } finally { denyAnvil = false; }
+  open(player);
+  assert.equal(player.interfaceId, 312);
 });

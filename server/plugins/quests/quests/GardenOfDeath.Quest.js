@@ -1,217 +1,62 @@
-/**
- * The Garden of Death (members).
- *
- * A dialogue-less exploration quest: every line is a search/read message from the
- * "The Garden of Death" transcript page (the page has no NPC speakers and no
- * default variant). The runtime plays it variant by variant, so this plugin
- * raises each variant itself from the scenery and item interactions and answers
- * the few prose conditions the page carries.
- *
- * Stages (varbit 14609 "tgod", varp 3713 bits 0-8): the cache's quest-tab helper
- * script 4024 maps db-table-0 row 180 ("Garden of Death, The") to varbit 14609
- * (`dump:cs2 4024`, case 180 -> get_varbit 14609; confirmed by name in
- * `lookup-gameval.ts varbit garden`). The stub's varp 554 is Garden of
- * Tranquillity's flower-patch varp, not this quest. The real stage values are
- * not published; this is the natural transcript order:
- *   0 not started, 1 journal found, 2 journal read (the campsite hole opens),
- *   3 first dungeon translated (Molch Island hole appears), 4 second dungeon
- *   translated (Xeric's Shrine hole appears), 5 third dungeon translated
- *   (Ruins of Morra hole appears), 6 fourth dungeon translated (the warning
- *   note can be taken), 7 complete.
- *
- * Rewards (OSRS Wiki): 1 Quest Point and 10,000 Farming XP, level 20 Farming
- * required to start (not boostable; checked against the base level).
- *
- * Gaps/approximations:
- * - The word-translation input interface does not exist here: reading the Word
- *   translations scroll translates every word of the current dungeon at once
- *   ("You've discovered a new translation: <meaning> = <word>"), and inspecting
- *   a wood carving or the compass discovers its word individually. The wiki's
- *   word pairs are in DUNGEON_WORDS; carvings carry a short discovery line
- *   instead of OSRS's illustration interface.
- * - The interactive scenery variants (46338/46340/46343/46345/46347 and the
- *   searchable stone tables 46362-46375) are not placed in the world maps, so
- *   the base rubble/chests/vases/mushrooms/tables are swapped for them on first
- *   login (tile, shape and face preserved). OSRS only makes each object
- *   searchable at the right quest step; here they are searchable from the start
- *   but every handler is stage-scoped.
- * - Three of the four entrance holes are not placed in the world maps (only the
- *   campsite hole 46326 at 1308,3467). The other three are spawned at the
- *   surface tiles above their dungeon exits once the previous dungeon's words
- *   are translated, matching the wiki's "the hole will not appear if any words
- *   are missing".
- * - The journal and the dirty notes open interfaces in OSRS; this plugin has no
- *   text for them, so Read only advances the journal stage.
- * - Reading stone tablets 2 and 3 has no transcript variant, so Read is silent.
- * - The "fully understand all of the stone tablets" line (L1cVhR) is raised once
- *   by the Word translations scroll when all four dungeons' words are known (a
- *   persisted flag), including after the fourth dungeon when currentDungeon is 0.
- *
- * Source: OSRS Wiki (The Garden of Death, Quick guide, Transcript:The Garden of
- * Death); ids from the cache identifier dumps.
- */
+/** The Garden of Death: recorded stages, native language puzzle and reading interfaces.
+* Source: RSProx capture1692 (rev226), with ids checked against the current cache.
+* See docs/p2p-kourend-parity.md for coverage and remaining unrecorded branches.
+*/
 module.exports = function registerGardenOfDeathQuest(api) {
-  const {
-    Animation,
-    GameObject,
-    ItemIdentifiers,
-    Location,
-    MapObjects,
-    NpcIdentifiers,
-    ObjectIdentifiers,
-    ObjectManager,
-    RegionManager,
-    Skill,
-  } = api.core;
-  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
-
-  // ==========================================================================
-  // Ids and constants
-  // ==========================================================================
-
-  const PAGE = "The Garden of Death";
-  // The page has no speakers, so the chathead id is inert: it only tags the
-  // events this plugin raises through the transcript runtime.
-  const TRANSCRIPT_NPC_ID = NpcIdentifiers.KASONDE;
-
-  const VARP_ID = 3713; // "tgod" quest varp
-  const VARBIT_ID = 14609; // "tgod", varp 3713 bits 0-8
-
-  const STAGE_STARTED = 1;
-  const STAGE_JOURNAL_READ = 2;
-  const STAGE_DUNGEON_1_DONE = 3;
-  const STAGE_DUNGEON_2_DONE = 4;
-  const STAGE_DUNGEON_3_DONE = 5;
-  const STAGE_DUNGEON_4_DONE = 6;
-  const STAGE_COMPLETE = 7;
-
+  const { Animation, Area, Boundary, CountdownTask, TaskManager, DialogueChainBuilder, ActionDialogue, StatementDialogue, ItemStatementDialogue, GameObject, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, ObjectManager, Skill, Equipment } = api.core;
+  const { registerQuest, refreshQuestList, startTranscript, openBook } = require("../QuestRuntime");
+  const reading = require("../data/garden-of-death.json");
+  const PAGE = "The Garden of Death", TRANSCRIPT_NPC_ID = NpcIdentifiers.KASONDE;
+  const VARP_ID = 3713, VARBIT_ID = 14609, FULLY_TRANSLATED_VARBIT = 14675;
   const FARMING_REQUIREMENT = 20;
-
-  const START_HOOK = "quest:the-garden-of-death:start";
-
-  // Condition step ids.
-  const CAMP_NO_SECATEURS_CONDITION = "OooLjQ";
-  const CAMP_HAS_SECATEURS_CONDITION = "ChpYRu";
-  const D4_FULL_INVENTORY_CONDITION = "98t8-D";
-  const D4_HAS_SPACE_CONDITION = "Gy9FwW";
-  // Message/action step ids the transcript runtime emits.
-  const JOURNAL_FOUND_ACTION = "FLIJGW";
-  const SECATEURS_FOUND_ACTION = "8YLvcl";
-  const WORD_TRANSLATIONS_ACTION = "fBeqSs";
-  const WARNING_NOTE_ACTION = "YBLHVE";
-  const QUEST_COMPLETE_ACTION = "ZsMuIY";
-
-  // Objects.
-  const TENT = ObjectIdentifiers.TENT_19; // 46324
-  const CAMPING_EQUIPMENT = ObjectIdentifiers.CAMPING_EQUIPMENT_6; // 46325
-  const HOLE = ObjectIdentifiers.HOLE_64; // 46326
-  const ROPE_CAMPSITE = ObjectIdentifiers.ROPE_46; // 46327 (dungeon 1 -> campsite)
-  const ROPE_MOLCH = ObjectIdentifiers.ROPE_47; // 46330
-  const ROPE_XERIC = ObjectIdentifiers.ROPE_48; // 46333
-  const ROPE_MORRA = ObjectIdentifiers.ROPE_49; // 46336
-  const TABLE_D1 = ObjectIdentifiers.STONE_TABLE_35; // 46376
-  const TABLE_D2 = ObjectIdentifiers.STONE_TABLE_36; // 46377 (Molch Island)
-  const TABLE_D3 = ObjectIdentifiers.STONE_TABLE_37; // 46378 (Xeric's Shrine)
-  const TABLE_D4 = ObjectIdentifiers.STONE_TABLE_38; // 46379 (Ruins of Morra)
-  const RUBBLE_SEARCH = ObjectIdentifiers.RUBBLE_71; // 46338
-  const STONE_CHEST_SEARCH = ObjectIdentifiers.STONE_CHEST_26; // 46340
-  const VASE_SEARCH = ObjectIdentifiers.VASE_5; // 46343
-  const MUSHROOM_SEARCH = ObjectIdentifiers.HUGE_MUSHROOM_6; // 46345
-  const MUSHROOM_SEARCH_2 = ObjectIdentifiers.HUGE_MUSHROOM_8; // 46347
-  const TABLE_SEARCH_WIDE = ObjectIdentifiers.STONE_TABLE_21; // 46362 (1x2)
-  const TABLE_SEARCH_BIG = ObjectIdentifiers.STONE_TABLE_29; // 46370 (2x2)
-  const TABLE_SEARCH_SMALL = ObjectIdentifiers.STONE_TABLE_34; // 46375 (1x1)
-
-  // Items.
-  const SECATEURS = ItemIdentifiers.SECATEURS; // 5329
-  const SECATEURS_2 = ItemIdentifiers.SECATEURS_2; // 5330
-  const MAGIC_SECATEURS = ItemIdentifiers.MAGIC_SECATEURS; // 7409
-  const KASONDES_JOURNAL = ItemIdentifiers.KASONDES_JOURNAL; // 27511
-  const WORD_TRANSLATIONS = ItemIdentifiers.WORD_TRANSLATIONS; // 27513
-  const DIRTY_NOTE = ItemIdentifiers.DIRTY_NOTE; // 27515
-  const DIRTY_NOTE_3 = ItemIdentifiers.DIRTY_NOTE_3; // 27517
-  const WARNING_NOTE = ItemIdentifiers.WARNING_NOTE; // 27518
-  const STONE_TABLET_1 = ItemIdentifiers.STONE_TABLET_6; // 27519
-  const STONE_TABLET_2 = ItemIdentifiers.STONE_TABLET_7; // 27520
-  const STONE_TABLET_3 = ItemIdentifiers.STONE_TABLET_8; // 27521
-  const STONE_TABLET_4 = ItemIdentifiers.STONE_TABLET_9; // 27522
-  const COMPASS = ItemIdentifiers.COMPASS; // 27532
-
-  const TABLET_BY_DUNGEON = [undefined, STONE_TABLET_1, STONE_TABLET_2, STONE_TABLET_3, STONE_TABLET_4];
-  const TABLET_ITEMS = new Set(TABLET_BY_DUNGEON.slice(1));
-  const PRIMARY_TABLE_BY_DUNGEON = new Map([
-    [TABLE_D1, 1],
-    [TABLE_D2, 2],
-    [TABLE_D3, 3],
-    [TABLE_D4, 4],
-  ]);
-
-  const CLIMB_UP_ANIMATION = 828;
-  const CLIMB_DOWN_ANIMATION = 827;
-
-  const WORDS_ATTRIBUTE = "quest.the_garden_of_death.words";
-  const SEARCHED_ATTRIBUTE = "quest.the_garden_of_death.searched";
-  const FULLY_TRANSLATED_ATTRIBUTE = "quest.the_garden_of_death.fully-translated";
-
-  // ==========================================================================
-  // Word data (OSRS Wiki translation table)
-  // ==========================================================================
-
-  const DUNGEON_WORDS = [
-    [["Island", "Ikam"], ["Water", "Ates"], ["Time", "Miki"], ["Vessel", "Toka"], ["Garden", "Tlane"], ["North", "Makt"]],
-    [["West", "Silam"], ["Poison", "Achi"], ["Animal", "Ayak"], ["Body", "Olkat"], ["Food", "Kualt"], ["Earth", "Xali"], ["Air", "Ehke"], ["Fire", "Tepat"]],
-    [["Make", "Chua"], ["Yes", "Kemo"], ["No", "Ami"], ["Move", "Lini"], ["Arrive", "Xita"], ["East", "Takam"], ["South", "Uitt"]],
-    [["Few", "Amok"], ["Big", "Siua"], ["Sun", "Ralo"], ["Moon", "Rani"], ["Life", "Tal"], ["Mind", "Yoka"], ["Home", "Antil"]],
+  const TENT = ObjectIdentifiers.TENT_19, CAMPING_EQUIPMENT = ObjectIdentifiers.CAMPING_EQUIPMENT_6;
+  const SECATEURS = ItemIdentifiers.SECATEURS, MAGIC_SECATEURS = ItemIdentifiers.MAGIC_SECATEURS;
+  const KASONDES_JOURNAL = ItemIdentifiers.KASONDES_JOURNAL, WORD_TRANSLATIONS = ItemIdentifiers.WORD_TRANSLATIONS;
+  const DIRTY_NOTE = ItemIdentifiers.DIRTY_NOTE, DIRTY_NOTE_2 = ItemIdentifiers.DIRTY_NOTE_2, DIRTY_NOTE_3 = ItemIdentifiers.DIRTY_NOTE_3;
+  const WARNING_NOTE = ItemIdentifiers.WARNING_NOTE, COMPASS = ItemIdentifiers.COMPASS;
+  const TABLETS = [ItemIdentifiers.STONE_TABLET_6, ItemIdentifiers.STONE_TABLET_7, ItemIdentifiers.STONE_TABLET_8, ItemIdentifiers.STONE_TABLET_9];
+  const TABLES = [ObjectIdentifiers.STONE_TABLE_35, ObjectIdentifiers.STONE_TABLE_36, ObjectIdentifiers.STONE_TABLE_37, ObjectIdentifiers.STONE_TABLE_38];
+  const RUBBLE_SEARCH = ObjectIdentifiers.RUBBLE_71, STONE_CHEST_SEARCH = ObjectIdentifiers.STONE_CHEST_26;
+  const VASE_SEARCH = ObjectIdentifiers.VASE_5, MUSHROOM_SEARCH = ObjectIdentifiers.HUGE_MUSHROOM_6, MUSHROOM_SEARCH_2 = ObjectIdentifiers.HUGE_MUSHROOM_8;
+  const TABLE_SEARCH_WIDE = ObjectIdentifiers.STONE_TABLE_21, TABLE_SEARCH_BIG = ObjectIdentifiers.STONE_TABLE_29, TABLE_SEARCH_SMALL = ObjectIdentifiers.STONE_TABLE_34;
+  const VINES_TRANSFORM = 46437, MOLCH_HOLE_TRANSFORM = 46434, XERIC_HOLE_TRANSFORM = 46435, MORRA_HOLE_TRANSFORM = 46436;
+  const VINES = new Set([VINES_TRANSFORM, ObjectIdentifiers.VINES_23, ObjectIdentifiers.VINES_24, ObjectIdentifiers.VINES_25]); // cache tgod_vines multi-loc
+  const TRANSLATIONS_GROUP = 804, TABLET_GROUP = 748, NOTE_GROUP = 625;
+  const WORDS_ATTRIBUTE = "garden-of-death:translations", SEEN_WORDS_ATTRIBUTE = "garden-of-death:seen-words";
+  const VERSION_ATTRIBUTE = "garden-of-death:stage-version";
+  const LEGACY_WORDS_ATTRIBUTE = "quest.the_garden_of_death.words";
+  const FULLY_TRANSLATED_ATTRIBUTE = "garden-of-death:fully-translated";
+  const READ_STAGES = [10, 28, 38, 48], FOUND_STAGES = [8, 26, 36, 46], ENTERED_STAGES = [6, 20, 34, 44], SOLVED_STAGES = [16, 30, 40, 50];
+  const TABLE_COORDS = [[1306, 9885], [1373, 10014], [1311, 10018], [1440, 9816]];
+  const DUNGEONS = [
+    { bounds: [1289, 1325, 9859, 9901, 0], hole: [1308, 3467], ids: [ObjectIdentifiers.HOLE_64], inside: [1309, 9869], outside: [1309, 3469], rope: ObjectIdentifiers.ROPE_46, required: 4 },
+    { bounds: [1354, 1401, 9989, 10039, 0], hole: [1364, 3637], ids: [MOLCH_HOLE_TRANSFORM, ObjectIdentifiers.HOLE_65], inside: [1375, 10032], outside: [1364, 3636], rope: ObjectIdentifiers.ROPE_47, required: 16 },
+    { bounds: [1289, 1325, 9989, 10039, 0], hole: [1314, 3617], ids: [XERIC_HOLE_TRANSFORM, ObjectIdentifiers.HOLE_66], inside: [1296, 10033], outside: [1315, 3617], rope: ObjectIdentifiers.ROPE_48, required: 30 },
+    { bounds: [1414, 1461, 9809, 9841, 0], hole: [1450, 3511], ids: [MORRA_HOLE_TRANSFORM, ObjectIdentifiers.HOLE_67], inside: [1456, 9824], outside: [1449, 3511], rope: ObjectIdentifiers.ROPE_49, required: 40 },
   ];
-  const WORD_BASE = [0, 6, 14, 21];
-
-  const CARVING_WORD_INDEX = new Map([
-    [ItemIdentifiers.WOOD_CARVING, 0], // Island
-    [ItemIdentifiers.WOOD_CARVING_2, 1], // Water
-    [ItemIdentifiers.WOOD_CARVING_3, 6], // West
-    [ItemIdentifiers.WOOD_CARVING_4, 7], // Poison
-    [ItemIdentifiers.WOOD_CARVING_5, 8], // Animal
-    [ItemIdentifiers.WOOD_CARVING_6, 14], // Make
-    [ItemIdentifiers.WOOD_CARVING_7, 15], // Yes
-    [ItemIdentifiers.WOOD_CARVING_8, 16], // No
-    [ItemIdentifiers.WOOD_CARVING_9, 17], // Move
-    [ItemIdentifiers.WOOD_CARVING_10, 21], // Few
-    [ItemIdentifiers.WOOD_CARVING_11, 22], // Big
-    [ItemIdentifiers.WOOD_CARVING_12, 23], // Sun
-    [ItemIdentifiers.WOOD_CARVING_13, 24], // Moon
-  ]);
-  const COMPASS_WORD_INDEXES = [5, 6, 19, 20]; // North, West, East, South
-
-  // ==========================================================================
-  // Searchable scenery (base map ids -> interactive variants)
-  // ==========================================================================
-
-  const BASE_SCENERY_IDS = new Set([
-    ObjectIdentifiers.RUBBLE_70, // 46337
-    ObjectIdentifiers.STONE_CHEST_25, // 46339
-    ObjectIdentifiers.STONE_CHEST_27, // 46341
-    ObjectIdentifiers.VASE_4, // 46342
-    ObjectIdentifiers.HUGE_MUSHROOM_5, // 46344
-    ObjectIdentifiers.HUGE_MUSHROOM_7, // 46346
-    ObjectIdentifiers.STONE_TABLE_7, // 46348
-    ObjectIdentifiers.STONE_TABLE_8, // 46349
-    ObjectIdentifiers.STONE_TABLE_9, // 46350
-    ObjectIdentifiers.STONE_TABLE_10, // 46351
-    ObjectIdentifiers.STONE_TABLE_11, // 46352
-    ObjectIdentifiers.STONE_TABLE_12, // 46353
-    ObjectIdentifiers.STONE_TABLE_13, // 46354
-    ObjectIdentifiers.STONE_TABLE_14, // 46355
-    ObjectIdentifiers.STONE_TABLE_15, // 46356
-    ObjectIdentifiers.STONE_TABLE_16, // 46357
-    ObjectIdentifiers.STONE_TABLE_17, // 46358
-    ObjectIdentifiers.STONE_TABLE_18, // 46359
-    ObjectIdentifiers.STONE_TABLE_19, // 46360
-    ObjectIdentifiers.STONE_TABLE_20, // 46361
-  ]);
-
-  // [replacementId, x, y, shape, face] for every placed base object, from
-  // `yarn dump:loc` of the base ids. Sizes are preserved (1x2 -> 46362,
-  // 2x2 -> 46370, 1x1 -> 46375).
+  const TABLET_TEXT = [
+    "Amok miki. Tal toka kemo. Lini toka makt. Tal tlane osto ates ikam.",
+    "Siua olkat moki. Olkat moki tal. Kualt olkat tal toka. Moki yoka tlane lini kamat. Silam osto achi ates xali.",
+    "Lini kamat kemo. Olkat kemo. Tal toka kemo. Miki xita. Miki achi moki. Miki chua tal. Miki tlane lini. Uitt takam osto tlane tasol.",
+    "Miki achi ami. Tlane chua rani miki. Lini antil. Antil tepat. Ami tal. Tal toka ami. Zema-Tal tepat.",
+  ];
+  // Each accepted meaning is independent: Miki can mean both Time and Death.
+  const WORDS = [
+    ["Osto", "Below/Under/Beneath"], ["Tlane", "Garden/Plant/Tree/Forest/Wood"], ["Tasol", "Structure/Building"], ["Kamat", "Method/Process"], ["Moki", "Need/Require"],
+    ["Amok", "Little/Small/Few"], ["Miki", "Time/Death/Die/Kill"], ["Tal", "Life/Soul"], ["Toka", "Vessel/Container/Holder"], ["Kemo", "Yes/Success/Right/Correct"], ["Lini", "Move/Transfer/Send/Deliver"],
+    ["Makt", "North"], ["Ates", "Lake/Pond/Water"], ["Ikam", "Island"], ["Siua", "Big/Many/Lots/Plenty"], ["Olkat", "Body"], ["Kualt", "Feed/Food/Eat"], ["Yoka", "Knowledge/Mind"], ["Silam", "West"], ["Achi", "Poison"], ["Xali", "Earth/Land/Ground"],
+    ["Xita", "Arrive/Here"], ["Chua", "Create/Build/Make"], ["Uitt", "South"], ["Takam", "East"], ["Ami", "No/Failure/Wrong/Incorrect"], ["Rani", "Dark/Moon"], ["Antil", "Home"], ["Tepat", "Fire/Destroy/Break"], ["Ehke", "Air/Wind"], ["Ayak", "Animal/Creature"], ["Ralo", "Light/Sun"],
+  ];
+  const INITIAL_WORDS = ["below", "under", "garden", "structure", "building", "method", "process", "need", "require"];
+  const REQUIRED = [["Ikam", "Ates", "Miki", "Toka", "Makt"], ["Silam", "Achi", "Olkat", "Kualt", "Xali"], ["Chua", "Kemo", "Ami", "Lini", "Xita", "Takam", "Uitt"], ["Amok", "Siua", "Ralo", "Rani", "Tal", "Miki", "Yoka", "Antil", "Ehke", "Tepat"]];
+  const CONTEXT_WORDS = [
+    ["Little", "time", "Soul", "vessel", "success", "Send", "vessel", "north", "Life", "garden", "below", "water", "island"],
+    ["Many", "body", "needed", "Body", "need", "life", "Feed", "body", "soul", "vessel", "Need", "knowledge", "garden", "transfer", "method", "West", "below", "poison", "water", "land"],
+    ["Transfer", "method", "success", "Body", "success", "Soul", "vessel", "success", "Time", "arrived", "Death", "poison", "needed", "Death", "create", "life", "Death", "garden", "deliver", "South", "east", "below", "forest", "building"],
+    ["Death", "poison", "fail", "Plant", "create", "dark", "death", "Send", "home", "Home", "destroyed", "No", "life", "Soul", "vessel", "fail", "Zema-Tal", "destroyed"],
+  ];
+  const CARVINGS = [105, 803, 800, 793, 797, 795, 801, 802, 792, 794, 799, 796, 791, 798];
+  const CLUE_HOURGLASS = 27538, CLUE_HOME_TABLET = 27539, CLUE_BODY_RUNE = 27541, CLUE_COMPOST = 27542; // Cache tgod_* display-only items.
   const SEARCHABLE_SCENERY = [
     [RUBBLE_SEARCH, 1433, 9812, 10, 1],
     [RUBBLE_SEARCH, 1419, 9814, 10, 3],
@@ -264,7 +109,6 @@ module.exports = function registerGardenOfDeathQuest(api) {
     [VASE_SEARCH, 1313, 10022, 10, 2],
     [VASE_SEARCH, 1305, 10023, 10, 2],
   ];
-
   const SCENERY_TYPE_BY_ID = new Map([
     [RUBBLE_SEARCH, "rubble"],
     [STONE_CHEST_SEARCH, "chest"],
@@ -275,13 +119,8 @@ module.exports = function registerGardenOfDeathQuest(api) {
     [TABLE_SEARCH_BIG, "table"],
     [TABLE_SEARCH_SMALL, "table"],
   ]);
-  const SPOT_TYPE_BY_KEY = new Map(
-    SEARCHABLE_SCENERY.map(([id, x, y]) => [`${x},${y}`, SCENERY_TYPE_BY_ID.get(id)])
-  );
-
-  // Exact transcript lines, per dungeon and object type, in the order a player
-  // meets the objects. "item" is handed out with the line; index beyond the
-  // list means that object has nothing more to give.
+  const SPOT_TYPE_BY_KEY = new Map(SEARCHABLE_SCENERY.map(([id, x, y]) => [`${x},${y}`, SCENERY_TYPE_BY_ID.get(id)]));
+  // Clues are tied to a fixed scenery placement, independent of search order.
   const OTHER_REWARDS = {
     1: {
       table: [
@@ -289,15 +128,15 @@ module.exports = function registerGardenOfDeathQuest(api) {
         { text: "You search the table and find a carving. You take it.", item: ItemIdentifiers.WOOD_CARVING_2 },
       ],
       vase: [{ text: "You find a note next to the vase. You take it.", item: DIRTY_NOTE }],
-      chest: [{ text: "The chest contains some hourglasses. A label on the chest reads 'Miki Toka'." }],
+      chest: [{ text: "The chest contains some hourglasses. A label on the chest reads 'Miki Toka'.", model: CLUE_HOURGLASS }],
     },
     2: {
       table: [{ text: "You search the table and find a carving. You take it.", item: ItemIdentifiers.WOOD_CARVING_3 }],
       vase: [
         { text: "You find a carving next to the vase. You take it.", item: ItemIdentifiers.WOOD_CARVING_4 },
-        { text: "The vase seems to contain some very old compost. A label on the vase reads 'Tlane Kualt'." },
+        { text: "The vase seems to contain some very old compost. A label on the vase reads 'Tlane Kualt'.", model: CLUE_COMPOST },
       ],
-      chest: [{ text: "The chest contains some body runes. A label on the chest reads 'Olkat'." }],
+      chest: [{ text: "The chest contains some body runes. A label on the chest reads 'Olkat'.", model: CLUE_BODY_RUNE }],
       rubble: [{ text: "You search the rubble and find a carving. You take it.", item: ItemIdentifiers.WOOD_CARVING_5 }],
     },
     3: {
@@ -312,483 +151,593 @@ module.exports = function registerGardenOfDeathQuest(api) {
     4: {
       table: [
         { text: "You search the table and find a carving. You take it.", item: ItemIdentifiers.WOOD_CARVING_10 },
-        { text: "You search the table and find a stone tablet. You take it." },
+        { text: "You search the table and find a carving. You take it.", item: ItemIdentifiers.WOOD_CARVING_13 },
       ],
-      vase: [{ text: "You find a carving next to the vase. You take it.", item: ItemIdentifiers.WOOD_CARVING_11 }],
+      vase: [{ text: "You find a carving next to the vase. You take it.", item: ItemIdentifiers.WOOD_CARVING_14 }],
       chest: [
-        { text: "You search the chest and find a carving. You take it.", item: ItemIdentifiers.WOOD_CARVING_12 },
-        { text: "The chest contains what look to be home teleport tablets. A label on the chest reads 'Antil'." },
+        { text: "You search the chest and find a carving. You take it.", item: ItemIdentifiers.WOOD_CARVING_12,
+          contents: { text: "The chest contains what look to be home teleport tablets. A label on the chest reads 'Antil'.", model: CLUE_HOME_TABLET } },
       ],
       rubble: [
-        { text: "You search the rubble and find a carving. You take it.", item: ItemIdentifiers.WOOD_CARVING_13 },
+        { text: "You search the rubble and find a carving. You take it.", item: ItemIdentifiers.WOOD_CARVING_11 },
         { text: "You search the rubble and find a note. You take it.", item: DIRTY_NOTE_3 },
       ],
     },
   };
-
-  // Entrance holes: surface position and the stage that makes them appear.
-  const ENTRANCES = [
-    { stage: STAGE_DUNGEON_1_DONE, x: 1374, y: 3633, to: { x: 1374, y: 10032 } }, // Molch Island
-    { stage: STAGE_DUNGEON_2_DONE, x: 1294, y: 3633, to: { x: 1295, y: 10032 } }, // Xeric's Shrine
-    { stage: STAGE_DUNGEON_3_DONE, x: 1457, y: 3423, to: { x: 1455, y: 9822 } }, // Ruins of Morra
-  ];
-  const HOLE_EXITS = new Map([
-    ["1308,3467", { stage: STAGE_JOURNAL_READ, to: { x: 1309, y: 9870 } }], // campsite
-    ["1374,3633", { stage: STAGE_DUNGEON_1_DONE, to: { x: 1374, y: 10032 } }],
-    ["1294,3633", { stage: STAGE_DUNGEON_2_DONE, to: { x: 1295, y: 10032 } }],
-    ["1457,3423", { stage: STAGE_DUNGEON_3_DONE, to: { x: 1455, y: 9822 } }],
-  ]);
-  const ROPE_EXITS = new Map([
-    [ROPE_CAMPSITE, { x: 1309, y: 3469 }],
-    [ROPE_MOLCH, { x: 1374, y: 3635 }],
-    [ROPE_XERIC, { x: 1294, y: 3635 }],
-    [ROPE_MORRA, { x: 1457, y: 3425 }],
-  ]);
-
   let quest;
-  let sceneryInstalled = false;
-  const spawnedEntrances = new Set();
+  const opened = new WeakMap(), ownedScenery = new WeakMap(), pending = new WeakMap();
+  const has = (player, id) => player.getInventory().getAmount(id) > 0;
+  const hasSecateurs = player => [SECATEURS, MAGIC_SECATEURS].some(id => has(player, id)) || player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId() === MAGIC_SECATEURS;
+  const later = (key, ticks, fn) => TaskManager.submit(new CountdownTask(key, ticks, fn));
 
-  // ==========================================================================
-  // State helpers
-  // ==========================================================================
-
-  const has = (player, itemId) => player.getInventory().getAmount(itemId) >= 1;
-
-  function hasSecateurs(player) {
-    return has(player, SECATEURS) || has(player, SECATEURS_2) || has(player, MAGIC_SECATEURS);
-  }
-
-  function words(player) {
-    return Number(player.getAttribute(WORDS_ATTRIBUTE)) || 0;
-  }
-
-  function knowsWord(player, index) {
-    return (words(player) & (1 << index)) !== 0;
-  }
-
-  function wordAt(index) {
-    for (let dungeon = 0; dungeon < DUNGEON_WORDS.length; dungeon++) {
-      const offset = index - WORD_BASE[dungeon];
-      if (offset >= 0 && offset < DUNGEON_WORDS[dungeon].length) return DUNGEON_WORDS[dungeon][offset];
+  function advance(player, stage) {
+    if (quest.getStage(player) < stage) {
+      quest.setStage(player, stage);
     }
-    return undefined;
   }
 
-  /** Discovers a word and shows the transcript's "new translation" line once. */
-  function discoverWord(player, index) {
-    if (knowsWord(player, index)) return false;
-    player.setAttribute(WORDS_ATTRIBUTE, words(player) | (1 << index));
-    const pair = wordAt(index);
-    if (pair) player.sendMessage(`You've discovered a new translation: ${pair[0]} = ${pair[1]}`);
+  function translations(player) {
+    return new Set(INITIAL_WORDS.concat(String(player.getAttribute(WORDS_ATTRIBUTE) || "").split("|").filter(Boolean)));
+  }
+
+  function meaningFor(word, known) {
+    return word[1].split("/").filter(meaning => known.has(meaning.toLowerCase()));
+  }
+
+  function statement(player, text, item, after) {
+    const chain = new DialogueChainBuilder().add(item === undefined ? new StatementDialogue(0, text) : new ItemStatementDialogue(0, item, text));
+    if (after) {
+      chain.add(new ActionDialogue(1, { execute: after }));
+    }
+    // Capture1692 sends message_game(type=mesbox) as well as the native dialogue text.
+    player.sendMessage(text.replace(/<br>/g, " "));
+    player.getDialogueManager().startDialogues(chain);
+  }
+
+  function give(player, id, text, after) {
+    if (has(player, id)) {
+      statement(player, "You search, but find nothing of interest.");
+      return false;
+    }
+    if (player.getInventory().getFreeSlots() < 1) {
+      statement(player, "You don't have enough room to take it.");
+      return false;
+    }
+    player.getInventory().adds(id, 1);
+    player.getPacketSender().sendSoundEffect(2582, 1, 0);
+    statement(player, text, id, after);
     return true;
   }
 
-  function dungeonWordsDiscovered(player, dungeon) {
-    const base = WORD_BASE[dungeon - 1];
-    return DUNGEON_WORDS[dungeon - 1].every((_, index) => knowsWord(player, base + index));
+  function clearScenery(player) {
+    for (const object of ownedScenery.get(player) || [])
+      ObjectManager.deregister(object, true);
+    ownedScenery.delete(player);
   }
 
-  function allWordsDiscovered(player) {
-    return DUNGEON_WORDS.every((_, dungeon) => dungeonWordsDiscovered(player, dungeon + 1));
-  }
-
-  /** The wiki's "fully understand all of the stone tablets" line, once. */
-  function maybePlayFullyTranslated(player) {
-    if (!allWordsDiscovered(player) || player.getAttribute(FULLY_TRANSLATED_ATTRIBUTE)) return;
-    player.setAttribute(FULLY_TRANSLATED_ATTRIBUTE, 1);
-    startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "the-fourth-dungeon-fully-translating-stone-tablets");
-  }
-
-  /** The dungeon the player is currently solving; 0 when every dungeon is done. */
-  function currentDungeon(stage) {
-    if (stage === STAGE_JOURNAL_READ) return 1;
-    if (stage === STAGE_DUNGEON_1_DONE) return 2;
-    if (stage === STAGE_DUNGEON_2_DONE) return 3;
-    if (stage === STAGE_DUNGEON_3_DONE) return 4;
-    return 0;
-  }
-
-  /** Which of the four dungeons a tile belongs to (from the loc dump bounds). */
-  function dungeonAt(x, y) {
-    if (y < 9850) return 4; // Ruins of Morra
-    if (y < 9950) return 1; // campsite
-    return x >= 1340 ? 2 : 3; // Molch Island east, Xeric's Shrine west
-  }
-
-  // The four Garden of Death dungeons, from the loc dump bounds.
-  const DUNGEON_BOUNDS = [
-    { x1: 1289, x2: 1325, y1: 9859, y2: 9901 }, // campsite
-    { x1: 1354, x2: 1401, y1: 9989, y2: 10039 }, // Molch Island
-    { x1: 1289, x2: 1325, y1: 9989, y2: 10039 }, // Xeric's Shrine
-    { x1: 1414, x2: 1461, y1: 9809, y2: 9841 }, // Ruins of Morra
-  ];
-
-  function inQuestDungeon(x, y) {
-    return DUNGEON_BOUNDS.some((bound) => x >= bound.x1 && x <= bound.x2 && y >= bound.y1 && y <= bound.y2);
-  }
-
-  function searchedKeys(player) {
-    return new Set(String(player.getAttribute(SEARCHED_ATTRIBUTE) || "").split("|").filter(Boolean));
-  }
-
-  function countSearched(keys, dungeon, type) {
-    let count = 0;
-    for (const key of keys) {
-      const [x, y] = key.split(",").map(Number);
-      if (dungeonAt(x, y) === dungeon && SPOT_TYPE_BY_KEY.get(key) === type) count++;
-    }
-    return count;
-  }
-
-  function clearRunState(player) {
-    player.setAttribute(WORDS_ATTRIBUTE, 0);
-    player.setAttribute(SEARCHED_ATTRIBUTE, "");
-  }
-
-  // ==========================================================================
-  // Movement
-  // ==========================================================================
-
-  function climbTo(player, x, y, animation) {
-    player.getMovementQueue().reset();
-    player.performAnimation(new Animation(animation));
-    player.moveTo(new Location(x, y, 0));
-  }
-
-  function spawnHole(x, y) {
-    const key = `${x},${y}`;
-    if (spawnedEntrances.has(key)) return;
-    spawnedEntrances.add(key);
-    const location = new Location(x, y, 0);
-    if (MapObjects.get(HOLE, location, null)) return;
-    ObjectManager.register(new GameObject(HOLE, location, 10, 0, null), true);
-  }
-
-  function ensureEntrances(player) {
-    for (const entrance of ENTRANCES) {
-      if (quest.getStage(player) >= entrance.stage) spawnHole(entrance.x, entrance.y);
-    }
-  }
-
-  // ==========================================================================
-  // Scenery: make the map's quest objects searchable
-  // ==========================================================================
-
-  function installSearchableScenery() {
-    if (sceneryInstalled) return;
-    sceneryInstalled = true;
+  function syncScenery(player) {
+    clearScenery(player);
+    const stage = quest.getStage(player), objects = [];
     for (const [id, x, y, shape, face] of SEARCHABLE_SCENERY) {
-      RegionManager.loadMapFiles(x, y);
-      const tile = MapObjects.mapObjects.get(MapObjects.getHash(x, y, 0)) ?? [];
-      for (const object of [...tile]) {
-        if (BASE_SCENERY_IDS.has(object.getId())) ObjectManager.deregister(object, true);
+      const dungeon = DUNGEONS.findIndex(d => x >= d.bounds[0] && x <= d.bounds[1] && y >= d.bounds[2] && y <= d.bounds[3]);
+      if (dungeon < 0 || stage < READ_STAGES[dungeon]) {
+        continue;
       }
-      ObjectManager.register(new GameObject(id, new Location(x, y, 0), shape, face, null), true);
+      const object = new GameObject(id, new Location(x, y, 0), shape, face, null).setOwner(player);
+      ObjectManager.register(object, true);
+      objects.push(object);
     }
+    ownedScenery.set(player, objects);
   }
 
-  // ==========================================================================
-  // Object interactions
-  // ==========================================================================
-
-  function searchTent(event) {
-    const { player, location } = event;
-    if (location.x !== 1313 || location.y !== 3469) return; // the other Tent 46324 placement
-    event.handled = true;
-    if (quest.isComplete(player) || quest.isStarted(player)) return;
-    if (player.getSkillManager().getMaxLevel(Skill.FARMING) < FARMING_REQUIREMENT) {
-      player.sendMessage("You need a Farming level of 20 to start this quest.");
+  function travel(player, to, animation, after) {
+    if (pending.has(player)) {
       return;
     }
-    clearRunState(player);
-    startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "starting-the-quest-searching-the-tent");
+    const token = {};
+    pending.set(player, token);
+    player.getMovementQueue().reset().setBlockMovement(true);
+    player.performAnimation(new Animation(animation));
+    later(token, 1, () => {
+      if (pending.get(player) !== token) {
+        return;
+      }
+      pending.delete(player);
+      player.moveTo(new Location(...to, 0));
+      player.getMovementQueue().setBlockMovement(false);
+      after?.();
+    });
   }
 
-  function searchCampingEquipment(event) {
-    const { player } = event;
-    event.handled = true;
-    startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "starting-the-quest-searching-the-camping-equipment");
-  }
-
-  function descendHole(event) {
-    const { player, location } = event;
-    const key = `${location.x},${location.y}`;
-    const exit = HOLE_EXITS.get(key);
-    if (!exit) return;
-    event.handled = true;
-    if (quest.getStage(player) < exit.stage) {
-      // Before reading the journal there is no reason to go down (5DPM8u).
-      if (key === "1308,3467") player.sendMessage("You have no reason to go down there.");
+  function handleObject(event) {
+    const { player, objectId, location } = event, stage = quest.getStage(player), option = String(event.option || "").toLowerCase();
+    if (objectId === TENT && location?.x === 1313 && location?.y === 3469) {
+      event.handled = true;
+      if (!quest.isStarted(player)) {
+        if (player.getSkillManager().getMaxLevel(Skill.FARMING) < FARMING_REQUIREMENT) {
+          player.sendMessage("You need a Farming level of 20 to start this quest.");
+          return;
+        }
+        if (player.getInventory().getFreeSlots() < 1) {
+          statement(player, "You don't have enough inventory space.");
+          return;
+        }
+        startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "starting-the-quest-searching-the-tent");
+      }
+      else if (!has(player, KASONDES_JOURNAL)) {
+        give(player, KASONDES_JOURNAL, "You search the tent and find a journal. You take it.");
+      }
       return;
     }
-    climbTo(player, exit.to.x, exit.to.y, CLIMB_DOWN_ANIMATION);
-  }
-
-  function searchPrimaryTable(event) {
-    const { player, objectId } = event;
-    const dungeon = PRIMARY_TABLE_BY_DUNGEON.get(objectId);
-    if (dungeon === undefined) return;
-    event.handled = true;
-    if (quest.getStage(player) !== dungeon + 1) return; // only the active dungeon's table
-    player.sendMessage("You search the table and find a stone tablet. You take it.");
-    player.getInventory().adds(TABLET_BY_DUNGEON[dungeon], 1);
-  }
-
-  function searchOtherObject(event) {
-    const { player, objectId, location } = event;
-    const type = SCENERY_TYPE_BY_ID.get(objectId);
-    if (!type) return;
-    const key = `${location.x},${location.y}`;
-    if (!SPOT_TYPE_BY_KEY.has(key)) return;
-    event.handled = true;
-    const seen = searchedKeys(player);
-    if (seen.has(key)) return;
-    seen.add(key);
-    player.setAttribute(SEARCHED_ATTRIBUTE, [...seen].sort().join("|"));
-    const dungeon = dungeonAt(location.x, location.y);
-    const rewards = OTHER_REWARDS[dungeon]?.[type] ?? [];
-    const reward = rewards[countSearched(seen, dungeon, type) - 1];
-    if (!reward) return;
-    player.sendMessage(reward.text);
-    if (reward.item !== undefined) player.getInventory().adds(reward.item, 1);
-  }
-
-  function handleObjectInteraction(event) {
-    const { objectId } = event;
-    if (objectId === TENT) return searchTent(event);
-    if (objectId === CAMPING_EQUIPMENT) return searchCampingEquipment(event);
-    if (objectId === HOLE) return descendHole(event);
-    if (PRIMARY_TABLE_BY_DUNGEON.has(objectId)) return searchPrimaryTable(event);
-    if (SCENERY_TYPE_BY_ID.has(objectId)) return searchOtherObject(event);
-  }
-
-  /** Ropes are claimed from the shared Ladders plugin before it guesses a floor. */
-  function claimRopeClimb(request) {
-    const exit = ROPE_EXITS.get(request.objectId);
-    if (!exit) return;
-    request.handled = true;
-    climbTo(request.player, exit.x, exit.y, CLIMB_UP_ANIMATION);
-  }
-
-  /** OSRS blocks teleports while inside the four ruins (7 December 2022 change). */
-  function blockDungeonTeleport(event) {
-    const location = event.player?.getLocation?.();
-    if (!location || !inQuestDungeon(location.x, location.y)) return;
-    event.allow = false;
-    event.player.sendMessage("An ancient magical force blocks your teleport.");
-  }
-
-  // ==========================================================================
-  // Item interactions
-  // ==========================================================================
-
-  function readJournal(event) {
-    if (!quest.isStarted(event.player)) return;
-    event.handled = true;
-    if (quest.getStage(event.player) < STAGE_JOURNAL_READ) {
-      quest.setStage(event.player, STAGE_JOURNAL_READ);
+    if (objectId === CAMPING_EQUIPMENT && location?.x >= 1300 && location?.x <= 1320 && location?.y >= 3460 && location?.y <= 3480) {
+      event.handled = true;
+      startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "starting-the-quest-searching-the-camping-equipment");
+      return;
     }
-  }
-
-  function readWordTranslations(event) {
-    const { player } = event;
-    if (!quest.isStarted(player)) return;
-    event.handled = true;
-    const dungeon = currentDungeon(quest.getStage(player));
-    if (dungeon) {
-      const base = WORD_BASE[dungeon - 1];
-      DUNGEON_WORDS[dungeon - 1].forEach((_, index) => discoverWord(player, base + index));
-      if (!dungeonWordsDiscovered(player, dungeon)) return;
-      player.sendMessage("You feel that you've translated enough words to read some of the text on the stone tablet.");
-      if (quest.getStage(player) < STAGE_JOURNAL_READ + dungeon) {
-        quest.setStage(player, STAGE_JOURNAL_READ + dungeon);
+    const dungeon = DUNGEONS.findIndex(d => d.ids.includes(objectId) && location?.x === d.hole[0] && location?.y === d.hole[1]);
+    if (dungeon >= 0) {
+      event.handled = true;
+      if (stage < DUNGEONS[dungeon].required) {
+        player.sendMessage("You have no reason to go down there.");
+        return;
       }
-      ensureEntrances(player);
+      if (dungeon > 0 && stage < ENTERED_STAGES[dungeon]) {
+        advance(player, ENTERED_STAGES[dungeon] - 2);
+      }
+      travel(player, DUNGEONS[dungeon].inside, 827, () => advance(player, ENTERED_STAGES[dungeon]));
+      return;
     }
-    maybePlayFullyTranslated(player);
+    if (VINES.has(objectId) && location?.x === 1375 && location?.y === 10024) {
+      event.handled = true;
+      if (stage < 20) {
+        return;
+      }
+      if (option === "inspect" || option === "search") {
+        if (!has(player, DIRTY_NOTE_2)) {
+          if (give(player, DIRTY_NOTE_2, "You spot a note on the floor near the vines. You take it.")) {
+            advance(player, 22);
+          }
+        }
+        else {
+          statement(player, "You search, but find nothing of interest.");
+        }
+        return;
+      }
+      if (stage < 24) {
+        cutVines(player);
+        return;
+      }
+      player.sendMessage("You squeeze through the vines.");
+      const to = player.getLocation().getY() > 10024 ? [1375, 10023] : [1375, 10025];
+      travel(player, to, 839);
+      return;
+    }
+    const table = TABLES.indexOf(objectId);
+    if (table >= 0 && location?.x === TABLE_COORDS[table][0] && location?.y === TABLE_COORDS[table][1]) {
+      event.handled = true;
+      if (stage < ENTERED_STAGES[table]) {
+        return;
+      }
+      if (give(player, TABLETS[table], "You search the table and find a stone tablet. You take it.")) {
+        advance(player, FOUND_STAGES[table]);
+      }
+      return;
+    }
+    const key = `${location?.x},${location?.y}`, type = SPOT_TYPE_BY_KEY.get(key);
+    if (!type || !SCENERY_TYPE_BY_ID.has(objectId)) {
+      return;
+    }
+    const area = DUNGEONS.findIndex(d => location.x >= d.bounds[0] && location.x <= d.bounds[1] && location.y >= d.bounds[2] && location.y <= d.bounds[3]);
+    if (area < 0 || stage < READ_STAGES[area]) {
+      return;
+    }
+    event.handled = true;
+    const siblings = SEARCHABLE_SCENERY.filter(([id, x, y]) => SCENERY_TYPE_BY_ID.get(id) === type && x >= DUNGEONS[area].bounds[0] && x <= DUNGEONS[area].bounds[1] && y >= DUNGEONS[area].bounds[2] && y <= DUNGEONS[area].bounds[3]);
+    const index = siblings.findIndex(([, x, y]) => x === location.x && y === location.y), reward = OTHER_REWARDS[area + 1]?.[type]?.[index];
+    if (!reward) {
+      statement(player, "You search, but find nothing of interest.");
+      return;
+    }
+    if (reward.item !== undefined) {
+      const contents = reward.contents;
+      const inspectContents = contents ? () => statement(player, contents.text, contents.model) : undefined;
+      if (has(player, reward.item) && inspectContents) inspectContents();
+      else give(player, reward.item, reward.text, inspectContents);
+    }
+    else {
+      statement(player, reward.text, reward.model);
+    }
   }
 
-  function readTablet(event) {
+  function cutVines(player) {
+    if (quest.getStage(player) < 22 || quest.getStage(player) >= 24) {
+      return;
+    }
+    if (!hasSecateurs(player)) {
+      player.sendMessage("You need some secateurs to cut through these vines.");
+      return;
+    }
+    if (pending.has(player)) {
+      return;
+    }
+    const token = {};
+    pending.set(player, token);
+    player.performAnimation(new Animation(2275));
+    player.getPacketSender().sendSoundEffect(2440, 1, 0);
+    later(token, 3, () => {
+      if (pending.get(player) !== token) {
+        return;
+      }
+      pending.delete(player);
+      advance(player, 24);
+      statement(player, "You cut through the vines.");
+    });
+  }
+
+  function handleItemOnObject(event) {
+    if (VINES.has(event.objectId) && [SECATEURS, MAGIC_SECATEURS].includes(event.itemId)) {
+      event.handled = true;
+      cutVines(event.player);
+    }
+  }
+
+  function rope(event) {
+    const dungeon = DUNGEONS.find(d => d.rope === event.objectId);
+    if (!dungeon) {
+      return;
+    }
+    event.handled = true;
+    travel(event.player, dungeon.outside, 828);
+  }
+
+  function visibleWords(player) {
+    const dungeon = READ_STAGES.findLastIndex(stage => quest.getStage(player) >= stage);
+    const seen = new Set(String(player.getAttribute(SEEN_WORDS_ATTRIBUTE) || "").split("|"));
+    return WORDS.filter((word, index) => index < [0, 14, 21, 29, 32][dungeon + 1] || seen.has(word[0]));
+  }
+
+  function openTranslations(player) {
+    if (!has(player, WORD_TRANSLATIONS)) {
+      return;
+    }
+    advance(player, 14);
+    opened.set(player, "translations");
+    const known = translations(player), text = visibleWords(player).map(word => `${word[0]} - ${meaningFor(word, known).join("/") || "???"}<br>`).join("");
+    player.getPacketSender().sendInterface(TRANSLATIONS_GROUP).sendClientScript(6945, text);
+  }
+
+  function promptTranslation(player) {
+    if (!has(player, WORD_TRANSLATIONS) || quest.getStage(player) < 14) {
+      return;
+    }
+    opened.delete(player);
+    player.getPacketSender().sendInterfaceRemoval();
+    player.setEnteredSyntaxAction({ execute: input => translate(player, input) });
+    player.getPacketSender().sendEnterInputPrompt("Enter a possible translation for a word you've found:");
+  }
+
+  function translate(player, input) {
+    if (!has(player, WORD_TRANSLATIONS) || quest.getStage(player) < 14) {
+      return;
+    }
+    const answer = String(input || "").trim().toLowerCase(), word = WORDS.find(([, meanings]) => meanings.toLowerCase().split("/").includes(answer));
+    if (!word) {
+      statement(player, "You can't think of any suitable translations for that word.", undefined, () => askAgain(player));
+      return;
+    }
+    if (!visibleWords(player).includes(word)) {
+      statement(player, "You feel like that word has potential, but you can't think of any suitable translations for it at the moment.", undefined, () => askAgain(player));
+      return;
+    }
+    const known = translations(player);
+    if (known.has(answer)) {
+      statement(player, "You've already discovered that translation.", undefined, () => askAgain(player));
+      return;
+    }
+    known.add(answer);
+    player.setAttribute(WORDS_ATTRIBUTE, [...known].sort().join("|"));
+    const dungeon = READ_STAGES.findLastIndex(s => quest.getStage(player) >= s);
+    const solved = dungeon >= 0 && quest.getStage(player) < SOLVED_STAGES[dungeon] && REQUIRED[dungeon].every(name => meaningFor(WORDS.find(([word]) => word === name), known).length);
+    if (solved) {
+      advance(player, SOLVED_STAGES[dungeon]);
+    }
+    player.getPacketSender().sendSoundEffect(2671, 1, 0);
+    const label = answer[0].toUpperCase() + answer.slice(1);
+    statement(player, `You've discovered a new translation:<br>${label} = ${word[0]}`, undefined, () => {
+      if (solved) {
+        player.getPacketSender().sendSoundEffect(2655, 1, 0);
+        statement(player, "You feel that you've translated enough words to read some of the text on the stone tablet.");
+      }
+      else if (!fullyTranslated(player)) {
+        askAgain(player);
+      }
+    });
+  }
+
+  function askAgain(player) {
+    api.sendMultiChatboxPrompt(player, "Attempt another translation?", "Yes.", () => promptTranslation(player), "No.", () => player.getPacketSender().sendInterfaceRemoval());
+  }
+  const CONTEXT_BASE = { needed: "need", arrived: "arrive", destroyed: "destroy", fail: "failure" };
+
+  function fullyTranslated(player) {
+    if (player.getAttribute(FULLY_TRANSLATED_ATTRIBUTE)) {
+      return false;
+    }
+    const known = translations(player);
+    const complete = CONTEXT_WORDS.flat().every(word => word === "Zema-Tal" || known.has(CONTEXT_BASE[word.toLowerCase()] || word.toLowerCase()));
+    if (!complete) {
+      return false;
+    }
+    player.setAttribute(FULLY_TRANSLATED_ATTRIBUTE, 1);
+    player.getPacketSender().sendVarbit(FULLY_TRANSLATED_VARBIT, 1);
+    statement(player, "You feel that you've translated enough words to fully understand all of the stone tablets!");
+    return true;
+  }
+
+  function translatedTablet(index, known) {
+    let position = 0;
+    return TABLET_TEXT[index].replace(/[A-Za-z]+(?:-[A-Za-z]+)?/g, token => {
+      const expected = CONTEXT_WORDS[index][position++], word = WORDS.find(([word]) => word.toLowerCase() === token.toLowerCase());
+      if (!word) {
+        return token;
+      }
+      const meanings = meaningFor(word, known);
+      if (!meanings.length) {
+        return token;
+      }
+      const base = CONTEXT_BASE[String(expected).toLowerCase()] || String(expected).toLowerCase();
+      const correct = meanings.some(m => m.toLowerCase() === base), text = correct ? expected : meanings[0];
+      return `<col=${correct ? "33cc59" : "32b5ff"}>${token[0] === token[0].toUpperCase() ? text[0].toUpperCase() + text.slice(1) : text.toLowerCase()}</col>`;
+    });
+  }
+
+  function readTablet(player, index) {
+    if (quest.getStage(player) < FOUND_STAGES[index] || !has(player, TABLETS[index])) {
+      return;
+    }
+    advance(player, READ_STAGES[index]);
+    if (index === 3 && quest.getStage(player) >= 50) {
+      advance(player, 52);
+    }
+    syncScenery(player);
+    opened.set(player, index === 0 && !has(player, WORD_TRANSLATIONS) ? "first-tablet"
+      : index === 3 && quest.getStage(player) >= 52 && !has(player, WARNING_NOTE) ? "last-tablet" : "tablet");
+    const packet = player.getPacketSender(), known = translations(player);
+    packet.sendInterface(TABLET_GROUP);
+    const learned = [...known].filter(word => !INITIAL_WORDS.includes(word));
+    const captured = reading.tabletLayouts.find(layout => layout.tablet === index && learned.length === layout.answers.length && layout.answers.every(answer => known.has(answer)));
+    if (captured) {
+      for (const [child, text] of Object.entries(captured.lines))
+        packet.sendString(text, (TABLET_GROUP << 16) | Number(child));
+    }
+    else {
+      for (let child = 3; child <= 13; child++)
+        packet.sendString("", (TABLET_GROUP << 16) | child);
+      const original = wrapTablet(TABLET_TEXT[index]), translated = quest.getStage(player) >= 12 ? wrapTablet(translatedTablet(index, known)) : [];
+      const start = 3 + Math.floor((11 - original.length - translated.length - (translated.length ? 1 : 0)) / 2);
+      original.forEach((text, line) => packet.sendString(text, (TABLET_GROUP << 16) | (start + line)));
+      translated.forEach((text, line) => packet.sendString(text, (TABLET_GROUP << 16) | (start + original.length + 1 + line)));
+    }
+  }
+
+  // shortcut: unrecorded answer combinations wrap at75 visible characters; add their native layouts when captured.
+  function wrapTablet(text) {
+    const lines = [];
+    let line = "";
+    for (const word of text.split(" ")) {
+      if (`${line} ${word}`.replace(/<[^>]*>/g, "").trim().length > 75) {
+        lines.push(line);
+        line = "";
+      }
+      line += (line ? " " : "") + word;
+    }
+    if (line) {
+      lines.push(line);
+    }
+    return lines;
+  }
+
+  function handleItem(event) {
     const { player, itemId } = event;
-    if (!quest.isStarted(player)) return;
-    event.handled = true;
-    if (itemId === STONE_TABLET_1 && !has(player, WORD_TRANSLATIONS)) {
-      startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "the-first-dungeon-reading-the-stone-tablet");
+    if (!quest.isStarted(player)) {
       return;
     }
-    if (
-      itemId === STONE_TABLET_4 &&
-      !has(player, WARNING_NOTE) &&
-      quest.getStage(player) === STAGE_DUNGEON_4_DONE
-    ) {
-      startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "the-fourth-dungeon-reading-the-stone-tablet-after-translating-it");
+    if (itemId === KASONDES_JOURNAL) {
+      event.handled = true;
+      advance(player, 4);
+      openBook(player, "Kasonde's Journal", reading.journalPages);
+      return;
+    }
+    if (itemId === WORD_TRANSLATIONS) {
+      event.handled = true;
+      openTranslations(player);
+      return;
+    }
+    const index = TABLETS.indexOf(itemId);
+    if (index >= 0) {
+      event.handled = true;
+      readTablet(player, index);
+      return;
+    }
+    if (itemId === WARNING_NOTE) {
+      event.handled = true;
+      if (quest.getStage(player) < 54 || !has(player, WARNING_NOTE)) {
+        return;
+      }
+      opened.set(player, "warning");
+      player.getPacketSender().sendInterface(NOTE_GROUP).sendClientScript(418, "", reading.warningNote);
+      return;
+    }
+    const note = [DIRTY_NOTE, DIRTY_NOTE_2, DIRTY_NOTE_3].indexOf(itemId);
+    if (note >= 0) {
+      event.handled = true;
+      if (!has(player, itemId)) return;
+      opened.set(player, "dirty-note");
+      player.getPacketSender().sendInterface(NOTE_GROUP).sendClientScript(418, "", reading.dirtyNotes[note]);
+      return;
+    }
+    const carving = Array.from({ length: 14 }, (_, i) => i ? ItemIdentifiers[`WOOD_CARVING_${i + 1}`] : ItemIdentifiers.WOOD_CARVING).indexOf(itemId);
+    if (carving >= 0) {
+      event.handled = true;
+      const seen = new Set(String(player.getAttribute(SEEN_WORDS_ATTRIBUTE) || "").split("|"));
+      for (const word of [["Ikam"], ["Ates"], ["Silam"], ["Achi"], ["Ayak", "Ehke", "Tepat"], ["Chua"], ["Kemo"], ["Ami"], ["Lini"], ["Amok"], ["Siua"], ["Ralo", "Rani"], ["Ehke", "Tepat"], ["Tal", "Miki", "Yoka"]][carving])
+        seen.add(word);
+      player.setAttribute(SEEN_WORDS_ATTRIBUTE, [...seen].join("|"));
+      player.getPacketSender().sendInterface(CARVINGS[carving]);
+      return;
+    }
+    if (itemId === COMPASS) {
+      event.handled = true;
+      statement(player, "Rather than the usual labels, the compass points are instead marked as 'Makt', 'Uitt', 'Takam' and 'Silam'.", COMPASS);
     }
   }
 
-  function readWarningNote(event) {
-    const { player } = event;
-    if (!quest.isStarted(player) || quest.isComplete(player)) return;
-    event.handled = true;
-    startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "the-fourth-dungeon-reading-the-warning-note");
+  function closed({ player, interfaceId }) {
+    const open = opened.get(player);
+    if (!open) {
+      return;
+    }
+    if (interfaceId === TABLET_GROUP) {
+      opened.delete(player);
+      if (open === "first-tablet" && !has(player, WORD_TRANSLATIONS)) {
+        startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "the-first-dungeon-reading-the-stone-tablet");
+      }
+      else if (open === "last-tablet" && !has(player, WARNING_NOTE)) {
+        startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "the-fourth-dungeon-reading-the-stone-tablet-after-translating-it");
+      }
+    }
+    else if (interfaceId === NOTE_GROUP) {
+      opened.delete(player);
+      if (open === "warning" && quest.getStage(player) === 54) {
+        quest.complete(player);
+        later(player, 3, () => statement(player, "Although you've now discovered the fate of the Old Ones, you feel that there could be more to find. Perhaps you should continue exploring and see if you can fully translate the stone tablets."));
+      }
+    }
   }
 
-  function inspectCarving(event) {
-    event.handled = true;
-    discoverWord(event.player, CARVING_WORD_INDEX.get(event.itemId));
+  function button(event) {
+    if (event.buttonId === (TRANSLATIONS_GROUP << 16 | 5)) {
+      if (opened.get(event.player) !== "translations") {
+        return;
+      }
+      event.handled = true;
+      promptTranslation(event.player);
+    }
   }
 
-  function inspectCompass(event) {
-    event.handled = true;
-    event.player.sendMessage(
-      "Rather than the usual labels, the compass points are instead marked as 'Makt', 'Uitt', 'Takam' and 'Silam'."
-    );
-    for (const index of COMPASS_WORD_INDEXES) discoverWord(event.player, index);
-  }
-
-  function handleItemAction(event) {
-    const { itemId } = event;
-    if (itemId === KASONDES_JOURNAL) return readJournal(event);
-    if (itemId === WORD_TRANSLATIONS) return readWordTranslations(event);
-    if (TABLET_ITEMS.has(itemId)) return readTablet(event);
-    if (itemId === WARNING_NOTE) return readWarningNote(event);
-    if (CARVING_WORD_INDEX.has(itemId)) return inspectCarving(event);
-    if (itemId === COMPASS) return inspectCompass(event);
-  }
-
-  // ==========================================================================
-  // Transcript events
-  // ==========================================================================
-
-  function handleStartHook({ player, npcId, hook }) {
-    if (npcId !== TRANSCRIPT_NPC_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) === 0) quest.setStage(player, STAGE_STARTED);
-  }
-
-  function answerCondition({ npcId, player, stepId }) {
-    if (npcId !== TRANSCRIPT_NPC_ID) return null;
-    if (stepId === CAMP_NO_SECATEURS_CONDITION) return !hasSecateurs(player);
-    if (stepId === CAMP_HAS_SECATEURS_CONDITION) return hasSecateurs(player);
-    if (stepId === D4_FULL_INVENTORY_CONDITION) return player.getInventory().isFull();
-    if (stepId === D4_HAS_SPACE_CONDITION) return !player.getInventory().isFull();
+  function condition({ npcId, player, stepId }) {
+    if (npcId !== TRANSCRIPT_NPC_ID) {
+      return null;
+    }
+    if (stepId === "OooLjQ") {
+      return !hasSecateurs(player);
+    }
+    if (stepId === "ChpYRu") {
+      return hasSecateurs(player);
+    }
+    if (stepId === "98t8-D") {
+      return player.getInventory().getFreeSlots() < 1;
+    }
+    if (stepId === "Gy9FwW") {
+      return player.getInventory().getFreeSlots() > 0;
+    }
     return null;
   }
 
-  function handleTranscriptAction(event) {
-    if (event.npcId !== TRANSCRIPT_NPC_ID) return;
+  function start({ player, npcId, hook }) {
+    if (npcId === TRANSCRIPT_NPC_ID && hook === "quest:the-garden-of-death:start" && quest.getStage(player) === 0) {
+      quest.setStage(player, 2);
+    }
+  }
+
+  function action(event) {
+    if (event.npcId !== TRANSCRIPT_NPC_ID) {
+      return;
+    }
     const { player, stepId } = event;
-    if (stepId === JOURNAL_FOUND_ACTION) {
-      event.handled = true;
-      player.sendMessage(event.text);
-      if (!has(player, KASONDES_JOURNAL)) player.getInventory().adds(KASONDES_JOURNAL, 1);
+    const items = { FLIJGW: KASONDES_JOURNAL, "8YLvcl": SECATEURS, fBeqSs: WORD_TRANSLATIONS, YBLHVE: WARNING_NOTE }, item = items[stepId];
+    if (item === undefined) {
       return;
     }
-    if (stepId === SECATEURS_FOUND_ACTION) {
-      event.handled = true;
-      player.sendMessage(event.text);
-      if (!hasSecateurs(player)) player.getInventory().adds(SECATEURS, 1);
-      return;
-    }
-    if (stepId === WORD_TRANSLATIONS_ACTION) {
-      event.handled = true;
-      player.sendMessage(event.text);
-      if (!has(player, WORD_TRANSLATIONS)) player.getInventory().adds(WORD_TRANSLATIONS, 1);
-      return;
-    }
-    if (stepId === WARNING_NOTE_ACTION) {
-      event.handled = true;
-      player.sendMessage(event.text);
-      if (!has(player, WARNING_NOTE)) player.getInventory().adds(WARNING_NOTE, 1);
-      return;
-    }
-    if (stepId === QUEST_COMPLETE_ACTION) {
-      event.handled = true;
-      if (!quest.isComplete(player)) quest.complete(player);
+    event.handled = true;
+    if (give(player, item, event.text)) {
+      if (item === WORD_TRANSLATIONS) {
+        advance(player, 12);
+      }
+      if (item === WARNING_NOTE) {
+        advance(player, 54);
+      }
     }
   }
 
-  // ==========================================================================
-  // Journal and reward
-  // ==========================================================================
-
-  function buildJournal(player, questHandle) {
-    const stage = questHandle.getStage(player);
-    if (stage >= STAGE_COMPLETE) {
-      return [
-        "<str>I explored the four ancient ruins and translated the Old Ones' language.</str>",
-        "<str>I discovered their fate and Kasonde's warning about soul transference.</str>",
-        "<str>I was rewarded with a Quest Point and 10,000 Farming experience.</str>",
-        "",
-        "<col=ff0000>QUEST COMPLETE!</col>",
-      ];
+  class Ruins extends Area {
+    getName() {
+      return "The Garden of Death ruins";
     }
-    if (stage === STAGE_DUNGEON_4_DONE) {
-      return [
-        "<str>I explored the four ancient ruins and translated their words.</str>",
-        "",
-        "I should read the final stone tablet again, then the warning note.",
-      ];
+    canTeleport(player) {
+      player.sendMessage("An ancient magical force blocks your teleport.");
+      return false;
     }
-    if (stage >= STAGE_JOURNAL_READ) {
-      const dungeon = currentDungeon(stage);
-      return [
-        "<str>I found Kasonde's journal at the abandoned campsite.</str>",
-        "<str>I read about the Old Ones and the ruins they left behind.</str>",
-        "",
-        `I am exploring the ancient ruins (${dungeon} of 4). I should translate`,
-        "the words I find so I can read the stone tablets.",
-      ];
-    }
-    if (stage >= STAGE_STARTED) {
-      return [
-        "<str>I searched the tent and found Kasonde's journal.</str>",
-        "",
-        "I should read the <col=800000>journal</col>.",
-      ];
-    }
-    return [
-      "I can start this quest by searching the <col=800000>Tent</col> at the",
-      "campsite in the south of the <col=800000>Kebos Lowlands</col>.",
-    ];
   }
 
-  function grantReward(player) {
-    player.getSkillManager().addExperiences(Skill.FARMING, 10000);
-  }
-
-  function handleLogin({ player }) {
-    installSearchableScenery();
-    ensureEntrances(player);
+  function login({ player }) {
+    const legacy = player.getAttribute(LEGACY_WORDS_ATTRIBUTE);
+    if (!player.getAttribute(VERSION_ATTRIBUTE)) {
+      const stage = quest.getStage(player);
+      if (stage > 0 && stage <= 7 && (stage % 2 === 1 || legacy !== undefined && legacy !== null)) {
+        quest.setStage(player, [0, 2, 4, 16, 30, 40, 50, 56][stage]);
+      }
+      if (Number(legacy) > 0) {
+        const oldWords = ["island", "water", "time", "vessel", "garden", "north", "west", "poison", "animal", "body", "food", "earth", "air", "fire", "make", "yes", "no", "move", "arrive", "east", "south", "few", "big", "sun", "moon", "life", "mind", "home"];
+        player.setAttribute(WORDS_ATTRIBUTE, oldWords.filter((_, index) => (Number(legacy) & (1 << index)) !== 0).join("|"));
+      }
+      player.setAttribute(VERSION_ATTRIBUTE, 1);
+    }
+    syncScenery(player);
+    player.getPacketSender().sendVarbit(FULLY_TRANSLATED_VARBIT, Number(player.getAttribute(FULLY_TRANSLATED_ATTRIBUTE) || 0));
     refreshQuestList(player);
   }
 
-  // ==========================================================================
-  // Registration
-  // ==========================================================================
+  function logout({ player }) {
+    clearScenery(player);
+    opened.delete(player);
+    const token = pending.get(player);
+    if (token) {
+      TaskManager.cancelTasks(token);
+    }
+    pending.delete(player);
+    player.getMovementQueue().setBlockMovement(false);
+  }
 
-  api.persistAttribute(WORDS_ATTRIBUTE);
-  api.persistAttribute(SEARCHED_ATTRIBUTE);
-  api.persistAttribute(FULLY_TRANSLATED_ATTRIBUTE);
-
-  quest = registerQuest(api, {
-    key: "the_garden_of_death",
-    name: "The Garden of Death",
-    varpId: VARP_ID,
-    varbitId: VARBIT_ID,
-    startedValue: STAGE_STARTED,
-    completionValue: STAGE_COMPLETE,
-    questPoints: 1,
-    xpRewards: [{ skillId: Skill.FARMING.getIndex(), amount: 10000, label: "Farming" }],
-    buildJournal,
-    onReward: grantReward,
-  });
-
-  api.onNpcDialogueCondition(answerCondition);
-  api.onCustomEvent("npc-dialogue:hook", handleStartHook);
-  api.onCustomEvent("npc-dialogue:action", handleTranscriptAction);
-  api.onItemAction(handleItemAction);
-  api.onObjectInteraction(handleObjectInteraction);
-  api.onCustomEvent("ladders:climb", claimRopeClimb);
-  api.onCanTeleport(blockDungeonTeleport);
-  api.onPlayerLogin(handleLogin);
+  function buildJournal(player) {
+    const stage = quest.getStage(player);
+    if (stage >= 56) {
+      return ["<str>I discovered the fate of the Old Ones and Kasonde's warning.</str>", "", "<col=ff0000>QUEST COMPLETE!</col>"];
+    }
+    if (stage >= 4) {
+      return ["I found and read Kasonde's journal.", "I should explore the ancient ruins and translate the stone tablets."];
+    }
+    if (stage >= 2) {
+      return ["I found Kasonde's journal. I should read it."];
+    }
+    return ["I can start this quest by searching the Tent at the campsite in the southern Kebos Lowlands.", "I need level 20 Farming."];
+  }
+  api.persistAttribute(LEGACY_WORDS_ATTRIBUTE);
+  api.persistAttribute(VERSION_ATTRIBUTE, 0);
+  api.persistAttribute(WORDS_ATTRIBUTE, "");
+  api.persistAttribute(SEEN_WORDS_ATTRIBUTE, "");
+  api.persistAttribute(FULLY_TRANSLATED_ATTRIBUTE, 0);
+  quest = registerQuest(api, { key: "the_garden_of_death", name: PAGE, varpId: VARP_ID, varbitId: VARBIT_ID, startedValue: 2, completionValue: 56, questPoints: 1, xpRewards: [{ skillId: Skill.FARMING.getIndex(), amount: 10000, label: "Farming" }], buildJournal, onReward: player => player.getSkillManager().addExperiences(Skill.FARMING, 10000) });
+  api.onNpcDialogueCondition(condition);
+  api.onCustomEvent("npc-dialogue:hook", start);
+  api.onCustomEvent("npc-dialogue:action", action);
+  api.onObjectInteraction(handleObject);
+  api.onItemOnObject(handleItemOnObject);
+  api.onItemAction(handleItem);
+  api.onCustomEvent("ladders:climb", rope);
+  api.onInterfaceActionButton([(TRANSLATIONS_GROUP << 16) | 5], button);
+  api.onCustomEvent("interface:closed", closed);
+  api.registerArea(new Ruins(DUNGEONS.map(d => new Boundary(...d.bounds))));
+  api.onPlayerLogin(login);
+  api.onPlayerLogout(logout);
 };

@@ -1525,6 +1525,30 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                     },
                 };
             }
+            if (mode === 4 || mode === 5) {
+                return {
+                    type: "camera",
+                    payload: {
+                        mode: mode === 4 ? "move" : "look",
+                        x: reader.readShort(), y: reader.readShort(), height: reader.readSignedShort(),
+                        rate: reader.readByte(), rate2: reader.readByte(), heightRelative: reader.readBoolean(),
+                    },
+                };
+            }
+            if (mode === 8 || mode === 9) {
+                const x = reader.readShort(), y = reader.readShort(), height = reader.readSignedShort();
+                const cycles = reader.readShort(), easingId = reader.readByte(), flags = reader.readByte();
+                const easing = ["linear", "ease_in_out_sine", "ease_out_cubic"][easingId];
+                if (!easing) return null;
+                return { type: "camera", payload: { mode: mode === 8 ? "move" : "look", x, y, height, cycles, easing,
+                    heightRelative: (flags & 1) !== 0, ignoreTerrain: (flags & 2) !== 0, trackTarget: (flags & 4) !== 0 } };
+            }
+            if (mode === 6) {
+                return { type: "camera", payload: { mode: "unlock", unlock: reader.readBoolean() } };
+            }
+            if (mode === 7) {
+                return { type: "camera", payload: { mode: "translate", dx: reader.readInt(), dy: reader.readInt() } };
+            }
             return null;
         }
 

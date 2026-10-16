@@ -165,7 +165,8 @@ module.exports = function registerTouristTrapQuest(api) {
   }
 
   /** Answer the page's prose conditions. */
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!IRENA_NPC_IDS.has(npcId) && !ANA_NPC_IDS.has(npcId) && ![AL_SHABIM_NPC_ID, MERCENARY_CAPTAIN_NPC_ID, CAPTAIN_SIAD_NPC_ID, MINE_CART_DRIVER_NPC_ID].includes(npcId)) return null;
     const value = String(text).toLowerCase();
     const has = (itemId, amount = 1) => held(player, itemId, amount);
     if (value.includes("does not have 5 coins")) return !has(COINS_ITEM_ID, 5);

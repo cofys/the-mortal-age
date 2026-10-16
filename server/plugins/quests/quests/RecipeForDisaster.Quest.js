@@ -31,7 +31,8 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     NpcIdentifiers.COOK_4, NpcIdentifiers.COOK_5, NpcIdentifiers.COOK_6,
     NpcIdentifiers.COOK_7, NpcIdentifiers.COOK_8,
   ]);
-  const ARIS_IDS = new Set([NpcIdentifiers.ARIS, NpcIdentifiers.ARIS_2, NpcIdentifiers.ARIS_3]);
+  // The public Varrock Aris starts Demon Slayer; these are her banquet forms.
+  const BANQUET_ARIS_IDS = new Set([NpcIdentifiers.ARIS_2, NpcIdentifiers.ARIS_3]);
   const RESCUES = [
     { name: "the Mountain Dwarf", page: "Recipe for Disaster/Freeing the Mountain Dwarf", ids: [NpcIdentifiers.MOUNTAIN_DWARF], item: ItemIdentifiers.DWARVEN_ROCK_CAKE_2, flag: 1, variant: "starting-out-inspecting-the-dwarf", finish: "finishing-up-freeing-the-dwarf" },
     { name: "the goblin generals", page: "Recipe for Disaster/Freeing the Goblin generals", ids: [NpcIdentifiers.GENERAL_WARTFACE_5, NpcIdentifiers.GENERAL_BENTNOZE_5], item: ItemIdentifiers.SLOP_OF_COMPROMISE, flag: 2, variant: "starting-out-inspecting-the-goblin-generals", finish: "finishing-up-freeing-the-goblin-generals" },
@@ -335,7 +336,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
         return { page: PAGE, variant: "recipe-for-success" };
       }
     }
-    if (ARIS_IDS.has(npcId)) {
+    if (BANQUET_ARIS_IDS.has(npcId)) {
       if (canBeginFinale(player)) {
         const finalPage = "Recipe for Disaster/Defeating the Culinaromancer";
         if (pages.some((entry) => entry.page === finalPage)) {
@@ -444,7 +445,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     if (value.includes("does not meet the requirements") || value.includes("doesn't meet the requirements")) {
       return !meetsOpeningRequirements(player);
     }
-    if (value.includes("meets the requirements") || value.includes("has completed cook's assistant")) {
+    if (value.includes("meets the requirements") || (COOK_IDS.has(npcId) && value.includes("has completed cook's assistant"))) {
       return meetsOpeningRequirements(player);
     }
     const ingredients = [ItemIdentifiers.EYE_OF_NEWT, ItemIdentifiers.GREENMANS_ALE,
@@ -1076,7 +1077,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
 
   function handleArisInteraction(event) {
     const { player, npcId } = event;
-    if (!ARIS_IDS.has(npcId) || stage(player) < STAGE_OPENING_COMPLETE || canBeginFinale(player)) return false;
+    if (!BANQUET_ARIS_IDS.has(npcId) || stage(player) < STAGE_OPENING_COMPLETE || canBeginFinale(player)) return false;
     const option = event.definition?.getActions?.()?.[event.clickType - 1];
     if (option !== "Talk-to") return false;
     event.handled = true;

@@ -1,54 +1,14 @@
-/**
- * A Ruff Situation (members).
- *
- * The words come from the "A Ruff Situation" transcript page (OSRS Wiki). This
- * plugin supplies the Talk-to/Interact handlers for the quest NPCs, the prose
- * condition answers, the den/goblins/outlaws stage logic and the completion
- * reward.
- *
- * Stages (varbit 15889 "dogquest", varp 5742, bits 0-6; lookup-gameval.ts
- * "dogquest"):
- *   0 not started, 1 Talia asked for help, 2 Gertrude visited, 3 stray dog found
- *   (following her to the den), 4 all three den objects inspected, 5 first puppy
- *   rescued, 6 the goblins want a stuffed dog, 7 second puppy rescued (third
- *   puppy hunt), 8 outlaws cornering the third puppy, 9 all three puppies
- *   rescued, 10 complete.
- *
- * The stray dog (16504/16505), Talia/Chase (16486/16488), the quest guard
- * (16493), Gertrude (7284), Picklenose/Toetaller (16523/16524) and the quest
- * outlaws (16527 level 23 / 16528 level 22) are per-player owner-only spawns:
- * none of them are in npc-spawns.json. The torn newspaper (62488), chewed box
- * (62491) and rough bedding (62485) have no map placements in this cache, so
- * they are registered at the cache/wiki tiles (3197,3413), (3195,3413),
- * (3195,3416).
- *
- * Source: OSRS Wiki "A Ruff Situation" page, quick guide and transcript; varbit
- * 15889 and every cache id confirmed with scripts/lookup-gameval.ts and
- * CacheDefinitions.
- *
- * Gaps: the dog does not physically path-follow the player; each beat teleports
- * her to the next scene tile (bank -> den -> Cooks' Guild -> goblins -> outlaw
- * camp), which keeps the transcript order and the walk short. Cutscene and
- * multi-speaker lines share the chathead of the NPC being talked to. The banker
- * and Grand Exchange proximity lines, the "periodically"/"upon approaching"
- * ambient variants and the "interacting with the dog while following her"
- * lead-in (the cutscene plays on the next interaction instead) are not
- * triggered. The stuffed dog consumes grain, one fur
- * and thread; the needle is kept (a costume needle replaces needle and thread).
- * Puppies are tracked as quest state rather than spawned NPCs. The trailing
- * "Congratulations! Quest complete!" action after the wiki "end" marker is
- * unreachable during replay, so the quest completes on the guard's walk-in a few
- * lines earlier. No post-quest Chase variant exists on the page, so a completed
- * player gets the "Transcript:Chase" standard dialogue.
+/** A Ruff Situation: RSProx main recording and puppy follow-up, revision241.
+ * Captured stage values, interactions, actor choreography and camera sequences
+ * are documented in docs/p2p-varlamore-pair-parity.md. Raw logs stay local.
  */
 module.exports = function registerARuffSituationQuest(api) {
   const {
-    GameObject,
+    ActionDialogue, Animation, Area, Boundary, CountdownTask, DialogueChainBuilder,
+    ItemStatementDialogue, PrivateArea, StatementDialogue, TaskManager,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
-    ObjectIdentifiers,
-    ObjectManager,
     Skill,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
@@ -60,23 +20,28 @@ module.exports = function registerARuffSituationQuest(api) {
   const VARP_DOGQUEST = 5742;
   const STAGE_VARBIT = 15889;
 
-  const STAGE_STARTED = 1;
-  const STAGE_GERTRUDE = 2;
-  const STAGE_DOG = 3;
-  const STAGE_DEN = 4;
-  const STAGE_FIRST_PUPPY = 5;
-  const STAGE_STUFFED_DOG = 6;
-  const STAGE_SECOND_PUPPY = 7;
-  const STAGE_OUTLAWS = 8;
-  const STAGE_THIRD_PUPPY = 9;
-  const STAGE_COMPLETE = 10;
+  const STAGE_ACCEPTED = 5, STAGE_LEADING = 20, STAGE_INSPECTED = 30;
+  const STAGE_FIRST_SCENE = 40, STAGE_FIRST_PICKUP = 45, STAGE_FIRST_SAFE = 50;
+  const STAGE_CRAFTED = 65, STAGE_TRADE = 66, STAGE_GOBLINS_GONE = 70;
+  const STAGE_THIRD_SEARCH = 80, STAGE_OUTLAW_SCENE = 85;
+  const STAGE_RESCUE = 95, STAGE_THIRD_PICKUP = 100, STAGE_SHELTER = 110, STAGE_FINAL_SCENE = 115;
+  const STAGE_STARTED = 10;
+  const STAGE_GERTRUDE = 15;
+  const STAGE_DOG = 25;
+  const STAGE_DEN = 35;
+  const STAGE_FIRST_PUPPY = 55;
+  const STAGE_STUFFED_DOG = 60;
+  const STAGE_SECOND_PUPPY = 75;
+  const STAGE_OUTLAWS = 90;
+  const STAGE_THIRD_PUPPY = 105;
+  const STAGE_COMPLETE = 120;
 
   const CRAFTING_REQUIREMENT = 15;
   const GERTRUDES_CAT_KEY = "gertrudes_cat";
 
   const TALIA_NPC_ID = NpcIdentifiers.TALIA_2; // 16486
   const CHASE_NPC_ID = NpcIdentifiers.CHASE; // 16488
-  const GERTRUDE_NPC_ID = NpcIdentifiers.GERTRUDE; // 7284
+  const GERTRUDE_NPC_ID = 3500; // Canonical Varrock Gertrude
   const QUEST_GUARD_NPC_ID = NpcIdentifiers.GUARD_302; // 16493
   const STRAY_DOG_NPC_ID = NpcIdentifiers.STRAY_DOG_8; // 16504, Interact
   const STRAY_DOG_FOLLOWING_NPC_ID = NpcIdentifiers.STRAY_DOG_9; // 16505, Interact|Dismiss
@@ -109,28 +74,21 @@ module.exports = function registerARuffSituationQuest(api) {
   const COSTUME_NEEDLE_ITEM_ID = ItemIdentifiers.COSTUME_NEEDLE; // 29920
   const STUFFED_DOG_ITEM_ID = ItemIdentifiers.STUFFED_DOG; // 34602
 
-  const TORN_NEWSPAPER_OBJECT_ID = ObjectIdentifiers.TORN_NEWSPAPER_2; // 62488, Inspect
-  const CHEWED_BOX_OBJECT_ID = ObjectIdentifiers.CHEWED_BOX_2; // 62491, Inspect
-  const ROUGH_BEDDING_OBJECT_ID = ObjectIdentifiers.ROUGH_BEDDING_2; // 62485, Inspect
 
-  const TALIA_TILE = { x: 3036, y: 3458 };
-  const CHASE_TILE = { x: 3038, y: 3457 };
-  const GERTRUDE_TILE = { x: 3151, y: 3410 };
-  const GUARD_TILE = { x: 3180, y: 3424 };
+  const TALIA_TILE = { x: 3036, y: 3456 };
+  const CHASE_TILE = { x: 3037, y: 3457 };
+  const GUARD_TILE = { x: 3179, y: 3425 };
   const BANK_DOG_TILE = { x: 3180, y: 3425 };
-  const DEN_DOG_TILE = { x: 3196, y: 3414 };
-  const COOK_DOG_TILE = { x: 3144, y: 3456 };
-  const GOBLIN_DOG_TILE = { x: 3120, y: 3443 };
-  const CAMP_DOG_TILE = { x: 3118, y: 3468 };
-  const PICKLENOSE_TILE = { x: 3122, y: 3443 };
-  const TOETALLER_TILE = { x: 3124, y: 3444 };
+  const DEN_DOG_TILE = { x: 3197, y: 3414 };
+  const COOK_DOG_TILE = { x: 3148, y: 3456 };
+  const GOBLIN_DOG_TILE = { x: 3132, y: 3436 };
+  const CAMP_DOG_TILE = { x: 3136, y: 3467 };
+  const PICKLENOSE_TILE = { x: 3130, y: 3437 };
+  const TOETALLER_TILE = { x: 3130, y: 3435 };
   const OUTLAW_TILES = new Map([
-    [OUTLAW_23_NPC_ID, { x: 3115, y: 3468 }],
-    [OUTLAW_22_NPC_ID, { x: 3121, y: 3468 }],
+    [OUTLAW_23_NPC_ID, { x: 3136, y: 3474 }],
+    [OUTLAW_22_NPC_ID, { x: 3135, y: 3475 }],
   ]);
-  const TORN_NEWSPAPER_TILE = { x: 3197, y: 3413 };
-  const CHEWED_BOX_TILE = { x: 3195, y: 3413 };
-  const ROUGH_BEDDING_TILE = { x: 3195, y: 3416 };
 
   // Condition step ids on the "A Ruff Situation" page.
   const REQUIREMENTS_NOT_MET_CONDITION_ID = "L94gv4";
@@ -178,15 +136,7 @@ module.exports = function registerARuffSituationQuest(api) {
   const GUARD_WALKS_IN_STEP = "XTGJ4B";
   const QUEST_COMPLETE_STEP = "sCG0ie";
 
-  const ALWAYS_MESSAGE_STEPS = new Set([
-    PUPPY_APPEARS_STEP,
-    PUPPY_APPROACHES_STEP,
-    GOBLIN_RUNS_STEP,
-    OUTLAWS_CONTINUE_STEP,
-    RUN_IN_STEP,
-    PLACE_PUPPIES_STEP,
-    DOG_LEAVES_STEP,
-  ]);
+
 
   const TALIA_OFFERED_ATTRIBUTE = "quest.a_ruff_situation.talia-offered";
   const INSPECTED_ATTRIBUTE = "quest.a_ruff_situation.inspected";
@@ -206,9 +156,17 @@ module.exports = function registerARuffSituationQuest(api) {
 
   /** Tracked per-player owner-only spawns, keyed by role. */
   const trackedNpcs = new WeakMap();
+  const DATA = require("../data/a-ruff-situation.json");
+  const VERSION_ATTRIBUTE = "a-ruff-situation:stage-version";
+  const PUPPIES = [ItemIdentifiers.STRAY_PUPPY, ItemIdentifiers.STRAY_PUPPY_2, ItemIdentifiers.STRAY_PUPPY_3];
+  const DEN_FLAGS = [15894, 15895, 15896];
+  const scenes = new WeakMap(), routes = new WeakMap(), actionKeys = new WeakMap();
+  const FADE_UID = (161 << 16) | 1;
+  const WELCOME_PLAY_BUTTON_UID = (378 << 16) | 72;
+  const pendingRecovery = new WeakMap();
+
 
   let quest;
-  let objectsInstalled = false;
 
   // ==========================================================================
   // State helpers
@@ -256,6 +214,7 @@ module.exports = function registerARuffSituationQuest(api) {
     if (quest.getStage(player) === stage) return;
     quest.setStage(player, stage);
     syncNpcs(player);
+    syncFlags(player);
   }
 
   function craftingLevel(player) {
@@ -318,33 +277,308 @@ module.exports = function registerARuffSituationQuest(api) {
     return Array.isArray(pages) && pages.some((page) => page?.page === PAGE);
   }
 
+  function later(key, ticks, callback) {
+    TaskManager.submit(new CountdownTask(key, ticks, callback));
+  }
+  function camera(player, move, look, motion = { rate: 232, rate2: 100 }) {
+    const sender = player.getPacketSender(), options = { ...motion, heightRelative: false };
+    if (move) sender.sendCameraMoveTo(...move, options);
+    if (look) sender.sendCameraLookAt(...look, options);
+  }
+  function controls(player, blocked) {
+    player.getMovementQueue().reset().setBlockMovement(blocked);
+    player.setUntargetable(blocked);
+    player.getPacketSender().sendVarbit(12393, blocked ? 1 : 0).sendVarbit(6719, blocked ? 2 : 0);
+  }
+  function fade(player, out) {
+    player.getPacketSender().sendSubInterface(FADE_UID, 174, 1, {
+      postScripts: [{ scriptId: 948, args: out ? [0, 255, 0, 0, 50] : [0, 0, 0, 255, 50] }],
+    });
+  }
+  function freeze(player) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
+      new ActionDialogue(0, { execute: () => StatementDialogue.send(player, "", false) })
+    ));
+  }
+  class DogScene extends PrivateArea {
+    constructor(player) { super([new Boundary(3008, 3210, 3392, 3500, 0)]); this.owner = player; }
+    canAttack() { return false; }
+    canTeleport() { return false; }
+    postLeave(actor, logout) {
+      if (actor === this.owner && scenes.get(actor)?.area === this) cleanupScene(actor, false);
+      super.postLeave(actor, logout);
+    }
+  }
+  function spawnSceneActor(scene, key, id, x, y) {
+    if (!scene) return null;
+    if (scene.actors.has(key)) return scene.actors.get(key);
+    const npc = api.spawnNpc({ id, x, y, z: 0, owner: scene.player, ownerOnly: true, wanderRadius: 0 });
+    if (npc) { scene.actors.set(key, npc); scene.area.enter(npc); }
+    return npc;
+  }
+  function cleanupScene(player, returnPlayer = true) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    scenes.delete(player); TaskManager.cancelTasks(scene);
+    for (const npc of scene.actors.values()) api.removeNpc(npc);
+    controls(player, false);
+    player.getPacketSender().sendCameraUnlock(false).sendCameraReset().closeSubInterface(FADE_UID);
+    if (scene.area && player.getArea() === scene.area && returnPlayer) {
+      scene.area.leave(player, false); player.moveTo(scene.returnTo);
+    }
+  }
+  const SCENE_VARIANTS = {
+    first: "cutscene", outlaws: "looking-for-the-third-puppy-cutscene",
+    rescue: "looking-for-the-third-puppy-after-killing-the-outlaws",
+    shelter: "looking-for-the-third-puppy-back-at-the-shelter",
+  };
+  function playScene(player, anchor) {
+    const scene = scenes.get(player); if (!scene) return;
+    startTranscript(api, player, STRAY_DOG_NPC_ID, PAGE, SCENE_VARIANTS[scene.name], steps => {
+      if (!anchor) return steps;
+      const index = steps.findIndex(step => step.id === anchor);
+      return index >= 0 ? steps.slice(index + 1) : steps;
+    });
+  }
+  function beginScene(player, name) {
+    if (scenes.has(player)) return;
+    if (name === "shelter" && !PUPPIES.every(id => hasItem(player, id))) {
+      startTranscript(api, player, STRAY_DOG_NPC_ID, PAGE, "looking-for-the-third-puppy-talking-to-the-stray-dog-with-the-puppies"); return;
+    }
+    routes.delete(player); removeTracked(player, "dog");
+    const returnTo = name === "first" ? new Location(3148, 3455, 0)
+      : name === "outlaws" ? new Location(3136, 3469, 0)
+      : name === "rescue" ? new Location(3136, 3475, 0) : new Location(3041, 3458, 0);
+    const scene = { player, name, returnTo, actors: new Map(), area: null };
+    scenes.set(player, scene);
+    setStage(player, { first: STAGE_FIRST_SCENE, outlaws: STAGE_OUTLAW_SCENE, rescue: STAGE_RESCUE, shelter: STAGE_SHELTER }[name]);
+    controls(player, true); freeze(player);
+    if (name !== "rescue") fade(player, true);
+    const place = () => {
+      scene.area = new DogScene(player); scene.area.enter(player); player.moveTo(returnTo);
+      if (name === "first") {
+        spawnSceneActor(scene, "dog", 16530, 3148, 3456);
+        spawnSceneActor(scene, "goblin", 16534, 3136, 3449);
+        spawnSceneActor(scene, "puppy", 16531, 3136, 3450);
+      } else if (name === "outlaws") {
+        player.moveTo(new Location(3136, 3464, 0));
+        spawnSceneActor(scene, "dog", 16530, 3136, 3465);
+        spawnSceneActor(scene, "puppy", 16533, 3137, 3476);
+        spawnSceneActor(scene, "outlaw-one", 16535, 3134, 3475);
+        spawnSceneActor(scene, "outlaw-two", 16536, 3134, 3477);
+      } else if (name === "rescue") {
+        spawnSceneActor(scene, "dog", 16530, 3136, 3477);
+        spawnSceneActor(scene, "puppy", 16533, 3137, 3476);
+      } else {
+        setStage(player, STAGE_FINAL_SCENE);
+        spawnSceneActor(scene, "dog", 16530, 3043, 3457);
+        spawnSceneActor(scene, "talia", 16537, 3038, 3458);
+        spawnSceneActor(scene, "chase", 16538, 3037, 3458);
+      }
+      for (const npc of scene.actors.values()) npc.setPositionToFace(player.getLocation());
+    };
+    const setCamera = () => {
+      player.getPacketSender().sendCameraUnlock(false);
+      if (name === "first") camera(player, [3152, 3451, 400], [3148, 3456, 250]);
+      if (name === "outlaws") camera(player, [3132, 3470, 600], [3137, 3476, 600]);
+      if (name === "rescue") camera(player, [3131, 3476, 500], [3137, 3476, 600]);
+      if (name === "shelter") camera(player, [3044, 3461, 500], [3038, 3458, 350]);
+    };
+    if (name === "rescue") { place(); setCamera(); later(scene, 1, () => playScene(player)); }
+    else {
+      later(scene, 2, place); later(scene, 3, setCamera);
+      later(scene, 4, () => fade(player, false));
+      later(scene, name === "shelter" ? 7 : 6, () => playScene(player));
+    }
+  }
+  function pauseScene(event, ticks) {
+    const scene = scenes.get(event.player); if (!scene) return;
+    freeze(event.player); later(scene, ticks, () => playScene(event.player, event.stepId));
+  }
+  function leaveScene(player, resetDelay, callback) {
+    const scene = scenes.get(player); if (!scene) { callback?.(); return; }
+    freeze(player); fade(player, true);
+    later(scene, resetDelay, () => {
+      const area = scene.area; scene.area = null;
+      if (area) { area.leave(player, false); player.moveTo(scene.returnTo); }
+      player.getPacketSender().sendCameraUnlock(false).sendCameraReset();
+    });
+    later(scene, resetDelay + 2, () => {
+      cleanupScene(player); syncNpcs(player); fade(player, false); callback?.();
+    });
+  }
+  function givePuppy(player, index) {
+    if (hasItem(player, PUPPIES[index])) return true;
+    if (freeSlots(player) === 0) {
+      const scene = scenes.get(player);
+      if (scene) { const name = scene.name; cleanupScene(player); setStage(player, name === "first" ? STAGE_FIRST_SCENE : STAGE_RESCUE); }
+      syncNpcs(player); player.sendMessage("You don't have room to take the stray puppy right now."); return false;
+    }
+    player.getInventory().adds(PUPPIES[index], 1); player.getPacketSender().sendVarbit(DEN_FLAGS[index], 0);
+    removeTracked(player, `den-puppy-${index}`); removeTracked(player, "goblin-puppy");
+    const scene = scenes.get(player), npc = scene?.actors.get("puppy");
+    if (npc) { api.removeNpc(npc); scene.actors.delete("puppy"); }
+    return true;
+  }
+  function pickupAfterPause(event, index, after) {
+    const { player } = event, scene = scenes.get(player), key = scene ?? {};
+    if (actionKeys.has(player)) return;
+    actionKeys.set(player, key); freeze(player);
+    later(key, 1, () => {
+      player.performAnimation(new Animation(827));
+      (scene?.actors.get("puppy") ?? tracked(player).get("goblin-puppy"))?.forceChat(["Yip yip!", "Yop yop!", "Yap yap!"][index]);
+    });
+    later(key, 2, () => {
+      actionKeys.delete(player);
+      if (!givePuppy(player, index)) return;
+      after();
+    });
+  }
+
+  function syncFlags(player) {
+    const stage = quest.getStage(player), mask = inspectedMask(player), sender = player.getPacketSender();
+    sender.sendVarbit(15890, (mask & BIT_BEDDING) ? 1 : 0).sendVarbit(15891, (mask & BIT_NEWSPAPER) ? 1 : 0)
+      .sendVarbit(15893, (mask & BIT_CHEWED_BOX) ? 1 : 0).sendVarbit(15899, stage > 0 && stage < STAGE_COMPLETE ? 1 : 0)
+      .sendVarbit(15897, stage >= STAGE_FIRST_SAFE && stage < STAGE_TRADE && !dogWaiting(player) ? 1 : 0)
+      .sendVarbit(15898, dogWaiting(player) ? 1 : 0);
+    const earned = [STAGE_FIRST_SAFE, STAGE_SECOND_PUPPY, STAGE_THIRD_PUPPY];
+    earned.forEach((threshold, i) => sender.sendVarbit(DEN_FLAGS[i], stage >= threshold && stage < STAGE_SHELTER && !hasItem(player, PUPPIES[i]) ? 1 : 0));
+  }
+  function syncPuppies(player, stage) {
+    [STAGE_FIRST_SAFE, STAGE_SECOND_PUPPY, STAGE_THIRD_PUPPY].forEach((threshold, i) => {
+      if (stage >= threshold && stage < STAGE_SHELTER && !hasItem(player, PUPPIES[i])) {
+        spawnTracked(player, `den-puppy-${i}`, { id: 16515 + i, x: 3196 + i, y: 3414, z: 0, wanderRadius: 0 });
+      } else removeTracked(player, `den-puppy-${i}`);
+    });
+    if (stage >= STAGE_FIRST_SAFE && stage <= STAGE_GOBLINS_GONE)
+      spawnTracked(player, "goblin-puppy", { id: 16516, x: 3131, y: 3435, z: 0, wanderRadius: 0 });
+    else removeTracked(player, "goblin-puppy");
+  }
+  function markVersion({ player, key }) { if (key === "a_ruff_situation") player.setAttribute(VERSION_ATTRIBUTE, 1); }
+  function migrateStage(player) {
+    const previous = quest.getStage(player), migrated = [0, 10, 15, 25, 35, 55, 60, 75, 90, 105, 120][previous];
+    if (player.getAttribute(VERSION_ATTRIBUTE) !== 1 && previous > 0 && previous <= 10) quest.setStage(player, migrated);
+    player.setAttribute(VERSION_ATTRIBUTE, 1);
+    // A disconnect during placement must not require puppies already removed from inventory.
+    if (quest.getStage(player) === STAGE_TRADE && !hasItem(player, STUFFED_DOG_ITEM_ID)) {
+      player.setAttribute(GOBLINS_LEFT_ATTRIBUTE, true); quest.setStage(player, STAGE_GOBLINS_GONE);
+    }
+    if (quest.getStage(player) === STAGE_FINAL_SCENE) {
+      PUPPIES.forEach(id => { if (!hasItem(player, id) && freeSlots(player) > 0) player.getInventory().adds(id, 1); });
+      quest.setStage(player, STAGE_THIRD_PUPPY);
+    }
+  }
+  function beginRoute(player, name) {
+    if (scenes.has(player) || routes.has(player)) return;
+    const path = DATA.routes[name]; if (!path?.length) return;
+    const dog = tracked(player).get("dog"); if (!dog) return;
+    dog.setFollowing(null); dog.setMovementSteps?.(2);
+    routes.set(player, { name, path, index: 0, dog, moving: false });
+  }
+  class DogQuestArea extends Area {
+    constructor() { super([new Boundary(3010, 3210, 3392, 3500, 0)]); }
+    process(actor) {
+      if (!actor.isPlayer()) return;
+      const player = actor.getAsPlayer(); if (scenes.has(player)) return;
+      const route = routes.get(player); if (!route) return;
+      const location = route.dog.getLocation();
+      // shortcut: the route records pauses but not the script's exact follow-distance threshold.
+      if (location.getDistance(player.getLocation()) > 10) return;
+      if (route.moving && !atTile(route.dog, { x: route.path[route.index][0], y: route.path[route.index][1] })) return;
+      if (route.moving) route.index++;
+      if (route.index >= route.path.length) {
+        routes.delete(player);
+        if (route.name === "den") setStage(player, STAGE_DOG);
+        else beginScene(player, route.name === "cook" ? "first" : "outlaws");
+        return;
+      }
+      const [x, y] = route.path[route.index]; route.dog.getMovementQueue().addSteps(new Location(x, y, 0)); route.moving = true;
+    }
+  }
+  function handleLine(event) {
+    if (!isQuestPage(event.pages)) return;
+    const { player, text } = event, scene = scenes.get(player), metadata = DATA.dialogue[text];
+    if (metadata) {
+      event.expression = metadata.expression;
+      if (metadata.head) event.speakerId = metadata.head;
+      if (metadata.side) event.side = metadata.side;
+    }
+    const speaker = event.step?.speaker;
+    if (text === "..." && speaker === "Picklenose") event.speakerId = 16521;
+    if (text === "..." && speaker === "Toetaller") event.speakerId = 16522;
+    if (speaker === "Stray puppy" || (scene && !metadata && ["Picklenose", "Stray dog", "Stray Dog"].includes(speaker))) {
+      event.skip = true; return;
+    }
+    const advance = (stage, after) => {
+      event.before = () => setStage(player, stage);
+      if (after) event.after = after;
+    };
+    if (text === "Gertrude." && quest.getStage(player) === STAGE_ACCEPTED) advance(STAGE_STARTED);
+    if (text.startsWith("Well, it would be nice for someone to do something about those mangy stray dogs")) advance(STAGE_GERTRUDE);
+    if (text === "Of course I can! Where did you want to go, girl?") advance(STAGE_LEADING);
+    if (text === "You'd better be quick! She's already on the move.") event.after = () => beginRoute(player, "den");
+    if (text === "What's wrong? Have you caught their scent?") advance(STAGE_DEN, () => beginRoute(player, "cook"));
+    if (text === "... Then a needle and thread to put it together...") advance(STAGE_STUFFED_DOG);
+    if (scene?.name === "first" && text === "Bark bark.") event.before = () => camera(player, [3152, 3454, 400], [3145, 3456, 380], { rate: 3, rate2: 30 });
+    if (scene?.name === "outlaws" && text === "Look what we got 'ere.") event.before = () => camera(player, [3128, 3476, 400], null, { cycles: 210, easing: "ease_in_out_sine", ignoreTerrain: true });
+    if (scene?.name === "outlaws" && text === "You'll 'av to take 'em from us.") event.after = () => {
+      cleanupScene(player); setStage(player, STAGE_OUTLAWS);
+    };
+    if (scene?.name === "shelter" && text === "Wonderful, you will all be happy and safe here!") event.after = () => camera(player, [3034, 3450, 400], [3039, 3458, 350]);
+    if (text === "You seem enthusiastic enough. Let's head out.") event.after = () => beginScene(player, "shelter");
+    if (scene?.name === "shelter" && text === "Business is business.") event.after = () => {
+      quest.complete(player); const active = scenes.get(player);
+      later(active, 2, () => { cleanupScene(player); syncNpcs(player); syncFlags(player); });
+    };
+  }
+  function pickupPuppy(event) {
+    const { player, npc } = event, stage = quest.getStage(player), map = tracked(player);
+    if (npc && map.get("goblin-puppy") === npc && stage === STAGE_GOBLINS_GONE) {
+      if (givePuppy(player, 1)) { setStage(player, STAGE_SECOND_PUPPY); syncNpcs(player); }
+      return;
+    }
+    for (let i = 0; i < 3; i++) {
+      if (npc && map.get(`den-puppy-${i}`) === npc) { if (givePuppy(player, i)) syncFlags(player); return; }
+    }
+    return false;
+  }
+  function puppyItemAction(event) {
+    const { player, itemId } = event;
+    const index = PUPPIES.indexOf(itemId);
+    if (index < 0 || !hasItem(player, itemId)) return;
+    event.handled = true; player.getInventory().deleteNumber(itemId, 1);
+    player.sendMessage("The stray puppy runs back to its den."); syncFlags(player); syncPuppies(player, quest.getStage(player));
+  }
+
   // ==========================================================================
   // NPC spawns
   // ==========================================================================
 
   function dogTileFor(player, stage) {
-    if (dogWaiting(player) && stage >= STAGE_DOG) return DEN_DOG_TILE;
-    if (stage === STAGE_GERTRUDE) return BANK_DOG_TILE;
-    if (stage === STAGE_DOG) return DEN_DOG_TILE;
-    if (stage === STAGE_DEN) return COOK_DOG_TILE;
-    if (stage >= STAGE_FIRST_PUPPY && stage <= STAGE_SECOND_PUPPY) {
-      return thirdHunt(player) ? CAMP_DOG_TILE : GOBLIN_DOG_TILE;
-    }
-    if (stage === STAGE_OUTLAWS) return CAMP_DOG_TILE;
+    if (dogWaiting(player)) return DEN_DOG_TILE;
+    if (stage === STAGE_GERTRUDE || stage === STAGE_LEADING) return BANK_DOG_TILE;
+    if (stage === STAGE_FIRST_SCENE) return COOK_DOG_TILE;
+    if (stage === STAGE_RESCUE || stage === STAGE_OUTLAW_SCENE) return CAMP_DOG_TILE;
+    if (stage === STAGE_DOG || stage === STAGE_INSPECTED || stage === STAGE_DEN) return DEN_DOG_TILE;
+    if (stage >= STAGE_FIRST_SAFE && stage <= STAGE_SECOND_PUPPY) return GOBLIN_DOG_TILE;
+    if (stage === STAGE_THIRD_SEARCH) return GOBLIN_DOG_TILE;
+    if (stage > STAGE_THIRD_SEARCH && stage <= STAGE_THIRD_PUPPY) return CAMP_DOG_TILE;
     return null;
   }
-
   function syncDog(player, stage) {
-    const tile = dogTileFor(player, stage);
-    if (!tile) {
+    if (scenes.has(player)) return;
+    const tile = dogTileFor(player, stage), existing = tracked(player).get("dog");
+    if (!tile) { removeTracked(player, "dog"); return; }
+    if (routes.has(player) && existing) return;
+    const follows = !dogWaiting(player) && stage >= STAGE_FIRST_PUPPY && stage < STAGE_TRADE;
+    const wanted = follows ? STRAY_DOG_FOLLOWING_NPC_ID : STRAY_DOG_NPC_ID;
+    if (!existing || existing.getId() !== wanted) {
       removeTracked(player, "dog");
-      return;
+      spawnTracked(player, "dog", { id: wanted, ...tile, z: 0, wanderRadius: 0 });
     }
-    const wantedId = stage === STAGE_GERTRUDE ? STRAY_DOG_NPC_ID : STRAY_DOG_FOLLOWING_NPC_ID;
-    const existing = tracked(player).get("dog");
-    if (existing && existing.getId() === wantedId && atTile(existing, tile)) return;
-    removeTracked(player, "dog");
-    spawnTracked(player, "dog", { id: wantedId, ...tile, z: 0, wanderRadius: 0 });
+    const dog = tracked(player).get("dog");
+    dog?.setFollowing(follows ? player : null);
+    if (follows) dog?.setMobileInteraction(player);
   }
 
   function outlawsKilledMask(player) {
@@ -385,11 +619,11 @@ module.exports = function registerARuffSituationQuest(api) {
   function syncNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
     spawnTracked(player, "talia", { id: TALIA_NPC_ID, ...TALIA_TILE, z: 0, wanderRadius: 0 });
-    spawnTracked(player, "chase", { id: CHASE_NPC_ID, ...CHASE_TILE, z: 0, wanderRadius: 0 });
+    spawnTracked(player, "chase", { id: 16487, ...CHASE_TILE, z: 0, wanderRadius: 0 });
 
     const stage = quest.getStage(player);
     if (stage >= STAGE_STARTED && stage <= STAGE_GERTRUDE) {
-      spawnTracked(player, "gertrude", { id: GERTRUDE_NPC_ID, ...GERTRUDE_TILE, z: 0, wanderRadius: 0 });
+      // The canonical Varrock Gertrude supplies this interaction.
     } else {
       removeTracked(player, "gertrude");
     }
@@ -403,23 +637,7 @@ module.exports = function registerARuffSituationQuest(api) {
     syncDog(player, stage);
     syncGoblins(player, stage);
     syncOutlaws(player, stage);
-  }
-
-  // ==========================================================================
-  // Runtime quest scenery (absent from this cache's maps)
-  // ==========================================================================
-
-  function installInspectObjects() {
-    if (objectsInstalled) return;
-    objectsInstalled = true;
-    registerObject(TORN_NEWSPAPER_OBJECT_ID, TORN_NEWSPAPER_TILE);
-    registerObject(CHEWED_BOX_OBJECT_ID, CHEWED_BOX_TILE);
-    registerObject(ROUGH_BEDDING_OBJECT_ID, ROUGH_BEDDING_TILE);
-  }
-
-  function registerObject(objectId, tile) {
-    const object = new GameObject(objectId, new Location(tile.x, tile.y, 0), 10, 0, null);
-    ObjectManager.register(object, true);
+    syncPuppies(player, stage);
   }
 
   // ==========================================================================
@@ -446,7 +664,7 @@ module.exports = function registerARuffSituationQuest(api) {
       );
       return;
     }
-    if (stage === STAGE_STARTED) {
+    if (stage === STAGE_ACCEPTED || stage === STAGE_STARTED) {
       startTranscript(api, player, npcId, PAGE, "starting-off-talking-to-talia-after-starting-the-quest");
       return;
     }
@@ -465,7 +683,7 @@ module.exports = function registerARuffSituationQuest(api) {
       return;
     }
     if (stage >= STAGE_THIRD_PUPPY) {
-      startTranscript(api, player, npcId, PAGE, "looking-for-the-third-puppy-back-at-the-shelter");
+      beginScene(player, "shelter");
       return;
     }
     startTranscript(api, player, npcId, PAGE, "cutscene-talking-to-talia-again");
@@ -473,8 +691,8 @@ module.exports = function registerARuffSituationQuest(api) {
 
   function talkChase(event) {
     const { player, npcId } = event;
-    if (npcId !== CHASE_NPC_ID) return false;
-    if (quest.isComplete(player)) return false;
+    if (![CHASE_NPC_ID, 16487, 16489].includes(npcId)) return false;
+    if (quest.isComplete(player)) return puppies.talkChase(event);
     startTranscript(
       api,
       player,
@@ -488,10 +706,9 @@ module.exports = function registerARuffSituationQuest(api) {
 
   function talkGertrude(event) {
     const { player, npcId } = event;
-    if (npcId !== GERTRUDE_NPC_ID) return false;
+    if (![GERTRUDE_NPC_ID, 7284].includes(npcId)) return false;
     const stage = quest.getStage(player);
     if (stage !== STAGE_STARTED && stage !== STAGE_GERTRUDE) return false;
-    if (stage === STAGE_STARTED) setStage(player, STAGE_GERTRUDE);
     startTranscript(
       api,
       player,
@@ -506,7 +723,6 @@ module.exports = function registerARuffSituationQuest(api) {
     if (npcId !== QUEST_GUARD_NPC_ID || quest.isComplete(player)) return false;
     const stage = quest.getStage(player);
     if (stage === STAGE_GERTRUDE) {
-      setStage(player, STAGE_DOG);
       startTranscript(api, player, npcId, PAGE, "stray-dog-talking-to-the-guard-or-interacting-with-the-stray-dog");
       return;
     }
@@ -534,11 +750,10 @@ module.exports = function registerARuffSituationQuest(api) {
     if (npcId !== PICKLENOSE_NPC_ID && npcId !== TOETALLER_NPC_ID) return false;
     const stage = quest.getStage(player);
     if (stage === STAGE_FIRST_PUPPY) {
-      setStage(player, STAGE_STUFFED_DOG);
       startTranscript(api, player, npcId, PAGE, "goblins");
       return;
     }
-    if (stage === STAGE_STUFFED_DOG) {
+    if (stage >= STAGE_STUFFED_DOG && stage <= STAGE_TRADE) {
       if (!hasItem(player, STUFFED_DOG_ITEM_ID)) {
         startTranscript(
           api,
@@ -576,7 +791,6 @@ module.exports = function registerARuffSituationQuest(api) {
       return;
     }
     if (stage === STAGE_GERTRUDE) {
-      setStage(player, STAGE_DOG);
       startTranscript(api, player, npcId, PAGE, "stray-dog-talking-to-the-guard-or-interacting-with-the-stray-dog");
       return;
     }
@@ -585,14 +799,17 @@ module.exports = function registerARuffSituationQuest(api) {
       return;
     }
     if (stage === STAGE_DEN) {
-      startTranscript(api, player, npcId, PAGE, "cutscene");
+      beginRoute(player, "cook");
       return;
     }
-    if (stage === STAGE_FIRST_PUPPY) {
+    if (stage === STAGE_FIRST_SCENE || stage === STAGE_RESCUE) {
+      beginScene(player, stage === STAGE_FIRST_SCENE ? "first" : "rescue"); return;
+    }
+    if (stage === STAGE_FIRST_SAFE || stage === STAGE_FIRST_PUPPY) {
       startTranscript(api, player, npcId, PAGE, "cutscene-after-the-cutscene");
       return;
     }
-    if (stage === STAGE_STUFFED_DOG) {
+    if (stage >= STAGE_STUFFED_DOG && stage <= STAGE_TRADE) {
       if (thirdHunt(player)) {
         startTranscript(api, player, npcId, PAGE, "looking-for-the-third-puppy-cutscene");
         return;
@@ -605,8 +822,6 @@ module.exports = function registerARuffSituationQuest(api) {
         startTranscript(api, player, npcId, PAGE, "looking-for-the-third-puppy-cutscene");
         return;
       }
-      player.setAttribute(THIRD_HUNT_ATTRIBUTE, true);
-      syncDog(player, stage);
       startTranscript(api, player, npcId, PAGE, "looking-for-the-third-puppy");
       return;
     }
@@ -635,31 +850,41 @@ module.exports = function registerARuffSituationQuest(api) {
   // Den objects
   // ==========================================================================
 
-  function inspectDenObject(event, objectId, variant, bit) {
+  function inspectDenObject(event, bit) {
     const { player } = event;
-    if (event.objectId !== objectId) return false;
-    const stage = quest.getStage(player);
-    if (quest.isComplete(player) || stage < STAGE_DOG) return false;
-    const mask = inspectedMask(player) | bit;
-    player.setAttribute(INSPECTED_ATTRIBUTE, mask);
-    if (stage === STAGE_DOG && (mask & ALL_INSPECTED) === ALL_INSPECTED) {
-      startTranscript(api, player, STRAY_DOG_NPC_ID, PAGE, "at-the-dog-s-house-after-inspecting-all-three-objects");
-      setStage(player, STAGE_DEN);
-      return;
-    }
-    startTranscript(api, player, STRAY_DOG_NPC_ID, PAGE, variant);
+    if (quest.getStage(player) !== STAGE_DOG || actionKeys.has(player)) return false;
+    event.handled = true;
+    const descriptions = {
+      [BIT_NEWSPAPER]: ["You inspect the scraps on the floor...", "They've been ripped up by something with small teeth.", 4, 15891],
+      [BIT_CHEWED_BOX]: ["You inspect the crate...", "You notice some chew marks on the corner.", 2, 15893],
+      [BIT_BEDDING]: ["You inspect the bed...", "You notice a large indentation and three smaller ones.", 2, 15890],
+    };
+    const [first, second, ticks, flag] = descriptions[bit], key = {};
+    actionKeys.set(player, key); StatementDialogue.send(player, first, false);
+    later(key, ticks, () => {
+      actionKeys.delete(player);
+      const mask = inspectedMask(player) | bit; player.setAttribute(INSPECTED_ATTRIBUTE, mask);
+      player.getPacketSender().sendVarbit(flag, 1);
+      const chain = new DialogueChainBuilder().add(new StatementDialogue(0, second));
+      chain.add(new ActionDialogue(1, { execute: () => {
+        if (mask === ALL_INSPECTED) {
+          setStage(player, STAGE_INSPECTED);
+          startTranscript(api, player, STRAY_DOG_NPC_ID, PAGE, "at-the-dog-s-house-after-inspecting-all-three-objects");
+        } else player.getPacketSender().sendInterfaceRemoval();
+      } })); player.getDialogueManager().startDialogues(chain);
+    });
   }
 
   function inspectNewspaper(event) {
-    return inspectDenObject(event, TORN_NEWSPAPER_OBJECT_ID, "at-the-dog-s-house-inspecting-the-torn-newspaper", BIT_NEWSPAPER);
+    return inspectDenObject(event, BIT_NEWSPAPER);
   }
 
   function inspectChewedBox(event) {
-    return inspectDenObject(event, CHEWED_BOX_OBJECT_ID, "at-the-dog-s-house-inspecting-the-chewed-box", BIT_CHEWED_BOX);
+    return inspectDenObject(event, BIT_CHEWED_BOX);
   }
 
   function inspectRoughBedding(event) {
-    return inspectDenObject(event, ROUGH_BEDDING_OBJECT_ID, "at-the-dog-s-house-inspecting-the-rough-bedding", BIT_BEDDING);
+    return inspectDenObject(event, BIT_BEDDING);
   }
 
   // ==========================================================================
@@ -716,9 +941,9 @@ module.exports = function registerARuffSituationQuest(api) {
       case HAS_ITEMS_CONDITION_ID:
         return hasCraftItems(player);
       case MISSING_PUPPIES_CONDITION_ID:
-        return quest.getStage(player) < STAGE_SECOND_PUPPY;
+        return !PUPPIES.every(id => hasItem(player, id));
       case HAS_PUPPIES_CONDITION_ID:
-        return quest.getStage(player) >= STAGE_SECOND_PUPPY;
+        return PUPPIES.every(id => hasItem(player, id));
       default:
         return null;
     }
@@ -733,7 +958,9 @@ module.exports = function registerARuffSituationQuest(api) {
     if (hook !== START_HOOK || npcId !== TALIA_NPC_ID) return;
     if (quest.getStage(player) !== 0) return;
     if (craftingLevel(player) < CRAFTING_REQUIREMENT) return;
-    setStage(player, STAGE_STARTED);
+    setStage(player, STAGE_ACCEPTED);
+    player.setAttribute(VERSION_ATTRIBUTE, 1);
+    player.getPacketSender().sendVarbit(15899, 1);
   }
 
   function handleChoice(event) {
@@ -744,52 +971,95 @@ module.exports = function registerARuffSituationQuest(api) {
   }
 
   function handleAction(event) {
-    const { player, stepId } = event;
-    if (ALWAYS_MESSAGE_STEPS.has(stepId)) {
-      event.handled = true;
-      if (event.text) player.sendMessage(event.text);
-      return;
-    }
+    if (!isQuestPage(event.pages)) return;
+    const { player, stepId } = event, scene = scenes.get(player);
+    if (event.kind === "message") event.box = { statement: true };
     switch (stepId) {
+      case PUPPY_APPEARS_STEP:
+        event.handled = true; scene?.actors.get("puppy")?.forceChat("Yelp!");
+        return pauseScene(event, 6);
+      case PUPPY_APPROACHES_STEP:
+        event.handled = true;
+        scene?.actors.get("puppy")?.getMovementQueue().addSteps(new Location(3147, 3456, 0));
+        scene?.actors.get("goblin")?.getMovementQueue().addSteps(new Location(3144, 3456, 0));
+        later(scene, 3, () => scene?.actors.get("goblin")?.forceChat("Get back 'ere!"));
+        return pauseScene(event, 13);
+      case GOBLIN_RUNS_STEP:
+        event.handled = true; scene?.actors.get("goblin")?.getMovementQueue().addSteps(new Location(3135, 3440, 0));
+        return pauseScene(event, 2);
       case FIRST_PUPPY_PICKUP_STEP:
         event.handled = true;
-        if (event.text) player.sendMessage(event.text);
-        setStage(player, STAGE_FIRST_PUPPY);
-        return;
+        return pickupAfterPause(event, 0, () => {
+          setStage(player, STAGE_FIRST_PICKUP); setStage(player, STAGE_FIRST_SAFE);
+          leaveScene(player, 4, () => startTranscript(api, player, STRAY_DOG_NPC_ID, PAGE, "cutscene-after-the-cutscene"));
+        });
       case GIVE_STUFFED_DOG_STEP:
+        if (!hasItem(player, STUFFED_DOG_ITEM_ID)) { event.handled = true; event.end = true; return; }
         player.getInventory().deleteNumber(STUFFED_DOG_ITEM_ID, 1);
-        player.setAttribute(GOBLINS_LEFT_ATTRIBUTE, true);
-        return;
+        setStage(player, STAGE_TRADE);
+        event.box = { items: [STUFFED_DOG_ITEM_ID] }; return;
       case GOBLINS_LEAVE_STEP:
         event.handled = true;
-        if (event.text) player.sendMessage(event.text);
-        syncGoblins(player, quest.getStage(player));
-        return;
+        controls(player, true); fade(player, true);
+        {
+          const key = {}; actionKeys.set(player, key); freeze(player);
+          later(key, 4, () => {
+            player.setAttribute(GOBLINS_LEFT_ATTRIBUTE, true); setStage(player, STAGE_GOBLINS_GONE); fade(player, false);
+          });
+          later(key, 6, () => {
+            actionKeys.delete(player); controls(player, false); player.getPacketSender().closeSubInterface(FADE_UID);
+            startTranscript(api, player, event.npcId, PAGE,
+              "back-to-the-goblins-with-the-stuffed-dog-talking-to-the-goblins-with-the-stray-dog",
+              steps => steps.slice(steps.findIndex(s => s.id === stepId) + 1));
+          });
+        } return;
       case SECOND_PUPPY_PICKUP_STEP:
         event.handled = true;
-        if (event.text) player.sendMessage(event.text);
-        setStage(player, STAGE_SECOND_PUPPY);
-        return;
+        return pickupAfterPause(event, 1, () => { setStage(player, STAGE_SECOND_PUPPY); player.getPacketSender().sendInterfaceRemoval(); });
       case OUTLAWS_APPROACH_STEP:
+      case OUTLAWS_CONTINUE_STEP:
         event.handled = true;
-        if (event.text) player.sendMessage(event.text);
-        setStage(player, STAGE_OUTLAWS);
-        return;
+        camera(player, stepId === OUTLAWS_APPROACH_STEP ? [3129, 3476, 450] : [3131, 3476, 500], null,
+          { cycles: stepId === OUTLAWS_APPROACH_STEP ? 60 : 90, easing: "ease_out_cubic", ignoreTerrain: true });
+        return pauseScene(event, 1);
+      case RUN_IN_STEP:
+        event.handled = true;
+        later(scene, 1, () => {
+          camera(player, [3130, 3481, 700], null, { cycles: 90, easing: "ease_out_cubic", ignoreTerrain: true });
+          camera(player, null, [3136, 3469, 300], { cycles: 150, easing: "ease_out_cubic", trackTarget: false });
+          player.getMovementQueue().setBlockMovement(false).addSteps(new Location(3136, 3469, 0));
+          scene.actors.get("dog")?.getMovementQueue().addSteps(new Location(3136, 3470, 0));
+        }); return pauseScene(event, 8);
       case THIRD_PUPPY_PICKUP_STEP:
         event.handled = true;
-        if (event.text) player.sendMessage(event.text);
-        return;
-      case GUARD_WALKS_IN_STEP:
-      case QUEST_COMPLETE_STEP:
+        return pickupAfterPause(event, 2, () => {
+          setStage(player, STAGE_THIRD_PICKUP); setStage(player, STAGE_THIRD_PUPPY);
+          leaveScene(player, 4, () => startTranscript(api, player, STRAY_DOG_NPC_ID, PAGE,
+            "looking-for-the-third-puppy-after-killing-the-outlaws", steps => steps.slice(steps.findIndex(s => s.id === stepId) + 1)));
+        });
+      case PLACE_PUPPIES_STEP:
         event.handled = true;
-        if (event.text) player.sendMessage(event.text);
-        if (!quest.isComplete(player)) {
-          quest.complete(player);
-          syncNpcs(player);
+        if (!PUPPIES.every(id => hasItem(player, id))) return;
+        for (let i = 0; i < 3; i++) {
+          player.getInventory().deleteNumber(PUPPIES[i], 1);
+          const pup = spawnSceneActor(scene, `puppy-${i}`, 16531 + i, 3039 - i, 3460); pup?.forceChat(["Yip!", "Yop!", "Yap yap!"][i]);
         }
-        return;
+        camera(player, [3044, 3455, 480], [3038, 3459, 330]); return pauseScene(event, 7);
+      case DOG_LEAVES_STEP:
+        event.handled = true; scene?.actors.get("dog")?.getMovementQueue().addSteps(new Location(3038, 3457, 0));
+        return pauseScene(event, 4);
+      case GUARD_WALKS_IN_STEP:
+        event.handled = true; spawnSceneActor(scene, "guard", QUEST_GUARD_NPC_ID, 3037, 3455)?.getMovementQueue().addSteps(new Location(3039, 3458, 0));
+        return pauseScene(event, 4);
+      case QUEST_COMPLETE_STEP:
+        return; // The transcript's end marker precedes this; finish on Chase's final line.
       default:
-        return;
+        if (event.text === "The stray dog barks in the direction the goblin ran off in.") setStage(player, STAGE_FIRST_PUPPY);
+        if (event.text === "The stray dog sniffs the air...") {
+          event.handled = true; StatementDialogue.send(player, event.text, false);
+          const key = {}; actionKeys.set(player, key);
+          later(key, 3, () => { actionKeys.delete(player); setStage(player, STAGE_THIRD_SEARCH); beginRoute(player, "third"); player.getPacketSender().sendInterfaceRemoval(); });
+        }
     }
   }
 
@@ -798,15 +1068,13 @@ module.exports = function registerARuffSituationQuest(api) {
   // ==========================================================================
 
   function handleNpcDeath(event) {
-    const player = event?.killer?.isPlayer?.() ? event.killer : null;
-    if (!player) return;
-    const bit = OUTLAW_BITS.get(event.npcId);
-    if (!bit || quest.getStage(player) !== STAGE_OUTLAWS) return;
-    const mask = outlawsKilledMask(player) | bit;
-    player.setAttribute(OUTLAWS_KILLED_ATTRIBUTE, mask);
-    if (mask !== ALL_OUTLAWS_KILLED) return;
-    setStage(player, STAGE_THIRD_PUPPY);
-    startTranscript(api, player, STRAY_DOG_NPC_ID, PAGE, "looking-for-the-third-puppy-after-killing-the-outlaws");
+    const { npc } = event, player = npc?.getOwner?.();
+    if (!player || !OUTLAW_BITS.has(event.npcId) || quest.getStage(player) !== STAGE_OUTLAWS) return;
+    const key = event.npcId === OUTLAW_23_NPC_ID ? "outlaw-23" : "outlaw-22";
+    if (tracked(player).get(key) !== npc) return;
+    const mask = outlawsKilledMask(player) | OUTLAW_BITS.get(event.npcId);
+    player.setAttribute(OUTLAWS_KILLED_ATTRIBUTE, mask); removeTracked(player, key);
+    if (mask === ALL_OUTLAWS_KILLED) beginScene(player, "rescue");
   }
 
   // ==========================================================================
@@ -864,23 +1132,56 @@ module.exports = function registerARuffSituationQuest(api) {
     }
     player.getInventory().deleteNumber(GRAIN_ITEM_ID, 1);
     player.getInventory().deleteNumber(furId, 1);
-    if (!hasItem(player, COSTUME_NEEDLE_ITEM_ID)) player.getInventory().deleteNumber(THREAD_ITEM_ID, 1);
+    // The recorded single craft leaves the needle and thread in the inventory.
     player.getInventory().adds(STUFFED_DOG_ITEM_ID, 1);
-    player.sendMessage("You create a stuffed dog. It will probably convince the goblins.");
+    player.performAnimation(new Animation(8839)); setStage(player, STAGE_CRAFTED);
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ItemStatementDialogue(0,
+      STUFFED_DOG_ITEM_ID, "You create a stuffed dog. It will probably convince the goblins.")));
   }
 
   // ==========================================================================
   // Session lifecycle
   // ==========================================================================
 
-  function handleLogin({ player }) {
-    installInspectObjects();
+  function handleLogin({ player, isNewAccount }) {
+    migrateStage(player);
+    syncFlags(player);
     syncNpcs(player);
+    // Login bootstrap and desktop Welcome both replace the root, clearing early scene UI.
+    // Match WelcomeScreen's bypasses; only resume once the final gameframe is mounted.
+    pendingRecovery.set(player, { waitForWelcome: !(isNewAccount || player.isPlayerBot?.() === true
+      || api.core.Wilderness.isInLocation(player.getLocation()) || player.getAttribute("mobile-client") === true) });
     refreshQuestList(player);
+  }
+  function scheduleRecovery(player, fromWelcome) {
+    const pending = pendingRecovery.get(player);
+    if (!pending || pending.waitForWelcome !== fromWelcome || pending.scheduled) return;
+    pending.scheduled = true;
+    queueMicrotask(() => {
+      if (pendingRecovery.get(player) !== pending) return;
+      pendingRecovery.delete(player);
+      resumeRecovery(player);
+    });
+  }
+  function handleBootstrap({ player }) { scheduleRecovery(player, false); }
+  function handleWelcomeReady({ player }) { scheduleRecovery(player, true); return false; }
+  function resumeRecovery(player) {
+    const stage = quest.getStage(player);
+    if (stage === STAGE_LEADING) beginRoute(player, "den");
+    else if (stage === STAGE_DEN) beginRoute(player, "cook");
+    else if (stage === STAGE_THIRD_SEARCH) beginRoute(player, "third");
+    else if (stage === STAGE_FIRST_SCENE) beginScene(player, "first");
+    else if (stage === STAGE_OUTLAW_SCENE) beginScene(player, "outlaws");
+    else if (stage === STAGE_RESCUE) beginScene(player, "rescue");
+    else if (stage === STAGE_SHELTER || stage === STAGE_FINAL_SCENE) beginScene(player, "shelter");
   }
 
   function handleLogout({ player }) {
     if (!player) return;
+    pendingRecovery.delete(player);
+    cleanupScene(player, false); routes.delete(player);
+    const key = actionKeys.get(player); if (key) TaskManager.cancelTasks(key); actionKeys.delete(player);
+    controls(player, false); player.getPacketSender().closeSubInterface(FADE_UID);
     removeAllTracked(player);
   }
 
@@ -981,19 +1282,20 @@ module.exports = function registerARuffSituationQuest(api) {
     player.getSkillManager().addExperiences(Skill.CRAFTING, 1000);
   }
 
-  api.persistAttribute(TALIA_OFFERED_ATTRIBUTE);
-  api.persistAttribute(INSPECTED_ATTRIBUTE);
-  api.persistAttribute(DOG_WAITING_ATTRIBUTE);
-  api.persistAttribute(THIRD_HUNT_ATTRIBUTE);
-  api.persistAttribute(GOBLINS_LEFT_ATTRIBUTE);
-  api.persistAttribute(OUTLAWS_KILLED_ATTRIBUTE);
+  api.persistAttribute(VERSION_ATTRIBUTE, 0);
+  api.persistAttribute(TALIA_OFFERED_ATTRIBUTE, false);
+  api.persistAttribute(INSPECTED_ATTRIBUTE, 0);
+  api.persistAttribute(DOG_WAITING_ATTRIBUTE, false);
+  api.persistAttribute(THIRD_HUNT_ATTRIBUTE, false);
+  api.persistAttribute(GOBLINS_LEFT_ATTRIBUTE, false);
+  api.persistAttribute(OUTLAWS_KILLED_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
     key: "a_ruff_situation",
     name: "A Ruff Situation",
     varpId: VARP_DOGQUEST,
     varbitId: STAGE_VARBIT,
-    startedValue: STAGE_STARTED,
+    startedValue: STAGE_ACCEPTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
     xpRewards: [{ skillId: Skill.CRAFTING.getIndex(), amount: 1000, label: "Crafting" }],
@@ -1002,12 +1304,16 @@ module.exports = function registerARuffSituationQuest(api) {
     onReward: grantReward,
   });
 
+  const puppies = require("../ruff/Puppies.Quests")(api, quest);
+  api.registerArea(new DogQuestArea());
   api.onNpcDialogueCondition(answerCondition);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onCustomEvent("quest:stage-changed", markVersion);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onNpcInteraction("Talia", { "Talk-to": talkTalia });
-  api.onNpcInteraction("Chase", { "Talk-to": talkChase });
+  api.onNpcInteraction("Chase", { "Talk-to": talkChase, Adopt: talkChase });
   api.onNpcInteraction("Gertrude", { "Talk-to": talkGertrude });
   api.onNpcInteraction("Guard", { "Talk-to": talkQuestGuard });
   api.onNpcInteraction("Picklenose", { "Talk-to": talkGoblins });
@@ -1017,7 +1323,12 @@ module.exports = function registerARuffSituationQuest(api) {
   api.onObjectInteraction("Chewed box", { Inspect: inspectChewedBox });
   api.onObjectInteraction("Rough bedding", { Inspect: inspectRoughBedding });
   api.onItemOnItem(handleItemOnItem);
+  api.onNpcInteraction("Stray puppy", { "Pick-up": pickupPuppy });
+  api.onItemDropPolicy(puppyItemAction);
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
+  api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
+  api.onInterfaceActionButton(WELCOME_PLAY_BUTTON_UID, handleWelcomeReady);
   api.onPlayerLogout(handleLogout);
+  api.onPlayerDisconnect(handleLogout);
 };

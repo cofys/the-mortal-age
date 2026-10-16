@@ -45,6 +45,8 @@ type CombatAnimation = {
     projectile?: number;
     /** Ticks from the death animation to the death itself; 2 when absent. */
     deathTicks?: number;
+    /** Ticks from removal to respawn; 25 when absent, 0 to disable. */
+    respawn?: number;
 };
 
 type CombatAnimationRole = "attack" | "block" | "death";
@@ -345,6 +347,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
 
         const ids = new Set([
             ...Object.keys(monsters),
+            ...Object.keys(animationFile.npcs ?? {}),
             ...Object.keys(animations), ...Object.keys(observedAnimations),
             ...Object.keys(projectiles),
         ]);
@@ -398,6 +401,9 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             if (Number.isInteger(projectiles[key])) {
                 definition.projectileId = projectiles[key];
             }
+
+            const respawn = animationFile.npcs?.[key]?.respawn;
+            if (Number.isInteger(respawn) && respawn >= 0) definition.setRespawn(respawn);
 
             const animation = animations[key];
             if (animation) {

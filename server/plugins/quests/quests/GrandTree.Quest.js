@@ -282,6 +282,7 @@ module.exports = function registerGrandTreeQuest(api) {
 
   /** Answer the page's prose conditions. */
   function answerCondition({ player, npcId, text }) {
+    if (![NARNODE_IDS, HAZELMERE_IDS, GLOUGH_IDS, CHARLIE_IDS, ANITA_IDS, CAPTAIN_ERRDO_IDS, GNOME_GUARD_IDS, JOGRE_IDS].some(ids => ids.has(npcId)) && ![NpcIdentifiers.FOREMAN, SHIPYARD_WORKER_ID, NpcIdentifiers.FEMI].includes(npcId)) return null;
     const value = String(text).toLowerCase();
     if (value.includes("below level 50 combat")) return false;
     if (value.includes("lost the bark sample")) return !has(player, BARK_SAMPLE_ITEM_ID);

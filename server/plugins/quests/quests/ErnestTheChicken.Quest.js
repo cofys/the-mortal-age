@@ -1,52 +1,19 @@
-/**
- * Ernest the Chicken.
- *
- * Words come from npc-dialogues.json. The "Ernest the Chicken" page mixes the
- * three speakers for the quest, so the variant is chosen by the speaker's cache
- * id:
- *   Veronica 3561, Professor Oddenstein 3562, Ernest 3563.
- *
- * Stages (varp 32): 1 started, 2 Oddenstein told you about the machine parts,
- * 3 complete.
- *
- * Supporting state kept in attributes (the reference's varps 33/668):
- *   ernest-the-chicken.fountain  1 = piranhas poisoned
- *   ernest-the-chicken.levers    the 6-bit basement lever/pulley puzzle
- *
- * The basement puzzle is the cache's own multi-loc set, not new map content:
- * levers 146-151 resolve through varbits 1788-1793 (varp 33, bits 1-6) and
- * doors 137-145 through varbits 1794-1802 (varp 668, bits 0-8). syncLevers
- * drives both and sends the resolved loc (up/down, closed/ajar) to the player,
- * since this client does not re-resolve multi-locs on a varp change; only an
- * ajar door (11450) offers its Open option.
- *
- * Gaps (no dump support, see summary):
- *   - Oddenstein before the quest has no "busy" line; the standard machine
- *     conversation plays.
- *   - Ernest 3563 has no stand-alone transcript, so he references the shared
- *     "finishing-up" conversation (a wiki infobox artifact). The runtime can
- *     only render the clicked NPC, so the plugin starts that variant itself
- *     with a speaker map that gives Ernest his own chathead.
- */
+/** Ernest the Chicken: revision240 Discord capture20260811T152500; cache241 IDs. */
 module.exports = function registerErnestTheChickenQuest(api) {
   const {
-    GameConstants,
     GameObject,
     Location,
     HitDamage,
     HitMask,
     ItemIdentifiers,
     MapObjects,
-    NpcDefinition,
     NpcIdentifiers,
     ObjectIdentifiers,
     RegionManager,
-    World,
+    Animation, Graphic, PrivateArea, Boundary, CountdownTask, TaskManager,
+    DialogueChainBuilder, PlayerDialogue, ActionDialogue,
   } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
-  const { startDialogue } = require("../../npcs/NpcDialogues.plugin.js");
-  const fs = require("fs");
-  const path = require("path");
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   const VERONICA_NPC_ID = NpcIdentifiers.VERONICA;
   const ODDENSTEIN_NPC_ID = NpcIdentifiers.PROFESSOR_ODDENSTEIN;
@@ -136,18 +103,72 @@ module.exports = function registerErnestTheChickenQuest(api) {
 
   const FOUNTAIN_ATTRIBUTE = "ernest-the-chicken.fountain";
   const LEVERS_ATTRIBUTE = "ernest-the-chicken.levers";
+  const HANDIN_ATTRIBUTE = "ernest-the-chicken:parts-handed-in";
+  const TRANSFORMED_ATTRIBUTE = "ernest-the-chicken:transformed";
+  const HANDIN_VARBIT = 19655;
+  const MACHINE_ACTION_ID = "7lApN_", COMPLETE_ACTION_ID = "2wle32";
+  const scenes = new WeakMap();
+  const actions = new WeakMap();
   const START_HOOK = "quest:ernest-the-chicken:start";
-  /** "The machine turns Ernest back into human form." */
-  const MACHINE_ACTION_ID = "7lApN_";
-  /** "Congratulations! Quest complete!" on the shared finishing-up page. */
-  const COMPLETE_ACTION_ID = "2wle32";
-  /** The nameless multi chicken (varp 32 picks Chicken 10556 or, at stage 3, nothing). */
-  const CHICKEN_MULTI_NPC_ID = 2831;
+  class ErnestScene extends PrivateArea {
+    constructor(player) { super([new Boundary(3106, 3115, 3362, 3370, 2)]); this.player = player; }
+    canTeleport() { return false; }
+    canAttack() { return false; }
+    postLeave(mobile, logout) {
+      if (mobile === this.player) {
+        TaskManager.cancelTasks(this);
+        scenes.delete(mobile);
+        mobile.getMovementQueue().setBlockMovement(false);
+        mobile.setUntargetable(false);
+      }
+      super.postLeave(mobile, logout);
+    }
+  }
+
+  function leaveScene(player) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    if (player.getArea() === scene) scene.leave(player, false);
+    else { TaskManager.cancelTasks(scene); scene.destroy(); scenes.delete(player); }
+  }
+
+  function transformErnest(player) {
+    if (scenes.has(player) || quest.isComplete(player)) return;
+    const scene = new ErnestScene(player);
+    scenes.set(player, scene); scene.enter(player);
+    const actor = (id, x, y) => {
+      const npc = api.spawnNpc({ id, x, y, z: 2, wanderRadius: 0, owner: player, ownerOnly: true });
+      if (npc) scene.enter(npc);
+      return npc;
+    };
+    const professor = actor(ODDENSTEIN_NPC_ID, 3110, 3367);
+    const chicken = actor(NpcIdentifiers.CHICKEN_16, 3110, 3365);
+    player.getMovementQueue().reset().setBlockMovement(true); player.setUntargetable(true);
+    later(scene, 1, () => professor?.moveTo(new Location(3111, 3367, 2)));
+    later(scene, 2, () => { player.sendMessage("Oddenstein starts up the machine."); professor?.performAnimation(new Animation(832)); });
+    later(scene, 4, () => { player.sendMessage("The machine hums and shakes."); player.getPacketSender().sendSoundEffect(1790, 1, 0); });
+    later(scene, 7, () => {
+      const at = new Location(3111, 3366, 2);
+      player.getPacketSender().sendGraphic(new Graphic(173), at);
+      if (chicken) {
+        chicken.performGraphic(new Graphic(80, 45));
+        player.getPacketSender().sendProjectile(at, chicken.getLocation(), 0, 45, 174, 12, 0, chicken, 15, 0);
+      }
+      player.getPacketSender().sendSoundEffect(187, 2, 0);
+    });
+    later(scene, 9, () => {
+      if (chicken) api.removeNpc(chicken);
+      actor(ERNEST_NPC_ID, 3110, 3365);
+      player.setAttribute(TRANSFORMED_ATTRIBUTE, 1);
+      player.getPacketSender().sendConfig(VARP_ERNEST, 3).sendSoundEffect(1564, 1, 0);
+      player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false);
+      startTranscript(api, player, ODDENSTEIN_NPC_ID, PAGE_ERNEST, FINISHING_UP_VARIANT, steps => steps.slice(9));
+    });
+  }
+
   /** The secret room's eastern-wall lever (160); pulling it opens the bookcase and shoves you out. */
   const SECRET_ROOM_LEVER = ObjectIdentifiers.LEVER_7;
   const SECRET_ROOM_EXIT_X = 3098;
-  /** The finishing-up variant's Ernest lines get Ernest's chathead, not the professor's. */
-  const FINISHING_UP_SPEAKERS = new Map([["Ernest", ERNEST_NPC_ID]]);
 
   const PAGE_VERONICA = "Veronica";
   const PAGE_ODDENSTEIN = "Professor Oddenstein";
@@ -177,8 +198,6 @@ module.exports = function registerErnestTheChickenQuest(api) {
   const ODDENSTEIN_STANDARD_VARIANT = "standard-dialogue";
   const ODDENSTEIN_AFTER_VARIANT = "after-ernest-the-chicken";
 
-  /** "I'm looking for a guy called Ernest." choice on the mad-scientist page. */
-  const FIND_ERNEST_OPTION = "I'm looking for a guy called Ernest.";
 
   let quest;
 
@@ -188,36 +207,34 @@ module.exports = function registerErnestTheChickenQuest(api) {
   const attr = (player, key) => Number(player.getAttribute(key)) || 0;
   const setAttr = (player, key, value) => player.setAttribute(key, value);
 
-  /** The 9 puzzle doors opened by the 6 lever bits (copied from the reference). */
+  /** Door varbits1794–1802; capture includes repeated toggles and the complete oil-can route. */
   function getErnestPuzzleDoorStates(bits) {
     const [a, b, c, d, e, f] = [0, 1, 2, 3, 4, 5].map((index) => (bits & (1 << index)) !== 0);
     return [
       !a && !b && d && e && f,
       !b && d && f,
-      a && b && d,
-      d,
-      !e && f,
-      !a && !b && c && d && !e && f,
+      a && !c && !e && !f,
+      d && !e && !f,
+      !a && !b && c && d && f,
+      !a && !b && d && !e && f,
       !b && d && !f,
-      a && b && !c && !d && !e && !f,
-      (!c && d) || (!a && !b && c && d && !e && f),
+      a && b && !c && !e && !f,
+      d && !e && (!c || (!a && !b && f)),
     ];
   }
 
   function buildJournal(player, quest) {
     const stage = quest.getStage(player);
     if (stage >= STAGE_COMPLETE) {
-      return [
-        "<str>I repaired the machine and Ernest is human again.</str>",
-        "",
-        "<col=ff0000>QUEST COMPLETE!</col>",
-      ];
+      return ["<str>I have spoken to Veronica", "", "<str>I have collected all the parts for the machine", "",
+        "<str>Dr Oddenstein thanked me for helping fix his machine", "<str>We turned Ernest back to normal and he rewarded me", "<col=ff0000>QUEST COMPLETE!"];
     }
     if (stage >= STAGE_ODDENSTEIN) {
-      return [
-        "Professor Oddenstein needs a <col=800000>pressure gauge</col>,",
-        "<col=800000>rubber tube</col> and <col=800000>oil can</col> to restore Ernest.",
-      ];
+      return ["<str>I have spoken to Veronica", "", "<str>I've spoken to Dr Oddenstein, and discovered Ernest is a", "<str>chicken", "",
+        "<col=000080>I need to bring <col=800000>Dr Oddenstein<col=000080> parts for his machine",
+        "<col=800000>1 Oil Can", "<col=800000>1 Pressure Gauge", "<col=800000>1 Rubber Tube",
+        "<col=800000>Dr Oddenstein<col=000080> said to search the manor grounds for the",
+        "<col=000080>items. Maybe there are some items laying around that could", "<col=000080>help me."];
     }
     if (stage >= STAGE_STARTED) {
       return [
@@ -359,51 +376,68 @@ module.exports = function registerErnestTheChickenQuest(api) {
     player.sendMessage("You find nothing but rotting vegetables. Perhaps a spade would help.");
   }
 
+  function later(key, ticks, run) { TaskManager.submit(new CountdownTask(key, ticks, run)); }
+
   function digCompost(player) {
-    if (hasItem(player, KEY)) {
-      player.sendMessage("You find nothing else.");
-      return;
-    }
-    if (player.getInventory().isFull()) {
-      player.sendMessage("You need a free inventory slot.");
-      return;
-    }
-    player.getInventory().adds(KEY, 1);
-    player.sendMessage("You dig up a small key.");
+    if (!hasItem(player, SPADE)) { searchCompost(player); return; }
+    if (actions.has(player)) return;
+    const token = {}; actions.set(player, token);
+    player.performAnimation(new Animation(830));
+    player.sendMessage("You dig through the compost...");
+    later(player, 3, () => {
+      if (actions.get(player) !== token) return;
+      actions.delete(player);
+      if (hasItem(player, KEY)) { player.sendMessage("... but you find nothing of interest."); return; }
+      if (player.getInventory().isFull()) { player.sendMessage("You need a free inventory slot."); return; }
+      player.getInventory().adds(KEY, 1);
+      player.sendMessage("... and find a small key.");
+    });
   }
 
   function searchFountain(player) {
-    if (hasItem(player, GAUGE)) {
-      player.sendMessage("There is nothing else in the fountain.");
-      return;
-    }
-    if (attr(player, FOUNTAIN_ATTRIBUTE) !== 1) {
-      bite(player, "The piranhas bite your hand!");
-      return;
-    }
-    if (player.getInventory().isFull()) {
-      player.sendMessage("You need a free inventory slot.");
-      return;
-    }
-    player.getInventory().adds(GAUGE, 1);
-    player.sendMessage("You retrieve the pressure gauge from the fountain.");
+    if (actions.has(player)) return;
+    if (hasItem(player, GAUGE)) { player.sendMessage("There is nothing else in the fountain."); return; }
+    const token = {}; actions.set(player, token);
+    player.performAnimation(new Animation(881));
+    later(player, 1, () => {
+      if (actions.get(player) !== token) return;
+      actions.delete(player);
+      const chain = new DialogueChainBuilder().add(new PlayerDialogue(0, "There seems to be a pressure gauge in here..."));
+      chain.add(new ActionDialogue(1, { execute: () => {
+        if (attr(player, FOUNTAIN_ATTRIBUTE) !== 1) {
+          bite(player, "Something in the water bites you.");
+          player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new PlayerDialogue(0, "... and a lot of piranhas! I can't get the gauge out.")));
+        } else {
+          if (!hasItem(player, GAUGE) && !player.getInventory().isFull()) {
+            player.getInventory().adds(GAUGE, 1);
+            player.sendMessage("You get the pressure gauge from the fountain.");
+          } else if (player.getInventory().isFull()) player.sendMessage("You need a free inventory slot.");
+          player.getDialogueManager().reset();
+          player.getPacketSender().sendInterfaceRemoval();
+        }
+      } }));
+      player.getDialogueManager().startDialogues(chain);
+    });
   }
 
-  function useFishFoodOnFountain(player) {
-    player.getInventory().deleteNumber(FISH_FOOD, 1);
-    player.sendMessage("You pour the fish food into the fountain.");
-    player.sendMessage("The piranhas start eating the food...");
-    player.sendMessage("Now they seem hungrier than ever!");
+  function feedFountain(player, poisoned) {
+    const item = poisoned ? POISONED_FOOD : FISH_FOOD;
+    if (!hasItem(player, item) || actions.has(player)) return;
+    const token = {}; actions.set(player, token);
+    player.getInventory().deleteNumber(item, 1);
+    player.performAnimation(new Animation(881));
+    player.sendMessage(`You pour the ${poisoned ? "poisoned " : ""}fish food into the fountain.`);
+    if (poisoned) setAttr(player, FOUNTAIN_ATTRIBUTE, 1);
+    later(player, 2, () => { if (actions.get(player) === token) player.sendMessage("The piranhas start eating the food..."); });
+    later(player, 5, () => {
+      if (actions.get(player) !== token) return;
+      actions.delete(player);
+      player.sendMessage(poisoned ? "... then die and float to the surface." : "Now they seem hungrier than ever!");
+    });
   }
 
-  function usePoisonedFoodOnFountain(player) {
-    if (attr(player, FOUNTAIN_ATTRIBUTE) === 1) return;
-    player.getInventory().deleteNumber(POISONED_FOOD, 1);
-    setAttr(player, FOUNTAIN_ATTRIBUTE, 1);
-    player.sendMessage("You pour the poisoned fish food into the fountain.");
-    player.sendMessage("The piranhas start eating the food...");
-    player.sendMessage("... then die and float to the surface.");
-  }
+  function useFishFoodOnFountain(player) { feedFountain(player, false); }
+  function usePoisonedFoodOnFountain(player) { feedFountain(player, true); }
 
   function poisonFishFood(player) {
     if (!hasItem(player, POISON) || !hasItem(player, FISH_FOOD)) return;
@@ -429,9 +463,8 @@ module.exports = function registerErnestTheChickenQuest(api) {
   function useLever(player, index) {
     const bits = attr(player, LEVERS_ATTRIBUTE) ^ (1 << index);
     syncLevers(player, bits);
-    player.sendMessage(
-      `You pull lever ${String.fromCharCode(65 + index)} ${(bits & (1 << index)) !== 0 ? "down" : "up"}.`
-    );
+    player.performAnimation(new Animation(2139));
+    player.sendMessage("You hear a clunk.");
   }
 
   function usePuzzleDoor(player, tile) {
@@ -466,19 +499,6 @@ module.exports = function registerErnestTheChickenQuest(api) {
     event.destination = { x: best.x, y: best.y, z: tile.getZ() };
   }
 
-  /** "The machine turns Ernest back into human form." (LostCity's change_ernest). */
-  function transformErnest(player) {
-    const here = player.getLocation();
-    for (const npc of World.getNpcs()) {
-      if (npc?.getId?.() !== CHICKEN_MULTI_NPC_ID) continue;
-      const location = npc.getLocation();
-      if (location.getZ() !== here.getZ()) continue;
-      if (Math.max(Math.abs(location.getX() - here.getX()), Math.abs(location.getY() - here.getY())) > 8) continue;
-      npc.setNpcTransformationId(ERNEST_NPC_ID);
-      return;
-    }
-  }
-
   /** The secret room's eastern-wall lever opens the bookcase and moves you out through it. */
   function exitSecretRoom(player) {
     if (player.getLocation().getX() >= SECRET_ROOM_EXIT_X) return;
@@ -507,50 +527,13 @@ module.exports = function registerErnestTheChickenQuest(api) {
     request.handled = true;
   }
 
-  let finishingUpSteps;
-
-  /** The finishing-up variant, loaded from the dialogue dump on first use. */
-  function loadFinishingUpSteps() {
-    if (finishingUpSteps) return finishingUpSteps;
-    try {
-      const file = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
-      const data = JSON.parse(fs.readFileSync(file, "utf8"));
-      finishingUpSteps = data?.[PAGE_ERNEST]?.variants?.[FINISHING_UP_VARIANT] ?? [];
-    } catch {
-      finishingUpSteps = [];
-    }
-    return finishingUpSteps;
-  }
-
-  /**
-   * The transcript runtime voices every line with the clicked NPC, so it puts
-   * Ernest's thank-you in Oddenstein's mouth. Start the hand-in variant here
-   * instead, with a speaker map the runtime resolves to Ernest's chathead.
-   */
   function handleOddensteinTalk(event) {
-    const { player, npcId, definition, clickType } = event;
-    if (npcId !== ODDENSTEIN_NPC_ID) return;
-    const option = String(definition?.getActions?.()?.[clickType - 1] ?? "").toLowerCase();
-    if (option !== "talk-to") return;
-    if (quest.getStage(player) < STAGE_ODDENSTEIN || !hasAllParts(player)) return;
-    const steps = loadFinishingUpSteps();
-    if (!steps.length) return;
-    const npcDefinition = NpcDefinition.forId(ODDENSTEIN_NPC_ID);
-    if (!npcDefinition) return;
-    startDialogue(
-      api,
-      { player, npc: event.npc, npcId: ODDENSTEIN_NPC_ID, definition: npcDefinition },
-      steps,
-      undefined,
-      {
-        player,
-        npc: event.npc,
-        npcId: ODDENSTEIN_NPC_ID,
-        definition: npcDefinition,
-        speakerIdByName: FINISHING_UP_SPEAKERS,
-      }
-    );
+    const { player, npcId } = event;
+    if (npcId !== ODDENSTEIN_NPC_ID || quest.isComplete(player) || quest.getStage(player) < STAGE_ODDENSTEIN) return;
+    if (!attr(player, HANDIN_ATTRIBUTE)) return;
     event.handled = true;
+    startTranscript(api, player, ODDENSTEIN_NPC_ID, PAGE_ERNEST, FINISHING_UP_VARIANT,
+      steps => steps.slice(attr(player, TRANSFORMED_ATTRIBUTE) ? 9 : 5));
   }
 
   function reward(player) {
@@ -603,41 +586,52 @@ module.exports = function registerErnestTheChickenQuest(api) {
     if (npcId !== VERONICA_NPC_ID || hook !== START_HOOK) return;
     if (quest.getStage(player) >= STAGE_STARTED) return;
     quest.setStage(player, STAGE_STARTED);
+    player.sendMessage("You've started a new quest: <col=081190>Ernest the Chicken</col>");
   }
 
-  // The dump carries no hook for learning about the parts, so advance the
-  // stage when the player commits to finding Ernest.
-  function handleOddensteinChoice({ player, npcId, option }) {
-    if (npcId !== ODDENSTEIN_NPC_ID) return;
-    if (option !== FIND_ERNEST_OPTION) return;
-    if (quest.getStage(player) >= STAGE_ODDENSTEIN) return;
-    quest.setStage(player, STAGE_ODDENSTEIN);
+  function handleLine(request) {
+    if (request.npcId !== ODDENSTEIN_NPC_ID && request.npcId !== ERNEST_NPC_ID) return;
+    if (String(request.text).startsWith("I'm missing the pressure gauge")) {
+      request.before = () => { if (quest.getStage(request.player) < STAGE_ODDENSTEIN) quest.setStage(request.player, STAGE_ODDENSTEIN); };
+    }
+    if (String(request.text).startsWith("[Thank you")) {
+      request.text = String(request.text).replace("[Thank you sir/Thank you m'lady/Thank you]", request.player.getAppearance?.().isMale?.() === false ? "Thank you, m'lady" : "Thank you, sir");
+    }
   }
 
   function handleAction(event) {
     const { player } = event;
-
-    // "The machine turns Ernest back into human form.": swap the chicken NPC
-    // for human Ernest 3563, as LostCity's change_ernest does.
-    if (event.stepId === MACHINE_ACTION_ID) {
-      transformErnest(player);
+    if (event.npcId !== ODDENSTEIN_NPC_ID && event.npcId !== ERNEST_NPC_ID) return;
+    if (event.stepId === "Y6CLr9") {
       event.handled = true;
+      if (!attr(player, HANDIN_ATTRIBUTE)) {
+        if (!hasAllParts(player) || quest.getStage(player) !== STAGE_ODDENSTEIN) { event.end = true; return; }
+        for (const id of [GAUGE, TUBE, OIL_CAN]) player.getInventory().deleteNumber(id, 1);
+        player.setAttribute(HANDIN_ATTRIBUTE, 1);
+        player.getPacketSender().sendVarbit(HANDIN_VARBIT, 1);
+        player.sendMessage("You give a rubber tube, a pressure gauge, ");
+      }
       return;
     }
-
+    if (event.stepId === "ig6Dot") {
+      event.handled = true; event.end = true;
+      if (attr(player, HANDIN_ATTRIBUTE)) transformErnest(player);
+      return;
+    }
+    if (event.stepId === MACHINE_ACTION_ID) { event.handled = true; return; }
     if (event.stepId !== COMPLETE_ACTION_ID) return;
-    if (!hasAllParts(player)) return;
-    player.getInventory().deleteNumber(GAUGE, 1);
-    player.getInventory().deleteNumber(TUBE, 1);
-    player.getInventory().deleteNumber(OIL_CAN, 1);
-    quest.complete(player);
-    event.handled = true;
-    event.end = true;
+    event.handled = true; event.end = true;
+    if (attr(player, HANDIN_ATTRIBUTE) && attr(player, TRANSFORMED_ATTRIBUTE)) {
+      quest.complete(player); leaveScene(player);
+    }
   }
 
   /** The lever/door state lives in a persisted attribute; restore its visuals on login. */
+  function handleLogout({ player }) { leaveScene(player); actions.delete(player); }
+
   function handleLogin({ player }) {
     syncLevers(player, attr(player, LEVERS_ATTRIBUTE));
+    player.getPacketSender().sendVarbit(HANDIN_VARBIT, attr(player, HANDIN_ATTRIBUTE));
   }
 
   function handleItemOnItem(event) {
@@ -699,7 +693,7 @@ module.exports = function registerErnestTheChickenQuest(api) {
       return;
     }
     if (objectId === COMPOST && option.includes("search")) {
-      searchCompost(player);
+      if (hasItem(player, SPADE)) digCompost(player); else searchCompost(player);
       event.handled = true;
       return;
     }
@@ -723,21 +717,25 @@ module.exports = function registerErnestTheChickenQuest(api) {
     key: "ernest_the_chicken",
     name: "Ernest the Chicken",
     varpId: VARP_ERNEST,
+    varpValue: (stage, player) => stage === STAGE_ODDENSTEIN && attr(player, TRANSFORMED_ATTRIBUTE) ? 3 : stage,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 4,
-    scrollItemId: COINS,
+    scrollItemId: ItemIdentifiers.FEATHER,
+    completionJingleId: 153,
     rewardItemLabel: "300 Coins",
     buildJournal,
     onReward: reward,
   });
 
-  api.persistAttribute(FOUNTAIN_ATTRIBUTE);
+  api.persistAttribute(FOUNTAIN_ATTRIBUTE, 0);
+  api.persistAttribute(HANDIN_ATTRIBUTE, 0);
+  api.persistAttribute(TRANSFORMED_ATTRIBUTE, 0);
   api.persistAttribute(LEVERS_ATTRIBUTE, 0);
 
   api.onNpcDialogueVariant(selectVariant);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
-  api.onCustomEvent("npc-dialogue:choice", handleOddensteinChoice);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("ladders:climb", claimPuzzleLadder);
   api.onCustomEvent("door:toggle", handleManorDoorToggle);
@@ -746,6 +744,8 @@ module.exports = function registerErnestTheChickenQuest(api) {
   api.onObjectRoute(routeClosetDoor);
   api.onObjectRoute(routeManorDoor);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
+  api.onPlayerDisconnect(handleLogout);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnObject(handleItemOnObject);
   api.onObjectInteraction(handleObjectInteraction);

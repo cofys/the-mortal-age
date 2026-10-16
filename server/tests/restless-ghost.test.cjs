@@ -12,7 +12,7 @@ const FATHER_URHNEY = 923;
 const COFFIN_CLOSED = 2145;
 const COFFIN_OPEN = 15052;
 const GHOSTS_SKULL = 553;
-const TASK_LINE = 'Ok. I will try and get the skull back for you, then you can rest in peace.';
+const TASK_LINE = 'Ooh, thank you. That would be such a great relief!';
 
 const noop = () => {};
 
@@ -23,8 +23,12 @@ function registerRestlessGhost() {
   const objectClicks = new Map();
   let itemOnObject;
   let logoutHandler;
+  const tasks = [];
   const api = {
-    core: PluginManager.getCoreApi(),
+    core: { ...PluginManager.getCoreApi(), TaskManager: {
+      submit: task => { task.setRunning(true); tasks.push(task); },
+      cancelTasks: key => tasks.filter(task => task.key === key).forEach(task => task.stop()),
+    }, ObjectManager: { register: noop, deregister: noop } },
     onNpcDialogueVariant: noop,
     onNpcDialogueCondition: noop,
     onCustomEvent: (name, handler) => { (customEvents[name] ??= []).push(handler); },
@@ -32,16 +36,19 @@ function registerRestlessGhost() {
     onObjectSecondClick: noop,
     onItemOnObject: (handler) => { itemOnObject = handler; },
     onItemOnNpc: noop,
+    onItemAction: noop,
+    onItemDropPolicy: noop,
     onInterfaceActionButton: noop,
     onPlayerLogin: noop,
     onPlayerLogout: (handler) => { logoutHandler = handler; },
     persistAttribute: noop,
-    spawnNpc: (definition) => { const npc = { definition }; spawned.push(npc); return npc; },
+    spawnNpc: (definition) => { const npc = { definition, performAnimation: noop }; spawned.push(npc); return npc; },
     removeNpc: (npc) => removed.push(npc),
   };
   require('../plugins/quests/quests/RestlessGhost.Quest')(api);
   const quest = getRegisteredQuests().find((q) => q.key === 'the_restless_ghost');
-  return { quest, customEvents, spawned, removed, objectClicks, itemOnObject, logoutHandler };
+  return { quest, customEvents, spawned, removed, objectClicks, itemOnObject, logoutHandler,
+    tick(count) { while (count-- > 0) [...tasks].forEach(task => task.tick()); } };
 }
 
 function player() {
@@ -50,6 +57,9 @@ function player() {
   const packet = new Proxy({}, { get: () => () => packet });
   return {
     inventory,
+    isRegistered: () => true,
+    getMovementQueue: () => ({ setBlockMovement() { return this; } }),
+    performAnimation: noop,
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => ({
@@ -60,6 +70,7 @@ function player() {
     }),
     getEquipment: () => ({ get: () => undefined }),
     getPacketSender: () => packet,
+    getDialogueManager: () => ({ startDialogues: noop }),
     getSkillManager: () => ({ addExperiences: noop }),
     sendMessage: noop,
   };
@@ -71,67 +82,52 @@ function coffinObject(id) {
 }
 
 test('opening or searching the coffin raises one owner-only ghost', () => {
-  const { quest, objectClicks, spawned, removed, logoutHandler } = registerRestlessGhost();
+  const { quest, objectClicks, spawned, removed, logoutHandler, tick } = registerRestlessGhost();
 
   const p = player();
   objectClicks.get(COFFIN_CLOSED)({ player: p, object: coffinObject(COFFIN_CLOSED) });
-  assert.equal(spawned.length, 1, 'opening the coffin raises the ghost');
+  assert.equal(spawned.length, 0, 'the ghost waits for the coffin opening animation');
+  tick(4);
+  assert.equal(spawned.length, 1, 'opening the coffin raises the ghost after four ticks');
   assert.equal(spawned[0].definition.id, RESTLESS_GHOST);
   assert.equal(spawned[0].definition.owner, p);
   assert.equal(spawned[0].definition.ownerOnly, true);
 
-  objectClicks.get(COFFIN_OPEN)({ player: p });
+  objectClicks.get(COFFIN_OPEN)({ player: p, object: coffinObject(COFFIN_OPEN) });
   assert.equal(spawned.length, 1, 'searching the open coffin must not spawn a second ghost');
 
-  logoutHandler({ player: p });
+  logoutHandler({ player: p, object: coffinObject(COFFIN_OPEN) });
   assert.deepEqual(removed, [spawned[0]], 'the private ghost is dropped on logout');
-  objectClicks.get(COFFIN_OPEN)({ player: p });
+  objectClicks.get(COFFIN_OPEN)({ player: p, object: coffinObject(COFFIN_OPEN) });
   assert.equal(spawned.length, 2, 'the ghost rises again when the player comes back');
 
   const done = player();
   quest.setStage(done, 5);
-  objectClicks.get(COFFIN_OPEN)({ player: done });
+  objectClicks.get(COFFIN_OPEN)({ player: done, object: coffinObject(COFFIN_OPEN) });
   assert.equal(spawned.length, 2, 'completed players get no ghost');
 });
 
-test('accepting the skull task advances only the spoken-to-ghost stage', () => {
+test('the skull explanation advances only after the final ghost response is continued', () => {
   const { quest, customEvents } = registerRestlessGhost();
   const handler = customEvents['npc-dialogue:line'][0];
-  const choiceHandler = customEvents['npc-dialogue:choice'][0];
-
-  const p = player();
-  quest.setStage(p, 2);
-  handler({ npcId: RESTLESS_GHOST, player: p, text: TASK_LINE });
-  assert.equal(quest.getStage(p), 3);
-
-  handler({ npcId: RESTLESS_GHOST, player: p, text: TASK_LINE });
-  assert.equal(quest.getStage(p), 3, 'a replay must not move the stage again');
-
-  // The other two conversation branches commit through these nested choices.
-  const nested = player();
-  quest.setStage(nested, 2);
-  choiceHandler({ npcId: RESTLESS_GHOST, player: nested, option: "Yes, ok. Do you know why you're a ghost?" });
-  assert.equal(quest.getStage(nested), 3);
-
-  const early = player();
-  quest.setStage(early, 1);
-  handler({ npcId: RESTLESS_GHOST, player: early, text: TASK_LINE });
-  assert.equal(quest.getStage(early), 1, 'only the amulet conversation advances the stage');
-
-  handler({ npcId: FATHER_URHNEY, player: early, text: TASK_LINE });
-  assert.equal(quest.getStage(early), 1, 'another NPC saying the line is ignored');
-
-  choiceHandler({ npcId: FATHER_URHNEY, player: early, option: "Yes, ok. Do you know why you're a ghost?" });
-  assert.equal(quest.getStage(early), 1, 'another NPC using the choice is ignored');
+  const p = player(); quest.setStage(p, 2);
+  const event = { npcId: RESTLESS_GHOST, player: p, text: TASK_LINE };
+  handler(event); assert.equal(quest.getStage(p), 2); event.after(); assert.equal(quest.getStage(p), 3);
+  event.after(); assert.equal(quest.getStage(p), 3, 'a replay must not move the stage again');
+  const early = player(); quest.setStage(early, 1);
+  const earlyEvent = { npcId: RESTLESS_GHOST, player: early, text: TASK_LINE };
+  handler(earlyEvent); earlyEvent.after(); assert.equal(quest.getStage(early), 1);
+  const other = { npcId: FATHER_URHNEY, player: early, text: TASK_LINE };
+  handler(other); assert.equal(other.after, undefined);
 });
 
-test('returning the skull removes the ghost and completes the quest', () => {
+test('returning the skull removes the ghost and saves the pending river scene', () => {
   const { quest, objectClicks, itemOnObject, spawned, removed } = registerRestlessGhost();
 
   const p = player();
   quest.setStage(p, 4);
   p.inventory.set(GHOSTS_SKULL, 1);
-  objectClicks.get(COFFIN_OPEN)({ player: p });
+  objectClicks.get(COFFIN_OPEN)({ player: p, object: coffinObject(COFFIN_OPEN) });
   assert.equal(spawned.length, 1);
 
   itemOnObject({
@@ -142,6 +138,8 @@ test('returning the skull removes the ghost and completes the quest', () => {
     handled: false,
   });
 
-  assert.equal(quest.getStage(p), 5);
-  assert.deepEqual(removed, [spawned[0]], 'the ghost vanishes with the completed quest');
+  assert.equal(quest.getStage(p), 4, 'rewards wait for the river scene');
+  assert.equal(p.getAttribute('restless-ghost:release-pending'), 1);
+  assert.equal(p.inventory.get(GHOSTS_SKULL), 0);
+  assert.deepEqual(removed, [spawned[0]], 'the field ghost is removed before the private scene');
 });

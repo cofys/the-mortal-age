@@ -21,6 +21,8 @@ import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/S
 import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
 import { StretchedModePlugin } from "../../../game/plugins/stretchedmode/StretchedModePlugin";
 import { OpponentInfoPlugin } from "../../../game/plugins/opponentinfo/OpponentInfoPlugin";
+import { PrayerPlugin } from "../../../game/plugins/tabreorder/PrayerPlugin";
+import { SpellbookPlugin } from "../../../game/plugins/tabreorder/SpellbookPlugin";
 import {
     FreezeTimerPlugin,
     PoisonTimerPlugin,
@@ -61,6 +63,8 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     StatusBarsPlugin,
     OpponentInfoPlugin,
     AdminWorldMapPlugin,
+    SpellbookPlugin,
+    PrayerPlugin,
     StretchedModePlugin,
     GpuPlugin,
 ];

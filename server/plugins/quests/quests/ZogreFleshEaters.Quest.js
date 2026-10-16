@@ -435,7 +435,8 @@ module.exports = function registerZogreFleshEatersQuest(api) {
     }
   }
 
-  function answerCondition({ player, text, stepId }) {
+  function answerCondition({ player, npcId, text, stepId }) {
+    if (!SITHIK_NPC_IDS.has(npcId) && !OGRE_GUARD_NPC_IDS.has(npcId) && ![GRISH_NPC_ID, ZOMBIE_NPC_ID, UGLUG_NAR_NPC_ID, ZAVISTIC_RARVE_NPC_ID].includes(npcId)) return null;
     const byId = conditionByStepId(player, stepId);
     if (byId !== null) return byId;
     const value = String(text).toLowerCase();

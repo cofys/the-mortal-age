@@ -10,8 +10,13 @@ const EGG = 1944;
 
 function playerWith(...itemIds) {
   const inventory = new Map();
+  const attributes = new Map();
   for (const id of itemIds) inventory.set(id, (inventory.get(id) || 0) + 1);
-  return { getInventory: () => ({ getAmount: (id) => inventory.get(id) || 0 }) };
+  return {
+    getInventory: () => ({ getAmount: (id) => inventory.get(id) || 0 }),
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+  };
 }
 
 function registerCooksAssistant() {

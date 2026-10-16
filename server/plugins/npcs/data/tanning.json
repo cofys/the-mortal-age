@@ -1,0 +1,14 @@
+{
+  "source": "https://oldschool.runescape.wiki/w/Mary_(Getting_Ahead)",
+  "coins": 995,
+  "hides": [
+    { "raw": 1739, "product": 1741, "name": "Soft leather", "price": 1 },
+    { "raw": 1739, "product": 1743, "name": "Hard leather", "price": 3 },
+    { "raw": 6287, "product": 6289, "name": "Snakeskin", "price": 15 },
+    { "raw": 7801, "product": 6289, "name": "Snakeskin", "price": 20 },
+    { "raw": 1753, "product": 1745, "name": "Green d'hide", "price": 20 },
+    { "raw": 1751, "product": 2505, "name": "Blue d'hide", "price": 20 },
+    { "raw": 1749, "product": 2507, "name": "Red d'hide", "price": 20 },
+    { "raw": 1747, "product": 2509, "name": "Black d'hide", "price": 20 }
+  ]
+}

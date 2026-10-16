@@ -198,7 +198,8 @@ module.exports = function registerMonksFriendQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (npcId !== BROTHER_OMAD_NPC_ID && npcId !== BROTHER_CEDRIC_NPC_ID) return null;
     const value = String(text).toLowerCase();
     if (value.includes("has logs")) return hasItem(player, LOGS_ITEM_ID);
     if (value.includes("has a plank")) return hasItem(player, PLANK_ITEM_ID);

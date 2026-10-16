@@ -10,12 +10,12 @@ export class PlayerDialogue extends Dialogue {
     private static readonly TEXT_UID = (PlayerDialogue.GROUP_ID << 16) | 6;
     private static readonly CONTINUE_UID = (PlayerDialogue.GROUP_ID << 16) | 5;
     private text: string;
-    private expression: DialogueExpression;
+    private expression: number | DialogueExpression;
 
-    constructor(index: number, text: string, expression?: DialogueExpression) {
+    constructor(index: number, text: string, expression?: number | DialogueExpression) {
         super(index);
         this.text = text;
-        this.expression = expression || DialogueExpression.CALM;
+        this.expression = expression ?? DialogueExpression.CALM;
     }
 
     public getText(): string {
@@ -26,11 +26,11 @@ export class PlayerDialogue extends Dialogue {
         PlayerDialogue.send(player, this.text, this.expression);
     }
 
-    static send(player: Player, text: string, expression: DialogueExpression) {
+    static send(player: Player, text: string, expression: number | DialogueExpression) {
         player.getPacketSender()
             .sendChatboxInterface(PlayerDialogue.GROUP_ID)
             .sendPlayerHeadOnInterface(PlayerDialogue.HEAD_UID)
-            .sendInterfaceAnimation(PlayerDialogue.HEAD_UID, expression.getExpression())
+            .sendInterfaceAnimation(PlayerDialogue.HEAD_UID, typeof expression === "number" ? expression : expression.getExpression())
             .sendString(player.getUsername(), PlayerDialogue.NAME_UID);
         PlayerDialogue.sendChatText(player, text, PlayerDialogue.TEXT_UID, PlayerDialogue.CONTINUE_UID);
     }

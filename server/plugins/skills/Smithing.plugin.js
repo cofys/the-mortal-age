@@ -892,8 +892,14 @@ function handleSmelt({ player }) {
   openSmeltingInterface(player);
 }
 
-function handleSmith({ player }) {
-  openEquipmentCreationInterface(player);
+function anvilAccess(event) {
+  const request = { player: event.player, object: event.object, denied: false };
+  pluginApi.emitCustomEvent("smithing:anvil-access", request);
+  return !request.denied;
+}
+
+function handleSmith(event) {
+  if (anvilAccess(event)) openEquipmentCreationInterface(event.player);
 }
 
 function handleSmithingItemOnObject(event) {
@@ -912,6 +918,8 @@ function handleSmithingItemOnObject(event) {
 
   if (name === "Anvil" || name === "An experimental anvil") {
     if (SMITHABLE_EQUIPMENT_BY_BAR.has(itemId)) {
+      event.handled = true;
+      if (!anvilAccess(event)) return;
       openEquipmentCreationInterface(player, itemId);
       event.handled = true;
       return;

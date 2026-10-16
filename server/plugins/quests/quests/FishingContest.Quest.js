@@ -193,7 +193,8 @@ module.exports = function registerFishingContestQuest(api) {
   }
 
   /** Answer the page's prose conditions. */
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!DwarfHandlerIds.has(npcId) && ![BONZO_NPC_ID, MORRIS_NPC_ID, NpcIdentifiers.SINISTER_STRANGER, NpcIdentifiers.BIG_DAVE, NpcIdentifiers.JOSHUA, NpcIdentifiers.GRANDPA_JACK].includes(npcId)) return null;
     const value = String(text).toLowerCase();
     const stage = quest.getStage(player);
     if (value.includes("quest speedrunning world")) return false;

@@ -1,39 +1,13 @@
-/**
- * Shield of Arrav.
- *
- * Words come from npc-dialogues.json, page "Shield of Arrav" (the modern
- * transcript). This plugin supplies the variant selector, the prose-condition
- * answers, the start hook, the gang-choice / hand-in actions and the simple
- * object, item and npc-death interactions from the xrsps reference.
- *
- * Stages (varp 145): 0 not started, 1 started, 2 read the book, 3 gang task,
- * 4 joined a gang, 6 certificate halves, 7 complete. Stage 5 is unused by the
- * reference (the shield half is checked by inventory, not a stage).
- *
- * Supporting state is kept in attributes (the reference's varp flag bits):
- *   gang                    0 none, 1 Phoenix, 2 Black Arm
- *   phoenixLocationKnown    Baraek was paid
- *   charliePaid             Charlie was paid for the hideout tip
- *   reldoMet                Reldo's first-time greeting was used
- *
- * Reachability notes:
- *  - NPC variant selection is only consulted for cache ids the dialogue index
- *    lists against the "Shield of Arrav" page. The reference ids 6203 (Reldo)
- *    and 5211 (Weaponsmaster) are not in the index; 4242/4243 and 14137 are,
- *    so both are handled here.
- *  - The curator (5214) is indexed, but not against Shield of Arrav, so Talk-to
- *    would play The Dig Site instead. An id-specific npc hook intercepts his
- *    Talk-to for the shield-half hand-in and replays the Shield of Arrav page
- *    with startTranscript, which keeps his chathead and the action step ids.
- *  - The world Jonny the Beard (5213) is Talk-to only. When a Phoenix player
- *    takes Straven's task, an owner-only attackable Jonny (14139) spawns on the
- *    Blue Moon Inn spawn tile so the kill and the intel report drop work.
- */
+/** Shield of Arrav. Capture evidence and remaining presentation gaps: docs/shield-of-arrav.md. */
 module.exports = function registerShieldOfArravQuest(api) {
-  const { Location, Item, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest, startTranscript } = require("../QuestRuntime");
+  const { Location, Item, Area, Boundary, StatementDialogue, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { registerQuest, startTranscript, openBook } = require("../QuestRuntime");
 
   const VARP_SHIELD_OF_ARRAV = 145;
+  const VARP_BLACK_ARM_GANG = 146;
+  const BOOK_PAGES = require("../data/shield-of-arrav-book.json");
+  const CERTIFICATE_INTERFACE = 526;
+  const CERTIFICATE_TEXT = "The bearer of this certificate has brought half of the legendary Shield of Arrav to me, Haig Halen, Curator of the Varrock Museum. I have examined the shield and am satisfied as to its authenticity. I recommend to His Majesty, King Roald III, that the bearer is rewarded as per Proclimation 262 of the year 143 of the 5th Age, by King Roald II.";
 
   const STAGE_NOT_STARTED = 0;
   const STAGE_STARTED = 1;
@@ -75,9 +49,6 @@ module.exports = function registerShieldOfArravQuest(api) {
     NpcIdentifiers.KING_ROALD_7,
   ]);
   const JONNY_NPC_IDS = new Set([JONNY_REFERENCE_NPC_ID, NpcIdentifiers.JONNY_THE_BEARD, NpcIdentifiers.JONNY_THE_BEARD_2]);
-  const JONNY_ATTACKABLE_NPC_ID = NpcIdentifiers.JONNY_THE_BEARD_2;
-  const JONNY_SPAWN_X = 3223;
-  const JONNY_SPAWN_Y = 3395;
 
   const BOOKCASE_ID = ObjectIdentifiers.BOOKCASE_10;
   const PHOENIX_CHEST_ID = ObjectIdentifiers.CHEST_11;
@@ -98,6 +69,10 @@ module.exports = function registerShieldOfArravQuest(api) {
   const CHARLIE_PAID_ATTRIBUTE = "shield-of-arrav.charlie-paid";
   const RELDO_MET_ATTRIBUTE = "shield-of-arrav.reldo-met";
 
+  const DIRECTIONS_ATTRIBUTE = "shield-of-arrav:reldo-directions";
+  const PHOENIX_TASK_ATTRIBUTE = "shield-of-arrav:phoenix-task";
+  const BLACKARM_TASK_ATTRIBUTE = "shield-of-arrav:black-arm-task";
+
   const PAGE = "Shield of Arrav";
   const START_HOOK = "quest:shield-of-arrav:start";
 
@@ -117,21 +92,38 @@ module.exports = function registerShieldOfArravQuest(api) {
   const CURATOR_REPLACE_VARIANT = "finishing-up-talking-to-the-curator-again-after-giving-him-the-shield-half";
   const KING_COMPLETE_ACTIONS = new Set(["25_j1f", "e0pTWp"]);
 
-  const CHARLIE_ALLEY_OPTION = "Is there anything down this alleyway?";
 
   let quest;
   let groundItems;
 
-  const jonnyByPlayer = new Map();
   const reldoFirstTalk = new WeakMap();
 
   const attr = (player, key) => Number(player.getAttribute(key)) || 0;
   const gang = (player) => attr(player, GANG_ATTRIBUTE);
   const gangChosen = (player) => gang(player) !== 0;
   const isPhoenix = (player) => gang(player) === GANG_PHOENIX;
+  const joinedGang = (player) => gangChosen(player) && quest.getStage(player) >= STAGE_JOINED_GANG;
+  const phoenixTask = (player) => !!attr(player, PHOENIX_TASK_ATTRIBUTE) || (isPhoenix(player) && quest.getStage(player) === STAGE_GANG_TASK);
+  const blackArmTask = (player) => !!attr(player, BLACKARM_TASK_ATTRIBUTE) || (isBlackArm(player) && quest.getStage(player) === STAGE_GANG_TASK);
+  const bankHasItem = (player, itemId) => player.getBanks?.()?.some((bank) => bank && bank.getAmount(itemId) > 0) === true;
   const isBlackArm = (player) => gang(player) === GANG_BLACKARM;
   const hasItem = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
   const coins = (player) => player.getInventory().getAmount(COINS_ID);
+
+  function phoenixProgress(player) {
+    const stage = quest.getStage(player);
+    if (joinedGang(player) && isPhoenix(player)) return stage >= STAGE_COMPLETE ? 10 : 9;
+    return phoenixTask(player) ? 8 : attr(player, PHOENIX_LOCATION_ATTRIBUTE) ? 4
+      : attr(player, DIRECTIONS_ATTRIBUTE) ? 3 : Math.min(stage, STAGE_READ_BOOK);
+  }
+
+  function syncGangProgress(player) {
+    const stage = quest.getStage(player);
+    player.getPacketSender().sendConfig(VARP_SHIELD_OF_ARRAV, phoenixProgress(player));
+    player.getPacketSender().sendConfig(VARP_BLACK_ARM_GANG,
+      joinedGang(player) && isBlackArm(player) ? stage >= STAGE_COMPLETE ? 4 : 3
+        : blackArmTask(player) ? 2 : attr(player, DIRECTIONS_ATTRIBUTE) ? 1 : 0);
+  }
 
   function setGang(player, value) {
     player.setAttribute(GANG_ATTRIBUTE, value);
@@ -179,45 +171,13 @@ module.exports = function registerShieldOfArravQuest(api) {
   }
 
   function handInReport(player, questHandle) {
-    if (!isPhoenix(player) || questHandle.getStage(player) !== STAGE_GANG_TASK) return false;
+    if (!phoenixTask(player) || joinedGang(player) || questHandle.getStage(player) !== STAGE_GANG_TASK) return false;
     if (!hasItem(player, REPORT_ID)) return false;
-    if (player.getInventory().isFull()) return false;
     player.getInventory().deleteNumber(REPORT_ID, 1);
     giveItem(player, KEY_ID);
+    setGang(player, GANG_PHOENIX);
     questHandle.setStage(player, STAGE_JOINED_GANG);
-    removeJonny(player);
     return true;
-  }
-
-  /**
-   * The world Jonny (5213) only has Talk-to, so a Phoenix player on the gang
-   * task gets a private attackable copy (14139) on the same tile. Kept while
-   * the task is open, respawned after a kill so a lost report is recoverable.
-   */
-  function ensureJonny(player) {
-    if (!isPhoenix(player) || quest.getStage(player) !== STAGE_GANG_TASK) return;
-    if (jonnyByPlayer.has(player)) return;
-    const npc = api.spawnNpc({
-      id: JONNY_ATTACKABLE_NPC_ID,
-      x: JONNY_SPAWN_X,
-      y: JONNY_SPAWN_Y,
-      z: 0,
-      wanderRadius: 0,
-      owner: player,
-      ownerOnly: true,
-    });
-    if (!npc) return;
-    // Without this the death task queues the definition's own respawn, leaving an
-    // untracked copy behind alongside the one handleNpcDeath spawns.
-    npc.__skipDefaultRespawn = true;
-    jonnyByPlayer.set(player, npc);
-  }
-
-  function removeJonny(player) {
-    const npc = jonnyByPlayer.get(player);
-    if (!npc) return;
-    jonnyByPlayer.delete(player);
-    api.removeNpc(npc);
   }
 
   function handInShieldHalf(player, questHandle) {
@@ -235,9 +195,10 @@ module.exports = function registerShieldOfArravQuest(api) {
   }
 
   function handInCrossbows(player, questHandle) {
-    if (!isBlackArm(player) || questHandle.getStage(player) !== STAGE_GANG_TASK) return false;
+    if (!blackArmTask(player) || joinedGang(player) || questHandle.getStage(player) !== STAGE_GANG_TASK) return false;
     if (!hasItem(player, CROSSBOW_ID, 2)) return false;
     player.getInventory().deleteNumber(CROSSBOW_ID, 2);
+    setGang(player, GANG_BLACKARM);
     questHandle.setStage(player, STAGE_JOINED_GANG);
     return true;
   }
@@ -256,22 +217,17 @@ module.exports = function registerShieldOfArravQuest(api) {
       lines.push("I should search the marked bookcase and read the book.");
       return lines;
     }
-    if (stage === STAGE_READ_BOOK && !gangChosen(player)) {
-      lines.push("I can investigate the Phoenix Gang through Baraek,", "or the Black Arm Gang through Charlie the Tramp.");
+    if (stage < STAGE_JOINED_GANG) {
+      if (!attr(player, DIRECTIONS_ATTRIBUTE)) lines.push("I should speak to Reldo about the gangs in the book.");
+      else lines.push("I can investigate the Phoenix Gang through Baraek,", "or the Black Arm Gang through Charlie the Tramp.");
+      if (phoenixTask(player)) lines.push("Straven wants Jonny the Beard's intelligence report.");
+      if (blackArmTask(player)) lines.push("Katrine wants two Phoenix crossbows.");
       return lines;
     }
 
     const phoenix = isPhoenix(player);
     lines.push(`I chose to work with the <col=800000>${phoenix ? "Phoenix" : "Black Arm"} Gang</col>.`);
-    if (stage === STAGE_READ_BOOK) {
-      lines.push(phoenix ? "I should find Straven at the Phoenix hideout." : "I should speak to Katrine in the Black Arm hideout.");
-    } else if (stage === STAGE_GANG_TASK) {
-      lines.push(
-        phoenix
-          ? "I must kill Jonny the Beard and return his intel report."
-          : "I must bring Katrine two Phoenix crossbows."
-      );
-    } else if (stage === STAGE_JOINED_GANG) {
+    if (stage === STAGE_JOINED_GANG) {
       const shield = phoenix ? PHOENIX_HALF_ID : BLACKARM_HALF_ID;
       lines.push(
         hasItem(player, shield)
@@ -308,79 +264,55 @@ module.exports = function registerShieldOfArravQuest(api) {
           ? { page: PAGE, variant: "shared-starting-talking-to-reldo-before-reading-the-book" }
           : { page: PAGE, variant: "shared-starting-talking-to-reldo-before-finding-the-book" };
       }
-      if (stage === STAGE_READ_BOOK) {
+      if (stage >= STAGE_READ_BOOK && stage < STAGE_JOINED_GANG) {
         return { page: PAGE, variant: "shared-starting-talking-to-reldo-after-reading-the-book" };
       }
       return null;
     }
 
     if (BARAEK_NPC_IDS.has(npcId)) {
-      if (stage === STAGE_READ_BOOK && !gangChosen(player)) {
+      if (stage >= STAGE_READ_BOOK && stage < STAGE_JOINED_GANG && !attr(player, PHOENIX_LOCATION_ATTRIBUTE)) {
         return { page: PAGE, variant: "phoenix-gang-talking-to-baraek" };
       }
       return null;
     }
 
     if (npcId === CHARLIE_NPC_ID) {
-      if (isPhoenix(player) && stage >= STAGE_READ_BOOK) {
+      if (isPhoenix(player) && joinedGang(player)) {
         return { page: PAGE, variant: "phoenix-gang-learning-the-location-of-the-black-arm-gang-from-charlie-the-tramp" };
       }
-      // Before a gang is chosen Charlie must play his standard transcript: its
-      // "Is there anything down this alleyway?" option is what picks Black Arm
-      // (handleGangChoice). The Shield of Arrav Charlie branches below only
-      // apply once the choice is made.
-      if (stage === STAGE_GANG_TASK && isBlackArm(player)) {
+      if (stage === STAGE_GANG_TASK && blackArmTask(player)) {
         return { page: PAGE, variant: "black-arm-gang-talking-to-charlie-the-tramp-after-accepting-katrine-s-task" };
+      }
+      if (stage >= STAGE_READ_BOOK && attr(player, DIRECTIONS_ATTRIBUTE)) {
+        return { page: PAGE, variant: "black-arm-gang-talking-to-charlie-the-tramp" };
       }
       return null;
     }
 
     if (npcId === KATRINE_NPC_ID) {
-      if (isPhoenix(player)) {
-        return { page: PAGE, variant: "phoenix-gang-talking-to-katrine-after-joining-the-phoenix-gang" };
+      if (joinedGang(player)) {
+        if (isPhoenix(player)) return { page: PAGE, variant: "phoenix-gang-talking-to-katrine-after-joining-the-phoenix-gang" };
+        return { page: PAGE, variant: stage >= STAGE_COMPLETE
+          ? "post-quest-talking-to-katrine-as-a-member-of-the-black-arm-gang"
+          : "black-arm-gang-talking-to-katrine-after-joining-the-black-arm-gang" };
       }
-      if (isBlackArm(player)) {
-        if (stage === STAGE_READ_BOOK) {
-          quest.setStage(player, STAGE_GANG_TASK);
-          return { page: PAGE, variant: "black-arm-gang-talking-to-katrine" };
-        }
-        if (stage === STAGE_GANG_TASK) {
-          return { page: PAGE, variant: "black-arm-gang-talking-to-katrine-again-after-accepting-her-task" };
-        }
-        if (stage >= STAGE_JOINED_GANG && stage < STAGE_COMPLETE) {
-          return { page: PAGE, variant: "black-arm-gang-talking-to-katrine-after-joining-the-black-arm-gang" };
-        }
-        if (stage >= STAGE_COMPLETE) {
-          return { page: PAGE, variant: "post-quest-talking-to-katrine-as-a-member-of-the-black-arm-gang" };
-        }
-      }
+      if (stage >= STAGE_READ_BOOK) return { page: PAGE, variant: blackArmTask(player)
+        ? "black-arm-gang-talking-to-katrine-again-after-accepting-her-task"
+        : "black-arm-gang-talking-to-katrine" };
       return null;
     }
 
     if (npcId === STRAVEN_NPC_ID) {
-      if (isBlackArm(player)) {
-        return { page: PAGE, variant: "black-arm-gang-talking-to-straven-after-joining-the-black-arm-gang" };
+      if (joinedGang(player)) {
+        if (isBlackArm(player)) return { page: PAGE, variant: "black-arm-gang-talking-to-straven-after-joining-the-black-arm-gang" };
+        return { page: PAGE, variant: stage >= STAGE_COMPLETE
+          ? hasItem(player, KEY_ID) ? "post-quest-talking-to-straven-as-a-member-of-the-phoenix-gang" : "post-quest-if-you-lost-the-weapon-store-key"
+          : hasItem(player, KEY_ID) ? "phoenix-gang-talking-to-straven-after-joining-the-phoenix-gang" : "phoenix-gang-talking-to-straven-after-losing-the-weapon-store-key" };
       }
-      if (isPhoenix(player)) {
-        if (stage === STAGE_READ_BOOK) {
-          quest.setStage(player, STAGE_GANG_TASK);
-          ensureJonny(player);
-          return { page: PAGE, variant: "phoenix-gang-talking-to-straven-or-attempting-to-open-the-door" };
-        }
-        if (stage === STAGE_GANG_TASK) {
-          return { page: PAGE, variant: "phoenix-gang-talking-to-straven-or-opening-the-door-after-accepting-his-task" };
-        }
-        if (stage >= STAGE_JOINED_GANG && stage < STAGE_COMPLETE) {
-          return hasItem(player, KEY_ID)
-            ? { page: PAGE, variant: "phoenix-gang-talking-to-straven-after-joining-the-phoenix-gang" }
-            : { page: PAGE, variant: "phoenix-gang-talking-to-straven-after-losing-the-weapon-store-key" };
-        }
-        if (stage >= STAGE_COMPLETE) {
-          return hasItem(player, KEY_ID)
-            ? { page: PAGE, variant: "post-quest-talking-to-straven-as-a-member-of-the-phoenix-gang" }
-            : { page: PAGE, variant: "post-quest-if-you-lost-the-weapon-store-key" };
-        }
-      }
+      if (stage >= STAGE_READ_BOOK) return { page: PAGE, variant: phoenixTask(player)
+        ? "phoenix-gang-talking-to-straven-or-opening-the-door-after-accepting-his-task"
+        : "phoenix-gang-talking-to-straven-or-attempting-to-open-the-door" };
       return null;
     }
 
@@ -415,7 +347,8 @@ module.exports = function registerShieldOfArravQuest(api) {
     return null;
   }
 
-  function answerDialogueCondition({ npcId, player, text }) {
+  function answerDialogueCondition({ npcId, player, text, stepId, pages }) {
+    if (["Vl3BPs", "JaT1Z6"].includes(stepId) && pages?.some(entry => entry.page === PAGE)) return player.getInventory().isFull();
     const value = String(text).toLowerCase();
 
     if (RELDO_NPC_IDS.has(npcId)) {
@@ -453,11 +386,11 @@ module.exports = function registerShieldOfArravQuest(api) {
     }
 
     if (npcId === STRAVEN_NPC_ID) {
-      const report = hasItem(player, REPORT_ID);
+      const report = hasItem(player, REPORT_ID) || bankHasItem(player, REPORT_ID);
       if (value.includes("doesn't have the intel report") || value.includes("does not have the intel report")) return !report;
       if (value.includes("has the intel report")) return report;
-      if (value.includes("intel report is in the bank")) return false;
-      if (value.includes("intel report is in the inventory")) return report;
+      if (value.includes("intel report is in the bank")) return !hasItem(player, REPORT_ID) && bankHasItem(player, REPORT_ID);
+      if (value.includes("intel report is in the inventory")) return hasItem(player, REPORT_ID);
       return null;
     }
 
@@ -475,12 +408,35 @@ module.exports = function registerShieldOfArravQuest(api) {
     if (hook !== START_HOOK) return;
     if (quest.getStage(player) >= STAGE_STARTED) return;
     quest.setStage(player, STAGE_STARTED);
+    player.sendMessage("You've started a new quest: <col=0ab0ff>Shield of Arrav</col>");
   }
 
   function handleGangChoice({ player, npcId, option }) {
-    if (npcId !== CHARLIE_NPC_ID || option !== CHARLIE_ALLEY_OPTION) return;
-    if (quest.getStage(player) !== STAGE_READ_BOOK || gangChosen(player)) return;
-    setGang(player, GANG_BLACKARM);
+    if (joinedGang(player) || quest.getStage(player) < STAGE_READ_BOOK) return;
+    if (npcId === STRAVEN_NPC_ID && option === "I'd like to offer you my services.") {
+      player.setAttribute(PHOENIX_TASK_ATTRIBUTE, true);
+      quest.setStage(player, STAGE_GANG_TASK);
+      syncGangProgress(player);
+    }
+    if (npcId === KATRINE_NPC_ID && (option === "Okay, no problem." || option === "Okay, I'll do it.")) {
+      player.setAttribute(BLACKARM_TASK_ATTRIBUTE, true);
+      quest.setStage(player, STAGE_GANG_TASK);
+      syncGangProgress(player);
+    }
+  }
+
+  function renderQuestLine(request) {
+    if (!request?.player || typeof request.text !== "string") return;
+    if (RELDO_NPC_IDS.has(request.npcId) && request.text.startsWith("There are rumours that they are based")) {
+      request.before = () => {
+        request.player.setAttribute(DIRECTIONS_ATTRIBUTE, true);
+        syncGangProgress(request.player);
+      };
+    }
+    if (request.text.includes("[Phoenix Gang/Black Arm Gang]")) {
+      request.text = request.text.replace("[Phoenix Gang/Black Arm Gang]", isPhoenix(request.player) ? "Phoenix Gang" : "Black Arm Gang")
+        .replace("[Black Arm Gang/Phoenix Gang]", isPhoenix(request.player) ? "Black Arm Gang" : "Phoenix Gang");
+    }
   }
 
   function handleDialogueAction(event) {
@@ -505,9 +461,9 @@ module.exports = function registerShieldOfArravQuest(api) {
     if (BARAEK_NPC_IDS.has(npcId) && BARAEK_PAY_ACTIONS.has(stepId)) {
       if (coins(player) < 20) return;
       player.getInventory().deleteNumber(COINS_ID, 20);
-      setGang(player, GANG_PHOENIX);
       player.setAttribute(PHOENIX_LOCATION_ATTRIBUTE, true);
-      player.sendMessage("Baraek directs you to an alley near Varrock's south gate.");
+      syncGangProgress(player);
+      player.sendMessage("You give 20 coins to Baraek.");
       event.handled = true;
       return;
     }
@@ -539,16 +495,16 @@ module.exports = function registerShieldOfArravQuest(api) {
     }
 
     if (npcId === CURATOR_NPC_ID) {
-      // A message step emits the generic action first, then the message itself;
-      // act once so the transcript line still shows and nothing is granted twice.
-      const isMessageStep = event.kind === "message";
       if (stepId === CURATOR_CERT_MESSAGE) {
-        if (isMessageStep) return;
+        const own = ownShieldAndCert(player);
         if (!handInShieldHalf(player, quest)) event.handled = true;
+        else {
+          event.text = "You give the shield half to the curator and he gives you two half-certificates.";
+          event.box = { items: [own.shield, own.half] };
+        }
         return;
       }
       if (stepId === CURATOR_REPLACE_MESSAGE) {
-        if (isMessageStep) return;
         const own = ownShieldAndCert(player);
         if (!own || quest.getStage(player) !== STAGE_CERTIFICATE || hasItem(player, own.half)) {
           event.handled = true;
@@ -604,21 +560,51 @@ module.exports = function registerShieldOfArravQuest(api) {
   }
 
   function handleLogin({ player }) {
-    ensureJonny(player);
+    syncGangProgress(player);
   }
 
-  function handleLogout({ player }) {
-    if (player) removeJonny(player);
+  function handleStageChanged({ player, key }) {
+    if (key === "shield_of_arrav") syncGangProgress(player);
   }
 
   function readBook(event) {
     if (event.itemId !== BOOK_ID) return;
     const option = String(event.option ?? "").toLowerCase();
     if (!option.includes("read")) return;
-    event.player.sendMessage("The book tells how the Phoenix Gang stole Arrav's shield and later split in two.");
+    if (!hasItem(event.player, BOOK_ID)) return;
+    openBook(event.player, "The Shield of Arrav", BOOK_PAGES);
     if (quest.getStage(event.player) === STAGE_STARTED) {
       quest.setStage(event.player, STAGE_READ_BOOK);
     }
+    event.handled = true;
+  }
+
+  function readCertificate(event) {
+    if (event.itemId !== CERTIFICATE_ID || String(event.option).toLowerCase() !== "read" || !hasItem(event.player, CERTIFICATE_ID)) return;
+    event.player.getPacketSender().sendInterface(CERTIFICATE_INTERFACE)
+      .sendString(CERTIFICATE_TEXT, (CERTIFICATE_INTERFACE << 16) | 3);
+    event.handled = true;
+  }
+
+  function closeCertificate({ player }) {
+    player.getPacketSender().sendInterfaceRemoval();
+  }
+
+  function inspectQuestItem(event) {
+    if (String(event.option).toLowerCase() !== "inspect") return;
+    const { player, itemId } = event;
+    if (!hasItem(player, itemId)) return;
+    if (itemId === PHOENIX_CERT_ID || itemId === BLACKARM_CERT_ID) {
+      if (hasItem(player, PHOENIX_CERT_ID) && hasItem(player, BLACKARM_CERT_ID)) {
+        api.sendMultiChatboxPrompt(player, "Combine the two half-certificates?",
+          "Yes.", () => combineCertificateHalves({ player, usedItemId: PHOENIX_CERT_ID, usedWithItemId: BLACKARM_CERT_ID }),
+          "No.", () => {});
+      } else player.sendMessage("It's half of a certificate for claiming a reward from King Roald. If you're working with a player who's restricted from trading, you can still give them this item by using it on them.");
+    } else if (itemId === KEY_ID) {
+      player.sendMessage("It's the key to the Phoenix Gang's weapons store. If you're working with a player who's restricted from trading, you can still give them this item by using it on them.");
+    } else if (itemId === CROSSBOW_ID) {
+      player.sendMessage("If you need to give this item to a player who's restricted from trading, you can give them the item by using it on them.");
+    } else return;
     event.handled = true;
   }
 
@@ -628,14 +614,10 @@ module.exports = function registerShieldOfArravQuest(api) {
     if (!pair.has(PHOENIX_CERT_ID) || !pair.has(BLACKARM_CERT_ID)) return;
     if (quest.getStage(player) !== STAGE_CERTIFICATE) return;
     if (!hasItem(player, PHOENIX_CERT_ID) || !hasItem(player, BLACKARM_CERT_ID)) return;
-    if (player.getInventory().isFull()) {
-      player.sendMessage("You need a free inventory space.");
-      return;
-    }
     player.getInventory().deleteNumber(PHOENIX_CERT_ID, 1);
     player.getInventory().deleteNumber(BLACKARM_CERT_ID, 1);
     player.getInventory().adds(CERTIFICATE_ID, 1);
-    player.sendMessage("You fit the two certificate halves together.");
+    StatementDialogue.send(player, "You combine the two halves to make a complete certificate.");
     event.handled = true;
   }
 
@@ -648,46 +630,29 @@ module.exports = function registerShieldOfArravQuest(api) {
   function useKeyOnDoor(event) {
     if (event.itemId !== KEY_ID || event.objectId !== WEAPON_STORE_DOOR_ID) return;
     if (!hasItem(event.player, KEY_ID)) return;
+    event.player.sendMessage("You unlock the door using the key you're carrying.");
     crossDoor(event.player, "x", WEAPON_STORE_DOOR_X);
     event.handled = true;
   }
 
-  // Tradeable quest items: using a certificate half on another player swaps it
-  // for their opposite half; the weapon store key can just be handed over.
+  // OSRS offers a deliberate hand-over prompt for all three tradeable quest items.
   function handleItemOnPlayer(event) {
     const { player, target, itemId } = event;
-    if (!target?.getInventory) return;
-    if (itemId === KEY_ID) {
-      if (!hasItem(player, KEY_ID)) return;
-      if (target.getInventory().isFull()) {
-        player.sendMessage("That player has no inventory space.");
-        event.handled = true;
-        return;
-      }
-      player.getInventory().deleteNumber(KEY_ID, 1);
-      target.getInventory().adds(KEY_ID, 1);
-      player.sendMessage(`You give the weapon store key to ${target.getUsername?.() ?? "the other player"}.`);
-      event.handled = true;
-      return;
-    }
-    if (itemId !== PHOENIX_CERT_ID && itemId !== BLACKARM_CERT_ID) return;
-    const opposite = itemId === PHOENIX_CERT_ID ? BLACKARM_CERT_ID : PHOENIX_CERT_ID;
-    if (quest.getStage(player) !== STAGE_CERTIFICATE || quest.getStage(target) !== STAGE_CERTIFICATE) return;
-    if (!hasItem(player, itemId) || !hasItem(target, opposite)) {
-      player.sendMessage("That player does not have the opposite certificate half.");
-      return;
-    }
-    if (player.getInventory().isFull() || target.getInventory().isFull()) {
-      player.sendMessage("Both players need a free inventory space.");
-      return;
-    }
-    player.getInventory().deleteNumber(itemId, 1);
-    target.getInventory().deleteNumber(opposite, 1);
-    player.getInventory().adds(opposite, 1);
-    target.getInventory().adds(itemId, 1);
-    player.sendMessage(`You exchange certificate halves with ${target.getUsername?.() ?? "the other player"}.`);
-    target.sendMessage?.(`You exchange certificate halves with ${player.getUsername?.() ?? "the other player"}.`);
+    if (![KEY_ID, CROSSBOW_ID, PHOENIX_CERT_ID, BLACKARM_CERT_ID].includes(itemId)) return;
+    if (!target?.getInventory || !hasItem(player, itemId)) return;
+    const label = itemId === KEY_ID ? "key" : itemId === CROSSBOW_ID ? "crossbow" : "certificate";
     event.handled = true;
+    api.sendMultiChatboxPrompt(player, `Drop your ${label} for ${target.getUsername()} to take?`,
+      "Yes", () => {
+        if (!hasItem(player, itemId)) return;
+        const location = player.getLocation().clone();
+        if (player.getPrivateArea() !== target.getPrivateArea() || !target.getLocation().isWithinDistance(location, 1)) return;
+        groundItems.registerLocation(target, new Item(itemId, 1), location);
+        player.getInventory().deleteNumber(itemId, 1);
+        player.sendMessage(`${target.getUsername()} can now take the item from the ground.`);
+        target.sendMessage(`<col=ef1020>${player.getUsername()} has dropped something for you to take.</col>`);
+      },
+      "No", () => {});
   }
 
   function handleObjectInteraction(event) {
@@ -713,6 +678,7 @@ module.exports = function registerShieldOfArravQuest(api) {
       if (!hasItem(player, KEY_ID)) {
         player.sendMessage("The door is securely locked.");
       } else {
+        player.sendMessage("You unlock the door using the key you're carrying.");
         crossDoor(player, "x", WEAPON_STORE_DOOR_X);
       }
       event.handled = true;
@@ -743,19 +709,38 @@ module.exports = function registerShieldOfArravQuest(api) {
     if (!location) return;
 
     if (JONNY_NPC_IDS.has(npcId)) {
-      if (jonnyByPlayer.get(killer) === npc) {
-        jonnyByPlayer.delete(killer);
-        ensureJonny(killer);
-      }
-      if (!isPhoenix(killer) || quest.getStage(killer) !== STAGE_GANG_TASK) return;
+      if (!phoenixTask(killer) || joinedGang(killer) || quest.getStage(killer) !== STAGE_GANG_TASK) return;
       if (hasItem(killer, REPORT_ID)) return;
       groundItems.registerLocation(killer, new Item(REPORT_ID, 1), location);
       return;
     }
-    if (WEAPONSMASTER_NPC_IDS.has(npcId)) {
-      groundItems.registerLocation(killer, new Item(CROSSBOW_ID, 1), location);
-      groundItems.registerLocation(killer, new Item(CROSSBOW_ID, 1), location);
+  }
+
+  class WeaponsStoreArea extends Area {
+    canAttack(attacker, target) {
+      if (!attacker.isPlayer() || !WEAPONSMASTER_NPC_IDS.has(target.getId?.())) return null;
+      if (joinedGang(attacker) && isPhoenix(attacker) && !quest.isComplete(attacker)) {
+        attacker.sendMessage("He's a fellow Phoenix Gang member.");
+        return false;
+      }
+      return null;
     }
+  }
+
+  function protectPhoenixCrossbows(event) {
+    if (event.groundItem?.getItem?.()?.getId?.() !== CROSSBOW_ID) return;
+    const tile = event.groundItem.getPosition();
+    if (tile.getZ() !== 1 || tile.getX() < 3242 || tile.getX() > 3253 || tile.getY() < 3380 || tile.getY() > 3390) return;
+    const weaponsmaster = [...(api.getWorld()?.getNpcs?.() ?? [])].find((npc) =>
+      WEAPONSMASTER_NPC_IDS.has(npc?.getId?.()) && npc.getHitpoints() > 0 && !npc.isDyingFunction());
+    if (!weaponsmaster) return;
+    event.handled = true;
+    if (joinedGang(event.player) && isPhoenix(event.player)) {
+      weaponsmaster.forceChat("Hey! That's Phoenix Gang property!");
+      return;
+    }
+    weaponsmaster.forceChat("Hey! Put that back!");
+    weaponsmaster.getCombat().attack(event.player);
   }
 
   function searchBookcase(player, questHandle) {
@@ -767,7 +752,7 @@ module.exports = function registerShieldOfArravQuest(api) {
       player.sendMessage("You already have The Shield of Arrav.");
       return;
     }
-    giveItem(player, BOOK_ID, "You take The Shield of Arrav from the bookcase.");
+    giveItem(player, BOOK_ID, "You search the bookcase and find a book titled The Shield of Arrav.");
   }
 
   function searchShieldCache(player, questHandle, phoenix) {
@@ -777,10 +762,10 @@ module.exports = function registerShieldOfArravQuest(api) {
     }
     const itemId = phoenix ? PHOENIX_HALF_ID : BLACKARM_HALF_ID;
     if (hasItem(player, itemId)) {
-      player.sendMessage("You already have this half of the Shield of Arrav.");
+      player.sendMessage("You open the cupboard, but don't find anything of interest inside.");
       return;
     }
-    giveItem(player, itemId, "You find half of the Shield of Arrav.");
+    giveItem(player, itemId, phoenix ? "You find half of a shield in the chest." : "You open the cupboard and find half of a shield inside.");
   }
 
   function crossDoor(player, axis, coordinate) {
@@ -800,6 +785,7 @@ module.exports = function registerShieldOfArravQuest(api) {
     key: "shield_of_arrav",
     name: "Shield of Arrav",
     varpId: VARP_SHIELD_OF_ARRAV,
+    varpValue: (stage, player) => phoenixProgress(player),
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
@@ -810,6 +796,9 @@ module.exports = function registerShieldOfArravQuest(api) {
     onReward: reward,
   });
 
+  api.persistAttribute(DIRECTIONS_ATTRIBUTE, false);
+  api.persistAttribute(PHOENIX_TASK_ATTRIBUTE, false);
+  api.persistAttribute(BLACKARM_TASK_ATTRIBUTE, false);
   api.persistAttribute(GANG_ATTRIBUTE);
   api.persistAttribute(PHOENIX_LOCATION_ATTRIBUTE);
   api.persistAttribute(CHARLIE_PAID_ATTRIBUTE);
@@ -823,31 +812,20 @@ module.exports = function registerShieldOfArravQuest(api) {
   api.onCustomEvent("npc-dialogue:choice", handleGangChoice);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("npc-dialogue:line", fillReldoPlayerName);
+  api.onCustomEvent("npc-dialogue:line", renderQuestLine);
+  api.onCustomEvent("quest:stage-changed", handleStageChanged);
   api.onNpcInteraction(handleNpcInteraction);
   api.onPlayerLogin(handleLogin);
-  api.onPlayerLogout(handleLogout);
   api.onItemAction(readBook);
+  api.onItemAction(inspectQuestItem);
+  api.onItemAction(readCertificate);
+  api.onInterfaceActionButton([(CERTIFICATE_INTERFACE << 16) | 4], closeCertificate);
   api.onItemOnItem(combineCertificateHalves);
   api.onItemOnNpc(handReportToStraven);
   api.onItemOnObject(useKeyOnDoor);
   api.onItemOnPlayer(handleItemOnPlayer);
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcDeath(handleNpcDeath);
-  /**
-   * Gaps (not selectable / not covered by the dump):
-   *  - Curator Haig Halen (5214) is indexed but the index does not list the
-   *    "Shield of Arrav" page against it; handleNpcInteraction replays the page
-   *    through startTranscript so the hand-in is reachable without a data fix.
-   *  - Reference ids 6203 (Reldo) and 5211 (Weaponsmaster) are not in the index;
-   *    the indexed cache ids 4242/4243 and 14137 are handled instead, so the
-   *    spawned ids must be the indexed ones for the overrides to apply.
-   *  - The modern page's bookcase search ("shared-starting-searching-the-right-
-   *    bookcase") and the "attempting to take a phoenix crossbow" variants are
-   *    object/dispenser interactions the object runtime cannot play; the bookcase
-   *    is implemented as a plain object search, the crossbow theft is skipped.
-   *  - The Weaponsmaster "starts attacking" action and the phoenix door
-   *    auto-open message are not modelled (no combat trigger / spawn control).
-   *  - stage 5 (RECOVERED_SHIELD) from the reference is never set; the shield
-   *    half is checked by inventory, matching the reference.
-   */
+  api.onGroundItemPickup(protectPhoenixCrossbows);
+  api.registerArea(new WeaponsStoreArea([new Boundary(3242, 3253, 3380, 3390, 1)]));
 };

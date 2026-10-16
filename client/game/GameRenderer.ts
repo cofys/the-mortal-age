@@ -72,6 +72,136 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     uiHidden: boolean = false;
     widgetsOverlay?: WidgetsOverlay;
 
+    // OSRS camera shake slots (0:X, 1:Y, 2:Z, 3:Yaw, 4:Pitch).
+    public readonly cameraShakeEnabled: boolean[] = [false, false, false, false, false];
+    public readonly cameraShakeRandomAmplitude: number[] = [0, 0, 0, 0, 0];
+    public readonly cameraShakeWaveAmplitude: number[] = [0, 0, 0, 0, 0];
+    public readonly cameraShakeWaveSpeed: number[] = [0, 0, 0, 0, 0];
+    public readonly cameraShakeWavePhase: number[] = [0, 0, 0, 0, 0];
+    public cameraShakeLastClientCycle: number = -1;
+
+    setCameraShakeSlot(
+        slot: number,
+        randomAmplitude: number,
+        waveAmplitude: number,
+        waveSpeed: number,
+        phase: number = 0,
+    ): void {
+
+        const idx = slot | 0;
+        if (idx < 0 || idx >= 5) return;
+        this.cameraShakeEnabled[idx] = true;
+        this.cameraShakeRandomAmplitude[idx] = randomAmplitude | 0;
+        this.cameraShakeWaveAmplitude[idx] = waveAmplitude | 0;
+        this.cameraShakeWaveSpeed[idx] = waveSpeed | 0;
+        this.cameraShakeWavePhase[idx] = phase | 0;
+        this.cameraShakeLastClientCycle = -1;
+
+    }
+
+    clearCameraShakeSlot(slot: number): void {
+
+        const idx = slot | 0;
+        if (idx < 0 || idx >= 5) return;
+        this.cameraShakeEnabled[idx] = false;
+        this.cameraShakeRandomAmplitude[idx] = 0;
+        this.cameraShakeWaveAmplitude[idx] = 0;
+        this.cameraShakeWaveSpeed[idx] = 0;
+        this.cameraShakeWavePhase[idx] = 0;
+
+    }
+
+    clearCameraShake(): void {
+
+        for (let i = 0; i < 5; i++) {
+            this.clearCameraShakeSlot(i);
+        }
+        this.cameraShakeLastClientCycle = -1;
+
+    }
+
+    computeCameraShakeOffsets(clientCycle: number): {
+        x: number;
+        y: number;
+        z: number;
+        yaw: number;
+        pitch: number;
+        active: boolean;
+    } {
+
+        if (this.cameraShakeLastClientCycle < 0) {
+            this.cameraShakeLastClientCycle = clientCycle;
+        }
+        let cyclesElapsed = (clientCycle - this.cameraShakeLastClientCycle) | 0;
+        if (cyclesElapsed < 0 || cyclesElapsed > 200) {
+            cyclesElapsed = 1;
+        }
+        if (cyclesElapsed > 0) {
+            this.cameraShakeLastClientCycle = clientCycle;
+        }
+
+        let x = 0;
+        let y = 0;
+        let z = 0;
+        let yaw = 0;
+        let pitch = 0;
+        let active = false;
+
+        for (let i = 0; i < 5; i++) {
+            if (!this.cameraShakeEnabled[i]) continue;
+            active = true;
+            if (cyclesElapsed > 0) {
+                this.cameraShakeWavePhase[i] = (this.cameraShakeWavePhase[i] + cyclesElapsed) | 0;
+            }
+            const randomAmp = this.cameraShakeRandomAmplitude[i] | 0;
+            const waveAmp = this.cameraShakeWaveAmplitude[i] | 0;
+            const waveSpeed = this.cameraShakeWaveSpeed[i] | 0;
+            const randomTerm = Math.random() * (randomAmp * 2 + 1) - randomAmp;
+            const waveTerm = Math.sin((this.cameraShakeWavePhase[i] * waveSpeed) / 100.0) * waveAmp;
+            const value = (randomTerm + waveTerm) | 0;
+
+            switch (i) {
+                case 0:
+                    x += value;
+                    break;
+                case 1:
+                    y += value;
+                    break;
+                case 2:
+                    z += value;
+                    break;
+                case 3:
+                    yaw += value;
+                    break;
+                case 4:
+                    pitch += value;
+                    break;
+            }
+        }
+
+        return { x, y, z, yaw, pitch, active };
+
+    }
+
+    /** Temporary draw perturbation; leave the scripted movement targets untouched. */
+    applyCameraShake(clientCycle: number): (() => void) | undefined {
+        const shake = this.computeCameraShakeOffsets(clientCycle);
+        if (!shake.active) return;
+        const camera = this.osrsClient.camera;
+        const [x, y, z] = camera.pos;
+        const yaw = camera.yaw;
+        camera.pos[0] += shake.x / 128;
+        camera.pos[1] += shake.y / 128;
+        camera.pos[2] += shake.z / 128;
+        camera.yaw = (yaw + shake.yaw) & 2047;
+        if (shake.pitch) camera.setRenderPitchOverride(clamp(camera.getScenePitchAngle() + shake.pitch, 128, 383));
+        return () => {
+            camera.pos[0] = x; camera.pos[1] = y; camera.pos[2] = z;
+            camera.yaw = yaw;
+            camera.setRenderPitchOverride(undefined);
+        };
+    }
+
     /** Drops any cached roof visibility state so the next frame recomputes it. */
     invalidateRoofState(): void {}
 

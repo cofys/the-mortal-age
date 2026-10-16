@@ -824,3 +824,119 @@ test('the Lassar vision uses the player head for copies speaking under the playe
   assert.ok(spoken[0] instanceof PlayerDialogue, 'the copy does not borrow Ketla’s head');
   assert.equal(spoken[0].getText(), cloneLine.text);
 });
+
+test('a plain quest message box waits for continue before resuming the transcript', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const core = PluginManager.getCoreApi();
+  let current;
+  const manager = {
+    getCurrent: () => current,
+    startDialogues(chain) {
+      current = chain;
+      const first = [...chain.getDialogues().values()][0];
+      if (first.constructor.name === 'ActionDialogue') first.send(player);
+    },
+  };
+  const player = { getDialogueManager: () => manager, getPacketSender: () => ({ sendInterfaceRemoval() {} }), sendMessage() { assert.fail('message must be a chatbox'); } };
+  const definition = { getName: () => 'Fred the Farmer', getId: () => 732 };
+  const api = { core, emitCustomEvent(name, message) {
+    if (name === 'npc-dialogue:action' && message.kind === 'message') message.box = { statement: true };
+  } };
+  startDialogue(api, { player, npcId: 732, definition }, [
+    { type: 'message', text: 'You give Fred 20 balls of wool.' },
+    { npc: "I guess I'd better pay you then." },
+  ], {}, { player, npcId: 732, definition, pages: [] });
+  let entries = [...current.getDialogues().values()];
+  assert.ok(entries[0] instanceof core.StatementDialogue);
+  assert.equal(entries[0].getText(), 'You give Fred 20 balls of wool.');
+  entries[1].send(player);
+  entries = [...current.getDialogues().values()];
+  assert.equal(entries[0].constructor.name, 'NpcDialogue');
+});
+
+test('quest state callbacks run when their line is reached, never while later lines are compiled', () => {
+  let entries, index = 0, stage = 0;
+  const manager = {
+    getCurrent: () => entries?.get(index),
+    startDialogues: chain => { entries = chain.getDialogues(); index = 0; },
+    advance: () => { index++; },
+  };
+  const player = { getUsername: () => 'Test', getDialogueManager: () => manager };
+  const definition = { getName: () => 'Cassius', getId: () => 15632 };
+  const api = { emitCustomEvent(name, request) {
+    if (name !== 'npc-dialogue:line') return;
+    if (request.text === 'Of milk.') request.before = () => { stage = 2; };
+    if (request.text === 'Meet the Groats family.') request.before = () => { stage = 3; };
+  } };
+  startDialogue(api, { player, npcId: 15632, definition }, [
+    { npc: 'Welcome.' }, { npc: 'Of milk.' }, { npc: 'Meet the Groats family.' },
+  ]);
+  assert.equal(stage, 0);
+  manager.advance(); manager.getCurrent().send(player);
+  assert.equal(stage, 2); assert.equal(manager.getCurrent().getText(), 'Of milk.');
+  manager.advance(); manager.getCurrent().send(player);
+  assert.equal(stage, 3); assert.equal(manager.getCurrent().getText(), 'Meet the Groats family.');
+});
+
+test('a quest can select the captured head for a group of cutscene speakers', () => {
+  let chain;
+  const player = { getUsername: () => 'Test', getDialogueManager: () => ({ startDialogues: value => { chain = value; } }) };
+  const definition = { getName: () => 'Denath', getId: () => 5091 };
+  startDialogue({ emitCustomEvent(name, request) {
+    if (name === 'npc-dialogue:line') request.speakerId = 5087;
+  } }, { player, npcId: 5091, definition }, [{ type: 'line', speaker: 'Dark wizards', text: 'Yes master!' }]);
+  const line = [...chain.getDialogues().values()][0];
+  assert.equal(line.npcId, 5087);
+});
+
+
+test('quest menu warning pauses once, then presents the same selectable options', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const core = PluginManager.getCoreApi();
+  const chains = [], menus = [];
+  const player = { getDialogueManager: () => ({ reset() {}, startDialogues: chain => chains.push(chain) }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }), sendMessage() {} };
+  const definition = { getName: () => 'Doric', getId: () => 3893 };
+  const api = { core, emitCustomEvent(name, request) { if (name === 'npc-dialogue:menu') request.warning = 'You need 15 Mining.'; },
+    sendMultiChatboxPrompt(_player, title, ...options) { menus.push({title, options}); } };
+  const event = { player, npcId: 3893, npc: null, definition };
+  startDialogue(api, event, [{ type: 'choice', options: [{ text: 'Yes', steps: [{ npc: 'Thanks.' }] }, { text: 'No' }] }], {}, event);
+  [...chains.shift().getDialogues().values()][0].send(player);
+  const entries = [...chains.shift().getDialogues().values()];
+  assert.equal(entries[0].getText(), 'You need 15 Mining.');
+  assert.equal(menus.length, 0);
+  entries[1].send(player);
+  assert.equal(menus.length, 1);
+  assert.deepEqual(menus[0].options.filter(value => typeof value === 'string'), ['Yes', 'No']);
+});
+
+test('typed speakers retain their name with a nameless transform-parent head and captured expressions', () => {
+  let chain;
+  const sent = [], sender = new Proxy({}, { get: (_target, key) => (...args) => { sent.push([key, ...args]); return sender; } });
+  const player = { getUsername: () => 'Test', getPacketSender: () => sender,
+    getDialogueManager: () => ({ startDialogues: value => { chain = value; } }) };
+  const definition = { getName: () => 'null', getId: () => 13404 };
+  startDialogue({ emitCustomEvent(name, request) { if (name === 'npc-dialogue:line') request.expression = 567; } },
+    { player, npcId: 13404, definition }, [{ type: 'line', speaker: 'Sue', text: 'Peace at last!' }]);
+  const line = [...chain.getDialogues().values()][0]; line.send(player);
+  assert.ok(sent.some(row => row[0] === 'sendString' && row[1] === 'Sue' && row[2] === (231 << 16 | 4)));
+  assert.ok(sent.some(row => row[0] === 'sendInterfaceAnimation' && row[2] === 567));
+  sent.length = 0;
+  startDialogue({ emitCustomEvent() {} }, { player, npcId: 13404, definition }, [{ player: 'Hello!', expression: 554 }]);
+  [...chain.getDialogues().values()][0].send(player);
+  assert.ok(sent.some(row => row[0] === 'sendInterfaceAnimation' && row[2] === 554));
+});
+
+test('paired cutscene NPCs can use the native right-side chatbox without the player head', () => {
+  let chain;
+  const sent = [], sender = new Proxy({}, { get: (_target, key) => (...args) => { sent.push([key, ...args]); return sender; } });
+  const player = { getUsername: () => 'Test', getPacketSender: () => sender,
+    getDialogueManager: () => ({ startDialogues: value => { chain = value; } }) };
+  startDialogue({ emitCustomEvent(_name, request) { request.speakerId = 16536; request.side = 'right'; } },
+    { player, npcId: 16527, definition: { getName: () => 'Outlaw', getId: () => 16527 } },
+    [{ type: 'line', speaker: 'Outlaw', text: "A little mangy mutt. Can we keep 'em?" }]);
+  [...chain.getDialogues().values()][0].send(player);
+  assert.ok(sent.some(row => row[0] === 'sendChatboxInterface' && row[1] === 217));
+  assert.ok(sent.some(row => row[0] === 'sendNpcHeadOnInterface' && row[1] === 16536 && row[2] === (217 << 16 | 2)));
+  assert.ok(!sent.some(row => row[0] === 'sendPlayerHeadOnInterface'));
+});

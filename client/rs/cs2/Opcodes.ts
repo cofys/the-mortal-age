@@ -1007,6 +1007,8 @@ export enum Opcodes {
     OC_ID = 4223,
     OC_BYID = 4224,
     CLIENT_VERSION = 6531,
+    /** RuneLite's runelite_callback(eventName): calls the VM's scriptCallbackListeners. */
+    RUNELITE_CALLBACK = 6599,
     ARRAY_SWAP = 8014,
     ARRAY_COPY = 8015,
     ENUM_GETOUTPUTS = 8021,

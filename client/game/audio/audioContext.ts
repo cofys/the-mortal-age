@@ -29,11 +29,19 @@ export function isAudioContextResumable(ctx: AudioContext): boolean {
     return state === "suspended" || state === "interrupted";
 }
 
+/**
+ * Contexts with a resume() still in flight. Until the page has user activation, resume() stays
+ * pending, so callers that run every frame (ambient sounds) would pile up a promise per call.
+ */
+const pendingResumes = new WeakSet<AudioContext>();
+
 /** Resume a context if it is suspended or (iOS) interrupted. Errors are ignored. */
 export function resumeAudioContextIfNeeded(ctx: AudioContext): void {
-    if (isAudioContextResumable(ctx)) {
-        ctx.resume().catch(() => {});
-    }
+    if (!isAudioContextResumable(ctx) || pendingResumes.has(ctx)) return;
+    pendingResumes.add(ctx);
+    ctx.resume()
+        .catch(() => {})
+        .finally(() => pendingResumes.delete(ctx));
 }
 
 /** One shared music graph — avoids N AudioContexts + forced 44.1→48 kHz resampling. */

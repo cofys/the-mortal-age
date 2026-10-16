@@ -10,12 +10,10 @@
  *                          | "finishing-up" (enough balls to hand in)
  *   complete           -> "Fred the Farmer" / "after-sheep-shearer"
  *
- * Shearing (shears on a sheep) and spinning (wool on a spinning wheel) are the
- * simple interactions the quest needs; the reference server keeps shearing in a
- * generic crafting module, so they live here.
+ * Wool collection follows the Wiki; fast-path handover and rewards follow rsprox 1718.
  */
 module.exports = function registerSheepShearerQuest(api) {
-  const { Skill, Animation, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Animation, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, TaskManager, CountdownTask } = api.core;
   const { registerQuest, refreshQuestList } = require("../QuestRuntime");
 
   const FRED_THE_FARMER_NPC_ID = NpcIdentifiers.FRED_THE_FARMER;
@@ -35,7 +33,7 @@ module.exports = function registerSheepShearerQuest(api) {
   const SHEAR_ANIMATION = new Animation(893);
   const SPIN_ANIMATION = new Animation(13138);
 
-  /** Unshorn sheep variants (xrsps SHORN_SHEEP_BY_SHEARABLE_TYPE keys). */
+  /** Shearable variants verified against the revision 241 cache. */
   const SHEARABLE_SHEEP_IDS = new Set([
     NpcIdentifiers.SHEEP_18,
     NpcIdentifiers.SHEEP_19,
@@ -50,8 +48,6 @@ module.exports = function registerSheepShearerQuest(api) {
     NpcIdentifiers.SHEEP_8,
   ]);
 
-  /** Cache loc ids for spinning wheels. 31431 has no ObjectIdentifiers member. */
-  const SPINNING_WHEEL_ID_31431 = 31431; // no enum member (generated enum gap)
   const SPINNING_WHEEL_IDS = new Set([
     ObjectIdentifiers.SPINNING_WHEEL,
     ObjectIdentifiers.SPINNING_WHEEL_2,
@@ -61,14 +57,11 @@ module.exports = function registerSheepShearerQuest(api) {
     ObjectIdentifiers.SPINNING_WHEEL_6,
     ObjectIdentifiers.SPINNING_WHEEL_7,
     ObjectIdentifiers.SPINNING_WHEEL_8,
-    ObjectIdentifiers.BROKEN_SPINNING_WHEEL,
-    SPINNING_WHEEL_ID_31431,
   ]);
 
-  const SAW_THING_ATTRIBUTE = "sheep_shearer.saw_thing";
-
-  /** Lone transcript guards the runner cannot skip on a `false` answer. */
-  const SUPPRESS_BRANCH_ATTRIBUTE = "sheep_shearer.suppress";
+  const SAW_THING_ATTRIBUTE = "sheep-shearer:saw-thing";
+  const FINAL_DELIVERY_ATTRIBUTE = "sheep-shearer:final-delivery";
+  const shornSheep = new WeakSet();
 
   /** Condition step ids and their prose substrings. */
   const SPEEDRUNNING_STEP_ID = "br3A1e";
@@ -105,13 +98,13 @@ module.exports = function registerSheepShearerQuest(api) {
   const START_HOOK = "quest:sheep-shearer:start";
 
   let quest;
+  const pendingStart = new WeakSet();
 
   const deliveredWool = (stage) => (stage <= STAGE_STARTED ? 0 : stage >= STAGE_COMPLETE ? TOTAL_BALLS_OF_WOOL : stage - STAGE_STARTED);
   const remainingWool = (stage) => TOTAL_BALLS_OF_WOOL - deliveredWool(stage);
   const woolBalls = (player) => player.getInventory().getAmount(BALL_OF_WOOL_ITEM_ID);
   const hasShears = (player) => player.getInventory().getAmount(SHEARS_ITEM_ID) > 0;
   const sawTheThing = (player) => player.getAttribute(SAW_THING_ATTRIBUTE) === true;
-  const suppressing = (player) => player.getAttribute(SUPPRESS_BRANCH_ATTRIBUTE) === true;
 
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
@@ -143,7 +136,8 @@ module.exports = function registerSheepShearerQuest(api) {
   }
 
   /** Shears used on (or the Shear option of) a normal sheep yields one wool. */
-  function shearSheep(player) {
+  function shearSheep(player, npc) {
+    if (!npc || shornSheep.has(npc)) return;
     if (!hasShears(player)) {
       player.sendMessage("You need a set of shears to do this.");
       return;
@@ -155,6 +149,13 @@ module.exports = function registerSheepShearerQuest(api) {
     player.performAnimation(SHEAR_ANIMATION);
     player.getInventory().adds(WOOL_ITEM_ID, 1);
     player.sendMessage("You get some wool.");
+    shornSheep.add(npc);
+    const whiteSheep = npc.getDefinition().getId() >= NpcIdentifiers.SHEEP_21;
+    npc.setNpcTransformationId(whiteSheep ? NpcIdentifiers.SHEEP_17 : NpcIdentifiers.SHEEP_16);
+    TaskManager.submit(new CountdownTask(npc, 100, () => {
+      shornSheep.delete(npc);
+      if (npc.isRegistered()) npc.setNpcTransformationId(-1);
+    }));
   }
 
   /** Shearing "The Thing" escapes and, once the quest is underway, flags it seen. */
@@ -180,19 +181,19 @@ module.exports = function registerSheepShearerQuest(api) {
   }
 
   function reward(player) {
-    player.getInventory().adds(COINS_ITEM_ID, 59);
+    player.getInventory().adds(COINS_ITEM_ID, 60);
     player.getSkillManager().addExperiences(Skill.CRAFTING, 150);
   }
 
   // Which Fred transcript plays, by quest stage and inventory.
   function selectVariant({ npcId, player }) {
     if (npcId !== FRED_THE_FARMER_NPC_ID) return null;
-    player.setAttribute(SUPPRESS_BRANCH_ATTRIBUTE, false);
     const stage = quest.getStage(player);
     if (stage >= STAGE_COMPLETE) return { page: PAGE_FRED_THE_FARMER, variant: VARIANT_AFTER };
     if (stage >= STAGE_STARTED) {
       const remaining = remainingWool(stage);
       const carried = woolBalls(player);
+      if (player.getAttribute(FINAL_DELIVERY_ATTRIBUTE) === true) return { page: PAGE_SHEEP_SHEARER, variant: VARIANT_FINISHING_UP };
       if (carried >= remaining) return { page: PAGE_SHEEP_SHEARER, variant: VARIANT_FINISHING_UP };
       if (sawTheThing(player)) return { page: PAGE_SHEEP_SHEARER, variant: VARIANT_AFTER_THING };
       if (carried > 0) return { page: PAGE_SHEEP_SHEARER, variant: VARIANT_HANDING_IN };
@@ -217,65 +218,66 @@ module.exports = function registerSheepShearerQuest(api) {
     return null;
   }
 
-  // Lone guards (speedrunning world, already carrying 20 balls) always play
-  // their branch because the runner picks the first when no sibling matches.
-  // Flag the branch so its lines/actions can be swallowed until its `end`.
-  function suppressGuardBranch({ npcId, player, stepId }) {
-    if (npcId !== FRED_THE_FARMER_NPC_ID) return;
-    if (stepId === SPEEDRUNNING_STEP_ID) player.setAttribute(SUPPRESS_BRANCH_ATTRIBUTE, true);
-    if (stepId === ALREADY_HAS_WOOL_STEP_ID && woolBalls(player) < TOTAL_BALLS_OF_WOOL) {
-      player.setAttribute(SUPPRESS_BRANCH_ATTRIBUTE, true);
+  function updateDialogueLine(event) {
+    if (event.npcId !== FRED_THE_FARMER_NPC_ID) return;
+    if (event.text === "Yes, okay. I can do that." && pendingStart.has(event.player)) {
+      event.after = () => {
+        pendingStart.delete(event.player);
+        if (quest.getStage(event.player) === 0) quest.setStage(event.player, STAGE_STARTED);
+      };
     }
-  }
-
-  function skipSuppressedLine(event) {
-    if (event.npcId === FRED_THE_FARMER_NPC_ID && suppressing(event.player)) event.skip = true;
+    const remaining = remainingWool(quest.getStage(event.player));
+    event.text = event.text.replace("20 more balls of wool", `${remaining} more ${remaining === 1 ? "ball" : "balls"} of wool`)
+      .replace("[#]", String(remaining));
   }
 
   function handleDialogueAction(event) {
     if (event.npcId !== FRED_THE_FARMER_NPC_ID) return;
     const { player } = event;
 
-    // Swallow a guard branch the runner wrongly selected, until its `end`.
-    if (suppressing(player)) {
-      if (event.step?.type === "end") player.setAttribute(SUPPRESS_BRANCH_ATTRIBUTE, false);
-      event.handled = true;
-      event.end = false;
-      return;
-    }
-
     switch (event.stepId) {
       case GIVE_SHEARS_STEP_ID: // "Fred gives you a set of sharp shears."
+        if (!hasShears(player) && player.getInventory().isFull()) {
+          player.sendMessage("You need a free inventory slot for the shears.");
+          event.handled = true;
+          event.end = true;
+          return;
+        }
         if (!hasShears(player)) player.getInventory().adds(SHEARS_ITEM_ID, 1);
+        event.box = { items: [SHEARS_ITEM_ID] };
         return; // leave unhandled so the message still shows
-      case START_WITH_20_BALLS_STEP_ID: // starting-off: player arrived with 20 balls
-        if (woolBalls(player) >= TOTAL_BALLS_OF_WOOL) {
-          removeWoolBalls(player, TOTAL_BALLS_OF_WOOL);
-          player.sendMessage("You give Fred 20 balls of wool.");
+      case "sheep-shearer:finish-handover": {
+        if (player.getAttribute(FINAL_DELIVERY_ATTRIBUTE) === true) { event.handled = true; return; }
+        const remaining = remainingWool(quest.getStage(player));
+        if (woolBalls(player) < remaining || quest.isComplete(player)) {
+          event.handled = true;
+          event.end = true;
+          return;
+        }
+        const removed = removeWoolBalls(player, remaining);
+        player.setAttribute(FINAL_DELIVERY_ATTRIBUTE, true);
+        event.text = removed === 1 ? "You give Fred a ball of wool." : `You give Fred ${removed} balls of wool.`;
+        event.box = { statement: true };
+        return;
+      }
+      case START_WITH_20_BALLS_STEP_ID:
+      case FINISHING_UP_STEP_ID:
+        if (player.getAttribute(FINAL_DELIVERY_ATTRIBUTE) === true) {
+          player.setAttribute(FINAL_DELIVERY_ATTRIBUTE, false);
           quest.complete(player);
         }
         event.handled = true;
         event.end = true;
         return;
-      case FINISHING_UP_STEP_ID: { // finishing-up
-        const remaining = remainingWool(quest.getStage(player));
-        const removed = removeWoolBalls(player, remaining);
-        player.sendMessage(removed === 1 ? "You give Fred a ball of wool." : `You give Fred ${removed} balls of wool.`);
-        quest.complete(player);
-        event.handled = true;
-        event.end = true;
-        return;
-      }
       case HANDING_IN_STEP_ID: // handing-in-any-balls-of-wool
       case AFTER_THING_STEP_ID: { // after-interacting-with-the-the-thing
         const stage = quest.getStage(player);
         const handIn = Math.min(woolBalls(player), remainingWool(stage));
         const removed = removeWoolBalls(player, handIn);
         if (removed > 0) quest.setStage(player, stage + removed);
-        if (removed > 0) {
-          player.sendMessage(removed === 1 ? "You give Fred a ball of wool." : `You give Fred ${removed} balls of wool.`);
-        }
-        event.handled = true;
+        event.text = removed === 1 ? "You give Fred a ball of wool." : `You give Fred ${removed} balls of wool.`;
+        if (removed > 0) event.box = { statement: true };
+        else event.handled = true;
         event.end = false;
         return;
       }
@@ -287,7 +289,7 @@ module.exports = function registerSheepShearerQuest(api) {
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== FRED_THE_FARMER_NPC_ID || hook !== START_HOOK) return;
     if (quest.getStage(player) >= STAGE_STARTED) return;
-    quest.setStage(player, STAGE_STARTED);
+    pendingStart.add(player);
   }
 
   // Shearing sheep: the Shear option, or shears used on a sheep.
@@ -300,7 +302,7 @@ module.exports = function registerSheepShearerQuest(api) {
       return;
     }
     if (SHEARABLE_SHEEP_IDS.has(event.npcId)) {
-      shearSheep(event.player);
+      shearSheep(event.player, event.npc ?? event.target);
       event.handled = true;
     }
   }
@@ -314,22 +316,45 @@ module.exports = function registerSheepShearerQuest(api) {
       return;
     }
     if (SHEARABLE_SHEEP_IDS.has(npcId)) {
-      shearSheep(event.player);
+      shearSheep(event.player, event.npc ?? event.target);
       event.handled = true;
     }
   }
 
-  // Spinning: wool used on a spinning wheel, or its Spin option.
+  const spinning = new WeakMap();
+
   function spinWool(player) {
     if (player.getInventory().getAmount(WOOL_ITEM_ID) <= 0) {
       player.sendMessage("You need some wool to spin.");
       return;
     }
-    player.performAnimation(SPIN_ANIMATION);
-    player.getInventory().deleteNumber(WOOL_ITEM_ID, 1);
-    player.getInventory().adds(BALL_OF_WOOL_ITEM_ID, 1);
-    player.getSkillManager().addExperiences(Skill.CRAFTING, 2.5);
-    player.sendMessage("You spin the wool into a ball of wool.");
+    player.getPacketSender().sendCreationMenu(new api.core.CreationMenu(
+      "What would you like to spin?", [BALL_OF_WOOL_ITEM_ID], {
+        execute(_itemId, amount) {
+          const token = {};
+          const from = player.getLocation().clone();
+          let remaining = Math.min(Math.max(0, Math.trunc(amount)), player.getInventory().getAmount(WOOL_ITEM_ID));
+          spinning.set(player, token);
+          player.getPacketSender().sendInterfaceRemoval();
+          TaskManager.submit(new (class extends api.core.Task {
+            constructor() { super(3, player, false); }
+            execute() {
+              if (spinning.get(player) !== token || player.isRegistered() === false ||
+                  !player.getLocation().equals(from) || remaining <= 0 || player.getInventory().getAmount(WOOL_ITEM_ID) <= 0) {
+                this.stop();
+                return;
+              }
+              player.performAnimation(SPIN_ANIMATION);
+              player.getInventory().deleteNumber(WOOL_ITEM_ID, 1);
+              player.getInventory().adds(BALL_OF_WOOL_ITEM_ID, 1);
+              player.getSkillManager().addExperiences(Skill.CRAFTING, 2.5);
+              remaining--;
+              if (remaining === 0) this.stop();
+            }
+          })());
+        },
+      }
+    ));
   }
 
   function handleItemOnObject(event) {
@@ -358,18 +383,18 @@ module.exports = function registerSheepShearerQuest(api) {
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
     xpRewards: [{ skillId: Skill.CRAFTING.getIndex(), amount: 150, label: "Crafting" }],
-    rewardItemId: COINS_ITEM_ID,
+    scrollItemId: SHEARS_ITEM_ID,
     rewardItemLabel: "60 Coins",
     buildJournal,
     onReward: reward,
   });
 
-  api.persistAttribute(SAW_THING_ATTRIBUTE);
+  api.persistAttribute(SAW_THING_ATTRIBUTE, false);
+  api.persistAttribute(FINAL_DELIVERY_ATTRIBUTE, false);
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
-  api.onCustomEvent("npc-dialogue:condition", suppressGuardBranch);
-  api.onCustomEvent("npc-dialogue:line", skipSuppressedLine);
+  api.onCustomEvent("npc-dialogue:line", updateDialogueLine);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
 

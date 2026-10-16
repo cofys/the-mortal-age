@@ -5,15 +5,13 @@ import { NpcDefinition } from "../../../../definition/NpcDefinition";
 
 export class NpcDialogue extends Dialogue {
     private static readonly GROUP_ID = 231;
-    private static readonly HEAD_UID = (NpcDialogue.GROUP_ID << 16) | 2;
-    private static readonly NAME_UID = (NpcDialogue.GROUP_ID << 16) | 4;
-    private static readonly TEXT_UID = (NpcDialogue.GROUP_ID << 16) | 6;
-    private static readonly CONTINUE_UID = (NpcDialogue.GROUP_ID << 16) | 5;
     private npcId: number;
     private text: string;
 
 
-    constructor(index: number, npcId: number, text: string) {
+    constructor(index: number, npcId: number, text: string,
+        private speakerName?: string, private expression: number | DialogueExpression = DialogueExpression.CALM,
+        private groupId = NpcDialogue.GROUP_ID) {
         super(index);
         this.npcId = npcId;
         this.text = text;
@@ -28,15 +26,16 @@ export class NpcDialogue extends Dialogue {
 
     public send(player: Player): void {
         const sender = player.getPacketSender();
+        const headUid = (this.groupId << 16) | 2;
         sender
-            .sendChatboxInterface(NpcDialogue.GROUP_ID)
-            .sendNpcHeadOnInterface(this.npcId, NpcDialogue.HEAD_UID)
-            .sendInterfaceAnimation(NpcDialogue.HEAD_UID, DialogueExpression.CALM.getExpression())
+            .sendChatboxInterface(this.groupId)
+            .sendNpcHeadOnInterface(this.npcId, headUid)
+            .sendInterfaceAnimation(headUid, typeof this.expression === "number" ? this.expression : this.expression.getExpression())
             .sendString(
-                NpcDefinition.forId(this.npcId)?.getName()?.replace(/_/g, " ") || "",
-                NpcDialogue.NAME_UID
+                this.speakerName ?? (NpcDefinition.forId(this.npcId)?.getName()?.replace(/_/g, " ") || ""),
+                (this.groupId << 16) | 4
             );
-        NpcDialogue.sendChatText(player, this.text, NpcDialogue.TEXT_UID, NpcDialogue.CONTINUE_UID);
+        NpcDialogue.sendChatText(player, this.text, (this.groupId << 16) | 6, (this.groupId << 16) | 5);
     }
 
 }

@@ -144,7 +144,8 @@ module.exports = function registerWaterfallQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (![ALMERA_NPC_ID, HUDON_NPC_ID, HADLEY_NPC_ID].includes(npcId) && !GOLRIE_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase();
     const equipment = player.getEquipment();
     const wearingAmulet = equipment.get(Equipment.AMULET_SLOT)?.getId?.() === GLARIALS_AMULET_ITEM_ID;

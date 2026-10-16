@@ -1,17 +1,4 @@
-/**
- * Cook's Assistant.
- *
- * The words come from the osrsreboxed transcript data (npc-dialogues.json):
- *   stage 0 -> "Cook's Assistant" / "starting-off"
- *   stage 1 -> "Cook's Assistant" / "talking-to-the-cook-again"
- *   stage 2 -> "Cook (Lumbridge)" / "standard-dialogue-after-cook-s-assistant"
- *
- * This plugin only supplies the branching: which variant to play, how to answer
- * the wiki's prose conditions, and the game actions (start, hand in) keyed off the
- * dialogue runtime's choice/condition events. Collecting gameplay lives in the
- * Pickable / Windmill / DairyCow plugins; pots, buckets and eggs come from the
- * Lumbridge General Store (OSRS uses kitchen floor spawns for the egg).
- */
+/** Cook's Assistant: Wiki transcript, with handover/reward timing from rsprox 1718. */
 module.exports = function registerCooksAssistantQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers } = api.core;
   const { registerQuest, refreshQuestList } = require("../QuestRuntime");
@@ -28,11 +15,10 @@ module.exports = function registerCooksAssistantQuest(api) {
     { itemId: ItemIdentifiers.POT_OF_FLOUR, label: "a pot of flour" },
   ];
 
-  /** Condition step ids in the transcript that mean "hand the ingredients over". */
-  const HAND_IN_CONDITION_IDS = new Set([
-    "vci6DY", // starting-off: player already has the necessary items
-    "_FB4HO", // talking-to-the-cook-again: player has brought all the ingredients
-  ]);
+  const DELIVERED_INGREDIENTS_ATTRIBUTE = "cooks-assistant:delivered-ingredients";
+  const ALL_INGREDIENTS = (1 << REQUIRED_ITEMS.length) - 1;
+  const HANDOVER_MESSAGE_ID = "qPWhXs";
+  const MISSING_INGREDIENTS_MESSAGE_ID = "UxCH5X";
 
   /** The Cook transcript's hand-over lines, keyed to the item the player gives. */
   const HANDOVER_LINE_ITEMS = new Map([
@@ -45,10 +31,23 @@ module.exports = function registerCooksAssistantQuest(api) {
   const START_HOOK = "quest:cook-s-assistant:start";
 
   let quest;
+  const pendingStart = new WeakSet();
+
+  const deliveredIngredients = (player) => Number(player.getAttribute(DELIVERED_INGREDIENTS_ATTRIBUTE)) || 0;
+
+  function deliverIngredient(player, itemId) {
+    const index = REQUIRED_ITEMS.findIndex((entry) => entry.itemId === itemId);
+    const bit = 1 << index;
+    if (index < 0 || (deliveredIngredients(player) & bit) !== 0) return;
+    if (player.getInventory().getAmount(itemId) <= 0) return;
+    player.getInventory().deleteNumber(itemId, 1);
+    player.setAttribute(DELIVERED_INGREDIENTS_ATTRIBUTE, deliveredIngredients(player) | bit);
+  }
 
   function hasAllIngredients(player) {
     const inventory = player.getInventory();
-    return REQUIRED_ITEMS.every((requirement) => inventory.getAmount(requirement.itemId) > 0);
+    return REQUIRED_ITEMS.every((requirement, index) =>
+      (deliveredIngredients(player) & (1 << index)) !== 0 || inventory.getAmount(requirement.itemId) > 0);
   }
 
   /**
@@ -58,7 +57,8 @@ module.exports = function registerCooksAssistantQuest(api) {
    */
   function hasAnyIngredient(player) {
     const inventory = player.getInventory();
-    return REQUIRED_ITEMS.some((requirement) => inventory.getAmount(requirement.itemId) > 0);
+    return REQUIRED_ITEMS.some((requirement, index) =>
+      (deliveredIngredients(player) & (1 << index)) === 0 && inventory.getAmount(requirement.itemId) > 0);
   }
 
   function buildJournal(player, questHandle) {
@@ -75,15 +75,14 @@ module.exports = function registerCooksAssistantQuest(api) {
       ];
     }
     if (stage >= STAGE_STARTED) {
-      const inventory = player.getInventory();
       const lines = [
         "It is the <col=800000>Duke of Lumbridge's</col> birthday.",
         "His <col=800000>cook</col> needs the following ingredients:",
         "",
       ];
-      for (const ingredient of REQUIRED_ITEMS) {
+      for (const [index, ingredient] of REQUIRED_ITEMS.entries()) {
         lines.push(
-          inventory.getAmount(ingredient.itemId) > 0
+          (deliveredIngredients(player) & (1 << index)) !== 0
             ? `<str>${ingredient.label}</str>`
             : ingredient.label
         );
@@ -125,20 +124,14 @@ module.exports = function registerCooksAssistantQuest(api) {
     if (value.includes("already has the necessary items")) return hasAllIngredients(player);
     if (value.includes("doesn't have the necessary items")) return !hasAllIngredients(player);
     if (value.includes("has not obtained anything yet")) {
-      return (
-        !has(ItemIdentifiers.BUCKET_OF_MILK) &&
-        !has(ItemIdentifiers.EGG) &&
-        !has(ItemIdentifiers.POT_OF_FLOUR)
-      );
+      return !hasAnyIngredient(player) && deliveredIngredients(player) !== ALL_INGREDIENTS;
     }
-    // Nested under "has not obtained anything yet", so it is reached only when
-    // the player has nothing - the "You still need to get:" list should show.
-    if (value.includes("hasn't handed in at least one item")) return true;
+    if (value.includes("hasn't handed in at least one item")) return deliveredIngredients(player) !== ALL_INGREDIENTS;
     if (value.includes("has brought all the ingredients")) return hasAllIngredients(player);
     if (value.includes("has not brought all the ingredients")) return !hasAllIngredients(player);
-    if (value.includes("has the ingredients")) return hasAnyIngredient(player);
-    if (value.includes("free-to-play world")) return true;
-    if (value.includes("members' world")) return false;
+    if (value.includes("has the ingredients")) return hasAnyIngredient(player) || deliveredIngredients(player) === ALL_INGREDIENTS;
+    if (value.includes("free-to-play world")) return !api.core.WorldDefinition.isMembersWorld();
+    if (value.includes("members' world")) return api.core.WorldDefinition.isMembersWorld();
     return null;
   }
 
@@ -148,26 +141,48 @@ module.exports = function registerCooksAssistantQuest(api) {
    */
   function handleDialogueLine(event) {
     if (event.npcId !== COOK_NPC_ID) return;
+    if (event.text === "Yes, I'll help you." && pendingStart.has(event.player)) {
+      event.after = () => {
+        pendingStart.delete(event.player);
+        if (quest.getStage(event.player) === 0) quest.setStage(event.player, STAGE_STARTED);
+      };
+    }
     const itemId = HANDOVER_LINE_ITEMS.get(event.text);
-    if (itemId !== undefined && event.player.getInventory().getAmount(itemId) <= 0) {
-      event.skip = true;
+    if (itemId !== undefined) {
+      const bit = 1 << REQUIRED_ITEMS.findIndex((entry) => entry.itemId === itemId);
+      if ((deliveredIngredients(event.player) & bit) !== 0 || event.player.getInventory().getAmount(itemId) <= 0) {
+        event.skip = true;
+      } else {
+        event.after = () => deliverIngredient(event.player, itemId);
+      }
+    }
+    if (event.text === "Maybe, but I won't be holding my breath.") {
+      event.after = () => {
+        if (quest.getStage(event.player) === STAGE_STARTED && deliveredIngredients(event.player) === ALL_INGREDIENTS) {
+          quest.complete(event.player);
+        }
+      };
     }
   }
 
   function handleStartHook({ player, npcId, hook }) {
-    if (npcId !== COOK_NPC_ID || hook !== START_HOOK) return;
-    quest.setStage(player, STAGE_STARTED);
+    if (npcId !== COOK_NPC_ID || hook !== START_HOOK || quest.getStage(player) !== 0) return;
+    pendingStart.add(player);
   }
 
-  /** Handing the ingredients over completes the quest. */
-  function handleHandIn({ player, npcId, stepId }) {
-    if (npcId !== COOK_NPC_ID || !HAND_IN_CONDITION_IDS.has(stepId)) return;
-    if (!hasAllIngredients(player)) return;
-    for (const requirement of REQUIRED_ITEMS) {
-      player.getInventory().deleteNumber(requirement.itemId, 1);
+  function handleHandIn(event) {
+    const { player, npcId, stepId } = event;
+    if (npcId !== COOK_NPC_ID || quest.getStage(player) !== STAGE_STARTED) return;
+    if (stepId === HANDOVER_MESSAGE_ID && hasAllIngredients(player)) {
+      for (const requirement of REQUIRED_ITEMS) deliverIngredient(player, requirement.itemId);
+      event.box = { items: [ItemIdentifiers.POT_OF_FLOUR, ItemIdentifiers.BUCKET_OF_MILK] };
     }
-    player.sendMessage("You give some milk, an egg and some flour to the cook.");
-    quest.complete(player);
+    if (stepId === MISSING_INGREDIENTS_MESSAGE_ID) {
+      const missing = REQUIRED_ITEMS.filter((_, index) => (deliveredIngredients(player) & (1 << index)) === 0);
+      event.text = `You still need to get: ${missing.map((entry) => entry.label).join(", ")}`;
+      player.sendMessage(event.text);
+      event.handled = true;
+    }
   }
 
   function handleLogin({ player }) {
@@ -182,16 +197,17 @@ module.exports = function registerCooksAssistantQuest(api) {
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
     xpRewards: [{ skillId: Skill.COOKING.getIndex(), amount: 300, label: "Cooking" }],
-    rewardItemId: ItemIdentifiers.CAKE,
-    rewardItemLabel: "A cake",
+    scrollItemId: ItemIdentifiers.CAKE,
     buildJournal,
     onReward: grantReward,
   });
+
+  api.persistAttribute(DELIVERED_INGREDIENTS_ATTRIBUTE, 0);
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
-  api.onCustomEvent("npc-dialogue:condition", handleHandIn);
+  api.onCustomEvent("npc-dialogue:action", handleHandIn);
   api.onPlayerLogin(handleLogin);
 };

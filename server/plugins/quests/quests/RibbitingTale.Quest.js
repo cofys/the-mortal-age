@@ -21,36 +21,22 @@
  * wants a leader, 8 election planned, 10 chop the orange tree, 12 tree chopped
  * (pad sabotagable), 14 sabotaged, 15 hop-off cutscene, 16 Sue's terms,
  * 18 Marcellus wants proof, 20 steal something, 22 bed/chest/dung phase,
- * 24 plushy planted (fight Cuthbert), 26 Cuthbert defeated, 28 Marcellus
- * accepts, 30 complete.
+ * 24 chest unlocked, 26 plushy planted (fight Cuthbert), 28 Cuthbert
+ * defeated, 30 Marcellus accepts, 32 complete.
  *
  * Rewards per the OSRS Wiki: 1 Quest point, 2,000 Woodcutting XP and access to
  * the new hardwood Farming patch (varbit 9845 "frog_quest_patch_unlocked").
  *
- * Gaps/approximations:
- * - The chest passcode interface (code NALIA) is not implemented: reading the
- *   love letter (its wiki item transcript is played as messages) unlocks the
- *   chest; a chest opened without the letter has no wiki line, so it says
- *   "The chest is locked."
- * - The hop-off is not a real cutscene: after the election dialogue, the next
- *   conversation with Sue/Gary plays the wiki cutscene transcript.
- * - The static Cuthbert (12955) is a world spawn that cannot be hidden per
- *   player after the hop-off; he keeps his pre-election line for players past
- *   that stage. The level-1 Cuthbert, Lord of Dread (12957) is spawned
- *   owner-only on planting and respawns on login while the fight is pending.
- * - Cuthbert's "peace-talks-cuthbert-killing-the-player" line is not played.
- * - The "interacting with the hardwood patch" variant is unreachable: the
- *   Locus Oasis patch is not in the server's farming data, so there is no
- *   patch object to hook; completion only sets the unlock varbit.
- * - The tree chop says "You chop down the orange tree." (no wiki line); the
- *   axe flow follows LostCity's quest trees.
- *
- * Source: OSRS Wiki (The Ribbiting Tale of a Lily Pad Labour Dispute, quick
- * guide, journal, Transcript:Love letter); stage values from RuneLite
- * quest-helper; ids from the cache gamevals and dump:loc.
+ * Packet evidence: RSProx database capture 1695, ticks 8893-9360. The
+ * hop-off uses its camera, actor positions, forced hops, fades and pauses;
+ * the chest uses the cache's native five-letter combination interface.
+ * Unrecorded alternate branches remain based on the Wiki transcript.
  */
 module.exports = function registerRibbitingTaleQuest(api) {
   const {
+    Animation, Boundary, CountdownTask, DialogueChainBuilder, ActionDialogue,
+    GameObject, Graphic, Location, ObjectManager, PrivateArea,
+    StatementDialogue, TaskManager,
     Equipment,
     ItemIdentifiers,
     NpcIdentifiers,
@@ -77,29 +63,35 @@ module.exports = function registerRibbitingTaleQuest(api) {
   const STAGE_PROOF = 18;
   const STAGE_BLAME = 20;
   const STAGE_STEAL = 22;
-  const STAGE_PLANTED = 24;
-  const STAGE_CUTHBERT_DEAD = 26;
-  const STAGE_ACCEPTED = 28;
-  const STAGE_COMPLETE = 30;
+  const STAGE_CHEST = 24;
+  const STAGE_PLANTED = 26;
+  const STAGE_CUTHBERT_DEAD = 28;
+  const STAGE_ACCEPTED = 30;
+  const STAGE_COMPLETE = 32;
 
   const WOODCUTTING_REQUIREMENT = 15;
   const CHILDREN_OF_THE_SUN_KEY = "children_of_the_sun";
 
   const MARCELLUS_NPC_IDS = new Set([NpcIdentifiers.MARCELLUS, NpcIdentifiers.MARCELLUS_2]);
   const BLUE_FROG_NPC_IDS = new Set([
+    NpcIdentifiers.FROG_12, NpcIdentifiers.FROG_16, // unnamed-at-first Gary/Sue
+    13402, 13404, // cache per-player Gary/Sue parents, both present in1695
+
     NpcIdentifiers.GARY,
     NpcIdentifiers.GARY_2,
     NpcIdentifiers.SUE,
     NpcIdentifiers.SUE_2,
   ]);
   const YELLOW_FROG_NPC_IDS = new Set([
+    13403, 13405, // cache Dave/Jane parents
+
     NpcIdentifiers.DAVE_2,
     NpcIdentifiers.DAVE_3,
     NpcIdentifiers.JANE,
     NpcIdentifiers.JANE_2,
   ]);
-  const CUTHBERT_NPC_IDS = new Set([NpcIdentifiers.CUTHBERT, NpcIdentifiers.CUTHBERT_2]);
-  // Null-named cutscene Marcellus indexed to the page (npc-dialogue-index 13401).
+  const CUTHBERT_NPC_IDS = new Set([NpcIdentifiers.CUTHBERT, NpcIdentifiers.CUTHBERT_2, 13406]);
+  // Transform-parent Marcellus is also indexed to the quest page.
   const CUTSCENE_MARCELLUS_NPC_ID = 13401;
   const OWNED_NPC_IDS = new Set([
     ...MARCELLUS_NPC_IDS,
@@ -143,8 +135,11 @@ module.exports = function registerRibbitingTaleQuest(api) {
   const CUTHBERT_SPAWN_TILE = { x: 1688, y: 2977, z: 0 };
   const LOCUS_LOGS_TILE = { x: 1683, y: 2975, z: 0 };
 
-  const CHEST_UNLOCKED_ATTRIBUTE = "quest.ribbiting-tale.chest-unlocked";
-  const LETTER_READ_ATTRIBUTE = "quest.ribbiting-tale.letter-read";
+  const PATCH_UNLOCKED_ATTRIBUTE = "ribbiting-tale:patch-unlocked";
+  const HARDWOOD_PATCH_ID = 50692;
+  const LEGACY_CHEST_ATTRIBUTE = "quest.ribbiting-tale.chest-unlocked";
+  const STAGE_VERSION_ATTRIBUTE = "ribbiting-tale:stage-version";
+  const QUEST_KEY = "the_ribbiting_tale_of_a_lily_pad_labour_dispute";
 
   const LOVE_LETTER_LINES = [
     "My dearest Nalia,",
@@ -156,7 +151,141 @@ module.exports = function registerRibbitingTaleQuest(api) {
     "Forever yours, Marcellus",
   ];
 
+  const CHEST_INTERFACE = 809;
+  const CHEST_CODE_ROW = 3511;
+  const NALIA_CODE = 334490; // Captured resume_p_countdialog value for the NALIA combination.
+  const FADE_UID = (161 << 16) | 1;
+  const HOP_VARIANT = "democracy-at-work-watching-the-frog-hop-off";
+  const TERMS_VARIANT = "peace-talks-talking-to-gary-or-sue";
+  const scenes = new WeakMap();
+  const pendingChests = new WeakMap();
+  const playerTasks = new WeakMap();
+  const actions = new WeakSet();
+  const acceptedStarts = new WeakSet();
+  const HEADS = { Marcellus: 13401, Gary: 13402, Dave: 13403, Sue: 13404, Jane: 13405, Cuthbert: 13406 };
+  const HOP_ACTORS = [
+    ["sue", 12948, 1694, 2982, 1692, 2982],
+    ["cuthbert", 12956, 1694, 2983, 1692, 2983],
+    ["gary", 12940, 1696, 2982, 1694, 2982],
+    ["jane", 12952, 1692, 2988, 1690, 2986],
+    ["dave", 12944, 1693, 2986, 1691, 2984],
+    ["frog", 12960, 1694, 2988, 1692, 2986],
+    ["capybara-a", 12958, 1700, 2981, 1691, 2983],
+    ["capybara-b", 12959, 1699, 2979, 1691, 2983],
+    ["capybara-c", 12958, 1696, 2986, 1694, 2984],
+  ];
   let quest;
+
+  function later(key, ticks, callback) {
+    if (key?.isPlayer?.()) {
+      const player = key;
+      key = playerTasks.get(player);
+      if (!key) { key = {}; playerTasks.set(player, key); }
+    }
+    TaskManager.submit(new CountdownTask(key, ticks, callback));
+  }
+  function fade(player, out) {
+    player.getPacketSender().sendSubInterface(FADE_UID, 174, 1, {
+      postScripts: [{ scriptId: 948, args: out ? [0, 255, 0, 0, 50] : [0, 0, 0, 255, 50] }],
+    });
+  }
+  function controls(player, active) {
+    player.getMovementQueue().reset().setBlockMovement(active);
+    player.setUntargetable(active);
+    player.getPacketSender().sendVarbit(12393, active ? 1 : 0).sendVarbit(6719, active ? 2 : 0);
+  }
+  function freeze(player) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
+      new ActionDialogue(0, { execute: () => StatementDialogue.send(player, "", false) })
+    ));
+  }
+  class HopOff extends PrivateArea {
+    constructor(player) { super([new Boundary(1664, 1727, 2944, 3007, 0)]); this.owner = player; }
+    canAttack() { return false; }
+    canTeleport() { return false; }
+    postLeave(actor, logout) {
+      if (actor === this.owner && scenes.get(actor)?.area === this) cleanScene(actor, false);
+      super.postLeave(actor, logout);
+    }
+  }
+  function cleanScene(player, returnPlayer = true) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    scenes.delete(player);
+    TaskManager.cancelTasks(scene);
+    for (const actor of scene.actors.values()) api.removeNpc(actor);
+    controls(player, false);
+    player.getPacketSender().sendCameraUnlock(false).sendCameraReset().closeSubInterface(FADE_UID);
+    if (scene.area && player.getArea() === scene.area && returnPlayer) {
+      scene.area.leave(player, false);
+      player.moveTo(scene.returnTo);
+    }
+  }
+  function playHop(player, anchor) {
+    startTranscript(api, player, MARCELLUS_NPC_ID, PAGE, HOP_VARIANT, steps => {
+      if (!anchor) return steps;
+      return steps.slice(steps.findIndex(step => step.id === anchor) + 1);
+    });
+  }
+  function beginHop(player) {
+    if (scenes.has(player)) return;
+    const scene = { returnTo: player.getLocation().clone(), actors: new Map(), area: null };
+    scenes.set(player, scene);
+    controls(player, true); freeze(player); fade(player, true);
+    later(scene, 2, () => {
+      scene.area = new HopOff(player); scene.area.enter(player);
+      player.moveTo(new Location(1696, 2983, 0));
+      for (const [key, id, x, y, faceX, faceY] of HOP_ACTORS) {
+        const npc = api.spawnNpc({ id, x, y, z: 0, owner: player, ownerOnly: true, wanderRadius: 0 });
+        if (npc) { scene.actors.set(key, npc); scene.area.enter(npc); npc.setPositionToFace(new Location(faceX, faceY, 0)); }
+      }
+    });
+    later(scene, 3, () => {
+      const rates = { rate: 232, rate2: 100, heightRelative: false };
+      player.getPacketSender().sendCameraMoveTo(1685, 2989, 550, rates).sendCameraLookAt(1697, 2981, 350, rates);
+    });
+    later(scene, 4, () => fade(player, false));
+    later(scene, 6, () => playHop(player));
+  }
+  function frogHop(player, stepId, cuthbert) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    freeze(player);
+    later(scene, 1, () => {
+      const npc = scene.actors.get(cuthbert ? "cuthbert" : "sue");
+      const y = cuthbert ? 2983 : 2982;
+      const delay = cuthbert ? 13 : 7, animation = cuthbert ? 1797 : 10957;
+      if (npc) {
+        npc.performAnimation(new Animation(animation, cuthbert ? 6 : 0));
+        npc.exactMove(new Location(1692, y, 0), { startCycles: delay, endCycles: cuthbert ? 30 : 24, angle: 512 });
+      }
+      player.getPacketSender().sendSoundEffect(2461, 1, delay).sendSoundEffect(842, 1, delay);
+      if (cuthbert) player.getPacketSender().sendGraphic(new Graphic(68, 20), new Location(1692, 2983, 0)).sendSoundEffect(2496, 1, 20);
+    });
+    if (cuthbert) later(scene, 2, () => {
+      const npc = scene.actors.get("cuthbert"); if (npc) api.removeNpc(npc);
+      scene.actors.delete("cuthbert");
+      ObjectManager.register(new GameObject(29733, new Location(1692, 2983, 0), 10, 0, scene.area), true);
+      player.getPacketSender().sendSoundEffect(843, 1, 0);
+    });
+    later(scene, cuthbert ? 7 : 3, () => playHop(player, stepId));
+  }
+  function finishHop(player) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    advance(player, STAGE_TERMS); freeze(player); fade(player, true);
+    later(scene, 2, () => {
+      const area = scene.area; scene.area = null;
+      if (area) { area.leave(player, false); player.moveTo(scene.returnTo); }
+      player.getPacketSender().sendCameraUnlock(false).sendCameraReset();
+    });
+    later(scene, 4, () => fade(player, false));
+    later(scene, 6, () => {
+      cleanScene(player);
+      startTranscript(api, player, NpcIdentifiers.SUE, PAGE, TERMS_VARIANT);
+    });
+  }
+
 
   /** Cuthbert, Lord of Dread spawn per player (owner-only). */
   const cuthbertByPlayer = new Map();
@@ -173,10 +302,6 @@ module.exports = function registerRibbitingTaleQuest(api) {
     return AXE_ITEM_IDS.some((id) => held(player, id)) || wearingAxe(player);
   }
 
-  function letterKnown(player) {
-    return held(player, LOVE_LETTER_ITEM_ID)
-      || player.getAttribute(LETTER_READ_ATTRIBUTE) === true;
-  }
 
   function meetsRequirements(player) {
     if (player.getSkillManager().getMaxLevel(Skill.WOODCUTTING) < WOODCUTTING_REQUIREMENT) {
@@ -208,7 +333,11 @@ module.exports = function registerRibbitingTaleQuest(api) {
       owner: player,
       ownerOnly: true,
     });
-    if (npc) cuthbertByPlayer.set(player, npc);
+    if (npc) {
+      cuthbertByPlayer.set(player, npc);
+      npc.forceChat("You! Prepare to face the Lord of Dread!");
+      npc.getCombat().attack(player);
+    }
   }
 
   function removeCuthbert(player) {
@@ -243,8 +372,7 @@ module.exports = function registerRibbitingTaleQuest(api) {
   }
 
   function resetRunState(player) {
-    player.setAttribute(CHEST_UNLOCKED_ATTRIBUTE, false);
-    player.setAttribute(LETTER_READ_ATTRIBUTE, false);
+    player.setAttribute(STAGE_VERSION_ATTRIBUTE, 1);
     removeCuthbert(player);
   }
 
@@ -383,7 +511,6 @@ module.exports = function registerRibbitingTaleQuest(api) {
         }
         return;
       case "dYtaJi": // sabotaged the lily pad
-        advance(player, STAGE_DEMOCRACY_DONE);
         return;
       case "6_EtxY": // placed the plushy in the dung
         if (held(player, PLUSHY_ITEM_ID)) {
@@ -405,18 +532,25 @@ module.exports = function registerRibbitingTaleQuest(api) {
       return;
     }
     switch (stepId) {
-      // Cutscene scene directions; no real cutscene, print the wiki text.
       case "En6MC0":
+        event.handled = true;
+        return;
       case "l-aVfO":
       case "cmWjC-":
-      case "vUhq-Q":
         event.handled = true;
-        if (event.text) player.sendMessage(event.text);
+        frogHop(player, stepId, stepId === "cmWjC-");
         return;
-      case "OnL648": // the cutscene ends
+      case "OnL648":
         event.handled = true;
-        if (event.text) player.sendMessage(event.text);
-        advance(player, STAGE_TERMS);
+        finishHop(player);
+        return;
+      case "vUhq-Q": // Marcellus checks the dung behind the recorded fade.
+        event.handled = true;
+        freeze(player); fade(player, true);
+        later(player, 4, () => fade(player, false));
+        later(player, 6, () => startTranscript(api, player, MARCELLUS_NPC_ID, PAGE,
+          "peace-talks-telling-marcellus-of-the-evidence", steps => steps.slice(steps.findIndex(step => step.id === stepId) + 1)));
+        later(player, 8, () => player.getPacketSender().closeSubInterface(FADE_UID));
         return;
       default:
         return;
@@ -428,35 +562,52 @@ module.exports = function registerRibbitingTaleQuest(api) {
     const { player, npcId } = event;
     if (!player || !OWNED_NPC_IDS.has(npcId)) return;
     const text = String(event.text ?? "");
+    const scene = scenes.get(player);
+    const speaker = scene?.actors.get(String(event.step?.speaker ?? "").toLowerCase());
+    if (speaker) event.speakerId = speaker.getId();
+    else if (HEADS[event.step?.speaker]) event.speakerId = HEADS[event.step.speaker];
     const stage = quest.getStage(player);
+    if (text.includes("Please feel free to use my farming patch")) {
+      event.before = () => {
+        player.setAttribute(PATCH_UNLOCKED_ATTRIBUTE, true);
+        player.getPacketSender().sendVarbit(VARBIT_PATCH_UNLOCKED, 1);
+      };
+    }
     if (BLUE_FROG_NPC_IDS.has(npcId)) {
       if (stage === STAGE_STARTED && text.includes("Okay, I'll be back shortly")) {
-        advance(player, STAGE_FROGS);
+        event.before = () => advance(player, STAGE_FROGS);
       } else if (stage === STAGE_LEADER && text.includes("I'm off to sabotage a lily pad")) {
-        advance(player, STAGE_ELECTION);
+        event.before = () => advance(player, STAGE_ELECTION);
       } else if (stage === STAGE_DEMOCRACY_DONE && text.includes("Let's!")) {
-        advance(player, STAGE_HOP_OFF);
+        event.after = () => beginHop(player);
       } else if (stage === STAGE_TERMS && text.includes("I'll take these terms to him")) {
-        advance(player, STAGE_PROOF);
+        event.before = () => advance(player, STAGE_PROOF);
       } else if (stage === STAGE_BLAME && text === "Fine.") {
-        advance(player, STAGE_STEAL);
+        event.before = () => advance(player, STAGE_STEAL);
       } else if (stage === STAGE_ACCEPTED && text.includes("true hero")) {
-        if (!quest.isComplete(player)) quest.complete(player);
+        event.after = () => { if (!quest.isComplete(player)) quest.complete(player); };
       }
       return;
     }
     if (MARCELLUS_NPC_IDS.has(npcId) || npcId === CUTSCENE_MARCELLUS_NPC_ID) {
-      if (stage === STAGE_FROGS && text.includes("I'll go and ask them about their leader")) {
-        advance(player, STAGE_LEADER);
+      if (stage === 0 && text.startsWith("Okay then... Well provided")) {
+        event.before = () => {
+          if (!acceptedStarts.has(player) || !meetsRequirements(player)) return;
+          acceptedStarts.delete(player);
+          quest.setStage(player, STAGE_STARTED);
+          player.sendMessage(`You've started a new quest: <col=081190>${PAGE}</col>`);
+        };
+      } else if (stage === STAGE_FROGS && text.includes("I'll go and ask them about their leader")) {
+        event.before = () => advance(player, STAGE_LEADER);
       } else if (stage === STAGE_PROOF && text.includes("Fine, I'll find this proof")) {
-        advance(player, STAGE_BLAME);
+        event.before = () => advance(player, STAGE_BLAME);
       } else if (stage === STAGE_CUTHBERT_DEAD && text.includes("Tell them we have a deal")) {
-        advance(player, STAGE_ACCEPTED);
+        event.before = () => advance(player, STAGE_ACCEPTED);
       }
       return;
     }
     if (YELLOW_FROG_NPC_IDS.has(npcId)) {
-      if (stage === STAGE_ELECTION && text === "Hmm...") advance(player, STAGE_TREE);
+      if (stage === STAGE_ELECTION && text === "Hmm...") event.before = () => advance(player, STAGE_TREE);
     }
   }
 
@@ -466,7 +617,7 @@ module.exports = function registerRibbitingTaleQuest(api) {
     if (quest.getStage(player) !== 0) return;
     if (!meetsRequirements(player)) return;
     resetRunState(player);
-    quest.setStage(player, STAGE_STARTED);
+    acceptedStarts.add(player);
   }
 
   // ==========================================================================
@@ -477,7 +628,7 @@ module.exports = function registerRibbitingTaleQuest(api) {
     if (!event || event.handled || event.itemId !== LOVE_LETTER_ITEM_ID) return;
     if (event.option !== undefined ? event.option !== "Read" : event.clickType !== 1) return;
     event.handled = true;
-    event.player.setAttribute(LETTER_READ_ATTRIBUTE, true);
+    // shortcut: the capture skips reading this letter; verify its native layout when captured.
     for (const line of LOVE_LETTER_LINES) event.player.sendMessage(line);
   }
 
@@ -494,7 +645,18 @@ module.exports = function registerRibbitingTaleQuest(api) {
       startTranscript(api, player, JANE_NPC_ID, PAGE, "democracy-at-work-attempting-to-sabotage-the-lily-pad");
       return;
     }
-    startTranscript(api, player, MARCELLUS_NPC_ID, PAGE, "democracy-at-work-sabotaging-the-lily-pad");
+    if (scenes.has(player) || actions.has(player)) return;
+    actions.add(player);
+    player.performAnimation(new Animation(827));
+    controls(player, true);
+    StatementDialogue.send(player, "You pick up a small stone from the shore and throw it at the lily pad. It leaves a barely noticeable hole in it.", false);
+    later(player, 1, () => player.getPacketSender().sendSoundEffect(2708, 1, 20));
+    later(player, 2, () => player.performAnimation(new Animation(385)));
+    later(player, 4, () => {
+      actions.delete(player);
+      advance(player, STAGE_DEMOCRACY_DONE); controls(player, false);
+      startTranscript(api, player, MARCELLUS_NPC_ID, PAGE, "democracy-at-work-sabotaging-the-lily-pad");
+    });
   }
 
   function handleOrangeTree(event) {
@@ -505,8 +667,17 @@ module.exports = function registerRibbitingTaleQuest(api) {
       player.sendMessage("You need an axe to chop this tree.");
       return;
     }
-    player.sendMessage("You chop down the orange tree.");
-    advance(player, STAGE_SABOTAGED);
+    if (actions.has(player)) return;
+    actions.add(player);
+    controls(player, true);
+    player.performAnimation(new Animation(879));
+    later(player, 4, () => {
+      actions.delete(player);
+      player.performAnimation(new Animation(-1));
+      player.getPacketSender().sendSoundEffect(2734, 1, 0);
+      advance(player, STAGE_SABOTAGED); controls(player, false);
+      startTranscript(api, player, JANE_NPC_ID, PAGE, "democracy-at-work-after-chopping-down-the-orange-tree");
+    });
   }
 
   function handleBed(event) {
@@ -519,30 +690,55 @@ module.exports = function registerRibbitingTaleQuest(api) {
 
   function handleChest(event) {
     const { player } = event;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_STEAL) return;
     event.handled = true;
-    if (quest.getStage(player) >= STAGE_PLANTED) {
+    if (stage >= STAGE_PLANTED) {
       startTranscript(api, player, MARCELLUS_NPC_ID, PAGE, "peace-talks-opening-the-chest-after-planting-the-evidence");
       return;
     }
-    if (player.getAttribute(CHEST_UNLOCKED_ATTRIBUTE) === true) {
+    if (stage >= STAGE_CHEST) {
       startTranscript(api, player, MARCELLUS_NPC_ID, PAGE, "peace-talks-opening-the-chest-after-unlocking-it");
       return;
     }
-    if (!letterKnown(player)) {
-      player.sendMessage("The chest is locked.");
-      return;
-    }
-    player.setAttribute(CHEST_UNLOCKED_ATTRIBUTE, true);
-    startTranscript(api, player, MARCELLUS_NPC_ID, PAGE, "peace-talks-unlocking-marcellus-chest");
+    const sender = player.getPacketSender();
+    sender.sendInterface(CHEST_INTERFACE).sendInterfaceScript(6963, [
+      (CHEST_INTERFACE << 16) | 1, (CHEST_INTERFACE << 16) | 4, 5, CHEST_CODE_ROW, 1, -1,
+    ]);
+    pendingChests.set(player, player.getLocation().clone());
+    player.setEnteredAmountAction({ execute: code => unlockChest(player, code) });
+  }
+  function unlockChest(player, code) {
+    const origin = pendingChests.get(player);
+    pendingChests.delete(player);
+    if (!origin || quest.getStage(player) !== STAGE_STEAL || player.getLocation().getDistance(origin) > 1) return;
+    player.getPacketSender().sendInterfaceRemoval();
+    if (code !== NALIA_CODE) { player.sendMessage("The combination doesn't seem to work."); return; }
+    if (player.getInventory().isFull()) { player.sendMessage("You don't have enough inventory space."); return; }
+    advance(player, STAGE_CHEST);
+    player.performAnimation(new Animation(536, 10));
+    player.getPacketSender().sendSoundEffect(2419, 1, 0).sendSoundEffect(52, 1, 10);
+    later(player, 1, () => {
+      startTranscript(api, player, MARCELLUS_NPC_ID, PAGE, "peace-talks-unlocking-marcellus-chest");
+      player.getPacketSender().sendObject(new GameObject(50896, new Location(1676, 2974, 0), 10, 1, player.getPrivateArea()));
+      player.getPacketSender().sendSoundEffect(51, 1, 45);
+    });
+    later(player, 3, () => player.getPacketSender().sendObject(new GameObject(CHEST_OBJECT_ID, new Location(1676, 2974, 0), 10, 1, player.getPrivateArea())));
   }
 
   function handleDung(event) {
     const { player } = event;
     const stage = quest.getStage(player);
-    if (stage < STAGE_STEAL || stage > STAGE_STEAL + 1) return;
+    if (stage < STAGE_STEAL || stage > STAGE_CHEST) return;
     event.handled = true;
     if (held(player, PLUSHY_ITEM_ID)) {
-      startTranscript(api, player, CUTHBERT_COMBAT_NPC_ID, PAGE, "peace-talks-planting-the-plushy");
+      player.performAnimation(new Animation(827));
+      controls(player, true);
+      later(player, 1, () => {
+        controls(player, false);
+        player.getPacketSender().sendSoundEffect(2285, 1, 0);
+        startTranscript(api, player, CUTHBERT_COMBAT_NPC_ID, PAGE, "peace-talks-planting-the-plushy");
+      });
       return;
     }
     if (held(player, LOVE_LETTER_ITEM_ID)) {
@@ -566,20 +762,40 @@ module.exports = function registerRibbitingTaleQuest(api) {
       return;
     }
     player.getInventory().adds(BRONZE_AXE_ITEM_ID, 1);
-    player.sendMessage("You take the bronze axe from the logs.");
+    player.getPacketSender().sendSoundEffect(2733, 1, 0);
+    StatementDialogue.send(player, "You take a bronze axe from the logs.");
   }
 
   // ==========================================================================
   // Login
   // ==========================================================================
 
+  function markStageVersion({ player, key }) {
+    if (key === QUEST_KEY) player.setAttribute(STAGE_VERSION_ATTRIBUTE, 1);
+  }
   function handleLogin({ player }) {
+    if (player.getAttribute(STAGE_VERSION_ATTRIBUTE) !== 1) {
+      const stage = quest.getStage(player);
+      const migrated = stage >= 24 ? Math.min(STAGE_COMPLETE, stage + 2)
+        : stage === STAGE_STEAL && player.getAttribute(LEGACY_CHEST_ATTRIBUTE) === true ? STAGE_CHEST
+        : stage === STAGE_HOP_OFF ? STAGE_DEMOCRACY_DONE : stage;
+      if (migrated !== stage) quest.setStage(player, migrated);
+      player.setAttribute(STAGE_VERSION_ATTRIBUTE, 1);
+      player.setAttribute(LEGACY_CHEST_ATTRIBUTE, false);
+    }
+    player.getPacketSender().sendVarbit(VARBIT_PATCH_UNLOCKED, player.getAttribute(PATCH_UNLOCKED_ATTRIBUTE) === true ? 1 : 0);
     refreshQuestList(player);
     ensureCuthbert(player);
   }
 
   function handleLogout({ player }) {
     if (!player) return;
+    cleanScene(player, false);
+    pendingChests.delete(player);
+    actions.delete(player);
+    acceptedStarts.delete(player);
+    const key = playerTasks.get(player); if (key) TaskManager.cancelTasks(key);
+    controls(player, false);
     removeCuthbert(player);
   }
 
@@ -698,14 +914,22 @@ module.exports = function registerRibbitingTaleQuest(api) {
 
   function grantReward(player) {
     player.getSkillManager().addExperiences(Skill.WOODCUTTING, 2000);
-    player.getPacketSender().sendVarbit(VARBIT_PATCH_UNLOCKED, 1);
+  }
+  function canUsePatch(event) {
+    const { player, patch } = event;
+    if (patch.id !== HARDWOOD_PATCH_ID || player.getAttribute(PATCH_UNLOCKED_ATTRIBUTE) === true) return;
+    event.allowed = false;
+    startTranscript(api, player, MARCELLUS_NPC_ID, PAGE, quest.isComplete(player)
+      ? "post-quest-dialogue-talking-to-marcellus"
+      : "crazy-frogs-talking-to-marcellus-without-the-requirements-to-start-interacting-with-the-hardwood-patch");
   }
 
-  api.persistAttribute(CHEST_UNLOCKED_ATTRIBUTE);
-  api.persistAttribute(LETTER_READ_ATTRIBUTE);
+  api.persistAttribute(LEGACY_CHEST_ATTRIBUTE, false); // Read once when migrating existing saves.
+  api.persistAttribute(PATCH_UNLOCKED_ATTRIBUTE, false);
+  api.persistAttribute(STAGE_VERSION_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
-    key: "the_ribbiting_tale_of_a_lily_pad_labour_dispute",
+    key: QUEST_KEY,
     name: "The Ribbiting Tale of a Lily Pad Labour Dispute",
     varpId: 4152,
     varbitId: 9844,
@@ -718,6 +942,8 @@ module.exports = function registerRibbitingTaleQuest(api) {
     onReward: grantReward,
   });
 
+  api.onCustomEvent("farming:can-use-patch", canUsePatch);
+  api.onCustomEvent("quest:stage-changed", markStageVersion);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);

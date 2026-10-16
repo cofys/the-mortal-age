@@ -140,8 +140,14 @@ function isOpen(player) {
   return player.getInterfaceId() === Shared.INTERFACE.MOULD;
 }
 
+function canSetup(player) {
+  const request = { player, allowed: true };
+  Shared.api().emitCustomEvent("giants-foundry:mould-access", request);
+  return Shared.questComplete(player) && request.allowed;
+}
+
 function setupJig({ player }) {
-  if (!Shared.questComplete(player)) {
+  if (!canSetup(player)) {
     Shared.playerSays(player, MESSAGE.TALK_TO_KOVAC);
     return;
   }
@@ -150,7 +156,7 @@ function setupJig({ player }) {
 
 /** "Check" on a jig already set up shows the setup again (no capture of this option). */
 function checkJig({ player }) {
-  if (!Shared.questComplete(player)) return false;
+  if (!canSetup(player)) return false;
   open(player);
   return true;
 }
@@ -177,7 +183,7 @@ function reset({ player }) {
 }
 
 function setMould({ player }) {
-  if (!isOpen(player)) return;
+  if (!isOpen(player) || !canSetup(player)) return;
   if (!hasCommission(player)) {
     player.getPacketSender().sendInterfaceRemoval();
     Shared.statement(player, MESSAGE.NO_COMMISSION);

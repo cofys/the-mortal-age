@@ -77,6 +77,8 @@ export type WidgetInputControllerDeps = {
         fromSlot: number,
         toSlot: number,
     ) => void;
+    /** Client plugins see a widget dropped on another; true keeps it from the server. */
+    handlePluginWidgetDrag?: (source: any, target: any) => boolean;
     buildWidgetActionPayload: (
         event: Parameters<
             import("../WidgetActionRouter").WidgetActionRouter["buildWidgetActionPayload"]

@@ -49,6 +49,12 @@ Object.assign(renderer, {
         getMap: () => undefined, getMapForWorldTile: () => undefined,
     },
     stats: { frameCount: 1 },
+    cameraShakeEnabled: Array(5).fill(false),
+    cameraShakeRandomAmplitude: Array(5).fill(0),
+    cameraShakeWaveAmplitude: Array(5).fill(0),
+    cameraShakeWaveSpeed: Array(5).fill(0),
+    cameraShakeWavePhase: Array(5).fill(0),
+    cameraShakeLastClientCycle: -1,
     playerPosUni: new Float32Array(2),
     interactionHost: { getRoofPlaneLimit: () => 3 },
     editorOverlays: { draw: noop, encodeCapture: noop },
@@ -95,6 +101,50 @@ assert.deepEqual(fills, [[0, 0, 1466, 763]], "Sky and post-processing outside th
 assert.deepEqual(clears.at(-1), [354, 4, 512, 334], "The mask leaves the scene visible");
 assert.equal(hudCanvas.style.display, "");
 assert.equal(renderer.canvas.style.clipPath, "", "Canvas input must still reach the gameframe controls");
+
+renderer.osrsClient.followPlayerCamera = false;
+renderer.osrsClient.camera.setScriptedPosition(10, 0, 0, 6, 0);
+renderer.render(1020, 20, false);
+assert.equal(renderer.osrsClient.camera.getPosX(), 6 / 128, "WebGPU advances captured camera rates while player following is disabled");
+renderer.osrsClient.camera.clearScriptedCamera();
+
+const camera = renderer.osrsClient.camera;
+camera.setScriptedPosition(10, 0, 0, 6, 0);
+camera.setViewPitchOverride(200);
+const beforeShake = [...camera.pos], beforeYaw = camera.yaw;
+let shaken: { x: number; pitch: number } | undefined;
+renderer.mapManager.visibleMaps.push({
+    canRender: () => true,
+    updateAnimatedLocs: noop,
+    drawOpaque: () => { shaken = { x: camera.getPosX(), pitch: camera.getScenePitchAngle() }; },
+    drawAlpha: noop,
+});
+renderer.setCameraShakeSlot(0, 0, 128, 100, 1);
+renderer.setCameraShakeSlot(4, 0, 20, 100, 1);
+render();
+assert.ok(shaken && shaken.x > beforeShake[0], "WebGPU applies positional camera shake while drawing scenery");
+assert.ok(shaken && shaken.pitch > 200, "pitch shake affects scripted view overrides");
+assert.deepEqual([...camera.pos], beforeShake, "shake does not accumulate into the next frame's camera position");
+assert.equal(camera.yaw, beforeYaw);
+assert.equal(camera.getViewPitchOverride(), 200, "the baseline view angle is restored for overlays");
+renderer.clearCameraShake();
+assert.equal(renderer.computeCameraShakeOffsets(1).active, false, "camera reset can clear WebGPU shake slots");
+renderer.mapManager.visibleMaps.length = 0;
+camera.applySmoothing(4);
+assert.equal(camera.getPosX(), beforeShake[0] + 6 / 128, "render shake leaves the unfinished movement target intact");
+camera.clearScriptedCamera();
+camera.setScriptedPitchUnlocked(true);
+camera.setScriptedLook(camera.getPosX(), camera.getPosY() + 10, camera.getPosZ(), 232, 232);
+const verticalPitch = camera.getScenePitchAngle();
+assert.equal(verticalPitch, 511);
+renderer.setCameraShakeSlot(4, 0, 20, 100, 1);
+const restoreVertical = renderer.applyCameraShake(1);
+assert.ok(restoreVertical);
+assert.equal(camera.getScenePitchAngle(), 383, "rendered pitch shake keeps its OSRS clamp");
+restoreVertical();
+assert.equal(camera.getScenePitchAngle(), verticalPitch, "restoration preserves unlocked scripted pitch beyond the first-person clamp");
+renderer.clearCameraShake();
+camera.clearScriptedCamera();
 
 // Hiding widgets still masks the world to its viewport.
 renderer.uiHidden = true;

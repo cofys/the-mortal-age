@@ -1501,6 +1501,8 @@ export class OsrsClient {
             handleTradeWidgetAction: (widget, event, groupId, childId) =>
                 this.handleTradeWidgetAction(widget, event, groupId, childId),
             handleInventorySlotMove: (from, to) => this.handleInventorySlotMove(from, to),
+            handlePluginWidgetDrag: (source, target) =>
+                this.clientPlugins.onWidgetDragComplete({ source, target }),
             buildWidgetActionPayload: (event) =>
                 this.widgetActionRouter.buildWidgetActionPayload(event) ?? null,
             resolveTransmitFlagWidget: (eventWidget, payload) =>
@@ -2224,6 +2226,10 @@ export class OsrsClient {
                 }
             },
         });
+
+        this.cs2Vm.scriptCallbackListeners.add((_script, eventName) =>
+            this.clientPlugins.onScriptCallback({ eventName, vm: this.cs2Vm }),
+        );
 
         this.initCustomInterfaces();
         this.initWidgetInteractionController();

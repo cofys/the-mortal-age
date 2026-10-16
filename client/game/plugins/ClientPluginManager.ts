@@ -11,6 +11,7 @@ import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../ui/menu/menuTransforms";
 import type { FontLoader } from "../../widgets/components/TextRenderer";
 import type { IndexedSprite } from "../../rs/sprite/IndexedSprite";
+import type { Cs2Vm } from "../../rs/cs2/Cs2Vm";
 import type {
     WebGPUSceneExtension,
     WebGPUSceneExtensionContext,
@@ -115,6 +116,15 @@ export type HealthBarEvent = {
     bar: { id: number; health: number; health2: number; removed?: boolean };
 };
 
+/**
+ * A `runelite_callback` a clientscript ran (RuneLite's ScriptCallbackEvent). The event's
+ * values are on the VM's stacks (see rs/cs2/sortCallbacks.ts for the sort callbacks).
+ */
+export type ScriptCallbackEvent = { eventName: string; vm: Cs2Vm };
+
+/** A widget dragged onto another (RuneLite's WidgetDrag on release). */
+export type WidgetDragEvent = { source: any; target: any };
+
 export interface ClientPlugin {
     /** Extra player headicons; return stable, immutable sprites so textures can be reused. */
     getPlayerHeadIcons?(serverId: number): readonly IndexedSprite[] | undefined;
@@ -140,6 +150,10 @@ export interface ClientPlugin {
     onHealthBar?(event: HealthBarEvent): void;
     /** A clientscript finished, nested calls included (RuneLite's ScriptPostFired). */
     onScriptFinished?(scriptId: number): void;
+    /** A clientscript ran `runelite_callback`. */
+    onScriptCallback?(event: ScriptCallbackEvent): void;
+    /** A widget was dropped on another; return true to keep the drag from the server. */
+    onWidgetDragComplete?(event: WidgetDragEvent): boolean;
     shouldKeepWorldMenuOpen?(): boolean;
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
@@ -250,6 +264,14 @@ export class ClientPluginManager {
 
     onScriptFinished(scriptId: number): void {
         for (const plugin of this.plugins) plugin.onScriptFinished?.(scriptId);
+    }
+
+    onScriptCallback(event: ScriptCallbackEvent): void {
+        for (const plugin of this.plugins) plugin.onScriptCallback?.(event);
+    }
+
+    onWidgetDragComplete(event: WidgetDragEvent): boolean {
+        return this.plugins.some((plugin) => plugin.onWidgetDragComplete?.(event) === true);
     }
 
     shouldKeepWorldMenuOpen(): boolean {

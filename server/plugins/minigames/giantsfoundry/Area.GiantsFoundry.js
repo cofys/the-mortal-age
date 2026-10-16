@@ -62,6 +62,10 @@ function processPlayer(player) {
   Shared.runTick(player, now);
 }
 
+function processWorkshop({ player }) { processPlayer(player); }
+
+function leaveWorkshop({ player }) { Shared.stopWork(player); Preform.storeOnLeave(player); }
+
 function createArea() {
   const { Area, Boundary } = Shared.core();
   const room = Shared.ROOM;
@@ -92,5 +96,7 @@ function routeToStation(event) {
 
 module.exports = function attachArea(api) {
   api.registerArea(createArea());
+  api.onCustomEvent("giants-foundry:process", processWorkshop);
+  api.onCustomEvent("giants-foundry:leave", leaveWorkshop);
   api.onObjectRoute(routeToStation);
 };

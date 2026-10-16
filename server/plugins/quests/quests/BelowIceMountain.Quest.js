@@ -1,53 +1,25 @@
 /**
- * Below Ice Mountain (free-to-play).
- *
- * The words come from the "Below Ice Mountain" transcript page; this plugin supplies
- * the variant selectors for Willow, Checkal, Atlas, Burntof, Marley and the shared
- * Blue Moon Inn cook and Charlie the Tramp, the wiki prose-condition answers, the
- * three recruitment errands (Atlas' strength training, Burntof's rock-paper-scissors,
- * Marley's steak sandwich), the entrance/ruins cutscene, the Ancient Guardian fight
- * (combat or the four structural pillars), Willow's bag hand-in and the reward.
- *
- * Stages (varbit 12063 "bim", varp 2951, bits 0-6; evidence: `lookup-gameval.ts varbit bim`
- * -> "12063 bim varp=2951 bits=0-6", siblings bim_marley 12064 / bim_checkal 12065 /
- * bim_burntof 12066 / bim_claimed_reward 12067):
- *   0 not started, 1 accepted (recruit the team), 2 all three recruited,
- *   3 cutscene done, Guardian awake, 4 Guardian defeated, 5 handed in / complete.
- * Per-member progress and side flags live in persisted quest.* attributes.
- *
- * Source: https://oldschool.runescape.wiki/w/Below_Ice_Mountain and
- * https://oldschool.runescape.wiki/w/Transcript:Below_Ice_Mountain
- * Rewards per the OSRS Wiki: 1 Quest point, 2,000 coins, access to the Ruins of
- * Camdozaal, the Flex emote and the ability to make a steak sandwich.
- *
- * Gaps / approximations:
- *   - npc-spawns.json points this quest's NPCs at ids the cache no longer has
- *     (10638-10649, 10701-10703 are nameless). The plugin spawns the real ids at the
- *     spawn-file coordinates: Willow 10655, Checkal 10657, Marley 10656 and Burntof
- *     10659; Atlas 10658, Cook 2895 and Charlie 5209 already spawn. Ramarno uses the
- *     world spawn 10702 at the big doors (its clicks resolve to 10685; the plugin
- *     accepts 10684/10685/10702 and no longer spawns a duplicate).
- *   - The map has no "Ruins Entrance"/"Blocked entry" placement, so "Ruins Entrance"
- *     (41439, op Enter) is registered at (2997,3492). Before all three recruits the
- *     Enter option answers the wiki examine line "The way is blocked.".
- *   - The crew never physically walks to the entrance; talking to them at their base
- *     spots plays their entrance/post-quest transcripts. Ramarno's departure to the
- *     workshop is cosmetic (he stays by the doors). The members-only Nardah gang is
- *     not spawned; post-quest words play at the Ice Mountain spots.
- *   - The four structural pillars (41458) are registered over the broken map pillars
- *     only while a Guardian fight is live; mining four times defeats it (no Mining
- *     xp, animation or pickaxe check). The big doors stay closed scenery.
- *   - Flex emote unlock is the wiki message only (this server's emotes are all
- *     available). The wiki's "<times done>" and RPS sign placeholders are filled
- *     from the session counter and the player's last pick.
- *   - The 16 Quest point requirement is not enforced (the transcript has no refusal
- *     lines); the quest is F2P but Quests.plugin.js does not yet list
- *     "BelowIceMountain" in F2P_QUESTS (shared change, not made here).
+ * Below Ice Mountain. Capture 1636 supplies quest variables, interaction order,
+ * montage timing and messages; docs/below-ice-mountain.md records the evidence.
+ * The five saved story stages remain compatible with existing characters; the
+ * cache receives OSRS's separate main, recruitment, reward and emote varbits.
  */
 module.exports = function registerBelowIceMountainQuest(api) {
   const {
     Animation,
+    CountdownTask,
+    CreationMenu,
+    DialogueChainBuilder,
+    NpcDialogue,
+    StatementDialogue,
+    TaskManager,
+    TemplatedInstanceArea,
+    ForceMovement,
+    ForceMovementTask,
     GameObject,
+    Graphic,
+    HitDamage,
+    HitMask,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -55,9 +27,27 @@ module.exports = function registerBelowIceMountainQuest(api) {
     ObjectManager,
     Skill,
   } = api.core;
-  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
+  const { registerQuest, refreshQuestList, startTranscript, QUEST_POINTS_ATTRIBUTE } = require("../QuestRuntime");
 
   const PAGE = "Below Ice Mountain";
+  const SCENES = require("../data/below-ice-mountain-scenes.json");
+  const MAIN_VARBIT = 12063;
+  const MARLEY_VARBIT = 12064;
+  const CHECKAL_VARBIT = 12065;
+  const BURNTOF_VARBIT = 12066;
+  const REWARD_VARBIT = 12067;
+  const FLEX_VARBIT = 12062;
+  const WORKOUT_VARBIT = 12131;
+  const RAMARNO_MOVED_VARBIT = 12068;
+  const QUEST_POINTS_REQUIRED = 16;
+  const MAIN_PROGRESS_ATTRIBUTE = "below-ice-mountain:progress";
+  const CHECKAL_PROMPT_ATTRIBUTE = "below-ice-mountain:flex-requested";
+  const REWARD_PENDING_ATTRIBUTE = "below-ice-mountain:reward-pending";
+  const STORY_SCENE_ATTRIBUTE = "below-ice-mountain:scene";
+  const TRAINING_ATTRIBUTE = "below-ice-mountain:training";
+  const FADE_TARGET_UID = (161 << 16) | 1;
+  const FADE_GROUP = 174;
+  const FADE_SCRIPT = 948;
 
   // NPCs.
   const WILLOW_NPC_ID = NpcIdentifiers.WILLOW; // 10655
@@ -105,6 +95,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
 
   // Objects (cache names in brackets; "Enter"/"Exit"/"Investigate"/"Mine" ops from the
   // object definitions; placements dumped with output/scripts/dump-loc.ts).
+  const RUINS_ENTRANCE_BASE_OBJECT_ID = 41357; // bim_entrance: cache morph driven by the main varbit
   const RUINS_ENTRANCE_OBJECT_ID = ObjectIdentifiers.RUINS_ENTRANCE; // 41439 [bim_door]
   const RUINS_EXIT_OBJECT_ID = ObjectIdentifiers.RUINS_EXIT; // 41446 [bim_exit]
   const WILLOWS_BAG_OBJECT_ID = ObjectIdentifiers.WILLOWS_BAG; // 41448
@@ -114,6 +105,8 @@ module.exports = function registerBelowIceMountainQuest(api) {
   // Flex emote: Emotes.plugin.js row { sequence: 8917, loop: 12064 } and cache seq
   // gameval 12064 "emote_flex_loop".
   const FLEX_ANIMATION_ID = 8917;
+  const EXPLOSION_OBJECT_ID = 20246; // Capture-only invisible explosion loc; no cache identifier name.
+  const ROCK_FALL_GRAPHIC_ID = 60;
 
   // Stage values.
   const STAGE_STARTED = 1;
@@ -124,8 +117,8 @@ module.exports = function registerBelowIceMountainQuest(api) {
 
   // Member sub-states.
   const MEMBER_NONE = 0;
-  const MEMBER_IN_PROGRESS = 1;
-  const MEMBER_RECRUITED = 2;
+  const MEMBER_IN_PROGRESS = 5;
+  const MEMBER_RECRUITED = 40;
 
   // Persisted attributes.
   const CHECKAL_ATTRIBUTE = "quest.below_ice_mountain.checkal";
@@ -213,25 +206,20 @@ module.exports = function registerBelowIceMountainQuest(api) {
     ACTION_BAG_RUMMAGE,
     ACTION_DOORS_OPEN,
     ACTION_RAMARNO_DEPARTS,
+    "tVCp4g", "eFwiMS", "Gu5UTk", "SISipN", "mjLSh6", "bR-g2A", "JSFicf", "_xHt7N", "RDp8vn", "9cN7I_", "yEp2qP", "bxSVrN",
     ...BRANCH_CONTINUE_IDS,
   ]);
 
   // Tiles (npc-spawns.json coordinates and dump-loc.ts placements).
-  const WILLOW_TILE = { x: 3003, y: 3435 };
   const CHECKAL_TILE = { x: 3087, y: 3415 };
-  const MARLEY_TILE = { x: 3088, y: 3471 };
-  const BURNTOF_TILE = { x: 2956, y: 3367 };
-  const ENTRANCE_OBJECT_TILE = { x: 2997, y: 3492 };
   const ENTRANCE_ARRIVAL_TILE = { x: 2996, y: 3494 };
   const RUINS_ARRIVAL_TILE = { x: 2951, y: 5770 };
-  const GUARDIAN_TILE = { x: 2952, y: 5775 };
   const PILLAR_TILES = [
     { x: 2947, y: 5771, face: 3 },
     { x: 2947, y: 5778, face: 3 },
     { x: 2958, y: 5771, face: 1 },
     { x: 2958, y: 5778, face: 1 },
   ];
-  const MINED_PILLARS_TO_WIN = 4;
 
   // Rock-paper-scissors: the transcript script has Burntof declare the player the
   // winner and the player "cheat" on the last round; the wiki fills the sign
@@ -240,12 +228,14 @@ module.exports = function registerBelowIceMountainQuest(api) {
   const LOSES = { Rock: "Scissors", Paper: "Rock", Scissors: "Paper" };
   const RPS_SIGNS = new Set(Object.keys(BEATS));
 
-  const GAME_MESSAGE_START = "The Ancient Guardian crumbles into a pile of rocks.";
 
   const guardians = new Map(); // player -> owner-only Ancient Guardian
   const rpsPicks = new WeakMap(); // player -> "Rock" | "Paper" | "Scissors"
-  let structuralPillars = [];
-  let worldInstalled = false;
+  const arenas = new Map();
+  const training = new Map();
+  const mining = new WeakMap();
+  const storyScenes = new Map();
+  const offeredDrinks = new WeakMap();
   let quest;
 
   // ==========================================================================
@@ -253,11 +243,51 @@ module.exports = function registerBelowIceMountainQuest(api) {
   // ==========================================================================
 
   function memberState(player, attribute) {
-    return Number(player.getAttribute(attribute)) || 0;
+    const value = Number(player.getAttribute(attribute)) || 0;
+    // Old saves used 1 for an errand and 2 for a recruit.
+    if (value === 2) return MEMBER_RECRUITED;
+    if (value === 1) {
+      if (attribute === CHECKAL_ATTRIBUTE && attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE)) return 15;
+      if (attribute === MARLEY_ATTRIBUTE && attrFlag(player, COOK_TALKED_ATTRIBUTE)) return 10;
+      return MEMBER_IN_PROGRESS;
+    }
+    return value;
   }
 
   function setMemberState(player, attribute, value) {
-    player.setAttribute(attribute, value | 0);
+    player.setAttribute(attribute, value);
+    syncVariables(player);
+  }
+
+  function mainProgress(stage, player) {
+    if (stage >= STAGE_COMPLETE) return 120;
+    if (stage === STAGE_GUARDIAN_DEAD) return 40;
+    if (stage === STAGE_GUARDIAN) return attrFlag(player, MAIN_PROGRESS_ATTRIBUTE) === 30 ? 30 : 35;
+    if (stage === STAGE_RECRUITED) return attrFlag(player, MAIN_PROGRESS_ATTRIBUTE) === 25 ? 25 : 20;
+    if (stage === STAGE_STARTED) {
+      if ([CHECKAL_ATTRIBUTE, MARLEY_ATTRIBUTE, BURNTOF_ATTRIBUTE].some((key) => memberState(player, key) >= 40)) return 15;
+      return attrFlag(player, MAIN_PROGRESS_ATTRIBUTE) || 10;
+    }
+    return 0;
+  }
+
+  function setMainProgress(player, value) {
+    player.setAttribute(MAIN_PROGRESS_ATTRIBUTE, value);
+    syncVariables(player);
+  }
+
+  function syncVariables(player) {
+    const stage = quest.getStage(player);
+    const sender = player.getPacketSender();
+    sender.sendVarbit(MAIN_VARBIT, mainProgress(stage, player));
+    for (const [attribute, varbit] of [[MARLEY_ATTRIBUTE, MARLEY_VARBIT], [CHECKAL_ATTRIBUTE, CHECKAL_VARBIT], [BURNTOF_ATTRIBUTE, BURNTOF_VARBIT]]) {
+      const value = stage >= STAGE_GUARDIAN ? mainProgress(stage, player) >= 35 ? 50 : 45 : memberState(player, attribute);
+      sender.sendVarbit(varbit, value);
+    }
+    sender.sendVarbit(FLEX_VARBIT, attrFlag(player, FLEX_UNLOCKED_ATTRIBUTE) || attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE) > 0 ? 1 : 0);
+    sender.sendVarbit(WORKOUT_VARBIT, Math.max(0, attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE) - 1));
+    sender.sendVarbit(REWARD_VARBIT, stage >= STAGE_COMPLETE ? 1 : 0);
+    sender.sendVarbit(RAMARNO_MOVED_VARBIT, attrFlag(player, MET_RAMARNO_ATTRIBUTE));
   }
 
   function attrFlag(player, attribute) {
@@ -281,10 +311,12 @@ module.exports = function registerBelowIceMountainQuest(api) {
   }
 
   function takeAlcohol(player) {
-    for (const itemId of ALCOHOL_ITEM_IDS) {
+    const preferred = offeredDrinks.get(player);
+    offeredDrinks.delete(player);
+    for (const itemId of preferred ? [preferred, ...ALCOHOL_ITEM_IDS.filter((id) => id !== preferred)] : ALCOHOL_ITEM_IDS) {
       if (held(player, itemId)) {
         player.getInventory().deleteNumber(itemId, 1);
-        return true;
+        return itemId;
       }
     }
     return false;
@@ -319,6 +351,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
 
   /** Third recruit in: the story moves to the ruins entrance. */
   function checkAllRecruited(player) {
+    syncVariables(player);
     if (quest.getStage(player) === STAGE_STARTED && allRecruited(player)) {
       quest.setStage(player, STAGE_RECRUITED);
     }
@@ -344,8 +377,11 @@ module.exports = function registerBelowIceMountainQuest(api) {
   function selectWillowVariant(player) {
     const stage = quest.getStage(player);
     if (stage === 0) return "willow-the-archaeologist-talking-to-willow";
-    if (stage === STAGE_STARTED) return "willow-the-archaeologist-talking-to-willow-again";
-    if (stage === STAGE_RECRUITED) return "the-ruins-of-camdozaal-talking-to-willow";
+    if (stage === STAGE_STARTED) return mainProgress(stage, player) < 10
+      ? "willow-the-archaeologist-talking-to-willow" : "willow-the-archaeologist-talking-to-willow-again";
+    if (stage === STAGE_RECRUITED) return mainProgress(stage, player) === 25
+      ? "the-ruins-of-camdozaal-talking-to-willow-talking-to-willow-again-if-the-player-chose-no"
+      : "the-ruins-of-camdozaal-talking-to-willow";
     if (stage >= STAGE_COMPLETE) return "post-quest-dialogue-willow";
     return null;
   }
@@ -356,13 +392,13 @@ module.exports = function registerBelowIceMountainQuest(api) {
     if (stage >= STAGE_COMPLETE) return "post-quest-dialogue-marley";
     const state = memberState(player, MARLEY_ATTRIBUTE);
     if (state === MEMBER_NONE) {
-      setMemberState(player, MARLEY_ATTRIBUTE, MEMBER_IN_PROGRESS);
       return "marley-the-thief-talking-to-marley";
     }
-    if (state === MEMBER_IN_PROGRESS && held(player, STEAK_SANDWICH_ITEM_ID)) {
+    if (state < MEMBER_RECRUITED && held(player, STEAK_SANDWICH_ITEM_ID)) {
       return "marley-the-thief-returning-to-marley";
     }
-    if (state === MEMBER_IN_PROGRESS) return "marley-the-thief-talking-to-marley-talking-to-marley-again";
+    if (state === 35) return "marley-the-thief-returning-to-marley";
+    if (state < MEMBER_RECRUITED) return "marley-the-thief-talking-to-marley-talking-to-marley-again";
     return "marley-the-thief-returning-to-marley-talking-to-marley-at-ice-mountain";
   }
 
@@ -372,12 +408,11 @@ module.exports = function registerBelowIceMountainQuest(api) {
     if (stage >= STAGE_COMPLETE) return "post-quest-dialogue-checkal";
     const state = memberState(player, CHECKAL_ATTRIBUTE);
     if (state === MEMBER_NONE) {
-      setMemberState(player, CHECKAL_ATTRIBUTE, MEMBER_IN_PROGRESS);
       return "checkal-the-strongman-talking-to-checkal";
     }
-    if (state === MEMBER_IN_PROGRESS) {
-      const sessions = attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE);
-      if (sessions === 0) return "checkal-the-strongman-talking-to-checkal-talking-to-checkal-again";
+    if (state < MEMBER_RECRUITED) {
+      if (state >= 20) return "checkal-the-strongman-talking-to-checkal-again-before-showing-muscles";
+      if (state < 15 && !attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE)) return "checkal-the-strongman-talking-to-checkal-talking-to-checkal-again";
       return "checkal-the-strongman-talking-to-checkal-after-completing-atlas-training";
     }
     return "checkal-the-strongman-talking-to-checkal-again-before-showing-muscles-talking-to-checkal-at-ice-mountain";
@@ -394,7 +429,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
     }
     if (stage < STAGE_STARTED || memberState(player, CHECKAL_ATTRIBUTE) === MEMBER_NONE) return null;
     const checkal = memberState(player, CHECKAL_ATTRIBUTE);
-    if (checkal === MEMBER_IN_PROGRESS && sessions === 0) {
+    if (checkal < 15 && sessions === 0) {
       if (attrFlag(player, ATLAS_DECLINED_ATTRIBUTE)) {
         return "checkal-the-strongman-talking-to-atlas-again-if-the-player-said-no-to-training-session";
       }
@@ -414,24 +449,23 @@ module.exports = function registerBelowIceMountainQuest(api) {
       if (attrFlag(player, BURNTOF_ASKED_ATTRIBUTE)) {
         return "burntof-master-of-explosives-talking-to-burntof-again-before-he-gets-a-beer";
       }
-      setFlag(player, BURNTOF_ASKED_ATTRIBUTE, true);
       return "burntof-master-of-explosives-talking-to-burntof";
     }
-    if (state === MEMBER_IN_PROGRESS) return "burntof-master-of-explosives-rock-paper-scissors";
+    if (state < 10) return "burntof-master-of-explosives-talking-to-burntof-again-before-he-gets-a-beer";
+    if (state < MEMBER_RECRUITED) return "burntof-master-of-explosives-rock-paper-scissors";
     return "burntof-master-of-explosives-talking-to-burntof-at-ice-mountain";
   }
 
   function selectCookVariant(player) {
     const stage = quest.getStage(player);
     if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return null;
-    if (memberState(player, MARLEY_ATTRIBUTE) !== MEMBER_IN_PROGRESS) return null;
+    if (memberState(player, MARLEY_ATTRIBUTE) < MEMBER_IN_PROGRESS || memberState(player, MARLEY_ATTRIBUTE) >= MEMBER_RECRUITED) return null;
     if (attrFlag(player, SANDWICH_MADE_ATTRIBUTE)) {
       return "marley-the-thief-making-the-steak-sandwich-talking-to-the-cook-after-managing-to-make-yourself-a-steak-sandwich";
     }
     if (attrFlag(player, COOK_TALKED_ATTRIBUTE)) {
       return "marley-the-thief-making-the-steak-sandwich-talking-to-the-cook-again";
     }
-    setFlag(player, COOK_TALKED_ATTRIBUTE, true);
     return "marley-the-thief-making-the-steak-sandwich-talking-to-the-cook";
   }
 
@@ -519,8 +553,11 @@ module.exports = function registerBelowIceMountainQuest(api) {
   function handleChoice({ player, npcId, option }) {
     const pick = normaliseOption(option);
     if (npcId === WILLOW_NPC_ID && pick === "yes" && quest.getStage(player) === 0) {
+      if ((Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) < QUEST_POINTS_REQUIRED) return;
       resetQuestState(player);
+      player.setAttribute(MAIN_PROGRESS_ATTRIBUTE, 5);
       quest.setStage(player, STAGE_STARTED);
+      player.sendMessage("You've started a new quest: <col=081190>Below Ice Mountain</col>");
       return;
     }
     if (npcId === ATLAS_NPC_ID) {
@@ -536,9 +573,533 @@ module.exports = function registerBelowIceMountainQuest(api) {
     }
   }
 
+  function statement(player, text) {
+    const chain = new DialogueChainBuilder();
+    chain.add(new StatementDialogue(0, text));
+    player.getDialogueManager().startDialogues(chain);
+  }
+
+  function handleWillowTalk(event) {
+    const { player } = event;
+    if (quest.getStage(player) === STAGE_RECRUITED && mainProgress(STAGE_RECRUITED, player) === 25) {
+      event.handled = true;
+      startTranscript(api, player, WILLOW_NPC_ID, PAGE, ENTRANCE_VARIANT, (steps) => [
+        { type: "line", speaker: "Willow", text: "Are you finally ready to crack these ruins open?" }, steps.at(-1),
+      ]);
+      return true;
+    }
+    if (quest.getStage(player) !== 0 || (Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) >= QUEST_POINTS_REQUIRED) return false;
+    player.sendMessage("You need 16 Quest points to start Below Ice Mountain.");
+    event.handled = true;
+    return true;
+  }
+
+  function handleAtlasTalk(event) {
+    const { player } = event;
+    const variant = selectAtlasVariant(player);
+    if (!variant || !attrFlag(player, ATLAS_DECLINED_ATTRIBUTE) && attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE) < 2) return false;
+    event.handled = true;
+    const records = require("../QuestRuntime").loadTranscripts(api)[PAGE].variants;
+    if (attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE) === 0) {
+      startTranscript(api, player, ATLAS_NPC_ID, PAGE, "checkal-the-strongman-talking-to-atlas", (steps) => [
+        { type: "line", speaker: "Atlas", text: "You're back. Would you like to start that training session now?" }, steps.at(-1),
+      ]);
+    } else {
+      const repeatMenu = records["checkal-the-strongman-talking-to-atlas-again-after-first-training-session"].find((step) => step.type === "choice");
+      startTranscript(api, player, ATLAS_NPC_ID, PAGE, variant, (steps) => [
+        ...steps.filter((step) => step.type !== "choice" && step.type !== "action"), repeatMenu,
+      ]);
+    }
+    return true;
+  }
+
+  function handleStageChanged({ player, key }) {
+    if (key === "below_ice_mountain") syncVariables(player);
+  }
+
+  function handleFlex({ player, sequence }) {
+    if (sequence !== FLEX_ANIMATION_ID && sequence !== 12064) return;
+    if (!attrFlag(player, CHECKAL_PROMPT_ATTRIBUTE)) return;
+    if (quest.getStage(player) !== STAGE_STARTED || memberState(player, CHECKAL_ATTRIBUTE) !== 20) return;
+    const tile = player.getLocation();
+    if (tile.getZ() !== 0 || Math.max(Math.abs(tile.getX() - CHECKAL_TILE.x), Math.abs(tile.getY() - CHECKAL_TILE.y)) > 3) return;
+    setFlag(player, CHECKAL_PROMPT_ATTRIBUTE, false);
+    TaskManager.submit(new CountdownTask(player, 3, () => {
+      if (player.isRegistered?.() === false || memberState(player, CHECKAL_ATTRIBUTE) !== 20) return;
+      startTranscript(api, player, CHECKAL_NPC_ID, PAGE,
+        "checkal-the-strongman-talking-to-checkal-after-completing-atlas-training",
+        (steps) => steps.slice(5));
+    }));
+  }
+
+  function handleRewardClosed({ player, interfaceId }) {
+    if (interfaceId !== 153 || !quest.isComplete(player) || !attrFlag(player, REWARD_PENDING_ATTRIBUTE) || attrFlag(player, MET_RAMARNO_ATTRIBUTE)) return;
+    setFlag(player, REWARD_PENDING_ATTRIBUTE, false);
+    startTranscript(api, player, RAMARNO_NPC_ID, PAGE, "post-quest-dialogue-ramarno");
+    return true;
+  }
+
+  class TrainingScene extends TemplatedInstanceArea {
+    constructor(player, name = "Barbarian Workout", sourcePlane = 0) {
+      super(12, 13);
+      this.owner = player;
+      this.sceneName = name;
+      this.sourcePlane = sourcePlane;
+      this.originX = 3200;
+      this.originY = 3384;
+    }
+    getName() { return this.sceneName; }
+    sourceTile(x, y) { return this.tile(x - this.originX, y - this.originY, this.sourcePlane); }
+    setSource(origin) {
+      if (this.originX === origin[0] && this.originY === origin[1] && this.loaded) return;
+      this.originX = origin[0]; this.originY = origin[1]; this.loaded = true;
+      for (let x = 0; x < 12; x++) {
+        for (let y = 0; y < 13; y++) this.setChunk(this.sourcePlane, x, y, {
+          sourceChunkX: this.originX / 8 + x, sourceChunkY: this.originY / 8 + y, sourcePlane: this.sourcePlane, rotation: 0,
+        });
+      }
+    }
+    canTeleport() { return false; }
+    canAttack() { return false; }
+    postLeave(actor, logout) {
+      super.postLeave(actor, logout);
+      if (actor === this.owner) {
+        if (training.get(actor) === this) training.delete(actor);
+        if (storyScenes.get(actor) === this) storyScenes.delete(actor);
+        actor.getMovementQueue().setBlockMovement(false);
+        actor.setUntargetable(false);
+        actor.getPacketSender().closeSubInterface(FADE_TARGET_UID);
+      }
+    }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const actor of [...this.entities]) if (actor.isNpc?.()) api.removeNpc(actor);
+      super.destroy();
+    }
+  }
+
+  function sceneActor(player, scene, id, x, y, face) {
+    const tile = scene.sourceTile(x, y);
+    const actor = api.spawnNpc({ id, x: tile.getX(), y: tile.getY(), z: scene.sourcePlane ?? 0, face, owner: player, ownerOnly: true, wanderRadius: 0 });
+    if (actor) scene.add(actor);
+    return actor;
+  }
+
+  function sceneCamera(player, scene, camera, look) {
+    const sender = player.getPacketSender();
+    if (camera) {
+      const tile = scene.sourceTile(camera[0], camera[1]);
+      sender.sendCameraMoveTo(tile.getX(), tile.getY(), camera[2], { rate: camera[3] ?? 232, rate2: camera[4] ?? 232 });
+    }
+    if (look) {
+      const tile = scene.sourceTile(look[0], look[1]);
+      sender.sendCameraLookAt(tile.getX(), tile.getY(), look[2], { rate: look[3] ?? 232, rate2: look[4] ?? 232 });
+    }
+  }
+
+  function sceneFade(player, out, cycles = 50) {
+    player.getPacketSender().sendSubInterface(FADE_TARGET_UID, FADE_GROUP, 1, {
+      postScripts: [{ scriptId: FADE_SCRIPT, args: out ? [0, 255, 0, 0, cycles] : [0, 0, 0, 255, cycles] }],
+    });
+  }
+
+  function transitionFade(player, scene, fadeInTick, fadeOutTick = 0) {
+    if (fadeOutTick) sceneLater(player, scene, fadeOutTick, () => sceneFade(player, true));
+    else sceneFade(player, true);
+    sceneLater(player, scene, fadeInTick, () => sceneFade(player, false));
+  }
+
+  function sceneTail(steps, stepId) {
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].id === stepId) return steps.slice(i + 1);
+      for (const option of steps[i].options ?? []) {
+        const found = sceneTail(option.steps ?? [], stepId);
+        if (found) return found;
+      }
+      if (steps[i].steps) {
+        const found = sceneTail(steps[i].steps, stepId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function pauseSceneAction(event, variant, ticks, beforeResume, prefix = []) {
+    const { player, npcId, stepId } = event;
+    const area = player.getPrivateArea();
+    player.getDialogueManager().reset();
+    StatementDialogue.send(player, "", false);
+    TaskManager.submit(new CountdownTask(player, ticks, () => {
+      if (player.isRegistered?.() === false || player.getPrivateArea() !== area) return;
+      beforeResume?.();
+      startTranscript(api, player, npcId, PAGE, variant, (steps) => [...prefix, ...(sceneTail(steps, stepId) ?? [])]);
+    }));
+    event.handled = true;
+  }
+
+  function startRpsScene(event) {
+    const { player } = event;
+    const scene = new TrainingScene(player, "Rock, paper, scissors", 1);
+    scene.setSource([2944, 3360]);
+    storyScenes.set(player, scene);
+    player.setAttribute(STORY_SCENE_ATTRIBUTE, 1);
+    scene.enter(player);
+    player.moveTo(scene.sourceTile(2956, 3369));
+    player.getMovementQueue().setBlockMovement(true);
+    player.setUntargetable(true);
+    scene.burntof = sceneActor(player, scene, NpcIdentifiers.BURNTOF_3, 2956, 3370);
+    sceneLater(player, scene, 4, () => sceneCamera(player, scene, [2961, 3369, 400], [2955, 3369, 180]));
+    transitionFade(player, scene, 4); // 900 fade out, 904 fade in, 905 first line.
+    pauseSceneAction(event, "burntof-master-of-explosives-rock-paper-scissors", 5);
+  }
+
+  function endStoryScene(player, tile) {
+    const scene = storyScenes.get(player);
+    if (!scene) return;
+    storyScenes.delete(player);
+    player.setAttribute(STORY_SCENE_ATTRIBUTE, 0);
+    player.setNpcTransformationId?.(-1);
+    player.setForceMovement(null);
+    player.getMovementQueue().setBlockMovement(false);
+    player.setUntargetable(false);
+    player.getPacketSender().sendCameraReset();
+    moveTo(player, tile);
+    scene.destroy();
+  }
+
+  const ENTRANCE_VARIANT = "the-ruins-of-camdozaal-talking-to-willow";
+
+  function sourceObject(player, scene, id, x, y, face = 0, type = 10) {
+    const object = new GameObject(id, scene.sourceTile(x, y), type, face, scene);
+    ObjectManager.register(object, true);
+    return object;
+  }
+
+  function sceneLater(player, scene, ticks, action) {
+    TaskManager.submit(new CountdownTask(player, ticks, () => {
+      if (player.isRegistered?.() !== false && player.getPrivateArea() === scene) action();
+    }));
+  }
+
+  function sceneRun(player, scene, x, y, ticks) {
+    const start = player.getLocation().clone(), end = scene.sourceTile(x, y);
+    const dx = end.getX() - start.getX(), dy = end.getY() - start.getY();
+    const direction = Math.abs(dx) > Math.abs(dy) ? dx > 0 ? 1 : 3 : dy > 0 ? 0 : 2;
+    TaskManager.submit(new ForceMovementTask(player, ticks, new ForceMovement(start,
+      new Location(dx, dy, 0), 0, ticks * 30, direction, 824)));
+  }
+
+  function startEntranceScene(event) {
+    const { player } = event;
+    const scene = new TrainingScene(player, "Opening Camdozaal");
+    scene.setSource([2976, 3472]);
+    storyScenes.set(player, scene);
+    player.setAttribute(STORY_SCENE_ATTRIBUTE, 2);
+    scene.enter(player);
+    player.moveTo(scene.sourceTile(2995, 3495));
+    player.getMovementQueue().setBlockMovement(true);
+    player.setUntargetable(true);
+    scene.crew = [sceneActor(player, scene, NpcIdentifiers.CHECKAL_2, 2994, 3494), sceneActor(player, scene, NpcIdentifiers.BURNTOF_3, 2996, 3492),
+      sceneActor(player, scene, NpcIdentifiers.WILLOW_2, 2997, 3494), sceneActor(player, scene, NpcIdentifiers.MARLEY_2, 2996, 3496)];
+    sceneLater(player, scene, 4, () => sceneCamera(player, scene, [2990, 3490, 600], [2997, 3494, 400]));
+    transitionFade(player, scene, 4); // 1940 out, 1944 in, 1946 Willow.
+    pauseSceneAction(event, ENTRANCE_VARIANT, 6);
+  }
+
+  function handleEntranceSceneAction(event) {
+    const { player, stepId } = event;
+    const scene = storyScenes.get(player);
+    if (!scene) return false;
+    event.handled = true;
+    if (stepId === "tVCp4g") {
+      sceneLater(player, scene, 8, () => sceneCamera(player, scene, [2989, 3501, 700], [2997, 3494, 350]));
+      player.getPacketSender().sendSound(4980, 1, 0);
+      sceneLater(player, scene, 6, () => sceneFade(player, true, 15)); // 1953 run, 1959 fade, 1961 line.
+      pauseSceneAction(event, ENTRANCE_VARIANT, 8);
+    } else if (stepId === "eFwiMS") {
+      player.getPacketSender().sendSound(4977, 1, 0);
+      sceneFade(player, false); // 1967, then Burntof speaks at 1970.
+      pauseSceneAction(event, ENTRANCE_VARIANT, 3);
+    } else if (stepId === "Gu5UTk") {
+      sceneRun(player, scene, 2991, 3501, 4);
+      player.getPacketSender().sendSound(4973, 1, 0);
+      sceneLater(player, scene, 2, () => sceneCamera(player, scene, [2991, 3500, 800, 1, 1], [2997, 3494, 400]));
+      sceneLater(player, scene, 6, () => {
+        player.getPacketSender().sendCameraShake(0, 75);
+        scene.explosion = sourceObject(player, scene, EXPLOSION_OBJECT_ID, 2998, 3493);
+      });
+      sceneLater(player, scene, 13, () => {
+        if (scene.explosion) ObjectManager.deregister(scene.explosion, true);
+      });
+      transitionFade(player, scene, 16, 11); // 1977 run, 1988 out, 1993 in, 1995 line.
+      sceneLater(player, scene, 16, () => {
+        player.getPacketSender().sendCameraReset();
+        sceneCamera(player, scene, [2990, 3490, 600], [2997, 3494, 400]);
+      });
+      pauseSceneAction(event, ENTRANCE_VARIANT, 18, () => {
+        player.moveTo(scene.sourceTile(2996, 3496));
+        sourceObject(player, scene, ObjectIdentifiers.RUINS_ENTRANCE_2, 2999, 3493, 1);
+        scene.rubble = sourceObject(player, scene, ObjectIdentifiers.RUBBLE_52, 2998, 3493, 1);
+      });
+    } else if (stepId === "SISipN") {
+      sceneLater(player, scene, 14, () => sceneFade(player, true, 15)); // 2002 work, 2016 fade, 2018 box.
+      pauseSceneAction(event, ENTRANCE_VARIANT, 16);
+    } else if (stepId === "mjLSh6") {
+      event.steps = [{ type: "message", text: "Checkal sets to work clearing out the rubble...", id: "below-ice-mountain:statement" }];
+    } else if (stepId === "bR-g2A") {
+      sceneLater(player, scene, 1, () => sceneFade(player, false)); // Continue 2022, in 2023, line 2024.
+      pauseSceneAction(event, ENTRANCE_VARIANT, 2, () => {
+        if (scene.rubble) ObjectManager.deregister(scene.rubble, true);
+      });
+    } else if (stepId === "JSFicf") {
+      for (const actor of scene.crew ?? []) api.removeNpc(actor);
+      scene.setSource([2944, 5760]);
+      player.setNpcTransformationId?.(NpcIdentifiers.MARLEY_2);
+      player.moveTo(scene.sourceTile(2952, 5763));
+      scene.tripwires = [sourceObject(player, scene, ObjectIdentifiers.TRIPWIRE_4, 2952, 5766), sourceObject(player, scene, ObjectIdentifiers.TRIPWIRE_4, 2953, 5766)];
+      sceneLater(player, scene, 3, () => sceneCamera(player, scene, [2954, 5771, 500], [2952, 5764, 250]));
+      transitionFade(player, scene, 3); // 2029 out, 2032 in, 2034 Marley.
+      pauseSceneAction(event, ENTRANCE_VARIANT, 5);
+    } else if (stepId === "_xHt7N") {
+      player.performAnimation(new Animation(827));
+      player.getPacketSender().sendSound(4981, 1, 0);
+      pauseSceneAction(event, ENTRANCE_VARIANT, 1);
+    } else if (stepId === "RDp8vn") {
+      sceneRun(player, scene, 2952, 5767, 3);
+      pauseSceneAction(event, ENTRANCE_VARIANT, 3);
+    } else if (stepId === "9cN7I_") {
+      const burntof = scene.crew?.[0];
+      burntof?.getMovementQueue?.().addFirstStep(scene.sourceTile(2953, 5775));
+      player.getPacketSender().sendSound(2400, 1, 0);
+    } else if (stepId === "yEp2qP") {
+      player.getPacketSender().sendCameraShake(0, 50);
+      player.getPacketSender().sendSound(4988, 1, 0);
+      for (const [x, y, delay] of [[2950, 5775, 50], [2950, 5772, 90], [2957, 5772, 160], [2956, 5776, 0], [2953, 5777, 180]]) {
+        const graphic = new Graphic(ROCK_FALL_GRAPHIC_ID);
+        graphic.delay = delay;
+        player.getPacketSender().sendGraphic(graphic, scene.sourceTile(x, y));
+      }
+      sceneLater(player, scene, 4, () => player.getPacketSender().sendCameraShake(0, 20));
+      sceneLater(player, scene, 9, () => player.getPacketSender().sendCameraShake(0, 5));
+      pauseSceneAction(event, ENTRANCE_VARIANT, 8);
+    } else if (stepId === "bxSVrN") {
+      player.getPacketSender().sendCameraReset();
+      sceneCamera(player, scene, [2946, 5768, 700], [2953, 5774, 100]);
+    } else return false;
+    return true;
+  }
+
+  function trainingAction(player, scene, event) {
+    if (training.get(player) !== scene || player.isRegistered?.() === false) return;
+    if (event.origin) {
+      for (const actor of scene.getNpcs()) api.removeNpc(actor);
+      scene.workoutActors.clear();
+      scene.setSource(event.origin);
+    }
+    if (event.position) {
+      player.setForceMovement(null);
+      player.moveTo(scene.sourceTile(...event.position));
+    }
+    if (event.actor) {
+      const cue = event.actor;
+      let actor = scene.workoutActors.get(cue.key);
+      if (cue.remove && actor) {
+        api.removeNpc(actor);
+        scene.workoutActors.delete(cue.key);
+      } else {
+        if (cue.id !== undefined) {
+          if (actor) api.removeNpc(actor);
+          actor = sceneActor(player, scene, cue.id, ...cue.position, cue.face);
+          if (actor) scene.workoutActors.set(cue.key, actor);
+        } else if (actor && cue.position) actor.moveTo(scene.sourceTile(...cue.position));
+        if (actor && cue.walk) actor.getMovementQueue().addFirstStep(scene.sourceTile(...cue.walk));
+        if (actor && cue.animation !== undefined) actor.performAnimation(new Animation(cue.animation));
+        if (actor && cue.chat !== undefined) actor.forceChat(cue.chat);
+        if (actor && cue.graphic) actor.performGraphic(new Graphic(cue.graphic[0], 0, cue.graphic[1]));
+      }
+    }
+    if (event.cameraReset) player.getPacketSender().sendCameraReset();
+    if (event.fade) player.getPacketSender().sendSubInterface(FADE_TARGET_UID, FADE_GROUP, 1, {
+      postScripts: [{ scriptId: FADE_SCRIPT, args: event.fade }],
+    });
+    if (event.clearDialogue) {
+      player.getDialogueManager().reset();
+      StatementDialogue.send(player, "", false);
+    }
+    if (event.tileGraphic) {
+      const cue = event.tileGraphic, graphic = new Graphic(cue.id);
+      graphic.delay = cue.delay;
+      player.getPacketSender().sendGraphic(graphic, scene.sourceTile(...cue.position));
+    }
+    if (event.projectile) {
+      const cue = event.projectile;
+      player.getPacketSender().sendProjectile(scene.sourceTile(...cue.source), scene.sourceTile(...cue.target),
+        0, cue.end, cue.id, cue.startHeight, cue.endHeight, null, cue.start, cue.angle, cue.progress);
+    }
+    for (const [id, delay] of event.sounds ?? []) player.getPacketSender().sendSound(id, 1, delay);
+    if (event.animation !== undefined) player.performAnimation(new Animation(event.animation));
+    if (event.walk) {
+      const [x, y, ticks] = event.walk;
+      const tile = scene.sourceTile(x, y);
+      const start = player.getLocation().clone();
+      const dx = tile.getX() - start.getX(), dy = tile.getY() - start.getY();
+      const direction = Math.abs(dx) > Math.abs(dy) ? dx > 0 ? 1 : 3 : dy > 0 ? 0 : 2;
+      TaskManager.submit(new ForceMovementTask(player, ticks, new ForceMovement(
+        start, new Location(dx, dy, 0), 0, ticks * 30, direction, 824
+      )));
+    }
+    if (event.camera) {
+      const [x, y, height, rate, rate2] = event.camera;
+      const tile = scene.sourceTile(x, y);
+      player.getPacketSender().sendCameraMoveTo(tile.getX(), tile.getY(), height, { rate, rate2 });
+    }
+    if (event.look) {
+      const [x, y, height, rate, rate2] = event.look;
+      const tile = scene.sourceTile(x, y);
+      player.getPacketSender().sendCameraLookAt(tile.getX(), tile.getY(), height, { rate, rate2 });
+    }
+    if (event.line !== undefined) {
+      const steps = require("../QuestRuntime").loadTranscripts(api)[PAGE].variants["checkal-the-strongman-talking-to-atlas"];
+      const line = steps.at(-1).options[0].steps[event.line];
+      const text = String(line.text).replaceAll("[strongman/strongwoman]", player.getAppearance?.().isMale?.() === false ? "strongwoman" : "strongman");
+      const chain = new DialogueChainBuilder();
+      chain.add(new NpcDialogue(0, ATLAS_NPC_ID, text));
+      player.getDialogueManager().startDialogues(chain);
+      player.getPacketSender().sendInterfaceFlagsRange((231 << 16) | 5, -1, -1, 0);
+    }
+  }
+
+  function startTraining(player) {
+    if (training.has(player)) return;
+    const scene = new TrainingScene(player);
+    scene.workoutActors = new Map();
+    scene.setSource([3200, 3384]);
+    training.set(player, scene);
+    player.setAttribute(TRAINING_ATTRIBUTE, 1);
+    scene.enter(player);
+    player.getMovementQueue().reset().setBlockMovement(true);
+    player.setUntargetable(true);
+    player.getPacketSender().sendInterfaceRemoval();
+    api.emitCustomEvent("music:unlock-track", { player, trackId: 689 });
+    player.getPacketSender().sendSong(689);
+    for (const event of SCENES.workout) {
+      TaskManager.submit(new CountdownTask(player, Math.max(1, event.tick), () => trainingAction(player, scene, event)));
+    }
+    TaskManager.submit(new CountdownTask(player, 206, () => {
+      if (training.get(player) !== scene || player.isRegistered?.() === false) return;
+      if (memberState(player, CHECKAL_ATTRIBUTE) < 15) setMemberState(player, CHECKAL_ATTRIBUTE, 15);
+      setFlag(player, FLEX_UNLOCKED_ATTRIBUTE, true);
+      player.setAttribute(ATLAS_SESSIONS_ATTRIBUTE, Math.min(attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE) + 1, 65536));
+      setFlag(player, ATLAS_DECLINED_ATTRIBUTE, false);
+      syncVariables(player);
+      startTranscript(api, player, ATLAS_NPC_ID, PAGE, "checkal-the-strongman-talking-to-atlas",
+        (steps) => steps.at(-1).options[0].steps.slice(7));
+    }));
+  }
+
+  function stopTraining(player, returnToHall) {
+    const scene = training.get(player);
+    if (!scene) return;
+    training.delete(player);
+    player.setAttribute(TRAINING_ATTRIBUTE, 0);
+    player.setForceMovement(null);
+    player.getMovementQueue().setBlockMovement(false);
+    player.setUntargetable(false);
+    player.getPacketSender().sendCameraReset();
+    player.getPacketSender().closeSubInterface(FADE_TARGET_UID);
+    for (const npc of scene.getNpcs()) api.removeNpc(npc);
+    if (returnToHall) moveTo(player, { x: 3075, y: 3440 });
+    scene.destroy();
+  }
+
   function handleLine(event) {
     const { player, npcId, text } = event;
     if (typeof text !== "string") return;
+    const after = (action) => { event.after = action; };
+    const scene = storyScenes.get(player) ?? arenas.get(player);
+    if (scene) {
+      if (text === "Right, let's see what hidden surprises you have in store for me.") after(() => {
+        sceneCamera(player, scene, null, [2952, 5764, 250, 1, 1]);
+        sceneCamera(player, scene, [2954, 5772, 500, 1, 1]);
+      });
+      if (text === "That would have been nasty.") after(() => sceneLater(player, scene, 1, () => {
+        sceneCamera(player, scene, null, [2952, 5766, 250, 1, 1]);
+        sceneCamera(player, scene, [2954, 5773, 500, 1, 1]);
+      }));
+      if (text === "You're impressed? There's nothing here but dust and fallen rocks.") event.before = () => {
+        sceneLater(player, scene, 2, () => sceneCamera(player, scene, [2959, 5768, 800, 2, 2]));
+      };
+      if (text.startsWith("It's not about the money though, right?")) event.before = () => {
+        sceneCamera(player, scene, [2952, 5763, 800, 2, 2], [2952, 5773, 70, 1, 1]);
+      };
+      if (text === "What was that noise?") event.before = () => {
+        sceneCamera(player, scene, [2946, 5768, 700, 5, 5], [2953, 5774, 100, 5, 5]);
+      };
+      if (text === "What the!") after(() => sceneLater(player, scene, 1, () => {
+        sceneCamera(player, scene, [2955, 5772, 450, 2, 2], [2952, 5778, 250, 5, 5]);
+      }));
+    }
+    if (npcId === WILLOW_NPC_ID) {
+      if (text === "What happened?" && quest.getStage(player) === STAGE_STARTED && mainProgress(STAGE_STARTED, player) < 7) after(() => setMainProgress(player, 7));
+      if (text.startsWith("I have no idea where he is these days") && quest.getStage(player) === STAGE_STARTED) after(() => setMainProgress(player, 10));
+      if (text.startsWith("Exactly. So who are you to judge?")) after(() => setMainProgress(player, 25));
+    }
+    if (npcId === CHECKAL_NPC_ID) {
+      if (text.startsWith("If you can survive his rigorous")) after(() => setMemberState(player, CHECKAL_ATTRIBUTE, 5));
+      if (text === "Thank you my friend, I will meet you there.") after(() => {
+        setMemberState(player, CHECKAL_ATTRIBUTE, 40); checkAllRecruited(player);
+      });
+    }
+    if (npcId === ATLAS_NPC_ID && text === "My work is done. Return to Checkal and show him your new-found muscles.") after(() => stopTraining(player, true));
+    if (npcId === ATLAS_NPC_ID && text === "That's a lot of money!") after(() => setMemberState(player, CHECKAL_ATTRIBUTE, 10));
+    if (text === "I can't believe they ran so quickly. I suppose I should take care of this thing.") after(() => {
+      const area = arenas.get(player);
+      if (!area || quest.getStage(player) !== STAGE_GUARDIAN) return;
+      for (const actor of area.crew ?? []) api.removeNpc(actor);
+      if (area.awakening) api.removeNpc(area.awakening);
+      sceneLater(player, area, 2, () => player.getPacketSender().sendCameraReset());
+      sceneLater(player, area, 5, () => {
+        storyScenes.delete(player);
+        player.setAttribute(STORY_SCENE_ATTRIBUTE, 0);
+        player.setUntargetable(false);
+        player.getMovementQueue().setBlockMovement(false);
+        sceneFade(player, false);
+        spawnGuardian(player)?.getCombat?.().attack(player);
+      });
+    });
+    if (npcId === MARLEY_NPC_ID) {
+      if (text.startsWith("Don't be like that!")) after(() => setMemberState(player, MARLEY_ATTRIBUTE, 5));
+      if (text === "Excellent! I'll be on my way then.") after(() => {
+        setMemberState(player, MARLEY_ATTRIBUTE, 40); checkAllRecruited(player);
+      });
+      if (memberState(player, MARLEY_ATTRIBUTE) === 35 && ["Hey Marley. I've managed to get your Steak sandwich.", "Ah, just in time for my afternoon snack. Pass it over."].includes(text)) event.skip = true;
+    }
+    if (npcId === COOK_NPC_ID && text.startsWith("Then, you take some bread.")) after(() => {
+      setFlag(player, COOK_TALKED_ATTRIBUTE, true); setMemberState(player, MARLEY_ATTRIBUTE, 10);
+    });
+    if (npcId === BURNTOF_NPC_ID || npcId === BURNTOF_2_NPC_ID) {
+      if (text === "Are you Burntof?") after(() => {
+        setFlag(player, BURNTOF_ASKED_ATTRIBUTE, true); setMemberState(player, BURNTOF_ATTRIBUTE, 5);
+      });
+      if (text.includes("have the game upshtairs away from everyone.")) after(() => startTranscript(api, player, BURNTOF_NPC_ID, PAGE, "burntof-master-of-explosives-rock-paper-scissors"));
+      if (text === "Hmmm... *hic*") after(() => setMemberState(player, BURNTOF_ATTRIBUTE, 15));
+      if (text === "Are you okay Burntof? I clearly beat you. Check my hand again.") after(() => {
+        setMemberState(player, BURNTOF_ATTRIBUTE, 40); checkAllRecruited(player);
+      });
+    }
+    if (RAMARNO_NPC_IDS.has(npcId) && text === "Bless my beard..." && quest.getStage(player) === STAGE_GUARDIAN_DEAD) after(() => {
+      const area = arenas.get(player);
+      transitionFade(player, area, 8, 3); // Resume 2245, out 2248, reset 2250, complete/in 2253.
+      sceneLater(player, area, 5, () => player.getPacketSender().sendCameraReset());
+      TaskManager.submit(new CountdownTask(player, 8, () => {
+        if (quest.getStage(player) !== STAGE_GUARDIAN_DEAD || player.getPrivateArea() !== area) return;
+        moveTo(player, { x: 2950, y: 5769 });
+        area?.destroy();
+        player.getMovementQueue().setBlockMovement(false);
+        player.setUntargetable(false);
+        quest.complete(player);
+      }));
+    });
     if (RAMARNO_NPC_IDS.has(npcId) && text.startsWith("The player will automatically speak")) {
       event.skip = true;
       return;
@@ -552,47 +1113,53 @@ module.exports = function registerBelowIceMountainQuest(api) {
 
   function fillRpsSigns(player, text) {
     const pick = rpsPicks.get(player) ?? "Rock";
-    // Burntof is too drunk to play properly, so the hand he actually shows is the
-    // sign the player's pick beats; both "Burntof's" blanks resolve from that sign.
-    const burntofs = LOSES[pick];
+    // The first/last rounds show the winning sign; the second shows the losing sign.
+    const burntofs = BEATS[pick];
     return String(text)
-      .replace(/\[winning sign\]/g, BEATS[pick])
-      .replace(/\[losing sign\]/g, LOSES[pick])
-      .replace(/\[chosen sign\]/g, pick)
-      .replace(/\[sign that gets beaten by Burntof's\]/g, LOSES[burntofs])
-      .replace(/\[sign that beats Burntof's\]/g, BEATS[burntofs]);
+      .replace(/\[winning sign\]/g, BEATS[pick].toLowerCase())
+      .replace(/\[losing sign\]/g, LOSES[pick].toLowerCase())
+      .replace(/\[chosen sign\]/g, pick.toLowerCase())
+      .replace(/\[sign that gets beaten by Burntof's\]/g, LOSES[LOSES[pick]].toLowerCase())
+      .replace(/\[sign that beats Burntof's\]/g, BEATS[burntofs].toLowerCase());
   }
 
   /** Fires for every quest step, scoped by the step ids on this quest's page. */
   function handleAction(event) {
     const { player, npcId, stepId } = event;
+    if (stepId === "below-ice-mountain:statement") {
+      event.handled = true; event.box = { statement: true }; return;
+    }
+    if (stepId === "below-ice-mountain:coins-found") {
+      event.handled = true; event.box = { items: [COINS_ITEM_ID] }; return;
+    }
+    if (stepId === "below-ice-mountain:sandwich") {
+      event.handled = true; event.box = { items: [STEAK_SANDWICH_ITEM_ID] }; return;
+    }
     if (typeof stepId !== "string" || !DIALOGUE_STEP_IDS.has(stepId)) return;
     if (stepId === ACTION_CHECKAL_FLEX || stepId === ACTION_CHECKAL_FLEX_AGAIN) {
-      if (npcId !== CHECKAL_NPC_ID) return;
+      if (npcId !== CHECKAL_NPC_ID || memberState(player, CHECKAL_ATTRIBUTE) < 15) return;
       event.handled = true;
-      player.performAnimation(new Animation(FLEX_ANIMATION_ID));
-      setFlag(player, FLEX_UNLOCKED_ATTRIBUTE, true);
-      setMemberState(player, CHECKAL_ATTRIBUTE, MEMBER_RECRUITED);
-      checkAllRecruited(player);
+      event.end = true;
+      setMemberState(player, CHECKAL_ATTRIBUTE, 20);
+      setFlag(player, CHECKAL_PROMPT_ATTRIBUTE, true);
+      statement(player, "Show your strength by <col=ef1020>flexing</col> your muscles.");
       return;
     }
     if (stepId === ACTION_TRAIN_START) {
       event.handled = true;
+      startTraining(player);
       return;
     }
     if (stepId === ACTION_FLEX_UNLOCK) {
       event.handled = true;
       setFlag(player, FLEX_UNLOCKED_ATTRIBUTE, true);
-      player.sendMessage("You have unlocked the flex emote!");
+      syncVariables(player);
+      player.performAnimation(new Animation(FLEX_ANIMATION_ID));
+      event.steps = [{ type: "message", text: "You have unlocked the <col=ef1020>flex</col> emote!", id: "below-ice-mountain:statement" }];
       return;
     }
     if (stepId === ACTION_TRAIN_END) {
       event.handled = true;
-      const sessions = attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE);
-      player.setAttribute(ATLAS_SESSIONS_ATTRIBUTE, Math.min(sessions + 1, 3));
-      if (memberState(player, CHECKAL_ATTRIBUTE) === MEMBER_IN_PROGRESS) {
-        setFlag(player, ATLAS_DECLINED_ATTRIBUTE, false);
-      }
       return;
     }
     if (stepId === ACTION_ATLAS_PAY_PROMPT || stepId === ACTION_ATLAS_PAY_PROMPT_2) {
@@ -600,37 +1167,56 @@ module.exports = function registerBelowIceMountainQuest(api) {
       return;
     }
     if (stepId === ACTION_ATLAS_REPLAY_TRAINING) {
-      // The paid repeat: charge and count the session, then carry on (the "restart"
-      // reference step cannot replay another variant from inside a live dialogue).
       event.handled = true;
       if (!held(player, COINS_ITEM_ID, 25000)) return;
       player.getInventory().deleteNumber(COINS_ITEM_ID, 25000);
-      const sessions = attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE);
-      player.setAttribute(ATLAS_SESSIONS_ATTRIBUTE, Math.min(sessions + 1, 3));
+      startTraining(player);
       return;
     }
     if (stepId === ACTION_BURNTOF_DRINK || stepId === ACTION_BURNTOF_DRINK_AGAIN) {
       if (npcId !== BURNTOF_NPC_ID && npcId !== BURNTOF_2_NPC_ID) return;
       event.handled = true;
-      if (takeAlcohol(player)) {
-        setMemberState(player, BURNTOF_ATTRIBUTE, MEMBER_IN_PROGRESS);
+      const drink = takeAlcohol(player);
+      if (!drink) { event.end = true; return; }
+      setMemberState(player, BURNTOF_ATTRIBUTE, 10);
+      startTranscript(api, player, BURNTOF_NPC_ID, PAGE, "burntof-master-of-explosives-talking-to-burntof", (steps) => {
+        const tail = sceneTail(steps, ACTION_BURNTOF_DRINK);
+        const remark = drink === DWARVEN_STOUT_ITEM_ID ? "Ah! A [lad/lass] of fhine taste *hic*. I love Dwarven shtout!"
+          : drink === WIZARDS_MIND_BOMB_ITEM_ID ? "No messhing around with you! Only the strong stuff, I like it!" : "That'sh good shtuff.";
+        return [{ type: "message", text: "You give Burntof the drink.", id: "below-ice-mountain:statement" }, { ...tail[0], text: remark }, ...tail.slice(1)];
+      });
+      return;
+    }
+    if (stepId === ACTION_RPS_START) {
+      startRpsScene(event);
+      return;
+    }
+    if (stepId === ACTION_RPS_TINA) {
+      const scene = storyScenes.get(player);
+      if (scene) {
+        const tina = sceneActor(player, scene, NpcIdentifiers.TINA_2, 2956, 3373);
+        tina?.getMovementQueue?.().addFirstStep(scene.sourceTile(2955, 3373));
+        tina?.getMovementQueue?.().addSteps(scene.sourceTile(2955, 3371));
+        tina?.getMovementQueue?.().addSteps(scene.sourceTile(2956, 3371));
       }
+      pauseSceneAction(event, "burntof-master-of-explosives-rock-paper-scissors", 8);
       return;
     }
-    if (stepId === ACTION_RPS_START || stepId === ACTION_RPS_TINA) {
-      event.handled = true;
-      return;
-    }
-    if (stepId === ACTION_RPS_ROUND_1 || stepId === ACTION_RPS_ROUND_2
-        || stepId === ACTION_RPS_ROUND_3 || stepId === ACTION_RPS_CHEAT) {
-      event.handled = true;
-      player.sendMessage(fillRpsSigns(player, event.text ?? ""));
+    if (stepId === ACTION_RPS_ROUND_1 || stepId === ACTION_RPS_ROUND_2 || stepId === ACTION_RPS_ROUND_3 || stepId === ACTION_RPS_CHEAT) {
+      const scene = storyScenes.get(player);
+      player.performAnimation(new Animation(8928));
+      scene?.burntof?.performAnimation?.(new Animation(8921));
+      const message = { type: "message", text: fillRpsSigns(player, event.text ?? ""), id: "below-ice-mountain:statement" };
+      pauseSceneAction(event, "burntof-master-of-explosives-rock-paper-scissors", stepId === ACTION_RPS_CHEAT ? 2 : 5, null, [message]);
       return;
     }
     if (stepId === ACTION_RPS_END) {
-      event.handled = true;
-      setMemberState(player, BURNTOF_ATTRIBUTE, MEMBER_RECRUITED);
-      checkAllRecruited(player);
+      const scene = storyScenes.get(player);
+      sceneLater(player, scene, 3, () => sceneFade(player, true));
+      pauseSceneAction(event, "burntof-master-of-explosives-rock-paper-scissors", 8, () => {
+        endStoryScene(player, { x: 2956, y: 3368 });
+        sceneFade(player, false);
+      }); // 976 departure, 979 out, 984 in and final line.
       return;
     }
     if (stepId === ACTION_MARLEY_HANDOVER) {
@@ -638,48 +1224,104 @@ module.exports = function registerBelowIceMountainQuest(api) {
       event.handled = true;
       if (held(player, STEAK_SANDWICH_ITEM_ID)) {
         player.getInventory().deleteNumber(STEAK_SANDWICH_ITEM_ID, 1);
-        setMemberState(player, MARLEY_ATTRIBUTE, MEMBER_RECRUITED);
-        checkAllRecruited(player);
+        setMemberState(player, MARLEY_ATTRIBUTE, 35);
+        event.steps = [{ type: "message", text: "You give the steak sandwich to Marley.", id: "below-ice-mountain:sandwich" }];
       }
       return;
     }
     if (stepId === ACTION_CUTSCENE_BEGIN) {
-      event.handled = true;
+      startEntranceScene(event);
       return;
     }
+    if (handleEntranceSceneAction(event)) return;
     if (stepId === ACTION_CUTSCENE_INSIDE) {
       event.handled = true;
-      moveTo(player, RUINS_ARRIVAL_TILE);
-      if (quest.getStage(player) === STAGE_RECRUITED) {
-        quest.setStage(player, STAGE_GUARDIAN);
-      }
-      player.setAttribute(PILLARS_MINED_ATTRIBUTE, 0);
+      const old = storyScenes.get(player);
+      storyScenes.delete(player);
+      player.setNpcTransformationId?.(-1);
+      const arena = enterArena(player);
+      storyScenes.set(player, arena);
+      old?.destroy();
+      player.moveTo(arena.sourceTile(2953, 5769));
+      player.getMovementQueue().setBlockMovement(true);
+      player.setUntargetable(true);
+      arena.crew = [sceneActor(player, arena, NpcIdentifiers.BURNTOF_3, 2950, 5772), sceneActor(player, arena, NpcIdentifiers.CHECKAL_2, 2956, 5770),
+        sceneActor(player, arena, NpcIdentifiers.MARLEY_2, 2952, 5772), sceneActor(player, arena, NpcIdentifiers.WILLOW_2, 2953, 5771)];
+      sceneLater(player, arena, 3, () => sceneCamera(player, arena, [2952, 5761, 200], [2952, 5768, 50]));
+      sceneLater(player, arena, 5, () => sceneCamera(player, arena, [2952, 5763, 800, 2, 2], [2952, 5771, 50, 1, 1]));
+      if (quest.getStage(player) === STAGE_RECRUITED) quest.setStage(player, STAGE_GUARDIAN);
+      setMainProgress(player, 30);
+      api.emitCustomEvent("music:unlock-track", { player, trackId: 691 });
+      player.getPacketSender().sendSong(691);
+      transitionFade(player, arena, 5); // 2052 out, 2057 in, 2059 first line.
+      pauseSceneAction(event, ENTRANCE_VARIANT, 7);
       return;
     }
     if (stepId === ACTION_GUARDIAN_WAKES) {
       event.handled = true;
-      spawnGuardian(player);
+      const area = arenas.get(player);
+      if (area) {
+        area.awakening = sceneActor(player, area, NpcIdentifiers.ANCIENT_GUARDIAN_2, 2952, 5778);
+        area.awakening?.performAnimation?.(new Animation(8944));
+        sceneCamera(player, area, [2948, 5771, 700, 1, 1], [2953, 5778, 100, 1, 1]);
+        player.getPacketSender().sendCameraShake(0, 5);
+        sceneLater(player, area, 2, () => {
+          player.getPacketSender().sendCameraReset();
+          sceneCamera(player, area, [2948, 5771, 700], [2952, 5778, 150, 2, 2]);
+        });
+        player.getPacketSender().sendSound(4972, 1, 0);
+      }
+      setMainProgress(player, 35);
+      if (!area) spawnGuardian(player);
+      pauseSceneAction(event, ENTRANCE_VARIANT, 5);
       return;
     }
     if (stepId === ACTION_CUTSCENE_END) {
-      event.handled = true;
-      if (quest.getStage(player) === STAGE_RECRUITED) quest.setStage(player, STAGE_GUARDIAN);
+      sceneFade(player, true, 15); // 2167 out, 2169 line; its Continue starts combat at +5.
+      pauseSceneAction(event, ENTRANCE_VARIANT, 2);
       return;
     }
     if (stepId === ACTION_BAG_RUMMAGE) {
       event.handled = true;
       if (quest.getStage(player) === STAGE_GUARDIAN_DEAD) {
-        quest.complete(player);
+        setFlag(player, REWARD_PENDING_ATTRIBUTE, true);
+        const area = arenas.get(player);
+      if (area) {
+        player.moveTo(area.sourceTile(2951, 5769));
+        sceneCamera(player, area, [2955, 5772, 450, 2, 2], [2951, 5769, 300, 2, 2]);
+      }
+      player.performAnimation(new Animation(6840));
+        event.steps = [{ type: "message", text: "You rummage through Willow's bag...", id: "below-ice-mountain:statement" }, { type: "message", text: "You find a pile of coins!", id: "below-ice-mountain:coins-found" }];
       }
       return;
     }
     if (stepId === ACTION_DOORS_OPEN) {
       event.handled = true;
+      const area = arenas.get(player);
+      if (area) {
+        sourceObject(player, area, ObjectIdentifiers.BIG_DOOR_5, 2951, 5780);
+        sourceObject(player, area, ObjectIdentifiers.BIG_DOOR_6, 2954, 5780);
+        sceneActor(player, area, NpcIdentifiers.RAMARNO, 2952, 5778);
+      }
+      player.getPacketSender().sendCameraShake(0, 15);
+      sceneLater(player, area, 3, () => {
+        player.getPacketSender().sendCameraReset();
+        sceneCamera(player, area, [2955, 5772, 450], [2951, 5769, 300]);
+      });
+      player.getPacketSender().sendSound(67, 1, 0);
+      pauseSceneAction(event, "finishing-up", 3);
       return;
     }
     if (stepId === ACTION_RAMARNO_DEPARTS) {
       event.handled = true;
-      setFlag(player, MET_RAMARNO_ATTRIBUTE, true);
+      sceneFade(player, true);
+      event.steps = [{ type: "message", text: "Ramarno departs for his workshop.", id: "below-ice-mountain:statement" }];
+      TaskManager.submit(new CountdownTask(player, 3, () => {
+        if (player.isRegistered?.() === false) return;
+        setFlag(player, MET_RAMARNO_ATTRIBUTE, true);
+        syncVariables(player);
+        sceneFade(player, false);
+      })); // 2283 departure/out, 2286 workshop morph/in.
       return;
     }
     if (BRANCH_CONTINUE_IDS.has(stepId)) {
@@ -694,78 +1336,87 @@ module.exports = function registerBelowIceMountainQuest(api) {
   // World: NPC/object spawns and the Guardian fight
   // ==========================================================================
 
-  function installWorld() {
-    if (worldInstalled) return;
-    worldInstalled = true;
-
-    ensureNpc(WILLOW_NPC_ID, WILLOW_TILE);
-    ensureNpc(CHECKAL_NPC_ID, CHECKAL_TILE);
-    ensureNpc(MARLEY_NPC_ID, MARLEY_TILE);
-    ensureNpc(BURNTOF_NPC_ID, BURNTOF_TILE);
-
-    ObjectManager.register(
-      new GameObject(RUINS_ENTRANCE_OBJECT_ID, new Location(ENTRANCE_OBJECT_TILE.x, ENTRANCE_OBJECT_TILE.y, 0), 10, 0, null),
-      true
-    );
+  class GuardianArena extends TemplatedInstanceArea {
+    constructor(owner) {
+      super(3, 3);
+      this.owner = owner;
+      for (let x = 0; x < 3; x++) {
+        for (let y = 0; y < 3; y++) this.setChunk(0, x, y, {
+          sourceChunkX: 368 + x, sourceChunkY: 720 + y, sourcePlane: 0, rotation: 0,
+        });
+      }
+      this.mined = new Set();
+    }
+    getName() { return "Below Ice Mountain"; }
+    sourceTile(x, y) { return this.tile(x - 2944, y - 5760, 0); }
+    canAttack(attacker, target) {
+      return (attacker === this.owner && target === guardians.get(this.owner))
+        || (target === this.owner && attacker === guardians.get(this.owner));
+    }
+    postLeave(actor, logout) {
+      super.postLeave(actor, logout);
+      if (actor === this.owner) {
+        const npc = guardians.get(actor);
+        if (npc) api.removeNpc(npc);
+        guardians.delete(actor);
+        arenas.delete(actor);
+        mining.delete(actor);
+      }
+    }
   }
 
-  function ensureNpc(id, tile, radius = 0) {
-    const world = api.getWorld();
-    const npcs = world?.getNpcs ? [...world.getNpcs()] : [];
-    if (npcs.some((npc) => npc?.getId?.() === id)) return;
-    api.spawnNpc({ id, x: tile.x, y: tile.y, z: 0, wanderRadius: radius });
+  function enterArena(player) {
+    let area = arenas.get(player);
+    if (!area || area.isDestroyed()) {
+      area = new GuardianArena(player);
+      arenas.set(player, area);
+    }
+    area.enter(player);
+    player.moveTo(area.sourceTile(RUINS_ARRIVAL_TILE.x, RUINS_ARRIVAL_TILE.y));
+    if (!area.getObjects().some((object) => object.getId() === STRUCTURAL_PILLAR_OBJECT_ID)) {
+      for (const tile of PILLAR_TILES) ObjectManager.register(new GameObject(
+        STRUCTURAL_PILLAR_OBJECT_ID, area.sourceTile(tile.x, tile.y), 10, tile.face, area
+      ), true);
+    }
+    return area;
   }
 
-  /** The owner-only Ancient Guardian and the mineable pillars it fights beside. */
   function spawnGuardian(player) {
     const existing = guardians.get(player);
     if (existing && existing.isRegistered?.() !== false) return existing;
-    ensurePillars();
-    const npc = api.spawnNpc({
-      id: ANCIENT_GUARDIAN_NPC_ID,
-      x: GUARDIAN_TILE.x,
-      y: GUARDIAN_TILE.y,
-      z: 0,
-      wanderRadius: 0,
-      owner: player,
-      ownerOnly: true,
-    });
-    if (npc) guardians.set(player, npc);
-    return npc;
-  }
-
-  function ensurePillars() {
-    if (structuralPillars.length > 0) return;
-    structuralPillars = PILLAR_TILES.map((tile) =>
-      new GameObject(STRUCTURAL_PILLAR_OBJECT_ID, new Location(tile.x, tile.y, 0), 10, tile.face, null)
-    );
-    for (const pillar of structuralPillars) ObjectManager.register(pillar, true);
-  }
-
-  function restorePillars() {
-    if (structuralPillars.length === 0) return;
-    for (const pillar of structuralPillars) {
-      ObjectManager.deregister(pillar, true);
-      ObjectManager.register(
-        new GameObject(BROKEN_PILLAR_OBJECT_ID, pillar.getLocation(), 10, pillar.getFace(), null),
-        true
-      );
+    const area = arenas.get(player) ?? enterArena(player);
+    const tile = area.sourceTile(2952, 5778);
+    const npc = api.spawnNpc({ id: ANCIENT_GUARDIAN_NPC_ID,
+      x: tile.getX(), y: tile.getY(), z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+    if (npc) {
+      area.add(npc);
+      guardians.set(player, npc);
     }
-    structuralPillars = [];
+    return npc;
   }
 
   function defeatGuardian(player) {
     if (quest.getStage(player) !== STAGE_GUARDIAN) return;
     quest.setStage(player, STAGE_GUARDIAN_DEAD);
     guardians.delete(player);
-    if (guardians.size === 0) restorePillars();
-    player.sendMessage(GAME_MESSAGE_START);
+    player.getCombat?.().reset();
+    player.getMovementQueue().setBlockMovement(true);
+    player.setUntargetable(true);
+    const area = arenas.get(player);
+    transitionFade(player, area, 7, 1); // 2197 death, 2198 out, 2204 in, 2206 first line.
+    sceneLater(player, area, 6, () => player.getPacketSender().sendCameraReset());
+    sceneLater(player, area, 7, () => sceneCamera(player, area, [2957, 5777, 450], [2952, 5773, 300]));
+    TaskManager.submit(new CountdownTask(player, 9, () => {
+      if (quest.getStage(player) === STAGE_GUARDIAN_DEAD && player.getPrivateArea() === area) {
+        startTranscript(api, player, RAMARNO_NPC_ID, PAGE, "finishing-up");
+      }
+    }));
   }
 
   function handleNpcDeath(event) {
     if (event.npcId !== ANCIENT_GUARDIAN_NPC_ID) return;
     const player = event.killer?.isPlayer?.() ? event.killer : null;
-    if (!player || !guardians.has(player)) return;
+    if (!player || guardians.get(player) !== event.npc) return;
     defeatGuardian(player);
   }
 
@@ -775,6 +1426,12 @@ module.exports = function registerBelowIceMountainQuest(api) {
       guardians.delete(player);
       api.removeNpc(npc);
     }
+    const arena = arenas.get(player);
+    arenas.delete(player);
+    arena?.destroy();
+    stopTraining(player, true);
+    const scene = storyScenes.get(player);
+    if (scene) endStoryScene(player, attrFlag(player, STORY_SCENE_ATTRIBUTE) === 1 ? { x: 2956, y: 3368 } : ENTRANCE_ARRIVAL_TILE);
   }
 
   // ==========================================================================
@@ -782,7 +1439,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
   // ==========================================================================
 
   function handleEntrance(event) {
-    if (event.objectId !== RUINS_ENTRANCE_OBJECT_ID) return;
+    if (event.objectId !== RUINS_ENTRANCE_OBJECT_ID && event.objectId !== RUINS_ENTRANCE_BASE_OBJECT_ID) return;
     const { player } = event;
     const stage = quest.getStage(player);
     if (stage < STAGE_RECRUITED) {
@@ -795,10 +1452,14 @@ module.exports = function registerBelowIceMountainQuest(api) {
       startTranscript(api, player, WILLOW_NPC_ID, PAGE, "the-ruins-of-camdozaal-talking-to-willow");
       return;
     }
-    moveTo(player, RUINS_ARRIVAL_TILE);
+    if (stage >= STAGE_COMPLETE) {
+      moveTo(player, { x: 2952, y: 5762 });
+      return;
+    }
+    enterArena(player);
     if (stage === STAGE_GUARDIAN) {
       player.setAttribute(PILLARS_MINED_ATTRIBUTE, 0);
-      spawnGuardian(player);
+      spawnGuardian(player)?.getCombat?.().attack(player);
     }
   }
 
@@ -810,7 +1471,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
 
   function handleObjectInteraction(event) {
     if (event.clickType !== 1) return; // op 1: Enter / Exit / Mine; leave Examine alone
-    if (event.objectId === RUINS_ENTRANCE_OBJECT_ID) return handleEntrance(event);
+    if (event.objectId === RUINS_ENTRANCE_OBJECT_ID || event.objectId === RUINS_ENTRANCE_BASE_OBJECT_ID) return handleEntrance(event);
     if (event.objectId === RUINS_EXIT_OBJECT_ID) return handleExit(event);
     if (event.objectId === STRUCTURAL_PILLAR_OBJECT_ID) return handlePillarMine(event);
   }
@@ -828,35 +1489,114 @@ module.exports = function registerBelowIceMountainQuest(api) {
     const { player } = event;
     if (quest.getStage(player) !== STAGE_GUARDIAN) return;
     event.handled = true;
-    const mined = attrFlag(player, PILLARS_MINED_ATTRIBUTE) + 1;
-    player.setAttribute(PILLARS_MINED_ATTRIBUTE, mined);
-    if (mined < MINED_PILLARS_TO_WIN) return;
-    const guardian = guardians.get(player);
-    if (guardian) api.removeNpc(guardian);
-    defeatGuardian(player);
+    const area = arenas.get(player);
+    if (!area || player.getPrivateArea() !== area) return;
+    const location = event.object?.getLocation() ?? new Location(event.location.x, event.location.y, 0);
+    const index = PILLAR_TILES.findIndex((tile) => area.sourceTile(tile.x, tile.y).equals(location));
+    if (index < 0 || area.mined.has(index) || mining.has(player)) return;
+    if (player.getSkillManager().getCurrentLevel(Skill.MINING) < 10) {
+      player.sendMessage("You need a Mining level of at least 10 to mine this rock.");
+      return;
+    }
+    const request = { player, pickaxe: null };
+    api.emitCustomEvent("mining:best-pickaxe", request);
+    if (!request.pickaxe) {
+      player.sendMessage("You don't have a pickaxe which you can use.");
+      return;
+    }
+    player.performAnimation(request.pickaxe.animation);
+    mining.set(player, index);
+    // shortcut: 1636 takes the combat route; verify the eight-tick mining delay against a mining capture.
+    TaskManager.submit(new CountdownTask(player, 8, () => {
+      if (mining.get(player) !== index) return;
+      mining.delete(player);
+      if (player.getPrivateArea() !== area || quest.getStage(player) !== STAGE_GUARDIAN
+        || !player.getLocation().isWithinDistance(location, 2)) return;
+      area.mined.add(index);
+      player.performAnimation(new Animation(-1));
+      const pillar = area.getObjects().find((object) => object.getId() === STRUCTURAL_PILLAR_OBJECT_ID && object.getLocation().equals(location));
+      if (pillar) ObjectManager.deregister(pillar, true);
+      ObjectManager.register(new GameObject(BROKEN_PILLAR_OBJECT_ID, location, 10, PILLAR_TILES[index].face, area), true);
+      player.getSkillManager().addExperiences(Skill.MINING, 10);
+      const guardian = guardians.get(player);
+      if (guardian) {
+        const damage = Math.min(10, guardian.getHitpoints());
+        guardian.setHitpoints(guardian.getHitpoints() - damage);
+        guardian.addTickHit?.(new HitDamage(damage, HitMask.RED));
+        if (guardian.getHitpoints() <= 0) {
+          api.removeNpc(guardian);
+          defeatGuardian(player);
+        }
+      }
+    }));
   }
 
   // ==========================================================================
   // Items
   // ==========================================================================
 
+  function knowsSandwich(player) {
+    return quest.isComplete(player) || memberState(player, MARLEY_ATTRIBUTE) >= 10;
+  }
+
+  function makeSandwich(player, amount = 1) {
+    const inventory = player.getInventory();
+    if (!knowsSandwich(player) || !held(player, KNIFE_ITEM_ID) || !held(player, BREAD_ITEM_ID) || !held(player, COOKED_MEAT_ITEM_ID)) return;
+    inventory.deleteNumber(BREAD_ITEM_ID, 1);
+    inventory.deleteNumber(COOKED_MEAT_ITEM_ID, 1);
+    inventory.adds(STEAK_SANDWICH_ITEM_ID, 1);
+    setFlag(player, SANDWICH_MADE_ATTRIBUTE, true);
+    player.performAnimation(new Animation(8938));
+    player.sendMessage("You combine the cooked meat and bread to make a Steak sandwich!");
+    if (amount > 1) TaskManager.submit(new CountdownTask(player, 3, () => {
+      if (player.isRegistered?.() !== false) makeSandwich(player, amount - 1);
+    }));
+  }
+
   function handleKnifeSandwich(event) {
     const { player, usedItemId, usedWithItemId } = event;
+    if (!knowsSandwich(player)) return false;
     const pair = new Set([usedItemId, usedWithItemId]);
     if (!pair.has(KNIFE_ITEM_ID) || !pair.has(BREAD_ITEM_ID) && !pair.has(COOKED_MEAT_ITEM_ID)) return false;
-    const stage = quest.getStage(player);
-    if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return false;
-    if (memberState(player, MARLEY_ATTRIBUTE) !== MEMBER_IN_PROGRESS) return false;
-    if (!held(player, KNIFE_ITEM_ID) || !held(player, BREAD_ITEM_ID) || !held(player, COOKED_MEAT_ITEM_ID)) {
-      return false;
-    }
+    if (!held(player, KNIFE_ITEM_ID)) return false;
     event.handled = true;
-    player.getInventory().deleteNumber(BREAD_ITEM_ID, 1);
-    player.getInventory().deleteNumber(COOKED_MEAT_ITEM_ID, 1);
-    player.getInventory().adds(STEAK_SANDWICH_ITEM_ID, 1);
-    setFlag(player, SANDWICH_MADE_ATTRIBUTE, true);
-    player.sendMessage("You make a steak sandwich.");
+    if (pair.has(COOKED_MEAT_ITEM_ID)) {
+      makeSandwich(player);
+      return true;
+    }
+    if (!held(player, BREAD_ITEM_ID)) return true;
+    // Bread used on the knife preserves its ordinary breadcrumbs action.
+    if (usedItemId === BREAD_ITEM_ID) {
+      player.getInventory().deleteNumber(BREAD_ITEM_ID, 1);
+      player.getInventory().adds(ItemIdentifiers.BREADCRUMBS, 1);
+      return true;
+    }
+    player.getPacketSender().sendCreationMenu(new CreationMenu("How many do you wish to make?",
+      [ItemIdentifiers.BREADCRUMBS, STEAK_SANDWICH_ITEM_ID], {
+        execute(itemId, amount) {
+          if (itemId === STEAK_SANDWICH_ITEM_ID) return makeSandwich(player, Math.max(1, Math.min(amount, 28)));
+          if (itemId !== ItemIdentifiers.BREADCRUMBS || !held(player, KNIFE_ITEM_ID)) return;
+          const count = Math.max(0, Math.min(amount, player.getInventory().getAmount(BREAD_ITEM_ID)));
+          player.getInventory().deleteNumber(BREAD_ITEM_ID, count);
+          player.getInventory().adds(ItemIdentifiers.BREADCRUMBS, count);
+        },
+      }, { labels: ["Breadcrumbs", "Steak sandwich"], mode: 0, maxAmount: player.getInventory().getAmount(BREAD_ITEM_ID), lastAmount: 1 }));
     return true;
+  }
+
+  function handleItemOnCrew(event) {
+    const { player, npcId, itemId } = event;
+    if (quest.getStage(player) !== STAGE_STARTED) return;
+    if ((npcId === BURNTOF_NPC_ID || npcId === BURNTOF_2_NPC_ID) && ALCOHOL_ITEM_IDS.includes(itemId)
+      && memberState(player, BURNTOF_ATTRIBUTE) < 10 && held(player, itemId)) {
+      event.handled = true;
+      offeredDrinks.set(player, itemId);
+      handleAction({ player, npcId: BURNTOF_NPC_ID, stepId: ACTION_BURNTOF_DRINK });
+    } else if (npcId === MARLEY_NPC_ID && itemId === STEAK_SANDWICH_ITEM_ID
+      && memberState(player, MARLEY_ATTRIBUTE) >= MEMBER_IN_PROGRESS && memberState(player, MARLEY_ATTRIBUTE) < MEMBER_RECRUITED && held(player, itemId)) {
+      event.handled = true;
+      startTranscript(api, player, MARLEY_NPC_ID, PAGE, "marley-the-thief-returning-to-marley");
+    }
   }
 
   function handleItemOnRamarno(event) {
@@ -931,8 +1671,24 @@ module.exports = function registerBelowIceMountainQuest(api) {
     player.getInventory().adds(COINS_ITEM_ID, 1999);
   }
 
+  function syncBootstrap({ player }) { syncVariables(player); }
+
   function handleLogin({ player }) {
-    installWorld();
+    syncVariables(player);
+    if (attrFlag(player, STORY_SCENE_ATTRIBUTE) && quest.getStage(player) < STAGE_GUARDIAN) {
+      moveTo(player, attrFlag(player, STORY_SCENE_ATTRIBUTE) === 1 ? { x: 2956, y: 3368 } : ENTRANCE_ARRIVAL_TILE);
+      player.setAttribute(STORY_SCENE_ATTRIBUTE, 0);
+    }
+    if (attrFlag(player, TRAINING_ATTRIBUTE)) {
+      player.setAttribute(TRAINING_ATTRIBUTE, 0);
+      player.getMovementQueue().setBlockMovement(false);
+      player.setUntargetable(false);
+      moveTo(player, { x: 3075, y: 3440 });
+    }
+    if (quest.getStage(player) === STAGE_GUARDIAN || quest.getStage(player) === STAGE_GUARDIAN_DEAD) {
+      enterArena(player);
+      if (quest.getStage(player) === STAGE_GUARDIAN) spawnGuardian(player)?.getCombat?.().attack(player);
+    }
     refreshQuestList(player);
   }
 
@@ -944,12 +1700,15 @@ module.exports = function registerBelowIceMountainQuest(api) {
     key: "below_ice_mountain",
     name: "Below Ice Mountain",
     varpId: 2951,
-    varbitId: 12063,
+    varbitId: MAIN_VARBIT,
+    varbitValue: mainProgress,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
     rewardItemId: COINS_ITEM_ID,
     rewardItemLabel: "2,000 Coins",
+    scrollItemId: STEAK_SANDWICH_ITEM_ID,
+    completionJingleId: 152,
     otherRewards: [
       "Access to the Ruins of Camdozaal",
       "Flex emote",
@@ -959,19 +1718,29 @@ module.exports = function registerBelowIceMountainQuest(api) {
     onReward: grantReward,
   });
 
-  api.persistAttribute(CHECKAL_ATTRIBUTE);
-  api.persistAttribute(MARLEY_ATTRIBUTE);
-  api.persistAttribute(BURNTOF_ATTRIBUTE);
-  api.persistAttribute(BURNTOF_ASKED_ATTRIBUTE);
-  api.persistAttribute(ATLAS_SESSIONS_ATTRIBUTE);
-  api.persistAttribute(ATLAS_DECLINED_ATTRIBUTE);
-  api.persistAttribute(FLEX_UNLOCKED_ATTRIBUTE);
-  api.persistAttribute(COOK_TALKED_ATTRIBUTE);
-  api.persistAttribute(SANDWICH_MADE_ATTRIBUTE);
-  api.persistAttribute(MET_RAMARNO_ATTRIBUTE);
-  api.persistAttribute(PILLARS_MINED_ATTRIBUTE);
+  api.persistAttribute(CHECKAL_ATTRIBUTE, 0);
+  api.persistAttribute(MARLEY_ATTRIBUTE, 0);
+  api.persistAttribute(BURNTOF_ATTRIBUTE, 0);
+  api.persistAttribute(BURNTOF_ASKED_ATTRIBUTE, 0);
+  api.persistAttribute(ATLAS_SESSIONS_ATTRIBUTE, 0);
+  api.persistAttribute(ATLAS_DECLINED_ATTRIBUTE, 0);
+  api.persistAttribute(FLEX_UNLOCKED_ATTRIBUTE, 0);
+  api.persistAttribute(COOK_TALKED_ATTRIBUTE, 0);
+  api.persistAttribute(SANDWICH_MADE_ATTRIBUTE, 0);
+  api.persistAttribute(MET_RAMARNO_ATTRIBUTE, 0);
+  api.persistAttribute(PILLARS_MINED_ATTRIBUTE, 0);
 
-  api.onServerStartup(installWorld);
+  api.persistAttribute(MAIN_PROGRESS_ATTRIBUTE, 0);
+  api.persistAttribute(CHECKAL_PROMPT_ATTRIBUTE, 0);
+  api.persistAttribute(REWARD_PENDING_ATTRIBUTE, 0);
+  api.persistAttribute(TRAINING_ATTRIBUTE, 0);
+  api.persistAttribute(STORY_SCENE_ATTRIBUTE, 0);
+  api.onNpcInteraction("Willow", { "Talk-to": handleWillowTalk });
+  api.onNpcInteraction("Atlas", { "Talk-to": handleAtlasTalk });
+  api.onCustomEvent("player:emote", handleFlex);
+  api.onCustomEvent("quest:stage-changed", handleStageChanged);
+  api.onCustomEvent("player:bootstrap-complete", syncBootstrap);
+  api.onCustomEvent("interface:closed", handleRewardClosed);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handlePlayerLogout);
   api.onNpcDialogueVariant(selectVariant);
@@ -985,5 +1754,6 @@ module.exports = function registerBelowIceMountainQuest(api) {
   api.onObjectInteraction("Willow's bag", { Investigate: handleWillowsBag });
   api.onItemOnItem("Knife", "Bread", handleKnifeSandwich);
   api.onItemOnItem("Knife", "Cooked meat", handleKnifeSandwich);
+  api.onItemOnNpc(handleItemOnCrew);
   api.onItemOnNpc(handleItemOnRamarno);
 };

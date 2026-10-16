@@ -1,57 +1,17 @@
-/**
- * A Porcine of Interest (members).
- *
- * The words come from the "A Porcine of Interest" transcript page (plus the
- * "Spria" / "Sarah" pages for the post-quest and pre-quest conversations).
- * This plugin supplies the variant selector for Sarah and Spria, the start
- * hook on the Draynor notice board, the crossroads investigation objects, the
- * cave and its cutscene, the quest sourhog spawn, the foot/bounty hand-in and
- * the completion rewards.
- *
- * Stages (varbit 10582 "porcine", varp 2748, bits 0-5; cache evidence:
- * `lookup-gameval.ts varbit porcine` -> "10582 porcine varp=2748 bits=0-5"):
- *   1 read the notice board, 2 Sarah explained the attack, 3 rope tied at the
- *   strange hole, 4 Pig Thing cutscene done (woke in Spria's house), 5 Spria
- *   gave the reinforced goggles, 6 quest sourhog killed, 7 foot cut,
- *   8 bounty collected from Sarah, 9 told Spria (complete).
- * Sibling bits used: 10583 footcut, 10584 inspected_cart, 10585 need_rope,
- * 10587 stop_warning, 10589 task_offered, 10590 task_accepted.
- *
- * The crossroads objects (cart, produce trail, broken trees, strange hole,
- * skeleton, pile of rope) are varbit locs in OSRS and absent from this cache's
- * map, so the plugin places them at their wiki tiles when a player first
- * reaches the area; the notice board (40307) and the cave rope/blockage
- * (40330/40331) are already in the map.
- *
- * The hole: per-player locs need a PrivateArea, which the open world has none
- * of, so 40308/40309 are not swapped. The world hole is registered once as the
- * tied "Climb-down" form (40309) and who may tie/enter is per player, via the
- * persisted "quest.porcine.rope-tied" attribute: Climb-down on 40308 (should it
- * ever be present, only when the attribute is set) and on 40309 both enter;
- * otherwise the hole runs the wiki investigate transcript (rope -> tie, no rope
- * -> "I'll need to tie something onto the edge").
- *
- * Gaps / approximations:
- *   - npc-spawns.json spawns Spria and Rosie with ids 10440/10441, which are
- *     name-null in this cache (no Talk-to). The plugin removes those two and
- *     spawns the real Spria 10432 / Rosie 10438 once; the canonical fix is an
- *     npc-spawns.json edit.
- *   - The Pig Thing is not spawned; its cutscene narration is shown as game
- *     messages with each speaker keeping their own chathead.
- *   - The 30 Slayer reward points go to the Slayer plugin through
- *     "slayer:grant-points". Sourhog tasks are not gated on quest completion.
- *   - Reinforced goggles are not folded into existing slayer helmets; the
- *     cleanup of the produce trail after the quest is not simulated.
- *   - The quest sourhog spawns at (3165,9677): the cache walls off the old
- *     (3163,9682) into an unreachable pocket, while (3165,9677) is inside the
- *     chamber's walkable component (live-walked from the (3156,9703) landing,
- *     all four neighbours walkable), so the kill and the corpse Cut-foot work.
- *
- * Source: https://oldschool.runescape.wiki/w/A_Porcine_of_Interest and
- * https://oldschool.runescape.wiki/w/Transcript:A_Porcine_of_Interest
- */
+/** A Porcine of Interest. Capture 1693 and remaining limits: docs/p2p-skilling-parity.md. */
 module.exports = function registerPorcineOfInterestQuest(api) {
   const {
+    CombatMethod,
+    CombatType,
+    PendingHit,
+    Projectile,
+    Misc,
+    Animation,
+    Boundary,
+    PrivateArea,
+    Task,
+    TaskManager,
+    Graphic,
     Equipment,
     GameObject,
     Item,
@@ -72,11 +32,10 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     NpcIdentifiers.SPRIA_3, // 10434
   ]);
   const SPRIA_DIALOGUE_NPC_ID = NpcIdentifiers.SPRIA;
-  /** Spawn-file id that is name-null in this cache; replaced by the real Spria. */
-  const BROKEN_SPRIA_NPC_ID = 10440;
-  const BROKEN_ROSIE_NPC_ID = 10441;
   const QUEST_SOURHOG_NPC_ID = NpcIdentifiers.SOURHOG_2; // 10436 (wiki monster id)
   const PIG_THING_NPC_ID = NpcIdentifiers.PIG_THING; // 10437, cutscene speaker
+
+  const SOURHOG_ATTACK = { melee: 8769, spit: 8770, projectile: 1817, impact: 1818, meleeSound: 2314, spitSound: 2313, impactSound: 3308 };
 
   const NOTICE_BOARD_OBJECT_ID = ObjectIdentifiers.NOTICE_BOARD_6; // 40307 (in the map)
   const STRANGE_HOLE_OBJECT_ID = ObjectIdentifiers.STRANGE_HOLE_2; // 40308
@@ -91,6 +50,8 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   const PILE_OF_ROPE_OBJECT_ID = ObjectIdentifiers.PILE_OF_ROPE_2; // 40324
   const CAVE_ROPE_OBJECT_ID = ObjectIdentifiers.ROPE_44; // 40330 (in the map)
   const BLOCKAGE_OBJECT_ID = ObjectIdentifiers.BLOCKAGE_7; // 40331 (in the map)
+  const DEAD_SOURHOG_MULTILOC_ID = 40349; // porcine_dead_sourhog_multi2, footcut varbit morph
+  const QUEST_MULTILOC_IDS = new Map([[ObjectIdentifiers.DEAD_SOURHOG_2, DEAD_SOURHOG_OBJECT_ID], [ObjectIdentifiers.DEAD_SOURHOG_3, DEAD_SOURHOG_OBJECT_ID], [ObjectIdentifiers.DEAD_SOURHOG_4, DEAD_SOURHOG_OBJECT_ID], [40341, STRANGE_HOLE_OBJECT_ID], [40342, CABBAGE_OBJECT_ID], [40343, POTATOES_OBJECT_ID], [40344, CARROT_OBJECT_ID], [40345, BROKEN_TREE_OBJECT_ID], [40346, DAMAGED_CART_OBJECT_ID], [40348, DEAD_SOURHOG_OBJECT_ID], [40349, DEAD_SOURHOG_OBJECT_ID], [40350, SKELETON_OBJECT_ID], [40352, PILE_OF_ROPE_OBJECT_ID]]);
 
   const QUEST_OBJECT_IDS = new Set([
     NOTICE_BOARD_OBJECT_ID,
@@ -143,6 +104,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   const PAGE = "A Porcine of Interest";
   const START_HOOK = "quest:a-porcine-of-interest:start";
 
+  const CORPSE_ATTRIBUTE = "a-porcine-of-interest:corpse";
   const BITS_ATTRIBUTE = "quest.a_porcine_of_interest.bits";
   const ROPE_TIED_ATTRIBUTE = "quest.porcine.rope-tied";
   const BIT_FOOTCUT = 1;
@@ -163,53 +125,11 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   const SLAYER_POINTS_REWARD = 30;
   const SLAYER_XP_REWARD = 1000;
 
-  /** Wiki tiles (oldschool.runescape.wiki scenery pages). */
-  const DAMAGED_CART_TILE = { x: 3120, y: 3300 };
-  const CABBAGE_TILES = [
-    { x: 3124, y: 3302 },
-    { x: 3126, y: 3308 },
-    { x: 3130, y: 3314 },
-  ];
-  const CARROT_TILES = [
-    { x: 3124, y: 3305 },
-    { x: 3125, y: 3304 },
-    { x: 3135, y: 3323 },
-    { x: 3135, y: 3327 },
-    { x: 3136, y: 3328 },
-    { x: 3145, y: 3337 },
-    { x: 3146, y: 3342 },
-  ];
-  const POTATOES_TILES = [
-    { x: 3119, y: 3302 },
-    { x: 3123, y: 3301 },
-    { x: 3128, y: 3310 },
-    { x: 3132, y: 3313 },
-  ];
-  const BROKEN_TREE_TILES = [
-    { x: 3133, y: 3323 },
-    { x: 3140, y: 3332 },
-    { x: 3148, y: 3344 },
-    { x: 3133, y: 3317 },
-    { x: 3146, y: 3332 },
-    { x: 3142, y: 3340 },
-    { x: 3139, y: 3331 },
-  ];
-  const STRANGE_HOLE_TILE = { x: 3150, y: 3347 };
-  const PILE_OF_ROPE_TILE = { x: 3159, y: 9713 };
-  const SKELETON_TILE = { x: 3163, y: 9676 };
-  const SCIMITAR_TILE = { x: 3162, y: 9677 };
-  const CAVE_LANDING_TILE = { x: 3157, y: 9713 };
+  const SCIMITAR_TILE = { x: 3163, y: 9675 };
+  const CAVE_LANDING_TILE = { x: 3158, y: 9713 };
   const HOLE_RETURN_TILE = { x: 3149, y: 3347 };
-  /**
-   * The skeleton chamber tile the quest sourhog spawns on. (3163,9682) is walled
-   * off from the climb-over landing; (3165,9677) is two tiles from the skeleton,
-   * was walked to from (3156,9703) and all four neighbours are walkable, so the
-   * fight and the corpse's Cut-foot are reachable.
-   */
-  const SOURHOG_SPAWN_TILE = { x: 3165, y: 9677 };
-  const SPRIA_HOUSE_TILE = { x: 3092, y: 3266 };
-  const SPRIA_SPAWN_TILE = { x: 3091, y: 3266 };
-  const ROSIE_SPAWN_TILE = { x: 3035, y: 3296 };
+  const SOURHOG_SPAWN_TILE = { x: 3162, y: 9699 };
+  const SPRIA_HOUSE_TILE = { x: 3095, y: 3267 };
   /** The blockage spans x3156-3157 at y9704 (loc dump). */
   const BLOCKAGE_Y = 9704;
 
@@ -217,8 +137,6 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   const CAVE_ZONE = { minX: 3130, maxX: 3200, minY: 9650, maxY: 9740, levels: [0] };
 
   let quest;
-  let questObjectsInstalled = false;
-  let brokenSpawnsFixed = false;
   let itemOnGroundManager = null;
 
   /** Transient branch context (never persisted). */
@@ -226,6 +144,11 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   const blockageDestination = new WeakMap();
   const bossByPlayer = new Map();
   const corpseByPlayer = new Map();
+  const caves = new WeakMap();
+  const notes = new WeakSet();
+  const SKELETON_VARIANT = "inside-the-cave-investigating-the-skeleton";
+  const NOTE_GROUP = 222;
+  const NOTE_LINES = ["", "", "This is what I get for exploring uncharted caves.", "Looks like I'm trapped down here - My entry", "rope slipped off and now there's nowhere to go", "but deeper. I think I'd be safer just waiting and", "praying for rescue. If anyone finds this, get out", "while you can.", "", "", ""];
 
   const held = (player, itemId, amount = 1) =>
     player.getInventory().getAmount(itemId) >= amount;
@@ -302,7 +225,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
 
   function bankHasGoggles(player) {
     try {
-      return Number(player.getBank?.()?.getAmount?.(REINFORCED_GOGGLES_ITEM_ID) ?? 0) > 0;
+      return (player.getBanks?.() ?? [player.getBank?.()]).some(bank => Number(bank?.getAmount?.(REINFORCED_GOGGLES_ITEM_ID) ?? 0) > 0);
     } catch {
       return false;
     }
@@ -321,74 +244,155 @@ module.exports = function registerPorcineOfInterestQuest(api) {
       && location.getY() >= CAVE_ZONE.minY && location.getY() <= CAVE_ZONE.maxY;
   }
 
-  // ==========================================================================
-  // Quest scenery (absent from the map, placed at the wiki tiles)
-  // ==========================================================================
+  // Captured cave scenes and recovery.
+  function liveStage(stage) { return [0, 5, 10, 15, 20, 25, 30, 30, 35, 40][stage] ?? 0; }
 
-  function registerObject(objectId, x, y) {
-    const object = new GameObject(objectId, new Location(x, y, 0), 10, 0, null);
-    ObjectManager.register(object, true);
-    return object;
+  function later(key, ticks, callback) {
+    class PorcineTask extends Task {
+      constructor() { super(ticks, key, false); }
+      execute() { this.stop(); callback(); }
+    }
+    TaskManager.submit(new PorcineTask());
   }
 
-  function installQuestObjects() {
-    if (questObjectsInstalled) return;
-    questObjectsInstalled = true;
-    registerObject(DAMAGED_CART_OBJECT_ID, DAMAGED_CART_TILE.x, DAMAGED_CART_TILE.y);
-    for (const tile of CABBAGE_TILES) registerObject(CABBAGE_OBJECT_ID, tile.x, tile.y);
-    for (const tile of CARROT_TILES) registerObject(CARROT_OBJECT_ID, tile.x, tile.y);
-    for (const tile of POTATOES_TILES) registerObject(POTATOES_OBJECT_ID, tile.x, tile.y);
-    for (const tile of BROKEN_TREE_TILES) registerObject(BROKEN_TREE_OBJECT_ID, tile.x, tile.y);
-    registerObject(PILE_OF_ROPE_OBJECT_ID, PILE_OF_ROPE_TILE.x, PILE_OF_ROPE_TILE.y);
-    registerObject(SKELETON_OBJECT_ID, SKELETON_TILE.x, SKELETON_TILE.y);
-    // Per-player locs need a PrivateArea, and the open world has none (Doors only
-    // passes one in instances). The hole is registered once in its tied
-    // "Climb-down" form and never swapped; the per-player rope-tied attribute
-    // decides who may tie/enter.
-    registerObject(STRANGE_HOLE_ROPE_OBJECT_ID, STRANGE_HOLE_TILE.x, STRANGE_HOLE_TILE.y);
+  function controls(player, active) {
+    player.getMovementQueue().setBlockMovement(active);
+    player.setUntargetable(active);
+    player.getPacketSender().sendVarbit(6719, active ? 2 : 0).sendVarbit(12393, active ? 1 : 0);
   }
 
-  /** Tied state is per player (OSRS keeps it in a varbit loc; the open world cannot). */
-  function isRopeTied(player) {
-    return quest.getStage(player) >= STAGE_STARTED
-      && player.getAttribute(ROPE_TIED_ATTRIBUTE) === true;
+  function fade(player, out) {
+    player.getPacketSender().sendSubInterface((161 << 16) | 1, 174, 1)
+      .sendString("", (174 << 16) | 4).sendClientScript(948, [0, out ? 255 : 0, 0, out ? 0 : 255, 50]);
   }
 
-  /** Tying the rope consumes it and marks this player's hole tied; no world swap. */
+  class SourhogCave extends PrivateArea {
+    constructor(player) { super([new Boundary(CAVE_ZONE.minX, CAVE_ZONE.maxX, CAVE_ZONE.minY, CAVE_ZONE.maxY, 0)]); this.owner = player; this.scene = false; }
+    canTeleport() { return this.scene ? false : null; }
+    canAttack() { return this.scene ? false : null; }
+    postLeave(mobile, logout) {
+      if (mobile === this.owner) {
+        caves.delete(mobile); notes.delete(mobile); TaskManager.cancelTasks(this);
+        removeSourhog(mobile); corpseByPlayer.delete(mobile);
+        controls(mobile, false); mobile.getPacketSender().sendCameraReset();
+        mobile.performAnimation(new Animation(-1));
+      }
+      super.postLeave(mobile, logout);
+    }
+  }
+
+  function enterCave(player) {
+    let cave = caves.get(player);
+    if (!cave || cave.isDestroyed()) { cave = new SourhogCave(player); caves.set(player, cave); cave.enter(player); }
+    return cave;
+  }
+
+  function actor(player, id, x, y) {
+    const npc = api.spawnNpc({ id, x, y, z: 0, owner: player, ownerOnly: true, wanderRadius: 0 });
+    if (npc) enterCave(player).add(npc);
+    return npc;
+  }
+
+  function camera(player, move, look) {
+    const sender = player.getPacketSender();
+    if (move) sender.sendCameraMoveTo(...move.slice(0, 3), { rate: move[3], rate2: move[4] });
+    if (look) sender.sendCameraLookAt(...look.slice(0, 3), { rate: look[3], rate2: look[4] });
+  }
+
+  function continueSkeleton(player, after) {
+    startTranscript(api, player, PIG_THING_NPC_ID, PAGE, SKELETON_VARIANT,
+      steps => steps.slice(steps.findIndex(step => step.id === after) + 1));
+  }
+
+  function showSkeletonNote(player) {
+    player.getDialogueManager().reset(); notes.add(player);
+    const sender = player.getPacketSender().sendInterface(NOTE_GROUP);
+    const chatbox = sender.getChatboxGroupId();
+    if (chatbox >= 0) sender.closeInterface(chatbox);
+    NOTE_LINES.forEach((line, index) => sender.sendString(line, (NOTE_GROUP << 16) | (index + 1)));
+  }
+
+  function noteClosed({ player, interfaceId }) {
+    if (interfaceId !== NOTE_GROUP || !notes.has(player)) return;
+    notes.delete(player); const cave = enterCave(player); cave.scene = true; controls(player, true);
+    player.moveTo(new Location(3165, 9676, 0));
+    camera(player, [3168, 9672, 500, 10, 10], [3165, 9676, 50, 232, 232]);
+    later(cave, 1, () => continueSkeleton(player, "K_pMcL"));
+  }
+
+  function pigAppears(player) {
+    const cave = enterCave(player); player.getDialogueManager().reset();
+    cave.pig = actor(player, PIG_THING_NPC_ID, 3171, 9676);
+    cave.pig?.setPositionToFace?.(new Location(3165, 9676, 0));
+    later(cave, 1, () => { camera(player, [3162, 9676, 200, 232, 232]); camera(player, [3162, 9676, 400, 1, 2]); });
+    later(cave, 2, () => cave.pig?.getMovementQueue().addSteps(new Location(3167, 9676, 0)));
+    later(cave, 6, () => camera(player, null, [3167, 9676, 100, 1, 1]));
+    later(cave, 13, () => { player.performAnimation(new Animation(857)); continueSkeleton(player, "eShaqt"); });
+  }
+
+  function pigAttack(player) {
+    const cave = enterCave(player); player.getDialogueManager().reset();
+    camera(player, [3166, 9681, 500, 10, 10], [3166, 9676, 100, 10, 10]);
+    later(cave, 1, () => {
+      cave.pig?.performAnimation(new Animation(8770, 20));
+      player.performAnimation(new Animation(4177, 66)); player.performGraphic(new Graphic(1818, 86, 20));
+      player.getPacketSender().sendProjectile(new Location(3167, 9676, 0), new Location(3165, 9676, 0), 0, 86, 1817, 43, 45, player, 77, 16, 64, cave.pig);
+      player.getPacketSender().sendSoundEffect(2313, 1, 77).sendSoundEffect(3308, 1, 86);
+    });
+    later(cave, 5, () => player.performAnimation(new Animation(836)));
+    later(cave, 7, () => fade(player, true));
+    later(cave, 15, () => player.getPacketSender().sendString("Some time passes...", (229 << 16) | 1));
+    later(cave, 20, () => { if (cave.pig) api.removeNpc(cave.pig); player.moveTo(new Location(3163, 9699, 0)); player.performAnimation(new Animation(-1)); });
+    later(cave, 21, () => { camera(player, [3162, 9698, 300, 232, 232], [3163, 9699, 0, 232, 232]); fade(player, false); camera(player, [3162, 9698, 700, 1, 1]); });
+    later(cave, 29, () => fade(player, true));
+    later(cave, 31, () => { cave.pig = actor(player, PIG_THING_NPC_ID, 3169, 9702); camera(player, [3158, 9705, 800, 232, 232], [3166, 9700, 50, 232, 232]); fade(player, false); });
+    later(cave, 36, () => cave.pig?.getMovementQueue().addSteps(new Location(3164, 9701, 0)));
+    later(cave, 45, () => player.getPacketSender().sendSoundEffect(694, 1, 0));
+    for (const [tick, x, y] of [[47,3165,9700],[48,3165,9699],[49,3165,9698],[50,3165,9697],[51,3165,9696],[52,3165,9695],[54,3166,9694],[55,3167,9693],[56,3168,9692],[57,3169,9691],[58,3170,9690],[59,3171,9689],[60,3172,9689]]) {
+      later(cave, tick, () => cave.pig?.getMovementQueue().addSteps(new Location(x, y, 0)));
+    }
+    later(cave, 53, () => { camera(player, [3167, 9693, 375, 232, 232], [3163, 9699, 200, 232, 232]); camera(player, [3167, 9693, 900, 5, 10], [3163, 9699, 1, 5, 1]); });
+    later(cave, 56, () => continueSkeleton(player, "OnSUD-"));
+  }
+
+  function spriaArrives(player) {
+    const cave = enterCave(player); player.getDialogueManager().reset();
+    later(cave, 2, () => { cave.spria = actor(player, NpcIdentifiers.SPRIA_2, 3158, 9710); cave.spria?.getMovementQueue().addSteps(new Location(3157, 9705, 0)); });
+    later(cave, 3, () => camera(player, [3159, 9714, 600, 232, 232], [3157, 9705, 50, 232, 232]));
+    later(cave, 8, () => { cave.spria?.moveTo(new Location(3157, 9703, 0)); cave.spria?.performAnimation(new Animation(840, 30)); camera(player, [3156, 9694, 800, 232, 232], [3158, 9701, 50, 232, 232]); player.getPacketSender().sendSoundEffect(2453, 1, 40); });
+    later(cave, 12, () => cave.spria?.getMovementQueue().addSteps(new Location(3158, 9701, 0)));
+    later(cave, 16, () => continueSkeleton(player, "32r40G"));
+  }
+
+  function spriaApproaches(player) {
+    const cave = enterCave(player); player.getDialogueManager().reset();
+    later(cave, 1, () => camera(player, null, [3162, 9699, 50, 2, 1]));
+    later(cave, 2, () => cave.spria?.getMovementQueue().addSteps(new Location(3162, 9699, 0)));
+    later(cave, 6, () => continueSkeleton(player, "Rb2zDN"));
+  }
+
+  function wakeInHouse(player) {
+    const cave = caves.get(player); player.getDialogueManager().reset();
+    later(cave, 1, () => { cave?.spria?.performAnimation(new Animation(827)); fade(player, true); });
+    later(cave, 4, () => {
+      advanceStage(player, STAGE_ATTACKED); if (cave) cave.leave(player, false);
+      player.moveTo(new Location(SPRIA_HOUSE_TILE.x, SPRIA_HOUSE_TILE.y, 0)); fade(player, false);
+      later(player, 2, () => player.getPacketSender().closeSubInterface((161 << 16) | 1));
+      continueSkeleton(player, "EaeUfj");
+    });
+  }
+
+  function restoreCorpse(player) {
+    if (![STAGE_SOURHOG_DEAD, STAGE_HAS_FOOT].includes(quest.getStage(player)) || corpseByPlayer.has(player)) return;
+    const at = player.getAttribute(CORPSE_ATTRIBUTE) ?? [SOURHOG_SPAWN_TILE.x, SOURHOG_SPAWN_TILE.y, 0];
+    registerDeadSourhog(player, { x: at[0], y: at[1], z: at[2] });
+  }
+
+  function isRopeTied(player) { return quest.getStage(player) >= STAGE_FOUND_CAVE; }
   function tieRope(player) {
-    if (isRopeTied(player)) return;
-    advanceStage(player, STAGE_FOUND_CAVE);
-    if (held(player, ROPE_ITEM_ID)) player.getInventory().deleteNumber(ROPE_ITEM_ID, 1);
-    player.setAttribute(ROPE_TIED_ATTRIBUTE, true);
-  }
-
-  /** The broken spawn-file ids (10440/10441) are name-null; put the real NPCs in. */
-  function ensureBrokenSpawns() {
-    if (brokenSpawnsFixed) return;
-    brokenSpawnsFixed = true;
-    const world = api.getWorld();
-    const npcs = world?.getNpcs ? [...world.getNpcs()] : [];
-    for (const npc of npcs) {
-      const id = npc?.getId?.();
-      if (id === BROKEN_SPRIA_NPC_ID || id === BROKEN_ROSIE_NPC_ID) api.removeNpc(npc);
-    }
-    const hasRealSpria = npcs.some((npc) => npc?.getId?.() === SPRIA_DIALOGUE_NPC_ID);
-    if (!hasRealSpria) {
-      api.spawnNpc({
-        id: SPRIA_DIALOGUE_NPC_ID,
-        x: SPRIA_SPAWN_TILE.x,
-        y: SPRIA_SPAWN_TILE.y,
-        z: 0,
-        wanderRadius: 0,
-      });
-      api.spawnNpc({
-        id: NpcIdentifiers.ROSIE_2,
-        x: ROSIE_SPAWN_TILE.x,
-        y: ROSIE_SPAWN_TILE.y,
-        z: 0,
-        wanderRadius: 0,
-      });
-    }
+    if (isRopeTied(player) || !held(player, ROPE_ITEM_ID)) return;
+    player.getInventory().deleteNumber(ROPE_ITEM_ID, 1); player.performAnimation(new Animation(832));
+    advanceStage(player, STAGE_FOUND_CAVE); player.setAttribute(ROPE_TIED_ATTRIBUTE, true);
   }
 
   // ==========================================================================
@@ -401,10 +405,42 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     if (player.getInventory().getAmount(BRONZE_SCIMITAR_ITEM_ID) > 0) return;
     const weapon = player.getEquipment().get(Equipment.WEAPON_SLOT);
     if (weapon?.getId?.() === BRONZE_SCIMITAR_ITEM_ID) return;
-    if (itemOnGroundManager.getGroundItem(player.getUsername(), BRONZE_SCIMITAR_ITEM_ID, tile)) {
+    if (itemOnGroundManager.getGroundItem(player.getUsername(), BRONZE_SCIMITAR_ITEM_ID, tile, player.getPrivateArea())) {
       return;
     }
-    itemOnGroundManager.registerLocation(player, new Item(BRONZE_SCIMITAR_ITEM_ID, 1), tile);
+    itemOnGroundManager.registerLocation(player, new Item(BRONZE_SCIMITAR_ITEM_ID, 1), tile, player.getPrivateArea());
+  }
+
+  class QuestSourhogCombat extends CombatMethod {
+    constructor() { super(); this.spit = true; this.flight = 58; }
+    type() { return this.spit ? CombatType.RANGED : CombatType.MELEE; }
+    attackSpeed() { return 5; }
+    attackDistance() { return 7; }
+    start(npc, target) {
+      const distance = npc.calculateDistance(target);
+      // shortcut: four captured attacks do not establish the random style weight; replace it when a longer protected fight is available.
+      this.spit = distance > 1 || Misc.randomInclusive(0, 1) === 0;
+      npc.performAnimation(new Animation(this.spit ? SOURHOG_ATTACK.spit : SOURHOG_ATTACK.melee));
+      const at = npc.getLocation();
+      if (!this.spit) {
+        target.getPacketSender().sendAreaSound(SOURHOG_ATTACK.meleeSound, at.getX(), at.getY(), at.getZ(), 1, 0, 15);
+        return;
+      }
+      // shortcut: the capture has 58-cycle adjacent and 86-cycle four-tile flights; intermediate distances use the same linear travel rate until captured.
+      this.flight = Math.max(58, 46 + distance * 10);
+      Projectile.createProjectile(npc, target, SOURHOG_ATTACK.projectile, 57, this.flight, 43, 45)
+        .withAngle(16).withProgress(128).sendProjectile();
+      target.getPacketSender().sendAreaSound(SOURHOG_ATTACK.spitSound, at.getX(), at.getY(), at.getZ(), 1, 57, 15);
+    }
+    hits(npc, target) {
+      const hit = new PendingHit(npc, target, this, this.spit ? Math.max(1, Math.floor(this.flight / 30)) : 0);
+      if (this.spit && hit.isAccurate()) {
+        target.performGraphic(new Graphic(SOURHOG_ATTACK.impact, this.flight, 20));
+        const at = target.getLocation();
+        target.getPacketSender().sendAreaSound(SOURHOG_ATTACK.impactSound, at.getX(), at.getY(), at.getZ(), 1, this.flight, 15);
+      }
+      return [hit];
+    }
   }
 
   function ensureSourhog(player) {
@@ -415,11 +451,11 @@ module.exports = function registerPorcineOfInterestQuest(api) {
       x: SOURHOG_SPAWN_TILE.x,
       y: SOURHOG_SPAWN_TILE.y,
       z: 0,
-      wanderRadius: 4,
+      wanderRadius: 0,
       owner: player,
       ownerOnly: true,
     });
-    if (npc) bossByPlayer.set(player, npc);
+    if (npc) { enterCave(player).add(npc); bossByPlayer.set(player, npc); }
   }
 
   function removeSourhog(player) {
@@ -436,12 +472,13 @@ module.exports = function registerPorcineOfInterestQuest(api) {
       corpseByPlayer.delete(player);
     }
     const corpse = new GameObject(
-      DEAD_SOURHOG_OBJECT_ID,
-      new Location(location.x | 0, location.y | 0, location.z | 0),
+      DEAD_SOURHOG_MULTILOC_ID,
+      new Location((location.x ?? location.getX?.()) | 0, (location.y ?? location.getY?.()) | 0, (location.z ?? location.getZ?.()) | 0),
       10,
-      0,
-      null
+      1,
+      enterCave(player)
     );
+    player.setAttribute(CORPSE_ATTRIBUTE, [corpse.getLocation().getX(), corpse.getLocation().getY(), 0]);
     ObjectManager.register(corpse, true);
     corpseByPlayer.set(player, corpse);
   }
@@ -588,6 +625,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     player.setAttribute(BITS_ATTRIBUTE, 0);
     for (const varbit of VARBIT_BY_BIT.values()) player.getPacketSender().sendVarbit(varbit, 0);
     player.setAttribute(ROPE_TIED_ATTRIBUTE, null);
+    player.setAttribute(CORPSE_ATTRIBUTE, null);
     removeSourhog(player);
     const corpse = corpseByPlayer.get(player);
     if (corpse) {
@@ -610,7 +648,8 @@ module.exports = function registerPorcineOfInterestQuest(api) {
 
   /** Spria's "still hunting" line carries wiki [task monster]/[amount] blanks. */
   function handleDialogueLine(event) {
-    if (!SPRIA_NPC_IDS.has(event.npcId)) return;
+    if (!SPRIA_NPC_IDS.has(event.npcId) && event.npcId !== PIG_THING_NPC_ID) return;
+    if (caves.get(event.player)?.scene && event.step?.speaker === "Spria") event.speakerId = NpcIdentifiers.SPRIA_2;
     const text = String(event.text ?? "");
     if (!text.includes("[task monster]") && !text.includes("[amount]")) return;
     if (!hasSlayerTask(event.player)) return;
@@ -658,7 +697,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   }
 
   function collectBounty(player) {
-    if (quest.getStage(player) !== STAGE_HAS_FOOT) return;
+    if (quest.getStage(player) !== STAGE_HAS_FOOT || !held(player, SOURHOG_FOOT_ITEM_ID)) return;
     if (held(player, SOURHOG_FOOT_ITEM_ID)) {
       player.getInventory().deleteNumber(SOURHOG_FOOT_ITEM_ID, 1);
     }
@@ -667,7 +706,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   }
 
   function takeFoot(player) {
-    if (quest.getStage(player) !== STAGE_SOURHOG_DEAD || hasFoot(player)) return;
+    if (quest.getStage(player) < STAGE_SOURHOG_DEAD || quest.getStage(player) >= STAGE_BOUNTY_COLLECTED || hasFoot(player)) return;
     if (player.getInventory().isFull()) {
       player.sendMessage("You need some free inventory space for the foot.");
       return;
@@ -675,11 +714,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     player.getInventory().adds(SOURHOG_FOOT_ITEM_ID, 1);
     setBit(player, BIT_FOOTCUT);
     quest.setStage(player, STAGE_HAS_FOOT);
-    const corpse = corpseByPlayer.get(player);
-    if (corpse) {
-      ObjectManager.deregister(corpse, true);
-      corpseByPlayer.delete(player);
-    }
+
   }
 
   function climbBlockage(player, destination) {
@@ -713,25 +748,17 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     const { player, npcId, stepId, kind } = event;
     if (npcId !== SARAH_NPC_ID && !SPRIA_NPC_IDS.has(npcId) && npcId !== PIG_THING_NPC_ID) return;
     if (kind === "message") {
+      event.box = stepId === "Um0TAs" ? { items: [SOURHOG_FOOT_ITEM_ID] } : { statement: true };
       handleMessageAction(player, stepId);
       return;
     }
     switch (stepId) {
-      case "eShaqt":
-      case "GiFHeZ":
-      case "2jP1lw":
-      case "OnSUD-":
-      case "32r40G":
-      case "Rb2zDN":
-      case "EaeUfj": {
-        event.handled = true;
-        if (stepId === "EaeUfj") {
-          player.moveTo(new Location(SPRIA_HOUSE_TILE.x, SPRIA_HOUSE_TILE.y, 0));
-          advanceStage(player, STAGE_ATTACKED);
-        }
-        if (event.text) player.sendMessage(event.text);
-        return;
-      }
+      case "K_pMcL": event.handled = true; showSkeletonNote(player); return;
+      case "eShaqt": event.handled = true; pigAppears(player); return;
+      case "GiFHeZ": event.handled = true; pigAttack(player); return;
+      case "32r40G": event.handled = true; spriaArrives(player); return;
+      case "Rb2zDN": event.handled = true; spriaApproaches(player); return;
+      case "EaeUfj": event.handled = true; wakeInHouse(player); return;
       case "f8rW5G":
         event.handled = true;
         handleBlockageClimb(player, event.text);
@@ -739,7 +766,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
       case "LFxcPW":
         event.handled = true;
         giveGoggles(player);
-        advanceStage(player, STAGE_HAS_GOGGLES);
+        if (held(player, REINFORCED_GOGGLES_ITEM_ID)) advanceStage(player, STAGE_HAS_GOGGLES);
         return;
       case "nT99T5":
         event.handled = true;
@@ -793,11 +820,14 @@ module.exports = function registerPorcineOfInterestQuest(api) {
       startTranscript(api, player, SPRIA_DIALOGUE_NPC_ID, PAGE, "the-sourhog-attempting-to-enter-the-hole-without-reinforced-goggles-equipped");
       return;
     }
-    if (stage === STAGE_HAS_FOOT) {
+    if (stage === STAGE_HAS_FOOT && hasFoot(player)) {
       startTranscript(api, player, SPRIA_DIALOGUE_NPC_ID, PAGE, "the-sourhog-attempting-to-re-enter-the-sourhog-cave-with-a-sourhog-foot-in-the-player-s-inventory");
       return;
     }
+    if (stage < STAGE_COMPLETE) enterCave(player);
     player.moveTo(new Location(CAVE_LANDING_TILE.x, CAVE_LANDING_TILE.y, 0));
+    ensureScimitar(player); ensureSourhog(player);
+    restoreCorpse(player);
   }
 
   function climbOut(player) {
@@ -805,6 +835,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
       startTranscript(api, player, SPRIA_DIALOGUE_NPC_ID, PAGE, "the-sourhog-attempting-to-climb-the-rope-after-killing-the-sourhog-but-before-severing-its-foot");
       return;
     }
+    caves.get(player)?.leave(player, false);
     player.moveTo(new Location(HOLE_RETURN_TILE.x, HOLE_RETURN_TILE.y, 0));
   }
 
@@ -828,7 +859,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   }
 
   function startFootTranscript(player, action) {
-    if (quest.getStage(player) < STAGE_SOURHOG_DEAD) return;
+    if (quest.getStage(player) < STAGE_SOURHOG_DEAD || quest.getStage(player) >= STAGE_BOUNTY_COLLECTED) return;
     footAction.set(player, action);
     startTranscript(api, player, SARAH_NPC_ID, PAGE, "the-sourhog-taking-the-sourhog-s-foot");
     footAction.delete(player);
@@ -840,17 +871,15 @@ module.exports = function registerPorcineOfInterestQuest(api) {
    * the conversation, so it is dropped.
    */
   function startSkeletonCutscene(player) {
-    api.emitCustomEvent("npc-dialogue:start", {
-      player,
-      npcId: PIG_THING_NPC_ID,
-      variant: "inside-the-cave-investigating-the-skeleton",
-      select: (steps) => steps.filter((step) => step.type !== "unavailable"),
-    });
+    enterCave(player);
+    startTranscript(api, player, PIG_THING_NPC_ID, PAGE, SKELETON_VARIANT);
   }
 
   function handleObjectInteraction(event) {
-    const { player, objectId, clickType } = event;
-    if (clickType !== 1 || !QUEST_OBJECT_IDS.has(objectId)) return;
+    const { player, clickType } = event;
+    let objectId = QUEST_MULTILOC_IDS.get(event.objectId) ?? event.objectId;
+    if (objectId === STRANGE_HOLE_OBJECT_ID && isRopeTied(player)) objectId = STRANGE_HOLE_ROPE_OBJECT_ID;
+    if ((clickType !== 1 && !(clickType === 2 && objectId === STRANGE_HOLE_OBJECT_ID)) || !QUEST_OBJECT_IDS.has(objectId)) return;
     switch (objectId) {
       case NOTICE_BOARD_OBJECT_ID:
         event.handled = true;
@@ -924,7 +953,8 @@ module.exports = function registerPorcineOfInterestQuest(api) {
 
   /** Rope on either hole form, or any item on the dead sourhog. */
   function handleItemOnObject(event) {
-    const { player, itemId, objectId } = event;
+    const { player, itemId } = event;
+    const objectId = QUEST_MULTILOC_IDS.get(event.objectId) ?? event.objectId;
     if (
       (objectId === STRANGE_HOLE_OBJECT_ID || objectId === STRANGE_HOLE_ROPE_OBJECT_ID)
       && itemId === ROPE_ITEM_ID
@@ -1003,25 +1033,25 @@ module.exports = function registerPorcineOfInterestQuest(api) {
 
   function handleLogin({ player }) {
     refreshQuestList(player);
-    ensureBrokenSpawns();
-    installQuestObjects();
-    if (inCaveZone(player)) {
-      ensureScimitar(player);
-      ensureSourhog(player);
+    if (inCaveZone(player) && quest.getStage(player) >= STAGE_FOUND_CAVE && !quest.isComplete(player)) {
+      enterCave(player); ensureScimitar(player); ensureSourhog(player); restoreCorpse(player);
     }
   }
 
   function handleZoneEnter({ player }) {
-    ensureBrokenSpawns();
-    installQuestObjects();
-    if (inCaveZone(player)) {
-      ensureScimitar(player);
-      ensureSourhog(player);
+    if (inCaveZone(player) && quest.getStage(player) >= STAGE_FOUND_CAVE && !quest.isComplete(player)) {
+      enterCave(player); ensureScimitar(player); ensureSourhog(player); restoreCorpse(player);
     }
   }
 
+  function keepGogglesEquipped(event) {
+    if (event.item.getId() !== REINFORCED_GOGGLES_ITEM_ID || quest.getStage(event.player) !== STAGE_HAS_GOGGLES || !inCaveZone(event.player)) return;
+    event.allow = false;
+    event.player.sendMessage("You should leave your eye protection on while you're down here with that Sourhog.");
+  }
+
   function handlePlayerGone({ player }) {
-    if (player) removeSourhog(player);
+    if (player) { const cave = caves.get(player); if (cave) cave.leave(player, true); else removeSourhog(player); }
   }
 
   quest = registerQuest(api, {
@@ -1029,6 +1059,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     name: "A Porcine of Interest",
     varpId: VARP_PORCINE,
     varbitId: VARBIT_PORCINE_STAGE,
+    varpValue: liveStage,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
@@ -1041,6 +1072,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   });
 
   itemOnGroundManager = api.getItemOnGroundManager();
+  api.persistAttribute(CORPSE_ATTRIBUTE, null);
   api.persistAttribute(BITS_ATTRIBUTE);
   api.persistAttribute(ROPE_TIED_ATTRIBUTE);
 
@@ -1051,9 +1083,12 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:condition", handleConditionStep);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("interface:closed", noteClosed);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject, { noted: false });
+  api.registerNpcCombatMethodProvider([QUEST_SOURHOG_NPC_ID], QuestSourhogCombat, { singleton: false });
   api.onNpcDeath(handleNpcDeath);
+  api.onCanUnequip(keepGogglesEquipped);
   api.onZoneEnter(SURFACE_ZONE, handleZoneEnter);
   api.onZoneEnter(CAVE_ZONE, handleZoneEnter);
   api.onPlayerLogin(handleLogin);

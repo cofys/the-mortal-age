@@ -1,0 +1,1262 @@
+{
+  "dialogue": {
+    "Hello, what is this place?": {
+      "expression": 554
+    },
+    "Welcome to our dog shelter! I'm Talia and I run it alongside my husband, Chase.": {
+      "head": 16486,
+      "expression": 568
+    },
+    "You don't seem to have many dogs. Where are the rest?": {
+      "expression": 555
+    },
+    "I wish I could tell you they'd all been adopted... but I'd be lying to myself.": {
+      "head": 16486,
+      "expression": 611
+    },
+    "So they were never here to begin with?": {
+      "expression": 13951
+    },
+    "No.": {
+      "head": 16488,
+      "expression": 13958
+    },
+    "We're trying. The monks from the Monastery believe in our cause. That's why they granted us this land.": {
+      "head": 16486,
+      "expression": 611
+    },
+    "But belief, sadly, won't help keep us open.": {
+      "head": 16486,
+      "expression": 610
+    },
+    "What would you need to keep the shelter open?": {
+      "expression": 554
+    },
+    "We need more strays to rescue. If people know they can find a companion here, they'll come.": {
+      "head": 16486,
+      "expression": 13954
+    },
+    "Can't you go out to look for strays then?": {
+      "expression": 554
+    },
+    "We tried.": {
+      "head": 16486,
+      "expression": 610
+    },
+    "What happened?": {
+      "expression": 554
+    },
+    "It can take one of us hours just to coerce a puppy out of hiding.": {
+      "head": 16486,
+      "expression": 611
+    },
+    "And the shelter doesn't run itself.": {
+      "head": 16488,
+      "expression": 13958
+    },
+    "By the time we got back, we'd still need to clean the kennels, feed the dogs we do have, repair the fences...": {
+      "head": 16486,
+      "expression": 589
+    },
+    "Plus, there was no one to keep the cats and dogs separate.": {
+      "head": 16486,
+      "expression": 589
+    },
+    "I thought this was a dog shelter?": {
+      "expression": 554
+    },
+    "Not always.": {
+      "head": 16488,
+      "expression": 13956
+    },
+    "What we really need is someone worldly who can bring strays back for us.": {
+      "head": 16486,
+      "expression": 589
+    },
+    "Lucky for you, I enjoy wandering.": {
+      "expression": 567
+    },
+    "I can smell it.": {
+      "head": 16488,
+      "expression": 13956
+    },
+    "So you'll help us out?": {
+      "head": 16486,
+      "expression": 554
+    },
+    "I'd be happy to. Any ideas where I could start?": {
+      "expression": 567
+    },
+    "We've met so many people that might be able to...": {
+      "head": 16486,
+      "expression": 554
+    },
+    "Gertrude.": {
+      "head": 16488,
+      "expression": 588
+    },
+    "Yes, Gertrude! She was a great help with the cats.": {
+      "head": 16486,
+      "expression": 567
+    },
+    "Not much for dogs.": {
+      "head": 16488,
+      "expression": 13956
+    },
+    "Right, but I'm sure she can point you in the right direction. You'll find her house near the western entrance to Varrock.": {
+      "head": 16486,
+      "expression": 569
+    },
+    "Excellent idea. I've helped her out before. I can check in with her.": {
+      "expression": 589
+    },
+    "Wonderful! Good luck!": {
+      "head": 16486,
+      "expression": 567
+    },
+    "Hello there, Gertrude.": {
+      "expression": 588
+    },
+    "Hello, adventurer! How can I help you today?": {
+      "head": 3500,
+      "expression": 567
+    },
+    "I've come to ask a favour, if you don't mind?": {
+      "expression": 554
+    },
+    "Of course, anything for the hero who returned Fluffs to me.": {
+      "head": 3500,
+      "expression": 568
+    },
+    "Talia sent me to you. She said you helped them with their dog shelter?": {
+      "expression": 589
+    },
+    "It's just a dog shelter now? I don't blame them... They had trouble keeping the cats and dogs separate. How have they been getting on?": {
+      "head": 3500,
+      "expression": 556
+    },
+    "Not well. They barely have any dogs in for adoption.": {
+      "expression": 610
+    },
+    "Oh dear... I suppose that's why you're here?": {
+      "head": 3500,
+      "expression": 13980
+    },
+    "Precisely! They thought you might know of some dogs in the city I could rescue.": {
+      "expression": 13954
+    },
+    "Well, it would be nice for someone to do something about those mangy stray dogs you see in Varrock.": {
+      "head": 3500,
+      "expression": 589
+    },
+    "I wouldn't call them mangy... They just need some love.": {
+      "expression": 611
+    },
+    "They're covered in fleas and they're everywhere. They always beg for food when I walk through the city.": {
+      "head": 3500,
+      "expression": 13956
+    },
+    "Sounds like the kind of rescue Talia would be looking for...": {
+      "expression": 13980
+    },
+    "I'd be happy to see them go. I always see them near the west entrance to the city.": {
+      "head": 3500,
+      "expression": 589
+    },
+    "I'll start my search there then. You've been a great help!": {
+      "expression": 589
+    },
+    "Woof woof!": {
+      "head": 16498,
+      "expression": 588
+    },
+    "Easy girl! Calm down!": {
+      "head": 16491,
+      "expression": 571
+    },
+    "What's going on here?": {
+      "expression": 554
+    },
+    "I have no idea. She just started barking at me.": {
+      "head": 16491,
+      "expression": 596
+    },
+    "Bark bark bark!": {
+      "head": 16504,
+      "expression": 13956
+    },
+    "Something has her upset. Has she ever been like this before?": {
+      "expression": 555
+    },
+    "No, normally she's very friendly, although we haven't seen her for a few weeks...": {
+      "head": 16491,
+      "expression": 597
+    },
+    "Whatever it is, she is being very persistent.": {
+      "expression": 554
+    },
+    "Maybe she wants one of us to follow her. I can't leave my post. Could you go?": {
+      "head": 16491,
+      "expression": 555
+    },
+    "Arf arf!": {
+      "head": 16530,
+      "expression": 567
+    },
+    "Hmm... This is the kind of situation Talia would have me intervene with...": {
+      "expression": 555
+    },
+    "Of course I can! Where did you want to go, girl?": {
+      "expression": 554
+    },
+    "You'd better be quick! She's already on the move.": {
+      "head": 16491,
+      "expression": 571
+    },
+    "I think I'm starting to understand what's got you so upset.": {
+      "expression": 589
+    },
+    "Whimper.": {
+      "head": 16497,
+      "expression": 588
+    },
+    "It appears some puppies were playing here at one point...": {
+      "expression": 555
+    },
+    "Mrrph...": {
+      "head": 16497,
+      "expression": 588
+    },
+    "But they're gone now and you don't seem too happy about it.": {
+      "expression": 555
+    },
+    "Woof.": {
+      "head": 16497,
+      "expression": 588
+    },
+    "What's wrong? Have you caught their scent?": {
+      "expression": 554
+    },
+    "Grrrrr...": {
+      "head": 16530,
+      "expression": 614
+    },
+    "What is it, girl?": {
+      "expression": 554
+    },
+    "Bark bark.": {
+      "head": 16500,
+      "expression": 610
+    },
+    "Hey, is that one of your puppies?": {
+      "expression": 554
+    },
+    "Uh oh! Big dog!": {
+      "head": 16534,
+      "expression": 571
+    },
+    "A goblin?!": {
+      "expression": 571
+    },
+    "Picklenose think Picklenose go now.": {
+      "head": 16534,
+      "expression": 571
+    },
+    "Hang on, get back here!": {
+      "expression": 614
+    },
+    "Yes of course, let's get you out of danger first, little guy.": {
+      "expression": 568
+    },
+    "We arrived at the right time.": {
+      "expression": 567
+    },
+    "Arf!": {
+      "head": 16530,
+      "expression": 13958
+    },
+    "Are there any more puppies we need to find?": {
+      "expression": 588
+    },
+    "Let's go find them then! Follow me!": {
+      "expression": 588
+    },
+    "What mean Picklenose lose other dog?": {
+      "head": 16522,
+      "expression": 614
+    },
+    "Picklenose jumped by big dog.": {
+      "head": 16521,
+      "side": "right",
+      "expression": 596
+    },
+    "How big?": {
+      "head": 16522,
+      "expression": 554
+    },
+    "Bigger than Nosorog.": {
+      "head": 16521,
+      "side": "right",
+      "expression": 571
+    },
+    "Ooh, big big! Toetaller understand now.": {
+      "head": 16522,
+      "expression": 588
+    },
+    "Bark bark!": {
+      "head": 16505,
+      "expression": 614
+    },
+    "Ahem!": {
+      "expression": 614
+    },
+    "Hello, human. What you want?": {
+      "head": 16522,
+      "expression": 554
+    },
+    "There! Big dog!": {
+      "head": 16521,
+      "expression": 596
+    },
+    "This dog?": {
+      "head": 16522,
+      "expression": 575
+    },
+    "Woof!": {
+      "head": 16530,
+      "expression": 567
+    },
+    "Yes.": {
+      "head": 16521,
+      "expression": 596
+    },
+    "It not big as Nosorog... Picklenose lie.": {
+      "head": 16522,
+      "expression": 575
+    },
+    "It bigger before.": {
+      "head": 16521,
+      "side": "right",
+      "expression": 588
+    },
+    "Toetaller doubt that.": {
+      "head": 16522,
+      "expression": 588
+    },
+    "Picklenose not lie! Dog bigger before.": {
+      "head": 16521,
+      "side": "right",
+      "expression": 614
+    },
+    "Excuse me!": {
+      "expression": 13965
+    },
+    "Human rude. Goblins busy. Speak quick.": {
+      "head": 16522,
+      "expression": 13956
+    },
+    "Why did you steal these puppies? You need to give them back.": {
+      "expression": 615
+    },
+    "Sorry, human. We have big plan. Keep village safe.": {
+      "head": 16522,
+      "expression": 588
+    },
+    "Puppies will keep your village safe?": {
+      "expression": 554
+    },
+    "Silly human.": {
+      "head": 16521,
+      "expression": 605
+    },
+    "Very silly. Puppy too weak. We wait 'till puppy big, strong.": {
+      "head": 16522,
+      "expression": 606
+    },
+    "Big, strong, scary dog keep village safe.": {
+      "head": 16521,
+      "expression": 588
+    },
+    "You're just going to wait here till the puppy is fully grown?": {
+      "expression": 576
+    },
+    "Yes. Not take long Toetaller think.": {
+      "head": 16522,
+      "expression": 588
+    },
+    "I'm afraid puppies don't work like that.": {
+      "expression": 605
+    },
+    "What human mean?": {
+      "head": 16521,
+      "expression": 575
+    },
+    "You know you have to feed dogs to keep them alive?": {
+      "expression": 588
+    },
+    "No...": {
+      "head": 16522,
+      "expression": 575
+    },
+    "They also have a lot of energy they need to burn off.": {
+      "expression": 588
+    },
+    "How do that?": {
+      "head": 16521,
+      "expression": 554
+    },
+    "You need to play with them, take them for walks...": {
+      "expression": 588
+    },
+    "That sound boring.": {
+      "head": 16521,
+      "expression": 562
+    },
+    "I wouldn't expect a dog to sit and guard your village all day either.": {
+      "expression": 589
+    },
+    "Why not?": {
+      "head": 16522,
+      "expression": 554
+    },
+    "It's a dog. It needs attention and caring for. It won't just sit still for hours.": {
+      "expression": 589
+    },
+    "Hmm...": {
+      "head": 16522,
+      "expression": 13958
+    },
+    "Maybe a guard dog isn't the best idea?": {
+      "expression": 554
+    },
+    "No, Toetaller still want guard dog. We make this one guard dog without all that.": {
+      "head": 16522,
+      "expression": 589
+    },
+    "If you don't feed it, it will die.": {
+      "expression": 614
+    },
+    "Toetaller don't think so.": {
+      "head": 16522,
+      "expression": 588
+    },
+    "Picklenose have idea.": {
+      "head": 16521,
+      "expression": 567
+    },
+    "Oh, here we go...": {
+      "expression": 13956
+    },
+    "Human find goblins dog that no need all that... extra stuff, then goblins give human this useless dog.": {
+      "head": 16521,
+      "expression": 13954
+    },
+    "I don't think a dog like that exists...": {
+      "expression": 13954
+    },
+    "Then we do goblin plan.": {
+      "head": 16522,
+      "expression": 588
+    },
+    "Wait, wait! Could I make you something?": {
+      "expression": 554
+    },
+    "Picklenose no know, can you?": {
+      "head": 16521,
+      "expression": 575
+    },
+    "Maybe I could make something with some fur...?": {
+      "expression": 554
+    },
+    "Remember dog need be big... huge!": {
+      "head": 16522,
+      "expression": 567
+    },
+    "Yes, huge and scary. Defend village from outsiders.": {
+      "head": 16521,
+      "expression": 567
+    },
+    "... Then I suppose I'd need to stuff it with something, maybe grain...?": {
+      "expression": 555
+    },
+    "Dog intimidate invaders, save goblin lives.": {
+      "head": 16522,
+      "expression": 567
+    },
+    "Human even listen to goblins now?": {
+      "head": 16521,
+      "side": "right",
+      "expression": 554
+    },
+    "More like Picklenose not worth listening to.": {
+      "head": 16522,
+      "expression": 588
+    },
+    "... Then a needle and thread to put it together...": {
+      "expression": 554
+    },
+    "Okay, I think I can make something better for you.": {
+      "expression": 588
+    },
+    "Human be quick. Goblins low attention span.": {
+      "head": 16522,
+      "expression": 588
+    },
+    "Human has returned.": {
+      "head": 16522,
+      "expression": 567
+    },
+    "Finally. Picklenose bored waiting.": {
+      "head": 16521,
+      "expression": 562
+    },
+    "Toetaller no see huge dog?": {
+      "head": 16522,
+      "expression": 575
+    },
+    "Human own idea fail?": {
+      "head": 16521,
+      "expression": 605
+    },
+    "No no, I have them right here.": {
+      "expression": 588
+    },
+    "So, what do you think?": {
+      "expression": 554
+    },
+    "That's big dog...": {
+      "head": 16521,
+      "expression": 571
+    },
+    "Village never attacked again with this dog guarding.": {
+      "head": 16522,
+      "expression": 571
+    },
+    "Toetaller accept trade, no takesies backsies. Human promise.": {
+      "head": 16522,
+      "expression": 13954
+    },
+    "I promise.": {
+      "expression": 13956
+    },
+    "Good. Toetaller no want human show up to village and cry in front of Generals.": {
+      "head": 16522,
+      "expression": 589
+    },
+    "You have my word. Here...": {
+      "expression": 13956
+    },
+    "...": {
+      "head": 16522,
+      "expression": 13959
+    },
+    "Are you two okay?": {
+      "expression": 554
+    },
+    "Goblins amazed at size of big dog.": {
+      "head": 16521,
+      "expression": 13958
+    },
+    "Very big.": {
+      "head": 16521,
+      "expression": 13958
+    },
+    "Toetaller have idea.": {
+      "head": 16522,
+      "expression": 13954
+    },
+    "General Toetaller and General Picklenose have good ring to them.": {
+      "head": 16522,
+      "expression": 13954
+    },
+    "Nobody stop us with big dog on our side.": {
+      "head": 16521,
+      "expression": 588
+    },
+    "Human, you do good. Goblins return to village heroes.": {
+      "head": 16522,
+      "expression": 567
+    },
+    "You allowed visit village, see dog if want.": {
+      "head": 16521,
+      "expression": 567
+    },
+    "Oh, that's very kind of you. Thank you.": {
+      "expression": 567
+    },
+    "They're finally gone. Come with us, little guy. We'll keep you safe.": {
+      "expression": 568
+    },
+    "Great! That's two puppies saved. Is that all of them?": {
+      "expression": 554
+    },
+    "I'm inclined to believe that's a no. Any clue where they could be?": {
+      "expression": 555
+    },
+    "Look what we got 'ere.": {
+      "head": 16535,
+      "expression": 592
+    },
+    "A little mangy mutt. Can we keep 'em?": {
+      "head": 16536,
+      "side": "right",
+      "expression": 592
+    },
+    "For now, but don't get too attached. Heard tale some folk down in Morytania buy 'em when they're fully grown.": {
+      "head": 16535,
+      "expression": 594
+    },
+    "What do they use 'em for?": {
+      "head": 16536,
+      "side": "right",
+      "expression": 592
+    },
+    "Not for us to know. All I care about is the runes they'll give us.": {
+      "head": 16535,
+      "expression": 13963
+    },
+    "Runes? We can sell them for a good bit of coin.": {
+      "head": 16536,
+      "side": "right",
+      "expression": 13963
+    },
+    "Oi, leave that puppy alone!": {
+      "expression": 614
+    },
+    "Grrr!": {
+      "head": 16505,
+      "expression": 614
+    },
+    "Who are you?": {
+      "head": 16535,
+      "expression": 571
+    },
+    "We're here to save that puppy.": {
+      "expression": 614
+    },
+    "We found 'em first. They're ours.": {
+      "head": 16536,
+      "expression": 614
+    },
+    "Not on my watch.": {
+      "expression": 614
+    },
+    "You'll 'av to take 'em from us.": {
+      "head": 16535,
+      "expression": 13963
+    },
+    "Are you okay, little guy? Did they hurt you?": {
+      "expression": 567
+    },
+    "Looks like you're all in one piece. Let's get you somewhere safe.": {
+      "expression": 568
+    },
+    "Is that all of them?": {
+      "expression": 554
+    },
+    "That was a close call. That's the second time we got lucky and arrived just in time.": {
+      "expression": 589
+    },
+    "We can't let something like that happen again. I can take you and your puppies somewhere safe, if you'd like?": {
+      "expression": 556
+    },
+    "Mmm?": {
+      "head": 16502,
+      "expression": 554
+    },
+    "It's not far from here. Follow me.": {
+      "expression": 588
+    },
+    "You seem enthusiastic enough. Let's head out.": {
+      "expression": 588
+    },
+    "Talia, Chase! I have returned.": {
+      "expression": 588
+    },
+    "Adventurer! Who's this beautiful girl you've got with you?": {
+      "head": 16537,
+      "expression": 568
+    },
+    "I found her in Varrock. She's one of the stray dogs.": {
+      "expression": 588
+    },
+    "Poor girl.": {
+      "head": 16538,
+      "expression": 588
+    },
+    "We've been on quite the adventure together.": {
+      "expression": 588
+    },
+    "Really? What happened?": {
+      "head": 16537,
+      "expression": 554
+    },
+    "When I found her, she was distraught. Her puppies had been stolen.": {
+      "expression": 611
+    },
+    "Who would do such a thing?": {
+      "head": 16538,
+      "expression": 614
+    },
+    "Goblins.": {
+      "expression": 13956
+    },
+    "Fair enough.": {
+      "head": 16538,
+      "expression": 588
+    },
+    "But we managed to save them all!": {
+      "expression": 588
+    },
+    "Oh my goodness!": {
+      "head": 16537,
+      "expression": 571
+    },
+    "Quite the selection.": {
+      "head": 16538,
+      "expression": 13968
+    },
+    "Cute, aren't they.": {
+      "expression": 567
+    },
+    "Oh Chase, this is exactly what we need to keep the shelter going!": {
+      "head": 16537,
+      "expression": 568
+    },
+    "Are you sure they want to stay with us?": {
+      "head": 16537,
+      "expression": 554
+    },
+    "I'm pretty sure that means yes at this point.": {
+      "expression": 588
+    },
+    "Wonderful, you will all be happy and safe here!": {
+      "head": 16537,
+      "expression": 567
+    },
+    "Arf arf.": {
+      "head": 16530,
+      "expression": 567
+    },
+    "What's the matter, girl?": {
+      "expression": 571
+    },
+    "She's not staying.": {
+      "head": 16538,
+      "expression": 13954
+    },
+    "I don't think she likes it here...": {
+      "head": 16537,
+      "expression": 610
+    },
+    "It's okay girl, you'll be safe here and well cared for.": {
+      "head": 16537,
+      "expression": 588
+    },
+    "Whine.": {
+      "head": 16530,
+      "expression": 588
+    },
+    "I don't think you'll be able to convince her, she's quite stubborn.": {
+      "expression": 589
+    },
+    "I like her already.": {
+      "head": 16538,
+      "expression": 13954
+    },
+    "What kind of shelter would we be if we let a dog stay as a stray?": {
+      "head": 16537,
+      "expression": 611
+    },
+    "I might be able to help with that.": {
+      "head": 16539,
+      "expression": 588
+    },
+    "I'm one of the Varrock guards. We've grown fond of this old girl.": {
+      "head": 16539,
+      "expression": 589
+    },
+    "I'd say she's happy to see you.": {
+      "expression": 588
+    },
+    "Would you be willing to adopt her for us?": {
+      "head": 16537,
+      "expression": 554
+    },
+    "She's proven her bravery, we'd be delighted to bring her into our ranks.": {
+      "head": 16539,
+      "expression": 589
+    },
+    "Thank you! We'll get you set up with some things for her, free of charge!": {
+      "head": 16537,
+      "expression": 568
+    },
+    "Free?": {
+      "head": 16538,
+      "expression": 13956
+    },
+    "It's the least we can do.": {
+      "head": 16537,
+      "expression": 567
+    },
+    "Thank you, adventurer, this is just what the shelter needed!": {
+      "head": 16537,
+      "expression": 568
+    },
+    "I do my best.": {
+      "expression": 13968
+    },
+    "If you would ever like to adopt one of these puppies yourself, just talk to Chase and he'll help you out.": {
+      "head": 16537,
+      "expression": 589
+    },
+    "For a small fee.": {
+      "head": 16538,
+      "expression": 13956
+    },
+    "After all I've done?": {
+      "expression": 1182
+    },
+    "Business is business.": {
+      "head": 16538,
+      "expression": 13956
+    },
+    "Thank you once again, adventurer. You've really given us hope to keep going.": {
+      "head": 16486,
+      "expression": 568
+    },
+    "Happy to help!": {
+      "expression": 567
+    },
+    "Wonderful, because our work has just begun!": {
+      "head": 16486,
+      "expression": 567
+    },
+    "Huh?": {
+      "expression": 575
+    },
+    "Word has spread of our shelter and we've received letters about stray dogs across the world.": {
+      "head": 16486,
+      "expression": 568
+    },
+    "Chase has been keeping a log of all the reports. If you speak with him, he'll show you.": {
+      "head": 16486,
+      "expression": 568
+    },
+    "What's in it for me?": {
+      "expression": 554
+    },
+    "Well, you'll be able to adopt any puppies you bring back.": {
+      "head": 16486,
+      "expression": 589
+    }
+  },
+  "routes": {
+    "den": [
+      [
+        3180,
+        3423
+      ],
+      [
+        3180,
+        3421
+      ],
+      [
+        3180,
+        3419
+      ],
+      [
+        3182,
+        3417
+      ],
+      [
+        3184,
+        3415
+      ],
+      [
+        3186,
+        3415
+      ],
+      [
+        3188,
+        3415
+      ],
+      [
+        3190,
+        3415
+      ],
+      [
+        3191,
+        3415
+      ],
+      [
+        3192,
+        3413
+      ],
+      [
+        3194,
+        3414
+      ],
+      [
+        3196,
+        3414
+      ],
+      [
+        3197,
+        3414
+      ]
+    ],
+    "cook": [
+      [
+        3198,
+        3415
+      ],
+      [
+        3198,
+        3417
+      ],
+      [
+        3198,
+        3419
+      ],
+      [
+        3198,
+        3421
+      ],
+      [
+        3198,
+        3423
+      ],
+      [
+        3198,
+        3425
+      ],
+      [
+        3198,
+        3427
+      ],
+      [
+        3197,
+        3428
+      ],
+      [
+        3195,
+        3428
+      ],
+      [
+        3193,
+        3428
+      ],
+      [
+        3191,
+        3428
+      ],
+      [
+        3189,
+        3429
+      ],
+      [
+        3188,
+        3430
+      ],
+      [
+        3186,
+        3430
+      ],
+      [
+        3184,
+        3430
+      ],
+      [
+        3182,
+        3432
+      ],
+      [
+        3182,
+        3434
+      ],
+      [
+        3182,
+        3436
+      ],
+      [
+        3182,
+        3438
+      ],
+      [
+        3182,
+        3440
+      ],
+      [
+        3182,
+        3442
+      ],
+      [
+        3182,
+        3444
+      ],
+      [
+        3182,
+        3446
+      ],
+      [
+        3182,
+        3448
+      ],
+      [
+        3180,
+        3449
+      ],
+      [
+        3178,
+        3451
+      ],
+      [
+        3178,
+        3453
+      ],
+      [
+        3176,
+        3455
+      ],
+      [
+        3174,
+        3457
+      ],
+      [
+        3172,
+        3457
+      ],
+      [
+        3170,
+        3458
+      ],
+      [
+        3168,
+        3460
+      ],
+      [
+        3166,
+        3462
+      ],
+      [
+        3165,
+        3463
+      ],
+      [
+        3163,
+        3462
+      ],
+      [
+        3161,
+        3462
+      ],
+      [
+        3159,
+        3462
+      ],
+      [
+        3158,
+        3461
+      ],
+      [
+        3156,
+        3460
+      ],
+      [
+        3154,
+        3460
+      ],
+      [
+        3152,
+        3459
+      ],
+      [
+        3151,
+        3458
+      ],
+      [
+        3150,
+        3456
+      ],
+      [
+        3148,
+        3456
+      ]
+    ],
+    "third": [
+      [
+        3131,
+        3437
+      ],
+      [
+        3131,
+        3439
+      ],
+      [
+        3129,
+        3441
+      ],
+      [
+        3127,
+        3441
+      ],
+      [
+        3125,
+        3443
+      ],
+      [
+        3124,
+        3444
+      ],
+      [
+        3122,
+        3444
+      ],
+      [
+        3120,
+        3446
+      ],
+      [
+        3119,
+        3447
+      ],
+      [
+        3119,
+        3449
+      ],
+      [
+        3117,
+        3449
+      ],
+      [
+        3115,
+        3448
+      ],
+      [
+        3117,
+        3449
+      ],
+      [
+        3119,
+        3449
+      ],
+      [
+        3120,
+        3447
+      ],
+      [
+        3122,
+        3447
+      ],
+      [
+        3124,
+        3447
+      ],
+      [
+        3126,
+        3447
+      ],
+      [
+        3128,
+        3447
+      ],
+      [
+        3130,
+        3447
+      ],
+      [
+        3132,
+        3447
+      ],
+      [
+        3134,
+        3446
+      ],
+      [
+        3136,
+        3444
+      ],
+      [
+        3138,
+        3444
+      ],
+      [
+        3140,
+        3443
+      ],
+      [
+        3142,
+        3443
+      ],
+      [
+        3143,
+        3442
+      ],
+      [
+        3141,
+        3442
+      ],
+      [
+        3139,
+        3443
+      ],
+      [
+        3137,
+        3443
+      ],
+      [
+        3136,
+        3444
+      ],
+      [
+        3136,
+        3446
+      ],
+      [
+        3136,
+        3448
+      ],
+      [
+        3136,
+        3450
+      ],
+      [
+        3136,
+        3452
+      ],
+      [
+        3136,
+        3454
+      ],
+      [
+        3136,
+        3456
+      ],
+      [
+        3136,
+        3458
+      ],
+      [
+        3136,
+        3460
+      ],
+      [
+        3136,
+        3462
+      ],
+      [
+        3136,
+        3464
+      ],
+      [
+        3136,
+        3466
+      ],
+      [
+        3136,
+        3467
+      ]
+    ]
+  }
+}

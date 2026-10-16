@@ -22,7 +22,6 @@ const PVP_DIALOGUE_OPTION_BUTTON_IDS = new Set([
 const ATTR_PVP_TELEPORT_PAGE = "teleports:pvp_page";
 const ATTR_BOSS_TELEPORT_PAGE = "teleports:boss_page";
 const ATTR_COUNT_DRAYNOR_PENDING_INSTANCE = "count_draynor:pending_instance";
-const ATTR_ELVARG_PENDING_INSTANCE = "elvarg:pending_instance";
 const DIALOGUE_OPTION_BUTTON_IDS = [2494, 2495, 2496, 2497, 2498, 2482, 2483, 2484, 2485];
 
 // Approximate Chaos Temple surface location matching the current bot hotspot anchor.
@@ -33,8 +32,8 @@ const COUNT_DRAYNOR_TELEPORT_DESTINATION = new Location(3077, 9772, 0);
 // the path reaches him over the decaying trunk at 3682,3716, so land just north
 // of it: walkable, connected and beside the trunk's Climb side.
 const DERANGED_ARCHAEOLOGIST_TELEPORT_DESTINATION = new Location(3682, 3718, 0);
-// Elvarg lives in the Crandor/Karamja dungeon lair (OSRS).
-const ELVARG_TELEPORT_DESTINATION = new Location(2852, 9637, 0);
+// Land outside the low wall; climbing it starts the private Elvarg encounter.
+const ELVARG_TELEPORT_DESTINATION = new Location(2845, 9636, 0);
 // Vorkath sleeps in the centre of Ungael's crater (2269, 4062); land outside by
 // the ice-chunks wall and climb over.
 const VORKATH_TELEPORT_DESTINATION = new Location(2272, 4052, 0);
@@ -67,10 +66,6 @@ function setBossInstancePending(player, destination) {
   player.setAttribute(
     ATTR_COUNT_DRAYNOR_PENDING_INSTANCE,
     destinationMatches(destination, COUNT_DRAYNOR_TELEPORT_DESTINATION) === true
-  );
-  player.setAttribute(
-    ATTR_ELVARG_PENDING_INSTANCE,
-    destinationMatches(destination, ELVARG_TELEPORT_DESTINATION) === true
   );
 }
 

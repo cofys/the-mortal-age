@@ -78,6 +78,7 @@ function onLogin(event) {
     // Drawn on the first tick, once the gameframe and the character design are up.
     player.setAttribute(T.PROGRESS_ATTRIBUTE, STEP.PAST_EXPERIENCE);
     player.moveTo(new core.Location(TUTORIAL_SPAWN.x, TUTORIAL_SPAWN.y, TUTORIAL_SPAWN.z));
+    pluginApi.emitCustomEvent("tutorial:started", { player });
   } else if (!T.isActive(player)) {
     // Done with the island (or from before it existed): the quest list reads the varp.
     player.getPacketSender().sendConfig(T.data.varps.progress, STEP.COMPLETED);

@@ -69,7 +69,8 @@ addEventListener("message", function connect(event) {
     if (response.status === 204) return;
     if (response.status === 404 || response.status === 410) {
       closed = true;
-      port.postMessage({ type: "close" });
+      port.postMessage({ type: "close", message: response.headers.get("X-Close-Reason") ||
+        (response.status === 404 ? "game session not found" : "game session closed") });
       return;
     }
     if (!response.ok) throw new Error("WebContainer HTTP poll failed: " + response.status);
@@ -133,6 +134,7 @@ export class BrowserHostHttpChannel implements BinaryChannel {
   private pollTimeout?: NodeJS.Timeout;
   private abandonTimeout?: NodeJS.Timeout;
   private closed = false;
+  private closeReason = "";
   /** The last batch sent to a poll, kept until the next poll acks it. */
   private unacked?: Buffer;
   private sentSeq = 0;
@@ -171,6 +173,7 @@ export class BrowserHostHttpChannel implements BinaryChannel {
     if (ack === this.sentSeq) this.unacked = undefined;
     if (this.isDrained()) {
       response.statusCode = 410;
+      response.setHeader("X-Close-Reason", this.closeReason);
       response.end();
       return;
     }
@@ -181,7 +184,7 @@ export class BrowserHostHttpChannel implements BinaryChannel {
       if (response.writableEnded || this.poll !== response) return;
       clearTimeout(this.pollTimeout);
       this.poll = undefined;
-      this.abandonTimeout = setTimeout(() => this.close(), ABANDON_MS);
+      this.abandonTimeout = setTimeout(() => this.close(1001, `no poll for ${ABANDON_MS / 1000}s`), ABANDON_MS);
       this.abandonTimeout.unref?.();
     });
     this.pollTimeout = setTimeout(() => this.finishPoll(204), POLL_TIMEOUT_MS);
@@ -192,6 +195,9 @@ export class BrowserHostHttpChannel implements BinaryChannel {
   public close(code?: number, reason?: string): void {
     if (this.closed) return;
     this.closed = true;
+    // Header-safe, as the page reads it from the poll that ends the session.
+    this.closeReason = (reason || "closed by the game server").replace(/[^\x20-\x7e]/g, "?");
+    console.info(`[browser-host] game session closed: ${this.closeReason}`);
     clearTimeout(this.abandonTimeout);
     if (this.queued.length > 0) this.flushPoll();
     else this.finishPoll(410);
@@ -242,6 +248,7 @@ export class BrowserHostHttpChannel implements BinaryChannel {
     this.poll = undefined;
     if (!response || response.writableEnded) return;
     response.statusCode = status;
+    if (status === 410) response.setHeader("X-Close-Reason", this.closeReason);
     if (body) {
       response.setHeader("Content-Type", "application/octet-stream");
       response.setHeader("Content-Length", body.length);
@@ -252,7 +259,7 @@ export class BrowserHostHttpChannel implements BinaryChannel {
 
   private reject(error: Error): void {
     for (const handler of this.errorHandlers) handler(error);
-    this.close();
+    this.close(1009, error.message);
   }
 }
 
@@ -292,15 +299,15 @@ export class BrowserHostHttpBridge {
       return true;
     }
     if (request.method === "POST" && match[2] === "send") {
-      void this.receive(request, response, channel, Number(match[3])).catch(() => {
-        channel.close();
+      void this.receive(request, response, channel, Number(match[3])).catch((error) => {
+        channel.close(1011, `send failed: ${(error as Error).message}`);
         if (!response.headersSent) response.statusCode = 400;
         if (!response.writableEnded) response.end();
       });
       return true;
     }
     if (request.method === "DELETE" && !match[2]) {
-      channel.close();
+      channel.close(1000, "browser host closed the session");
       this.sessions.delete(match[1]);
       response.statusCode = 204;
       response.end();
@@ -325,7 +332,7 @@ export class BrowserHostHttpBridge {
       if (bytes > MAX_GAME_MESSAGE_BYTES) {
         response.statusCode = 413;
         response.end();
-        channel.close();
+        channel.close(1009, `message over ${MAX_GAME_MESSAGE_BYTES} bytes`);
         return;
       }
       chunks.push(buffer);

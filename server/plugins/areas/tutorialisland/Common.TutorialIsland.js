@@ -84,8 +84,11 @@ function onStep(listener) {
 }
 
 function setProgress(player, value) {
+  const finishing = (value | 0) === STEP.COMPLETED && isActive(player);
   player.setAttribute(PROGRESS_ATTRIBUTE, value | 0);
   for (const listener of stepListeners) listener(player, value | 0);
+  // Other plugins undo what they set up for the island (the spellbook's level filter).
+  if (finishing) api.emitCustomEvent("tutorial:completed", { player });
 }
 
 /** Moves on to `value` unless the player is already there or further. */

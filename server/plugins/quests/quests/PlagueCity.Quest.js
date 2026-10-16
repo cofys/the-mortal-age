@@ -271,7 +271,8 @@ module.exports = function registerPlagueCityQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (![ALRENA_NPC_IDS, JETHICK_NPC_IDS, CLERK_NPC_IDS, BRAVEK_NPC_IDS, ELENA_NPC_IDS].some(ids => ids.has(npcId)) && ![EDMOND_NPC_ID, TED_REHNISON_NPC_ID, MARTHA_REHNISON_NPC_ID, MILLI_REHNISON_NPC_ID].includes(npcId)) return null;
     const value = String(text).toLowerCase();
     const inventory = player.getInventory();
     if (value.includes("already has the gas mask")) return held(player, GAS_MASK_ITEM_ID);

@@ -30,11 +30,23 @@ export function interpolateActorHeight(h00: number, h10: number, h01: number, h1
 }
 
 export function sampleBridgeHeightForWorldTile<T extends MapSquare>(
-    mapManager: MapManager<T>,
-    worldX: number,
-    worldY: number,
-    basePlane: number,
+    mapManager: MapManager<T>, worldX: number, worldY: number, basePlane: number,
     strategy: BridgePlaneStrategy = BridgePlaneStrategy.RENDER,
+): BridgeHeightSample {
+    return sampleHeightForWorldTile(mapManager, worldX, worldY, basePlane, strategy, false);
+}
+
+/** Scripted cameras use getTileHeight's integer bilinear interpolation, not actor triangles. */
+export function sampleCameraHeightForWorldTile<T extends MapSquare>(
+    mapManager: MapManager<T>, worldX: number, worldY: number, basePlane: number,
+): number | undefined {
+    const sample = sampleHeightForWorldTile(mapManager, worldX, worldY, basePlane, BridgePlaneStrategy.RENDER, true);
+    return sample.valid ? sample.height : undefined;
+}
+
+function sampleHeightForWorldTile<T extends MapSquare>(
+    mapManager: MapManager<T>, worldX: number, worldY: number, basePlane: number,
+    strategy: BridgePlaneStrategy, cameraBilinear: boolean,
 ): BridgeHeightSample {
     const map = mapManager.getMapForWorldTile(worldX, worldY) as HeightMapBridgeMapSquare | undefined;
     const result: BridgeHeightSample = {
@@ -79,7 +91,13 @@ export function sampleBridgeHeightForWorldTile<T extends MapSquare>(
     const h01 = ((data[base + iz1 * size + ix] || 0) * Scene.UNITS_TILE_HEIGHT_BASIS) | 0;
     const h11 = ((data[base + iz1 * size + ix1] || 0) * Scene.UNITS_TILE_HEIGHT_BASIS) | 0;
 
-    const hWorld = interpolateActorHeight(h00, h10, h01, h11, offX, offY);
+    let hWorld: number;
+    if (cameraBilinear) {
+        const fineX = Math.floor(offX * 128), fineY = Math.floor(offY * 128);
+        const row0 = (h00 * (128 - fineX) + h10 * fineX) >> 7;
+        const row1 = (h01 * (128 - fineX) + h11 * fineX) >> 7;
+        hWorld = (row0 * (128 - fineY) + row1 * fineY) >> 7;
+    } else hWorld = interpolateActorHeight(h00, h10, h01, h11, offX, offY);
 
     return {
         plane: resolvedPlane,

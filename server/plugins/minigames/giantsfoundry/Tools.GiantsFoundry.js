@@ -160,7 +160,7 @@ function damage(player) {
   const quality = Math.max(0, Shared.get(player, Shared.VARBIT.PREFORM_QUALITY) - DAMAGE);
   Shared.set(player, Shared.VARBIT.PREFORM_QUALITY, quality);
   Shared.sound(player, SOUND_DAMAGE);
-  if (quality <= 0) {
+  if (quality <= 0 && Shared.field(player, "tutorial", false) !== true) {
     player.sendMessage(MESSAGE.RUINED);
     stop(player);
   }
@@ -182,6 +182,11 @@ function machineTick(player, state, bonus = 0) {
   if (!right) {
     setTemperature(player, temperature + spec.heat);
     damage(player);
+    const requiredTool = stageTool(player, stageOf(completion, stages));
+    const zone = heatZone(state.tool, difficulty);
+    const request = { player, tool: state.tool, requiredTool, temperature, minimum: zone.start, maximum: zone.end, rightTool: requiredTool === state.tool, rightTemperature: inZone(state.tool, difficulty, temperature), stop: false };
+    Shared.api().emitCustomEvent("giants-foundry:tool-check", request);
+    if (request.stop) stop(player);
     return;
   }
   let progress = spec.progress + bonus;
@@ -246,7 +251,7 @@ function useTool(player, tool) {
     Shared.playerSays(player, MESSAGE.FINISHED);
     return true;
   }
-  if (ruined(player)) {
+  if (ruined(player) && Shared.field(player, "tutorial", false) !== true) {
     player.sendMessage(MESSAGE.RUINED);
     return true;
   }

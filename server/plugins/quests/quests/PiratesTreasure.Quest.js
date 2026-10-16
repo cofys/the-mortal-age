@@ -1,31 +1,13 @@
-/**
- * Pirate's Treasure.
- *
- * Words come from npc-dialogues.json. This plugin supplies the variant selector
- * for Redbeard Frank (3643), Wydin (2890), Luthas (3647), the Karamja bartender
- * (1314) and the customs officer (14984/14985), the prose-condition answers, the
- * start hook, the rum/key/coin hand-ins and the crate/door/chest/dig interactions.
- *
- * Stages (varp 71): 1 started, 2 key, 3 note, 4 complete.
- *
- * Supporting state, kept in attributes (the reference's varps 72-74):
- *   employment bit 1 = Luthas's banana job, bit 2 = Wydin's shop job
- *   bananas = how many bananas are in the plantation crate
- *   rum = 0 none, 1 hidden in the crate, 2 shipped to Wydin's stock room
- *
- * Gaps (no dump support, see summary): Frank while carrying the key/message or
- * the note; banana and apron sources; the shop options on Wydin's dialogue.
- */
+/** Pirate's Treasure. Capture evidence: docs/f2p-coastal-parity.md. */
 module.exports = function registerPiratesTreasureQuest(api) {
-  const { Equipment, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, World } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { Equipment, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, GameObject, Animation, Task, TaskManager, StatementDialogue } = api.core;
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   const FRANK_NPC_ID = NpcIdentifiers.REDBEARD_FRANK;
   const WYDIN_NPC_ID = NpcIdentifiers.WYDIN;
   const LUTHAS_NPC_ID = NpcIdentifiers.LUTHAS;
   const BARTENDER_NPC_ID = NpcIdentifiers.BARTENDER_6;
-  const ZEMBO_NPC_ID = NpcIdentifiers.ZEMBO;
-  const GARDENER_NPC_ID = NpcIdentifiers.GARDENER;
+  const GARDENER_NPC_ID = NpcIdentifiers.GARDENER_3;
   const CUSTOMS_OFFICER_IDS = new Set([
     NpcIdentifiers.CUSTOMS_OFFICER,
     NpcIdentifiers.CUSTOMS_OFFICER_2,
@@ -40,6 +22,8 @@ module.exports = function registerPiratesTreasureQuest(api) {
   const RUM_ITEM_ID = ItemIdentifiers.KARAMJAN_RUM;
   const KEY_ITEM_ID = ItemIdentifiers.CHEST_KEY;
   const MESSAGE_ITEM_ID = ItemIdentifiers.PIRATE_MESSAGE;
+  const CASKET_ITEM_ID = ItemIdentifiers.CASKET_3;
+  const NOTE_INTERFACE = 222;
   const BANANA_ITEM_ID = ItemIdentifiers.BANANA;
   const APRON_ITEM_ID = ItemIdentifiers.WHITE_APRON;
   const SPADE_ITEM_ID = ItemIdentifiers.SPADE;
@@ -51,14 +35,15 @@ module.exports = function registerPiratesTreasureQuest(api) {
   const STORE_CRATE_ID = ObjectIdentifiers.CRATE_14;
   const STOCK_ROOM_DOOR_ID = ObjectIdentifiers.DOOR_56;
   const CHEST_ID = ObjectIdentifiers.CHEST_4;
+  const OPEN_CHEST_ID = 2080; // piratechestopen, cache241/capture.
+  const CHEST_TILE = new Location(3219, 3396, 1);
+  const CHEST_OPEN_SOUND = 52;
   const TREASURE_TILE = { x: 2999, y: 3383, z: 0 };
-  const GARDENER_TILE = { x: 2999, y: 3382, z: 0 };
-  /** Behind the Musa Point bar counter, where the shop's "Zambo" spawn row points. */
-  const ZEMBO_TILE = { x: 2924, y: 3143, z: 0 };
+  const GARDENER_TILE = { x: 2997, y: 3382, z: 0 };
   const STOCK_ROOM_DOOR_TILE = { x: 3012, y: 3204 };
   const STORE_CRATE_TILE = { x: 3009, y: 3207 };
-  const PORT_SARIM_LANDING = new Location(3028, 3218, 0);
-  const MUSA_POINT_LANDING = new Location(2955, 3146, 0);
+  const PORT_SARIM_LANDING = new Location(3029, 3217, 0);
+  const MUSA_POINT_LANDING = new Location(2956, 3146, 0);
   const FARE = 30;
   const GARDENER_SHOUT = "First moles, now this! Take this, vandal!";
 
@@ -96,6 +81,9 @@ module.exports = function registerPiratesTreasureQuest(api) {
   const doorOrigins = new WeakMap();
   /** The gardener each player's last dig spawned; a WeakMap so a lost NPC never sticks. */
   const gardenerByPlayer = new WeakMap();
+  const digging = new WeakSet();
+  const sailing = new WeakSet();
+  const openingChests = new WeakMap();
 
   const attr = (player, key) => Number(player.getAttribute(key)) || 0;
   const setAttr = (player, key, value) => player.setAttribute(key, value);
@@ -149,10 +137,6 @@ module.exports = function registerPiratesTreasureQuest(api) {
     ];
   }
 
-  function reward(player) {
-    player.getInventory().adds(COINS_ITEM_ID, 450);
-    player.getInventory().adds(RING_ITEM_ID, 1);
-  }
 
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
@@ -269,14 +253,18 @@ module.exports = function registerPiratesTreasureQuest(api) {
 
   function handleAction(event) {
     const { player, npcId, stepId } = event;
+    if (npcId === WYDIN_NPC_ID && stepId === "2MkvlZ") {
+      event.handled = true;
+      startTranscript(api, player, WYDIN_NPC_ID, "Pirate's Treasure", "retrieving-the-rum-talking-to-wydin", (steps) => steps[1].options[3].steps);
+      return;
+    }
     if (npcId === FRANK_NPC_ID && stepId === RUM_HANDIN_STEP_ID) {
-      if (event.text) player.sendMessage(String(event.text));
-      if (hasItem(player, RUM_ITEM_ID)) {
+      event.box = { items: [RUM_ITEM_ID, KEY_ITEM_ID] };
+      if (quest.getStage(player) === STAGE_STARTED && hasItem(player, RUM_ITEM_ID)) {
         player.getInventory().deleteNumber(RUM_ITEM_ID, 1);
         giveItem(player, KEY_ITEM_ID);
         quest.setStage(player, STAGE_KEY);
       }
-      event.handled = true;
       return;
     }
     if (npcId === FRANK_NPC_ID && stepId === RECLAIM_KEY_STEP_ID) {
@@ -303,7 +291,6 @@ module.exports = function registerPiratesTreasureQuest(api) {
     }
     const returnFare = SAIL_BACK_FARES.get(stepId);
     if (returnFare !== undefined) {
-      if (event.text) player.sendMessage(String(event.text));
       sailToPortSarim(player, returnFare);
       event.handled = true;
     }
@@ -314,9 +301,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
     if ((event.npcId ?? event.target?.getId?.()) !== FRANK_NPC_ID) return;
     const { player } = event;
     if (quest.getStage(player) !== STAGE_STARTED || !hasItem(player, RUM_ITEM_ID)) return;
-    player.getInventory().deleteNumber(RUM_ITEM_ID, 1);
-    giveItem(player, KEY_ITEM_ID, "Frank happily takes the rum... and hands you a key.");
-    quest.setStage(player, STAGE_KEY);
+    startTranscript(api, player, FRANK_NPC_ID, "Pirate's Treasure", "delivering-the-rum-talking-to-redbeard-frank");
     event.handled = true;
   }
 
@@ -364,7 +349,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
     }
     if (objectId === CHEST_ID && option.includes("open")) {
       player.sendMessage(
-        quest.getStage(player) === STAGE_KEY ? "The chest is locked." : "The chest is empty.",
+        "The chest is locked.",
       );
       event.handled = true;
     }
@@ -372,10 +357,28 @@ module.exports = function registerPiratesTreasureQuest(api) {
 
   function handleItemAction(event) {
     const option = String(event.option ?? "").toLowerCase();
-    if (event.itemId === MESSAGE_ITEM_ID && option.includes("read")) {
-      if (quest.getStage(event.player) === STAGE_KEY) quest.setStage(event.player, STAGE_NOTE);
-      event.player.sendMessage("Visit the city of the White Knights.");
-      event.player.sendMessage("In the park, Saradomin points to the X that marks the spot.");
+    const { player } = event;
+    if (!hasItem(player, event.itemId)) return;
+    if (event.itemId === MESSAGE_ITEM_ID && option === "read") {
+      if (quest.getStage(player) === STAGE_KEY) quest.setStage(player, STAGE_NOTE);
+      const packet = player.getPacketSender();
+      packet.sendInterface(NOTE_INTERFACE);
+      for (let child = 1; child <= 11; child++) packet.sendString(child === 5
+        ? "Visit the city of the White Knights. In the park," : child === 6
+          ? "Saradomin points to the X which marks the spot." : "", (NOTE_INTERFACE << 16) | child);
+      event.handled = true;
+    }
+    if (event.itemId === CASKET_ITEM_ID && option === "open") {
+      const needed = hasItem(player, COINS_ITEM_ID) ? 2 : 3;
+      if (player.getInventory().getFreeSlots() + 1 < needed) {
+        player.sendMessage("You need more inventory space.");
+      } else {
+        player.getInventory().deleteNumber(CASKET_ITEM_ID, 1);
+        player.getInventory().adds(COINS_ITEM_ID, 450);
+        player.getInventory().adds(RING_ITEM_ID, 1);
+        player.getInventory().adds(EMERALD_ITEM_ID, 1);
+        player.sendMessage("You open the casket, and find One-Eyed Hector's treasure.");
+      }
       event.handled = true;
     }
   }
@@ -398,11 +401,11 @@ module.exports = function registerPiratesTreasureQuest(api) {
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 2,
-    rewardItemId: EMERALD_ITEM_ID,
-    rewardItemLabel: "An Emerald",
-    otherRewards: ["450 Coins", "A Gold ring"],
+    rewardItemId: CASKET_ITEM_ID,
+    scrollItemId: CASKET_ITEM_ID,
+    completionJingleId: 153,
+    rewardItemLabel: "One-Eyed Hector's Treasure",
     buildJournal,
-    onReward: reward,
   });
 
   api.persistAttribute(EMPLOYMENT_ATTRIBUTE);
@@ -426,7 +429,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
   api.onNpcInteraction("Seaman Lorris", { Travel: travelToKaramja });
   api.onNpcInteraction("Captain Tobias", { Travel: travelToKaramja });
   api.onNpcInteraction("Customs officer", { Travel: travelToPortSarim });
-  api.onServerStartup(spawnZembo);
+  api.onPlayerLogout(cleanupGardener);
   function buyRum(player) {
     const inventory = player.getInventory();
     if (inventory.getAmount(COINS_ITEM_ID) < 27) return;
@@ -444,19 +447,21 @@ module.exports = function registerPiratesTreasureQuest(api) {
   }
 
   function sailToKaramja(player) {
+    if (sailing.has(player)) return;
     if (!payFare(player, FARE)) {
       player.sendMessage("You don't have enough coins to pay for passage.");
       return;
     }
-    player.moveTo(MUSA_POINT_LANDING);
+    sail(player, MUSA_POINT_LANDING, "Musa Point", FARE);
   }
 
   function sailToPortSarim(player, fare = FARE) {
+    if (sailing.has(player)) return false;
     if (!payFare(player, fare)) {
       player.sendMessage(`You do not have enough coins to pay passage, you need ${fare}.`);
       return false;
     }
-    player.moveTo(PORT_SARIM_LANDING);
+    sail(player, PORT_SARIM_LANDING, "Port Sarim", fare);
     return true;
   }
 
@@ -464,18 +469,24 @@ module.exports = function registerPiratesTreasureQuest(api) {
     sailToKaramja(player);
   }
 
-  function travelToPortSarim({ player }) {
-    if (sailToPortSarim(player)) player.sendMessage("You pay 30 coins and board the ship.");
+  function travelToPortSarim({ player, npc }) {
+    if (hasItem(player, RUM_ITEM_ID) && quest.getStage(player) < STAGE_COMPLETE) {
+      startTranscript(api, player, npc?.getId?.() || NpcIdentifiers.CUSTOMS_OFFICER, "Customs officer", "standard-dialogue-before-completing-pirate-s-treasure");
+      return;
+    }
+    sailToPortSarim(player);
   }
 
-  /**
-   * Zembo's spawn row says "Zambo" and carries Surok Magis's id, so the bar's shop has
-   * no NPC to open it. Spawn him here instead; skip if a spawn row for him appears later.
-   */
-  function spawnZembo() {
-    const existing = World.getNpcs().search((npc) => npc?.getId?.() === ZEMBO_NPC_ID);
-    if (existing) return;
-    api.spawnNpc({ id: ZEMBO_NPC_ID, ...ZEMBO_TILE, wanderRadius: 0 });
+  function sail(player, destination, port, fare) {
+    sailing.add(player);
+    if (fare > 0) player.sendMessage(`You pay the boarding charge of ${fare} coins.`);
+    player.sendMessage(`You board the ship and sail to ${port}.`);
+    const task = new Task(5, player, false);
+    task.execute = () => {
+      task.stop(); sailing.delete(player);
+      if (player.isRegistered?.() !== false) player.moveTo(destination);
+    };
+    TaskManager.submit(task);
   }
 
   function payForBananas(player) {
@@ -511,7 +522,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
     const packed = Math.min(carried, 10 - stored);
     player.getInventory().deleteNumber(BANANA_ITEM_ID, packed);
     setAttr(player, BANANA_ATTRIBUTE, stored + packed);
-    player.sendMessage("You pack all your bananas into the crate.");
+    StatementDialogue.send(player, "You pack all your bananas into the crate.");
   }
 
   function stashRum(player) {
@@ -523,35 +534,27 @@ module.exports = function registerPiratesTreasureQuest(api) {
     if (!hasItem(player, RUM_ITEM_ID)) return;
     player.getInventory().deleteNumber(RUM_ITEM_ID, 1);
     setAttr(player, RUM_ATTRIBUTE, 1);
-    player.sendMessage("You stash the rum in the crate.");
+    StatementDialogue.send(player, "You stash the rum in the crate.");
   }
 
   function searchPlantationCrate(player) {
-    const bananas = attr(player, BANANA_ATTRIBUTE);
-    player.sendMessage(
-      bananas >= 10
-        ? "The crate is full of bananas."
-        : `The crate has ${bananas} banana${bananas === 1 ? "" : "s"} inside.`,
-    );
-    if (attr(player, RUM_ATTRIBUTE) === 1) {
-      player.sendMessage("There is also some rum stashed in here too.");
-    }
+    const bananas = attr(player, BANANA_ATTRIBUTE), rum = attr(player, RUM_ATTRIBUTE) === 1;
+    if (rum && bananas === 0) player.sendMessage("There is some rum in here, although with no bananas to cover it. It is a little obvious.");
+    else player.sendMessage(bananas >= 10 ? "The crate is full of bananas." : `The crate has ${bananas} banana${bananas === 1 ? "" : "s"} inside.`);
+    if (rum && bananas > 0) player.sendMessage("There is also some rum stashed in here too.");
   }
 
   function searchStoreCrate(player) {
-    if (!isEmployed(player, 2)) {
-      player.sendMessage("Wydin won't let you into the stock room.");
-      return;
-    }
-    if (attr(player, RUM_ATTRIBUTE) < 2) {
-      player.sendMessage("You find only bananas.");
-      return;
-    }
-    if (hasItem(player, RUM_ITEM_ID) || giveItem(player, RUM_ITEM_ID)) {
+    if (!isEmployed(player, 2)) { player.sendMessage("Wydin won't let you into the stock room."); return; }
+    player.sendMessage("There are a lot of bananas in the crate.");
+    if (attr(player, RUM_ATTRIBUTE) >= 2 && giveItem(player, RUM_ITEM_ID)) {
       setAttr(player, RUM_ATTRIBUTE, 0);
-      player.sendMessage("There are a lot of bananas in the crate.");
       player.sendMessage("You find your bottle of rum in amongst the bananas.");
     }
+    api.sendMultiChatboxPrompt(player, "Do you want to take a banana?", "Yes.", () => {
+      if (player.getInventory().isFull()) { player.sendMessage("You need more inventory space."); return; }
+      player.getInventory().adds(BANANA_ITEM_ID, 1); player.sendMessage("You take a banana.");
+    }, "No.", () => {});
   }
 
   /**
@@ -564,8 +567,10 @@ module.exports = function registerPiratesTreasureQuest(api) {
     doorOrigins.delete(player);
     const originX = origin ? origin.x : player.getLocation().getX();
     const entering = originX > location.x;
-    if (entering && !isEmployed(player, 2)) {
-      player.sendMessage("Wydin won't let you into the stock room.");
+    if (entering && (!isEmployed(player, 2) || !wearingApron(player))) {
+      startTranscript(api, player, WYDIN_NPC_ID, "Pirate's Treasure", !isEmployed(player, 2)
+        ? "retrieving-the-rum-trying-to-open-the-door-in-the-food-store-before-getting-the-job"
+        : "retrieving-the-rum-trying-to-open-the-door-after-getting-the-job-while-not-wearing-a-white-apron");
       return;
     }
     player.moveTo(new Location(location.x + (entering ? -1 : 1), location.y, location.z ?? player.getLocation().getZ()));
@@ -586,22 +591,44 @@ module.exports = function registerPiratesTreasureQuest(api) {
     const y = STOCK_ROOM_DOOR_TILE.y;
     const inShop = sourceLocation.x >= x && sourceLocation.x <= x + 5
       && sourceLocation.y >= y - 3 && sourceLocation.y <= y + 4;
-    if (!inShop || !isEmployed(player, 2)) return;
+    if (!inShop || !isEmployed(player, 2) || !wearingApron(player)) return;
     const z = player.getLocation().getZ();
     player.moveTo(new Location(x - 1, y, z));
     event.destination = { x: STORE_CRATE_TILE.x + 1, y: STORE_CRATE_TILE.y, z };
   }
 
+  function closeChest(player) {
+    const closed = openingChests.get(player);
+    if (!closed) return;
+    openingChests.delete(player);
+    player.getPacketSender().sendObject(closed).sendVarbit(12393, 0);
+    player.getMovementQueue().setBlockMovement(false);
+  }
+
   function unlockChest(player) {
+    if (openingChests.has(player)) return;
     if (quest.getStage(player) !== STAGE_KEY || !hasItem(player, KEY_ITEM_ID)) {
       player.sendMessage("The chest is locked.");
       return;
     }
-    player.getInventory().deleteNumber(KEY_ITEM_ID, 1);
-    giveItem(player, MESSAGE_ITEM_ID);
+    const closed = new GameObject(CHEST_ID, CHEST_TILE, 10, 0, player.getPrivateArea());
+    const opened = new GameObject(OPEN_CHEST_ID, CHEST_TILE, 10, 0, player.getPrivateArea());
+    openingChests.set(player, closed);
     player.sendMessage("You unlock the chest.");
     player.sendMessage("All that's in the chest is a message...");
-    player.sendMessage("You take the message from the chest.");
+    player.getMovementQueue().setBlockMovement(true);
+    player.getPacketSender().sendObject(opened).sendVarbit(12393, 1).sendSoundEffect(CHEST_OPEN_SOUND);
+    const task = new Task(4, player, false);
+    task.execute = () => {
+      task.stop();
+      if (!openingChests.has(player)) return;
+      closeChest(player);
+      if (!hasItem(player, KEY_ITEM_ID) || quest.getStage(player) !== STAGE_KEY) return;
+      player.getInventory().deleteNumber(KEY_ITEM_ID, 1);
+      giveItem(player, MESSAGE_ITEM_ID);
+      player.sendMessage("You take the message from the chest.");
+    };
+    TaskManager.submit(task);
   }
 
   function digForTreasure(player) {
@@ -612,6 +639,8 @@ module.exports = function registerPiratesTreasureQuest(api) {
       Math.abs(position.getY() - TREASURE_TILE.y),
     );
     if (distance > 1 || position.getZ() !== TREASURE_TILE.z) return false;
+    if (digging.has(player)) return true;
+    player.performAnimation(new Animation(830));
     // The first dig only wakes the gardener; the casket is on the second (Wiki).
     if (!attr(player, DUG_ATTRIBUTE)) {
       setAttr(player, DUG_ATTRIBUTE, 1);
@@ -624,9 +653,18 @@ module.exports = function registerPiratesTreasureQuest(api) {
       player.sendMessage("I can't dig up anything with him attacking me!");
       return true;
     }
+    if (player.getInventory().isFull()) { player.sendMessage("You need more inventory space."); return true; }
     player.sendMessage("You dig a hole in the ground...");
-    player.sendMessage("and find a little chest of treasure.");
-    quest.complete(player);
+    digging.add(player);
+    const task = new Task(4, player, false);
+    task.execute = () => {
+      task.stop(); digging.delete(player);
+      if (quest.getStage(player) !== STAGE_NOTE || player.isRegistered?.() === false) return;
+      if (player.getInventory().isFull()) { player.sendMessage("You need more inventory space."); return; }
+      player.sendMessage("and find a little chest of treasure.");
+      quest.complete(player);
+    };
+    TaskManager.submit(task);
     return true;
   }
 
@@ -641,8 +679,17 @@ module.exports = function registerPiratesTreasureQuest(api) {
     if (!npc) return;
     npc.__skipDefaultRespawn = true;
     npc.forceChat(GARDENER_SHOUT);
+    player.getPacketSender().sendEntityHint(npc);
     npc.getCombat().attack(player);
     gardenerByPlayer.set(player, npc);
+  }
+
+  function cleanupGardener({ player }) {
+    closeChest(player); sailing.delete(player);
+    const npc = gardenerByPlayer.get(player);
+    if (npc) api.removeNpc(npc);
+    gardenerByPlayer.delete(player);
+    digging.delete(player);
   }
 
   function gardenerThreatens(player) {
@@ -651,6 +698,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
     const registered = typeof npc.isRegistered !== "function" || npc.isRegistered();
     if (!registered || npc.getHitpoints() <= 0) {
       gardenerByPlayer.delete(player);
+      player.getPacketSender().sendEntityHintRemoval();
       return false;
     }
     return npc.getLocation().isWithinDistance(player.getLocation(), 8);

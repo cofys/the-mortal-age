@@ -22,10 +22,11 @@
  *     general stores; garlic from Morgan's cupboard (or spice stalls).
  *   - Harlow has no post-quest transcript variant, so completion falls back to
  *     his generic "Dr Harlow" / "standard-dialogue".
- *   - The "lost the stake" condition only checks the inventory (no bank lookup).
+ *   - The captured Harlow dialogue predates the rev 241 Wiki transcript; current words
+ *     come from that transcript, while the captured beer-request stage remains 2.
  */
 module.exports = function registerVampyreSlayerQuest(api) {
-  const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Animation, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, ObjectManager, GameObject } = api.core;
   const { registerQuest } = require("../QuestRuntime");
 
   // Rev 241 moved Morgan's and Harlow's names into NPC transforms: the world spawns the
@@ -52,7 +53,8 @@ module.exports = function registerVampyreSlayerQuest(api) {
   /** Morgan's garlic cupboard (the only searchable garlic source in the quest). */
   const GARLIC_CUPBOARD_IDS = [ObjectIdentifiers.CUPBOARD_18, ObjectIdentifiers.CUPBOARD_19];
 
-  const MORGAN_GREET_ATTR = "quest.vampyre_slayer.morgan_greeted";
+  const MORGAN_GREET_ATTR = "vampyre-slayer:morgan-greeted";
+  const STAKE_RECEIVED_ATTRIBUTE = "vampyre-slayer:stake-received";
 
   const QUEST_START_HOOK = "quest:vampyre-slayer:start";
   /** "You give a beer to Dr Harlow." on page "Vampyre Slayer". */
@@ -64,8 +66,8 @@ module.exports = function registerVampyreSlayerQuest(api) {
 
   const hasItem = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
 
-  /** Count Draynor NPCs already weakened once this spawn (needs garlic). */
-  const weakenedNpcs = new WeakSet();
+  const ownsStake = (player) => hasItem(player, STAKE_ITEM_ID) ||
+    (player.getBanks?.() ?? []).some((bank) => bank.getAmount(STAKE_ITEM_ID) > 0);
 
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
@@ -127,14 +129,18 @@ module.exports = function registerVampyreSlayerQuest(api) {
         return { page: "Dr Harlow", variant: "standard-dialogue" };
       }
       if (stage >= STAGE_HARLOW) {
-        return { page: "Vampyre Slayer", variant: "dr-harlow-talking-to-dr-harlow-after-getting-the-stake" };
+        if (ownsStake(player)) player.setAttribute(STAKE_RECEIVED_ATTRIBUTE, true);
+        return {
+          page: "Vampyre Slayer",
+          variant: player.getAttribute(STAKE_RECEIVED_ATTRIBUTE) === true
+            ? "dr-harlow-talking-to-dr-harlow-after-getting-the-stake"
+            : "dr-harlow-talking-to-him-again",
+        };
       }
       if (stage >= STAGE_STARTED) {
         return {
           page: "Vampyre Slayer",
-          variant: hasItem(player, BEER_ITEM_ID)
-            ? "dr-harlow-talking-to-him-again"
-            : "dr-harlow",
+          variant: "dr-harlow",
         };
       }
       return { page: "Dr Harlow", variant: "standard-dialogue" };
@@ -149,8 +155,10 @@ module.exports = function registerVampyreSlayerQuest(api) {
     if (value.includes("combat level less than 20")) {
       return player.getSkillManager().getCombatLevel() < 20;
     }
-    if (value.includes("lost the stake")) return !hasItem(player, STAKE_ITEM_ID);
-    if (value.includes("has the stake")) return hasItem(player, STAKE_ITEM_ID);
+    if (value.includes("lost the stake")) return !ownsStake(player);
+    if (value.includes("has the stake")) return ownsStake(player);
+    if (value.includes("does not have a beer")) return !hasItem(player, BEER_ITEM_ID);
+    if (value.includes("has a beer")) return hasItem(player, BEER_ITEM_ID);
     return null;
   }
 
@@ -165,61 +173,58 @@ module.exports = function registerVampyreSlayerQuest(api) {
     const { player, stepId } = event;
 
     if (stepId === HARLOW_BEER_MESSAGE_ID) {
-      // Hand over the beer; let the transcript print its own line.
-      if (player.getInventory().getAmount(BEER_ITEM_ID) > 0) {
-        player.getInventory().deleteNumber(BEER_ITEM_ID, 1);
+      if (!hasItem(player, BEER_ITEM_ID) || quest.getStage(player) !== STAGE_HARLOW) {
+        event.handled = true;
+        event.end = true;
+        return;
       }
+      player.getInventory().deleteNumber(BEER_ITEM_ID, 1);
+      player.performAnimation(new Animation(3116));
+      event.box = { items: [BEER_ITEM_ID] };
       return;
     }
 
     if (HARLOW_STAKE_MESSAGE_IDS.has(stepId)) {
+      if (ownsStake(player) || quest.getStage(player) !== STAGE_HARLOW) { event.handled = true; return; }
       if (player.getInventory().isFull()) {
         player.sendMessage("You need a free inventory slot for the stake.");
         event.handled = true;
+        event.end = true;
         return;
       }
       player.getInventory().adds(STAKE_ITEM_ID, 1);
+      player.setAttribute(STAKE_RECEIVED_ATTRIBUTE, true);
+      event.box = { items: [STAKE_ITEM_ID] };
       if (quest.getStage(player) < STAGE_HARLOW) quest.setStage(player, STAGE_HARLOW);
       // Transcript prints "Dr Harlow hands you a stake."
     }
   }
 
-  // Beer on Dr Harlow: hand it over and take the stake without the menu.
-  function handleItemOnNpc(event) {
-    if (event.itemId !== BEER_ITEM_ID) return;
-    if (!HARLOW_NPC_IDS.has(event.npcId ?? event.target.getId?.())) return;
-    const stage = quest.getStage(event.player);
-    if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return;
-    const inventory = event.player.getInventory();
-    if (inventory.getAmount(BEER_ITEM_ID) <= 0) return;
-    inventory.deleteNumber(BEER_ITEM_ID, 1);
-    inventory.adds(STAKE_ITEM_ID, 1);
-    if (stage < STAGE_HARLOW) quest.setStage(event.player, STAGE_HARLOW);
-    event.player.sendMessage("You give a beer to Dr Harlow.");
-    event.player.sendMessage("Dr Harlow hands you a stake.");
-    event.handled = true;
-  }
-
-  // Morgan's cupboard: search or open it for a clove of garlic.
-  function takeGarlic({ player }) {
-    if (player.getInventory().isFull()) {
-      player.sendMessage("You need a free inventory slot for the garlic.");
-      return;
+  function handleDialogueLine(event) {
+    if (!HARLOW_NPC_IDS.has(event.npcId) || quest.getStage(event.player) !== STAGE_STARTED) return;
+    if (event.text === "Huh? No, I don't think ssho. Now, buy ush a beer.") {
+      event.after = () => quest.setStage(event.player, STAGE_HARLOW);
     }
-    player.getInventory().adds(GARLIC_ITEM_ID, 1);
-    player.sendMessage("You take a clove of garlic from the cupboard.");
   }
 
-  // Carrying garlic weakens the vampyre the first time it is struck.
-  function handlePlayerDealtDamage({ player, target }) {
-    if (!target || typeof target.getId !== "function") return;
-    if (!COUNT_NPC_IDS.has(target.getId())) return;
-    const stage = quest.getStage(player);
-    if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return;
-    if (!hasItem(player, GARLIC_ITEM_ID)) return;
-    if (weakenedNpcs.has(target)) return;
-    weakenedNpcs.add(target);
-    player.sendMessage("The vampyre seems to be weakened by the garlic you're carrying.");
+  function useGarlicCupboard(event) {
+    if (!GARLIC_CUPBOARD_IDS.includes(event.objectId)) return false;
+    const { object, player } = event;
+    const action = object.getDefinition().getInteractions()[event.clickType - 1];
+    if (action === "Search") {
+      if (player.getInventory().isFull()) {
+        player.sendMessage("You need a free inventory slot for the garlic.");
+      } else {
+        player.getInventory().adds(GARLIC_ITEM_ID, 1);
+        player.sendMessage("The cupboard contains garlic. You take a clove.");
+      }
+    } else if (action === "Open" || action === "Close") {
+      const id = action === "Open" ? ObjectIdentifiers.CUPBOARD_19 : ObjectIdentifiers.CUPBOARD_18;
+      ObjectManager.deregister(object, true);
+      ObjectManager.register(new GameObject(id, object.getLocation().clone(), object.getType(), object.getFace(), object.getPrivateArea()), true);
+    }
+    event.handled = true;
+    return true;
   }
 
   // Without a stake (or a hammer to drive it in) the vampyre regenerates.
@@ -247,7 +252,8 @@ module.exports = function registerVampyreSlayerQuest(api) {
     if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return;
     if (!hasItem(killer, STAKE_ITEM_ID) || !hasItem(killer, HAMMER_ITEM_ID)) return;
     killer.getInventory().deleteNumber(STAKE_ITEM_ID, 1);
-    killer.sendMessage("You hammer the stake into the vampyre's chest!");
+    killer.performAnimation(new Animation(806));
+    killer.sendMessage("<col=ff3045>You hammer the stake into the vampyre's chest!");
     quest.complete(killer);
   }
 
@@ -263,16 +269,15 @@ module.exports = function registerVampyreSlayerQuest(api) {
     buildJournal,
     onReward: reward,
   });
-  api.persistAttribute(MORGAN_GREET_ATTR);
+  api.persistAttribute(MORGAN_GREET_ATTR, false);
+  api.persistAttribute(STAKE_RECEIVED_ATTRIBUTE, false);
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
-  api.onItemOnNpc(handleItemOnNpc);
-  api.onObjectFirstClick(GARLIC_CUPBOARD_IDS, takeGarlic);
-  api.onObjectSecondClick(GARLIC_CUPBOARD_IDS, takeGarlic);
-  api.onPlayerDealtDamage(handlePlayerDealtDamage);
+  api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
+  api.onObjectInteraction(useGarlicCupboard);
   api.onNpcBeforeDeath(handleNpcBeforeDeath);
   api.onNpcDeath(handleNpcDeath);
 };

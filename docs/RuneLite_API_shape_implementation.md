@@ -235,7 +235,7 @@ Each emitter lives in `impl/events/<area>.ts` and subscribes to an existing engi
 | WorldViewLoaded / WorldViewUnloaded | scene rebuild (`subscribeRebuildRegion/Normal/WorldEntity`) | |
 | WidgetLoaded / WidgetClosed | `WidgetManager.openSubInterface` / `closeSubInterface` | |
 | ScriptPreFired / ScriptPostFired | `Cs2Vm.execute` entry/exit (+ `runScriptEvent`) | Only post when a subscriber exists (VM hot path) |
-| ScriptCallbackEvent | needs RuneLite's patched rs2asm scripts (64 in `runelite-client/src/main/scripts`), which call opcode `runelite_callback` | Phase 6: add the opcode to `Cs2Vm` and an rs2asm→cache-script override loader. Until then, plugins depending on it (chat timestamps, bank tags, etc.) are out. |
+| ScriptCallbackEvent | needs RuneLite's patched rs2asm scripts (64 in `runelite-client/src/main/scripts`), which call opcode `runelite_callback` | `Cs2Vm` runs the opcode, and `ClientPlugin.onScriptCallback` gets it. Cache scripts get callbacks only where `rs/cs2/sortCallbacks.ts` inserts them (the spellbook and prayer sorts, [tab-reordering.md](tab-reordering.md)). Phase 6: an rs2asm→cache-script override loader for the rest (chat timestamps, bank tags, etc.). |
 | MenuEntryAdded, MenuOpened, PostMenuSort, MenuOptionClicked | §4.9 | |
 | CommandExecuted | `handleClientCommand` path (`::cmd`) | |
 | FocusChanged | window `focus`/`blur` | |
@@ -295,7 +295,7 @@ Each phase ends with real RuneLite plugins ported unchanged except for the conve
 - **Canaries:** `xptracker` (side panel, RS profile, StatChanged), `statusbars`, `entityhider` (needs a render-side hide hook; this checks the `DrawCallbacks`-style extension).
 
 ### Phase 6: harder parity and external plugins (optional, decide later)
-- `ScriptCallbackEvent`: the `runelite_callback` opcode in `Cs2Vm` plus loading RuneLite's patched `.rs2asm` scripts as overrides (an assembler is needed).
+- `ScriptCallbackEvent`: loading RuneLite's patched `.rs2asm` scripts as overrides (an assembler is needed). The `runelite_callback` opcode is already in `Cs2Vm`.
 - Dynamic plugin loading (an ESM `import()` from a URL, i.e. a JS "plugin hub"). This needs a trust model before it ships: plugins run with full page access, so start with a curated list we build, never arbitrary URLs.
 
 ---
@@ -316,7 +316,7 @@ Each phase ends with real RuneLite plugins ported unchanged except for the conve
 5. **Overlay layering** under widgets (§4.7) may cost a texture upload per frame if the DOM approach doesn't work.
 6. **Convex hulls/outlines** need renderer cooperation, and the per-frame cost must stay at zero when unused.
 7. **Varbit event volume:** posting per changed varbit needs the reverse index; posting must be skipped entirely when there are no `onVarbitChanged` subscribers.
-8. **`ScriptCallbackEvent`** stays unavailable until Phase 6, and the coverage report flags plugins that need it.
+8. **`ScriptCallbackEvent`** is only raised by the callbacks `rs/cs2/sortCallbacks.ts` inserts until Phase 6, and the coverage report flags plugins that need it.
 9. **Server parity:** some RuneLite plugins assume OSRS server behaviour (packets, varbits) that our server may not emulate. That is a server gap, tracked separately, not an API gap.
 
 ## 9. Tracking "how close to 1:1 are we"

@@ -16,6 +16,27 @@ export enum ProjectionType {
     ORTHO,
 }
 
+type CameraEasing = "linear" | "ease_in_out_sine" | "ease_out_cubic";
+interface CameraTween {
+    cycles: number;
+    elapsed: number;
+    easing: CameraEasing;
+    start: vec3;
+    ignoreTerrain?: boolean;
+    packetHeight?: number;
+    startHeight?: number;
+    trackTarget?: boolean;
+    angles?: { pitch: number; yaw: number; targetPitch: number; targetYaw: number };
+}
+interface ScriptedCameraShot {
+    target: vec3;
+    rate: number;
+    rate2: number;
+    snapPending: boolean;
+    tween?: CameraTween;
+    heightAt?: (x: number, z: number) => number | undefined;
+}
+
 export class Camera {
     static moveCameraRotOrigin: vec3 = vec3.create();
     static deltaTemp: vec3 = vec3.create();
@@ -43,7 +64,13 @@ export class Camera {
     private targetYaw: number;
     private scenePitchOverride: number | undefined;
     private viewPitchOverride: number | undefined;
+    private renderPitchOverride: number | undefined;
     private viewZoomScale: number = 1;
+    private scriptedMove?: ScriptedCameraShot;
+    private scriptedLook?: ScriptedCameraShot;
+    private scriptedCycleMs = 0;
+    private scriptedPitchUnlocked = false;
+    private scriptedHeights = { move: 0, look: 0 };
 
     private readonly positionMaxSpeedPerSec = 12; // tiles per second toward target
     private readonly positionSpringPerSec = 6; // proportional easing factor
@@ -146,12 +173,173 @@ export class Camera {
         this.updated = true;
     }
 
+    resolveScriptedHeight(mode: "move" | "look", height: number, relative: boolean): number {
+        return this.scriptedHeights[mode] = relative ? this.scriptedHeights[mode] + height : height;
+    }
+
+    setScriptedPosition(x: number, y: number, z: number, rate: number, rate2: number,
+        heightAt?: (x: number, z: number) => number | undefined): void {
+        if (!this.scriptedMove && !this.scriptedLook) this.setViewPitchOverride(undefined);
+        const shot = this.scriptedMove = { target: vec3.fromValues(x, y, z), rate, rate2, heightAt, snapPending: rate2 >= 100 };
+        const heightReady = this.refreshScriptedHeight(shot);
+        if (shot.snapPending) {
+            // Centre streaming on a cold scene without inventing its missing ground elevation.
+            this.snapToPosition(x, heightReady ? shot.target[1] : this.pos[1], z);
+            shot.snapPending = !heightReady;
+        }
+    }
+
+    setScriptedLook(x: number, y: number, z: number, rate: number, rate2: number,
+        heightAt?: (x: number, z: number) => number | undefined): void {
+        if (!this.scriptedMove && !this.scriptedLook) this.setViewPitchOverride(undefined);
+        const shot = this.scriptedLook = { target: vec3.fromValues(x, y, z), rate, rate2, heightAt, snapPending: rate2 >= 100 };
+        if (this.refreshScriptedHeight(shot) && this.refreshScriptedHeight(this.scriptedMove) && !this.scriptedMove?.snapPending && shot.snapPending) this.advanceScriptedLook();
+    }
+
+    setScriptedPositionCycles(x: number, z: number, cycles: number, easing: CameraEasing, ignoreTerrain: boolean,
+        heightAt: (x: number, z: number) => number | undefined, packetHeight: number): void {
+        this.setScriptedPosition(x, this.pos[1], z, 0, 0, heightAt);
+        this.scriptedMove!.tween = { cycles, elapsed: 0, easing, start: vec3.clone(this.pos), ignoreTerrain, packetHeight };
+    }
+
+    setScriptedLookCycles(x: number, z: number, cycles: number, easing: CameraEasing, trackTarget: boolean,
+        heightAt: (x: number, z: number) => number | undefined): void {
+        this.setScriptedLook(x, this.pos[1], z, 0, 0, heightAt);
+        const shot = this.scriptedLook!;
+        shot.tween = { cycles, elapsed: 0, easing, start: vec3.clone(this.pos), trackTarget };
+        if (this.refreshScriptedHeight(shot)) this.advanceScriptedLook();
+    }
+
+    private tweenProgress(tween: CameraTween): number {
+        const progress = Math.min(1, tween.elapsed / Math.max(1, tween.cycles));
+        if (tween.easing === "ease_in_out_sine") return (1 - Math.cos(Math.PI * progress)) / 2;
+        if (tween.easing === "ease_out_cubic") return 1 - Math.pow(1 - progress, 3);
+        return progress;
+    }
+
+    private refreshScriptedHeight(shot: ScriptedCameraShot | undefined): boolean {
+        if (!shot?.heightAt) return true;
+        const height = shot.heightAt(shot.target[0], shot.target[2]);
+        if (height === undefined || !Number.isFinite(height)) return false;
+        shot.target[1] = height;
+        return true;
+    }
+
+    setScriptedPitchUnlocked(unlock: boolean): void {
+        this.scriptedPitchUnlocked = unlock;
+    }
+
+    translateScriptedCamera(dx: number, dz: number): void {
+        this.snapToPosition(this.pos[0] + dx, this.pos[1], this.pos[2] + dz);
+        for (const shot of [this.scriptedMove, this.scriptedLook]) {
+            if (shot) {
+                shot.target[0] += dx; shot.target[2] += dz;
+                if (shot.tween) { shot.tween.start[0] += dx; shot.tween.start[2] += dz; }
+            }
+        }
+    }
+
+    clearScriptedCamera(): void {
+        const wasScripted = this.scriptedMove || this.scriptedLook;
+        this.scriptedMove = this.scriptedLook = undefined;
+        this.scriptedCycleMs = 0;
+        this.scriptedPitchUnlocked = false;
+        this.scriptedHeights = { move: 0, look: 0 };
+        if (wasScripted) {
+            this.snapToPosition(this.pos[0], this.pos[1], this.pos[2]);
+            this.snapToYaw(this.yaw);
+        }
+    }
+
+    private scriptedStep(current: number, target: number, rate: number, rate2: number): number {
+        const distance = Math.abs(target - current);
+        return current + Math.sign(target - current) * Math.min(distance, Math.trunc(distance * rate2 / 1000) + rate);
+    }
+
+    private advanceScriptedLook(): void {
+        const look = this.scriptedLook;
+        if (!look) return;
+        const dx = Math.trunc((look.target[0] - this.pos[0]) * 128);
+        const dy = Math.trunc((look.target[1] - this.pos[1]) * 128);
+        const dz = Math.trunc((look.target[2] - this.pos[2]) * 128);
+        const horizontal = Math.trunc(Math.hypot(dx, dz));
+        const angleScale = 325.9490051269531;
+        let pitch = Math.trunc(Math.atan2(dy, horizontal) * angleScale) & 2047;
+        if (this.scriptedPitchUnlocked) {
+            if (pitch > 1024) pitch -= 2048;
+        } else pitch = clamp(pitch, 128, 383);
+        const yaw = Math.trunc(Math.atan2(dx, dz) * angleScale) & 2047;
+        if (look.tween) {
+            const tween = look.tween;
+            const angles = tween.angles ??= { pitch: this.getScenePitchAngle(), yaw: this.yaw, targetPitch: pitch, targetYaw: yaw };
+            if (tween.trackTarget) { angles.targetPitch = pitch; angles.targetYaw = yaw; }
+            const progress = this.tweenProgress(tween);
+            this.viewPitchOverride = Math.round(angles.pitch + (angles.targetPitch - angles.pitch) * progress);
+            this.snapToYaw(Math.round(angles.yaw + this.normalizeYawDelta(angles.targetYaw - angles.yaw) * progress));
+        } else if (look.snapPending) {
+            this.viewPitchOverride = pitch;
+            this.snapToYaw(yaw);
+        } else {
+            this.viewPitchOverride = this.scriptedStep(Math.trunc(this.getScenePitchAngle()), pitch, look.rate, look.rate2);
+            const delta = this.normalizeYawDelta(yaw - Math.trunc(this.yaw));
+            this.snapToYaw(this.scriptedStep(Math.trunc(this.yaw), Math.trunc(this.yaw) + delta, look.rate, look.rate2));
+        }
+        look.snapPending = false;
+        this.updated = true;
+    }
+
+    private advanceScriptedCamera(deltaTimeMs: number): void {
+        const move = this.scriptedMove, look = this.scriptedLook;
+        const moveReady = this.refreshScriptedHeight(move), lookReady = this.refreshScriptedHeight(look);
+        if (!moveReady || !lookReady) { this.scriptedCycleMs = 0; return; }
+        if (move?.snapPending) {
+            this.snapToPosition(move.target[0], move.target[1], move.target[2]);
+            move.snapPending = false;
+        }
+        if (look?.snapPending) this.advanceScriptedLook();
+        // OSRS applies the constant + proportional rates in integer fine units every 20ms.
+        this.scriptedCycleMs += Math.max(0, deltaTimeMs);
+        while (this.scriptedCycleMs >= 20) {
+            this.scriptedCycleMs -= 20;
+            if (move) {
+                const tween = move.tween;
+                if (tween) {
+                    // Terrain-aware pans interpolate height above the ground at each tile.
+                    if (!tween.ignoreTerrain && tween.startHeight === undefined) {
+                        const startY = move.heightAt?.(tween.start[0], tween.start[2]);
+                        if (startY === undefined) return;
+                        tween.startHeight = (startY - tween.start[1]) * 128 + (tween.packetHeight ?? 0);
+                    }
+                    const nextElapsed = Math.min(tween.cycles, tween.elapsed + 1);
+                    const previousElapsed = tween.elapsed;
+                    tween.elapsed = nextElapsed;
+                    const progress = this.tweenProgress(tween);
+                    const position = vec3.clone(this.pos);
+                    for (let axis = 0; axis < 3; axis++) position[axis] = Math.round((tween.start[axis] + (move.target[axis] - tween.start[axis]) * progress) * 128) / 128;
+                    if (!tween.ignoreTerrain) {
+                        const ground = move.heightAt?.(position[0], position[2]);
+                        if (ground === undefined) { tween.elapsed = previousElapsed; return; }
+                        position[1] = ground + ((tween.packetHeight ?? 0) - (tween.startHeight! + ((tween.packetHeight ?? 0) - tween.startHeight!) * progress)) / 128;
+                    }
+                    vec3.copy(this.pos, position);
+                } else for (let axis = 0; axis < 3; axis++) {
+                    const current = Math.trunc(this.pos[axis] * 128), target = Math.trunc(move.target[axis] * 128);
+                    this.pos[axis] = this.scriptedStep(current, target, move.rate, move.rate2) / 128;
+                }
+                vec3.copy(this.targetPos, this.pos);
+                this.updatedPosition = this.updated = true;
+            }
+            if (look?.tween) look.tween.elapsed = Math.min(look.tween.cycles, look.tween.elapsed + 1);
+            this.advanceScriptedLook();
+        }
+    }
+
     private wrapYawInternal(yaw: number): number {
         return ((yaw % 2048) + 2048) % 2048;
     }
 
     private normalizeYawDelta(delta: number): number {
-        let normalized = ((delta % 2048) + 2048) % 2048;
+        let normalized = delta % 2048;
         if (normalized > 1024) {
             normalized -= 2048;
         } else if (normalized < -1024) {
@@ -165,7 +353,12 @@ export class Camera {
     }
 
     getScenePitchAngle(): number {
-        return this.viewPitchOverride ?? this.scenePitchOverride ?? this.getControlPitchAngle();
+        return this.renderPitchOverride ?? this.viewPitchOverride ?? this.scenePitchOverride ?? this.getControlPitchAngle();
+    }
+
+    setRenderPitchOverride(pitch: number | undefined): void {
+        this.renderPitchOverride = pitch;
+        this.updated = true;
     }
 
     getScenePitchOverride(): number | undefined {
@@ -240,6 +433,10 @@ export class Camera {
 
     applySmoothing(deltaTimeMs: number): void {
         if (!Number.isFinite(deltaTimeMs)) {
+            return;
+        }
+        if (this.scriptedMove || this.scriptedLook) {
+            this.advanceScriptedCamera(deltaTimeMs);
             return;
         }
         const dt = Math.max(0, deltaTimeMs) / 1000;

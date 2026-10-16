@@ -1,4 +1,6 @@
 [
+  {"id":767,"location":{"x":3243,"y":3383,"z":1},"amt":1,"respawn":100,"description":"Phoenix Gang weapons store"},
+  {"id":767,"location":{"x":3245,"y":3385,"z":1},"amt":1,"respawn":100,"description":"Phoenix Gang weapons store"},
   {"id":11680,"location":{"x":2739,"y":3581,"z":1},"amt":1,"respawn":0,"description":"Sinclair Mansion"},
   {"id":6561,"location":{"x":3049,"y":3257,"z":0},"amt":1,"respawn":0,"description":"Port Sarim"},
   {"id":1595,"location":{"x":2928,"y":3290,"z":0},"amt":1,"respawn":200,"description":"UNDIFINED"},

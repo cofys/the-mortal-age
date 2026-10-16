@@ -1095,7 +1095,8 @@ module.exports = function registerLegendsQuest(api) {
   // Prose conditions
   // ==========================================================================
 
-  function answerCondition({ player, text, stepId }) {
+  function answerCondition({ player, text, stepId, pages }) {
+    if (!pages?.some(entry => entry.page === PAGE)) return null;
     if (!player) return null;
     const value = String(text ?? "").toLowerCase();
     const has = (needle) => value.includes(needle);

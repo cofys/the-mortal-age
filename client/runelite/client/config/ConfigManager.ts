@@ -160,6 +160,16 @@ export class ConfigManager {
         this.emit(new ConfigChanged(group, key, previous, undefined));
     }
 
+    /** RuneLite's `getConfigurationKeys(prefix)`: every stored "group.key" starting with `prefix`. */
+    getConfigurationKeys(prefix: string): string[] {
+        const keys: string[] = [];
+        for (let i = 0; i < this.storage.length; i++) {
+            const key = this.storage.key(i);
+            if (key?.startsWith(CONFIG_PREFIX + prefix)) keys.push(key.slice(CONFIG_PREFIX.length));
+        }
+        return keys;
+    }
+
     /** Legacy keys were JSON blobs; migration flags keep the shim one-shot. */
     isMigrated(name: string): boolean {
         return this.storage.getItem(`${CONFIG_PREFIX}migrated.${name}`) === "true";

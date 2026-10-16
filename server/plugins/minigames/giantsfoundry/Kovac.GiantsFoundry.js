@@ -96,8 +96,8 @@ function startQuestCommission({ player, words: pair, tutorial }) {
 }
 
 /** The quest takes its finished sword ("giants-foundry:discard-preform"). */
-function discardPreform({ player }) {
-  if (player) clearPreform(player);
+function discardPreform({ player, preserveQuality = false }) {
+  if (player) clearPreform(player, preserveQuality);
 }
 
 /** The new commission's line, handing it out first. */
@@ -151,10 +151,12 @@ function pay(player, coins) {
 }
 
 /** Clears the finished preform and its commission. */
-function clearPreform(player) {
+function clearPreform(player, preserveQuality = false) {
   Shared.stopWork(player);
   Preform.unequip(player);
-  for (const varbit of [Shared.VARBIT.PREFORM_DIFFICULTY, Shared.VARBIT.PREFORM_QUALITY, Shared.VARBIT.PREFORM_START_QUALITY, Shared.VARBIT.COMPLETION]) {
+  const cleared = [Shared.VARBIT.PREFORM_DIFFICULTY, Shared.VARBIT.COMPLETION, Shared.VARBIT.PREFORM_STORED];
+  if (!preserveQuality) cleared.push(Shared.VARBIT.PREFORM_QUALITY, Shared.VARBIT.PREFORM_START_QUALITY);
+  for (const varbit of cleared) {
     Shared.set(player, varbit, 0);
   }
   clearCommission(player);

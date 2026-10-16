@@ -59,6 +59,11 @@ const STATUS_NOT_STARTED = 1;
 const STATUS_COMPLETE = 2;
 
 const quests = [];
+const openBooks = new WeakMap();
+const BOOK_GROUP = 392;
+const BOOK_CLOSE = (BOOK_GROUP << 16) | 7;
+const BOOK_PREVIOUS = (BOOK_GROUP << 16) | 75;
+const BOOK_NEXT = (BOOK_GROUP << 16) | 77;
 let widgetsRegistered = false;
 let coreApi = null;
 
@@ -305,6 +310,11 @@ function registerQuestWidgets(api) {
   if (widgetsRegistered) return;
   widgetsRegistered = true;
 
+  api.onInterfaceActionButton([BOOK_CLOSE, BOOK_PREVIOUS, BOOK_NEXT], turnBookPage);
+  api.onCustomEvent("interface:closed", ({ player, interfaceId }) => {
+    if (interfaceId === BOOK_GROUP) openBooks.delete(player);
+  });
+
   // "Read journal:" on a quest list row.
   api.onInterfaceActionButton([QUEST_LIST_ENTRY_UID], (event) => {
     openJournalBySlot(event.player, event.slot);
@@ -329,6 +339,47 @@ function registerQuestWidgets(api) {
   // re-sends the all-spells-unlocked varps, clobbering quest varps that share
   // storage with cache transforms (e.g. Drezel's 302). Re-send ours afterwards.
   api.onCustomEvent("player:bootstrap-complete", ({ player }) => sendQuestVarps({ player }));
+}
+
+/** The cache's two-page book (392), using the captured text lines for each spread. */
+function openBook(player, title, pages) {
+  if (!pages.length) return;
+  player.getPacketSender().sendInterface(BOOK_GROUP);
+  openBooks.set(player, { title, pages, page: 0 });
+  showBookPage(player);
+}
+
+function showBookPage(player) {
+  const { title, pages, page } = openBooks.get(player);
+  const packet = player.getPacketSender();
+  packet.sendString(title, (BOOK_GROUP << 16) | 6);
+  packet.sendString(String(page * 2 + 1), (BOOK_GROUP << 16) | 9);
+  packet.sendString(String(page * 2 + 2), (BOOK_GROUP << 16) | 10);
+  for (let line = 0; line < 15; line++) {
+    for (const [text, model] of [[44 + line, 12 + line], [60 + line, 28 + line]]) {
+      packet.sendString(pages[page][text] ?? "", (BOOK_GROUP << 16) | text);
+      packet.sendInterfaceDisplayState((BOOK_GROUP << 16) | model, true);
+    }
+  }
+  packet.sendInterfaceDisplayState(BOOK_PREVIOUS, page === 0);
+  packet.sendInterfaceDisplayState(BOOK_NEXT, page === pages.length - 1);
+  packet.sendInterfaceScript(2524, [-1, -1]);
+}
+
+function turnBookPage(event) {
+  const { player, buttonId } = event;
+  const book = openBooks.get(player);
+  if (!book) return false;
+  event.handled = true;
+  if (buttonId === BOOK_CLOSE) {
+    openBooks.delete(player);
+    player.getPacketSender().sendInterfaceRemoval();
+    return;
+  }
+  const page = book.page + (buttonId === BOOK_NEXT ? 1 : -1);
+  if (page < 0 || page >= book.pages.length) return;
+  book.page = page;
+  showBookPage(player);
 }
 
 /**
@@ -414,7 +465,7 @@ function registerQuest(api, def) {
 
       if (def.onReward) def.onReward(player, quest);
       if (def.rewardItemId !== undefined) player.getInventory().adds(def.rewardItemId, 1);
-      player.getPacketSender().sendJingle(QUEST_COMPLETE_JINGLE, 0);
+      player.getPacketSender().sendJingle(def.completionJingleId ?? QUEST_COMPLETE_JINGLE, 0);
       player.sendMessage(`Congratulations, you've completed a quest: ${def.name}`);
       showCompletedScroll(player, quest, points | 0);
       api.emitCustomEvent?.("quest:completed", { player, key: def.key, quest });
@@ -535,6 +586,7 @@ function startTranscript(api, player, npcId, page, variant, select) {
 }
 
 module.exports = {
+  openBook,
   QUEST_POINTS_VARP,
   QUEST_POINTS_ATTRIBUTE,
   QUEST_COMPLETE_JINGLE,

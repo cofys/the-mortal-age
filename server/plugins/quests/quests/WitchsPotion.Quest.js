@@ -1,25 +1,7 @@
-/**
- * Witch's Potion.
- *
- * Words come from npc-dialogues.json (dumped OSRS transcript):
- *   stage 0   -> "Witch's Potion" / "starting-off-talking-to-hetty"
- *   stage 1   -> "Witch's Potion" / "acquiring-the-items-…-with-none/some/all-of-the-items"
- *                (by how many of the four ingredients are carried)
- *   stage 2   -> "Witch's Potion" / "acquiring-the-items-talking-to-hetty-again-before-drinking-from-the-cauldron"
- *   complete  -> "Hetty"           / "standard-dialogue-after-completing-witch-s-potion"
- *
- * This plugin supplies the variant selector, the prose-condition answers for the
- * "some of the items" speech, the start hook, the ingredient hand-in action, and
- * the two object/death interactions the reference needs: rat-tail drops from rats
- * and drinking from Hetty's cauldron.
- *
- * Not covered here (world content, not quest logic): sourcing the eye of newt,
- * onion and burnt meat. Cooking burns meat (Cooking.plugin.js); no onion spawn or
- * eye-of-newt shop exists in this world yet.
- */
+/** Witch's Potion. Capture evidence: docs/f2p-coastal-parity.md. */
 module.exports = function registerWitchsPotionQuest(api) {
   const { Skill, Item, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest, startDialogue } = require("../QuestRuntime");
+  const { registerQuest, startDialogue, startTranscript } = require("../QuestRuntime");
 
   const VARP_WITCHS_POTION = 67;
   const STAGE_STARTED = 1;
@@ -86,6 +68,7 @@ module.exports = function registerWitchsPotionQuest(api) {
 
   let quest;
   let pluginApi;
+  const accepted = new WeakSet();
 
   const hasItem = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
 
@@ -183,17 +166,14 @@ module.exports = function registerWitchsPotionQuest(api) {
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== NpcIdentifiers.HETTY || hook !== START_HOOK) return;
     if (quest.getStage(player) >= STAGE_STARTED) return;
-    quest.setStage(player, STAGE_STARTED);
+    accepted.add(player);
   }
 
   // Hand the four ingredients over: the transcript prints its own hand-over line.
   function handleHandIn(event) {
     if (event.npcId !== NpcIdentifiers.HETTY || event.stepId !== HAND_IN_ACTION_ID) return;
-    if (!hasAllIngredients(event.player)) return;
-    for (const requirement of REQUIRED_ITEMS) {
-      event.player.getInventory().deleteNumber(requirement.itemId, 1);
-    }
-    quest.setStage(event.player, STAGE_INGREDIENTS_GIVEN);
+    if (!hasAllIngredients(event.player)) { event.handled = true; event.end = true; return; }
+    event.box = { statement: true };
   }
 
   // Rat's tail drops from rats while the quest is in progress and none is carried.
@@ -208,16 +188,37 @@ module.exports = function registerWitchsPotionQuest(api) {
       .registerLocation(killer, new Item(ItemIdentifiers.RATS_TAIL, 1), npc.getLocation());
   }
 
-  // Hetty's cauldron: drink once the ingredients are in, otherwise decline.
+  function renderQuestLine(event) {
+    if (event.npcId !== NpcIdentifiers.HETTY) return;
+    if (event.text.startsWith("You need an eye of newt, a rat's tail, an onion...")) event.before = () => {
+      if (!accepted.has(event.player) || quest.getStage(event.player) !== 0) return;
+      accepted.delete(event.player);
+      quest.setStage(event.player, STAGE_STARTED);
+      event.player.sendMessage("You've started a new quest: <col=081190>Witch's Potion</col>");
+    };
+    if (event.text === "Ok, now drink from the cauldron.") event.before = () => {
+      if (quest.getStage(event.player) !== STAGE_STARTED || !hasAllIngredients(event.player)) return;
+      for (const requirement of REQUIRED_ITEMS) event.player.getInventory().deleteNumber(requirement.itemId, 1);
+      quest.setStage(event.player, STAGE_INGREDIENTS_GIVEN);
+    };
+  }
+
+  function handleCauldronAction(event) {
+    if (event.npcId !== NpcIdentifiers.HETTY) return;
+    if (event.stepId === "oLsPKg") event.box = { statement: true };
+    if (event.stepId === "OpbvIv" && quest.getStage(event.player) === STAGE_INGREDIENTS_GIVEN) {
+      quest.complete(event.player);
+      event.handled = true;
+      event.end = true;
+    }
+  }
+
   function handleCauldronClick({ player }) {
     if (quest.getStage(player) === STAGE_INGREDIENTS_GIVEN) {
-      player.sendMessage(
-        "You drink from the cauldron. It tastes horrible! You feel yourself imbued with power."
-      );
-      quest.complete(player);
+      startTranscript(api, player, NpcIdentifiers.HETTY, PAGE_WITCHS_POTION, "acquiring-the-items-drinking-from-the-cauldron");
       return;
     }
-    startDialogue(pluginApi, player, { npcId: NpcIdentifiers.HETTY }, [
+    startDialogue(api, player, { npcId: NpcIdentifiers.HETTY }, [
       { player: ["As nice as that looks, I think I'll give it a miss for now."] },
     ]);
   }
@@ -230,6 +231,7 @@ module.exports = function registerWitchsPotionQuest(api) {
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
+    completionJingleId: 154,
     xpRewards: [{ skillId: Skill.MAGIC.getIndex(), amount: 325, label: "Magic" }],
     scrollItemId: ItemIdentifiers.EYE_OF_NEWT,
     buildJournal,
@@ -240,6 +242,8 @@ module.exports = function registerWitchsPotionQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleHandIn);
+  api.onCustomEvent("npc-dialogue:action", handleCauldronAction);
+  api.onCustomEvent("npc-dialogue:line", renderQuestLine);
   api.onNpcDeath(handleRatDeath);
   api.onObjectFirstClick(ObjectIdentifiers.CAULDRON_2, handleCauldronClick);
 };

@@ -145,3 +145,19 @@ test("an aborted poll leaves the session open for the page to retry", () => {
   assert.ok(channel.isOpen());
   channel.close();
 });
+
+test("a session nobody polls closes with a reason the next poll passes on", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const channel = new BrowserHostHttpChannel();
+  const reasons = [];
+  channel.onClose((_code, reason) => reasons.push(reason));
+  const poll = fakeResponse();
+  channel.attachPoll(poll, 0);
+  poll.emit("close");
+  t.mock.timers.tick(20_000);
+  assert.deepEqual(reasons, ["no poll for 20s"]);
+  const late = fakeResponse();
+  channel.attachPoll(late, 0);
+  assert.equal(late.statusCode, 410);
+  assert.equal(late.headers["X-Close-Reason"], "no poll for 20s");
+});

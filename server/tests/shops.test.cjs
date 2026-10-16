@@ -145,7 +145,7 @@ test("shop:purchase reports only paid, delivered quantities", (t) => {
   });
   const player = openShop();
   buy(player, 0, BRONZE_AXE, "Buy 5");
-  assert.deepEqual(purchases, [{ player, shopId: AXE_SHOP, shopName: "Bob's Brilliant Axes", itemId: BRONZE_AXE, amount: 2, originalStock: true }]);
+  assert.deepEqual(purchases, [{ player, shopId: AXE_SHOP, shopName: "Bob's Brilliant Axes", currency: "COINS", itemId: BRONZE_AXE, amount: 2, originalStock: true }]);
   buy(player, 0, BRONZE_AXE);
   buy(player, 1, BRONZE_AXE);
   assert.equal(purchases.length, 1, "sold-out and stale requests do not report a purchase");

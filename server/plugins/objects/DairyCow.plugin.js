@@ -26,6 +26,8 @@ const STEAL_XP = 16;
 const STEAL_STUN_TICKS = 8;
 
 let TaskManager;
+let pluginApi;
+const milking = new WeakMap();
 
 /** Mod Ash: 50% at level 1, 78% at level 99, interpolated. */
 function stealChance(level) {
@@ -38,10 +40,22 @@ function milkCow(event) {
     player.sendMessage("You need an empty bucket to milk the cow.");
     return;
   }
+  const from = player.getLocation().clone();
+  const token = {};
+  const amulet = player.getEquipment().get(pluginApi.core.Equipment.AMULET_SLOT)?.getId();
+  const faster = amulet === ItemIdentifiers.COWBELL_AMULET || amulet === ItemIdentifiers.COWBELL_AMULET_2;
+  milking.set(player, token);
   player.performAnimation(MILKING_ANIMATION);
-  player.getInventory().deleteNumber(ItemIdentifiers.BUCKET, 1);
-  player.getInventory().adds(ItemIdentifiers.BUCKET_OF_MILK, 1);
-  player.sendMessage("You milk the cow.");
+  TaskManager.submit(new pluginApi.core.CountdownTask(player, faster ? 6 : 7, () => {
+    if (milking.get(player) !== token) return;
+    milking.delete(player);
+    if (!player.isRegistered() || !player.getLocation().equals(from) ||
+        !player.getInventory().containsNumber(ItemIdentifiers.BUCKET)) return;
+    player.getInventory().deleteNumber(ItemIdentifiers.BUCKET, 1);
+    player.getInventory().adds(ItemIdentifiers.BUCKET_OF_MILK, 1);
+    player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+    player.sendMessage("You milk the cow.");
+  }));
 }
 
 function stealCowbell(event) {
@@ -88,9 +102,12 @@ function stealCowbell(event) {
 module.exports = {
   name: "DairyCow",
   register(api) {
+    pluginApi = api;
     TaskManager = api.getTaskManager();
     const actions = { Milk: milkCow, "Steal-cowbell": stealCowbell };
     api.onObjectInteraction("Dairy cow", actions);
     api.onObjectInteraction("Dairy Cow", actions);
+    api.onItemOnObject("Bucket", "Dairy cow", milkCow, { noted: false });
+    api.onItemOnObject("Bucket", "Dairy Cow", milkCow, { noted: false });
   },
 };

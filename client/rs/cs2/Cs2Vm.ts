@@ -1775,7 +1775,7 @@ export class Cs2Vm {
                         continue;
                     }
 
-                    case 6599: {
+                    case Opcodes.RUNELITE_CALLBACK: {
                         const eventName = this.popString();
                         if (typeof eventName !== "string") throw new Error("RuneLite callback name must be a string");
                         for (const listener of this.scriptCallbackListeners) listener(currentScript, eventName);

@@ -687,7 +687,8 @@ module.exports = function registerUndergroundPassQuest(api) {
   }
 
   /** Answer the page's prose conditions without ever throwing. */
-  function answerCondition({ player, text, stepId }) {
+  function answerCondition({ player, text, stepId, pages }) {
+    if (!pages?.some(entry => entry.page === PAGE)) return null;
     const value = String(text ?? "").toLowerCase();
     const stage = quest.getStage(player);
     const slots = freeSlots(player);

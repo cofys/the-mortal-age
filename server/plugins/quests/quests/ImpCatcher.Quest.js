@@ -1,21 +1,7 @@
-/**
- * Imp Catcher.
- *
- * The words come from the osrsreboxed transcript data (npc-dialogues.json):
- *   stage 0            -> "Imp Catcher" / "starting-out-talking-to-wizard-mizgog"
- *   stage 1, no beads  -> "Imp Catcher" / "finding-the-beads-speaking-to-wizard-mizgog-with-no-beads"
- *   stage 1, some      -> "Imp Catcher" / "finding-the-beads-speaking-to-wizard-mizgog-with-some-beads"
- *   stage 1, all four  -> "Imp Catcher" / "finishing-up-giving-the-beads-to-wizard-mizgog"
- *   complete           -> "Wizard Mizgog" / "after-imp-catcher"
- *
- * This plugin supplies only the branching: which variant to play, how to answer
- * the wiki's prose conditions, and the game actions (start, hand in the beads,
- * trade a spare set for another amulet). The beads themselves are on the imp
- * drop table (npc-drops.json "imp"), so no loot hook is needed.
- */
+/** Imp Catcher: dialogue branches and the captured bead ritual. See docs/f2p-varrock-parity.md. */
 module.exports = function registerImpCatcherQuest(api) {
-  const { Skill, ItemIdentifiers, NpcIdentifiers } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { Skill, Animation, Graphic, Location, World, CountdownTask, TaskManager, DialogueChainBuilder, ActionDialogue, StatementDialogue, ItemIdentifiers, NpcIdentifiers } = api.core;
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   // Wizard Mizgog spawns as transformed NPC 5005 (-> 7746/7747); handle all forms.
   // 5005 has no NpcIdentifiers member, so it stays a local constant.
@@ -61,7 +47,53 @@ module.exports = function registerImpCatcherQuest(api) {
   const CONDITION_WITHOUT_ALL_BEADS = "without all four beads";
   const CONDITION_ALL_BEADS = "has all four beads";
 
+  const PENDING_ATTRIBUTE = "imp-catcher:ritual-pending";
+  const REWARDED_ATTRIBUTE = "imp-catcher:amulet-issued";
+  const rituals = new Map(), casters = new WeakMap();
   let quest;
+  function later(key, ticks, fn) { TaskManager.submit(new CountdownTask(key, ticks, fn)); }
+  function fade(player, out) { player.getPacketSender().sendSubInterface((161 << 16) | 1, 174, 1, { postScripts: [{ scriptId: 948, args: out ? [0, 255, 0, 0, 15] : [0, 0, 0, 255, 50] }] }); }
+  function unlock(player) {
+    const ritual=rituals.get(player); if (ritual) TaskManager.cancelTasks(ritual);
+    rituals.delete(player);
+    player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false);
+    player.getPacketSender().sendVarbit(12393, 0).sendVarbit(6719, 0).sendCameraReset().closeSubInterface((161 << 16) | 1);
+  }
+  function beginRitual(event) {
+    const { player } = event;
+    if (rituals.has(player) || quest.isComplete(player) || !hasAllBeads(player)) return;
+    const ritual={}; rituals.set(player,ritual);
+    player.getMovementQueue().reset().setBlockMovement(true); player.setUntargetable(true);
+    player.getPacketSender().sendVarbit(12393,1);
+    fade(player,true);
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ActionDialogue(0, { execute: () => StatementDialogue.send(player,"You give four coloured beads to Wizard Mizgog.",false) })));
+    later(ritual,1,()=> player.getPacketSender().sendJingle(133,0).sendCameraLookAt(3103,3162,350,{rate:232,rate2:100,heightRelative:false}).sendCameraMoveTo(3103,3161,775,{rate:232,rate2:100,heightRelative:false}));
+    later(ritual,2,()=>fade(player,false));
+    later(ritual,5,()=> {
+      const npc=casters.get(player) ?? World.getNpcsNear(player.getLocation(),16,player.getPrivateArea?.()??null).find(npc=>npc && isMizgog(npc.getId()));
+      npc?.performAnimation(new Animation(4285)); player.getPacketSender().sendSoundEffect(1632,1,0);
+    });
+    later(ritual,7,()=> {
+      if (!hasAllBeads(player)) { unlock(player); return; }
+      for (const requirement of REQUIRED_ITEMS) player.getInventory().deleteNumber(requirement.itemId,1);
+      player.setAttribute(PENDING_ATTRIBUTE,1); player.getPacketSender().sendConfig(VARP_IMP_CATCHER,STAGE_COMPLETE);
+    });
+    later(ritual,8,()=>player.getPacketSender().sendGraphic(new Graphic(714,0,100),new Location(3102,3163,2)).sendSoundEffect(1633,1,0));
+    later(ritual,16,()=>fade(player,true));
+    later(ritual,17,()=> {
+      if (!player.getAttribute(PENDING_ATTRIBUTE)) return;
+      reward(player); player.getPacketSender().sendCameraReset(); fade(player,false);
+    });
+    later(ritual,19,()=> {
+      player.getDialogueManager().reset(); player.getPacketSender().sendInterfaceRemoval();
+      if (player.getAttribute(PENDING_ATTRIBUTE)) { player.setAttribute(PENDING_ATTRIBUTE,0); quest.complete(player); }
+      unlock(player);
+    });
+  }
+  function restoreRitual({ player }) {
+    if (player.getAttribute(PENDING_ATTRIBUTE)) { player.setAttribute(PENDING_ATTRIBUTE,0); quest.complete(player); }
+  }
+
 
   const isMizgog = (npcId) => MIZGOG_NPC_IDS.has(npcId);
 
@@ -109,11 +141,16 @@ module.exports = function registerImpCatcherQuest(api) {
   }
 
   function reward(player) {
+    if (player.getAttribute(REWARDED_ATTRIBUTE)) return;
+    player.setAttribute(REWARDED_ATTRIBUTE,1);
+    player.getInventory().adds(ItemIdentifiers.AMULET_OF_ACCURACY,1);
+    player.sendMessage("The wizard hands you an amulet.");
     player.getSkillManager().addExperiences(Skill.MAGIC, 875);
   }
 
   // Which transcript variant Wizard Mizgog plays, by quest stage / carried beads.
   function selectVariant({ npcId, player }) {
+    if (npcId === NpcIdentifiers.WIZARD_GRAYZAG && quest.getStage(player) === STAGE_STARTED) return { page: PAGE_IMP_CATCHER, variant: "finding-the-beads-speaking-to-wizard-grayzag" };
     if (!isMizgog(npcId)) return null;
     const stage = quest.getStage(player);
     if (stage >= STAGE_COMPLETE) return { page: PAGE_WIZARD_MIZGOG, variant: VARIANT_AFTER };
@@ -145,21 +182,17 @@ module.exports = function registerImpCatcherQuest(api) {
 
   function handleDialogueAction(event) {
     if (!isMizgog(event.npcId)) return;
-    // Turn in the four coloured beads.
     if (HAND_IN_ACTION_IDS.has(event.stepId)) {
-      if (!hasAllBeads(event.player)) return;
-      for (const requirement of REQUIRED_ITEMS) {
-        event.player.getInventory().deleteNumber(requirement.itemId, 1);
-      }
-      event.player.sendMessage("You give four coloured beads to Wizard Mizgog.");
-      quest.complete(event.player);
-      event.handled = true;
-      event.end = true;
-      return;
+      if (!hasAllBeads(event.player) || quest.getStage(event.player) !== STAGE_STARTED) return;
+      if (event.npc) casters.set(event.player,event.npc);
+      startTranscript(api,event.player,event.npcId,PAGE_IMP_CATCHER,"finishing-up-quest-complete");
+      event.handled=true; return;
     }
+    if (event.stepId === "XpTtp9") { event.handled=true; beginRitual(event); return; }
+    if (["DUX9vV","6fGWGv","2TvFXa"].includes(event.stepId)) { event.handled=true; return; }
     // Post-quest: swap a spare set of beads for another amulet. Do not consume
     // the step so the transcript's own "Mizgog removes the beads..." line plays.
-    if (event.stepId === SPARE_AMULET_MESSAGE_ID && hasAllBeads(event.player)) {
+    if (event.stepId === SPARE_AMULET_MESSAGE_ID && quest.isComplete(event.player) && hasAllBeads(event.player)) {
       for (const requirement of REQUIRED_ITEMS) {
         event.player.getInventory().deleteNumber(requirement.itemId, 1);
       }
@@ -174,13 +207,19 @@ module.exports = function registerImpCatcherQuest(api) {
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
+    completionJingleId: 153,
+    varpValue: (stage,player)=>player.getAttribute(PENDING_ATTRIBUTE) ? STAGE_COMPLETE : stage,
     xpRewards: [{ skillId: Skill.MAGIC.getIndex(), amount: 875, label: "Magic" }],
-    rewardItemId: ItemIdentifiers.AMULET_OF_ACCURACY,
+    scrollItemId: ItemIdentifiers.AMULET_OF_ACCURACY,
     rewardItemLabel: "An Amulet of Accuracy",
     buildJournal,
     onReward: reward,
   });
 
+  api.persistAttribute(PENDING_ATTRIBUTE,0);
+  api.persistAttribute(REWARDED_ATTRIBUTE,0);
+  api.onPlayerLogin(restoreRitual);
+  api.onPlayerLogout(({player})=>unlock(player));
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);

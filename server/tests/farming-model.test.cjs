@@ -232,3 +232,24 @@ try {
     Model.advanceFarm = realAdvance;
 }
 console.log("Farming state and hook checks passed.");
+
+// A quest restriction must run before any patch state, tool or rune mutation.
+const originalEmit = core.PluginManager.emitCustomEvent;
+const restricted = Data.CACHE.patches.find(p => p.id === 50692);
+let patchRequests = 0;
+core.PluginManager.emitCustomEvent = (name, request) => {
+    if (name !== "farming:can-use-patch") return;
+    assert.equal(request.patch, restricted);
+    request.allowed = false;
+    patchRequests++;
+};
+try {
+    for (const hook of ["onObjectInteraction", "onItemOnObject", "onSpellOnObject"]) {
+        const player = testPlayer();
+        const event = { player, object: { getId: () => restricted.id }, location: { x: restricted.x, y: restricted.y, z: restricted.z }, itemId: 1, clickType: 1 };
+        hooks[hook][0](event);
+        assert.equal(event.handled, true);
+        assert.equal(player.getAttribute(Patches.FARM_ATTRIBUTE), undefined, `${hook} must not create farming state for a locked patch`);
+    }
+    assert.equal(patchRequests, 3);
+} finally { core.PluginManager.emitCustomEvent = originalEmit; }

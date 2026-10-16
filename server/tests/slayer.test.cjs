@@ -485,3 +485,66 @@ test("::superior spawns the current task's superior", () => {
   commands.superior({ player });
   assert.equal(player.messages.at(-1), "Your task has no superior monster.");
 });
+
+/** Answers quest:is-complete / quest:is-started from a player's `quests` map ({ key: "complete" | "started" }). */
+function withQuests(run) {
+  const answer = (field, done) => (request) => {
+    const state = request.player.quests?.[request.key];
+    if (state !== undefined) request[field] = done(state);
+  };
+  handlers.events.set("quest:is-complete", [answer("complete", (state) => state === "complete")]);
+  handlers.events.set("quest:is-started", [answer("started", (state) => state === "complete" || state === "started")]);
+  try {
+    run();
+  } finally {
+    handlers.events.delete("quest:is-complete");
+    handlers.events.delete("quest:is-started");
+  }
+}
+
+test("tasks behind a quest aren't assigned without it (#504)", () => {
+  withQuests(() => {
+    const player = createPlayer();
+    player.quests = { priest_in_peril: "not started", fairytale_ii_cure_a_queen: "not started" };
+    for (let i = 0; i < 300; i++) {
+      Tasks.clear(player);
+      Tasks.assign(player, master(3), Math.random);
+      const name = Tasks.current(player).task.displayName;
+      assert.ok(!["Ghouls", "Werewolves", "Vampyres", "Abyssal Demons"].includes(name), `${name} needs Priest in Peril`);
+    }
+    assert.equal(Tasks.meetsQuests(player, taskId("Ghouls")), false);
+    player.quests.priest_in_peril = "complete";
+    assert.equal(Tasks.meetsQuests(player, taskId("Ghouls")), true);
+    assert.equal(Tasks.meetsQuests(player, taskId("Werewolves")), true);
+  });
+});
+
+test("Abyssal demons need either quest; partly-done quests only need starting", () => {
+  withQuests(() => {
+    const player = createPlayer();
+    player.quests = { priest_in_peril: "not started", fairytale_ii_cure_a_queen: "complete", dragon_slayer_i: "started" };
+    assert.equal(Tasks.meetsQuests(player, taskId("Abyssal Demons")), true);
+    assert.equal(Tasks.meetsQuests(player, taskId("Blue Dragons")), true, "Dragon Slayer I started is enough");
+    player.quests.dragon_slayer_i = "not started";
+    assert.equal(Tasks.meetsQuests(player, taskId("Blue Dragons")), false);
+    assert.equal(Tasks.meetsQuests(player, taskId("Goblins")), true, "no quest");
+  });
+  // No quest plugin answering (a quest tsps doesn't have): the task isn't blocked.
+  assert.equal(Tasks.meetsQuests(createPlayer(), taskId("Ghouls")), true);
+});
+
+test("every task quest names a task and a registered quest", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const dir = path.join(__dirname, "../plugins/quests/quests");
+  const keys = new Set();
+  for (const file of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!file.isFile() || !file.name.endsWith(".Quest.js")) continue;
+    for (const match of fs.readFileSync(path.join(dir, file.name), "utf8").matchAll(/\bkey:\s*"([a-z0-9_]+)"/g)) keys.add(match[1]);
+  }
+  const taskQuests = require("../plugins/skills/data/slayer-masters.json").taskQuests;
+  for (const [id, needs] of Object.entries(taskQuests)) {
+    assert.equal(Data.get().taskById.get(Number(id))?.displayName, needs.task, `task ${id}`);
+    for (const key of needs.any) assert.ok(keys.has(key), `${needs.task}: ${key} is a quest`);
+  }
+});

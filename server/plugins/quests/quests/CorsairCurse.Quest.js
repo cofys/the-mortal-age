@@ -1,43 +1,7 @@
-/**
- * The Corsair Curse (free-to-play).
- *
- * The words come from the "The Corsair Curse" transcript page (plus the
- * post-quest "Captain Tock", "Cabin Boy Colin", "Arsen the Thief" and
- * "Gnocci the Cook" pages); this plugin supplies the per-stage variant
- * selector, the prose-condition answers, the boat rides, the dungeon
- * entrance, the telescope/dig/driftwood investigations and the Ithoi fight.
- *
- * Stages (varp 1677 "corscurs", written through varbit 6071
- * "corscurs_progress", bits 0-5):
- *   0 not started, 1 agreed to help (meet the ship west of Rimmington),
- *   2 sailed to Corsair Cove (visit Ithoi first), 3 investigating the crew,
- *   4 Captain Tock explained the dinner, 5 Gnocci and Arsen questioned,
- *   6 Ithoi confessed, 7 Ithoi proved healthy (driftwood lit),
- *   8 Captain Tock asked for Ithoi's death, 9 Ithoi killed, 10 complete.
- *
- * Crew progress mirrors the cache's sibling bits of the same varp, cached in
- * persisted attributes: 6072 corcurs_cabinboy 0-3 (0 none, 1 heard, 2 used
- * telescope, 3 told), 6073 corcurs_cook 0-3 (0 none, 1 heard, 2 dug, 3 told),
- * 6074 corcurs_thief 0-4 (0 none, 1 heard, 2 has artefact, 3 returned relic,
- * 4 told), 6075 corcurs_navigator 0-1 (1 = the player challenged Ithoi to
- * prove he can get up).
- *
- * Source: OSRS Wiki (https://oldschool.runescape.wiki/w/The_Corsair_Curse and
- * its quick guide and transcript). Rewards per the wiki: 2 Quest points,
- * access to Yusuf's Corsair Cove bank and boat docking (neither simulated).
- *
- * Gaps: the "Wet driftwood" scenery (31723) has no map placement in this
- * cache, so the plugin spawns the dry driftwood (31721) itself and swaps it
- * for the burning/wet ids during the reveal; that swap is world-wide rather
- * than per-player. Ithoi's overhead fight lines ("traitor-in-the-midst-
- * killing-ithoi"), the cutscene camera work and Yusuf's bank gating are not
- * simulated; "Please take me back to Rimmington" is handled directly on the
- * choice. The journal text is adapted from the quick guide (the wiki has no
- * journal transcript).
- */
+/** The Corsair Curse. Capture evidence: docs/f2p-coastal-parity.md. */
 module.exports = function registerCorsairCurseQuest(api) {
   const {
-    GameObject,
+    GameObject, Area, PrivateArea, Boundary, Animation, Graphic, Task, TaskManager, DialogueChainBuilder, ActionDialogue, MagicCombatMethod, CombatSpells, Projectile, StatementDialogue,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -80,6 +44,7 @@ module.exports = function registerCorsairCurseQuest(api) {
   const GNOCCI = NpcIdentifiers.GNOCCI_THE_COOK; // 7970
   const GNOCCI_2 = NpcIdentifiers.GNOCCI_THE_COOK_2; // 7971
   const GNOCCI_3 = NpcIdentifiers.GNOCCI_THE_COOK_3; // 7972
+  const DOLL = NpcIdentifiers.DOLL;
   const ARSEN = NpcIdentifiers.ARSEN_THE_THIEF; // 7976
 
   const TOCK_NPC_IDS = new Set([CAPTAIN_TOCK_START, CAPTAIN_TOCK_POST, CAPTAIN_TOCK_FERRY]);
@@ -99,6 +64,7 @@ module.exports = function registerCorsairCurseQuest(api) {
   const DRIFTWOOD_OBJECT = ObjectIdentifiers.DRIFTWOOD_4; // 31721
   const BURNING_DRIFTWOOD_OBJECT = ObjectIdentifiers.BURNING_DRIFTWOOD; // 31722
   const WET_DRIFTWOOD_OBJECT = ObjectIdentifiers.WET_DRIFTWOOD; // 31723
+  const DRIFTWOOD_PARENT = 31724; // corscurs_driftwood_multi, cache241.
   const DUNGEON_HOLE_OBJECT = ObjectIdentifiers.HOLE_54; // 31791, Enter (four pillars)
   const OGRE_CAVE_OBJECT = ObjectIdentifiers.CAVE_59; // 31766, Enter (west of the cove)
   const VINE_LADDER_OBJECT = ObjectIdentifiers.VINE_LADDER_2; // 31790, Climb
@@ -127,7 +93,7 @@ module.exports = function registerCorsairCurseQuest(api) {
   const RIMMINGTON_TILE = { x: 2910, y: 3226, z: 0 };
   const RIMMINGTON_LANDING = { x: 2911, y: 3226, z: 0 };
   const COVE_TOCK_TILE = { x: 2574, y: 2836, z: 1 };
-  const COVE_LANDING = { x: 2576, y: 2836, z: 1 };
+  const COVE_LANDING = { x: 2578, y: 2837, z: 1 };
   const ARSEN_TILE = { x: 2556, y: 2856, z: 1 };
   const COLIN_TILE = { x: 2559, y: 2856, z: 1 };
   const GNOCCI_TILE = { x: 2546, y: 2862, z: 1 };
@@ -161,7 +127,13 @@ module.exports = function registerCorsairCurseQuest(api) {
   const TRAITOR_COLIN = 1 << 2;
 
   const npcsByPlayer = new Map();
-  let driftwoodObject = null;
+  const scenes = new WeakMap();
+  const fights = new WeakMap();
+  const dolls = new WeakMap();
+  const PROOF_ATTRIBUTE = "corsair-curse:proof-plan";
+  const THIEF_STORY_ATTRIBUTE = "corsair-curse:thief-story";
+  const THIEF_REPORT_ATTRIBUTE = "corsair-curse:thief-report";
+  const DEPARTED_ATTRIBUTE = "corsair-curse:captain-departed";
   let quest;
 
   const sub = (player, attribute) => Number(player.getAttribute(attribute)) || 0;
@@ -173,7 +145,8 @@ module.exports = function registerCorsairCurseQuest(api) {
 
   function setSub(player, attribute, varbit, value) {
     player.setAttribute(attribute, value | 0);
-    player.getPacketSender().sendVarbit(varbit, value | 0);
+    player.getPacketSender().sendVarbit(varbit, varbit === VARBIT_THIEF ? thiefWire(player) : value | 0);
+    if (quest) player.getPacketSender().sendVarbit(VARBIT_PROGRESS, wireStage(player));
   }
 
   const setCabinboy = (player, value) => setSub(player, CABINBOY_ATTRIBUTE, VARBIT_CABINBOY, value);
@@ -194,6 +167,26 @@ module.exports = function registerCorsairCurseQuest(api) {
 
   function anyTheoryHeard(player) {
     return thief(player) >= THIEF_HEARD || cabinboy(player) >= CABINBOY_HEARD || cook(player) >= COOK_HEARD;
+  }
+
+  function thiefWire(player) {
+    const stage = thief(player);
+    if (stage === THIEF_HEARD) return sub(player, THIEF_STORY_ATTRIBUTE) ? 1 : 2;
+    if (stage === THIEF_HAS_ARTEFACT) return 3;
+    if (stage === THIEF_RETURNED_RELIC) return sub(player, THIEF_REPORT_ATTRIBUTE) ? 5 : 4;
+    return stage >= THIEF_TOLD ? 6 : 0;
+  }
+
+  function wireStage(player) {
+    const stage = quest.getStage(player);
+    if (scenes.get(player)?.kind === "fire") return 49;
+    if (stage === STAGE_STARTED) return sub(player, DEPARTED_ATTRIBUTE) ? 10 : 5;
+    if (stage === STAGE_ARRIVED) return 15;
+    if (stage === STAGE_INVESTIGATING) return crewResolved(player) ? 20 : 15;
+    if (stage === STAGE_TRAITOR_KNOWN) return traitorFlags(player) & (TRAITOR_GNOCCI | TRAITOR_ARSEN) ? 30 : 25;
+    if (stage === STAGE_FIRING_KNOWN) return 35;
+    if (stage === STAGE_CONFESSED) return sub(player, PROOF_ATTRIBUTE) ? 45 : 40;
+    return ({ [STAGE_PROVED]: 50, [STAGE_KILL_ORDER]: 52, [STAGE_KILLED]: 55, [STAGE_COMPLETE]: 60 })[stage] ?? 0;
   }
 
   function crewResolved(player) {
@@ -243,29 +236,11 @@ module.exports = function registerCorsairCurseQuest(api) {
 
   function desiredNpcs(player) {
     const stage = quest.getStage(player);
-    const list = [];
-    if (stage === STAGE_NOT_STARTED) {
-      list.push({ key: "tock", id: CAPTAIN_TOCK_START, ...TOCK_START_TILE });
-    } else if (stage < STAGE_COMPLETE) {
-      list.push({ key: "tock-rimmington", id: CAPTAIN_TOCK_FERRY, ...RIMMINGTON_TILE });
-      list.push({ key: "tock-cove", id: CAPTAIN_TOCK_FERRY, ...COVE_TOCK_TILE });
-    } else {
-      list.push({ key: "tock", id: CAPTAIN_TOCK_POST, ...POST_TOCK_TILE });
-    }
-    if (stage < STAGE_COMPLETE) {
-      list.push({ key: "arsen", id: ARSEN, ...ARSEN_TILE });
-      list.push({ key: "colin", id: COLIN, ...COLIN_TILE });
-      list.push({ key: "gnocci", id: GNOCCI, ...GNOCCI_TILE });
-      if (stage < STAGE_KILL_ORDER) {
-        list.push({ key: "ithoi", id: ITHOI, ...ITHOI_TILE });
-      } else if (stage === STAGE_KILL_ORDER) {
-        list.push({ key: "ithoi", id: ITHOI_FIGHT, ...ITHOI_TILE });
-      }
-    } else {
-      list.push({ key: "arsen", id: ARSEN, ...ARSEN_TILE });
-      list.push({ key: "gnocci", id: GNOCCI, ...GNOCCI_TILE });
-      list.push({ key: "colin", id: COLIN_POST, ...postColinTile(player) });
-    }
+    if (stage <= STAGE_NOT_STARTED || stage >= STAGE_COMPLETE) return [];
+    // The cache's canonical multi-NPCs already supply the crew and post-quest
+    // captain. Only the travelling captain needs per-player locations.
+    const list = [{ key: "tock-rimmington", id: CAPTAIN_TOCK_FERRY, ...RIMMINGTON_TILE }];
+    if (stage >= STAGE_ARRIVED) list.push({ key: "tock-cove", id: CAPTAIN_TOCK_FERRY, ...COVE_TOCK_TILE });
     return list;
   }
 
@@ -328,25 +303,15 @@ module.exports = function registerCorsairCurseQuest(api) {
     return true;
   }
 
-  // ==========================================================================
-  // The driftwood (no map placement in this cache - the plugin places it)
-  // ==========================================================================
-
-  function placeDriftwood(id) {
-    if (driftwoodObject) {
-      ObjectManager.deregister(driftwoodObject, true);
-      driftwoodObject = null;
-    }
-    const object = new GameObject(
-      id,
-      new Location(DRIFTWOOD_TILE.x, DRIFTWOOD_TILE.y, DRIFTWOOD_TILE.z),
-      10,
-      0,
-      null
-    );
-    ObjectManager.register(object, true);
-    driftwoodObject = object;
+  // Scenery in cinematic Areas is local to the viewer. Main-world driftwood
+  // uses cache multi-loc31724 and the player's progress varbit.
+  function placeDriftwood(player, id) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    ObjectManager.register(new GameObject(id, new Location(DRIFTWOOD_TILE.x, DRIFTWOOD_TILE.y, DRIFTWOOD_TILE.z), 10, 0, scene), true);
   }
+
+  // ==========================================================================
 
   // ==========================================================================
   // Transcript variant selection
@@ -427,7 +392,6 @@ module.exports = function registerCorsairCurseQuest(api) {
     if (progress === 0) return "arsen-s-curse-talking-to-arsen";
     if (progress <= THIEF_HAS_ARTEFACT) return "arsen-s-curse-talking-to-arsen-talking-to-arsen-again";
     if (progress === THIEF_RETURNED_RELIC) {
-      setThief(player, THIEF_TOLD);
       return "arsen-s-curse-returning-to-arsen";
     }
     return "arsen-s-curse-returning-to-arsen";
@@ -460,7 +424,6 @@ module.exports = function registerCorsairCurseQuest(api) {
     if (progress === 0) return "colin-s-curse-talking-to-colin";
     if (progress === CABINBOY_HEARD) return "colin-s-curse-talking-to-colin-talking-to-colin-again";
     if (progress === CABINBOY_TELESCOPE) {
-      setCabinboy(player, CABINBOY_TOLD);
       return "colin-s-curse-returning-to-colin";
     }
     return "colin-s-curse-returning-to-colin";
@@ -489,7 +452,6 @@ module.exports = function registerCorsairCurseQuest(api) {
     if (progress === 0) return "gnocci-s-curse-talking-to-gnocci";
     if (progress === COOK_HEARD) return "gnocci-s-curse-talking-to-gnocci-talking-to-gnocci-again";
     if (progress === COOK_DUG) {
-      setCook(player, COOK_TOLD);
       return "gnocci-s-curse-returning-to-gnocci";
     }
     return "gnocci-s-curse-returning-to-gnocci";
@@ -514,6 +476,7 @@ module.exports = function registerCorsairCurseQuest(api) {
     if (COLIN_NPC_IDS.has(npcId)) return selectColinVariant(player, npc);
     if (GNOCCI_NPC_IDS.has(npcId)) return selectGnocciVariant(player);
     if (npcId === NpcIdentifiers.CHIEF_TESS) return selectTessVariant(player);
+    if (npcId === NpcIdentifiers.YUSUF || npcId === NpcIdentifiers.YUSUF_2) return { page: "Yusuf", variant: quest.isComplete(player) ? "standard-dialogue" : "before-completion-of-the-corsair-curse" };
     return null;
   }
 
@@ -559,21 +522,26 @@ module.exports = function registerCorsairCurseQuest(api) {
   function handleDialogueAction(event) {
     const { player, stepId } = event;
     if (!player || !stepId) return;
+    if (sceneAction(event)) return;
     if (stepId === ACTION_TOCK_LEAVES) {
       event.handled = true;
-      player.sendMessage(String(event.text ?? ""));
-      advance(player, STAGE_STARTED);
+      event.box = { statement: true };
+      player.setAttribute(DEPARTED_ATTRIBUTE, true);
+      if (quest.getStage(player) < STAGE_STARTED) advance(player, STAGE_STARTED);
+      else sendProgress(player);
       return;
     }
     if (stepId === ACTION_SAIL_TO_COVE) {
       event.handled = true;
-      player.sendMessage(String(event.text ?? ""));
-      sailToCove(player);
+      advance(player, STAGE_ARRIVED);
+      event.box = { statement: true };
+      later(player, 3, () => moveTo(player, COVE_LANDING));
       return;
     }
     if (stepId === ACTION_RECEIVE_ARTEFACT) {
       event.handled = true;
-      player.sendMessage(String(event.text ?? ""));
+      if (player.getInventory().isFull()) { player.sendMessage("You need more inventory space."); return; }
+      event.box = { items: [OGRE_ARTEFACT_ITEM] }; event.handled = false;
       if (thief(player) === THIEF_HEARD) {
         player.getInventory().adds(OGRE_ARTEFACT_ITEM, 1);
         setThief(player, THIEF_HAS_ARTEFACT);
@@ -582,16 +550,14 @@ module.exports = function registerCorsairCurseQuest(api) {
     }
     if (stepId === ACTION_PRESENT_ARTEFACT) {
       event.handled = true;
-      player.sendMessage(String(event.text ?? ""));
-      if (thief(player) === THIEF_HAS_ARTEFACT) {
-        player.getInventory().deleteNumber(OGRE_ARTEFACT_ITEM, 1);
-        setThief(player, THIEF_RETURNED_RELIC);
-      }
+      if (thief(player) !== THIEF_HAS_ARTEFACT || !player.getInventory().getAmount(OGRE_ARTEFACT_ITEM)) return;
+      event.box = { items: [OGRE_ARTEFACT_ITEM] }; event.handled = false;
+      player.getInventory().deleteNumber(OGRE_ARTEFACT_ITEM, 1);
       return;
     }
     if (stepId === ACTION_ITHOI_EXTINGUISHES) {
       event.handled = true;
-      placeDriftwood(WET_DRIFTWOOD_OBJECT);
+      placeDriftwood(player, WET_DRIFTWOOD_OBJECT);
       return;
     }
     if (stepId === ACTION_QUEST_COMPLETE) {
@@ -605,99 +571,30 @@ module.exports = function registerCorsairCurseQuest(api) {
   function handleDialogueChoice(event) {
     const { player, npcId, option } = event;
     if (!player) return;
-    const text = String(option ?? "");
-    const stage = quest.getStage(player);
-
-    if (TOCK_NPC_IDS.has(npcId)) {
-      if (text === "Please take me back to Rimmington.") {
-        sailToRimmington(player);
-      } else if (
-        text === "I've ruled out all the Corsairs' theories..."
-        && stage === STAGE_INVESTIGATING
-        && crewResolved(player)
-      ) {
-        advance(player, STAGE_TRAITOR_KNOWN);
-      } else if (
-        text === "I've seen Ithoi running around. He's not sick at all."
-        && stage === STAGE_PROVED
-      ) {
-        advance(player, STAGE_KILL_ORDER);
-      }
-      return;
+    if (TOCK_NPC_IDS.has(npcId) && option === "Please take me back to Rimmington.") sailToRimmington(player);
+    if (npcId === COLIN_POST && quest.isComplete(player)) {
+      if (option === "Please take me back to Rimmington.") sailToRimmington(player);
+      if (option === "Yes please.") sailToCove(player);
     }
-
-    if (ITHOI_NPC_IDS.has(npcId)) {
-      if (text === "I hear you've been cursed." && stage === STAGE_ARRIVED) {
-        advance(player, STAGE_INVESTIGATING);
-      } else if (
-        text === "Maybe because the Captain's thinking of firing you."
-        && stage === STAGE_FIRING_KNOWN
-      ) {
-        advance(player, STAGE_CONFESSED);
-      } else if (
-        text === "I bet I can prove you're well enough to get up."
-        && stage === STAGE_CONFESSED
-      ) {
-        setNavigator(player, NAVIGATOR_TOLD);
-      }
-      return;
-    }
-
-    if (npcId === ARSEN) {
-      if (text === "I hear you've been cursed." && stage === STAGE_INVESTIGATING && thief(player) === 0) {
-        setThief(player, THIEF_HEARD);
-      } else if (
-        text === "I hear Ithoi cooked the meal you ate that night."
-        && stage === STAGE_TRAITOR_KNOWN
-      ) {
-        addTraitorFlag(player, TRAITOR_ARSEN);
-        maybeAdvanceTraitor(player);
-      }
-      return;
-    }
-
-    if (COLIN_NPC_IDS.has(npcId)) {
-      if (npcId === COLIN_POST && quest.isComplete(player)) {
-        if (text === "Please take me back to Rimmington.") sailToRimmington(player);
-        else if (text === "Yes please.") sailToCove(player);
-        return;
-      }
-      if (
-        text === "I hear you've been cursed."
-        && stage === STAGE_INVESTIGATING
-        && cabinboy(player) === 0
-      ) {
-        setCabinboy(player, CABINBOY_HEARD);
-      } else if (
-        text === "I hear the Captain's thinking of firing Ithoi."
-        && stage === STAGE_FIRING_KNOWN
-      ) {
-        addTraitorFlag(player, TRAITOR_COLIN);
-      }
-      return;
-    }
-
-    if (GNOCCI_NPC_IDS.has(npcId)) {
-      if (
-        text === "I hear you've been cursed."
-        && stage === STAGE_INVESTIGATING
-        && cook(player) === 0
-      ) {
-        setCook(player, COOK_HEARD);
-      } else if (
-        text === "I hear it happened straight after dinner."
-        && stage === STAGE_TRAITOR_KNOWN
-      ) {
-        addTraitorFlag(player, TRAITOR_GNOCCI);
-        maybeAdvanceTraitor(player);
-      } else if (
-        text === "Search for the possessed doll and face the consequences."
-        && stage === STAGE_INVESTIGATING
-        && cook(player) === COOK_HEARD
-      ) {
+    if (GNOCCI_NPC_IDS.has(npcId) && option === "Search for the possessed doll and face the consequences." && cook(player) === COOK_HEARD) {
+      event.player.performAnimation(new Animation(830));
+      later(player, 1, () => {
+        if (cook(player) !== COOK_HEARD) return;
         setCook(player, COOK_DUG);
-      }
+        const doll = api.spawnNpc({ id: DOLL, x: 2505, y: 2839, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+        if (!doll) return;
+        doll.__skipDefaultRespawn = true; dolls.set(player, doll);
+        const path = [[2505,2840],[2506,2841],[2507,2842],[2508,2842],[2509,2841],[2509,2840],[2509,2839],[2509,2838],[2509,2839]];
+        path.forEach(([x,y], index) => later(player, index + 1, () => { if (dolls.get(player) === doll) doll.moveTo(new Location(x,y,0)); }));
+        later(player, 10, () => removeDoll(player));
+      });
     }
+  }
+
+  function removeDoll(player) {
+    const doll = dolls.get(player);
+    if (doll) api.removeNpc(doll);
+    dolls.delete(player);
   }
 
   // ==========================================================================
@@ -709,7 +606,6 @@ module.exports = function registerCorsairCurseQuest(api) {
     if (stage === STAGE_INVESTIGATING) {
       const progress = cabinboy(player);
       if (progress === CABINBOY_HEARD) {
-        setCabinboy(player, CABINBOY_TELESCOPE);
         startTranscript(api, player, ITHOI, PAGE, "colin-s-curse-using-ithoi-s-telescope");
         return true;
       }
@@ -726,12 +622,16 @@ module.exports = function registerCorsairCurseQuest(api) {
     return false;
   }
 
-  function enterDungeon(player) {
-    moveTo(player, DUNGEON_LANDING);
+  function climbVine(player, entering) {
+    const north = player.getLocation().getY() > (entering ? 2861 : 9005);
+    player.performAnimation(new Animation(828));
+    later(player, 1, () => moveTo(player, entering
+      ? { x: 2012, y: north ? 9006 : 9004, z: 1 }
+      : { x: 2523, y: north ? 2862 : 2860, z: 0 }));
   }
 
   function leaveDungeon(player) {
-    moveTo(player, CAVE_LANDING);
+    climbVine(player, false);
   }
 
   function handleObjectInteraction(event) {
@@ -743,7 +643,8 @@ module.exports = function registerCorsairCurseQuest(api) {
     }
     if (objectId === DUNGEON_HOLE_OBJECT || objectId === OGRE_CAVE_OBJECT) {
       event.handled = true;
-      enterDungeon(player);
+      if (objectId === DUNGEON_HOLE_OBJECT) climbVine(player, true);
+      else moveTo(player, DUNGEON_LANDING);
       return;
     }
     if (objectId === VINE_LADDER_OBJECT) {
@@ -777,23 +678,18 @@ module.exports = function registerCorsairCurseQuest(api) {
       player.sendMessage("The driftwood is too wet to light.");
       return;
     }
-    if (objectId !== DRIFTWOOD_OBJECT) return;
+    if (objectId !== DRIFTWOOD_OBJECT && objectId !== DRIFTWOOD_PARENT) return;
+    if (!player.getInventory().getAmount(TINDERBOX_ITEM)) return;
     event.handled = true;
     const stage = quest.getStage(player);
     if (stage >= STAGE_PROVED) {
       player.sendMessage("The driftwood is too wet to light.");
       return;
     }
-    if (stage === STAGE_CONFESSED && navigator(player) === NAVIGATOR_TOLD) {
-      advance(player, STAGE_PROVED);
-      placeDriftwood(BURNING_DRIFTWOOD_OBJECT);
-      startTranscript(
-        api,
-        player,
-        ITHOI,
-        PAGE,
-        "traitor-in-the-midst-attempting-to-light-the-the-driftwood-after-discovering-ithoi-s-lie"
-      );
+    if (stage === STAGE_CONFESSED && sub(player, PROOF_ATTRIBUTE)) {
+      if (scenes.has(player)) return;
+      player.performAnimation(new Animation(733));
+      startFireScene(player);
       return;
     }
     if (stage >= STAGE_INVESTIGATING) {
@@ -817,6 +713,10 @@ module.exports = function registerCorsairCurseQuest(api) {
     return true;
   }
 
+  function claimDig(event) {
+    if (event.itemId === SPADE_ITEM && /dig/i.test(String(event.option)) && handleDig(event)) event.allow = false;
+  }
+
   function handleItemOnNpc(event) {
     const { player, target, itemId } = event;
     if (!player || !target || !ITHOI_NPC_IDS.has(target.getId?.())) return;
@@ -828,7 +728,8 @@ module.exports = function registerCorsairCurseQuest(api) {
   function handleNpcDeath(event) {
     const player = event?.killer?.isPlayer?.() ? event.killer : null;
     if (!player || event.npcId !== ITHOI_FIGHT) return;
-    if (quest.getStage(player) !== STAGE_KILL_ORDER) return;
+    if (quest.getStage(player) !== STAGE_KILL_ORDER || fights.get(player)?.npc !== event.npc) return;
+    clearFight(player);
     const tracked = npcsByPlayer.get(player);
     if (tracked) {
       tracked.delete("ithoi");
@@ -837,16 +738,309 @@ module.exports = function registerCorsairCurseQuest(api) {
     advance(player, STAGE_KILLED);
   }
 
+  function later(key, ticks, action) {
+    const task = new Task(ticks, key, false);
+    task.execute = () => { task.stop(); action(); };
+    TaskManager.submit(task);
+  }
+
+  class CorsairScene extends PrivateArea {
+    constructor(player, kind, tile) {
+      super([new Boundary(tile.x - 40, tile.x + 40, tile.y - 40, tile.y + 40, 0), new Boundary(tile.x - 40, tile.x + 40, tile.y - 40, tile.y + 40, 1)]);
+      this.owner = player; this.kind = kind; this.returnTile = player.getLocation().clone();
+      this.model = player.getNpcTransformationId();
+    }
+    canTeleport() { return false; }
+    canAttack() { return false; }
+    postLeave(mobile, logout) {
+      if (mobile === this.owner) { mobile.setArea(null); endScene(mobile); }
+      super.postLeave(mobile, logout);
+    }
+  }
+
+  function beginScene(player, kind, tile, model) {
+    if (scenes.has(player)) endScene(player);
+    const scene = new CorsairScene(player, kind, tile);
+    scenes.set(player, scene); scene.enter(player); moveTo(player, tile);
+    if (model !== undefined) player.setNpcTransformationId(model);
+    player.getMovementQueue().setBlockMovement(true); player.setUntargetable(true);
+    player.getPacketSender().sendVarbit(6719, 2); player.getPacketSender().sendVarbit(12393, 1);
+    for(let axis=0;axis<5;axis++)player.getPacketSender().sendCameraShake(axis,0,0,0);
+    return scene;
+  }
+
+  function endScene(player) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    scenes.delete(player); TaskManager.cancelTasks(scene);
+    player.setNpcTransformationId(scene.model); player.performAnimation(new Animation(-1));
+    player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false);
+    player.getPacketSender().sendVarbit(6719, 0); player.getPacketSender().sendVarbit(12393, 0);
+    player.getPacketSender().sendCameraUnlock(false).sendCameraReset();
+    if (player.getArea() === scene) scene.leave(player, false);
+    player.moveTo(scene.returnTile); scene.destroy();
+  }
+
+  function camera(player, x, y, height, tx, ty, th, rate = 232, rate2 = 100) {
+    const options={rate,rate2,heightRelative:false};
+    player.getPacketSender().sendCameraMoveTo(x, y, height, options);
+    player.getPacketSender().sendCameraLookAt(tx, ty, th, options);
+  }
+  function moveCamera(player,x,y,height,rate,rate2=rate) {
+    player.getPacketSender().sendCameraMoveTo(x,y,height,{rate,rate2,heightRelative:false});
+  }
+  function sceneTail(steps,anchor) {
+    for(let i=0;i<steps.length;i++) {
+      const step=steps[i];
+      if(step.id===anchor||step.text===anchor||step.player===anchor)return steps.slice(i+1);
+      for(const nested of [step.steps,...(step.options??[]).map(option=>option.steps)]) {
+        const result=nested&&sceneTail(nested,anchor);if(result)return result;
+      }
+    }
+    return null;
+  }
+  function freezeScene(player) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ActionDialogue(0,{execute:()=>StatementDialogue.send(player,"",false)})));
+  }
+  function sceneSpeech(player,npcId,name,text) {
+    player.getPacketSender().sendChatboxInterface(231).sendNpcHeadOnInterface(npcId,(231<<16)|2).sendString(name,(231<<16)|4)
+      .sendString(text,(231<<16)|6).sendString("",(231<<16)|5).sendInterfaceFlagsRange((231<<16)|5,-1,-1,0);
+  }
+  function pauseScene(event,ticks) {
+    const {player}=event,scene=scenes.get(player),anchor=event.stepId??event.text;
+    freezeScene(player);
+    event.handled=true;
+    later(scene,ticks,()=>startTranscript(api,player,scene.kind==="colin"?COLIN:GNOCCI,PAGE,scene.kind==="colin"?"colin-s-curse-talking-to-colin":"gnocci-s-curse-talking-to-gnocci",steps=>sceneTail(steps,anchor)??[]));
+  }
+  function gnocciBurial(player) {
+    const scene=scenes.get(player);freezeScene(player);
+    sceneSpeech(player,GNOCCI,"Gnocci the Cook","She's moving!<br>SHE'S POSSESSED!<br>HELP!");
+    later(scene,8,()=>{
+      StatementDialogue.send(player,"",false);camera(player,2510,2835,350,2504,2840,200);
+      const doll=api.spawnNpc({id:DOLL,x:2505,y:2839,z:0,wanderRadius:0,owner:player,ownerOnly:true});if(doll)scene.enter(doll);
+    });
+    later(scene,10,()=>player.performAnimation(new Animation(830)));
+    const line="I buried Her in the sand, by that tree, to the west. But I still feel Her eyes staring into my soul. Please find Her, and kill the demon inside!";
+    later(scene,13,()=>sceneSpeech(player,GNOCCI,"Gnocci the Cook",line));
+    later(scene,18,()=>{
+      endScene(player);setCook(player,COOK_HEARD);
+      startTranscript(api,player,GNOCCI,PAGE,"gnocci-s-curse-talking-to-gnocci",steps=>sceneTail(steps,"OV-LNe")??[]);
+    });
+  }
+
+  function sceneAction(event) {
+    const { player, stepId } = event;
+    if (stepId === "Gsd1jQ") {
+      beginScene(player, "colin", { x: 2528, y: 2841, z: 1 }, COLIN_2);
+      camera(player, 2527, 2824, 700, 2527, 2839, 350);
+      const scene=scenes.get(player);later(scene,1,()=>moveCamera(player,2527,2828,700,1));
+      pauseScene(event,1);
+    } else if (stepId === "p6ox6g") {
+      const scene=scenes.get(player);freezeScene(player);
+      later(scene,2,()=>{
+        endScene(player);setCabinboy(player,CABINBOY_HEARD);
+        startTranscript(api,player,COLIN,PAGE,"colin-s-curse-talking-to-colin",steps=>sceneTail(steps,"p6ox6g")??[]);
+      });
+    } else if (stepId === "Cs_rhQ") {
+      beginScene(player, "gnocci", { x: 2500, y: 2840, z: 0 }, GNOCCI_3);
+      camera(player, 2499, 2833, 800, 2505, 2837, 200);
+      player.performAnimation(new Animation(619));
+      const scene=scenes.get(player);later(scene,1,()=>moveCamera(player,2503,2830,280,3));
+      pauseScene(event,1);
+    } else if (stepId === "OV-LNe") {
+      gnocciBurial(player);
+    } else if (stepId === "36K07h") {
+      player.performAnimation(new Animation(2171));
+      beginScene(player, "telescope", { x: 2528, y: 2816, z: 0 });
+      camera(player, 2528, 2821, 400, 2528, 2822, 300);
+      const scene = scenes.get(player);
+      later(scene,1,()=>moveCamera(player,2528,2818,400,1));
+      const ogre = api.spawnNpc({ id: NpcIdentifiers.BUGS_2, x: 2528, y: 2822, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+      if (ogre) scene.enter(ogre);
+      freezeScene(player);
+      later(scene,9,()=>player.getPacketSender().sendChatboxInterface(217).sendPlayerHeadOnInterface((217<<16)|2)
+        .sendString("That doesn't look anything like a mermaid. That's an ogre!",(217<<16)|6).sendString("",(217<<16)|5).sendInterfaceFlagsRange((217<<16)|5,-1,-1,0));
+      later(scene, 18, () => {
+        endScene(player); setCabinboy(player, CABINBOY_TELESCOPE);
+        startTranscript(api, player, ITHOI, PAGE, "colin-s-curse-using-ithoi-s-telescope", (steps) => steps.slice(2));
+      });
+    } else if (["rqXQdP", "Xub2Df", "gXvRex", "8whjhh"].includes(stepId) && scenes.get(player)?.kind === "colin") {
+      player.performAnimation(new Animation(2171));
+      const scene=scenes.get(player);
+      if(stepId==="Xub2Df"){moveCamera(player,2523,2830,700,1);pauseScene(event,3);}
+      else {
+        const delay=stepId==="gXvRex"?2:3;
+        later(scene,delay,()=>camera(player,2523,2831,650,2540,2844,350));
+        pauseScene(event,stepId==="rqXQdP"?3:stepId==="gXvRex"?5:6);
+      }
+    } else return false;
+    event.handled = true;
+    return true;
+  }
+
+  function startFireScene(player) {
+    if (scenes.has(player)) return;
+    StatementDialogue.send(player, "You light the driftwood...");
+    later(player, 2, () => {
+      if (player.isRegistered?.() === false || quest.getStage(player) !== STAGE_CONFESSED) return;
+      const scene = beginScene(player, "fire", { x: 2530, y: 2841, z: 1 });
+      scene.returnTile = new Location(2529, 2838, 0);
+      sendProgress(player); placeDriftwood(player, BURNING_DRIFTWOOD_OBJECT);
+      later(scene,3,()=>camera(player, 2529, 2835, 200, 2529, 2841, 170));
+      later(scene,4,()=>moveCamera(player,2529,2837,200,1));
+      later(scene, 10, () => {
+        moveTo(player, { x: 2529, y: 2838, z: 0 });
+        camera(player, 2531, 2841, 300, 2531, 2835, 240);
+        const ithoi = api.spawnNpc({ id: ITHOI_2, x: 2529, y: 2833, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+        if (!ithoi) return;
+        scene.enter(ithoi); ithoi.forceChat("Arrr... uh-oh!");
+        for (const [tick, x, y] of [[1,2530,2833],[2,2532,2833],[3,2532,2835],[4,2532,2836]]) later(scene, tick, () => ithoi.moveTo(new Location(x, y, 0)));
+        later(scene, 8, () => {
+          ithoi.forceChat("Arrr!"); ithoi.performAnimation(new Animation(711)); ithoi.performGraphic(new Graphic(120, 92));
+          player.getPacketSender().sendProjectile(ithoi.getLocation(), new Location(2530, 2837, 0), 0, 90, 127, 43, 31, null, 51);
+          placeDriftwood(player, WET_DRIFTWOOD_OBJECT);
+        });
+      });
+      later(scene,22,()=>moveCamera(player,2531,2840,300,1));
+      later(scene, 26, () => {
+        endScene(player); advance(player, STAGE_PROVED);
+        startTranscript(api, player, ITHOI, PAGE, "traitor-in-the-midst-attempting-to-light-the-the-driftwood-after-discovering-ithoi-s-lie", (steps) => steps.slice(-1));
+      });
+    });
+  }
+
+  function menuWarning(event) {
+    if (!TOCK_NPC_IDS.has(event.npcId) || quest.getStage(event.player) !== 0) return;
+    if (String(event.prompt).includes("Start") && event.player.getSkillManager().getCombatLevel() < 20) event.warning = "Before starting this quest, be aware that your combat level is lower than the recommended level of 20.";
+  }
+
+  function renderLine(event) {
+    const { player, npcId } = event;
+    if (!player || typeof event.text !== "string") return;
+    const line = event.text;
+    if (TOCK_NPC_IDS.has(npcId) && line.startsWith("Now, I've a ship moored west of Rimmington.")) { event.before = () => {
+      if(quest.getStage(player)!==STAGE_STARTED)return;
+      const scene = beginScene(player, "ship", { x: 2918, y: 3231, z: 0 });
+      freezeScene(player);sceneSpeech(player,CAPTAIN_TOCK_START,"Captain Tock",line);
+      later(scene,2,()=>camera(player, 2943, 3224, 800, 2928, 3224, 100));
+      later(scene, 3, () => camera(player, 2926, 3224, 800, 2911, 3224, 100, 6, 0));
+      later(scene, 12, () => player.getPacketSender().sendCameraLookAt(2911, 3227, 100, {rate:1,rate2:0,heightRelative:false}));
+      later(scene, 23, () => {
+        endScene(player);
+        startTranscript(api, player, CAPTAIN_TOCK_START, PAGE, "the-cursed-crew-talking-to-captain-tock", (steps) => sceneTail(steps,line)??[]);
+      });
+    }; return; }
+    event.before = () => {
+      const stage = quest.getStage(player);
+      if (TOCK_NPC_IDS.has(npcId) && line === "Sure, I'll try to help with your curse." && stage === 0) {
+        advance(player, STAGE_STARTED); player.sendMessage("You've started a new quest: <col=081190>The Corsair Curse</col>");
+      }
+      if (ITHOI_NPC_IDS.has(npcId) && line.startsWith("Okay, it doesn't sound like you know")) { setNavigator(player, 1); if (stage < STAGE_INVESTIGATING) advance(player, STAGE_INVESTIGATING); }
+      if (npcId === ARSEN && line.startsWith("I'd hoped I could use my amazing")) { player.setAttribute(THIEF_STORY_ATTRIBUTE, true); setThief(player, THIEF_HEARD); }
+      if (npcId === ARSEN && line.startsWith("Maybe you could get the relic back")) { player.setAttribute(THIEF_STORY_ATTRIBUTE, false); setThief(player, THIEF_HEARD); }
+      if (npcId === NpcIdentifiers.CHIEF_TESS && line.startsWith("Dis is tooth-pick.")) setThief(player, THIEF_RETURNED_RELIC);
+      if (npcId === ARSEN && line.startsWith("Their chief, Tess, says")) { player.setAttribute(THIEF_REPORT_ATTRIBUTE, true); sendProgress(player); }
+      if (npcId === ARSEN && line.startsWith("She didn't care - she's got lots")) { player.setAttribute(THIEF_REPORT_ATTRIBUTE, false); setThief(player, THIEF_TOLD); }
+      if (COLIN_NPC_IDS.has(npcId) && line.startsWith("Oh. Oh, I see. Okay...")) setCabinboy(player, CABINBOY_TOLD);
+      if (GNOCCI_NPC_IDS.has(npcId) && line.startsWith("Clockwork? Oh,")) setCook(player, COOK_TOLD);
+      if (TOCK_NPC_IDS.has(npcId) && line.startsWith("Arrr, I don't rightly know. It began")) advance(player, STAGE_TRAITOR_KNOWN);
+      if (GNOCCI_NPC_IDS.has(npcId) && line.startsWith("Anyway I didn't dare try to fish")) { addTraitorFlag(player, TRAITOR_GNOCCI); maybeAdvanceTraitor(player); sendProgress(player); }
+      if (npcId === ARSEN && line.startsWith("My brother, Francois, says")) { addTraitorFlag(player, TRAITOR_ARSEN); maybeAdvanceTraitor(player); sendProgress(player); }
+      if (ITHOI_NPC_IDS.has(npcId) && line.startsWith("Arrr! Too clever ye be")) advance(player, STAGE_CONFESSED);
+      if (ITHOI_NPC_IDS.has(npcId) && line.startsWith("The Corsairs all think I'm sick too")) { player.setAttribute(PROOF_ATTRIBUTE, true); sendProgress(player); }
+      if (TOCK_NPC_IDS.has(npcId) && line.startsWith("Arrr! So he was never sick at all!")) advance(player, STAGE_KILL_ORDER);
+      const scene = scenes.get(player);
+      if (scene?.kind === "telescope" && line.startsWith("That doesn't look anything like a mermaid.")) { endScene(player); setCabinboy(player, CABINBOY_TELESCOPE); }
+      if (scene?.kind === "colin") {
+        if(line.startsWith("... yes, it's a mermaid!"))moveCamera(player,2523,2831,650,1);
+        if(line.startsWith("I hope she's not angry."))moveCamera(player,2516,2827,1300,2);
+      }
+      if (scene?.kind === "gnocci" && line.startsWith("Ooh, what's this?")) player.performAnimation(new Animation(4185));
+      if(scene?.kind==="gnocci"&&line.startsWith("She's moving!"))gnocciBurial(player);
+    };
+    const scene=scenes.get(player);
+    if(scene?.kind==="colin"&&line.startsWith("... yes, it's a mermaid!"))event.after=()=>{
+      pauseScene(event,2);later(scene,1,()=>camera(player,2524,2834,400,2540,2839,350));
+    };
+    if(scene?.kind==="colin"&&line.startsWith("I can see you moving your arms"))event.after=()=>{
+      pauseScene(event,6);later(scene,2,()=>camera(player,2524,2834,400,2540,2839,350));
+    };
+    if(scene?.kind==="gnocci"&&line.startsWith("Ooh, what's this?"))event.after=()=>{
+      moveCamera(player,2505,2839,220,1);pauseScene(event,2);
+    };
+    if(scene?.kind==="gnocci"&&line.startsWith("C'mon little lobsters. We don't want to keep the Captain"))event.after=()=>{
+      pauseScene(event,2);later(scene,1,()=>camera(player,2504,2841,220,2505,2835,170));
+    };
+  }
+
+  class IthoiArena extends PrivateArea {
+    constructor(player) { super([new Boundary(2525,2534,2834,2843,1)]); this.owner = player; }
+    postLeave(mobile, logout) {
+      if (mobile === this.owner) { mobile.setArea(null); clearFight(mobile); }
+      super.postLeave(mobile, logout);
+    }
+  }
+  class IthoiHut extends Area {
+    process(mobile) {
+      if (!mobile.isPlayer() || quest.getStage(mobile) !== STAGE_KILL_ORDER || fights.has(mobile)) return;
+      const arena = new IthoiArena(mobile); arena.enter(mobile);
+      const npc = api.spawnNpc({ id: ITHOI_FIGHT, x: 2529, y: 2839, z: 1, wanderRadius: 0, owner: mobile, ownerOnly: true });
+      if (!npc) { arena.leave(mobile, false); return; }
+      npc.__skipDefaultRespawn = true; arena.enter(npc); fights.set(mobile, { arena, npc }); npc.getCombat().attack(mobile);
+    }
+  }
+  function clearFight(player) {
+    const fight = fights.get(player); if (!fight) return;
+    fights.delete(player); api.removeNpc(fight.npc);
+    if (player.getArea() === fight.arena) fight.arena.leave(player, false);
+    fight.arena.destroy();
+  }
+  function ithoiDying({ npc }) { if (npc?.getId() === ITHOI_FIGHT) npc.forceChat("Awww!"); }
+
+  const ithoiSpells = [CombatSpells.WIND_STRIKE, CombatSpells.WATER_STRIKE, CombatSpells.EARTH_STRIKE, CombatSpells.FIRE_STRIKE, CombatSpells.CURSE].map((base, index) => {
+    const spell = Object.create(base);
+    spell.castAnimation = () => new Animation(index === 4 ? 11428 : 9144);
+    spell.castProjectile = (source, target) => Projectile.createProjectile(source, target, [91,94,97,100,109][index], 51, 90, 43, 31);
+    if (index < 4) spell.maximumHit = () => Math.min(6, base.maximumHit());
+    else spell.spellEffect = (_source, target) => {
+      if (!target.isPlayer()) return;
+      const skills = target.getSkillManager(), current = skills.getCurrentLevel(Skill.DEFENCE);
+      if (current >= skills.getMaxLevel(Skill.DEFENCE)) {
+        skills.setCurrentLevelCombat(Skill.DEFENCE, Math.max(0, current - Math.floor(current * 0.05)));
+        skills.updateSkill(Skill.DEFENCE); target.sendMessage("You feel weakened.");
+      }
+    };
+    return spell;
+  });
+  class IthoiCombat extends MagicCombatMethod {
+    start(npc, target) {
+      npc.getCombat().setCastSpell(ithoiSpells[Math.floor(Math.random() * ithoiSpells.length)]);
+      npc.forceChat(["Ye'll pay!", "Curse you!", "Curse 'em all!", "Arrr, land-lubber!"][Math.floor(Math.random() * 4)]);
+      super.start(npc, target);
+    }
+    attackSpeed() { return 5; }
+    hits(npc, target) {
+      const hits = super.hits(npc, target);
+      if (npc.getCombat().getSelectedSpell() === ithoiSpells[4]) for (const hit of hits) hit.setTotalDamage(0);
+      return hits;
+    }
+    finished(npc) { npc.getCombat().setCastSpell(null); }
+  }
+  function useYusufBank({ player }) {
+    if (!quest.isComplete(player)) { startTranscript(api, player, NpcIdentifiers.YUSUF, "Yusuf", "before-completion-of-the-corsair-curse"); return; }
+    player.getBank(player.getCurrentBankTab()).open();
+  }
+
   // ==========================================================================
   // Session lifecycle
   // ==========================================================================
 
   function sendProgress(player) {
     const packet = player.getPacketSender();
-    packet.sendVarbit(VARBIT_PROGRESS, quest.getStage(player));
+    packet.sendVarbit(VARBIT_PROGRESS, wireStage(player));
     packet.sendVarbit(VARBIT_CABINBOY, cabinboy(player));
     packet.sendVarbit(VARBIT_COOK, cook(player));
-    packet.sendVarbit(VARBIT_THIEF, thief(player));
+    packet.sendVarbit(VARBIT_THIEF, thiefWire(player));
     packet.sendVarbit(VARBIT_NAVIGATOR, navigator(player));
   }
 
@@ -859,6 +1053,7 @@ module.exports = function registerCorsairCurseQuest(api) {
 
   function handleLogout({ player }) {
     if (!player) return;
+    endScene(player); clearFight(player); removeDoll(player); TaskManager.cancelTasks(player);
     const tracked = npcsByPlayer.get(player);
     if (tracked) for (const npc of tracked.values()) api.removeNpc(npc);
     npcsByPlayer.delete(player);
@@ -969,7 +1164,11 @@ module.exports = function registerCorsairCurseQuest(api) {
     ];
   }
 
-  api.persistAttribute(CABINBOY_ATTRIBUTE);
+  api.persistAttribute(PROOF_ATTRIBUTE, false);
+  api.persistAttribute(THIEF_STORY_ATTRIBUTE, false);
+  api.persistAttribute(THIEF_REPORT_ATTRIBUTE, false);
+  api.persistAttribute(DEPARTED_ATTRIBUTE, false);
+  api.persistAttribute(CABINBOY_ATTRIBUTE, 0);
   api.persistAttribute(COOK_ATTRIBUTE);
   api.persistAttribute(THIEF_ATTRIBUTE);
   api.persistAttribute(NAVIGATOR_ATTRIBUTE);
@@ -980,6 +1179,8 @@ module.exports = function registerCorsairCurseQuest(api) {
     name: "The Corsair Curse",
     varpId: VARP_CORSAIR_CURSE,
     varbitId: VARBIT_PROGRESS,
+    varbitValue: (_stage, player) => wireStage(player),
+    completionJingleId: 154,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 2,
@@ -991,19 +1192,25 @@ module.exports = function registerCorsairCurseQuest(api) {
     buildJournal,
   });
 
-  placeDriftwood(DRIFTWOOD_OBJECT);
+
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
+  api.onCustomEvent("npc-dialogue:line", renderLine);
+  api.onCustomEvent("npc-dialogue:menu", menuWarning);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
   api.onNpcInteraction("Captain Tock", { Travel: handleTravel });
   api.onNpcInteraction("Cabin Boy Colin", { Travel: handleTravel });
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject);
-  api.onItemAction("Spade", { Dig: handleDig });
+  api.onCanUseItem(claimDig);
   api.onItemOnNpc(handleItemOnNpc);
   api.onNpcDeath(handleNpcDeath);
+  api.onNpcBeforeDeath(ithoiDying);
+  api.registerNpcCombatMethodProvider(ITHOI_FIGHT, IthoiCombat);
+  api.registerArea(new IthoiHut([new Boundary(2525, 2534, 2834, 2843, 1)]));
+  api.onNpcInteraction("Yusuf", { Bank: useYusufBank });
   api.onCustomEvent("ladders:climb", claimClimb);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
