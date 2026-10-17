@@ -26,7 +26,13 @@ Thieving.register({
     onNpcInteraction: (name, actions) => interactions.push([name, Object.keys(actions)[0]]),
     onObjectInteraction: () => {},
     onItemAction: () => {},
-    emitCustomEvent: (name) => { if (name === 'thieving:success') log.push(name); },
+    emitCustomEvent: (name, request) => {
+        if (name === 'thieving:success') log.push(name);
+        // The Skillcapes plugin answers this; a worn Thieving cape is all these tests need.
+        if (name === 'skillcape:has-perk' && request.skill === 'THIEVING') {
+            request.result = request.player.getEquipment().get(Equipment.CAPE_SLOT)?.getId() === I.THIEVING_CAPE;
+        }
+    },
     log: () => {},
 });
 Sounds.sendSound = () => {};

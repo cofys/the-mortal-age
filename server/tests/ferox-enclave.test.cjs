@@ -17,6 +17,7 @@ const Ferox = require("../plugins/areas/ferox/Common.FeroxEnclave");
 const Barriers = require("../plugins/areas/ferox/Barriers.FeroxEnclave");
 const Pool = require("../plugins/areas/ferox/Pool.FeroxEnclave");
 const FFA = require("../plugins/areas/ferox/FreeForAll.FeroxEnclave");
+const Portal = require("../plugins/areas/ferox/CastleWarsPortal.FeroxEnclave");
 
 let prompt = null;
 let barrier = null;
@@ -173,6 +174,38 @@ test("players can't attack each other in the town unless one is teleblocked", ()
   const allowed = { attacker: a, target: tb, allow: null };
   Barriers.denySafeZoneAttack(allowed);
   assert.equal(allowed.allow, null);
+});
+
+// ------------------------------------------------------------------ the Castle Wars portal
+
+test("the Castle Wars portal by The Old Nite is this cache's 30386, with an Enter option", () => {
+  RegionManager.loadMapFiles(3146, 3638);
+  const portal = (MapObjects.mapObjects.get(MapObjects.getHash(3146, 3638, 0)) ?? []).find((o) => o.getId() === 30386);
+  assert.ok(portal, "portal 30386 at 3146,3638");
+  assert.deepEqual(portal.getDefinition().getInteractions().filter(Boolean), ["Enter"]);
+});
+
+test("the Castle Wars portal: warns about no return, then walks you to the lobby a tick later", () => {
+  const p = player({ at: new Location(3146, 3637, 0) });
+  Portal.enter({ player: p, object: { id: 30386 } });
+  assert.ok(p.ticks[0].includes(`statement: ${Portal.WARNING}`));
+  p.continueDialogue();
+  assert.equal(prompt.title, "Enter the Castle Wars portal?");
+  assert.deepEqual(prompt.options, ["Yes.", "No."]);
+  prompt.choose("Yes.");
+  assert.ok(p.ticks[0].includes("varbit 12393=1"));
+  p.nextTick();
+  assert.deepEqual(runTicks(p, 1)[1], ["varbit 12393=0", "teleport 2440,3090"]);
+});
+
+test("the Castle Wars portal: 'No.' only clears the busy flag", () => {
+  const p = player({ at: new Location(3146, 3637, 0) });
+  Portal.enter({ player: p, object: { id: 30386 } });
+  p.continueDialogue();
+  prompt.choose("No.");
+  assert.ok(p.ticks[0].filter((x) => x === "varbit 12393=1").length === 1, "busy once");
+  assert.ok(p.ticks[0].includes("varbit 12393=0"), "declining clears busy");
+  assert.deepEqual(runTicks(p, 1)[1], [], "nothing else happens");
 });
 
 // ------------------------------------------------------------------ the free-for-all arena

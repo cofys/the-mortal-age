@@ -28,6 +28,7 @@ before(async () => {
       TeleportType: { TELE_TAB: "TELE_TAB" },
     },
     onItemAction: (name, actions) => { breakTablet = actions.Break; },
+    onCustomEvent() {},
   });
 });
 

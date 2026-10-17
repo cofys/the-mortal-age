@@ -3363,9 +3363,6 @@ export class PluginManager {
 
         registerGroundItemClickHook(clickType, itemIds, handler, "ground-item");
       },
-      onGroundItemSecondClick: (itemIds, handler) => {
-        registerGroundItemClickHook(2, itemIds, handler, "ground-item-second");
-      },
       onGroundItemPickup: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.groundItemPickupHooks.push({
@@ -4171,7 +4168,8 @@ export class PluginManager {
               }
               return instance;
             }
-            return new methodCtor();
+            // The NPC is passed so a per-attack method can read that NPC's own fight state.
+            return new methodCtor(npc);
           },
         };
         PluginManager.registerNpcCombatMethodProviderInternal(

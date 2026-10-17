@@ -10,6 +10,8 @@ const {
   XPDROPS_ENABLED_ATTRIBUTE,
   resolveGameframeRoot,
   DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID,
+  ATTACK_PRIORITY_PLAYER_BUTTONS_UID,
+  ATTACK_PRIORITY_NPC_BUTTONS_UID,
 } = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
 const { getWorldDefinition } = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
 const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
@@ -41,6 +43,11 @@ const WORLD_GAMEFRAME_OPTIONS = {
   "317-resizable": GAMEFRAME_317_OPTION,
   "317-fixed": GAMEFRAME_317_FIXED_OPTION,
 };
+// Settings > Controls: the "Player 'Attack' options" and "NPC 'Attack' options" dropdowns.
+// They are All Settings rows 55 and 56 (varps 1107 and 1306), so both places set the same var.
+// Like the layout dropdown, an option's row is at slot option + 1 (live sends op1 on 1..5 / 1..4).
+const PLAYER_ATTACK_OPTIONS_SETTING = 55;
+const NPC_ATTACK_OPTIONS_SETTING = 56;
 // Cache script 3962 reads this to pick the selected dropdown row; 4607 is only
 // a display mirror of the layout (no rendering effect in this revision).
 const GAMEFRAME_STONE_VARBIT = 4607;
@@ -406,6 +413,14 @@ function applyGameframeLayout({ player, slot }) {
   return true;
 }
 
+function choosePlayerAttackOption({ player, slot }) {
+  return Number.isInteger(slot) && chooseSettingOption(player, PLAYER_ATTACK_OPTIONS_SETTING, slot - 1);
+}
+
+function chooseNpcAttackOption({ player, slot }) {
+  return Number.isInteger(slot) && chooseSettingOption(player, NPC_ATTACK_OPTIONS_SETTING, slot - 1);
+}
+
 function openAllSettings(player) {
   player.setInterfaceId(ALL_SETTINGS_INTERFACE_ID);
   const sender = player.getPacketSender();
@@ -509,6 +524,8 @@ module.exports = {
     // dropdown panel's dynamic children, one per option (the row at child 0 is
     // the highlight rectangle), so the option index is slot - 1.
     api.onInterfaceActionButton(DISPLAY_LAYOUT_DROPDOWN, applyGameframeLayout);
+    api.onInterfaceActionButton(ATTACK_PRIORITY_PLAYER_BUTTONS_UID, choosePlayerAttackOption);
+    api.onInterfaceActionButton(ATTACK_PRIORITY_NPC_BUTTONS_UID, chooseNpcAttackOption);
 
     // Keybindings panel (121): remember which dropdown was clicked, then let the
     // cache's CS2 script (985) open the key popup.

@@ -387,11 +387,11 @@ export class RegionManager {
             }
         } else if (type >= 9 && type <= 11) {
             if (def.isSolid()) {
-                this.removeClippingForSolidObject(x, y, height, xLength, yLength, def.isSolid(), object.getPrivateArea());
+                this.removeClippingForSolidObject(x, y, height, xLength, yLength, def.isImpenetrable(), object.getPrivateArea());
             }
         } else if (type >= 0 && type <= 3) {
             if (def.isSolid()) {
-                RegionManager.removeClippingForVariableObject(x, y, height, type, direction, def.isSolid(), object.getPrivateArea());
+                RegionManager.removeClippingForVariableObject(x, y, height, type, direction, def.isImpenetrable(), object.getPrivateArea());
             }
         }
     }

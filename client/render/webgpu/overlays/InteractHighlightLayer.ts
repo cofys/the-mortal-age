@@ -15,6 +15,16 @@ type HighlightTarget = {
     worldEntityTransform?: Float32Array;
 };
 
+/** Per-target uniforms, rewritten in place each frame. */
+type TargetUniforms = {
+    transformBuffer: GPUBuffer;
+    transformBindGroup: GPUBindGroup;
+    composeBuffer: GPUBuffer;
+    composeBindGroup?: GPUBindGroup;
+    /** The mask view composeBindGroup samples; a resize replaces the views. */
+    composeView?: GPUTextureView;
+};
+
 /**
  * Interact-highlight overlay for WebGPU. The mask + multi-ring blur compose pass is a port of
  * client/ui/devoverlay/InteractHighlightOverlay.ts and client/render/render/interact/highlight.ts.
@@ -46,7 +56,9 @@ export class InteractHighlightLayer {
     private screenVertexBuffer?: GPUBuffer;
     private targets: HighlightTarget[] = [];
     private composeBindGroups: GPUBindGroup[] = [];
-    private uniformBuffers: GPUBuffer[] = [];
+    // Created once per target index and reused: buffers and bind groups made every frame
+    // pile up in Chrome's GPU process (hundreds of MB a minute at high frame rates, #559).
+    private targetUniforms: TargetUniforms[] = [];
     private uniformBindGroupLayout!: GPUBindGroupLayout;
     private composeLayout!: GPUBindGroupLayout;
     private readonly composeData = new Float32Array(8);
@@ -236,8 +248,11 @@ export class InteractHighlightLayer {
         this.targetVertexCapacities.length = 0;
         this.screenVertexBuffer?.destroy();
         this.screenVertexBuffer = undefined;
-        for (const buffer of this.uniformBuffers) buffer.destroy();
-        this.uniformBuffers.length = 0;
+        for (const uniforms of this.targetUniforms) {
+            uniforms.transformBuffer.destroy();
+            uniforms.composeBuffer.destroy();
+        }
+        this.targetUniforms.length = 0;
     }
 
     /** Ensures one canvas-sized mask target per requested index. */
@@ -282,6 +297,49 @@ export class InteractHighlightLayer {
         return buffer;
     }
 
+    private uniformsFor(index: number): TargetUniforms {
+        let uniforms = this.targetUniforms[index];
+        if (!uniforms) {
+            const transformBuffer = this.device.createBuffer({
+                label: `highlight transform ${index}`,
+                size: 64,
+                usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+            });
+            uniforms = {
+                transformBuffer,
+                transformBindGroup: this.device.createBindGroup({
+                    layout: this.uniformBindGroupLayout,
+                    entries: [{ binding: 0, resource: { buffer: transformBuffer, offset: 0, size: 64 } }],
+                }),
+                composeBuffer: this.device.createBuffer({
+                    label: `highlight compose ${index}`,
+                    size: 32,
+                    usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+                }),
+            };
+            this.targetUniforms[index] = uniforms;
+        }
+        return uniforms;
+    }
+
+    private composeBindGroupFor(uniforms: TargetUniforms, maskView: GPUTextureView): GPUBindGroup {
+        if (!uniforms.composeBindGroup || uniforms.composeView !== maskView) {
+            uniforms.composeBindGroup = this.device.createBindGroup({
+                layout: this.composeLayout,
+                entries: [
+                    { binding: 0, resource: maskView },
+                    { binding: 1, resource: this.sampler },
+                    {
+                        binding: 2,
+                        resource: { buffer: uniforms.composeBuffer, offset: 0, size: 32 },
+                    },
+                ],
+            });
+            uniforms.composeView = maskView;
+        }
+        return uniforms.composeBindGroup;
+    }
+
     private encodeMasks(): void {
         if (this.targets.length === 0) return;
         if (!this.ensureMaskTargets(this.targets.length)) return;
@@ -304,25 +362,12 @@ export class InteractHighlightLayer {
             const targetBuffer = this.vertexBufferFor(targetIndex, usedBytes);
             this.device.queue.writeBuffer(targetBuffer, 0, vertexData);
 
-            const transformBuffer = this.device.createBuffer({
-                size: 64,
-                usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
-            });
+            const uniforms = this.uniformsFor(targetIndex);
             this.device.queue.writeBuffer(
-                transformBuffer,
+                uniforms.transformBuffer,
                 0,
                 target.worldEntityTransform ?? IDENTITY_MAT4,
             );
-            const transformBindGroup = this.device.createBindGroup({
-                layout: this.uniformBindGroupLayout,
-                entries: [{ binding: 0, resource: { buffer: transformBuffer, offset: 0, size: 64 } }],
-            });
-            this.uniformBuffers.push(transformBuffer);
-            // Keep the transform buffers bounded to this frame.
-            if (this.uniformBuffers.length > 16) {
-                const old = this.uniformBuffers.shift();
-                old?.destroy();
-            }
 
             const color = target.color >>> 0;
             this.composeData[0] = ((color >> 16) & 0xff) / 255.0;
@@ -331,25 +376,8 @@ export class InteractHighlightLayer {
             this.composeData[3] = Math.max(0, Math.min(1, target.alpha));
             this.composeData[4] = 1.0 / Math.max(1, this.maskWidth);
             this.composeData[5] = 1.0 / Math.max(1, this.maskHeight);
-            const composeUniformBuffer = this.device.createBuffer({
-                size: 32,
-                usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
-            });
-            this.device.queue.writeBuffer(composeUniformBuffer, 0, this.composeData);
-            this.uniformBuffers.push(composeUniformBuffer);
-            this.composeBindGroups.push(
-                this.device.createBindGroup({
-                    layout: this.composeLayout,
-                    entries: [
-                        { binding: 0, resource: maskView },
-                        { binding: 1, resource: this.sampler },
-                        {
-                            binding: 2,
-                            resource: { buffer: composeUniformBuffer, offset: 0, size: 32 },
-                        },
-                    ],
-                }),
-            );
+            this.device.queue.writeBuffer(uniforms.composeBuffer, 0, this.composeData);
+            this.composeBindGroups.push(this.composeBindGroupFor(uniforms, maskView));
 
             const pass = encoder.beginRenderPass({
                 colorAttachments: [
@@ -363,7 +391,7 @@ export class InteractHighlightLayer {
             });
             pass.setPipeline(this.maskPipeline);
             pass.setBindGroup(0, this.sceneBindGroup);
-            pass.setBindGroup(1, transformBindGroup);
+            pass.setBindGroup(1, uniforms.transformBindGroup);
             pass.setVertexBuffer(0, targetBuffer);
             pass.draw(pointCount, 1, 0, 0);
             pass.end();

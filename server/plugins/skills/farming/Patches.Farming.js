@@ -316,7 +316,10 @@ function harvest(player, patch) {
     animate(player, ANIM.HARVEST);
     award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount));
     const variable = Data.COMPOSTABLE_YIELD.has(crop.type) || ["BUSH", "CACTUS", "GRAPES", "CORAL"].includes(crop.type);
-    const cape = player.getEquipment().contains(Data.itemId("Farming cape")) || player.getEquipment().contains(Data.itemId("Farming cape(t)"));
+    // Wiki: a worn Farming cape (or max cape) saves herb lives more often.
+    const capePerk = { player, skill: "FARMING", result: false };
+    core.PluginManager.emitCustomEvent("skillcape:has-perk", capePerk);
+    const cape = capePerk.result === true;
     const vars = player.getPacketSender();
     const diary = crop.type !== "HERB" ? 0 : patch.x === 2813 && patch.y === 3463
         ? vars.getVarbit(4478) ? 25 : vars.getVarbit(4477) ? 17 : vars.getVarbit(4476) ? 10 : 0

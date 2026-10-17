@@ -48,6 +48,12 @@ export class Bank extends ItemContainer {
      * own bank ops (a rune pouch's View or Empty) are not deposits.
      */
     public static readonly INVENTORY_OP_EVENT = "bank:inventory-op";
+    /**
+     * Custom event for an op on a banked item, before it withdraws:
+     * `{ player, item, tab, slot, op, option, handled }`. A plugin sets `handled` for an op that
+     * is not a withdrawal (op 9, Configure-Charges, on items with cache param 2257).
+     */
+    public static readonly ITEM_OP_EVENT = "bank:item-op";
 
     /** Ends the client's bank search, as OSRS does on closing the bank or picking a tab. */
     public static closeSearch(player: Player): void {
@@ -567,6 +573,9 @@ export class Bank extends ItemContainer {
                 }
                 return true;
             }
+            const event = { player, item: entry.item, tab: entry.tab, slot: entry.slot, op: packet.buttonNum, option: packet.option, handled: false };
+            getPluginManager().emitCustomEvent(Bank.ITEM_OP_EVENT, event);
+            if (event.handled) return true;
             const amount = Bank.actionAmount(
                 "withdraw", packet.buttonNum, packet.option, entry.item.getAmount(),
                 player.getBankCustomQuantity(), player.getBankQuantityMode(),

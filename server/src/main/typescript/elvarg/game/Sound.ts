@@ -47,6 +47,8 @@ export class Sound {
     public static SHOOT_ARROW = new Sound(2702, 1, 0, 0)
     public static SHOOT_CROSSBOW = new Sound(2695, 1, 0, 0)
     public static SHOOT_BOW_QUIET = new Sound(2700, 1, 0, 0)
+    /** Captures (rsprox): every Venator bow shot. */
+    public static VENATOR_BOW_SHOOT = new Sound(6797, 1, 0, 0)
     public static THROW_DART = new Sound(2696, 1, 0, 0)
 
     public static WEAPON = new Sound(2567, 1, 0, 0) // default/other

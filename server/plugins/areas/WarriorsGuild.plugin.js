@@ -22,7 +22,6 @@ module.exports = {
     require("./warriors-guild/ShotPut.WarriorsGuild")(api);
     require("./warriors-guild/Kegs.WarriorsGuild")(api);
     require("./warriors-guild/Cyclopes.WarriorsGuild")(api);
-    require("./warriors-guild/Skillcapes.WarriorsGuild")(api);
     require("./warriors-guild/Chatter.WarriorsGuild")(api);
   },
 };

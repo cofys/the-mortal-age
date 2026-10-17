@@ -98,6 +98,16 @@ export function updateFollowCamera(
 
     renderer.playerPosUni[0] = playerX;
     renderer.playerPosUni[1] = playerZ;
+    const basePlane = playerEcs.getLevel(playerEcsIndex) | 0;
+    const playerHeightSample = sampleBridgeHeightForWorldTile(
+        renderer.mapManager,
+        playerX,
+        playerZ,
+        basePlane,
+        BridgePlaneStrategy.RENDER,
+    );
+    // Login must finish while a cutscene owns the camera, too.
+    if (playerHeightSample.valid) markMapDataLoaded(renderer, timeSec);
     // Scripted camera moves (and free cameras) turn following off, as in WebGL's frame loop.
     if (!osrsClient.followPlayerCamera) return;
 
@@ -138,16 +148,6 @@ export function updateFollowCamera(
 
     const targetX = renderer.followCamFocalXSub / 128;
     const targetZ = renderer.followCamFocalZSub / 128;
-    const basePlane = playerEcs.getLevel(playerEcsIndex) | 0;
-
-    const playerHeightSample = sampleBridgeHeightForWorldTile(
-        renderer.mapManager,
-        playerX,
-        playerZ,
-        basePlane,
-        BridgePlaneStrategy.RENDER,
-    );
-
     const camera = osrsClient.camera;
     // A plugin camera (the backquote third-person view) places the camera itself.
     if (
@@ -168,7 +168,6 @@ export function updateFollowCamera(
         // Leaving the plugin view must not swoop the HD camera from stale smoothed angles.
         renderer.followCamCameraFeelInitialized = false;
         renderer.followCamDistance = Math.hypot(camera.getPosX() - playerX, camera.getPosZ() - playerZ);
-        if (playerHeightSample.valid) markMapDataLoaded(renderer, timeSec);
         return;
     }
     // 117 HD camera feel. Without the plugin (and in first person, whose view pitch override
@@ -276,8 +275,6 @@ export function updateFollowCamera(
     if (!playerHeightSample.valid) {
         return;
     }
-
-    markMapDataLoaded(renderer, timeSec);
 
     const focusHeightTiles = (osrsClient.camFollowHeight | 0) / 128.0;
     const targetY = playerHeightSample.height - focusHeightTiles;

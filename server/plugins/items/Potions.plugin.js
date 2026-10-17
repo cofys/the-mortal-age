@@ -128,14 +128,16 @@ function applyAntifire(player, seconds, tier = DragonfireProtectionTier.ANTIFIRE
 }
 
 const PRAYER_BONUS_WORN = [
-  Items.PRAYER_CAPE, Items.PRAYER_CAPE_T_, Items.PRAYER_CAPE_2, Items.PRAYER_CAPE_T__2,
   Items.RING_OF_THE_GODS_I_, Items.RING_OF_THE_GODS_I__2, Items.RING_OF_THE_GODS_I__3,
   Items.RING_OF_THE_GODS_I__4, Items.RING_OF_THE_GODS_I__5, Items.RING_OF_THE_GODS_I__6,
 ];
 
-/** Wiki: a worn prayer cape or ring of the gods (i), or a carried holy wrench, boosts prayer restores. */
+/** Wiki: a ring of the gods (i), a carried holy wrench, or a Prayer cape (or max cape) worn or
+ * carried - it acts as a holy wrench - boosts prayer restores. */
 function hasPrayerRestoreBonus(player) {
-  return player.getInventory?.()?.contains?.(Items.HOLY_WRENCH) === true ||
+  const cape = { player, skill: "PRAYER", inventory: true, result: false };
+  pluginApi?.emitCustomEvent("skillcape:has-perk", cape);
+  return cape.result === true || player.getInventory?.()?.contains?.(Items.HOLY_WRENCH) === true ||
     PRAYER_BONUS_WORN.some((itemId) => player.getEquipment?.()?.contains?.(itemId) === true);
 }
 

@@ -13,6 +13,7 @@ const { teleportFocusOf } = require("./BoatFacilities.Sailing");
 const { openBoatSelection, MODE } = require("./BoatSelection.plugin");
 
 const NEAR_DOCK_RANGE = 16;
+const PANDEMONIUM_DOCK = "the_pandemonium";
 
 let core;
 
@@ -40,6 +41,50 @@ function teleportToBoat(player, itemId, slot) {
   core.TeleportHandler.teleport(player, landing, core.TeleportType.TELE_TAB, false, undefined, useTablet);
 }
 
+/**
+ * "sailing:cape-teleport" `{ player, target, handled }`: the Sailing and max capes' teleports
+ * (Wiki: Sailing cape). `target` is "pandemonium" (its gangplank), "boat" (pick a moored boat
+ * with a greater teleport focus) or "last-boat" (the one at the player's last dock). They cast
+ * as a standard teleport and use nothing up.
+ */
+function capeTeleport(request) {
+  const { player, target } = request;
+  if (!player || request.handled) return;
+  request.handled = true;
+  if (target === "pandemonium") {
+    const { landing } = Sailing.getDock(PANDEMONIUM_DOCK);
+    teleportTo(player, landing);
+    return;
+  }
+  if (Sailing.instanceAboard(player)) {
+    player.sendMessage("You're already on a boat.");
+    return;
+  }
+  const boats = reachableBoats(player);
+  if (boats.length === 0) {
+    player.sendMessage("You need a moored boat with a greater teleport focus to do that.");
+    return;
+  }
+  if (target === "last-boat") {
+    const last = boats.find((boat) => boat.location.dock === player.getSailing().lastDock) ?? boats[0];
+    teleportTo(player, Sailing.getDock(last.location.dock)?.landing);
+    return;
+  }
+  const current = dockNear(player, NEAR_DOCK_RANGE) ?? dockById(player.getSailing().lastDock) ?? dockById(boats[0].location.dock);
+  openBoatSelection(player, MODE.TELEPORT_TO_BOAT, current, (slot) => {
+    const boat = reachableBoats(player).find((candidate) => candidate.slot === slot);
+    if (boat) teleportTo(player, Sailing.getDock(boat.location.dock)?.landing);
+  });
+}
+
+function teleportTo(player, landing) {
+  if (!landing) return;
+  const destination = new core.Location(landing.x, landing.y, landing.z);
+  if (core.TeleportHandler.checkReqs(player, destination)) {
+    core.TeleportHandler.teleport(player, destination, core.TeleportType.NORMAL, false);
+  }
+}
+
 function breakTablet({ player, itemId }) {
   if (Sailing.instanceAboard(player)) {
     player.sendMessage("You're already on a boat.");
@@ -62,6 +107,7 @@ module.exports = {
     core = api.core;
     content();
     api.onItemAction("Teleport to boat", { Break: breakTablet });
+    api.onCustomEvent("sailing:cape-teleport", capeTeleport);
   },
-  _test: { reachableBoats, hasGreaterFocus, teleportToBoat },
+  _test: { reachableBoats, hasGreaterFocus, teleportToBoat, capeTeleport },
 };

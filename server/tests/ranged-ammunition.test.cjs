@@ -114,6 +114,7 @@ let avaRecovery = null;
 require('../plugins/items/AvasAccumulator.plugin').register({
   core: { Equipment: Slots, ItemIdentifiers: Items },
   registerRangedAmmoRecovery(resolver) { avaRecovery = resolver; },
+  emitCustomEvent() {},
 });
 PluginManager.rangedAmmoRecovery = (player) => avaRecovery.recovery(player) ?? 0;
 

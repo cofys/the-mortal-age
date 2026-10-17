@@ -166,9 +166,12 @@ function awardOre(player, state) {
   if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, state.rock.oreId)) {
     player.sendMessage("The infernal pickaxe smelts the ore as you mine it.");
   } else {
-    player.getInventory().adds(state.rock.oreId, 1 + bonusOre);
+    // "mining:ore": a container may take the ore instead (an open coal bag).
+    const ore = { player, oreId: state.rock.oreId, banked: false };
+    pluginApi.emitCustomEvent("mining:ore", ore);
+    if (!ore.banked) player.getInventory().adds(state.rock.oreId, 1 + bonusOre);
     player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
-    if (bonusOre > 0) {
+    if (bonusOre > 0 && !ore.banked) {
       player.sendMessage(`A rich seam — ${bonusOre} extra ore!`);
     }
   }

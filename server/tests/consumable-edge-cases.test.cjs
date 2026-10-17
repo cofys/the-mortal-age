@@ -14,6 +14,10 @@ let combinePotions, staminaFromHook;
 Potions.register(new Proxy({}, {
   get: (_, key) => key === "core" ? { Item } : (...args) => {
     if (key === "onCustomEvent" && args[0] === "potions:apply-stamina") staminaFromHook = args[1];
+    // The Skillcapes plugin answers this; a worn Prayer cape is all these tests need.
+    if (key === "emitCustomEvent" && args[0] === "skillcape:has-perk" && args[1].skill === "PRAYER") {
+      args[1].result = args[1].player.getEquipment().contains(ItemIdentifiers.PRAYER_CAPE);
+    }
     if (key === "onItemOnItem") {
       combinePotions = args[0];
       assert.deepEqual(args[1], { noted: false });

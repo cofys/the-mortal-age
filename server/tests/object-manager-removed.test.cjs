@@ -14,6 +14,7 @@ const { Location } = require('../dist/game/model/Location');
 const { World } = require('../dist/game/World');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { ObjectActionPacketListener } = require('../dist/net/packet/impl/ObjectActionPacketListener');
+const { PrivateArea } = require('../dist/game/model/areas/impl/PrivateArea');
 
 before(async () => {
     await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -21,6 +22,44 @@ before(async () => {
 });
 
 const removed = () => World.getRemovedObjects();
+
+test('replacing private scenery detaches its old form and snapshot removals detach the registered form', () => {
+    const area = new (class extends PrivateArea {})();
+    const at = new Location(1637, 4835, 0);
+    const opened = new GameObject(5623, at, 10, 3, area);
+    ObjectManager.register(opened, true);
+    ObjectManager.register(opened, true);
+    assert.deepEqual(area.getObjects(), [opened], 'registering the same object keeps its area membership');
+    const closed = new GameObject(5622, at.clone(), 10, 3, area);
+    ObjectManager.register(closed, true);
+    assert.deepEqual(area.getObjects(), [closed], 'old open wardrobe cannot survive in area lookup');
+    assert.equal(MapObjects.get(5623, at, area)?.getPrivateArea(), undefined);
+    assert.equal(MapObjects.get(5622, at, area), closed);
+    const snapshot = new GameObject(5622, at.clone(), 10, 3, area);
+    ObjectManager.deregister(snapshot, true);
+    assert.deepEqual(area.getObjects(), [], 'both snapshot and actual registered form are detached');
+    assert.ok(!World.getObjects().includes(closed));
+    area.destroy();
+});
+
+test('moving solid private scenery clears old tiles and preserves unrelated projectile clipping', () => {
+    const area = new (class extends PrivateArea {})();
+    const tiles = [new Location(100,100,0),new Location(101,100,0),new Location(101,101,0)];
+    for (const tile of tiles) area.setClip(tile,0x20000);
+    let previous = null;
+    for (const tile of [...tiles,...tiles.slice().reverse()]) {
+        if (previous) ObjectManager.register(new GameObject(30144,previous.clone(),10,0,area),true);
+        ObjectManager.register(new GameObject(30143,tile.clone(),10,0,area),true);
+        for (const candidate of tiles) {
+            assert.equal(area.getClip(candidate)&0x100,candidate.equals(tile)?0x100:0,'only the current mirror tile blocks walking');
+            assert.equal(area.getClip(candidate)&0x20000,0x20000,'non-projectile mirror removal preserves other projectile clipping');
+        }
+        previous=tile;
+    }
+    ObjectManager.register(new GameObject(30144,previous.clone(),10,0,area),true);
+    assert.ok(tiles.every(tile=>(area.getClip(tile)&0x100)===0));
+    area.destroy();
+});
 
 test('a removed map object is remembered (hidden on scene reloads); a runtime fire is not', () => {
     RegionManager.loadMapFiles(3204, 3229);
@@ -142,6 +181,62 @@ test('owner objects resolve through normal loc lookup and only enter their owner
 
     ObjectManager.deregister(object, true);
     assert.equal(MapObjects.getPrivateArea(owner, 48216, object.getLocation()), null);
+});
+
+test('deck-to-world loc clicks keep their route hook; ordinary clicks delegate the option once', (t) => {
+    const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+    const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
+    const object = new GameObject(1535, new Location(3226, 3214, 0), 0, 0, null);
+    const definition = { getInteractions: () => ['Open', 'Close'] };
+    const source = new Location(10003, 10004, 0);
+    let area = { countsAsMainWorld: () => true };
+    let root = new Location(3226, 3213, 0);
+    const routes = [], walks = [], interactions = [], messages = [];
+    const queue = {
+        reset() {}, walkToReset() {},
+        walkToObject: (...args) => walks.push(args),
+    };
+    const player = {
+        getHitpoints: () => 99, busy: () => false,
+        getLocation: () => source, getPrivateArea: () => area,
+        getMovementQueue: () => queue, setPositionToFace() {},
+        sendMessage: (text) => messages.push(text),
+    };
+    t.mock.method(MapObjects, 'getPrivateArea', () => object);
+    t.mock.method(ObjectDefinition, 'forPlayer', () => definition);
+    t.mock.method(BoatManager, 'rootLocation', () => root);
+    t.mock.method(PluginManager, 'emitObjectRoute', event => routes.push(event));
+    t.mock.method(PluginManager, 'emitObjectInteraction', event => {
+        assert.equal(routes.length, 1, 'route side effects happen before the deck operation');
+        interactions.push(event);
+        return true;
+    });
+    const listener = new ObjectActionPacketListener();
+    listener.executeAction(player, 1535, 3226, 3214, 2);
+    assert.equal(routes.length, 1, 'the deck shortcut still emits exactly one route event');
+    assert.equal(routes[0].definition, definition);
+    assert.equal(routes[0].clickType, 2);
+    assert.deepEqual(routes[0].sourceLocation, { x: 10003, y: 10004, z: 0 });
+    assert.equal(interactions.length, 1);
+    assert.equal(interactions[0].clickType, 2);
+    assert.equal(walks.length, 0, 'the boat still operates the nearby world loc without a land route');
+    assert.deepEqual(messages, []);
+
+    routes.length = 0;
+    root = new Location(3300, 3300, 0);
+    listener.executeAction(player, 1535, 3226, 3214, 2);
+    assert.equal(routes.length, 1, 'route side effects also precede an out-of-range deck refusal');
+    assert.equal(interactions.length, 1, 'the unreachable loc is not operated');
+    assert.deepEqual(messages, ["You can't reach that."]);
+
+    area = null;
+    routes.length = 0;
+    listener.executeAction(player, 1535, 3226, 3214, 2);
+    assert.equal(routes.length, 0, 'normal routing emits in MovementQueue, never twice in the listener');
+    assert.equal(walks.length, 1);
+    assert.equal(walks[0][0], object);
+    assert.equal(typeof walks[0][1].execute, 'function');
+    assert.equal(walks[0][2], 2, 'the normalized option reaches the central object router');
 });
 
 test('a closed door snapshot replays when a player returns after missing auto-close', () => {

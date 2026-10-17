@@ -11,7 +11,8 @@ import type { AttackTypeName } from "../../definition/ItemDefinition";
 const ATTACK_TYPE_NAMES: AttackTypeName[] = ["stab", "slash", "crush", "magic", "range"];
 
 export type HitDelayProfile = { base: number; distanceOffset: number; divisor: number };
-export type ProjectileProfile = { delay: number; speed?: number; startHeight: number; endHeight: number; lengthAdjustment?: number; stepMultiplier?: number };
+/** angle and progress are the packet's arc (16 and 64 unless set, see Projectile). */
+export type ProjectileProfile = { delay: number; speed?: number; startHeight: number; endHeight: number; lengthAdjustment?: number; stepMultiplier?: number; angle?: number; progress?: number };
 
 export interface WeaponCombatProfile {
     itemIds?: number[];
@@ -25,6 +26,10 @@ export interface WeaponCombatProfile {
     longRangeFightType?: FightType;
     hitDelays?: HitDelayProfile[];
     projectiles?: ProjectileProfile[];
+    /** The weapon's own travel spotanim, fired instead of its ammunition's. */
+    projectileId?: number;
+    /** The weapon's own launch spotanim, played instead of its ammunition's. */
+    launchGraphic?: number;
     startGraphic?: boolean;
     /** Fires two arrows: the ammunition's double launch graphic (double_<ammo>_arrow_launch). */
     doubleStartGraphic?: boolean;
@@ -271,6 +276,23 @@ export class WeaponProfiles {
             hitDelays: [STANDARD_HIT],
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_ARROW,
+        });
+        // Wiki: range 6, 8 on Longrange; speed from cache param 14 (5). Captures (rsprox): every
+        // arrow flies as arrow_venator01_travel01 (2291) from arrow_venator01_launch01 (2289), at
+        // starttime 31 and endtime 46 + 2 per tile, heights 39 -> 36, angle 255, progress 11, with
+        // synth 6797. The hit lands on the tick the arrow does, floor(end / 30) - as the standard
+        // table, 1 + floor((3 + d) / 6), does for its arrow's 46 + 5 per tile - so floor((23 + d) / 15):
+        // 1 up to 6 tiles (captured: the NPC's hitsplat 2 ticks after the shot at 1-6 tiles), 2 beyond.
+        this.register({
+            itemIds: [ItemIdentifiers.VENATOR_BOW, ItemIdentifiers.VENATOR_BOW_UNCHARGED_],
+            attackDistance: 6,
+            longRangeDistance: 8,
+            longRangeFightType: FightType.SHORTBOW_LONGRANGE,
+            hitDelays: [{ base: 0, distanceOffset: 23, divisor: 15 }],
+            projectiles: [{ delay: 31, lengthAdjustment: 15, stepMultiplier: 2, startHeight: 39, endHeight: 36, angle: 255, progress: 11 }],
+            projectileId: 2291,
+            launchGraphic: 2289,
+            fireSound: Sound.VENATOR_BOW_SHOOT,
         });
         // Wiki (and cache params 13/14): attack range 10, speed 5.
         this.register({

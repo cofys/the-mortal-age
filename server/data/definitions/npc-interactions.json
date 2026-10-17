@@ -45,22 +45,10 @@
       "args": { "shopId": 5 }
     }
   },
-  "2460": {
-    "first_click": {
-      "method": "core.shops.open",
-      "args": { "shopId": 3 }
-    }
-  },
   "4921": {
     "first_click": {
       "method": "core.shops.open",
       "args": { "shopId": 1 }
-    }
-  },
-  "6059": {
-    "first_click": {
-      "method": "core.shops.open",
-      "args": { "shopId": 4 }
     }
   },
   "3837": {

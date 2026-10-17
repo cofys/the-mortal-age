@@ -1949,6 +1949,12 @@ export const MAIN_INVENTORY_SLOT_FLAGS = 0x1207fe;
 export const DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID = (116 << 16) | 40;
 const DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS = 5;
 const FIRST_OPTION_FLAG = 1 << 1;
+// "Player/NPC 'Attack' options" dropdowns beside it (116:38, 116:39). Live sends op1 on the
+// option rows 1..5 (five player options) and 1..4 (four NPC options).
+export const ATTACK_PRIORITY_PLAYER_BUTTONS_UID = (116 << 16) | 38;
+export const ATTACK_PRIORITY_NPC_BUTTONS_UID = (116 << 16) | 39;
+const ATTACK_PRIORITY_PLAYER_OPTIONS = 5;
+const ATTACK_PRIORITY_NPC_OPTIONS = 4;
 
 // Quest tab icon child per gameframe root, from the cache pane redirect enums
 // (1129 fixed / 1130 stretch / 1131 classic). Not a mount - this is a flag on a
@@ -2018,6 +2024,8 @@ function gameframeFlagEntries(root: number): Array<[number, Buffer]> {
     [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, (1 << 1) | (1 << 2))],
     [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_PLAYTIME_ROW, ACCOUNT_SUMMARY_PLAYTIME_ROW, 1 << 1)],
     [DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, encodeWidgetSetFlagsRange(DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, 0, DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS, FIRST_OPTION_FLAG)],
+    [ATTACK_PRIORITY_PLAYER_BUTTONS_UID, encodeWidgetSetFlagsRange(ATTACK_PRIORITY_PLAYER_BUTTONS_UID, 1, ATTACK_PRIORITY_PLAYER_OPTIONS, FIRST_OPTION_FLAG)],
+    [ATTACK_PRIORITY_NPC_BUTTONS_UID, encodeWidgetSetFlagsRange(ATTACK_PRIORITY_NPC_BUTTONS_UID, 1, ATTACK_PRIORITY_NPC_OPTIONS, FIRST_OPTION_FLAG)],
   ];
 }
 

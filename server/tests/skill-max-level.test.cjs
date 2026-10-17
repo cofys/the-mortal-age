@@ -479,7 +479,7 @@ function feedbackPlayer(core) {
     getInventory: () => inventory, getEquipment: () => ({ contains: () => false }), getPacketSender: () => sender,
     getMovementQueue: () => ({ size: () => 0 }), getForceMovement: () => null,
     isRegistered: () => true, getHitpoints: () => 99,
-    getUsername: () => "feedback-test", isPlayerBot: () => false,
+    getUsername: () => "feedback-test", getIndex: () => 1, isPlayerBot: () => false,
     performAnimation: a => animations.push(a.getId()), performGraphic: g => graphics.push(g.getId()), sendMessage: m => messages.push(m),
     getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
     getSkill: () => null, setSkill() {}, setCreationMenu() {},
@@ -655,35 +655,42 @@ test("burying resolves inventory and XP together on tick two; movement, logout a
   }
 });
 
-test("Fletching cancels while waiting after movement and never restarts its animation after a level-up", () => {
+test("Fletching keeps going while moving, stops on the next click and never restarts its animation after a level-up", () => {
   const { PluginManager } = require("../dist/plugins/PluginManager");
   const core = PluginManager.getCoreApi(), tasks = [];
   const hooks = registerFeedbackPlugin("skills/Fletching", core, {
-    getTaskManager: () => ({ submit: task => tasks.push(task) }),
+    getTaskManager: () => ({ submit: task => { task.setRunning(true); tasks.push(task); } }),
   });
   // The level-up pop-up is what stops Fletching: SkillLevelUp announces it as an event.
   const feedback = registerFeedbackPlugin("interface/SkillLevelUp", core, {
     emitCustomEvent: (name, event) => name === "level-up:popup-opened" && hooks.onCustomEvent(event),
   });
-  for (const mode of ["walk", "level-up"]) {
+  for (const mode of ["moving", "click", "level-up"]) {
     const p = feedbackPlayer(core);
     let xp = 0;
     p.skills = {
       getCurrentLevel: () => 99, getTotalLevel: () => 100, getCombatLevel: () => 3, stopSkillable() {},
       addExperiences() {
         xp++;
-        feedback.onPlayerLevelUp({ player: p, skill: Skill.FLETCHING, oldLevel: 1, newLevel: 2 });
+        if (mode === "level-up") feedback.onPlayerLevelUp({ player: p, skill: Skill.FLETCHING, oldLevel: 1, newLevel: 2 });
       },
     };
     p.counts.set(core.ItemIdentifiers.KNIFE, 1); p.counts.set(core.ItemIdentifiers.LOGS, 2);
     hooks.onItemOnItem({ player: p, usedItemId: core.ItemIdentifiers.KNIFE, usedWithItemId: core.ItemIdentifiers.LOGS });
     const menu = p.menu(); assert.ok(menu);
     menu.execute(menu.getItems()[0], 2);
-    if (mode === "walk") p.moveTo(new core.Location(3001, 3000, 0));
-    for (let n = 0; n < 7; n++) tasks[0].execute();
-    assert.equal(xp, mode === "walk" ? 0 : 1);
-    assert.equal(p.counts.get(core.ItemIdentifiers.LOGS), mode === "walk" ? 2 : 1);
-    assert.equal(p.animations.at(-1), 65535);
+    const task = tasks.at(-1);
+    assert.equal(task.key, p.getIndex(), "walkToReset cancels tasks keyed to the player");
+    for (let n = 0; n < 7; n++) {
+      // A walk click or interaction runs walkToReset, which stops the player's keyed tasks.
+      if (mode === "click" && n === 1) task.stop();
+      if (mode === "moving") p.moveTo(new core.Location(3000 + n, 3000, 0));
+      if (task.isRunning()) task.execute();
+    }
+    assert.equal(xp, { moving: 2, click: 0, "level-up": 1 }[mode]);
+    assert.equal(p.counts.get(core.ItemIdentifiers.LOGS) ?? 0, { moving: 0, click: 2, "level-up": 1 }[mode]);
+    assert.equal(task.isRunning(), false);
+    if (mode === "level-up") assert.equal(p.animations.at(-1), 65535);
     assert.equal(p.sent.some(([type]) => type === "sendSoundEffect"), false, "animation frames supply the audio");
   }
 });

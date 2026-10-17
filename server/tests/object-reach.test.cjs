@@ -18,6 +18,24 @@ const { Sounds } = require('../dist/game/Sounds');
 
 const target = { level: 0, destX: 100, destY: 100, srcSize: 1, privateArea: null };
 
+test('wall-door crossings align both coordinates for every face and angled approach', () => {
+  const { crossingFor } = require('../plugins/objects/WallDoor.Doors');
+  for (let face = 0; face < 4; face++) {
+    const door = new GameObject(30112, new Location(100, 100, 0), 0, face, null);
+    const [dx, dy] = [[-1,0],[0,1],[1,0],[0,-1]][face];
+    const tile = {x:100,y:100,z:0},neighbour={x:100+dx,y:100+dy,z:0};
+    for (const side of [-1,1]) for (const offset of [-5,-1,0,1,5]) {
+      const source = {x:100+dx*side*4+dy*offset,y:100+dy*side*4+dx*offset,z:0};
+      const crossing = crossingFor(door, source);
+      assert.deepEqual(crossing.approach, side>0?neighbour:tile);
+      assert.deepEqual(crossing.destination, side>0?tile:neighbour);
+      assert.equal(Math.abs(crossing.approach.x-crossing.destination.x)+Math.abs(crossing.approach.y-crossing.destination.y),1);
+    }
+    assert.deepEqual(crossingFor(door,tile),{approach:tile,destination:neighbour});
+  }
+  assert.equal(crossingFor(new GameObject(30112,new Location(100,100,0),2,0,null),target),null,'corner walls need their own route');
+});
+
 test('object reach respects cardinal sides, walls, rotated footprints and access masks', () => {
   let wall = 0;
   const route = new RsmodRouteFinding(() => wall);
@@ -51,6 +69,94 @@ test('large actors can reach walls and decorations inside their footprint', () =
       assert.equal(route.reachedAbsolute({ ...target, srcX: 99, srcY: 99, srcSize: 2, locShape: shape, locAngle: angle }), true);
     }
   }
+});
+
+test('wall approach masks reject door flanks in both reach checks and route searches', () => {
+  const route = new RsmodRouteFinding(() => 0);
+  for (let face = 0; face < 4; face++) {
+    const [dx, dy] = [[-1, 0], [0, 1], [1, 0], [0, -1]][face];
+    const door = { ...target, locShape: 0, locAngle: face, blockAccessFlags: 0x5 };
+    const valid = [[100, 100], [100 + dx, 100 + dy]];
+    for (let x = 98; x <= 102; x++) for (let y = 98; y <= 102; y++) {
+      const options = { ...door, srcX: x, srcY: y };
+      assert.equal(route.reachedAbsolute(options), valid.some(([vx, vy]) => x === vx && y === vy));
+      const path = route.findRoute(options);
+      assert.equal(path.alternative, false);
+      assert.ok(valid.some(([vx, vy]) => path.endX === vx && path.endY === vy), `face ${face}: ${x},${y}`);
+    }
+    // An unmarked wall ladder keeps the ordinary wall reach strategy.
+    assert.equal(route.reachedAbsolute({ ...door, srcX: 100 + dy, srcY: 100 + dx, blockAccessFlags: 0 }), true);
+    for (const [x, y] of [[98, 98], [98, 100], [100, 98], [101, 101]]) {
+      const options = { ...door, srcX: x, srcY: y, srcSize: 2 };
+      assert.equal(route.reachedAbsolute(options), valid.some(([vx, vy]) =>
+        vx >= x && vx < x + 2 && vy >= y && vy < y + 2));
+    }
+  }
+
+  const blocked = new RsmodRouteFinding((x, y) => x === 100 && y === 100 ? 0x100 : 0);
+  const otherSide = blocked.findRoute({ ...target, locShape: 0, locAngle: 2, blockAccessFlags: 0x5,
+    srcX: 100, srcY: 99 });
+  assert.deepEqual([otherSide.endX, otherSide.endY], [101, 100], 'use the other reachable face when one tile is blocked');
+  const sealed = new RsmodRouteFinding((x, y) => y === 100 && (x === 100 || x === 101) ? 0x100 : 0);
+  const near = sealed.findRoute({ ...target, locShape: 0, locAngle: 2, blockAccessFlags: 0x5,
+    srcX: 100, srcY: 99 });
+  assert.equal(near.alternative, true);
+  assert.equal(sealed.reachedAbsolute({ ...target, locShape: 0, locAngle: 2, blockAccessFlags: 0x5,
+    srcX: near.endX, srcY: near.endY }), false, 'move-near cannot make a blocked doorway operable');
+});
+
+test('every walkToObject caller shares route masks and cannot operate a door from its flank', (t) => {
+  const noop = () => {};
+  let location = new Location(100, 99, 0);
+  const player = {
+    isPlayer: () => true, isNpc: () => false, isPlayerBot: () => true, getAsPlayer() { return this; },
+    getIndex: () => 1, getUsername: () => 'door-reach', getSize: () => 1,
+    getLocation: () => location, getPrivateArea: () => null, setPositionToFace: noop, setDirection: noop,
+  };
+  const queue = new MovementQueue(player);
+  player.getMovementQueue = () => queue;
+  queue.getMobility = () => ({ canMove: () => true });
+  queue.checkDestination = () => true;
+  queue.walkToReset = noop;
+  const definition = { getName: () => 'Door' };
+  t.mock.method(ObjectDefinition, 'forId', () => definition);
+  const requests = [];
+  let explicitDestination = null;
+  t.mock.method(PluginManager, 'emitObjectRoute', (event) => {
+    requests.push(event);
+    event.blockAccessFlags = 0x5;
+    event.destination = explicitDestination;
+  });
+  const previousRoute = PathFinder.rsmodRouteFinding;
+  PathFinder.rsmodRouteFinding = new RsmodRouteFinding(() => 0);
+  t.after(() => { PathFinder.rsmodRouteFinding = previousRoute; TaskManager.cancelTasks(1); });
+  const door = new GameObject(1535, new Location(100, 100, 0), 0, 2, null);
+  for (const clickType of [undefined, 0, 1, 2, 3, 4, 5]) {
+    location = new Location(100, 99, 0);
+    let operations = 0;
+    queue.walkToObject(door, { execute: () => { operations++; } }, clickType);
+    assert.ok(queue.points.length > 0, 'even an already adjacent caller must route to a door face');
+    assert.equal(requests.at(-1).clickType, clickType ?? 0);
+    assert.equal(requests.at(-1).definition, definition);
+    // Losing the path beside the wall must repath, not fire the operation early.
+    queue.reset();
+    TaskManager.process();
+    TaskManager.processWalkTo(1);
+    assert.equal(operations, 0);
+    assert.ok(queue.points.length > 0);
+    location = new Location(100, 100, 0);
+    queue.reset();
+    TaskManager.process();
+    TaskManager.processWalkTo(1);
+    assert.equal(operations, 1);
+  }
+  assert.equal(requests.length, 7, 'one route hook per object interaction');
+
+  explicitDestination = { x: 99, y: 98, z: 0 };
+  let destination;
+  queue.walkToTile = (tile, action) => { destination = tile; action(); };
+  queue.walkToObject(door, { execute: noop });
+  assert.deepEqual([destination.x, destination.y, destination.z], [99, 98, 0], 'explicit quest routes retain priority');
 });
 
 test('ground-item routes can stop on a reachable tile beside a blocked item tile', (t) => {

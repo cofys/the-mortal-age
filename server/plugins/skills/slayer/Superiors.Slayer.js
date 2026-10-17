@@ -115,8 +115,14 @@ function npcKilled({ killer, npc }) {
   killer.getSkillManager().addExperiences(core.Skill.SLAYER, hitpoints * DATA.xpPerHitpoint);
 }
 
+/** "slayer:is-superior" { npc, superior }: whether an NPC is a superior Slayer monster. */
+function answerIsSuperior(request) {
+  if (request?.npc && isSuperior(request.npc)) request.superior = true;
+}
+
 function attach(pluginApi) {
   pluginApi.onCustomEvent("slayer:task-kill", taskKillEvent);
+  pluginApi.onCustomEvent("slayer:is-superior", answerIsSuperior);
   pluginApi.onNpcDeath(npcKilled);
 }
 

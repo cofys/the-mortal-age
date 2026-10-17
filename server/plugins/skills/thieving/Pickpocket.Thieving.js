@@ -43,7 +43,6 @@ const GLOVES_OF_SILENCE_FAILURES = 62;
 const GLOVES_OF_SILENCE_ATTRIBUTE = "thieving.gloves-of-silence-failures";
 // Wiki (Thieving cape): +10% success, multiplied with the gloves; the max cape carries the perk.
 const THIEVING_CAPE_BONUS = 110;
-const THIEVING_CAPES = new Set(["thieving cape", "thieving cape(t)", "max cape"]);
 // Wiki (Dodgy necklace): 25% to avoid the stun and damage; 10 charges, kept on the player.
 const DODGY_NECKLACE_CHANCE = 0.25;
 const DODGY_NECKLACE_CHARGES = 10;
@@ -108,6 +107,12 @@ function questComplete(player, key) {
   return typeof request.complete === "boolean" ? request.complete : Number(player.getAttribute(`quest.${key}.stage`)) >= 2;
 }
 
+function wearsThievingCape(player) {
+  const request = { player, skill: "THIEVING", result: false };
+  pluginApi?.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
+}
+
 function hasFireCape(player) {
   if (FIRE_CAPES.has(wornName(player, Equipment.CAPE_SLOT))) return true;
   return player.getInventory().getItems().some((item) =>
@@ -133,7 +138,7 @@ function successChance(player, target) {
   let high = target.high;
   const bonuses = [];
   if (wornName(player, Equipment.HANDS_SLOT) === "gloves of silence") bonuses.push(GLOVES_OF_SILENCE_BONUS);
-  if (THIEVING_CAPES.has(wornName(player, Equipment.CAPE_SLOT))) bonuses.push(THIEVING_CAPE_BONUS);
+  if (wearsThievingCape(player)) bonuses.push(THIEVING_CAPE_BONUS);
   for (const bonus of bonuses) {
     low = Math.floor((low * bonus) / 100);
     high = Math.floor((high * bonus) / 100);

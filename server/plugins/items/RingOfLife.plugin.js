@@ -3,16 +3,17 @@
  *
  * When a combat hit leaves the wearer at 10% or less of their maximum Hitpoints
  * (but not dead), the ring teleports them to their respawn point and crumbles;
- * a worn Defence cape does the same without being destroyed. The teleport works
- * up to level 30 Wilderness, but Tele Block stops it and the effect never cures
- * poison.
+ * a worn Defence cape (or max cape) does the same without being destroyed, unless its
+ * effect is toggled off, and goes to the Ardougne marketplace when its respawn is set there
+ * (the Skillcapes plugin's "skillcape:ring-of-life"). The teleport works up to level 30
+ * Wilderness, but Tele Block stops it and the effect never cures poison.
  */
 const Equipment = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment").Equipment;
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 
 let core = null;
+let pluginApi = null;
 let ringIds = new Set();
-let capeIds = new Set();
 
 function onIncomingDamage(entity, hitDamage) {
   if (!entity?.isPlayer?.() || !(hitDamage?.getDamage?.() > 0)) {
@@ -30,9 +31,10 @@ function onIncomingDamage(entity, hitDamage) {
   const equipment = player.getEquipment();
   const ringItem = equipment.get(Equipment.RING_SLOT);
   const ringId = ringItem?.getId?.();
-  const capeId = equipment.get(Equipment.CAPE_SLOT)?.getId?.();
   const hasRing = ringIds.has(ringId);
-  const hasCape = capeIds.has(capeId);
+  const cape = { player, active: false, destination: null };
+  if (!hasRing) pluginApi?.emitCustomEvent("skillcape:ring-of-life", cape);
+  const hasCape = cape.active === true;
   if (!hasRing && !hasCape) {
     return;
   }
@@ -40,7 +42,9 @@ function onIncomingDamage(entity, hitDamage) {
   if (!player.getCombat()?.getTeleblockTimer?.()?.finished?.()) {
     return;
   }
-  const destination = core.GameConstants.DEFAULT_LOCATION;
+  const destination = !hasRing && cape.destination
+    ? new core.Location(cape.destination[0], cape.destination[1], cape.destination[2] ?? 0)
+    : core.GameConstants.DEFAULT_LOCATION;
   if (!core.TeleportHandler.checkReqs(player, destination, 30)) {
     return;
   }
@@ -61,11 +65,8 @@ module.exports = {
   _test: { onIncomingDamage },
   register(api) {
     core = api.core;
+    pluginApi = api;
     ringIds = new Set([core.ItemIdentifiers.RING_OF_LIFE]);
-    capeIds = new Set([
-      core.ItemIdentifiers.DEFENCE_CAPE,
-      core.ItemIdentifiers.DEFENCE_CAPE_T_,
-    ]);
     api.registerIncomingDamageModifier(onIncomingDamage);
   },
 };

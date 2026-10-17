@@ -19,6 +19,12 @@ export class OptionDialogue extends Dialogue {
         return this.title;
     }
 
+    /** The question above the options ("Select an Option" when unset). */
+    public setTitle(title: string): OptionDialogue {
+        this.title = title;
+        return this;
+    }
+
     public getOptions(): string[] {
         return this.options;
     }

@@ -154,10 +154,10 @@ test("a session nobody polls closes with a reason the next poll passes on", (t) 
   const poll = fakeResponse();
   channel.attachPoll(poll, 0);
   poll.emit("close");
-  t.mock.timers.tick(20_000);
-  assert.deepEqual(reasons, ["no poll for 20s"]);
+  t.mock.timers.tick(120_000);
+  assert.deepEqual(reasons, ["no poll for 120s"]);
   const late = fakeResponse();
   channel.attachPoll(late, 0);
   assert.equal(late.statusCode, 410);
-  assert.equal(late.headers["X-Close-Reason"], "no poll for 20s");
+  assert.equal(late.headers["X-Close-Reason"], "no poll for 120s");
 });

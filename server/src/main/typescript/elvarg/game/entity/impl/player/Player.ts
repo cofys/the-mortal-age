@@ -485,6 +485,11 @@ export class Player extends Mobile {
                                     }
                                 }
 
+                                // "stats:restore-rate": gear may raise how fast a stat restores (the Hitpoints cape).
+                                const restore = { player: this, skill, rate: restoreRate };
+                                PluginManager.emitCustomEvent("stats:restore-rate", restore);
+                                restoreRate = restore.rate;
+
                                 this.getSkillManager().increaseCurrentLevel(skill, restoreRate, max);
                             }
                         } else if (current > max) {

@@ -157,6 +157,7 @@ function applyWikiCorrections(tableById) {
     tableById.vorkath.rolls = 2;
   }
   correctMadAngel(tableById.mad_angel);
+  correctSkotizo(tableById.skotizo);
   const kalphiteQueen = tableById.kalphite_queen;
   if (!kalphiteQueen) {
     return;
@@ -198,6 +199,24 @@ function correctMadAngel(table) {
     if (Number.isInteger(entry.out_of) && entry.out_of === table.main_max_roll) entry.out_of = 150;
   }
   table.main_max_roll = 150;
+}
+
+const SKOTIZO_TOTEMS = new Set([19679, 19681, 19683, 19685]);
+
+/**
+ * Skotizo (Wiki, Drops): one guaranteed roll of the ancient shard table (75/15/5/4/1 in 100) on
+ * top of a main table out of 100 - the export folded the shards into the main roll out of 199.
+ * His totem table (4/128: a whole totem or the piece the player lacks) is the Skotizo plugin's,
+ * so the four flat totem tertiaries go.
+ */
+function correctSkotizo(table) {
+  if (!table) return;
+  for (const entry of table.entries || []) {
+    if (entry.section === "Ancient shards") Object.assign(entry, { separate_roll: true, roll_group: "skotizo_shards", out_of: 100 });
+    else if (Number.isInteger(entry.out_of) && entry.out_of === table.main_max_roll) entry.out_of = 100;
+  }
+  table.main_max_roll = 100;
+  table.tertiary = (table.tertiary || []).filter((entry) => !SKOTIZO_TOTEMS.has(entry.item_id));
 }
 
 function loadDrops() {
@@ -493,6 +512,9 @@ function dropFor(player, npc, npcId, location, damagers = []) {
   }
 
   const drops = rollTable(table, player, npc);
+  // Loot that depends on where or what the NPC was rather than its table (the Catacombs of
+  // Kourend's totem pieces and shards), added before anything below reads the drops.
+  pluginApi?.emitCustomEvent("npc-drops:add", { player, npc, npcId, drops });
   // Drops that depend on the killer's progress (Warriors' Guild defenders) are edited in place.
   // `damagers`: every player who damaged the npc (an Ironman gets nothing when others helped).
   pluginApi?.emitCustomEvent("npc-drops:roll", { player, npc, npcId, drops, damagers });

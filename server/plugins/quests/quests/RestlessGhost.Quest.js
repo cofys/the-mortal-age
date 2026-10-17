@@ -40,7 +40,7 @@ module.exports = function registerRestlessGhostQuest(api) {
   function statement(player, text, item) {
     player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(item === undefined ? new StatementDialogue(0, text) : new ItemStatementDialogue(0, item, text)));
   }
-  const bankedAmulet = player => (player.getBanks?.() ?? []).some(bank => bank.getAmount(GHOSTSPEAK_AMULET_ID) > 0);
+  const bankedAmulet = player => (player.getBanks?.() ?? []).some(bank => bank?.getAmount(GHOSTSPEAK_AMULET_ID) > 0);
   const ownsGhostspeakAmulet = (player) => {
     if (player.getInventory().getAmount(GHOSTSPEAK_AMULET_ID) > 0) return true;
     return player.getEquipment().get(Equipment.AMULET_SLOT)?.getId?.() === GHOSTSPEAK_AMULET_ID;

@@ -3,6 +3,7 @@
  * room names, and small helpers for timing, speech and walking through the guild's doors.
  */
 let core;
+let pluginApi;
 
 /** Filled from the generated identifiers once the plugin hands over `api`. */
 const ITEMS = {};
@@ -11,6 +12,7 @@ const NPCS = {};
 /** Set once by the plugin before any room attaches. */
 function init(api) {
   core = api.core;
+  pluginApi = api;
   const Items = core.ItemIdentifiers;
   const Npcs = core.NpcIdentifiers;
   Object.assign(ITEMS, {
@@ -20,7 +22,6 @@ function init(api) {
     SHOT_22LB: Items._22LB_SHOT,
     ONE_BARREL: Items.ONE_BARREL,
     GROUND_ASHES: Items.GROUND_ASHES,
-    ATTACK_CAPES: [Items.ATTACK_CAPE, Items.ATTACK_CAPE_T_, Items.MAX_CAPE],
   });
   Object.assign(NPCS, {
     GHOMMAL: Npcs.GHOMMAL_3,
@@ -192,7 +193,9 @@ function wearing(player, slot, ...itemIds) {
 
 /** Kamfreena and Lorelai let the Attack (or max) cape in without tokens. */
 function wearsAttackCape(player) {
-  return wearing(player, core.Equipment.CAPE_SLOT, ...ITEMS.ATTACK_CAPES);
+  const request = { player, skill: "ATTACK", result: false };
+  pluginApi.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
 }
 
 function random(min, max) {

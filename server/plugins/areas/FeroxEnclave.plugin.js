@@ -12,5 +12,6 @@ module.exports = {
     require("./ferox/Barriers.FeroxEnclave")(api);
     require("./ferox/Pool.FeroxEnclave")(api);
     require("./ferox/FreeForAll.FeroxEnclave")(api);
+    require("./ferox/CastleWarsPortal.FeroxEnclave")(api);
   },
 };

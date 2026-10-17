@@ -851,6 +851,14 @@ export class RsmodRouteFinding {
     }
     switch (exitStrategy) {
       case WALL_STRATEGY:
+        // Route search and operation use the same rotated approach-side restrictions.
+        const access = rotateBlockAccess(locAngle, blockAccessFlags);
+        if ((srcX + srcSize <= destX && (access & BLOCK_ACCESS_WEST) !== 0) ||
+          (srcX > destX && (access & BLOCK_ACCESS_EAST) !== 0) ||
+          (srcY + srcSize <= destY && (access & BLOCK_ACCESS_SOUTH) !== 0) ||
+          (srcY > destY && (access & BLOCK_ACCESS_NORTH) !== 0)) {
+          return false;
+        }
         return srcSize === 1
           ? this.reachWall1(level, srcX, srcY, destX, destY, locShape, locAngle, privateArea)
           : this.reachWallN(level, srcX, srcY, destX, destY, srcSize, locShape, locAngle, privateArea);

@@ -1,0 +1,107 @@
+{
+  "$comment": "Skotizo (plugins/bosses/Skotizo.plugin.js, docs/skotizo.md). Ids are the rev 241 cache's; ticks count from the player's arrival at the catacombs altar, as in the rsprox captures (recordings 3323, 3329). Fields marked estimate in docs/skotizo.md have no capture behind them.",
+  "npcs": {
+    "boss": 7286,
+    "minion": 7287,
+    "ankou": 7296
+  },
+  "locs": {
+    "catacombsAltar": 28900,
+    "altarOpen": 28923,
+    "altarClosed": 28924,
+    "portal": 28925
+  },
+  "instance": {
+    "$comment": "Skotizo's lair is map square 9048 (2240-2303, 5632-5695), copied 8x8 chunks a plane, as captured.",
+    "sourceChunkX": 280,
+    "sourceChunkY": 704,
+    "chunks": 8,
+    "planes": 2
+  },
+  "arena": { "minX": 2257, "maxX": 2287, "minY": 5650, "maxY": 5677 },
+  "altars": {
+    "$comment": "In the HUD script's order (west, east, south, north). Captured (rev 235) one tile further out; the rev 241 arena is smaller, so each sits just outside its wall's walkable edge (estimate).",
+    "w": { "tile": [2256, 5664], "rotation": 1, "open": 7294, "closed": 7295 },
+    "e": { "tile": [2288, 5664], "rotation": 3, "open": 7290, "closed": 7291 },
+    "s": { "tile": [2272, 5649], "rotation": 0, "open": 7292, "closed": 7293 },
+    "n": { "tile": [2270, 5678], "rotation": 2, "open": 7288, "closed": 7289 }
+  },
+  "enter": {
+    "locAnim": 1477,
+    "anim": 3865,
+    "spotanim": 1296,
+    "sound": 200,
+    "animTick": 1,
+    "fadeOutTick": 3,
+    "moveTick": 6,
+    "fadeInTick": 7,
+    "hudTick": 9
+  },
+  "exit": {
+    "$comment": "Not captured: the Wiki says the portals lead back to the catacombs; the tile is where captured players stood to use the altar.",
+    "tile": [1662, 10049, 0],
+    "fadeOutTick": 0,
+    "moveTick": 2,
+    "fadeInTick": 3,
+    "closeTick": 5
+  },
+  "music": 472,
+  "killCountVarp": 1527,
+  "hud": { "interface": 308, "script": 1313 },
+  "combat": {
+    "speed": 6,
+    "meleeChance": 0.75,
+    "melee": { "anim": 4680, "sound": 521, "soundDelay": 20 },
+    "magic": {
+      "anim": 69,
+      "castSound": 3006,
+      "impactSound": 3007,
+      "projectile": 1242,
+      "impact": 1243,
+      "startCycle": 30,
+      "minEndCycle": 70,
+      "cyclesPerTile": 10,
+      "startHeight": 300,
+      "endHeight": 124,
+      "angle": 16,
+      "slope": 226,
+      "distance": 10
+    }
+  },
+  "awakenedAltars": {
+    "timerTicks": [50, 129],
+    "cooldownTicks": 100,
+    "reductionPercent": 25,
+    "lightReductionPercent": 15,
+    "lightReductionCap": 60,
+    "lightWeapons": ["Arclight", "Emberlight"]
+  },
+  "minions": {
+    "summonAtHitpoints": 150,
+    "count": 3,
+    "resummonChance": 0.25,
+    "chant": "Gar mulno ful taglo!",
+    "spawnGraphic": 188,
+    "spawnSound": 1930,
+    "spawnRadius": 9,
+    "despawnTicks": 5
+  },
+  "ankou": {
+    "$comment": "Wiki: one at a time, off a random timer while an altar is awake. The range is an estimate.",
+    "timerTicks": [25, 75]
+  },
+  "drops": {
+    "totemTable": { "weight": 4, "outOf": 128, "fullTotemChance": 4 },
+    "pieces": ["DARK_TOTEM_BASE", "DARK_TOTEM_MIDDLE", "DARK_TOTEM_TOP"],
+    "catacombs": {
+      "$comment": "Wiki: every monster but ghosts in the Catacombs of Kourend and the Giants' Den; superior Slayer monsters always drop a piece.",
+      "boxes": [[1600, 9984, 1791, 10111], [1408, 9856, 1472, 9920]],
+      "excludedNames": ["Ghost"],
+      "totemFrom": 500,
+      "shardWeight": 3,
+      "shardFrom": 500,
+      "shardHitpointsCap": 400
+    }
+  },
+  "demonbaneWeapons": ["Silverlight", "Darklight", "Arclight", "Emberlight", "Bone claws", "Burning claws", "Scorching bow", "Purging staff"]
+}

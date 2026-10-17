@@ -17,6 +17,7 @@ const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
+const { PrivateArea } = require('../dist/game/model/areas/impl/PrivateArea');
 const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
 const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
 
@@ -30,7 +31,7 @@ async function initializeMapCollisionOnce() {
   mapCollisionInitialized = true;
 }
 
-function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {}) {
+function buildHarness({ cacheObjects, objectManager: suppliedObjectManager, realMapObjects = false } = {}) {
   const world = new Map();
   const ops = [];
   const sounds = [];
@@ -40,7 +41,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
   const originalSound = Sounds.sendSound;
   const originalGetObject = CacheDefinitions.getObject;
   const originalGetCounts = CacheDefinitions.getCounts;
-  MapObjects.get = (id, location) =>
+  if (!realMapObjects) MapObjects.get = (id, location) =>
     world.get(tileKey(id, location.getX(), location.getY(), location.getZ())) ?? null;
   Sounds.sendSound = (...args) => sounds.push(args);
   CacheDefinitions.getObject = (id) => cacheObjects?.get(id) ?? (id === 3743
@@ -55,6 +56,9 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
   CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: cacheObjects ? 62522 : 8740 });
 
   const handlers = new Map();
+  const routes = [];
+  const startup = [];
+  let regionLoaded;
   let doorToggleHandler = null;
   const visibleObjectIds = new Map();
   const objectManager = suppliedObjectManager ?? {
@@ -80,11 +84,14 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
       if (name === 'door:toggle') doorToggleHandler?.(event);
     },
     onObjectInteraction: (name, actions) => handlers.set(name, actions),
-    onRegionLoaded: () => {},
+    onRegionLoaded: (handler) => { regionLoaded = handler; },
+    onObjectRoute: (handler) => routes.push(handler),
+    onServerStartup: (handler) => startup.push(handler),
     onPlayerProcess: () => {},
   };
   delete require.cache[require.resolve('../plugins/objects/Doors.plugin')];
   require('../plugins/objects/Doors.plugin').register(api);
+  for (const handler of startup) handler();
 
   const place = (id, x, y, face) => {
     const object = new GameObject(id, new Location(x, y, 0), 0, face, null);
@@ -117,8 +124,147 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
     CacheDefinitions.getCounts = originalGetCounts;
   };
 
-  return { place, click, sounds, ops, submitted, handlers, visibleObjectIds, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
+  return { place, click, sounds, ops, submitted, handlers, routes, regionLoaded: (regionId) => regionLoaded({ regionId }), visibleObjectIds, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
 }
+
+test('shared wall-door reach masks cover every operation and preserve other object routing', () => {
+  const h = buildHarness();
+  try {
+    assert.equal(h.routes.length, 1, 'the shared reach hook is installed on startup');
+    const route = ({ name = 'Door', shape = 0, face = 0, clickType = 1, blockAccessFlags = 0, destination = null } = {}) => {
+      const event = {
+        object: new GameObject(30112, new Location(100, 100, 0), shape, face, null),
+        sourceLocation: { x: 104, y: 97, z: 0 }, clickType, blockAccessFlags, destination,
+        definition: { getName: () => name, getInteractions: () => ['Open', 'Close', 'Pick-lock'] },
+      };
+      h.routes[0](event);
+      return event;
+    };
+    for (let face = 0; face < 4; face++) {
+      for (const [clickType, option] of [[1, 'Open'], [2, 'Close'], [3, 'Pick-lock'], [0, 'item or spell']]) {
+        const event = route({ face, clickType });
+        assert.equal(event.blockAccessFlags, 0x5, `${option} uses the same local face mask at rotation ${face}`);
+        assert.equal(event.destination, null, 'the shared route finder chooses either usable face tile');
+      }
+    }
+    for (const name of ['Door', 'Doors', 'Large door', 'Castle door', 'Cell Door', 'Glass door',
+      'Doorway', 'Wall', 'Ardougne Wall Door', 'Oak door', 'Heavy door', 'Tomb Door',
+      'Hardwood Grove Doors', 'Gate', 'Metal gate', 'Ancient Gate', 'Sapphire Gate', 'Gate of War']) {
+      assert.equal(route({ name }).blockAccessFlags, 0x5, `${name} uses shared wall-door reach`);
+    }
+    for (const name of ['Ladder', 'Iron ore vein', 'Wardrobe', 'Stained-glass window']) {
+      assert.equal(route({ name }).blockAccessFlags, 0, `${name} retains its ordinary wall reach`);
+    }
+    for (const shape of [2, 4, 9, 10, 11, 22]) {
+      assert.equal(route({ shape }).blockAccessFlags, 0, `shape ${shape} retains its existing reach geometry`);
+    }
+    const questRoute = { x: 300, y: 400, z: 1 };
+    assert.equal(route({ destination: questRoute }).destination, questRoute, 'explicit plugin destinations remain intact');
+    assert.equal(route({ blockAccessFlags: 0xa }).blockAccessFlags, 0xf, 'the door mask retains prior access restrictions');
+  } finally { h.restore(); }
+});
+
+test('base-map doors send private removals before spawns and keep identical instances independent', async () => {
+  await initializeMapCollisionOnce();
+  const base = MapObjects.get(1535, new Location(3226, 3214, 0), null);
+  assert.ok(base.isMapOriginal());
+  const definitions = new Map([1535, 1536].map((id) => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const areas = [new PrivateArea(), new PrivateArea()];
+  const tuple = (object) => [object.getId(), object.getLocation().getX(), object.getLocation().getY(), object.getFace()];
+  const players = [...areas, null].map((area) => {
+    const packets = [];
+    return {
+      packets,
+      getPrivateArea: () => area,
+      getRights: () => 0,
+      getSession: () => ({ isTileInScene: () => true }),
+      getPacketSender: () => ({
+        sendObject: (object) => packets.push(['add', ...tuple(object)]),
+        sendObjectRemoval: (object) => packets.push(['del', ...tuple(object)]),
+      }),
+    };
+  });
+  const originalBroadcast = World.forEachNetworkPlayer;
+  World.forEachNetworkPlayer = (consumer) => players.forEach(consumer);
+  const click = (player, object, action = 'Open') => h.handlers.get('Door')[action]({
+    player, object, objectId: object.getId(), definition: { id: object.getId() }, location: object.getLocation(),
+  });
+  const opened = [['del', 1535, 3226, 3214, 2], ['add', 1536, 3227, 3214, 3]];
+  const closed = [['del', 1536, 3227, 3214, 3], ['add', 1535, 3226, 3214, 2]];
+  try {
+    for (const player of players.slice(0, 2)) {
+      assert.equal(MapObjects.getPrivateArea(player, 1535, base.getLocation()), base,
+        'an ordinary private area initially resolves the shared base-map object');
+      click(player, base);
+      assert.deepEqual(player.packets.splice(0), opened);
+      assert.deepEqual(player.getPrivateArea().getObjects().map(tuple), [[1536, 3227, 3214, 3]],
+        'the area holds the current door only, without a synthetic closed snapshot');
+    }
+    assert.equal(h.submitted.length, 2);
+    assert.notEqual(h.submitted[0].key, h.submitted[1].key, 'auto-close tasks are scoped to each instance');
+    assert.equal(MapObjects.get(1535, base.getLocation(), null), base, 'opening a private door leaves the shared map intact');
+    assert.deepEqual(players[2].packets, [], 'main-world viewers receive no private changes');
+    h.regionLoaded(((3226 >> 6) << 8) | (3214 >> 6));
+    assert.ok(areas.every((area) => area.getObjects().length === 1), 'shared map reloads do not attach closed snapshot objects');
+    ObjectManager.onRegionChange(players[0], 3200, 3200);
+    assert.deepEqual(players[0].packets.splice(0), opened, 'scene rebuilds replay the old-tile removal before the open door');
+
+    click(players[0], areas[0].getObjects()[0], 'Close');
+    assert.deepEqual(players[0].packets.splice(0), closed);
+    assert.deepEqual(areas[0].getObjects().map(tuple), [[1535, 3226, 3214, 2]]);
+    assert.deepEqual(areas[1].getObjects().map(tuple), [[1536, 3227, 3214, 3]], 'closing one instance leaves the other open');
+    click(players[0], areas[0].getObjects()[0]);
+    assert.deepEqual(players[0].packets.splice(0), opened);
+    h.submitted[1].execute();
+    assert.deepEqual(players[1].packets.splice(0), closed);
+    assert.deepEqual(areas[1].getObjects().map(tuple), [[1535, 3226, 3214, 2]]);
+    assert.deepEqual(areas[0].getObjects().map(tuple), [[1536, 3227, 3214, 3]], 'the other instance keeps its own close task');
+    h.submitted.at(-1).execute();
+    assert.deepEqual(players[0].packets.splice(0), closed);
+    assert.deepEqual(areas[0].getObjects().map(tuple), [[1535, 3226, 3214, 2]]);
+  } finally {
+    World.forEachNetworkPlayer = originalBroadcast;
+    for (const area of areas) area.destroy();
+    h.restore();
+  }
+});
+
+test('base-map double doors keep their records and auto-close scoped to each private area', async () => {
+  await initializeMapCollisionOnce();
+  const location = new Location(3287, 3172, 0);
+  const base = MapObjects.get(1511, location, null);
+  const partner = MapObjects.get(1513, new Location(3287, 3171, 0), null);
+  assert.ok(base?.isMapOriginal() && partner?.isMapOriginal());
+  const definitions = new Map([1511, 1512, 1513, 1516].map((id) => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const areas = [new PrivateArea(), new PrivateArea()];
+  const ids = (area) => area.getObjects().map((object) => object.getId()).sort((a, b) => a - b);
+  const click = (area, object, action = 'Open') => h.handlers.get('Large door')[action]({
+    player: { getPrivateArea: () => area }, object, objectId: object.getId(), location: object.getLocation(),
+  });
+  try {
+    for (const area of areas) {
+      click(area, base);
+      assert.deepEqual(ids(area), [1512, 1516], 'only the two open panels remain attached');
+    }
+    assert.notEqual(h.submitted[0].key, h.submitted[1].key);
+    assert.equal(MapObjects.get(1511, location, null), base);
+    h.submitted[0].execute();
+    assert.deepEqual(ids(areas[0]), [1511, 1513]);
+    assert.deepEqual(ids(areas[1]), [1512, 1516]);
+    click(areas[1], areas[1].getObjects()[0], 'Close');
+    assert.deepEqual(ids(areas[1]), [1511, 1513], 'closing one area still finds its records after another auto-closes');
+    click(areas[1], areas[1].getObjects()[0]);
+    areas[1].destroy();
+    h.submitted.at(-1).execute();
+    assert.deepEqual(areas[1].getObjects(), [], 'a delayed auto-close cannot repopulate a destroyed instance');
+    assert.ok(!World.getObjects().some((object) => object.getPrivateArea() === areas[1]));
+  } finally {
+    for (const area of areas) area.destroy();
+    h.restore();
+  }
+});
 
 test('captured door portals can hand off before the ordinary door swing', () => {
   const h = buildHarness({ cacheObjects: new Map([
@@ -179,13 +325,13 @@ test('Ghorrock Prison’s keyed western gate uses its cache-supported self-openi
   try {
     const opened = h.click(id, 8343, 1689, 3);
     assert.deepEqual(opened, [
-      ['register', id, 8343, 1688, 0],
       ['deregister', id, 8343, 1689, 3],
+      ['register', id, 8343, 1688, 0],
     ], 'opening rotates the same loc out of the doorway');
     const closed = h.click(id, 8343, 1688, 0);
     assert.deepEqual(closed, [
-      ['register', id, 8343, 1689, 3],
       ['deregister', id, 8343, 1688, 0],
+      ['register', id, 8343, 1689, 3],
     ], 'the open gate can swing shut again through the normal door plugin');
   } finally {
     h.restore();
@@ -205,8 +351,8 @@ test('the DT2 final-cell Gate swings to its actionless same-model loc after the 
   const h = buildHarness({ cacheObjects: new Map([[O.GATE_270, closed], [O.GATE_271, open]]) });
   try {
     assert.deepEqual(h.click(O.GATE_270, 3107, 9248, 1), [
-      ['register', O.GATE_270, 3107, 9249, 2],
       ['deregister', O.GATE_270, 3107, 9248, 1],
+      ['register', O.GATE_270, 3107, 9249, 2],
     ], 'the normal door handler rotates the same Gate out of the doorway');
   } finally {
     h.restore();
@@ -228,8 +374,8 @@ test('Slepe church crypt gate opens through its actionless cache partner', async
   try {
     // The placed loc's cache rotation is 1; opening swings its replacement north.
     assert.deepEqual(h.click(closedId, 3728, 9752, 1), [
-      ['register', openId, 3728, 9753, 2],
       ['deregister', closedId, 3728, 9752, 1],
+      ['register', openId, 3728, 9753, 2],
     ]);
   } finally {
     h.restore();
@@ -332,7 +478,7 @@ test('Tree Gnome Stronghold doors use their nameless open variants and restore o
       [1967, 1969, 2464, 0, 2463, 1], [1968, 1970, 2466, 2, 2467, 3],
     ]) {
       assert.deepEqual(h.click(closed, x, 3492, face, 'Open', 'Tree Door', 10), [
-        ['register', open, openX, 3492, openFace], ['deregister', closed, x, 3492, face],
+        ['deregister', closed, x, 3492, face], ['register', open, openX, 3492, openFace],
       ]);
       h.submitted.at(-1).execute();
       assert.deepEqual(h.ops.splice(0), [
@@ -349,10 +495,10 @@ test('Ardougne Wall Doors are registered and swing by rotating the same loc', ()
   try {
     h.place(8738, 2557, 3299, 0);
     assert.deepEqual(h.click(8738, 2557, 3299, 0, 'Open', 'Ardougne Wall Door'), [
-      ['register', 8738, 2556, 3299, 1], ['deregister', 8738, 2557, 3299, 0],
+      ['deregister', 8738, 2557, 3299, 0], ['register', 8738, 2556, 3299, 1],
     ]);
     assert.deepEqual(h.click(8738, 2557, 3299, 0, 'Open', 'Ardougne Wall Door'), [
-      ['register', 8738, 2557, 3299, 0], ['deregister', 8738, 2556, 3299, 1],
+      ['deregister', 8738, 2556, 3299, 1], ['register', 8738, 2557, 3299, 0],
     ]);
   } finally {
     h.restore();
@@ -959,12 +1105,12 @@ test('the Gnome Ball pitch gate 2394 rotates in place and closes back onto its w
     // catalog self-pairs it and the panel swings one tile with the rotation.
     h.place(2394, 2383, 3488, 0);
     assert.deepEqual(h.click(2394, 2383, 3488, 0), [
-      ['register', 2394, 2382, 3488, 1],
       ['deregister', 2394, 2383, 3488, 0],
+      ['register', 2394, 2382, 3488, 1],
     ], 'the closed gate opens');
     assert.deepEqual(h.click(2394, 2382, 3488, 1, 'Close'), [
-      ['register', 2394, 2383, 3488, 0],
       ['deregister', 2394, 2382, 3488, 1],
+      ['register', 2394, 2383, 3488, 0],
     ], 'it closes back onto the pitch wall');
   } finally {
     h.restore();
@@ -979,8 +1125,8 @@ test('the Blood Moon Vitur food-shop door opens through the normal door handler'
   try {
     assert.ok(h.handlers.get('Vitur door')?.Open, 'the cache name is registered by the shared Doors plugin');
     assert.deepEqual(h.click(id, 2598, 7843, 3, 'Open', 'Vitur door'), [
-      ['register', id, 2598, 7842, 0],
       ['deregister', id, 2598, 7843, 3],
+      ['register', id, 2598, 7842, 0],
     ], 'the self-opening door rotates away from the door tile just as recorded');
   } finally {
     h.restore();
@@ -1007,9 +1153,13 @@ test('a transformed Blood Moon door opens its visible child instead of treating 
       location: object.getLocation(),
     });
     assert.deepEqual(h.ops, [
-      ['register', O.DOOR_838, 2590, 7819, 2],
       ['deregister', rawParent, 2590, 7818, 1],
+      ['register', O.DOOR_838, 2590, 7819, 2],
     ], 'the transformed closed parent is replaced with the cache-backed open child');
+    assert.deepEqual(h.click(O.DOOR_838, 2590, 7819, 2, 'Close', 'Door'), [
+      ['deregister', O.DOOR_838, 2590, 7819, 2],
+      ['register', rawParent, 2590, 7818, 1],
+    ], 'closing restores the actual placement parent and retains its native transforms');
   } finally {
     h.restore();
   }
@@ -1023,8 +1173,8 @@ test('the Blood Hunt Myrmel pub door swings from its cache Open-only definition'
   try {
     assert.ok(h.handlers.get('Myrmel door')?.Open);
     assert.deepEqual(h.click(O.MYRMEL_DOOR, 2599, 7826, 3, 'Open', 'Myrmel door'), [
-      ['register', O.MYRMEL_DOOR, 2599, 7825, 0],
       ['deregister', O.MYRMEL_DOOR, 2599, 7826, 3],
+      ['register', O.MYRMEL_DOOR, 2599, 7825, 0],
     ], 'the unlocked pub doorway clears its recorded south approach');
   } finally {
     h.restore();
@@ -1035,7 +1185,7 @@ test('the Blood Hunt Myrmel pub door swings from its cache Open-only definition'
 test('the catacomb outer jail gate uses its actionless open cache variant and auto-closes', () => {
  const h=buildHarness();try{
   assert.deepEqual(h.click(53441,4126,4788,2),[
-   ['register',53442,4127,4788,3],['deregister',53441,4126,4788,2],
+   ['deregister',53441,4126,4788,2],['register',53442,4127,4788,3],
   ]);
   h.submitted.at(-1).execute();assert.deepEqual(h.ops.splice(0),[
    ['deregister',53442,4127,4788,3],['register',53441,4126,4788,2],
@@ -1050,8 +1200,8 @@ test('the Lassar cistern gate opens into its actionless cache variant', () => {
   ]) });
   try {
     assert.deepEqual(h.click(48301, 2784, 6287, 0, 'Open', 'Gate', 0, null, 1), [
-      ['register', 48302, 2783, 6287, 1],
       ['deregister', 48301, 2784, 6287, 0],
+      ['register', 48302, 2783, 6287, 1],
     ], 'opening uses the actual same-model open loc and clears the closed gate footprint');
   } finally {
     h.restore();
@@ -1066,8 +1216,8 @@ test('Dragon Slayer secret wall opens with the normal door interaction', () => {
     assert.ok(h.handlers.get('Wall')?.Open, 'the cache calls the Dragon Slayer passage a Wall');
     h.place(2606, 2836, 9600, 3);
     assert.deepEqual(h.click(2606, 2836, 9600, 3, 'Open', 'Wall'), [
-      ['register', 2606, 2836, 9599, 0],
       ['deregister', 2606, 2836, 9600, 3],
+      ['register', 2606, 2836, 9599, 0],
     ], 'opening rotates the wall out of the doorway so ordinary pathfinding can cross');
   } finally {
     h.restore();
@@ -1174,12 +1324,12 @@ test('Lassar residential house door opens through its nonconsecutive cache Close
   try {
     h.place(48262, 2688, 6429, 2);
     assert.deepEqual(h.click(48262, 2688, 6429, 2, 'Open', 'Door'), [
-      ['register', 48264, 2689, 6429, 3],
       ['deregister', 48262, 2688, 6429, 2],
+      ['register', 48264, 2689, 6429, 3],
     ]);
     assert.deepEqual(h.click(48264, 2689, 6429, 3, 'Close', 'Door'), [
-      ['register', 48262, 2688, 6429, 2],
       ['deregister', 48264, 2689, 6429, 3],
+      ['register', 48262, 2688, 6429, 2],
     ]);
   } finally {
     h.restore();
@@ -1191,12 +1341,12 @@ test("Harold's bedroom door rotates without needing a separate open cache loc", 
   const h = buildHarness();
   try {
     assert.deepEqual(h.click(3747, 2906, 3543, 3, 'Open', 'Door'), [
-      ['register', 3747, 2906, 3542, 0],
       ['deregister', 3747, 2906, 3543, 3],
+      ['register', 3747, 2906, 3542, 0],
     ]);
     assert.deepEqual(h.click(3747, 2906, 3542, 0, 'Open', 'Door'), [
-      ['register', 3747, 2906, 3543, 3],
       ['deregister', 3747, 2906, 3542, 0],
+      ['register', 3747, 2906, 3543, 3],
     ]);
   } finally { h.restore(); }
 });
@@ -1206,12 +1356,12 @@ test('Death Plateau equipment door swings open after the quest unlocks it', () =
   const h = buildHarness();
   try {
     assert.deepEqual(h.click(3743, 2894, 3566, 1, 'Open', 'Large door'), [
-      ['register', 3743, 2894, 3567, 2],
       ['deregister', 3743, 2894, 3566, 1],
+      ['register', 3743, 2894, 3567, 2],
     ]);
     assert.deepEqual(h.click(3743, 2894, 3567, 2, 'Open', 'Large door'), [
-      ['register', 3743, 2894, 3566, 1],
       ['deregister', 3743, 2894, 3567, 2],
+      ['register', 3743, 2894, 3566, 1],
     ]);
   } finally { h.restore(); }
 });

@@ -28,6 +28,11 @@ y 10067. The varbit follows a move by a tick, so the border is accurate to a til
   statue's east side (1639, 3673). Nothing was captured for it: the ladder animation (828), the
   tile and the fade are ours.
 
+## Skotizo
+
+The altar in the centre (28900) takes a dark totem to Skotizo's lair, and the Catacombs' monsters
+drop the totem pieces and ancient shards: see [skotizo.md](skotizo.md).
+
 ## Not built
 
 - **The other exits:** the four corner vine ladders (Wiki: Demon's Run, Dragon's Den, Reeking

@@ -188,6 +188,10 @@ import {
 import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
 import { RENDER_CONSTANTS, InteractHighlightTarget, LocHighlightTarget } from "../constants";
+import {
+    buildItemModelHighlightTriangles,
+    isItemHighlightTargetStillPresent,
+} from "./highlightItem";
 
 export function getInteractHighlightDrawTargets(host: WebGLOsrsRendererHost, ): ReadonlyArray<InteractHighlightDrawTarget> {
 
@@ -215,23 +219,32 @@ export function getInteractHighlightDrawTargets(host: WebGLOsrsRendererHost, ): 
             return undefined;
         };
 
-        if (config.showInteract && host.interactHighlightActiveTarget) {
+        // Items have their own switches and colours (RuneLite's Items section).
+        const showInteract = (target: InteractHighlightTarget | undefined): boolean =>
+            !!target && (target.kind === "item" ? config.itemShowInteract : config.showInteract);
+        const showHover = (target: InteractHighlightTarget | undefined): boolean =>
+            !!target && (target.kind === "item" ? config.itemShowHover : config.showHover);
+
+        if (showInteract(host.interactHighlightActiveTarget) && host.interactHighlightActiveTarget) {
             const trianglePoints = host.buildHighlightTrianglePoints(
                 host.interactHighlightActiveTarget,
             );
             if (trianglePoints && trianglePoints.length >= 3) {
                 out.push({
                     trianglePoints,
-                    color: config.interactColor,
+                    color:
+                        host.interactHighlightActiveTarget.kind === "item"
+                            ? config.itemInteractColor
+                            : config.interactColor,
                     alpha: 0.45,
                     worldEntityTransform: getWeTransform(host.interactHighlightActiveTarget),
                 });
             }
         }
 
-        if (config.showHover && host.interactHighlightHoverTarget) {
+        if (showHover(host.interactHighlightHoverTarget) && host.interactHighlightHoverTarget) {
             const showingActive =
-                config.showInteract &&
+                showInteract(host.interactHighlightActiveTarget) &&
                 host.isSameInteractHighlightTarget(
                     host.interactHighlightHoverTarget,
                     host.interactHighlightActiveTarget,
@@ -243,7 +256,10 @@ export function getInteractHighlightDrawTargets(host: WebGLOsrsRendererHost, ): 
                 if (trianglePoints && trianglePoints.length >= 3) {
                     out.push({
                         trianglePoints,
-                        color: config.hoverColor,
+                        color:
+                            host.interactHighlightHoverTarget.kind === "item"
+                                ? config.itemHoverColor
+                                : config.hoverColor,
                         alpha: 0.45,
                         worldEntityTransform: getWeTransform(host.interactHighlightHoverTarget),
                     });
@@ -309,6 +325,12 @@ export function maybeExpireInteractHighlightTarget(host: WebGLOsrsRendererHost, 
                 return;
             }
         }
+        if (host.interactHighlightActiveTarget.kind === "item") {
+            if (!isItemHighlightTargetStillPresent(host, host.interactHighlightActiveTarget)) {
+                host.clearInteractHighlightActiveTarget();
+                return;
+            }
+        }
         if (host.interactHighlightActiveFromInteraction) return;
         const clickTick = host.interactHighlightClickTick | 0;
         if (clickTick < 0) return;
@@ -363,6 +385,14 @@ export function isSameInteractHighlightTarget(host: WebGLOsrsRendererHost,
         if (a.kind === "npc" && b.kind === "npc") {
             return (a.serverId | 0) === (b.serverId | 0);
         }
+        if (a.kind === "item" && b.kind === "item") {
+            return (
+                (a.itemId | 0) === (b.itemId | 0) &&
+                (a.tileX | 0) === (b.tileX | 0) &&
+                (a.tileY | 0) === (b.tileY | 0) &&
+                (a.plane | 0) === (b.plane | 0)
+            );
+        }
         return false;
     
 }
@@ -373,6 +403,9 @@ export function buildHighlightTrianglePoints(host: WebGLOsrsRendererHost,
 
         if (target.kind === "loc") {
             return host.buildLocModelHighlightTriangles(target);
+        }
+        if (target.kind === "item") {
+            return buildItemModelHighlightTriangles(host, target);
         }
         return host.buildNpcModelHighlightTriangles(target);
     

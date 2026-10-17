@@ -31,7 +31,7 @@ The plugin lives under `areas/` so that its door and ladder handlers run before 
   - The basement door needs a rune defender shown to Lorelai once (`warriors-guild:basement-unlocked`). Its cyclopes drop the dragon defender at 1/100.
   - `NpcDrops` emits `npc-drops:roll`, and the plugin removes the dump's flat defender entries and adds the right one.
   - Ranged and magic do no damage to the guild's cyclopes or animated armour.
-- **Skillcapes:** Ajjat (Attack) and Sloane (Strength) sell their cape and hood for 99,000 coins at 99. The cape is trimmed with more than one 99.
+- **Skillcapes:** Ajjat (Attack) and Sloane (Strength) sell their cape and hood for 99,000 coins at 99, through the Skillcapes plugin (docs/skillcapes.md). Kamfreena lets an Attack or max cape in without tokens.
 - **Overheads:** Shanomi speaks in order every 15 ticks, Kamfreena at random every 50, and Jimmy while kegs are balanced.
 
 ## Data fixes

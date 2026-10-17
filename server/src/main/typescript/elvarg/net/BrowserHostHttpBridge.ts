@@ -6,7 +6,10 @@ const POLL_TIMEOUT_MS = 10_000;
 // WebContainer fetches occasionally drop (#559). The page retries for up to
 // RETRY_MS, so an aborted poll only ends the session once that has passed.
 const RETRY_MS = 15_000;
-const ABANDON_MS = RETRY_MS + 5_000;
+// The page runs in the same tab as this server, and a page that goes away sends
+// DELETE first. One that stops polling has usually stalled, as both players' pages did
+// together in #559, so give it minutes rather than seconds to come back.
+const ABANDON_MS = 2 * 60_000;
 
 export const BROWSER_HOST_BRIDGE_HTML = `<!doctype html><meta charset="utf-8"><script>
 addEventListener("message", function connect(event) {
@@ -139,6 +142,7 @@ export class BrowserHostHttpChannel implements BinaryChannel {
   private unacked?: Buffer;
   private sentSeq = 0;
   private receivedSeq = 0;
+  private lastPollAt = 0;
 
   public get bufferedAmount(): number {
     return this.queuedBytes;
@@ -170,6 +174,9 @@ export class BrowserHostHttpChannel implements BinaryChannel {
   }
 
   public attachPoll(response: ServerResponse, ack: number): void {
+    const gap = Date.now() - this.lastPollAt;
+    if (this.lastPollAt && gap > RETRY_MS) console.info(`[browser-host] poll resumed after ${Math.round(gap / 1000)}s`);
+    this.lastPollAt = Date.now();
     if (ack === this.sentSeq) this.unacked = undefined;
     if (this.isDrained()) {
       response.statusCode = 410;

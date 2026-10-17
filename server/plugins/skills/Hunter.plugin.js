@@ -102,6 +102,9 @@ function huntingTrapInfo() {
   }
 }
 
+// Ground traps are "Take" (op3) and "Lay"/"Activate" (op4) in the cache.
+const LAY_GROUND_OPTION = 4;
+
 module.exports = {
   name: "Hunter",
   members: true,
@@ -145,7 +148,7 @@ module.exports = {
     api.onNpcInteraction("Broav", { "Pick-up": Broavs.pickup });
     for (const name of ["Broav", "Unconscious broav"]) api.onItemAction(name, { Drop: Broavs.release, Release: Broavs.release });
     api.onItemAction("Magic box", { Activate: Traps.activate });
-    api.onGroundItemSecondClick([api.core.ItemIdentifiers.BIRD_SNARE, api.core.ItemIdentifiers.BOX_TRAP, api.core.ItemIdentifiers.MAGIC_BOX, api.core.ItemIdentifiers.RABBIT_SNARE], Traps.groundActivate);
+    api.onGroundItemClick([api.core.ItemIdentifiers.BIRD_SNARE, api.core.ItemIdentifiers.BOX_TRAP, api.core.ItemIdentifiers.MAGIC_BOX, api.core.ItemIdentifiers.RABBIT_SNARE], LAY_GROUND_OPTION, Traps.groundActivate);
     for (const name of ["Bird snare", "Box trap", "Shaking box", "Magic box", "Magic box failed", "Deadfall", "Boulder", "Large boulder", "Net trap", "Young tree", "Collapsed trap"])
       api.onObjectInteraction(name, { Check: Traps.check, Retrieve: Traps.check, Dismantle: Runtime.dismantle, Deactivate: Traps.dismantle, Reset: Traps.reset, Investigate: Traps.investigate, "Set-trap": Traps.build, Trap: Traps.build });
     api.onObjectInteraction("Pit", { Trap: Runtime.pitBuild });

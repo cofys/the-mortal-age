@@ -102,6 +102,76 @@ test('a face tile lasts a tick; crawling stays until it is turned off', () => {
   assert.equal(npc.isCrawling(), true);
 });
 
+test('NPC facing setters reach native NPC_INFO through the real session sync', () => {
+  const npc = new NPC(7636, new Location(1615, 4833, 0));
+  npc.setIndex(8);
+  const location = new Location(1615, 4827, 0);
+  const player = {
+    getIndex: () => 1, getLocation: () => location,
+    getArea: () => null, getPrivateArea: () => null,
+    getLocalNpcs: () => [npc], getLocalPlayers: () => [],
+    getAudioSettings: () => ({ 18: 1 }), getForceMovement: () => null,
+  };
+  const session = new PlayerSession({ isOpen: true });
+  session.setPlayer(player);
+  // Keep map/music setup out of this test; exercise the production NPC view and encoder.
+  const baseX = (location.getX() - 48) & ~7, baseY = (location.getY() - 48) & ~7;
+  const region = ((location.getX() >> 6) << 8) | (location.getY() >> 6);
+  Object.assign(session, {
+    hasReplayedScene: true, replayedSceneBaseX: baseX, replayedSceneBaseY: baseY,
+    replayedSceneLevel: 0, lastGroundItemRegion: region, lastGroundItemLevel: 0,
+    lastMusicRegion: region, lastMusicMode: 1,
+  });
+  const packets = [];
+  session.sendClientPacket = packet => { packets.push(packet); return true; };
+  let tick = 0;
+  const sync = () => {
+    packets.length = 0;
+    session.playerSyncState = undefined; // Avoid unrelated player-appearance setup.
+    session.flush(++tick);
+    const packet = packets.find(packet => packet[0] === 21); // native NPC_INFO
+    assert.ok(packet, 'an actual NPC_INFO packet was sent');
+    const body = packet.subarray(3);
+    assert.equal(body.readUInt16BE(9), body.length - 11);
+    return [...body.subarray(11)];
+  };
+  sync(); // Establish the NPC so subsequent packets contain one known, stationary actor.
+  const noUpdate = [1, 0x7f, 0xff, 0x80];
+  const face = (x, y) => [1, 0x9f, 0xff, 0xe0, 0x80, 0x08, x >> 8, x & 255, y >> 8, y & 255];
+
+  npc.resetUpdating();
+  npc.setPositionToFace(new Location(1615, 4832, 0));
+  assert.deepEqual(sync(), face(1615, 4832), 'Sid’s killer receives a south-facing coordinate update');
+  npc.resetUpdating();
+  assert.deepEqual(sync(), noUpdate, 'the saved face coordinate is not resent every tick');
+  npc.setPositionToFace(new Location(1615, 4832, 0));
+  assert.deepEqual(sync(), noUpdate, 'the ordinary setter keeps its same-coordinate deduplication');
+  npc.forcePositionToFace(new Location(1615, 4832, 0));
+  assert.deepEqual(sync(), face(1615, 4832), 'the force setter can reassert a turn after walking');
+  npc.resetUpdating();
+  npc.setPositionToFaceCoordinates(1639, 4838, 0);
+  assert.deepEqual(sync(), face(1639, 4838), 'the inherited coordinate setter uses the same NPC sync path');
+
+  for (const explicitFirst of [true, false]) {
+    npc.resetUpdating();
+    if (explicitFirst) npc.faceTile(new Location(1640, 4838, 0));
+    npc.forcePositionToFace(new Location(1639, 4838, 0));
+    if (!explicitFirst) npc.faceTile(new Location(1640, 4838, 0));
+    assert.deepEqual(sync(), face(1640, 4838), 'explicit faceTile wins regardless of call order');
+  }
+  npc.resetUpdating();
+  const target = new NPC(7625, new Location(1615, 4832, 0));
+  target.setIndex(9);
+  npc.setMobileInteraction(target);
+  npc.forcePositionToFace(target.getLocation());
+  assert.deepEqual(sync(), [1, 0x9f, 0xff, 0xe0, 0x88, 0x08, 137, 0, 128, 6, 79, 18, 224],
+    'facing a tile does not discard the separately encoded interaction target');
+  npc.resetUpdating();
+  npc.setPositionToFace(null);
+  assert.deepEqual(sync(), noUpdate, 'clearing a tile target does not turn the NPC towards world origin');
+  assert.equal(npc.getInteractingMobile(), target);
+});
+
 test('players walk through NPCs, while NPCs still block each other', () => {
   const { World } = require('../dist/game/World');
   const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');

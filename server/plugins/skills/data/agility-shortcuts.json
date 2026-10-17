@@ -3707,6 +3707,40 @@
       }
     },
     {
+      "name": "Tree stump (Mac's island)",
+      "object": 27061,
+      "level": 99,
+      "xp": 0,
+      "requires": [{"skills": {"agility": 99}}],
+      "between": {
+        "ends": [[2830,3543,0],[2828,3543,0]],
+        "cross": [
+          {"msg":"You jump over the stump."},
+          {"sound":2453},
+          {"move":"to","anim":"CLIMB_OVER","speed":[30,94],"ticks":3}
+        ]
+      },
+      "unverified": "the refusal below 99 Agility (no capture)",
+      "note": "The way to Mac (Wiki: Mac); the stump stands while the evergreen is chopped. rsprox captures 3144, 3146"
+    },
+    {
+      "name": "Rockslide (Mac's island)",
+      "object": 27063,
+      "level": 1,
+      "xp": 0,
+      "requires": [{"skills": {"defence": 99}}],
+      "between": {
+        "ends": [[2822,3540,0],[2820,3539,0]],
+        "cross": [
+          {"msg":"You jump over the rocks."},
+          {"sound":2453},
+          {"move":"to","anim":"CLIMB_OVER","speed":[30,94],"ticks":3}
+        ]
+      },
+      "unverified": "the refusal below 99 Defence (no capture)",
+      "note": "The way to Mac (Wiki: Mac); the mined rockslide. rsprox captures 3144, 3146"
+    },
+    {
       "name": "Araxxor lair web tunnel (in)",
       "object": 54161,
       "level": 1,

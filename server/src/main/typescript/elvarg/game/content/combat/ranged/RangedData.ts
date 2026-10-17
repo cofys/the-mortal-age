@@ -450,6 +450,8 @@ export class RangedWeaponType {
     static get SALAMANDER() { return new RangedWeaponType(1, 1, null); }
     static get LONGBOW() { const FT: any = getFightType(); return new RangedWeaponType(9, 10, FT?.LONGBOW_LONGRANGE ?? null); }
     static get TWISTED_BOW() { const FT: any = getFightType(); return new RangedWeaponType(10, 10, FT?.LONGBOW_LONGRANGE ?? null); }
+    /** Wiki (and cache param 13): attack range 6, 8 on Longrange. */
+    static get VENATOR_BOW() { const FT: any = getFightType(); return new RangedWeaponType(6, 8, FT?.SHORTBOW_LONGRANGE ?? null); }
     /** Wiki: attack range 10, longbow styles. */
     static get SCORCHING_BOW() { const FT: any = getFightType(); return new RangedWeaponType(10, 10, FT?.LONGBOW_LONGRANGE ?? null); }
     static get BLOWPIPE() { const FT: any = getFightType(); return new RangedWeaponType(5, 7, FT?.BLOWPIPE_LONGRANGE ?? null); }
@@ -507,6 +509,9 @@ export class RangedWeapon {
     public static readonly CRAWS_BOW = new RangedWeapon([ItemIdentifiers.CRAWS_BOW, ItemIdentifiers.CRAWS_BOW_2], [Ammunition.CRAWS_BOW], RangedWeaponType.SHORTBOW)
     public static readonly SEERCULL = new RangedWeapon([ItemIdentifiers.SEERCULL], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly TWISTED_BOW = new RangedWeapon([ItemIdentifiers.TWISTED_BOW], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.TWISTED_BOW)
+
+    /** Wiki: fires any arrow, charged or not. */
+    public static readonly VENATOR_BOW = new RangedWeapon([ItemIdentifiers.VENATOR_BOW, ItemIdentifiers.VENATOR_BOW_UNCHARGED_], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.VENATOR_BOW)
 
     /** Wiki: fires arrows up to dragon arrows. */
     public static readonly SCORCHING_BOW = new RangedWeapon([ItemIdentifiers.SCORCHING_BOW], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.SCORCHING_BOW)

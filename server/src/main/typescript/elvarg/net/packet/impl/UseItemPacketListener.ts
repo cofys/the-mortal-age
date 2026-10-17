@@ -86,22 +86,6 @@ export class UseItemPacketListener {
       }
     };
 
-    // The same route hook as clicking the loc, so a plugin's approach tile holds for items too.
-    const location = player.getLocation();
-    const routeEvent = {
-      player,
-      object,
-      objectId: object.getId(),
-      clickType: 0,
-      sourceLocation: { x: location.getX(), y: location.getY(), z: location.getZ() },
-      destination: null as { x: number; y: number; z: number } | null,
-    };
-    PluginManager.emitObjectRoute(routeEvent);
-    if (routeEvent.destination) {
-      const { x, y, z } = routeEvent.destination;
-      player.getMovementQueue().walkToTile(new Location(x, y, z), useItem);
-      return;
-    }
     player.getMovementQueue().walkToObject(object, { execute: useItem });
   }
 

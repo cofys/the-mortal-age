@@ -10,8 +10,8 @@ const DARKNESS_WARNING_MESSAGE = "You hear tiny insects skittering over the grou
 const DARKNESS_SWARM_MESSAGE = "Tiny biting insects swarm all over you!";
 
 // OSRS Wiki Light sources table, lit variants only. Carried sources light a dark area from
-// the inventory (or equipped); worn lamps only work while equipped. The firemaking and max
-// capes are the group that works from either.
+// the inventory (or equipped); worn lamps only work while equipped. The Firemaking cape (and
+// the max capes that keep its perk) works from either, asked of the Skillcapes plugin.
 const CARRIED_LIGHT_SOURCE_IDS = new Set([
   ItemIds.LIT_TORCH,
   ItemIds.LIT_CANDLE,
@@ -23,13 +23,6 @@ const CARRIED_LIGHT_SOURCE_IDS = new Set([
   ItemIds.BULLSEYE_LANTERN_3, // lit bullseye lantern
   ItemIds.SAPPHIRE_LANTERN_3, // lit sapphire lantern
   ItemIds.EMERALD_LANTERN_2, // lit emerald lantern
-  ItemIds.FIREMAKING_CAPE,
-  ItemIds.FIREMAKING_CAPE_T_,
-  ItemIds.FIREMAKING_CAPE_2,
-  ItemIds.FIREMAKING_CAPE_T__2,
-  ItemIds.MAX_CAPE,
-  ItemIds.MAX_CAPE_2,
-  ItemIds.MAX_CAPE_3,
 ]);
 
 const EQUIPPED_LIGHT_SOURCE_IDS = new Set([
@@ -85,8 +78,14 @@ function containerHasLightSource(container, ids) {
   return false;
 }
 
+function carriesFiremakingCape(player) {
+  const request = { player, skill: "FIREMAKING", inventory: true, result: false };
+  pluginApi?.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
+}
+
 function hasLightSource(player) {
-  if (containerHasLightSource(player?.getInventory?.(), CARRIED_LIGHT_SOURCE_IDS)) {
+  if (containerHasLightSource(player?.getInventory?.(), CARRIED_LIGHT_SOURCE_IDS) || carriesFiremakingCape(player)) {
     return true;
   }
   const equipment = player?.getEquipment?.();

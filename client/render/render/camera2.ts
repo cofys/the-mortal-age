@@ -213,6 +213,17 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
         // Update player position for fog calculation (use actual player pos)
         host.playerPosUni[0] = playerX;
         host.playerPosUni[1] = playerZ;
+        const basePlane = pe.getLevel(playerEcsIndex) | 0;
+        const playerHeightSample = sampleBridgeHeightForWorldTile(
+            host.mapManager,
+            playerX,
+            playerZ,
+            basePlane,
+            BridgePlaneStrategy.RENDER,
+        );
+        // Login must finish while a cutscene owns the camera, too.
+        if (playerHeightSample.valid) markMapDataLoaded(host, timeSec);
+        if (!host.osrsClient.followPlayerCamera) return;
 
         // OSRS follow camera uses a smoothed focal point (oculusOrbFocalPointX/Y) that eases toward the player.
         // Important: update is tick-based (integer math), not frame-delta based; otherwise the camera/focal timebase
@@ -256,7 +267,6 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
 
         const focalSubX = host.followCamFocalXSub;
         const focalSubZ = host.followCamFocalZSub;
-        const basePlane = pe.getLevel(playerEcsIndex) | 0;
         const onWorldEntity = host.getControlledPlayerWorldViewId() >= 0;
         // Pitch pressure eases on the client-cycle timebase like the focal point;
         // per-frame easing would converge several times faster than OSRS at high refresh rates.
@@ -275,16 +285,6 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
         const targetX = focalSubX / 128;
         const targetZ = focalSubZ / 128;
 
-        // OSRS: vertical follow uses the player's height, not the smoothed focal point height.
-        // (X/Z lag slightly, Y follows the player with camFollowHeight-style offset).
-        const playerHeightSample = sampleBridgeHeightForWorldTile(
-            host.mapManager,
-            playerX,
-            playerZ,
-            basePlane,
-            BridgePlaneStrategy.RENDER,
-        );
-
         const camera = host.osrsClient.camera;
         if (
             host.osrsClient.clientPlugins.handleCameraFollow({
@@ -301,8 +301,6 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
                 collisionFlagAt: (plane, tileX, tileY) => host.osrsClient.renderer.getCollisionFlagAt(plane, tileX, tileY),
             })
         ) {
-            // A plugin camera still has to let the login finish ("Loading - please wait").
-            if (playerHeightSample.valid) markMapDataLoaded(host, timeSec);
             return;
         }
         // OSRS uses the effective viewport height after viewport-shape clamping,
@@ -371,8 +369,6 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
         if (!playerHeightSample.valid) {
             return;
         }
-
-        markMapDataLoaded(host, timeSec);
 
         const focusHeightTiles = (host.osrsClient.camFollowHeight | 0) / 128.0;
         const targetY = playerHeightSample.height - focusHeightTiles;

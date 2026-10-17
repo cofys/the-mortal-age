@@ -309,6 +309,14 @@ const GATE_PARTNER_OFFSETS = Object.freeze([
 let DOOR_CATALOG = null;
 const OPEN_OBJECT_STATES = new Map();
 const RUNTIME_DOUBLE_DOOR_RECORDS = [];
+const PRIVATE_AREA_IDS = new WeakMap();
+let nextPrivateAreaId = 0;
+
+function doorStateKey(key, privateArea) {
+  if (!privateArea) return key;
+  if (!PRIVATE_AREA_IDS.has(privateArea)) PRIVATE_AREA_IDS.set(privateArea, ++nextPrivateAreaId);
+  return `${key}:area:${PRIVATE_AREA_IDS.get(privateArea)}`;
+}
 function hasAction(actions, keyword) {
   return Array.isArray(actions) && actions.some((action) => typeof action === "string" && action.toLowerCase() === keyword);
 }
@@ -427,6 +435,13 @@ function objectFromSnapshot(snapshot, privateArea = null) {
   );
 }
 
+function objectForArea(object, privateArea) {
+  // Unchanged scenery in a private area can resolve to the shared map's object.
+  return (object.getPrivateArea?.() ?? null) === privateArea
+    ? object
+    : objectFromSnapshot(toObjectSnapshot(object), privateArea);
+}
+
 function resolveClosedId(objectId) {
   const catalog = getDoorCatalog();
   if (catalog.closedToOpen.has(objectId)) {
@@ -436,18 +451,19 @@ function resolveClosedId(objectId) {
   return closedId ?? null;
 }
 
-function findOpenDoorState(closedId, location) {
-  const directKey = locationKey(location);
+function findOpenDoorState(closedId, location, privateArea) {
+  const directKey = doorStateKey(locationKey(location), privateArea);
   const direct = OPEN_OBJECT_STATES.get(directKey);
-  if (direct?.closed?.length === 1 && direct.closed[0]?.id === closedId) {
+  if (direct?.closed?.length === 1 && (direct.closedId ?? direct.closed[0]?.id) === closedId) {
     return [directKey, direct];
   }
 
   for (const [anchorKey, state] of OPEN_OBJECT_STATES.entries()) {
-    if (state.closed?.length !== 1 || state.closed[0]?.id !== closedId) {
+    if (state.closed?.length !== 1 || (state.closedId ?? state.closed[0]?.id) !== closedId ||
+        (state.closed[0]?.privateArea ?? null) !== privateArea) {
       continue;
     }
-    if (locationKey(state.current[0]?.location) === directKey) {
+    if (locationKey(state.current[0]?.location) === locationKey(location)) {
       return [anchorKey, state];
     }
   }
@@ -455,8 +471,9 @@ function findOpenDoorState(closedId, location) {
   return [directKey, null];
 }
 
-function rememberOpenObjects(anchorKey, closedObjects, currentObjects) {
+function rememberOpenObjects(anchorKey, closedObjects, currentObjects, closedId) {
   OPEN_OBJECT_STATES.set(anchorKey, {
+    closedId,
     closed: closedObjects.map(toObjectSnapshot),
     current: currentObjects.map(toObjectSnapshot),
   });
@@ -474,25 +491,27 @@ function autoCloseDoor(anchorKey) {
   if (!state) {
     return;
   }
-  for (const snapshot of state.current ?? []) {
-    const object = objectFromSnapshot(snapshot);
-    core.ObjectManager.deregister(object, true);
-    object.getPrivateArea?.()?.detach?.(object);
-  }
-  for (const snapshot of state.closed ?? []) {
-    core.ObjectManager.register(objectFromSnapshot(snapshot), true);
+  const destroyed = state.closed?.[0]?.privateArea?.isDestroyed?.() ?? false;
+  if (!destroyed) {
+    for (const snapshot of state.current ?? []) {
+      const object = objectFromSnapshot(snapshot);
+      core.ObjectManager.deregister(object, true);
+    }
+    for (const snapshot of state.closed ?? []) {
+      core.ObjectManager.register(objectFromSnapshot(snapshot), true);
+    }
   }
   for (let i = RUNTIME_DOUBLE_DOOR_RECORDS.length - 1; i >= 0; i--) {
     const record = RUNTIME_DOUBLE_DOOR_RECORDS[i];
     if (state.closed.some((snapshot) => snapshot.id === record.originalId &&
       snapshot.location.x === record.originalX && snapshot.location.y === record.originalY &&
-      snapshot.location.z === record.z)) {
+      snapshot.location.z === record.z && snapshot.privateArea === record.privateArea)) {
       RUNTIME_DOUBLE_DOOR_RECORDS.splice(i, 1);
     }
   }
   OPEN_OBJECT_STATES.delete(anchorKey);
   const closedSample = state.closed?.[0];
-  if (closedSample) {
+  if (closedSample && !destroyed) {
     core.Sounds.sendSound(objectFromSnapshot(closedSample), doorSound(closedSample.id, false));
   }
 }
@@ -509,6 +528,8 @@ function scheduleAutoClose(anchorKey) {
 
 function reapplyOpenDoorsForRegion(regionId) {
   for (const state of OPEN_OBJECT_STATES.values()) {
+    // Private overlays already own their removals; this hook reloads the shared map.
+    if (state.closed?.[0]?.privateArea) continue;
     const inRegion = [...(state.closed ?? []), ...(state.current ?? [])].some(
       (snapshot) => locationRegionId(snapshot.location) === regionId
     );
@@ -574,7 +595,8 @@ function handleWoodenGate(player, object, objectId, location) {
     const key = locationKey(location);
     for (const [anchorKey, state] of OPEN_OBJECT_STATES) {
       if (anchorKey.startsWith("wooden-gate:") &&
-          state.current.some((snapshot) => snapshot.id === objectId && locationKey(snapshot.location) === key)) {
+          state.current.some((snapshot) => snapshot.id === objectId && snapshot.privateArea === privateArea &&
+            locationKey(snapshot.location) === key)) {
         core.TaskManager.cancelTasks(anchorKey);
         autoCloseDoor(anchorKey);
         return true;
@@ -600,14 +622,14 @@ function handleWoodenGate(player, object, objectId, location) {
   }
 
   const clickedPart = {
-    object,
+    object: objectForArea(object, privateArea),
     x,
     y,
     rotation,
     type: Number(object.getType?.() ?? object.type ?? 0),
   };
   const partnerPart = {
-    object: partner,
+    object: objectForArea(partner, privateArea),
     x: Number(partner.getLocation?.().getX?.() ?? 0),
     y: Number(partner.getLocation?.().getY?.() ?? 0),
     rotation: Number(partner.getFace?.() ?? 0) & 0x3,
@@ -644,23 +666,9 @@ function handleWoodenGate(player, object, objectId, location) {
   // Anchor on the CLOSED hinge tile so open and close compute the same key for auto-close.
   const closedHingeX = isClosed ? hingeOld.x : transform.hinge[0];
   const closedHingeY = isClosed ? hingeOld.y : transform.hinge[1];
-  const anchorKey = `wooden-gate:${gate.closed.hinge}:${closedHingeX},${closedHingeY},${z}`;
+  const anchorKey = doorStateKey(`wooden-gate:${gate.closed.hinge}:${closedHingeX},${closedHingeY},${z}`, privateArea);
   if (isClosed) {
-    const closedHinge = new core.GameObject(
-      gate.closed.hinge,
-      cloneLocation(hingeOld.x, hingeOld.y, z),
-      hingeOld.type,
-      hingeOld.rotation,
-      privateArea
-    );
-    const closedExtension = new core.GameObject(
-      gate.closed.extension,
-      cloneLocation(extensionOld.x, extensionOld.y, z),
-      extensionOld.type,
-      extensionOld.rotation,
-      privateArea
-    );
-    rememberOpenObjects(anchorKey, [closedHinge, closedExtension], [hingeNew, extensionNew]);
+    rememberOpenObjects(anchorKey, [hingeOld.object, extensionOld.object], [hingeNew, extensionNew]);
   } else {
     clearOpenDoor(anchorKey);
   }
@@ -675,6 +683,7 @@ function handleCompositeDoor(player, object, objectId) {
   if (!opening) return false;
   const location = object.getLocation();
   const privateArea = player.getPrivateArea?.() ?? null;
+  object = objectForArea(object, privateArea);
   const opened = opening.map(([id, dx, dy, face]) => new core.GameObject(
     id,
     cloneLocation(location.getX() + dx, location.getY() + dy, location.getZ()),
@@ -682,7 +691,7 @@ function handleCompositeDoor(player, object, objectId) {
   ));
   core.ObjectManager.deregister(object, true);
   for (const leaf of opened) core.ObjectManager.register(leaf, true);
-  rememberOpenObjects(locationKey(location), [object], opened);
+  rememberOpenObjects(doorStateKey(locationKey(location), privateArea), [object], opened);
   core.Sounds.sendSound(player, doorSound(objectId, true));
   return true;
 }
@@ -699,10 +708,11 @@ function handleMappedDoor(player, object, objectId, location) {
     return false;
   }
 
-  const [anchorKey, existingState] = findOpenDoorState(closedId, location);
+  const privateArea = player?.getPrivateArea?.() ?? null;
+  const [anchorKey, existingState] = findOpenDoorState(closedId, location, privateArea);
   const activeObject = existingState?.current?.[0]
-    ? objectFromSnapshot(existingState.current[0], player?.getPrivateArea?.() ?? null)
-    : object;
+    ? objectFromSnapshot(existingState.current[0], privateArea)
+    : objectForArea(object, privateArea);
   const activeLocation = activeObject.getLocation?.() ?? location;
   const openId = getDoorCatalog().closedToOpen.get(closedId);
   // A self-opening door keeps its id, so only the tracked state says it is open.
@@ -717,39 +727,28 @@ function handleMappedDoor(player, object, objectId, location) {
   const nextRotation = open ? ((rotation + 1) & 0x3) : rotation;
   const offsetIndex = type === 9 ? ((nextRotation + 1) & 0x3) : nextRotation;
   const [dx, dy] = COORD_OFFSETS[offsetIndex] ?? [0, 0];
-  const privateArea = player?.getPrivateArea?.() ?? null;
-
   const previousObject = activeObject;
-  const nextObject = new core.GameObject(
-    nextId,
-    cloneLocation(
-      (activeLocation.getX?.() ?? activeLocation.x ?? 0) + dx,
-      (activeLocation.getY?.() ?? activeLocation.y ?? 0) + dy,
-      activeLocation.getZ?.() ?? activeLocation.z ?? 0
-    ),
-    type,
-    open ? ((rotation - 1) & 0x3) : ((rotation + 1) & 0x3),
-    privateArea
-  );
+  const nextObject = open && existingState?.closed?.[0]
+    ? objectFromSnapshot(existingState.closed[0])
+    : new core.GameObject(
+      nextId,
+      cloneLocation(
+        (activeLocation.getX?.() ?? activeLocation.x ?? 0) + dx,
+        (activeLocation.getY?.() ?? activeLocation.y ?? 0) + dy,
+        activeLocation.getZ?.() ?? activeLocation.z ?? 0
+      ),
+      type,
+      open ? ((rotation - 1) & 0x3) : ((rotation + 1) & 0x3),
+      privateArea
+    );
 
-  core.ObjectManager.register(nextObject, true);
   core.ObjectManager.deregister(previousObject, true);
+  core.ObjectManager.register(nextObject, true);
 
   if (open) {
     clearOpenDoor(anchorKey);
   } else {
-    const closedObject = new core.GameObject(
-      closedId,
-      cloneLocation(
-        location.getX?.() ?? location.x ?? 0,
-        location.getY?.() ?? location.y ?? 0,
-        location.getZ?.() ?? location.z ?? 0
-      ),
-      type,
-      rotation,
-      privateArea
-    );
-    rememberOpenObjects(anchorKey, [closedObject], [nextObject]);
+    rememberOpenObjects(anchorKey, [previousObject], [nextObject], closedId);
   }
 
   core.Sounds.sendSound(player, doorSound(closedId, !open));
@@ -757,13 +756,14 @@ function handleMappedDoor(player, object, objectId, location) {
   return true;
 }
 
-function findDoubleDoorRecord(id, x, y, z) {
+function findDoubleDoorRecord(id, x, y, z, privateArea) {
   return RUNTIME_DOUBLE_DOOR_RECORDS.find(
-    (record) => record.currentId === id && record.x === x && record.y === y && record.z === z
+    (record) => record.currentId === id && record.x === x && record.y === y && record.z === z &&
+      record.privateArea === privateArea
   ) ?? null;
 }
 
-function createDynamicDoubleDoorRecord(object, location, originalId) {
+function createDynamicDoubleDoorRecord(object, location, originalId, privateArea) {
   return {
     originalId,
     currentId: Number(object.getId?.() ?? object.id ?? originalId),
@@ -775,7 +775,7 @@ function createDynamicDoubleDoorRecord(object, location, originalId) {
     currentFace: Number(object.getFace?.() ?? object.face ?? 0) & 0x3,
     originalFace: Number(object.getFace?.() ?? object.face ?? 0) & 0x3,
     type: Number(object.getType?.() ?? object.type ?? 0),
-    privateArea: object.getPrivateArea?.() ?? object.privateArea ?? null,
+    privateArea,
   };
 }
 
@@ -805,12 +805,14 @@ function ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea 
       const clickedRecord = createDynamicDoubleDoorRecord(
         object,
         location,
-        Number(object.getId?.() ?? object.id ?? objectId)
+        Number(object.getId?.() ?? object.id ?? objectId),
+        privateArea
       );
       const partnerRecord = createDynamicDoubleDoorRecord(
         partnerObject,
         candidateLocation,
-        Number(partnerObject.getId?.() ?? partnerObject.id ?? partnerId)
+        Number(partnerObject.getId?.() ?? partnerObject.id ?? partnerId),
+        privateArea
       );
       RUNTIME_DOUBLE_DOOR_RECORDS.push(clickedRecord, partnerRecord);
       return [clickedRecord, partnerRecord];
@@ -821,10 +823,10 @@ function ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea 
 }
 
 function buildDoubleDoorAnchorKey(records) {
-  return records
+  return doorStateKey(records
     .map((record) => `${record.originalId}:${record.originalX},${record.originalY},${record.z}`)
     .sort()
-    .join("|");
+    .join("|"), records[0].privateArea);
 }
 
 function isDoubleDoorOpen(record) {
@@ -878,7 +880,7 @@ function resolveDoubleDoorPair(clicked) {
       const candidateX = clicked.x + dx;
       const candidateY = clicked.y + dy;
       for (const partnerId of specialPartnerIds) {
-        const partner = findDoubleDoorRecord(partnerId, candidateX, candidateY, clicked.z);
+        const partner = findDoubleDoorRecord(partnerId, candidateX, candidateY, clicked.z, clicked.privateArea);
         if (!partner) {
           continue;
         }
@@ -895,9 +897,9 @@ function resolveDoubleDoorPair(clicked) {
 
   const { currentId: id, x, y, z, originalFace } = clicked;
   const [dx, dy, idDelta] = LEFT_LEAF_OFFSETS[originalFace];
-  const left = findDoubleDoorRecord(id + idDelta, x + dx, y + dy, z);
+  const left = findDoubleDoorRecord(id + idDelta, x + dx, y + dy, z, clicked.privateArea);
   if (left) return [left, clicked];
-  const right = findDoubleDoorRecord(id - idDelta, x - dx, y - dy, z);
+  const right = findDoubleDoorRecord(id - idDelta, x - dx, y - dy, z, clicked.privateArea);
   return right ? [clicked, right] : null;
 }
 
@@ -905,8 +907,9 @@ function handleDoubleDoor(player, object, objectId, location) {
   const x = location?.getX?.() ?? location?.x;
   const y = location?.getY?.() ?? location?.y;
   const z = location?.getZ?.() ?? location?.z ?? 0;
-  const clickedDoor = findDoubleDoorRecord(objectId, x, y, z)
-    ?? ensureDynamicDoubleDoorRecords(object, objectId, location, player?.getPrivateArea?.() ?? null)?.[0];
+  const privateArea = player?.getPrivateArea?.() ?? null;
+  const clickedDoor = findDoubleDoorRecord(objectId, x, y, z, privateArea)
+    ?? ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea)?.[0];
   if (!clickedDoor) {
     return false;
   }
@@ -924,7 +927,6 @@ function handleDoubleDoor(player, object, objectId, location) {
   const currentObjects = pair.map((record) => doubleDoorRecordToObject(record));
   for (const previousObject of previousObjects) {
     core.ObjectManager.deregister(previousObject, true);
-    previousObject.getPrivateArea?.()?.detach?.(previousObject);
   }
   for (const currentObject of currentObjects) {
     core.ObjectManager.register(currentObject, true);
@@ -936,6 +938,9 @@ function handleDoubleDoor(player, object, objectId, location) {
     rememberOpenObjects(anchorKey, previousObjects, currentObjects);
   } else {
     clearOpenDoor(anchorKey);
+    if (privateArea) {
+      for (const record of pair) RUNTIME_DOUBLE_DOOR_RECORDS.splice(RUNTIME_DOUBLE_DOOR_RECORDS.indexOf(record), 1);
+    }
   }
 
   core.Sounds.sendSound(
@@ -957,6 +962,19 @@ function toggleDoor({ player, object, objectId, definition, location, clickType 
   return handleMappedDoor(player, object, definition?.id ?? objectId, location);
 }
 
+function routeWallDoor(event) {
+  const name = event.definition?.getName?.() ?? "";
+  if (event.object?.getType?.() !== 0 ||
+    (!DOOR_NAMES.has(name) && !/\b(?:doors?|doorway|gates?)\b/i.test(name))) return;
+  // A straight wall door is used across its face, never from either end of the wall.
+  event.blockAccessFlags = (event.blockAccessFlags ?? 0) | 0x5;
+}
+
+function registerWallDoorRoutes() {
+  // Explicit routes retain priority for objects whose usable tile differs from the wall edge.
+  api.onObjectRoute(routeWallDoor);
+}
+
 module.exports = {
   name: "Doors",
   register: (pluginApi) => {
@@ -971,5 +989,6 @@ module.exports = {
       api.onObjectInteraction(name, { Open: toggleDoor, Close: toggleDoor, Release: toggleDoor });
     }
     api.onRegionLoaded(({ regionId }) => reapplyOpenDoorsForRegion(regionId));
+    api.onServerStartup(registerWallDoorRoutes);
   },
 };

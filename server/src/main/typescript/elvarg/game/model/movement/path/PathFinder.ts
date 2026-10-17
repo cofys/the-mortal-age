@@ -391,6 +391,7 @@ export class PathFinder {
         } else if (size !== 0) {
             locShape = size - 1;
             locAngle = direction;
+            blockAccessFlags = blockingMask;
         }
 
         return PathFinder.applyRsmodRoute(entity, destX, destY, {

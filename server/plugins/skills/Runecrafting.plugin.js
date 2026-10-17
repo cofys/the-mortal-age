@@ -550,11 +550,20 @@ function matchesRuins(ruins, itemId, tiara) {
   return itemId === specific || itemId === shared;
 }
 
+/** Wiki: a worn Runecraft cape (or a max cape) enters every altar without a talisman or tiara;
+ * the ruins' varbits (rc_no_tally_required_*) all switch on, as for a tiara (rsprox captures). */
+function wearsRunecraftCape(player) {
+  const request = { player, skill: "RUNECRAFTING", result: false };
+  pluginApi.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
+}
+
 function syncTiaraOptions({ player }) {
   const headId = player.getEquipment().getItems()[Equipment.HEAD_SLOT]?.getId();
   const sender = player.getPacketSender();
+  const cape = wearsRunecraftCape(player);
   for (const ruins of RUINS) {
-    const enabled = matchesRuins(ruins, headId, true) ? 1 : 0;
+    const enabled = cape || matchesRuins(ruins, headId, true) ? 1 : 0;
     if (sender.getVarbit(ruins.varbit) !== enabled) sender.sendVarbit(ruins.varbit, enabled);
   }
 }
@@ -576,7 +585,7 @@ function handleEnterRuins({ player, objectId }) {
   const ruins = RUINS_BY_ID.get(objectId);
   if (!ruins) return false;
   const headId = player.getEquipment().getItems()[Equipment.HEAD_SLOT]?.getId();
-  if (!matchesRuins(ruins, headId, true)) return false;
+  if (!matchesRuins(ruins, headId, true) && !wearsRunecraftCape(player)) return false;
   enterRuins(player, ruins);
   return true;
 }

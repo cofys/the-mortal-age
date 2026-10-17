@@ -1438,7 +1438,8 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         selectPointer: (tile) => {
             clearSelectionHighlight();
             const { renderer, target } = resolvePointerTarget();
-            if (renderer && target) {
+            // The editor picks scenery and NPCs only (resolveEditScenePick), never ground items.
+            if (renderer && target && target.kind !== "item") {
                 selectedModelTarget = target;
                 configureInteractHighlight();
                 renderer.interactHighlightActiveTarget = target;

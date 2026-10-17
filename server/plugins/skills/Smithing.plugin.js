@@ -9,7 +9,7 @@ const { Equipment } = require("../../src/main/typescript/elvarg/game/model/conta
 
 const SMELT_ANIMATION = new Animation(899);
 const SMITH_ANIMATION = new Animation(898);
-// Wiki: goldsmith gauntlets (or the Smithing cape) raise gold bar XP from 22.5 to 56.2.
+// Wiki: goldsmith gauntlets (or the Smithing or max cape) raise gold bar XP from 22.5 to 56.2.
 const GOLDSMITH_GAUNTLETS_BONUS_XP = 33.7;
 
 const SMELTING_SKILLMULTI_GROUP_ID = 270;
@@ -498,10 +498,9 @@ function closeSmeltingInterface(player) {
 function smeltingXp(player, recipe) {
   if (recipe.barId !== ItemIds.GOLD_BAR) return recipe.xp;
   const gloves = player.getEquipment().get(Equipment.HANDS_SLOT)?.getId?.();
-  const cape = player.getEquipment().get(Equipment.CAPE_SLOT)?.getId?.();
-  const boosted = gloves === ItemIds.GOLDSMITH_GAUNTLETS
-    || cape === ItemIds.SMITHING_CAPE
-    || cape === ItemIds.SMITHING_CAPE_T_;
+  const cape = { player, skill: "SMITHING", result: false };
+  pluginApi?.emitCustomEvent("skillcape:has-perk", cape);
+  const boosted = gloves === ItemIds.GOLDSMITH_GAUNTLETS || cape.result === true;
   return boosted ? recipe.xp + GOLDSMITH_GAUNTLETS_BONUS_XP : recipe.xp;
 }
 

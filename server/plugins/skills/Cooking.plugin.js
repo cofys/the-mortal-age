@@ -135,10 +135,11 @@ function stopBurnLevel(player, cookable, objectId) {
   return GAUNTLETS_STOP_BURN.get(cookable.raw) ?? cookable.stopBurn;
 }
 
-/** Wiki: a worn Cooking cape never burns food, and supersedes the gauntlets. */
+/** Wiki: a worn Cooking cape (or max cape) never burns food, and supersedes the gauntlets. */
 function wearingCookingCape(player) {
-  const cape = player.getEquipment?.()?.getItems?.()[Equipment.CAPE_SLOT]?.getId?.();
-  return cape === ItemIds.COOKING_CAPE || cape === ItemIds.COOKING_CAPE_T_;
+  const request = { player, skill: "COOKING", result: false };
+  pluginApi?.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
 }
 
 function isSuccess(player, cookable, objectId) {
@@ -407,5 +408,5 @@ module.exports = {
   COOKABLE_BY_RAW,
   COOKABLE_OBJECT_NAMES,
   FIRE_OBJECT_NAMES,
-  _test: { startCooking, isSuccess, stopBurnLevel, wearingCookingCape, GAUNTLETS_STOP_BURN, COOKABLE_BY_RAW },
+  _test: { startCooking, isSuccess, stopBurnLevel, wearingCookingCape, GAUNTLETS_STOP_BURN, COOKABLE_BY_RAW, setApi: (value) => { pluginApi = value; } },
 };

@@ -5,7 +5,7 @@ Combat Achievements live in `server/plugins/achievements/combatachievements/`. T
 ## What finishes a task
 
 - **Kill-count tasks finish themselves.** A task whose description is only a target and a count ("Kill the King Black Dragon 10 times.", "Open Obor's chest once.", "Kill a Black Dragon.") gets its target from the description. 160 tasks work this way. A kill counts for its monster when an NPC of that name dies with the player as killer. Content that isn't one NPC's death (Barrows chests, the Wintertodt, the Gauntlet, raids, the Fight Caves) is counted by its plugin through `combat-achievements:kill`.
-- **Fight rules derived from the descriptions.** For the phrasings the cache repeats, the rule comes from the description too: "Kill Vorkath in less than 54 seconds.", "... without a slayer task.", "Kill Skotizo without taking any damage.", "... without taking any damage from her.", "... with only magical attacks.", "... with the Protect from Melee prayer activated.", "... solo.", "... using only special attacks.", "... without equipping any weapon.", "... with a stab weapon." The description has to be exactly one of these. A fight is timed from the first hit either way to the death (`Fights.CombatAchievements.js`, `DerivedRules.CombatAchievements.js`); this covers 35 tasks.
+- **Fight rules derived from the descriptions.** For the phrasings the cache repeats, the rule comes from the description too: "Kill Vorkath in less than 54 seconds.", "... without a slayer task.", "Kill Skotizo without taking any damage.", "... without taking any damage from her.", "... with only magical attacks.", "... with the Protect from Melee prayer activated.", "... solo.", "... using only special attacks.", "... without equipping any weapon.", "... with a stab weapon." The description has to be exactly one of these. A fight is timed from the first hit either way to the death (`Fights.CombatAchievements.js`, `DerivedRules.CombatAchievements.js`); this covers 34 tasks.
 - **Hand-written fight rules** for a few bosses, in `combatachievements/tasks/<Unit>.CombatAchievements.js`: the Barrows brothers, Bryophyta, Obor, the Kalphite Queen, the Giant Mole, the Dagannoth Kings and Vorkath (melee only, fists only, the zombified spawn without magic).
 - **Content plugins finish their own tasks**, as diaries do with `diary:task`, from a `CombatAchievements.<Plugin>.js` unit in their folder:
 
@@ -23,8 +23,9 @@ Combat Achievements live in `server/plugins/achievements/combatachievements/`. T
 | Zulrah | count, speed (off a slayer task), Perfect Zulrah, Snake. Snake!? Snaaaaaake! |
 | Vorkath | speed (timed from her waking), Faithless Encounter, The Walk, Dodging the Dragon and Extended Encounter (kills in a row without leaving her area; her specials' damage) |
 | Araxxor | count, the three speed tasks (N kills in 10:00 in one stay), Perfect Araxxor (I and II), Relaxxor, Let it seep in, Araxyte Betrayal, Arachnid Lover, Swimming in Venom |
+| Skotizo | counts, Demonic Weakening, Demonbane Weaponry, Up for the Challenge, Demon Evasion, Precise Positioning |
 
-That's 301 of the 655 tasks: Easy 27/41, Medium 38/64, Hard 40/89, Elite 82/166, Master 63/173, Grandmaster 51/122. Most of the rest belong to content this server doesn't have yet (the Chambers of Xeric, the Theatre of Blood, the Nightmare, the Desert Treasure II bosses) or need a boss's own mechanics reported (ToA's rooms, Doom's grubs, the GWD instances).
+That's 305 of the 655 tasks: Easy 27/41, Medium 40/64, Hard 40/89, Elite 83/166, Master 64/173, Grandmaster 51/122. Most of the rest belong to content this server doesn't have yet (the Chambers of Xeric, the Theatre of Blood, the Nightmare, the Desert Treasure II bosses) or need a boss's own mechanics reported (ToA's rooms, Doom's grubs, the GWD instances).
 
 From another plugin:
 

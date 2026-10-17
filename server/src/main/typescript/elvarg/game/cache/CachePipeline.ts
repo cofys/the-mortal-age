@@ -69,6 +69,9 @@ export class CachePipeline {
     fs.mkdirSync(caches, { recursive: true });
 
     if (!this.isValid(directory)) {
+      if (process.env.BROWSER_HOST === "1") {
+        throw new Error("Browser-host cache is missing or incomplete; restart the server to reload it");
+      }
       await this.download(caches, directory, name, revision, date);
     }
 

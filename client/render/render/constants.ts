@@ -199,7 +199,17 @@ export interface NpcHighlightTarget {
     plane: number;
 }
 
-export type InteractHighlightTarget = LocHighlightTarget | NpcHighlightTarget;
+/** A ground item: the outline is the model of the stack its menu entry names. */
+export interface ItemHighlightTarget {
+    kind: "item";
+    itemId: number;
+    quantity: number;
+    tileX: number;
+    tileY: number;
+    plane: number;
+}
+
+export type InteractHighlightTarget = LocHighlightTarget | NpcHighlightTarget | ItemHighlightTarget;
 
 export type LocReloadBatchState = {
     id: number;

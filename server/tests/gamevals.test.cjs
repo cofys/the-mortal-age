@@ -89,3 +89,22 @@ test("a cache whose index list stops short of the gamevals is re-downloaded (#55
   assert.equal(CachePipeline.isValid(dir), true);
   fs.rmSync(dir, { recursive: true });
 });
+
+test("a browser host with an incomplete cache fails without downloading from OpenRS2 (#559)", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "browser-cache-"));
+  const previous = process.env.BROWSER_HOST;
+  const network = t.mock.method(globalThis, "fetch", async () => { throw new TypeError("network error"); });
+  try {
+    fs.writeFileSync(path.join(root, "target.txt"), "osrs-241_2026-09-30");
+    process.env.BROWSER_HOST = "1";
+    await assert.rejects(CachePipeline.initialize(root), /Browser-host cache is missing or incomplete/);
+    await CachePipeline.initialize(path.resolve(__dirname, ".."));
+    assert.equal(network.mock.callCount(), 0);
+  } finally {
+    if (previous === undefined) delete process.env.BROWSER_HOST;
+    else process.env.BROWSER_HOST = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -17,6 +17,19 @@ test("light sources and the darkness timer follow the OSRS Wiki", () => {
     DARKNESS_SWARM_TICKS,
   } = Darkness;
 
+  // The Skillcapes plugin answers this; a carried or worn Firemaking cape is all this test needs.
+  const firemakingCapes = [I.FIREMAKING_CAPE, I.FIREMAKING_CAPE_T_];
+  Darkness.register({
+    registerArea: () => {},
+    log: () => {},
+    core: { Area: class {} },
+    emitCustomEvent(name, request) {
+      if (name !== "skillcape:has-perk" || request.skill !== "FIREMAKING") return;
+      const held = [...request.player.getInventory().getItems(), ...request.player.getEquipment().getItems()];
+      request.result = held.some((item) => firemakingCapes.includes(item.getId()));
+    },
+  });
+
   const fakePlayer = ({ inventory = [], equipment = [] } = {}) => ({
     getInventory: () => ({ getItems: () => inventory.map((id) => ({ getId: () => id })) }),
     getEquipment: () => ({ getItems: () => equipment.map((id) => ({ getId: () => id })) }),
@@ -68,6 +81,7 @@ test("the caves warn, swarm and damage an unlit player until a light is lit", as
     core,
     registerArea: (registered) => { area = registered; },
     log: () => {},
+    emitCustomEvent: () => {},
   });
   assert.ok(area, "dark area registered");
 

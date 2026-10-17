@@ -30,6 +30,8 @@ const CAMPFIRE_ANIMATION = new Animation(896);
 const LIGHT_ATTEMPT_INTERVAL_TICKS = 4;
 const TEND_INTERVAL_TICKS = 9;
 const MAX_ACTION_DISTANCE = 25;
+// Ground logs are "Take" (op3) and "Light" (op4) in the cache.
+const LIGHT_GROUND_OPTION = 4;
 
 // OSRS Wiki (Mod Ash): fires burn 60-119 seconds, independent of the log used.
 const FIRE_MIN_LIFETIME_TICKS = 100;
@@ -740,7 +742,7 @@ function handleItemOnGroundItem(event, activeSessions) {
   });
 }
 
-function handleGroundItemSecondClick(event, activeSessions) {
+function handleGroundItemLight(event, activeSessions) {
   const { player, groundItemId, location } = event;
   const log = LIGHTABLE_LOGS_BY_ID.get(groundItemId);
   if (!log) {
@@ -895,8 +897,8 @@ function onItemOnGroundItemEvent(event) {
   handleItemOnGroundItem(event, activeSessionsRef);
 }
 
-function onGroundItemSecondClickEvent(event) {
-  handleGroundItemSecondClick(event, activeSessionsRef);
+function onGroundItemLightEvent(event) {
+  handleGroundItemLight(event, activeSessionsRef);
 }
 
 function onItemOnObjectEvent(event) {
@@ -952,9 +954,10 @@ module.exports = {
     api.onCustomEvent("level-up:popup-opened", handlePlayerLevelUp);
     api.onItemOnItem(onItemOnItemEvent, { noted: false });
     api.onItemOnGroundItem(onItemOnGroundItemEvent, { noted: false });
-    api.onGroundItemSecondClick(
+    api.onGroundItemClick(
       LIGHTABLE_LOGS.map((log) => log.itemId),
-      onGroundItemSecondClickEvent
+      LIGHT_GROUND_OPTION,
+      onGroundItemLightEvent
     );
     api.onItemOnObject(onItemOnObjectEvent, { noted: false });
     api.onObjectInteraction("Forester's Campfire", {
@@ -966,7 +969,7 @@ module.exports = {
       hooks: [
         "item_on_item",
         "item_on_ground_item",
-        "ground_item_second_click",
+        "ground_item_light",
         "item_on_object",
         "object_tend_to",
         "object_check",

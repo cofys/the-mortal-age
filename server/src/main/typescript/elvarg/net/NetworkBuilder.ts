@@ -1114,8 +1114,12 @@ export class ClientConnection {
       // bones' "Bury" is their op3, where Take usually sits).
       PickupItemPacketListener.pickup(player, packet.itemId, packet.x, packet.y, packet.stackId);
     } else {
+      // A named option (the agent MCP) is resolved to its op number, as the client sends it.
+      const named = option
+        ? CacheDefinitions.getItem(packet.itemId)?.groundActions?.findIndex((action) => action?.toLowerCase() === option) ?? -1
+        : -1;
       SecondGroundItemOptionPacketListener.interact(
-        player, packet.itemId, packet.x, packet.y, packet.optionIndex ?? 2
+        player, packet.itemId, packet.x, packet.y, packet.optionIndex ?? (named >= 0 ? named + 1 : 2)
       );
     }
   }

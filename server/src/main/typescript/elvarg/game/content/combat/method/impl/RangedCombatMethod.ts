@@ -5,6 +5,7 @@ import { Ammunition, RangedWeapon } from "../../ranged/RangedData";
 import { PendingHit } from "../../hit/PendingHit";
 import { Mobile } from "../../../../entity/impl/Mobile";
 import { Animation } from "../../../../model/Animation";
+import { Graphic } from "../../../../model/Graphic";
 import { Projectile } from "../../../../model/Projectile";
 import { Sound } from "../../../../Sound";
 import { Sounds } from "../../../../Sounds";
@@ -56,7 +57,9 @@ export class RangedCombatMethod extends CombatMethod {
         }
 
         const profile = character.isPlayer() ? WeaponProfiles.ranged(character.getAsPlayer()) : null;
-        if (ammo?.getStartGraphic() && profile?.startGraphic !== false) {
+        if (profile?.launchGraphic != null && ammo) {
+            character.performGraphic(new Graphic(profile.launchGraphic));
+        } else if (ammo?.getStartGraphic() && profile?.startGraphic !== false) {
             character.performGraphic(profile?.doubleStartGraphic ? ammo.getDoubleStartGraphic() : ammo.getStartGraphic());
         }
 
@@ -82,7 +85,10 @@ export class RangedCombatMethod extends CombatMethod {
         for (let index = 0; index < projectiles.length; index++) {
             const projectile = projectiles[index];
             const end = RangedCombatMethod.projectileEnd(projectile, distance);
-            Projectile.createProjectile(character, target, ammo.getProjectileId(), projectile.delay, end, projectile.startHeight, projectile.endHeight).sendProjectile();
+            const shot = Projectile.createProjectile(character, target, profile?.projectileId ?? ammo.getProjectileId(), projectile.delay, end, projectile.startHeight, projectile.endHeight);
+            if (projectile.angle != null) shot.withAngle(projectile.angle);
+            if (projectile.progress != null) shot.withProgress(projectile.progress);
+            shot.sendProjectile();
         }
         Sounds.sendSound(character, profile?.fireSound ?? Sound.SHOOT_ARROW);
 

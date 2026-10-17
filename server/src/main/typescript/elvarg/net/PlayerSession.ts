@@ -351,6 +351,9 @@ export class PlayerSession {
       player.getLocalNpcs().map((npc) => {
         const location = npc.getLocation();
         const face = npc.getFace()?.getDirection?.();
+        const positionToFace = npc.getUpdateFlag().flagged(Flag.FACE_POSITION)
+          ? npc.getPositionToFace()
+          : null;
         return {
           ...this.createActorUpdates(npc, npc.getMaxHitpoints(), false),
           interactionIndex: this.interactionIndex(npc.getInteractingMobile()),
@@ -365,7 +368,9 @@ export class PlayerSession {
           runDirection: this.clientDirection(npc.getRunningDirection()),
           exactMove: this.exactMoveView(npc.getExactMove?.(), location),
           bars: npc.getHeadbars?.().length ? npc.getHeadbars() : undefined,
-          faceTile: npc.getFaceTile?.() ?? undefined,
+          faceTile: npc.getFaceTile?.() ?? (positionToFace
+            ? { x: positionToFace.getX(), y: positionToFace.getY() }
+            : undefined),
           crawl: npc.isCrawling?.() || undefined,
           modelCustomisation: npc.getModelCustomisationForUpdate?.() ?? undefined,
         };

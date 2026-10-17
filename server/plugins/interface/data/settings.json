@@ -8,6 +8,8 @@
     "35": { "name": "Split friends private chat", "varp": 287, "script": 83 },
     "37": { "name": "Enable profanity filter", "varp": 1074 },
     "54": { "name": "Modern Layout - Side panel can be closed by the hotkeys", "varbit": 4611 },
+    "55": { "name": "Player Attack options", "varp": 1107 },
+    "56": { "name": "NPC Attack options", "varp": 1306 },
     "81": { "name": "Last Man Standing fog colour", "varbit": 11865 },
     "82": { "name": "Enable precise timing", "varbit": 11866 },
     "84": { "name": "Food/Potions can form supply piles on death", "varbit": 11893 },

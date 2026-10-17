@@ -8,6 +8,9 @@
  *   combat_level_reqs_disabled; Krystilia never checks) and stat levels for, whose required
  *   unlock is bought, that no bought unlock removes, and that the player hasn't blocked. One is
  *   picked by weight, its amount from min..max, or the extension range with its unlock.
+ * - A Slayer cape (or max cape): worn, it bypasses the combat level a master or task needs;
+ *   worn or carried, a new task has a 10% chance to be the previous one again (Wiki: Slayer
+ *   cape), if the player could still get it.
  * - The "Boss" task picks one of the boss tasks the player qualifies for. Konar picks one of the
  *   task's areas (varp slayer_area).
  * - A kill counts when the NPC counts for the task (Data.npcCountsFor); Konar's must be in her
@@ -29,6 +32,9 @@ const NO_POINTS = 0;
 const KRYSTILIA = 7;
 /** The Slayer XP gained on the current task, for the completion message. */
 const TASK_XP_ATTRIBUTE = "slayer:task-xp";
+/** The last task assigned (its slayer_task row), which a Slayer cape may offer again. */
+const PREVIOUS_TASK_ATTRIBUTE = "slayer:previous-task";
+const CAPE_REPEAT_CHANCE = 0.1;
 const MORTIMER = 10;
 
 let api = null;
@@ -106,7 +112,14 @@ function meetsStats(player, task) {
 }
 
 function checksCombat(player, master) {
-  return master.id !== KRYSTILIA && State.varbit(player, "combat_level_reqs_disabled") !== 1;
+  return master.id !== KRYSTILIA && State.varbit(player, "combat_level_reqs_disabled") !== 1 && !hasSlayerCape(player, false);
+}
+
+/** "skillcape:has-perk": a worn Slayer cape (or max cape), or with `inventory` a carried one. */
+function hasSlayerCape(player, inventory) {
+  const request = { player, skill: "SLAYER", inventory, result: false };
+  api.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
 }
 
 /** Whether the player may get this row from this master. */
@@ -147,7 +160,8 @@ function bossChoices(player) {
 /** Whether a player may get tasks from this master at all (the master's own levels). */
 function meetsMaster(player, master) {
   const skills = player.getSkillManager();
-  return skills.getCombatLevel() >= master.combat && skills.getMaxLevel(core.Skill.SLAYER) >= master.slayer;
+  const combat = skills.getCombatLevel() >= master.combat || hasSlayerCape(player, false);
+  return combat && skills.getMaxLevel(core.Skill.SLAYER) >= master.slayer;
 }
 
 // --- Assigning
@@ -172,7 +186,10 @@ function assign(player, master, random = Math.random) {
   const blocked = blockedTaskIds(player, master);
   const choices = master.tasks.filter((entry) => eligible(player, master, entry, blocked));
   if (choices.length === 0) return { refused: `${master.names[0]} was unable to give you a Slayer task. Please try again later.` };
-  const entry = weightedPick(choices, random);
+  const previous = choices.find((entry) => entry.task.id === player.getAttribute(PREVIOUS_TASK_ATTRIBUTE));
+  const repeat = previous && hasSlayerCape(player, true) && random() < CAPE_REPEAT_CHANCE;
+  const entry = repeat ? previous : weightedPick(choices, random);
+  player.setAttribute(PREVIOUS_TASK_ATTRIBUTE, entry.task.id);
   let task = entry.task;
   let bossId = 0;
   let amount;
@@ -326,6 +343,7 @@ function grantPointsEvent({ player, points }) {
 
 function attach(pluginApi) {
   pluginApi.persistAttribute(TASK_XP_ATTRIBUTE);
+  pluginApi.persistAttribute(PREVIOUS_TASK_ATTRIBUTE, 0);
   pluginApi.onNpcDeath(npcKilled);
   pluginApi.onCustomEvent("slayer:on-task", onTaskEvent);
   pluginApi.onCustomEvent("slayer:grant-points", grantPointsEvent);

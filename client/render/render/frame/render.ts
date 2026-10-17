@@ -563,7 +563,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
 
         camera.applySmoothing(deltaTime);
         // Now update follow camera and matrices using up-to-date player position
-        if (host.osrsClient.followPlayerCamera && host.osrsClient.playerEcs.size() > 0) {
+        if (host.osrsClient.playerEcs.size() > 0) {
             host.updateCameraFollow(deltaTime, timeSec);
         }
         // Ensure camera uses valid dimensions

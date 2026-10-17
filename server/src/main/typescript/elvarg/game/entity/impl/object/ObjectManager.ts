@@ -143,6 +143,9 @@ export class ObjectManager {
         for (const o of [...ObjectManager.objectsAt(object.getLocation())]) {
             if (o.getType() === object.getType() && object.getPrivateArea() == o.getPrivateArea()
                 && object.getOwner() === o.getOwner()) {
+                // Replacing a solid loc with an empty form must clear its old clipping too.
+                if (playerUpdate) MapObjects.remove(o);
+                if (o !== object) o.getPrivateArea()?.detach(o);
                 ObjectManager.removeFromWorld(o);
             }
         }
@@ -189,9 +192,11 @@ export class ObjectManager {
         const mapObject = object.getPrivateArea() != null || ObjectManager.standsForMapObject(object);
         for (const existing of [...ObjectManager.objectsAt(object.getLocation())]) {
             if (ObjectManager.sameObjectIdentity(existing, object)) {
+                existing.getPrivateArea()?.detach(existing);
                 ObjectManager.removeFromWorld(existing);
             }
         }
+        object.getPrivateArea()?.detach(object);
 
         if (playerUpdate) {
             ObjectManager.perform(object, OperationType.DESPAWN);

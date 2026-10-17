@@ -1,6 +1,6 @@
 # Ferox Enclave
 
-`server/plugins/areas/FeroxEnclave.plugin.js`, with its parts in `server/plugins/areas/ferox/`: the town's barriers and safe ground (`Barriers.FeroxEnclave.js`), the Pools of Refreshment (`Pool.FeroxEnclave.js`) and the free-for-all portal and arena (`FreeForAll.FeroxEnclave.js`). `Common.FeroxEnclave.js` holds what they share: tick timing, the busy varbit and the full restore.
+`server/plugins/areas/FeroxEnclave.plugin.js`, with its parts in `server/plugins/areas/ferox/`: the town's barriers and safe ground (`Barriers.FeroxEnclave.js`), the Pools of Refreshment (`Pool.FeroxEnclave.js`), the free-for-all portal and arena (`FreeForAll.FeroxEnclave.js`) and the Castle Wars portal (`CastleWarsPortal.FeroxEnclave.js`). `Common.FeroxEnclave.js` holds what they share: tick timing, the busy varbit and the full restore.
 
 **Sources:**
 - **OSRS captures** (rsprox): passing through a barrier both ways (once with the warning, once with "don't ask again"), drinking from a pool, and the free-for-all portal there and back;
@@ -68,3 +68,11 @@ Players can't attack each other inside the town or in its buffer, unless one of 
 **Not done:**
 - **The level row:** the capture also shows the PvP overlay's level row. We leave it hidden, because its text comes from a cache script that only knows real Wilderness levels.
 - **Music unlocks:** the server has no music unlocks, so the music follows the region.
+
+## Castle Wars portal
+
+`CastleWarsPortal.FeroxEnclave.js` - from the OSRS Wiki ("Castle Wars portal", which says only that the portal leads to the Castle Wars lobby and warns there is no return portal).
+
+- The portal (30386, "Enter", at 3146, 3638 by The Old Nite pub; checked against this cache - it moved here from the Clan Wars building in May 2023) first says "There is no return portal to Ferox Enclave from Castle Wars." (the Wiki names the warning; the wording is ours), then asks "Enter the Castle Wars portal?", Yes. / No.
+- On Yes: a tick later you're in the Castle Wars lobby at 2440, 3090 (the tile the ring of dueling's Castle Wars teleport uses). On No: nothing.
+- **Not done:** on a free-to-play world the lobby's double doors teleport back to Ferox; our Castle Wars doesn't have that yet, so for now the warning is always final.

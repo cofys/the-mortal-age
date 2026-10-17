@@ -21,6 +21,8 @@
     { "minX": 3190, "maxX": 3327, "minY": 3648, "maxY": 3839, "z": 0, "tags": ["multi-combat"] },
     { "minX": 3200, "maxX": 3390, "minY": 3840, "maxY": 3967, "z": 0, "tags": ["multi-combat"] },
     { "_description": "Corporeal Beast's Lair (both copies: lobby and room)", "minX": 2944, "maxX": 3007, "minY": 4224, "maxY": 4415, "z": 2, "tags": ["multi-combat"] },
+    { "_description": "Crash Site Cavern past the archway (captured: the multi icon from y 5666 on the eastern passage): the northern passage and rooms", "minX": 2050, "maxX": 2167, "minY": 5666, "maxY": 5695, "z": 0, "tags": ["multi-combat"] },
+    { "_description": "Crash Site Cavern past the archway: the western room and its passage north", "minX": 2050, "maxX": 2089, "minY": 5640, "maxY": 5665, "z": 0, "tags": ["multi-combat"] },
     { "_description": "Clan Wars free-for-all arena, northern part (captured: the multi icon from y 4800)", "minX": 3264, "maxX": 3391, "minY": 4800, "maxY": 4863, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2992, "maxX": 3007, "minY": 3912, "maxY": 3967, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2946, "maxX": 2959, "minY": 3816, "maxY": 3831, "z": 0, "tags": ["multi-combat"] },

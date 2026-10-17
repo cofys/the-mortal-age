@@ -187,6 +187,7 @@ import {
 } from "../../shaders/Shaders";
 import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
+import { resolveItemHighlightTargetFromEntry } from "./highlightItem";
 import { projectDeckToWorld } from "../worldEntityMotion";
 import { RENDER_CONSTANTS, InteractHighlightTarget } from "../constants";
 
@@ -202,6 +203,9 @@ export function resolveInteractHighlightTargetFromEntry(host: WebGLOsrsRendererH
         if (entry.targetType === MenuTargetType.NPC) {
             return host.resolveNpcHighlightTargetFromEntry(entry, fallbackTile);
         }
+        if (entry.targetType === MenuTargetType.OBJ) {
+            return resolveItemHighlightTargetFromEntry(host, entry, fallbackTile);
+        }
         return undefined;
     
 }
@@ -209,7 +213,7 @@ export function resolveInteractHighlightTargetFromEntry(host: WebGLOsrsRendererH
 export function updateInteractHighlightHoverTarget(host: WebGLOsrsRendererHost, simpleEntries: SimpleMenuEntry[]): void {
 
         const config = host.osrsClient.interactHighlightPlugin.getConfig();
-        if (!config.enabled || !config.showHover) {
+        if (!config.enabled || (!config.showHover && !config.itemShowHover)) {
             host.clearInteractHighlightHoverTarget();
             return;
         }
@@ -243,7 +247,11 @@ export function onInteractHighlightEntryInvoked(host: WebGLOsrsRendererHost,
         if (!entry) return;
 
         const optionLower = String(entry.option || "").toLowerCase();
-        if (entry.targetType === MenuTargetType.LOC || entry.targetType === MenuTargetType.NPC) {
+        if (
+            entry.targetType === MenuTargetType.LOC ||
+            entry.targetType === MenuTargetType.NPC ||
+            entry.targetType === MenuTargetType.OBJ
+        ) {
             if (optionLower === "examine") {
                 return;
             }
@@ -260,7 +268,6 @@ export function onInteractHighlightEntryInvoked(host: WebGLOsrsRendererHost,
 
         if (
             optionLower === "walk here" ||
-            entry.targetType === MenuTargetType.OBJ ||
             entry.targetType === MenuTargetType.PLAYER
         ) {
             host.clearInteractHighlightActiveTarget();

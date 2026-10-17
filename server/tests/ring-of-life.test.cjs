@@ -23,6 +23,12 @@ RingOfLife.register({
     TeleportType: { NORMAL: "NORMAL" },
   },
   registerIncomingDamageModifier() {},
+  // The Skillcapes plugin answers this; a worn Defence cape is all these tests need.
+  emitCustomEvent(name, request) {
+    if (name === "skillcape:ring-of-life") {
+      request.active = request.player.getEquipment().get(Equipment.CAPE_SLOT)?.getId() === ItemIds.DEFENCE_CAPE;
+    }
+  },
 });
 
 function createPlayer({ hp = 100, max = 100, ring = -1, cape = -1, teleblocked = false } = {}) {

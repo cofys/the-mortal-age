@@ -68,6 +68,18 @@ const FINISHED_POTIONS = new Map([
   [`${ItemIds.LANTADYME_POTION_UNF_}:${ItemIds.POTATO_CACTUS}`, { potion: ItemIds.MAGIC_POTION_3_, level: 91, xp: 172.5 }],
 ]);
 
+/** "herblore:unfinished" `{ herbId, potion }`: the unfinished potion a clean herb makes (Zahur). */
+function answerUnfinished(request) {
+  const unfinished = UNFINISHED_POTIONS.get(request?.herbId);
+  if (unfinished) request.potion = unfinished.potion;
+}
+
+function wearsHerbloreCape(api, player) {
+  const request = { player, skill: "HERBLORE", result: false };
+  api.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
+}
+
 function finishedPotionKey(a, b) {
   return `${a}:${b}`;
 }
@@ -280,6 +292,7 @@ module.exports = {
       }
     });
 
+    api.onCustomEvent("herblore:unfinished", answerUnfinished);
     api.onItemFirstAction((event) => {
       const { player, itemId, slot } = event;
       const herb = CLEANABLE_HERBS.get(itemId);
@@ -314,7 +327,11 @@ module.exports = {
       if (hasVialWater) {
         const herbId =
           usedItemId === ItemIds.VIAL_OF_WATER ? usedWithItemId : usedItemId;
-        const unfinished = UNFINISHED_POTIONS.get(herbId);
+        // Wiki (Herblore cape): wearing it, a grimy herb goes straight in, with its cleaning XP.
+        const grimy = CLEANABLE_HERBS.get(herbId);
+        const cleanedByCape = grimy && wearsHerbloreCape(api, player) &&
+          player.getSkillManager().getCurrentLevel(Skill.HERBLORE) >= grimy.level ? grimy : null;
+        const unfinished = UNFINISHED_POTIONS.get(cleanedByCape ? grimy.clean : herbId);
         if (!unfinished) {
           return;
         }
@@ -335,6 +352,7 @@ module.exports = {
         player.getInventory().deleteNumber(ItemIds.VIAL_OF_WATER, 1);
         player.getInventory().deleteNumber(herbId, 1);
         player.getInventory().addItem(new Item(unfinished.potion, 1));
+        if (cleanedByCape) player.getSkillManager().addExperiences(Skill.HERBLORE, cleanedByCape.xp);
         player.getSkillManager().addExperiences(Skill.HERBLORE, 10);
         event.handled = true;
         return;

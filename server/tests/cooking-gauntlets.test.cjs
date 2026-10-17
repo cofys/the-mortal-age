@@ -11,6 +11,15 @@ const { Skill } = require("../dist/game/model/Skill");
 
 const Cooking = require("../plugins/skills/Cooking.plugin");
 
+// The Skillcapes plugin answers this; a worn Cooking cape (or trimmed) is all these tests need.
+Cooking._test.setApi({
+  emitCustomEvent(name, request) {
+    if (name !== "skillcape:has-perk" || request.skill !== "COOKING") return;
+    const cape = request.player.getEquipment().getItems()[Equipment.CAPE_SLOT]?.getId();
+    request.result = cape === ItemIds.COOKING_CAPE || cape === ItemIds.COOKING_CAPE_T_;
+  },
+});
+
 function player(cooking, hands = 0, cape = 0) {
   const equipment = new Array(14).fill(null).map(() => ({ getId: () => 0 }));
   equipment[Equipment.HANDS_SLOT] = { getId: () => hands };

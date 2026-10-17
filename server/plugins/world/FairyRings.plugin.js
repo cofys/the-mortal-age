@@ -280,9 +280,12 @@ function fairyTeleport(player, ring, from, fromClick) {
 function hasLightSource(player) {
   const lit = (item) => {
     const name = item?.getId?.() > 0 ? core.ItemDefinition.forId(item.getId())?.getName?.() ?? "" : "";
-    return /^lit |\(lit\)$|^bullseye lantern|^kandarin headgear [2-4]|^firemaking cape|^max cape/i.test(name);
+    return /^lit |\(lit\)$|^bullseye lantern|^kandarin headgear [2-4]/i.test(name);
   };
-  return [...player.getInventory().getItems(), ...player.getEquipment().getItems()].some(lit);
+  // The Firemaking cape (and max capes) light from the inventory too: asked of the Skillcapes plugin.
+  const cape = { player, skill: "FIREMAKING", inventory: true, result: false };
+  core.PluginManager.emitCustomEvent("skillcape:has-perk", cape);
+  return cape.result === true || [...player.getInventory().getItems(), ...player.getEquipment().getItems()].some(lit);
 }
 
 function confirmDial(player) {

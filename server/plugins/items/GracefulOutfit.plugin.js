@@ -15,21 +15,13 @@ const PIECES = [
 const SET_BONUS = 0.10;
 
 let coreApi;
+let pluginApi;
 
-/** The cape-only slots that count as a graceful cape for the set effect. */
-function capeSubstituteIds() {
-  const { ItemIdentifiers } = coreApi;
-  return new Set([
-    ItemIdentifiers.AGILITY_CAPE,
-    ItemIdentifiers.AGILITY_CAPE_T_,
-    ItemIdentifiers.AGILITY_CAPE_2,
-    ItemIdentifiers.AGILITY_CAPE_T__2,
-    ItemIdentifiers.AGILITY_CAPE_3,
-    ItemIdentifiers.AGILITY_CAPE_T__3,
-    ItemIdentifiers.MAX_CAPE,
-    ItemIdentifiers.MAX_CAPE_2,
-    ItemIdentifiers.MAX_CAPE_3,
-  ]);
+/** An Agility cape (or max cape) at the cape slot counts as a graceful cape for the set effect. */
+function capeIsSubstitute(player) {
+  const request = { player, skill: "AGILITY", result: false };
+  pluginApi.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
 }
 
 function itemName(item) {
@@ -67,8 +59,7 @@ function energyRestoreBonus(player) {
   for (const piece of PIECES) {
     nameBySlot[piece.slot] = itemName(equipment[piece.slot]);
   }
-  const capeId = equipment[1]?.getId?.() ?? -1;
-  return gracefulRestoreBonusFromSlots(nameBySlot, capeSubstituteIds().has(capeId));
+  return gracefulRestoreBonusFromSlots(nameBySlot, capeIsSubstitute(player));
 }
 
 /** The core delay is milliseconds per energy point; a bigger rate means a shorter delay. */
@@ -83,6 +74,7 @@ module.exports = {
   _test: { gracefulRestoreBonusFromSlots, energyRestoreBonus },
   register(api) {
     coreApi = api.core;
+    pluginApi = api;
     api.registerRunEnergyRestoreModifier(applyGracefulRunEnergy);
   },
 };
