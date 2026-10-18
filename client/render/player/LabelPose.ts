@@ -119,9 +119,9 @@ export class LabelPose extends Model {
                     sz += m[o + 8] * rx + m[o + 9] * ry + m[o + 10] * rz + c * m[o + 11];
                     n += c;
                 }
-                Model.animateOriginX = tx + (n > 0 ? Math.trunc(sx / n) : 0);
-                Model.animateOriginY = ty + (n > 0 ? Math.trunc(sy / n) : 0);
-                Model.animateOriginZ = tz + (n > 0 ? Math.trunc(sz / n) : 0);
+                Model.animateOriginX = tx + (n > 0 ? (this.fractionalAnimation ? sx / n : Math.trunc(sx / n)) : 0);
+                Model.animateOriginY = ty + (n > 0 ? (this.fractionalAnimation ? sy / n : Math.trunc(sy / n)) : 0);
+                Model.animateOriginZ = tz + (n > 0 ? (this.fractionalAnimation ? sz / n : Math.trunc(sz / n)) : 0);
                 break;
             }
             case SeqTransformType.TRANSLATE:
@@ -136,9 +136,13 @@ export class LabelPose extends Model {
             case SeqTransformType.ROTATE: {
                 // Roll (z), then pitch (x), then yaw (y), as Model.transform0 applies them.
                 const az = (tz & 0xff) * 8, ax = (tx & 0xff) * 8, ay = (ty & 0xff) * 8;
-                const sz = SINE[az] / 65536, cz = COSINE[az] / 65536;
-                const sx = SINE[ax] / 65536, cx = COSINE[ax] / 65536;
-                const sy = SINE[ay] / 65536, cy = COSINE[ay] / 65536;
+                const r = Math.PI * 2 / 256;
+                const sz = this.fractionalAnimation ? Math.sin(tz * r) : SINE[az] / 65536;
+                const cz = this.fractionalAnimation ? Math.cos(tz * r) : COSINE[az] / 65536;
+                const sx = this.fractionalAnimation ? Math.sin(tx * r) : SINE[ax] / 65536;
+                const cx = this.fractionalAnimation ? Math.cos(tx * r) : COSINE[ax] / 65536;
+                const sy = this.fractionalAnimation ? Math.sin(ty * r) : SINE[ay] / 65536;
+                const cy = this.fractionalAnimation ? Math.cos(ty * r) : COSINE[ay] / 65536;
                 // R = Ry * Rx * Rz for column vectors.
                 const r00 = cy * cz - sy * sx * sz, r01 = cy * sz + sy * sx * cz, r02 = sy * cx;
                 const r10 = -cx * sz, r11 = cx * cz, r12 = -sx;

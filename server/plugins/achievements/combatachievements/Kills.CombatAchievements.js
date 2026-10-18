@@ -10,7 +10,8 @@
  * back with `total`, the kill count Combat Achievements now holds (what the boss page shows), so
  * the plugin can tell the player one number. An `announce(total)` function in the request is
  * called with it before any task finishes, so the kill-count message comes first, as live sends
- * it. At login, plugins
+ * it. "combat-achievements:count" { player, monster } comes back with `total` and changes
+ * nothing. At login, plugins
  * that keep a count answer
  *   "combat-achievements:kill-count" { player, counts }  -> counts["Zulrah"] = 41
  * so kills from before Combat Achievements still finish their tasks (as the Wiki says kill-count
@@ -89,6 +90,13 @@ function onKill(request) {
   request.total = killCount(request.player, monster);
 }
 
+/** "combat-achievements:count" { player, monster } -> total: the count, read only. */
+function onCount(request) {
+  const monster = Data.monsterNamed(request?.monster ?? "");
+  if (!request?.player || !monster) return;
+  request.total = killCount(request.player, monster);
+}
+
 /** At login: catch up with the counts plugins keep, send every count, finish what they reach. */
 function restore(player) {
   const request = { player, counts: {} };
@@ -121,6 +129,7 @@ module.exports = function attachKills(api) {
   api.persistAttribute(KILLS_ATTRIBUTE, {});
   api.onNpcDeath(onNpcDeath);
   api.onCustomEvent("combat-achievements:kill", onKill);
+  api.onCustomEvent("combat-achievements:count", onCount);
 };
 
-Object.assign(module.exports, { KILLS_ATTRIBUTE, counts, killCount, setCount, addKill, checkTasks, onNpcDeath, onKill, restore, reset });
+Object.assign(module.exports, { KILLS_ATTRIBUTE, counts, killCount, setCount, addKill, checkTasks, onNpcDeath, onKill, onCount, restore, reset });

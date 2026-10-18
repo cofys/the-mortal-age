@@ -1,39 +1,54 @@
+import { inject } from "@runelite/client/plugins/PluginInjector";
+import { AnimationSmoothingConfig } from "./AnimationSmoothingConfig";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 
-/** Player poses that break when blended. */
-const EXCLUDED_PLAYER_SEQUENCES = new Set([244]);
-/** NPC animations that break when blended (hellhound defence and others). */
-const EXCLUDED_NPC_SEQUENCES = new Set([6566, 8270, 8271, 5583]);
-/** NPCs whose idle poses break when blended: the wyrm and the tree spirits. */
-const EXCLUDED_NPC_IDLES = new Set([8610, 1163, 6380, 6319]);
+import { EXCLUDED_NPC_IDLES, EXCLUDED_SEQUENCES } from "./exclusions";
 
 /**
- * Animation smoothing, as in RuneLite: keyframe animations of players and NPCs are blended
- * toward their next frame by how far into the current frame they are, instead of jumping from
- * frame to frame. The renderers ask smoothsPlayer/smoothsNpc per animation.
+ * Animation smoothing, as in RuneLite: keyframe animations of players, NPCs, graphics and
+ * scenery are blended toward their next frame by how far into the current frame they are,
+ * instead of jumping from frame to frame. The renderers ask smoothsPlayer/smoothsNpc per
+ * animation; scenery is baked a frame per client cycle when its map square loads
+ * (smoothsObjects), skipping EXCLUDED_SEQUENCES there.
  */
 export class AnimationSmoothingPlugin extends Plugin {
     static descriptor: PluginDescriptor = {
         name: "Animation Smoothing",
-        description: "Blends player, NPC and graphic animations between their frames.",
+        description: "Blends player, NPC, graphic and object animations between their frames.",
         tags: ["animation"],
         enabledByDefault: false,
         configKey: "animationsmoothingplugin",
     };
 
+    static config = AnimationSmoothingConfig;
+    private readonly config = inject(AnimationSmoothingConfig);
+
+    objectSettings(): { smoothLocAnimations: boolean; smoothLocAnimationSteps: number } {
+        const quality = this.config.sceneryQuality();
+        return {
+            smoothLocAnimations: this.smoothsObjects(),
+            smoothLocAnimationSteps: quality === 0 || quality === 8 ? quality : 4,
+        };
+    }
+
     /** Whether a player's animation (action or movement) is blended. */
     smoothsPlayer(seqId: number): boolean {
-        return this.isEnabled() && !EXCLUDED_PLAYER_SEQUENCES.has(seqId);
+        return this.isEnabled() && this.config.players() && !EXCLUDED_SEQUENCES.has(seqId);
     }
 
     /** Whether graphics (spotanims on actors and the ground, and projectiles) are blended. */
     smoothsGraphics(): boolean {
-        return this.isEnabled();
+        return this.isEnabled() && this.config.graphics();
+    }
+
+    /** Whether scenery animations are baked blended (read when a map square is built). */
+    smoothsObjects(): boolean {
+        return this.isEnabled() && this.config.objects();
     }
 
     /** Whether an NPC's animation is blended; `action` is false for its movement/idle pose. */
     smoothsNpc(npcTypeId: number, seqId: number, action: boolean): boolean {
-        if (!this.isEnabled() || EXCLUDED_NPC_SEQUENCES.has(seqId)) return false;
+        if (!this.isEnabled() || !this.config.npcs() || EXCLUDED_SEQUENCES.has(seqId)) return false;
         return action || !EXCLUDED_NPC_IDLES.has(npcTypeId);
     }
 }

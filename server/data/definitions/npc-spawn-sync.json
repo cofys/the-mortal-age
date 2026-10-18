@@ -4,6 +4,12 @@
     "2353": {"label": "Sailing sea creature", "skip": false, "why": "Sea encounters for Sailing (sharks, rays, krakens, seabirds) in open water; reachable only by boat."}
   },
   "ids": {
+    "6609": {"label": "Wilderness boss", "skip": true, "why": "Callisto spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "6610": {"label": "Wilderness boss", "skip": true, "why": "Venenatis spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "6611": {"label": "Wilderness boss", "skip": true, "why": "Vet'ion spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "11992": {"label": "Wilderness boss", "skip": true, "why": "Artio spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "11993": {"label": "Wilderness boss", "skip": true, "why": "Calvar'ion spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "11998": {"label": "Wilderness boss", "skip": true, "why": "Spindel spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
     "12861": {"label": "Quest stage", "skip": true, "why": "Attala before Perilous Moons; after it she's in Cam Torum (13099)."},
     "12876": {"label": "Quest stage", "skip": true, "why": "The builder before Perilous Moons; after it he's in Cam Torum (12877)."},
     "14209": {"label": "Quest stage", "skip": true, "why": "Antos injured, during the quest; he's well (14211) after it."},
@@ -47,7 +53,9 @@
   "boxes": [
     {"box": "2624,2560,2687,2623,0", "label": "Spawned by a plugin", "skip": true, "why": "Pest Control's game island: PestControl.plugin.js spawns the Void Knight and the squire there."},
     {"box": "3136,4224,3391,4479", "label": "Spawned by a plugin", "skip": true, "why": "The Theatre of Blood: TheatreOfBlood.plugin.js spawns each room's boss and Nylocas in the raid's instance."},
-    {"box": "3072,3008,3135,3071,0", "label": "Group Ironman island", "skip": true, "why": "The Node, where Group Ironman accounts start; its tutors and fake players aren't for other accounts."}
+    {"box": "3289,9858,3308,9877,0", "label": "Spawned by a plugin", "skip": true, "why": "Scurrius' lair: Scurrius.plugin.js spawns the public Scurrius, each private instance's, and their giant rats."},
+    {"box": "3072,3008,3135,3071,0", "label": "Group Ironman island", "skip": true, "why": "The Node, where Group Ironman accounts start; its tutors and fake players aren't for other accounts."},
+    {"box": "2816,4224,2879,4287", "label": "Spawned by a plugin", "skip": true, "why": "The Phantom Muspah's lair: PhantomMuspah.plugin.js spawns the boss in each player's instance, and Secrets of the North its creature."}
   ],
   "pagePatterns": [
     {"pattern": "^Armoured zombie \\(Defender of Varrock\\)$", "label": "Quest only", "skip": true, "why": "The zombies invading Varrock Palace exist only during Defender of Varrock."},

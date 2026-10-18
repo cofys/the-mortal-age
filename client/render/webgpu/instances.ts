@@ -93,6 +93,7 @@ export class WebGPUInstances {
                 maxLevel: Scene.MAX_LEVELS - 1,
                 loadNpcs: false,
                 smoothTerrain: true,
+                ...r.osrsClient.animationSmoothingPlugin?.objectSettings(),
                 minimizeDrawCalls: true,
                 instance: { templateChunks, regionX, regionY },
                 locOverrides: r.locOverrides,

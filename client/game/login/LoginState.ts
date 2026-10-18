@@ -16,11 +16,16 @@ import {
     getClientPreference,
     setClientPreference,
     updateClientPreferences,
+    type RememberedLoginPreference,
 } from "../preferences/ClientPreferences";
+import { readLocalStorageJson, removeLocalStorageItem } from "../../common/utils/localStorage";
 import { LoginIndex } from "./GameState";
 
 const STORAGE_KEY_IOS_PWA_LOGIN_STATE = "osrs:iosPwaLoginState";
 const IOS_PWA_LOGIN_STATE_VERSION = 2;
+
+/** Where the removed Remember Login plugin kept the username and plain password. */
+const LEGACY_REMEMBER_LOGIN_KEY = "osrs.plugin.remember_login.v1";
 
 type PersistedIosPwaLoginState = {
     version: number;
@@ -57,6 +62,8 @@ export class LoginState {
         // Load persisted settings from localStorage
         this.loadPersistedSettings();
         this.loadPersistedLoginState();
+        this.restoreLegacyRememberedPassword();
+        this.showRememberedLogin();
     }
 
     /** Load settings that should persist between sessions */
@@ -237,6 +244,9 @@ export class LoginState {
     /** Remember username checkbox hover state */
     rememberUsernameHover: boolean = false;
 
+    /** The current login attempt uses the remembered token instead of a password. */
+    loginWithToken: boolean = false;
+
     /** Hide username checkbox state */
     isUsernameHidden: boolean = false;
 
@@ -289,6 +299,76 @@ export class LoginState {
     serverIceServers: RTCIceServer[] = [];
 
     /** Persist the last selected server to localStorage */
+    // ========== Remembered login ==========
+
+    /** A token only works on the server that issued it, so each server keeps its own. */
+    private get rememberedLoginKey(): string {
+        return this.serverTransport === "webrtc"
+            ? `webrtc:${this.serverWorldId ?? ""}@${this.serverSignalUrl ?? ""}`
+            : this.serverAddress;
+    }
+
+    getRememberedLogin(): RememberedLoginPreference | undefined {
+        return getClientPreference("rememberedLogins")[this.rememberedLoginKey];
+    }
+
+    rememberLogin(username: string, token: string): void {
+        updateClientPreferences({
+            rememberedLogins: {
+                ...getClientPreference("rememberedLogins"),
+                [this.rememberedLoginKey]: { username, token },
+            },
+        });
+    }
+
+    forgetRememberedLogin(): void {
+        const logins = { ...getClientPreference("rememberedLogins") };
+        if (!(this.rememberedLoginKey in logins)) return;
+        delete logins[this.rememberedLoginKey];
+        updateClientPreferences({ rememberedLogins: logins });
+    }
+
+    /**
+     * The Play screen for the account kept signed in on this server, in place of the welcome
+     * screen or an untouched login form; back to the welcome screen when there is none.
+     */
+    showRememberedLogin(): void {
+        const remembered = this.getRememberedLogin();
+        const replaceable =
+            this.loginIndex === LoginIndex.WELCOME ||
+            this.loginIndex === LoginIndex.WELCOME_DISPLAY_NAME ||
+            (this.loginIndex === LoginIndex.LOGIN_FORM && this.password.length === 0);
+        if (remembered && replaceable) {
+            this.loginIndex = LoginIndex.WELCOME_DISPLAY_NAME;
+            this.displayName = remembered.username;
+        } else if (!remembered && this.loginIndex === LoginIndex.WELCOME_DISPLAY_NAME) {
+            this.loginIndex = LoginIndex.WELCOME;
+            this.displayName = "";
+        }
+    }
+
+    /**
+     * Fills in the password the removed Remember Login plugin kept, ticking "Remember username"
+     * so the next login swaps it for a token. clearLegacyRememberedPassword deletes it then.
+     */
+    private restoreLegacyRememberedPassword(): void {
+        if (this.getRememberedLogin()) return;
+        const legacy = readLocalStorageJson<{ enabled?: unknown; username?: unknown; password?: unknown }>(
+            LEGACY_REMEMBER_LOGIN_KEY,
+        );
+        if (legacy?.enabled !== true) return;
+        if (typeof legacy.username !== "string" || typeof legacy.password !== "string") return;
+        if (!legacy.username || !legacy.password) return;
+        this.username = legacy.username.slice(0, MAX_ACCOUNT_NAME_LENGTH);
+        this.password = legacy.password.slice(0, MAX_PASSWORD_LENGTH);
+        this.currentLoginField = 1;
+        this.rememberUsername = true;
+    }
+
+    clearLegacyRememberedPassword(): void {
+        removeLocalStorageItem(LEGACY_REMEMBER_LOGIN_KEY);
+    }
+
     saveLastServer(): void {
         if (getBrowserHostWorldConfig()) return;
         setClientPreference("lastServer", {
@@ -404,7 +484,9 @@ export class LoginState {
         this.mobileWorldSelectScrollVelocity = 0;
         this.mobileWorldSelectFilter = "";
         this.virtualKeyboardVisible = false;
+        this.loginWithToken = false;
         this.loadPersistedLoginState();
+        this.showRememberedLogin();
     }
 
     /**

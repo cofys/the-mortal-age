@@ -2,7 +2,15 @@ import { LoginActions } from "../../LoginAction";
 import type { LoginState } from "../../LoginState";
 import { GameState, LoginIndex } from "../../GameState";
 import type { LoginRendererHost } from "../host";
-import { getWelcomeLayout } from "../layout/geometry";
+import {
+    getWelcomeLayout,
+    LOGIN_FORM_BUTTON_Y,
+    LOGIN_FORM_REMEMBER_Y,
+    getRememberedPlayBounds,
+    REMEMBERED_LOG_OUT_TEXT,
+    REMEMBERED_LOG_OUT_Y,
+    REMEMBER_USERNAME_TEXT,
+} from "../layout/geometry";
 import { measureText } from "../render/drawUtils";
 
 export function handleWelcomeClick(host: LoginRendererHost, x: number, y: number) {
@@ -51,41 +59,27 @@ export function handleLoginFormClick(host: LoginRendererHost, state: LoginState,
             return undefined;
         }
 
-        // Checkbox: Remember username
+        // Checkbox: the label or the box toggles it, as drawn by drawLoginForm
         if (host.optionsRadioSprite0 && host.fontBold12) {
-            const rememberY = 275; // Updated to match new layout
-            const checkboxX = host.loginBoxX + 180 - 108;
-            const checkboxW = host.optionsRadioSprite0.subWidth;
-            const checkboxH = host.optionsRadioSprite0.subHeight || 15;
+            const labelX = host.loginBoxX + 180 - 108;
+            const boxRight =
+                labelX +
+                measureText(host, host.fontBold12, REMEMBER_USERNAME_TEXT) +
+                host.optionsRadioSprite0.subWidth;
+            const top = (baseline: number) => baseline - host.fontBold12!.lineHeight;
+            const boxH = host.optionsRadioSprite0.subHeight || 15;
             if (
-                x >= checkboxX &&
-                x <= checkboxX + checkboxW &&
-                y >= rememberY - checkboxH &&
-                y <= rememberY
+                x >= labelX &&
+                x <= boxRight &&
+                y >= top(LOGIN_FORM_REMEMBER_Y) &&
+                y < top(LOGIN_FORM_REMEMBER_Y) + boxH
             ) {
                 return LoginActions.TOGGLE_REMEMBER;
-            }
-
-            // Checkbox: Hide username
-            const hideTextWidth = measureText(host, host.fontBold12, "Hide username: ");
-            const hideCheckboxX =
-                checkboxX +
-                measureText(host, host.fontBold12, "Remember username: ") +
-                checkboxW +
-                10 +
-                hideTextWidth;
-            if (
-                x >= hideCheckboxX &&
-                x <= hideCheckboxX + checkboxW &&
-                y >= rememberY - checkboxH &&
-                y <= rememberY
-            ) {
-                return LoginActions.TOGGLE_HIDE_USERNAME;
             }
         }
 
         // Buttons
-        const buttonY = 301;
+        const buttonY = LOGIN_FORM_BUTTON_Y;
         if (isButtonHit(host, x, y, host.loginBoxCenter - 80, buttonY)) {
             return LoginActions.LOGIN;
         }
@@ -188,6 +182,28 @@ export function handleMessageClick(host: LoginRendererHost, state: LoginState, x
         const buttonY = state.loginIndex === LoginIndex.MESSAGE ? 321 : 311;
         if (isButtonHit(host, x, y, host.loginBoxX + 180, buttonY)) {
             return LoginActions.BACK;
+        }
+        return undefined;
+    
+}
+
+export function handleWelcomeDisplayNameClick(host: LoginRendererHost, x: number, y: number) {
+
+        const button = getRememberedPlayBounds(host);
+        if (x >= button.x && x < button.x + button.width && y >= button.y && y < button.y + button.height) {
+            return LoginActions.PLAY;
+        }
+        if (host.fontPlain11) {
+            const centerX = host.loginBoxX + 180;
+            const halfWidth = measureText(host, host.fontPlain11, REMEMBERED_LOG_OUT_TEXT) / 2;
+            if (
+                x >= centerX - halfWidth - 4 &&
+                x <= centerX + halfWidth + 4 &&
+                y >= REMEMBERED_LOG_OUT_Y - 12 &&
+                y <= REMEMBERED_LOG_OUT_Y + 4
+            ) {
+                return LoginActions.FORGET_REMEMBERED_LOGIN;
+            }
         }
         return undefined;
     

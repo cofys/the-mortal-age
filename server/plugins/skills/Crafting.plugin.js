@@ -137,23 +137,63 @@ const STRUNG_AMULETS = new Map([
 ]);
 
 /**
- * OSRS Leather Crafting Configuration.
- * A needle is required along with 1 thread per item.
- * The needle is kept, while the thread and leather are consumed.
+ * Wiki (Leather, Thread, Crafting#Leather) and rsprox captures (recordings 1854, 1857, 1858,
+ * 3276): a needle on leather, hard leather or dragon leather opens the skillmulti menu
+ * ("How many do you wish to make?", up to the leather carried). Every 3 ticks the player
+ * makes one item ("You make ..."), the first 2 ticks after choosing it. A reel of thread lasts
+ * five items ("You use up one of your reels of thread."); a costume needle needs none. Items
+ * above the player's level stay in the menu and answer with a message box when chosen.
  */
 const LEATHER_TASK_ATTRIBUTE = "crafting:leather-task";
+const THREAD_USES_ATTRIBUTE = "crafting:thread-uses";
+const CRAFTS_PER_THREAD = 5;
+const NEEDLES = new Set([ItemIds.NEEDLE, ItemIds.COSTUME_NEEDLE]);
+const LEATHER_MENU_TITLE = "How many do you wish to make?";
+// skillmulti_setup's first argument for leather menus, as captured.
+const LEATHER_MENU_MODE = 0;
 
-const LEATHER_RECIPES = [
-  { name: "leather gloves", itemId: ItemIds.LEATHER_GLOVES, materialId: ItemIds.LEATHER, level: 1, xp: 13.8 },
-  { name: "leather boots", itemId: ItemIds.LEATHER_BOOTS, materialId: ItemIds.LEATHER, level: 7, xp: 16.25 },
-  { name: "leather cowl", itemId: ItemIds.LEATHER_COWL, materialId: ItemIds.LEATHER, level: 9, xp: 18.5 },
-  { name: "leather vambraces", itemId: ItemIds.LEATHER_VAMBRACES, materialId: ItemIds.LEATHER, level: 11, xp: 22 },
-  { name: "leather body", itemId: ItemIds.LEATHER_BODY, materialId: ItemIds.LEATHER, level: 14, xp: 25 },
-  { name: "leather chaps", itemId: ItemIds.LEATHER_CHAPS, materialId: ItemIds.LEATHER, level: 18, xp: 27 },
-  { name: "hardleather body", itemId: ItemIds.HARDLEATHER_BODY, materialId: ItemIds.HARD_LEATHER, level: 28, xp: 35 },
-];
+/** The three dragonhide items of one colour, in the menu's order: body, vambraces, chaps. */
+function dragonhideRecipes(colour, [bodyId, bodyLevel, bodyXp], [vambracesId, vambracesLevel, vambracesXp],
+  [chapsId, chapsLevel, chapsXp]) {
+  const lower = colour.toLowerCase();
+  return [
+    { itemId: bodyId, label: `${colour} dragonhide body`, leather: 3, level: bodyLevel, xp: bodyXp,
+      made: `a ${lower} dragonhide body`, members: true },
+    { itemId: vambracesId, label: `${colour} dragonhide vambraces`, leather: 1, level: vambracesLevel,
+      xp: vambracesXp, made: `a pair of ${lower} dragonhide vambraces`, members: true },
+    { itemId: chapsId, label: `${colour} dragonhide chaps`, leather: 2, level: chapsLevel, xp: chapsXp,
+      made: `a pair of ${lower} dragonhide chaps`, members: true },
+  ];
+}
 
+/**
+ * Leather -> the items it makes, in menu order. `made` completes "You make ..."; every text is
+ * captured except the leather boots, cowl and vambraces, which follow the captured pattern.
+ */
+const LEATHER_RECIPES = new Map([
+  [ItemIds.LEATHER, [
+    { itemId: ItemIds.LEATHER_GLOVES, leather: 1, level: 1, xp: 13.8, made: "a pair of leather gloves" },
+    { itemId: ItemIds.LEATHER_BOOTS, leather: 1, level: 7, xp: 16.25, made: "a pair of leather boots" },
+    { itemId: ItemIds.LEATHER_COWL, leather: 1, level: 9, xp: 18.5, made: "a leather cowl" },
+    { itemId: ItemIds.LEATHER_VAMBRACES, leather: 1, level: 11, xp: 22, made: "a pair of leather vambraces" },
+    { itemId: ItemIds.LEATHER_BODY, leather: 1, level: 14, xp: 25, made: "a leather body" },
+    { itemId: ItemIds.LEATHER_CHAPS, leather: 1, level: 18, xp: 27, made: "a pair of leather chaps" },
+    { itemId: ItemIds.COIF, leather: 1, level: 38, xp: 37, made: "a coif", members: true },
+  ]],
+  [ItemIds.HARD_LEATHER, [
+    { itemId: ItemIds.HARDLEATHER_BODY, leather: 1, level: 28, xp: 35, made: "a hard leather body" },
+  ]],
+  [ItemIds.GREEN_DRAGON_LEATHER, dragonhideRecipes("Green",
+    [ItemIds.GREEN_DHIDE_BODY, 63, 186], [ItemIds.GREEN_DHIDE_VAMBRACES, 57, 62], [ItemIds.GREEN_DHIDE_CHAPS, 60, 124])],
+  [ItemIds.BLUE_DRAGON_LEATHER, dragonhideRecipes("Blue",
+    [ItemIds.BLUE_DHIDE_BODY, 71, 210], [ItemIds.BLUE_DHIDE_VAMBRACES, 66, 70], [ItemIds.BLUE_DHIDE_CHAPS, 68, 140])],
+  [ItemIds.RED_DRAGON_LEATHER, dragonhideRecipes("Red",
+    [ItemIds.RED_DHIDE_BODY, 77, 234], [ItemIds.RED_DHIDE_VAMBRACES, 73, 78], [ItemIds.RED_DHIDE_CHAPS, 75, 156])],
+  [ItemIds.BLACK_DRAGON_LEATHER, dragonhideRecipes("Black",
+    [ItemIds.BLACK_DHIDE_BODY, 84, 258], [ItemIds.BLACK_DHIDE_VAMBRACES, 79, 86], [ItemIds.BLACK_DHIDE_CHAPS, 82, 172])],
+]);
 
+/** human_leather_crafting. */
 const LEATHER_CRAFTING_ANIMATION = new Animation(1249);
 
 /** The furnace smelting animation, used for jewellery as well. */
@@ -200,41 +240,55 @@ const WATER_CONTAINERS = new Map([
 const POTTER_WHEEL_NAMES = new Set(["Potter's Wheel", "Potter's wheel"]);
 const POTTERY_OVEN_NAMES = new Set(["Pottery Oven"]);
 
-function hasLeatherMaterials(player, recipe) {
-  const inventory = player.getInventory();
-  return inventory.contains(ItemIds.NEEDLE) &&
-    inventory.contains(ItemIds.THREAD) &&
-    inventory.getAmount(recipe.materialId) > 0;
+function carriedNeedle(inventory) {
+  return [...NEEDLES].find((id) => inventory.contains(id));
 }
 
-function craftLeatherItem(player, recipe) {
-  if (player.getSkillManager().getCurrentLevel(Skill.CRAFTING) < recipe.level) {
-    player.sendMessage(`You need a Crafting level of at least ${recipe.level} to make this.`);
-    return false;
-  }
-
-  if (!hasLeatherMaterials(player, recipe)) {
-    player.sendMessage("You do not have the required materials to sew this item.");
-    return false;
-  }
-
+function hasLeatherMaterials(player, materialId, recipe) {
   const inventory = player.getInventory();
-  inventory.deleteNumber(recipe.materialId, 1);
+  const needle = carriedNeedle(inventory);
+  return needle !== undefined &&
+    (needle === ItemIds.COSTUME_NEEDLE || inventory.contains(ItemIds.THREAD)) &&
+    inventory.getAmount(materialId) >= recipe.leather;
+}
+
+/** One use of the carried reel; the fifth uses it up. A costume needle needs no thread. */
+function useThread(player) {
+  const inventory = player.getInventory();
+  if (carriedNeedle(inventory) === ItemIds.COSTUME_NEEDLE) return;
+  const uses = (player.getAttribute(THREAD_USES_ATTRIBUTE) ?? 0) + 1;
+  if (uses < CRAFTS_PER_THREAD) {
+    player.setAttribute(THREAD_USES_ATTRIBUTE, uses);
+    return;
+  }
+  player.setAttribute(THREAD_USES_ATTRIBUTE, 0);
   inventory.deleteNumber(ItemIds.THREAD, 1);
+  player.sendMessage("You use up one of your reels of thread.");
+}
+
+function craftLeatherItem(player, materialId, recipe) {
+  if (!hasLeatherMaterials(player, materialId, recipe)) return false;
+  const inventory = player.getInventory();
+  inventory.deleteNumber(materialId, recipe.leather);
   inventory.addItem(new Item(recipe.itemId, 1));
   player.getSkillManager().addExperiences(Skill.CRAFTING, recipe.xp);
+  player.sendMessage(`You make ${recipe.made}.`);
+  useThread(player);
   return true;
 }
 
-function startLeatherCraftingTask(player, recipe, amount) {
-  if (!hasLeatherMaterials(player, recipe)) return;
+function startLeatherCraftingTask(player, materialId, recipe, amount) {
+  if (player.getSkillManager().getCurrentLevel(Skill.CRAFTING) < recipe.level) {
+    const { DialogueChainBuilder, StatementDialogue } = pluginApi.core;
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
+      new StatementDialogue(0, `You need a Crafting level of ${recipe.level} to make ${recipe.made}.`)));
+    return;
+  }
+  if (!hasLeatherMaterials(player, materialId, recipe)) return;
   const { Task } = pluginApi.core;
 
   player.getAttribute(LEATHER_TASK_ATTRIBUTE)?.stop();
-
-  // Close the chatbox interface safely
-  player.setInterfaceId(-1);
-  player.getPacketSender().closeInterface();
+  player.performAnimation(LEATHER_CRAFTING_ANIMATION);
 
   class LeatherCraftingTask extends Task {
     constructor() {
@@ -245,20 +299,18 @@ function startLeatherCraftingTask(player, recipe, amount) {
     execute() {
       if (!player.isRegistered() || player.getHitpoints() <= 0 ||
         player.getMovementQueue().size() > 0 || player.getForceMovement() != null ||
-        player.getInterfaceId() !== -1 || !hasLeatherMaterials(player, recipe)) {
+        player.getInterfaceId() !== -1 || !hasLeatherMaterials(player, materialId, recipe)) {
         this.stop();
         return;
       }
-      this.ticks++;
-      // Sew action occurs every 3 game ticks (~1.8s)
-      if (this.ticks % 3 === 1) {
-        player.performAnimation(LEATHER_CRAFTING_ANIMATION);
+      // Items on ticks 2, 5, 8 ... after the choice; the animation restarts with each one.
+      if (++this.ticks % 3 !== 2) return;
+      if (!craftLeatherItem(player, materialId, recipe) || --this.remaining <= 0 ||
+        !hasLeatherMaterials(player, materialId, recipe)) {
+        this.stop();
+        return;
       }
-      if (this.ticks % 3 === 0) {
-        if (!craftLeatherItem(player, recipe) || --this.remaining <= 0) {
-          this.stop();
-        }
-      }
+      player.performAnimation(LEATHER_CRAFTING_ANIMATION);
     }
     stop() {
       super.stop();
@@ -274,47 +326,42 @@ function startLeatherCraftingTask(player, recipe, amount) {
   pluginApi.getTaskManager().submit(task);
 }
 
-
+/** A needle (or costume needle) used on leather, in either order, opens the skillmulti menu. */
 function handleNeedleOnLeather(event) {
   const { player, usedItemId, usedWithItemId } = event;
-  const materialId = usedItemId === ItemIds.NEEDLE ? usedWithItemId : usedItemId;
-  if (
-    (usedItemId !== ItemIds.NEEDLE && usedWithItemId !== ItemIds.NEEDLE) ||
-    !LEATHER_RECIPES.some((recipe) => recipe.materialId === materialId)
-  ) return;
+  const needleId = NEEDLES.has(usedItemId) ? usedItemId : usedWithItemId;
+  const materialId = needleId === usedItemId ? usedWithItemId : usedItemId;
+  if (!NEEDLES.has(needleId) || !LEATHER_RECIPES.has(materialId)) return;
   event.handled = true;
 
-  if (!player.getInventory().contains(ItemIds.THREAD)) {
+  const inventory = player.getInventory();
+  if (needleId !== ItemIds.COSTUME_NEEDLE && !inventory.contains(ItemIds.THREAD)) {
+    // ponytail: not in the captures or on the Wiki; replace with the live text when captured.
     player.sendMessage("You need some thread to sew leather.");
     return;
   }
 
-  // Clear any existing active processing loop tasks
   player.getAttribute(LEATHER_TASK_ATTRIBUTE)?.stop();
-
-  const inventory = player.getInventory();
-  const recipes = LEATHER_RECIPES.filter((recipe) => recipe.materialId === materialId);
-  const maxAmount = Math.min(
-    inventory.getAmount(materialId),
-    inventory.getAmount(ItemIds.THREAD),
-    28
-  );
+  const members = pluginApi.core.WorldDefinition.isMembersWorld();
+  const recipes = LEATHER_RECIPES.get(materialId).filter((recipe) => members || !recipe.members);
   const recipeByItem = new Map(recipes.map((recipe) => [recipe.itemId, recipe]));
   const menu = new pluginApi.core.CreationMenu(
-    "What would you like to make?",
+    LEATHER_MENU_TITLE,
     recipes.map((recipe) => recipe.itemId),
     {
       execute: (itemId, amount) => {
         const recipe = recipeByItem.get(itemId);
-        if (recipe) startLeatherCraftingTask(player, recipe, amount);
+        if (recipe) startLeatherCraftingTask(player, materialId, recipe, amount);
       },
     },
-    { maxAmount, lastAmount: Math.min(1, maxAmount) }
+    {
+      labels: recipes.map((recipe) => recipe.label ?? pluginApi.core.CacheDefinitions.getItem(recipe.itemId).name),
+      maxAmount: inventory.getAmount(materialId),
+      mode: LEATHER_MENU_MODE,
+    }
   );
   player.getPacketSender().sendCreationMenu(menu);
 }
-
-
 
 function cutGem(event) {
   const { player, usedItemId, usedWithItemId } = event;
@@ -674,6 +721,7 @@ module.exports = {
     pluginApi = api;
     TaskManager = api.getTaskManager();
     TaskManager.submit(new CraftingTask(ACTIVE_CRAFTING_SESSIONS));
+    api.persistAttribute(THREAD_USES_ATTRIBUTE, 0);
     api.onItemOnItem(cutGem, { noted: false });
     api.onItemOnItem(makeSoftClay, { noted: false });
     api.onItemOnItem(blowGlass, { noted: false });

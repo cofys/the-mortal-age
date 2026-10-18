@@ -25,21 +25,22 @@ module.exports=function registerChasm({api,stage,advance,held,give,val,play,repl
  class ChasmArea extends PrivateArea{
   constructor(p){super([0,1,2].map(z=>new Boundary(4032,4095,4544,4607,z)).concat([new Boundary(4096,4159,5056,5119,0)]));this.player=p;this.cast=[];}
   canAttack(){return false;}
-  postLeave(m,logout){if(m===this.player){for(const n of this.cast)api.removeNpc(n);sessions.delete(m);if(logout)m.moveTo(loc(3229,9527,2));}super.postLeave(m,logout);}
+  postLeave(m,logout){if(m===this.player){for(const n of this.cast)api.removeNpc(n);sessions.delete(m);if(logout&&stage(m)<900)m.moveTo(loc(3229,9527,2));}super.postLeave(m,logout);}
  }
- function enter(p){
+ function enter(p,tile=loc(4064,4600)){
   let area=sessions.get(p);if(!area){area=new ChasmArea(p);sessions.set(p,area);area.enter(p);}
   if(!val(p,ROUTE_ATTRIBUTE)){
    const order=[0,1,3];for(let i=2;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
    p.setAttribute(ROUTE_ATTRIBUTE,1+order[0]+order[1]*4+order[2]*16);
   }
-  p.moveTo(loc(4064,4600));advance(p,720);sync(p);
+  p.moveTo(tile);advance(p,720);sync(p);
   // These quest locs are created by OSRS scripts and have no static map placement.
   if(!area.scenery){
    for(const[id,x,y,z,type=10,face=0]of [[53809,4067,4600,0,22,2],[53810,4070,4605,0,22,3],[53727,4072,4604,0,10,3],[53731,4056,4602,0,10,3],[53819,4053,4589,0,10,3],[53820,4073,4588,0,10,3],[53615,4062,4554,0],[53616,4056,4557,0],[53617,4068,4557,0],[CUBE,4063,4552,2],[53625,4147,5094,0],[53627,4137,5071,0],[53629,4113,5098,0],[53830,4126,5081,0],[53831,4143,5103,0],[53832,4109,5113,0]])replace(p,id,[x,y,z],type,face);
    area.scenery=true;
   }
-  if(!area.cast.length)for(const[id,x,y]of [[LIGHT,4063,4602],[MOVARIO,4062,4599],[DARVE,4061,4599]]){
+  // After the quest Movario and Darve are gone; the light creature still carries players back up.
+  if(!area.cast.length)for(const[id,x,y]of stage(p)>=900?[[LIGHT,4063,4602]]:[[LIGHT,4063,4602],[MOVARIO,4062,4599],[DARVE,4061,4599]]){
    const n=api.spawnNpc({id,x,y,z:0,wanderRadius:0,owner:p,ownerOnly:true});area.enter(n);area.cast.push(n);
   }
   for(const [i,e]of ELEMENTS.entries())if(e.rocks&&(val(p,ROCKS_ATTRIBUTE)&(1<<i))){
@@ -49,7 +50,7 @@ module.exports=function registerChasm({api,stage,advance,held,give,val,play,repl
  function clear(p){for(const n of actors.get(p)||[])api.removeNpc(n);actors.delete(p);}
  function mapChange({player:p}){
   clear(p);const l=p.getLocation();if(stage(p)>=700&&l.getZ()===2&&l.getX()>=3200&&l.getX()<3264&&l.getY()>=9472&&l.getY()<9536){
-   actors.set(p,[[MOVARIO,3229,9528],[DARVE,3228,9528],[LIGHT,3228,9525]].map(([id,x,y])=>api.spawnNpc({id,x,y,z:2,wanderRadius:0,owner:p,ownerOnly:true})));
+   actors.set(p,(stage(p)>=900?[[LIGHT,3228,9525]]:[[MOVARIO,3229,9528],[DARVE,3228,9528],[LIGHT,3228,9525]]).map(([id,x,y])=>api.spawnNpc({id,x,y,z:2,wanderRadius:0,owner:p,ownerOnly:true})));
   }sync(p);
  }
  function talk({player:p,npcId}){
@@ -105,7 +106,7 @@ module.exports=function registerChasm({api,stage,advance,held,give,val,play,repl
   const hole=HOLES.indexOf(id);if(hole>=0){const element=ELEMENTS.findIndex(a=>a.hole===id),route=val(p,ROUTE_ATTRIBUTE)-1;const cavity=[0,1,2].find(i=>((route>>(i*2))&3)===element);p.moveTo(loc([4069,4063,4057][cavity],cavity===1?4555:4558));return true;}
   if(id===OPENING&&stage(p)>=760){api.emitCustomEvent('wgs:enter-temple',{player:p});return true;}return false;
  }
- function login(e){const l=e.player.getLocation();if((l.getX()>=4032&&l.getX()<=4095&&l.getY()>=4544&&l.getY()<=4607)||(l.getX()>=4096&&l.getX()<=4159&&l.getY()>=5056&&l.getY()<=5119))e.player.moveTo(loc(3229,9527,2));mapChange(e);}
+ function login(e){const l=e.player.getLocation();if(stage(e.player)>=900&&l.getX()>=4032&&l.getX()<=4095&&l.getY()>=4544&&l.getY()<=4607){enter(e.player,l.clone());mapChange(e);return;}if((l.getX()>=4032&&l.getX()<=4095&&l.getY()>=4544&&l.getY()<=4607)||(l.getX()>=4096&&l.getX()<=4159&&l.getY()>=5056&&l.getY()<=5119))e.player.moveTo(loc(3229,9527,2));mapChange(e);}
  function logout({player}){clear(player);}
  api.onNpcInteraction('Movario',{'Talk-to':talk});
  api.onNpcInteraction('Darve',{'Talk-to':talk});
@@ -119,6 +120,8 @@ module.exports=function registerChasm({api,stage,advance,held,give,val,play,repl
  api.onObjectInteraction('Cavity',{Enter:climb});
  api.onObjectInteraction('Hole',{Exit:climb});
  api.onObjectInteraction('Opening',{'Climb-through':climb});
+ // The Guthixian temple teleport's arrival (plugins/bosses/tormenteddemons/Scroll.TormentedDemons.js).
+ api.onCustomEvent('wgs:enter-chasm',({player:p,tile})=>{if(stage(p)>=900)enter(p,tile);});
  api.onCustomEvent('wgs:return-chasm',({player:p})=>{if(stage(p)>=760){enter(p);p.moveTo(loc(4063,4553,2));}});
  api.onCustomEvent('npc-dialogue:line',line);
  api.onCustomEvent('npc-dialogue:action',action);

@@ -217,19 +217,25 @@ export class CombatSpecial {
 
                 const target = player.getCombat().getTarget();
                 if (target != null && CombatFactory.getMethod(player).type() == CombatType.MELEE) {
-                    const drainAmount = spec.getDrainAmountForWeaponId(equippedWeaponId);
-                    player.getCombat().setSpecialAttackQueued(true);
-                    if (!developerQueuedAttackSpam) {
-                        CombatSpecial.drain(player, drainAmount);
-                    }
-                    const attacked = player.getCombat().performNewAttack(true);
-                    if (!attacked) {
-                        player.getCombat().setSpecialAttackQueued(false);
-                        if (!developerQueuedAttackSpam) {
-                            player.incrementSpecialPercentage(drainAmount);
+                    // The energy is drained where the special actually swings: a queued
+                    // special pressed mid-cooldown stays lit and drains on the next
+                    // attack instead of charging instantly and refunding on failure.
+                    // Bypassing specials (granite maul) swing on the press regardless.
+                    const instant = spec.getTraits()?.bypassAttackDelay === true;
+                    if (instant || player.getCombat().getAttackDelay() <= 0) {
+                        const method = CombatFactory.getMethod(player);
+                        if (!player.getCombat().performNewAttack(true)) {
+                            player.setSpecialActivated(false);
+                            CombatSpecial.updateBar(player);
+                            return;
                         }
-                        player.setSpecialActivated(false);
-                        CombatSpecial.updateBar(player);
+                        // A special swing is the player's attack for the cycle and is
+                        // followed by the weapon's normal cooldown; `bypassDelay`
+                        // (performNewAttack(true)) skips that reset, so do it here.
+                        const speed = spec.getTraits()?.attackSpeedTicks ?? method.attackSpeed(player);
+                        player.getCombat().setAttackDelay(speed);
+                    } else {
+                        player.getCombat().setSpecialAttackQueued(true);
                     }
                     return;
                 } else {

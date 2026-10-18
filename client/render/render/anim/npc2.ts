@@ -1,3 +1,4 @@
+import { npcInterpolation } from "../../npc/NpcInterpolation";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -384,6 +385,10 @@ export function uploadDynamicNpcGeometry(host: WebGLOsrsRendererHost,
                     stride: ACTOR_VERTEX_STRIDE,
                     integer: true as any,
                 })
+                .vertexAttributeBuffer(3, host.dynamicNpcInterleavedBuffer, {
+                    type: PicoGL.UNSIGNED_INT, size: 1, stride: ACTOR_VERTEX_STRIDE,
+                    offset: 16, integer: true as any,
+                })
                 .indexBuffer(host.dynamicNpcIndexBuffer);
 
             if (host.dynamicNpcVertexArray && host.sceneUniformBuffer) {
@@ -453,7 +458,7 @@ export function resolveUnbatchedNpcGeometry(
                     frameId,
                     overlaySeqId,
                     overlayFrameId,
-                    Math.max(0, npcSmoothingCycle(host, ecsId)),
+                    npcInterpolation(host.osrsClient, ecsId, renderSeqId, frameId, overlaySeqId, overlayFrameId),
                 );
             }
             const hasGraphics =
@@ -472,41 +477,15 @@ export function resolveUnbatchedNpcGeometry(
 
 }
 
-/** NPCs this close to the local player (in tiles) are drawn smoothed when the plugin is on. */
-const NPC_SMOOTHING_RADIUS_TILES = 16;
-
-/**
- * Animation smoothing for an NPC: -1 when it is not smoothed (drawn from the map's baked
- * frames), otherwise the cycles into its current frame (0..length) to blend toward the next
- * frame. Smoothed NPCs are drawn through the unbatched (CPU) path, which can blend frames.
- */
-export function npcSmoothingCycle(host: WebGLOsrsRendererHost, ecsId: number): number {
-    const client = host.osrsClient;
-    const plugin = client.animationSmoothingPlugin;
-    if (!plugin?.isEnabled() || !host.dynamicNpcAnimLoader?.isReady()) return -1;
-    const ecs = client.npcEcs;
-    if ((ecs.getWorldViewId(ecsId) | 0) >= 0) return -1;
-
-    const playerIndex = client.playerEcs.getIndexForServerId(client.controlledPlayerServerId | 0);
-    if (playerIndex === undefined) return -1;
-    const radius = NPC_SMOOTHING_RADIUS_TILES * 128;
-    const dx = (ecs.getWorldX(ecsId) | 0) - (client.playerEcs.getX(playerIndex) | 0);
-    const dy = (ecs.getWorldY(ecsId) | 0) - (client.playerEcs.getY(playerIndex) | 0);
-    if (Math.abs(dx) > radius || Math.abs(dy) > radius) return -1;
-
-    const actionSeqId = ecs.getSeqId(ecsId) | 0;
-    const action = actionSeqId >= 0 && (ecs.getSeqDelay?.(ecsId) | 0) === 0;
+/** Whether this NPC needs dynamic interpolated poses instead of its baked keyframes. */
+export function isNpcAnimationSmoothed(host: WebGLOsrsRendererHost, ecsId: number): boolean {
+    if (!host.dynamicNpcAnimLoader?.isReady()) return false;
+    const ecs = host.osrsClient.npcEcs;
+    const actionId = ecs.getSeqId(ecsId);
+    const action = actionId >= 0 && ecs.getSeqDelay(ecsId) === 0;
     const { movementSeqId, idleSeqId } = host.resolveNpcMovementSequenceIds(ecs, ecsId);
-    const seqId = action ? actionSeqId : movementSeqId | 0;
-    if (seqId < 0) return -1;
-    // An action layered over movement is not blended (as in RuneLite).
-    const layered =
-        action &&
-        host.shouldLayerNpcMovementSequence(actionSeqId, movementSeqId | 0, idleSeqId | 0);
-    if (layered) return -1;
-    if (!plugin.smoothsNpc(ecs.getNpcTypeId(ecsId) | 0, seqId, action)) return -1;
-    const seqType: any = client.seqTypeLoader.load(seqId);
-    if (!seqType || seqType.isSkeletalSeq?.() || !(seqType.frameIds?.length > 1)) return -1;
-    const cycle = action ? ecs.getAnimTick(ecsId) : ecs.getMovementAnimTick(ecsId);
-    return Math.max(0, cycle | 0);
+    const overlay = action && host.shouldLayerNpcMovementSequence(actionId, movementSeqId, idleSeqId) ? movementSeqId : -1;
+    return !!npcInterpolation(host.osrsClient, ecsId, action ? actionId : movementSeqId,
+        action ? ecs.getFrameIndex(ecsId) : ecs.getMovementFrameIndex(ecsId),
+        overlay, ecs.getMovementFrameIndex(ecsId));
 }

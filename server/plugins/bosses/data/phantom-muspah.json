@@ -1,0 +1,630 @@
+{
+  "$comment": "Phantom Muspah (docs/phantom-muspah.md). Tiles are in the lair's own map square (2816-2879, 4224-4287); the plugin turns them into each player's instance. Timings are ticks; projectile and graphic delays are client cycles. From rsprox captures unless marked: wiki, estimate.",
+  "npcs": {
+    "ranged": 12077,
+    "melee": 12078,
+    "teleport": 12082,
+    "shielded": 12079,
+    "final": 12080,
+    "cloud": 12083
+  },
+  "locs": {
+    "entry": 46597,
+    "escape": 46599,
+    "spike": 46695,
+    "spikePre": 46693,
+    "spikePost": 46694,
+    "spikeFollow": 46697,
+    "invisible": 29733
+  },
+  "lair": {
+    "instance": {
+      "sourceChunkX": 352,
+      "sourceChunkY": 528,
+      "width": 8,
+      "height": 8,
+      "planes": [
+        0,
+        1
+      ]
+    },
+    "arrival": [
+      2859,
+      4259,
+      0
+    ],
+    "exit": [
+      2909,
+      10317,
+      0
+    ],
+    "escape": {
+      "tile": [
+        2860,
+        4258,
+        0
+      ],
+      "shape": 10,
+      "rotation": 0
+    },
+    "enterMessage": "You enter the icy cavern.",
+    "leaveMessage": "You leave the icy cavern.",
+    "fade": {
+      "outArgs": [
+        0,
+        200,
+        0,
+        0,
+        50
+      ],
+      "inArgs": [
+        0,
+        0,
+        0,
+        255,
+        50
+      ],
+      "minimapTicks": 1,
+      "moveTicks": 2,
+      "inTicks": 3
+    },
+    "music": {
+      "arrival": 743,
+      "fight": 742
+    },
+    "spawnTicks": 3,
+    "respawnTicks": 50
+  },
+  "overlay": {
+    "interface": 818,
+    "script": 7021,
+    "spawn": 240,
+    "dark": 130,
+    "clear": 255
+  },
+  "boss": {
+    "tile": [
+      2844,
+      4258,
+      0
+    ],
+    "face": [
+      2864,
+      4260
+    ],
+    "centre": [
+      2847,
+      4258
+    ],
+    "spawnAnim": 9938,
+    "spawnSound": [
+      6698,
+      2
+    ],
+    "attackableTicks": 3,
+    "firstAttackTicks": 7,
+    "hitpoints": 850,
+    "range": 10,
+    "healthBar": {
+      "id": 20,
+      "width": 120
+    },
+    "hudColours": [
+      25600,
+      576,
+      800
+    ]
+  },
+  "forms": {
+    "ranged": {
+      "speed": 6,
+      "rangedMax": 61,
+      "magicMax": 72
+    },
+    "melee": {
+      "speed": 5,
+      "meleeMax": 34
+    },
+    "shielded": {
+      "speed": 5,
+      "rangedMax": 72,
+      "magicMax": 79
+    },
+    "final": {
+      "speed": 5,
+      "rangedMax": 72,
+      "magicMax": 79
+    }
+  },
+  "magicChance": 0.2,
+  "attacks": {
+    "ranged": {
+      "anim": 9922,
+      "sounds": [
+        [
+          6705,
+          2
+        ],
+        [
+          6787,
+          21
+        ],
+        [
+          6692,
+          22
+        ]
+      ],
+      "projectile": {
+        "id": 2329,
+        "start": 26,
+        "end": 60,
+        "angle": 5,
+        "progress": 244,
+        "startHeight": 32,
+        "endHeight": 25
+      },
+      "hitDelay": 2,
+      "impact": {
+        "spot": 2293,
+        "delay": 60,
+        "sound": [
+          6774,
+          60
+        ]
+      }
+    },
+    "magic": {
+      "anim": 9918,
+      "spot": 2319,
+      "sounds": [
+        [
+          6731,
+          2
+        ],
+        [
+          6680,
+          3
+        ],
+        [
+          6813,
+          11
+        ],
+        [
+          6662,
+          22
+        ]
+      ],
+      "projectileTicks": 2,
+      "projectile": {
+        "id": 2327,
+        "start": 24,
+        "end": 54,
+        "angle": 5,
+        "progress": 0,
+        "startHeight": 100,
+        "endHeight": 24
+      },
+      "hitDelay": 4,
+      "impact": {
+        "spot": 2328,
+        "height": 124
+      }
+    },
+    "melee": {
+      "anim": 9920,
+      "spot": 2320,
+      "sound": [
+        6674,
+        30
+      ],
+      "hitDelay": 1,
+      "$comment": "estimate: each tick it stands still adds 1 to the max hit and 5% that gets through Protect from Melee",
+      "stillMaxBonus": 1,
+      "stillMaxBonusCap": 20,
+      "stillThroughPrayer": 0.05,
+      "stillThroughPrayerCap": 0.5
+    }
+  },
+  "switch": {
+    "anim": 9936,
+    "appearAnim": 9937,
+    "appearSpot": 2334,
+    "rangedDamage": 100,
+    "meleeDamage": 80,
+    "minHits": 4
+  },
+  "specials": {
+    "thresholds": [
+      637,
+      425
+    ],
+    "message": "<col=a53fff>The Phantom Muspah floods the room with darkness...</col>"
+  },
+  "spikes": {
+    "warnSpot": 2335,
+    "riseSpot": 2324,
+    "despawnSpot": 2325,
+    "preTicks": 2,
+    "upTicks": 3,
+    "riseSounds": [
+      1678,
+      6780
+    ],
+    "cameraShake": [
+      [
+        0,
+        6
+      ],
+      [
+        1,
+        5
+      ],
+      [
+        2,
+        8
+      ]
+    ],
+    "spawnCount": 2,
+    "spawnMinDistance": 8,
+    "knock": {
+      "anim": 1114,
+      "cycles": 29,
+      "minDamage": 9,
+      "maxDamage": 15,
+      "heal": 0.75,
+      "$comment": "damage: estimate from the captures' 9-15"
+    },
+    "growth": {
+      "everyAttacks": 4,
+      "$comment": "estimate: how many tiles each growth adds"
+    }
+  },
+  "homing": {
+    "anim": 9923,
+    "spot": 2321,
+    "min": 2,
+    "max": 4,
+    "stepTicks": 2,
+    "lifetimeTicks": 34,
+    "stepSpot": 2326,
+    "stepSounds": [
+      [
+        6686,
+        0
+      ],
+      [
+        6764,
+        30
+      ]
+    ],
+    "soundRadius": 3,
+    "minDamage": 9,
+    "maxDamage": 15,
+    "$comment": "damage: estimate"
+  },
+  "clouds": {
+    "disappearAnim": 9928,
+    "disappearSpot": 2332,
+    "disappearSounds": [
+      [
+        6717,
+        11
+      ],
+      [
+        6732,
+        12
+      ],
+      [
+        6759,
+        13
+      ],
+      [
+        6724,
+        14
+      ]
+    ],
+    "transformTicks": 3,
+    "jumpAnim": 9930,
+    "jumpSpot": 2333,
+    "jumpSound": 6820,
+    "loop": [
+      [
+        2854,
+        4257
+      ],
+      [
+        2840,
+        4263
+      ],
+      [
+        2845,
+        4249
+      ],
+      [
+        2852,
+        4263
+      ],
+      [
+        2838,
+        4257
+      ],
+      [
+        2851,
+        4251
+      ],
+      [
+        2846,
+        4262
+      ],
+      [
+        2839,
+        4250
+      ]
+    ],
+    "jumps": 20,
+    "landAnim": 9932,
+    "landSpot": 2334,
+    "perJumpMax": 4,
+    "maxHit": 20,
+    "smokeAnim": 9948,
+    "$comment": "clouds per jump 0-4 (captured); where they start and their damage on contact: estimate"
+  },
+  "shockwave": {
+    "hitpoints": 127,
+    "tile": [
+      2845,
+      4256,
+      0
+    ],
+    "teleportTicks": 3,
+    "windupTicks": 2,
+    "releaseTicks": 5,
+    "shieldTicks": 3,
+    "windupAnim": 9925,
+    "windupSpot": 2322,
+    "windupSounds": [
+      [
+        6744,
+        2
+      ],
+      [
+        6828,
+        3
+      ],
+      [
+        6707,
+        19
+      ],
+      [
+        6796,
+        29
+      ],
+      [
+        6843,
+        126
+      ],
+      [
+        6753,
+        137
+      ],
+      [
+        6685,
+        140
+      ],
+      [
+        6807,
+        164
+      ]
+    ],
+    "releaseSpot": 2323,
+    "releaseSound": 6817,
+    "brightSpot": 2330,
+    "darkSpot": 2331,
+    "maxHit": 80,
+    "hitTicks": 1,
+    "map": {
+      "west": -12,
+      "north": 10,
+      "rows": [
+        "                 .....   ",
+        "  .. ....ooooooo.......  ",
+        "  ........ooooo........  ",
+        " .........ooooo......... ",
+        " .......ooooooooo....... ",
+        " ......oooo...oooo...... ",
+        " .....oooo.....oooo..... ",
+        "   o..ooooo...ooooo..o.. ",
+        "  .ooooo.ooo.ooo.ooooo...",
+        "  .oooo...o   o...oooo...",
+        "  .oooo....   ....oooo...",
+        "  .oooo...o   o...oooo...",
+        "  .ooooo.ooo.ooo.ooooo...",
+        "  .o..ooooo...ooooo..o.. ",
+        "  ....oooo.....oooo....  ",
+        " ......oooo...oooo...    ",
+        "........ooooooooo....    ",
+        "..........ooooo......    ",
+        "..........ooooo.......   ",
+        " ........ooooooo......   ",
+        "   .................     ",
+        "   ..            .       "
+      ]
+    }
+  },
+  "shield": {
+    "points": 75,
+    "drainPerAttack": 2,
+    "smiteShare": 0.25,
+    "soulSplitHeal": 0.5,
+    "message": "<col=ff3045>The Phantom Muspah's</col> <col=00e6e6>prayer shield</col> <col=ff3045>mitigates regular damage.</col>",
+    "healthBar": {
+      "id": 50,
+      "width": 120
+    },
+    "hudColours": [
+      2084,
+      7309,
+      14617
+    ],
+    "drainSplat": 60,
+    "healSplat": 6
+  },
+  "corruption": {
+    "varbits": {
+      "base": 12140,
+      "current": 12141,
+      "target": 12142
+    },
+    "magicBase": 3,
+    "shockwaveBase": 4,
+    "iterations": 3,
+    "intervalTicks": 10,
+    "splat": 0,
+    "start": "<col=ff289d>You have been corrupted!</col>",
+    "end": "<col=ff289d>You are no longer afflicted with corruption.</col>"
+  },
+  "kill": {
+    "anim": 9941,
+    "lootTicks": 5,
+    "killCountVarp": 3752,
+    "chargedIceTicks": 300
+  },
+  "frozenCache": {
+    "preRoll": {
+      "outOf": 500,
+      "entries": [
+        {
+          "item": "FROZEN_CACHE",
+          "weight": 7
+        },
+        {
+          "item": "ANCIENT_ICON",
+          "weight": 2
+        },
+        {
+          "item": "VENATOR_SHARD",
+          "weight": 1
+        }
+      ]
+    },
+    "outOf": 80,
+    "entries": [
+      {
+        "essence": [
+          [
+            540,
+            599,
+            1,
+            60
+          ],
+          [
+            885,
+            995,
+            5,
+            23
+          ],
+          [
+            1970,
+            2060,
+            10,
+            10
+          ]
+        ],
+        "weight": 15
+      },
+      {
+        "item": "DRAGON_PLATESKIRT",
+        "amount": 1,
+        "weight": 5
+      },
+      {
+        "item": "RUNE_PLATELEGS",
+        "amount": 3,
+        "noted": true,
+        "weight": 5
+      },
+      {
+        "item": "BLACK_DHIDE_BODY",
+        "amount": 1,
+        "weight": 5
+      },
+      {
+        "item": "DRAGON_PLATELEGS",
+        "amount": 2,
+        "noted": true,
+        "weight": 4
+      },
+      {
+        "item": "RUNE_SWORD",
+        "amount": 1,
+        "weight": 1
+      },
+      {
+        "item": "CHAOS_RUNE",
+        "amount": 480,
+        "weight": 5
+      },
+      {
+        "item": "FIRE_RUNE",
+        "amount": 1964,
+        "weight": 5
+      },
+      {
+        "item": "STEEL_CANNONBALL",
+        "amount": 670,
+        "weight": 5
+      },
+      {
+        "item": "TORSTOL_SEED",
+        "amount": 2,
+        "weight": 5
+      },
+      {
+        "item": "GRIMY_TOADFLAX",
+        "amount": 40,
+        "noted": true,
+        "weight": 3
+      },
+      {
+        "item": "RANARR_SEED",
+        "amount": 5,
+        "weight": 3
+      },
+      {
+        "item": "SNAPDRAGON_SEED",
+        "amount": 5,
+        "weight": 4
+      },
+      {
+        "item": "SPIRIT_SEED",
+        "amount": 1,
+        "weight": 2
+      },
+      {
+        "item": "COAL",
+        "amount": 163,
+        "noted": true,
+        "weight": 5
+      },
+      {
+        "item": "RUNITE_ORE",
+        "amount": 18,
+        "noted": true,
+        "weight": 3
+      },
+      {
+        "item": "LIMPWURT_ROOT",
+        "amount": 21,
+        "noted": true,
+        "weight": 3
+      },
+      {
+        "item": "SILVER_ORE",
+        "amount": 101,
+        "noted": true,
+        "weight": 2
+      }
+    ],
+    "anotherCache": "You open the frozen cache and find... another frozen cache inside! How peculiar."
+  }
+}

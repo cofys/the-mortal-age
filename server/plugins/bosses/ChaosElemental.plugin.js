@@ -1,123 +1,126 @@
-const { CombatMethod } = require("../../src/main/typescript/elvarg/game/content/combat/method/CombatMethod");
-const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
-const { Graphic } = require("../../src/main/typescript/elvarg/game/model/Graphic");
-const { CombatType } = require("../../src/main/typescript/elvarg/game/content/combat/CombatType");
-const { PendingHit } = require("../../src/main/typescript/elvarg/game/content/combat/hit/PendingHit");
-const { Projectile } = require("../../src/main/typescript/elvarg/game/model/Projectile");
-const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
-const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
-const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
-const { WeaponInterfaceManager } = require("../../src/main/typescript/elvarg/game/content/combat/WeaponInterfaceManager");
-const { Flag } = require("../../src/main/typescript/elvarg/game/model/Flag");
-const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
-const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
-
 const ChaosElementalAttackType = {
   DISCORD: 558,
   DISARM: 551,
   TELEPORT: 554,
 };
 
-const REGULAR_COMBAT_TYPES = [CombatType.MELEE, CombatType.RANGED, CombatType.MAGIC];
 const SPECIAL_HIT_DELAY = 2;
 
-class ChaosElementalTask extends Task {
-  constructor(delay, execFunc, key, immediate) {
-    super(delay, key, immediate);
-    this.execFunc = execFunc;
-  }
+/** Core classes, from api.core when the combat method is built. */
+let Animation, CombatType, Equipment, Flag, Graphic, Item, Misc, PendingHit, Projectile, WeaponInterfaceManager;
+let BonusManager;
+let RegionManager;
+let TaskManager;
 
-  execute() {
-    this.execFunc();
-    this.stop();
-  }
-}
+/** The combat method, built on api.core's classes. */
+function combatClass(api) {
+  ({ Animation, CombatType, Equipment, Flag, Graphic, Item, Misc, PendingHit, Projectile, WeaponInterfaceManager } = api.core);
+  BonusManager = api.getBonusManager();
+  RegionManager = api.getRegionManager();
+  TaskManager = api.getTaskManager();
+  const { CombatMethod, Task } = api.core;
+  const REGULAR_COMBAT_TYPES = [CombatType.MELEE, CombatType.RANGED, CombatType.MAGIC];
 
-class ChaosElementalCombatMethod extends CombatMethod {
-  static MELEE_COMBAT_GFX = new Graphic(869, 0);
-  static RANGED_COMBAT_GFX = new Graphic(867, 0);
-  static MAGIC_COMBAT_GFX = new Graphic(868, 0);
-
-  constructor() {
-    super();
-    this.currentAttack = ChaosElementalAttackType.DISCORD;
-    this.currentCombatType = CombatType.MAGIC;
-  }
-
-  type() {
-    return this.currentCombatType;
-  }
-
-  hits(character, target) {
-    if (this.currentAttack !== ChaosElementalAttackType.DISCORD) {
-      return [];
+  class ChaosElementalTask extends Task {
+    constructor(delay, execFunc, key, immediate) {
+      super(delay, key, immediate);
+      this.execFunc = execFunc;
     }
-    return [new PendingHit(character, target, this, 2)];
-  }
 
-  start(character, target) {
-    this.selectAttack();
-    character.performAnimation(new Animation(character.getAttackAnim()));
-    Projectile.createProjectile(character, target, this.currentAttack, 40, 70, 31, 43).sendProjectile();
-
-    if (this.currentAttack !== ChaosElementalAttackType.DISCORD) {
-      const queuedAttack = this.currentAttack;
-      TaskManager.submit(
-        new ChaosElementalTask(
-          SPECIAL_HIT_DELAY,
-          () => applyChaosElementalSpecial(queuedAttack, character, target),
-          target,
-          false
-        )
-      );
+    execute() {
+      this.execFunc();
+      this.stop();
     }
   }
 
-  attackDistance() {
-    return 8;
-  }
+  class ChaosElementalCombatMethod extends CombatMethod {
+    static MELEE_COMBAT_GFX = new Graphic(869, 0);
+    static RANGED_COMBAT_GFX = new Graphic(867, 0);
+    static MAGIC_COMBAT_GFX = new Graphic(868, 0);
 
-  finished() {
-  }
-
-  selectAttack() {
-    // OSRS strategy notes Confusion is less frequent than Madness, so weight teleport lower.
-    const specialRoll = Misc.getRandom(19);
-    if (specialRoll === 0) {
-      this.currentAttack = ChaosElementalAttackType.TELEPORT;
+    constructor() {
+      super();
+      this.currentAttack = ChaosElementalAttackType.DISCORD;
       this.currentCombatType = CombatType.MAGIC;
-      return;
-    }
-    if (specialRoll <= 3) {
-      this.currentAttack = ChaosElementalAttackType.DISARM;
-      this.currentCombatType = CombatType.MAGIC;
-      return;
     }
 
-    this.currentAttack = ChaosElementalAttackType.DISCORD;
-    this.currentCombatType = REGULAR_COMBAT_TYPES[Misc.getRandom(REGULAR_COMBAT_TYPES.length - 1)];
+    type() {
+      return this.currentCombatType;
+    }
+
+    hits(character, target) {
+      if (this.currentAttack !== ChaosElementalAttackType.DISCORD) {
+        return [];
+      }
+      return [new PendingHit(character, target, this, 2)];
+    }
+
+    start(character, target) {
+      this.selectAttack();
+      character.performAnimation(new Animation(character.getAttackAnim()));
+      Projectile.createProjectile(character, target, this.currentAttack, 40, 70, 31, 43).sendProjectile();
+
+      if (this.currentAttack !== ChaosElementalAttackType.DISCORD) {
+        const queuedAttack = this.currentAttack;
+        TaskManager.submit(
+          new ChaosElementalTask(
+            SPECIAL_HIT_DELAY,
+            () => applyChaosElementalSpecial(queuedAttack, character, target),
+            target,
+            false
+          )
+        );
+      }
+    }
+
+    attackDistance() {
+      return 8;
+    }
+
+    finished() {
+    }
+
+    selectAttack() {
+      // OSRS strategy notes Confusion is less frequent than Madness, so weight teleport lower.
+      const specialRoll = Misc.getRandom(19);
+      if (specialRoll === 0) {
+        this.currentAttack = ChaosElementalAttackType.TELEPORT;
+        this.currentCombatType = CombatType.MAGIC;
+        return;
+      }
+      if (specialRoll <= 3) {
+        this.currentAttack = ChaosElementalAttackType.DISARM;
+        this.currentCombatType = CombatType.MAGIC;
+        return;
+      }
+
+      this.currentAttack = ChaosElementalAttackType.DISCORD;
+      this.currentCombatType = REGULAR_COMBAT_TYPES[Misc.getRandom(REGULAR_COMBAT_TYPES.length - 1)];
+    }
+
+    handleAfterHitEffects(hit) {
+      if (!hit || !hit.getTarget()) {
+        return;
+      }
+      const target = hit.getTarget();
+      switch (this.currentCombatType) {
+        case CombatType.MELEE:
+          target.performGraphic(ChaosElementalCombatMethod.MELEE_COMBAT_GFX);
+          break;
+        case CombatType.RANGED:
+          target.performGraphic(ChaosElementalCombatMethod.RANGED_COMBAT_GFX);
+          break;
+        case CombatType.MAGIC:
+          target.performGraphic(ChaosElementalCombatMethod.MAGIC_COMBAT_GFX);
+          break;
+        default:
+          break;
+      }
+
+    }
   }
 
-  handleAfterHitEffects(hit) {
-    if (!hit || !hit.getTarget()) {
-      return;
-    }
-    const target = hit.getTarget();
-    switch (this.currentCombatType) {
-      case CombatType.MELEE:
-        target.performGraphic(ChaosElementalCombatMethod.MELEE_COMBAT_GFX);
-        break;
-      case CombatType.RANGED:
-        target.performGraphic(ChaosElementalCombatMethod.RANGED_COMBAT_GFX);
-        break;
-      case CombatType.MAGIC:
-        target.performGraphic(ChaosElementalCombatMethod.MAGIC_COMBAT_GFX);
-        break;
-      default:
-        break;
-    }
-
-  }
+  return ChaosElementalCombatMethod;
 }
 
 function applyChaosElementalSpecial(attackType, character, target) {
@@ -246,17 +249,11 @@ function shuffleInPlace(values) {
   }
 }
 
-let BonusManager;
-let RegionManager;
-let TaskManager;
-
 module.exports = {
   name: "ChaosElemental",
   members: true,
   register(api) {
-    BonusManager = api.getBonusManager();
-    RegionManager = api.getRegionManager();
-    TaskManager = api.getTaskManager();
+    const { NpcIdentifiers } = api.core;
     api.registerNpcCombatMethodProvider(
       [
         NpcIdentifiers.CHAOS_ELEMENTAL,
@@ -264,7 +261,7 @@ module.exports = {
         NpcIdentifiers.CHAOS_ELEMENTAL_JR_2,
         NpcIdentifiers.CHAOS_ELEMENTAL_2,
       ],
-      ChaosElementalCombatMethod,
+      combatClass(api),
       { singleton: false }
     );
   },

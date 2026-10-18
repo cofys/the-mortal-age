@@ -1640,14 +1640,19 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
         // ========================================
 
         case ServerPacketId.LOGIN_RESPONSE: {
+            // What's left once this packet is read: a batch carries more packets after it.
+            const remainingAfter = reader.remaining - packetLength;
             const success = reader.readBoolean();
             const errorCodeRaw = reader.readInt();
             const error = reader.readString() || undefined;
             const displayName = reader.readString() || undefined;
+            // A "Stay logged in" token; servers from before it end the packet here.
+            const loginToken =
+                (reader.remaining > remainingAfter ? reader.readString() : "") || undefined;
             const errorCode = errorCodeRaw >= 0 ? errorCodeRaw | 0 : undefined;
             return {
                 type: "login_response",
-                payload: { success, errorCode, error, displayName },
+                payload: { success, errorCode, error, displayName, loginToken },
             };
         }
 

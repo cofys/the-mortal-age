@@ -32,6 +32,17 @@ export class DbRowType {
 
     static decode(id: number, data: Int8Array): DbRowType {
         const row = new DbRowType(id);
+        row.tableId = this.read(data, row.columns);
+        return row;
+    }
+
+    /** Finds table membership without allocating column values or decoding strings. */
+    static readTableId(data: Int8Array): number {
+        return this.read(data);
+    }
+
+    private static read(data: Int8Array, columns?: Map<number, Array<number | string>>): number {
+        let tableId = -1;
         const buffer = new ByteBuffer(data);
         while (buffer.offset < data.length) {
             const opcode = buffer.readUnsignedByte();
@@ -43,18 +54,26 @@ export class DbRowType {
                     for (let count = buffer.readUnsignedByte(); count > 0; count--) {
                         types.push(buffer.readUnsignedShortSmart());
                     }
-                    const values: Array<number | string> = [];
+                    const values: Array<number | string> | undefined = columns ? [] : undefined;
                     for (let tuples = buffer.readUnsignedShortSmart(); tuples > 0; tuples--) {
-                        for (const type of types) values.push(STRING_TYPES.has(type) ? buffer.readString() : buffer.readInt());
+                        for (const type of types) {
+                            if (values) {
+                                values.push(STRING_TYPES.has(type) ? buffer.readString() : buffer.readInt());
+                            } else if (STRING_TYPES.has(type)) {
+                                while (buffer.readUnsignedByte() !== 0) { /* skip null-terminated string */ }
+                            } else {
+                                buffer.offset += 4;
+                            }
+                        }
                     }
-                    row.columns.set(column, values);
+                    if (values) columns!.set(column, values);
                 }
             } else if (opcode === 4) {
-                row.tableId = buffer.readVarInt2();
+                tableId = buffer.readVarInt2();
             } else {
                 break; // an unknown opcode would misalign the rest
             }
         }
-        return row;
+        return tableId;
     }
 }

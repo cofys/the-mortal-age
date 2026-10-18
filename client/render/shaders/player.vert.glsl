@@ -33,6 +33,7 @@ uniform float u_modelYOffset;
 uniform mat4 u_worldEntityTransform;
 
 layout(location = 0) in uvec3 a_vertex;
+layout(location = 3) in uint a_positionFraction;
 layout(location = 1) in int a_playerSlot;
 // GPU-animated geometry: the vertex's label (vertex group) + 1, or 0 for geometry posed on the
 // CPU. Float so geometry without the attribute reads the default 0.
@@ -118,6 +119,7 @@ mat4 rotationY( in float angle ) {
 void main() {
     PlayerInfo playerInfo = decodePlayerInfo(getDrawId() + u_npcDataOffset);
     Vertex vertex = decodeVertex(a_vertex.x, a_vertex.y, a_vertex.z, u_brightness, playerInfo.hslOverride);
+    vertex.pos += vec3(float(a_positionFraction & 1023u), -float((a_positionFraction >> 10u) & 1023u), float((a_positionFraction >> 20u) & 1023u)) / 1024.0;
     if (a_label > 0.5) {
         int texel = (int(a_label + 0.5) - 1) * 3;
         vec4 r0 = texelFetch(u_poseTexture, ivec2(texel, u_poseRow), 0);

@@ -68,6 +68,7 @@ module.exports = function registerDesertTreasureII(api) {
     }
     return ({ 0: 0, 2: 10, 3: 12, 4: 18, 5: 20, 7: 42, 8: 54, 9: 66 })[stage] ?? 0;
   }
+  const STRANGLEWOOD_COMPLETE = 56;
   const nativeProgressSent = new WeakMap();
   function syncNativeProgress(player) {
     const value = nativeProgress(stage(player), player);
@@ -75,7 +76,9 @@ module.exports = function registerDesertTreasureII(api) {
       && player?.getAttribute(FINAL_FIGURE_DEFEATED) !== true ? 1 : 0;
     // QuestHelper DT2_STRANGLEWOOD milestones drive the cache desk, boat and later scenery.
     const progress = Number(player.getAttribute(VARDORVIS_PROGRESS)) || 0;
-    const stranglewood = [0, 4, 6, 6, 8, 10, player.getAttribute(STRANGLEWOOD_CITY_ENTERED) ? 16 : 12, 18, 18, 22, 24, 24, 24, 34, 36, 36, 38, 42, 44, 48, 50, 52, 54][progress] ?? 0;
+    // After the quest live sends 56 (rsprox 3285, 3344): the ritual site's rocks open to the post-quest fight.
+    const stranglewood = stage(player) === S.COMPLETE ? STRANGLEWOOD_COMPLETE
+      : [0, 4, 6, 6, 8, 10, player.getAttribute(STRANGLEWOOD_CITY_ENTERED) ? 16 : 12, 18, 18, 22, 24, 24, 24, 34, 36, 36, 38, 42, 44, 48, 50, 52, 54][progress] ?? 0;
     const prison = Number(player.getAttribute(SUCELLUS_PRISON_PROGRESS)) || (player.getAttribute(SUCELLUS_ASSASSIN_GONE) ? 22
       : player.getAttribute(SUCELLUS_CELL_ESCAPED) ? 20
         : player.getAttribute(SUCELLUS_CELL_ENTERED) ? [8, 10, 10, 12, 14, 16, 18, 20][Number(player.getAttribute(SUCELLUS_CELL_PROGRESS)) || 0]

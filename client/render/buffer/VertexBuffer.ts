@@ -54,6 +54,10 @@ export class VertexBuffer extends DataBuffer {
         const yPos = clamp(-y + 0x4000, 0, 0x8000);
         const zPos = clamp(z + 0x4000, 0, 0x8000);
 
+        const fraction = (v: number) => Math.floor((v - Math.floor(v)) * 1024);
+        const fractions = this.stride >= 20
+            ? fraction(xPos) | (fraction(yPos) << 10) | (fraction(zPos) << 20) : 0;
+
         const uPacked = clamp(FloatUtil.packFloat11(u), 0, 0x7ff);
         const vPacked = clamp(FloatUtil.packFloat11(v), 0, 0x7ff);
 
@@ -74,7 +78,7 @@ export class VertexBuffer extends DataBuffer {
             (uPacked >> 6);
 
         if (reuseVertex) {
-            const key = `${v0 >>> 0}:${v1 >>> 0}:${v2 >>> 0}` + (this.stride > VertexBuffer.STRIDE ? `:${actorData >>> 0}` : "");
+            const key = `${v0 >>> 0}:${v1 >>> 0}:${v2 >>> 0}` + (this.stride > VertexBuffer.STRIDE ? `:${actorData >>> 0}:${fractions >>> 0}` : "");
             const cachedIndex = this.vertexIndices.get(key);
             if (cachedIndex !== undefined) {
                 return cachedIndex;
@@ -89,6 +93,8 @@ export class VertexBuffer extends DataBuffer {
         this.view.setUint32(byteOffset + 4, v1, true);
         this.view.setUint32(byteOffset + 8, v2, true);
         if (this.stride > VertexBuffer.STRIDE) this.view.setUint32(byteOffset + 12, actorData, true);
+
+        if (this.stride >= 20) this.view.setUint32(byteOffset + 16, fractions, true);
 
         return this.offset++;
     }

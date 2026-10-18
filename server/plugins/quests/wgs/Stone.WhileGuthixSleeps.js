@@ -86,7 +86,7 @@ module.exports=function registerStone({api,stage,advance,play,replace,hit}){
  function death({npc}){const p=npc.getOwner?.(),a=p&&sessions.get(p);if(a&&npc===a.boss){advance(p,820);afterBalance(a);p.sendMessage('The Balance Elemental falls. Touch the Stone of Jas.');}}
  function action({player:p,stepId}){const a=sessions.get(p);if(!a)return;if(stepId==='KzHwbD')startBalance(a);if(stepId==='hgivty')spawn(a,LUCIEN,4144,4383);if(stepId==='JXzCsk')startDemons(a);if(stepId==='8jJyHQ'&&stage(p)===880)p.moveTo(loc(2989,3343));}
  function idria({player:p,npcId}){if(npcId!==IDRIA||stage(p)!==880||!sessions.has(p))return false;play(p,npcId,'into-the-chasm-talking-to-idria-after-killing-the-tormented-demons');return true;}
- function login({player:p}){const l=p.getLocation();if(l.getX()>=4096&&l.getX()<=4159&&l.getY()>=4352&&l.getY()<=4419)p.moveTo(new Location(3229,9527,2));}
+ function login({player:p}){const l=p.getLocation();if(stage(p)<900&&l.getX()>=4096&&l.getX()<=4159&&l.getY()>=4352&&l.getY()<=4419)p.moveTo(new Location(3229,9527,2));}
  // shortcut: use the shared floor-loot death system at the rim until server deaths support gravestones.
  function deathDrop(e){if(!sessions.has(e.player)||!e.dropEligible)return;api.core.ItemOnGroundManager.registerLocation(e.player,e.item,new Location(3229,9527,2),null);e.handled=true;}
  api.onCustomEvent('wgs:approach-stone',enter);

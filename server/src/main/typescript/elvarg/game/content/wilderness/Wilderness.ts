@@ -10,6 +10,13 @@ export class Wilderness {
         [2944, 3391, 3520, 4351],
         [2944, 3455, 9920, 10879],
     ];
+    /** Plugin-given levels (e.g. the Wilderness boss caves), asked before the strips above. */
+    private static readonly levelSources = new Map<string, (x: number, y: number) => number | null>();
+
+    /** Gives the level of some tiles: `source` answers a level, or null to pass. A reload replaces it by name. */
+    public static setLevelSource(name: string, source: (x: number, y: number) => number | null): void {
+        Wilderness.levelSources.set(name, source);
+    }
 
     public static isInSafeBuilding(location: Location | null | undefined): boolean {
         return !!location && WORLD_ZONE_BOUNDARIES["all-buildings-safe"].some((boundary) => boundary.inside(location)) &&
@@ -44,6 +51,12 @@ export class Wilderness {
      * not inherit a level from its y.
      */
     public static levelAt(x: number, y: number): number {
+        for (const source of Wilderness.levelSources.values()) {
+            const level = source(x, y);
+            if (level != null) {
+                return level;
+            }
+        }
         for (const [minX, maxX, minY, maxY] of Wilderness.LEVELLED_AREAS) {
             if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
                 return Math.floor((y - minY) / 8) + 1;

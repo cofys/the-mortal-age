@@ -50,6 +50,17 @@ function imbuedSlayerActive(entity) {
   return query.active === true;
 }
 
+/**
+ * Whether the player's attack counts as demonbane: a demonbane weapon above, or a demonbane
+ * spell (Wiki: Demonbane weapons). Read by content where demonbane matters beyond its bonus.
+ */
+function isDemonbaneAttack(player) {
+  const weapon = weaponName(player);
+  if (MELEE_PERCENT.has(weapon) || RANGED_PERCENT.has(weapon)) return true;
+  const spell = player?.getCombat?.()?.getSelectedSpell?.();
+  return spell?.demonbane === true;
+}
+
 /** Ranged damage: the bow's 30%, unless an imbued slayer helmet takes it in additively. */
 function rangedDemonbaneDamage(entity, value) {
   if (percentFor(entity, RANGED_PERCENT) > 0 && imbuedSlayerActive(entity)) return value;
@@ -70,4 +81,5 @@ module.exports = function registerDemonbaneEffects(api) {
   api.onCustomEvent("slayer:imbued-ranged-bonus", addToSlayerBonus);
 };
 
+module.exports.isDemonbaneAttack = isDemonbaneAttack;
 module.exports._test = { meleeDemonbane, rangedDemonbane, rangedDemonbaneDamage, addToSlayerBonus };

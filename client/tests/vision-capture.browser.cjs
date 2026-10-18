@@ -6,6 +6,8 @@
 // Run: node client/tests/vision-capture.browser.cjs [--url <client URL>]
 //   --user visionbot --pass vision1234 --out shot.png [--yaw 1024 --pitch 300]
 //   [--clip-secs 5 --clip-fps 10 --clip-out clip.mp4]
+//   [--animation-smoothing on|off] [--check-animation-smoothing 1]
+// VISION_CHROME_FLAGS is an optional JSON array for software rendering in CI.
 // --url defaults to this worktree's client (PORT in the root .env, see
 // docs/worktrees.md), then http://localhost:3000; VISION_CLIENT_URL overrides.
 //
@@ -121,6 +123,7 @@ function createCdp(url) {
   const ws = new Ws(url, { maxPayload: 512 * 1024 * 1024 });
   let id = 0;
   const pending = new Map();
+  const graphicsErrors = new Set();
   ws.on("message", (data) => {
     let msg;
     try { msg = JSON.parse(data.toString()); } catch { return; }
@@ -130,10 +133,14 @@ function createCdp(url) {
       p(msg);
     } else if (msg.method === "Page.screencastFrame" && ws.onScreencastFrame) {
       ws.onScreencastFrame(msg.params);
+    } else if (msg.method === "Runtime.consoleAPICalled" || msg.method === "Log.entryAdded") {
+      const message = msg.params.entry?.text ?? msg.params.args?.map(a => a.value ?? a.description ?? "").join(" ") ?? "";
+      if (/validation error|invalid.*pipeline|shader.*error|error.*shader|GPUValidationError|Error while parsing WGSL|device lost|context lost/i.test(message)) graphicsErrors.add(message);
     }
   });
   return {
     ws,
+    graphicsErrors,
     opened: new Promise((res, rej) => { ws.on("open", res); ws.on("error", rej); }),
     close() { try { ws.close(); } catch {} },
     send(method, params = {}) {
@@ -151,7 +158,7 @@ function createCdp(url) {
     async evaluate(expression) {
       // CDP wraps the value twice: { result: { result: { value } } }.
       const r = await this.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
-      if (r.exceptionDetails) throw new Error(r.exceptionDetails.text || JSON.stringify(r.exceptionDetails));
+      if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.text || JSON.stringify(r.result.exceptionDetails));
       if (r.error) throw new Error(r.error.message || JSON.stringify(r.error));
       return r.result?.result?.value;
     },
@@ -173,11 +180,12 @@ async function tryBrowser(bin, viewport, budgetMs, targetHref) {
   const proc = spawn(bin, [
     "--headless=new", "--no-first-run", "--no-default-browser-check",
     "--mute-audio", "--hide-scrollbars",
+    ...JSON.parse(process.env.VISION_CHROME_FLAGS || "[]"),
     `--window-size=${viewport[0] | 0},${viewport[1] | 0}`,
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profile}`,
     "about:blank",
-  ], { stdio: "ignore", detached: true });
+  ], { stdio: process.env.VISION_DEBUG ? ["ignore", "ignore", "inherit"] : "ignore", detached: true });
   proc.unref();
   let cdp = null;
   const cleanup = () => {
@@ -189,6 +197,8 @@ async function tryBrowser(bin, viewport, budgetMs, targetHref) {
     cdp = createCdp(tab.webSocketDebuggerUrl);
     await cdp.opened;
     await cdp.send("Page.enable");
+    await cdp.send("Runtime.enable");
+    await cdp.send("Log.enable");
     await cdp.send("Page.navigate", { url: targetHref });
     // Probe on the secure page; poll briefly in case the document is mid-load.
     let webgpu = false;
@@ -296,6 +306,14 @@ async function main() {
     }, (s) => s && s.present && (s.frames > 0) && (!needLogin || (s.loggedIn && s.maps > 0 && s.gameState === 30)));
     summary.client = state;
     await dismissWelcome(cdp);
+    const smoothing = arg("animation-smoothing", null);
+    if (smoothing !== null) {
+      await cdp.evaluate(`(async () => {
+        const c = ${CLIENT_JS};
+        await c.runeLite.pluginManager.setPluginEnabled(c.animationSmoothingPlugin, ${smoothing === "on"});
+      })()`);
+    }
+
 
     const yaw = arg("yaw", null), pitch = arg("pitch", null);
     if (yaw !== null || pitch !== null) {
@@ -309,6 +327,80 @@ async function main() {
       await sleep(Number(arg("settle-ms", "1500")));
     } else {
       await sleep(Number(arg("settle-ms", "2500")));
+    }
+
+    if (arg("check-animation-smoothing", "0") === "1") {
+      summary.animationSmoothing = await cdp.evaluate(`(async () => {
+        const c = ${CLIENT_JS}, r = c.renderer;
+        const pid = c.playerEcs.getIndexForServerId(c.controlledPlayerServerId);
+        const poses = new Set(), durations = [];
+        let last = performance.now();
+        for (let i = 0; i < 120; i++) {
+          await new Promise(requestAnimationFrame);
+          const now = performance.now(); durations.push(now - last); last = now;
+          const cache = r.actors?.playerPose?.poseCache ?? r.playerRenderer?.poseCache;
+          if (cache) for (const [key, matrices] of cache) if (matrices && key.includes("~")) poses.add(key);
+        }
+        const cpu = r.actors?.playerPose?.resolve(pid, false);
+        let fractionalVertices = 0;
+        if (cpu) for (let i = 16; i < cpu.opaqueVertices.length; i += 20) {
+          const v = new DataView(cpu.opaqueVertices.buffer, cpu.opaqueVertices.byteOffset + i, 4).getUint32(0, true);
+          if (v) fractionalVertices++;
+        }
+        durations.sort((a,b) => a-b);
+        return { backend: r.constructor.name, enabled: c.animationSmoothingPlugin.isEnabled(),
+          poses: poses.size, fractionalVertices, glError: (r.gl ?? r.app?.gl)?.getError?.() ?? 0,
+          medianFrameMs: durations[60], p95FrameMs: durations[114] };
+      })()`);
+      const check = summary.animationSmoothing;
+      check.graphicsErrors = [...cdp.graphicsErrors].slice(0, 10);
+      const enabled = smoothing !== "off";
+      if (check?.enabled !== enabled || (enabled ? check.poses < 2 : check.poses !== 0) || check.glError !== 0 || check.graphicsErrors.length) throw new Error("animation smoothing render check failed: " + JSON.stringify(check));
+      if (arg("renderer", "webgpu") === "webgpu" && check.backend !== "WebGPURenderer") throw new Error("WebGPU fell back to " + check.backend);
+      if (check.backend === "WebGPURenderer") {
+        // Read the submitted scene itself: some headless Vulkan compositors capture a black
+        // canvas even when the GPU rendered correctly. Pose-cache activity alone is not proof.
+        const scene = await cdp.evaluate(`(async () => {
+          const r = ${CLIENT_JS}.renderer;
+          const width = r.canvas.width, height = r.canvas.height;
+          const bytesPerRow = Math.ceil(width * 4 / 256) * 256;
+          const buffer = r.device.createBuffer({size: bytesPerRow * height, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
+          await new Promise((resolve, reject) => {
+            const render = r.render;
+            const timeout = setTimeout(() => { r.render = render; reject(new Error("scene readback timed out")); }, 10000);
+            r.render = function(...args) {
+              r.render = render;
+              try {
+                render.apply(r, args);
+                const encoder = r.device.createCommandEncoder();
+                encoder.copyTextureToBuffer({texture:r.context.getCurrentTexture()}, {buffer,bytesPerRow}, {width,height});
+                r.device.queue.submit([encoder.finish()]);
+                buffer.mapAsync(GPUMapMode.READ).then(resolve, reject).finally(() => clearTimeout(timeout));
+              } catch (e) { clearTimeout(timeout); reject(e); }
+            };
+          });
+          const bytes = new Uint8Array(buffer.getMappedRange());
+          const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext("2d"), pixels = ctx.createImageData(width, height);
+          const bgra = r.format.startsWith("bgra"), colours = new Set();
+          for (let y=0; y<height; y++) for (let x=0; x<width; x++) {
+            const src=y*bytesPerRow+x*4, dst=(y*width+x)*4;
+            pixels.data[dst]=bytes[src+(bgra?2:0)]; pixels.data[dst+1]=bytes[src+1];
+            pixels.data[dst+2]=bytes[src+(bgra?0:2)]; pixels.data[dst+3]=255;
+            if(x%16===0 && y%16===0) colours.add((bytes[src]<<16)|(bytes[src+1]<<8)|bytes[src+2]);
+          }
+          buffer.unmap(); buffer.destroy(); ctx.putImageData(pixels,0,0);
+          return {colours:colours.size,png:canvas.toDataURL("image/png").split(",")[1]};
+        })()`);
+        check.sceneColours = scene.colours;
+        if (scene.colours < 16) throw new Error("WebGPU scene is blank: " + scene.colours + " colours");
+        if (out) {
+          const scenePath = path.resolve(out.replace(/\.png$/i, "") + "-scene.png");
+          fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+          fs.writeFileSync(scenePath, Buffer.from(scene.png, "base64"));
+          summary.sceneScreenshot = scenePath;
+        }
+      }
     }
 
     // Staging hold: print READY after login+camera so an external driver can

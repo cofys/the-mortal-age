@@ -243,11 +243,22 @@ function createTraversalAssist(api, options = {}) {
     if (!region) {
       return 0;
     }
-    if (!region.isLoaded?.()) {
-      const { absX, absY } = regionBounds(regionId);
-      RegionManager.loadMapFiles(absX, absY);
+    if (region.isLoaded?.()) return scanLoadedRegion(regionId);
+    // A stale index must not populate the live world with every map's objects and collision grids.
+    const template = api.core.readTemplateRegion(regionId);
+    if (!template) return 0;
+    let matches = 0;
+    for (const chunk of template.chunks) {
+      for (const loc of chunk) {
+        if (!trackedObjectIds.has(loc.id)) continue;
+        const bridge = template.settings[(1 << 12) | (loc.localX << 6) | loc.localY] & 2;
+        const plane = loc.plane - (bridge ? 1 : 0);
+        if (plane < 0 || plane > 3) continue;
+        addIndexedLocation(regionId, loc.id, loc.localX, loc.localY, plane);
+        matches++;
+      }
     }
-    return scanLoadedRegion(regionId);
+    return matches;
   }
 
   /** Region loads replace its entries, so late maps and region packs are indexed. */

@@ -1286,12 +1286,13 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
         return;
       case DUNGEON_CREVICE_39:
       case DUNGEON_CREVICE_40:
+        // After the creature, the crevice leads to the Phantom Muspah's lair (PhantomMuspah.plugin.js).
+        if (stage > STAGE_CREATURE) return;
         event.handled = true;
         if (stage < STAGE_ICY_GATE) {
           player.sendMessage("The crevice is too narrow to squeeze through here.");
           return;
         }
-        if (stage > STAGE_CREATURE) return;
         startTranscript(api, player, STRANGE_CREATURE, PAGE, "more-mahjarrat-more-problems-upon-entering-the-strange-creature-room", withoutBlankLines);
         return;
       default:

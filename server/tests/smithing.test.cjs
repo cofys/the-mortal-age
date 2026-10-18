@@ -161,3 +161,21 @@ test("anvil access rules cover Smith and using bars without consuming anything",
   open(player);
   assert.equal(player.interfaceId, 312);
 });
+
+test("the rusted anvil only works bronze and ignores other items", () => {
+  const rusted = { getDefinition: () => ({ getName: () => "Rusted anvil" }) };
+  const iron = playerWith(I.IRON_BAR);
+  objects.get("Rusted anvil").Smith({ player: iron });
+  assert.equal(iron.interfaceId, -1);
+  const ironOnAnvil = { player: iron, itemId: I.IRON_BAR, object: rusted };
+  itemOnObject(ironOnAnvil);
+  assert.equal(ironOnAnvil.handled, true);
+  assert.equal(iron.interfaceId, -1);
+  const hammerOnAnvil = { player: iron, itemId: I.HAMMER, object: rusted };
+  itemOnObject(hammerOnAnvil);
+  assert.equal(hammerOnAnvil.handled, undefined);
+
+  const bronze = playerWith();
+  objects.get("Rusted anvil").Smith({ player: bronze });
+  assert.equal(bronze.interfaceId, 312);
+});

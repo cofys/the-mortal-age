@@ -301,7 +301,7 @@ test('Lassar blue-key room door uses its cache Close variant after the unused lo
   assert.equal(open.name, 'Door');
   assert.equal(open.actions[0], 'Close');
 
-  const h = buildHarness({ cacheObjects: new Map([[48274, closed], [48276, open]]) });
+  const h = buildHarness({ cacheObjects: new Map([[48274, closed], [48275, CacheDefinitions.getObject(48275)], [48276, open]]) });
   try {
     h.place(48274, 2422, 6442, 3);
     const operations = h.click(48274, 2422, 6442, 3, 'Open', 'Door');
@@ -1319,8 +1319,9 @@ test('Lassar pub gate opens into its cache Close leaves and can be closed again'
   }
 });
 
-test('Lassar residential house door opens through its nonconsecutive cache Close loc', () => {
-  const h = buildHarness();
+test('Lassar residential house door opens through its nonconsecutive cache Close loc', async () => {
+  await initializeMapCollisionOnce();
+  const h = buildHarness({ cacheObjects: new Map([48262, 48263, 48264].map((id) => [id, CacheDefinitions.getObject(id)])) });
   try {
     h.place(48262, 2688, 6429, 2);
     assert.deepEqual(h.click(48262, 2688, 6429, 2, 'Open', 'Door'), [
@@ -1336,6 +1337,33 @@ test('Lassar residential house door opens through its nonconsecutive cache Close
   }
 });
 
+
+test('Varrock doors open across the actionless loc before their Close variant (11780 -> 11782)', async () => {
+  await initializeMapCollisionOnce();
+  const h = buildHarness({ cacheObjects: new Map([11780, 11781, 11782].map((id) => [id, CacheDefinitions.getObject(id)])) });
+  try {
+    // Katrine's Black Arm Gang hideout entrance.
+    assert.deepEqual(h.click(11780, 3190, 3384, 0, 'Open', 'Door'), [
+      ['deregister', 11780, 3190, 3384, 0],
+      ['register', 11782, 3189, 3384, 1],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
+test("the Champions' Guild door swings without a separate open cache loc", async () => {
+  await initializeMapCollisionOnce();
+  const h = buildHarness({ cacheObjects: new Map([1805, 1806].map((id) => [id, CacheDefinitions.getObject(id)])) });
+  try {
+    assert.deepEqual(h.click(1805, 3191, 3363, 3, 'Open', 'Door'), [
+      ['deregister', 1805, 3191, 3363, 3],
+      ['register', 1805, 3191, 3362, 0],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
 
 test("Harold's bedroom door rotates without needing a separate open cache loc", () => {
   const h = buildHarness();

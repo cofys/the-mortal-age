@@ -412,3 +412,50 @@ test('Wally charge reaches its camera target while the teleport placement is sti
   assert.equal(p.getForceMovement(), null);
   q.call('onPlayerLogout', { player: p });
 });
+
+test('Shield gang doors claim the shared door toggle and cross on the axis their wall faces', () => {
+  const q = register('ShieldOfArrav', 'shield_of_arrav'), p = player();
+  const toggle = (id, x, y, face) => {
+    const request = { player: p, objectId: id, object: new core.GameObject(id, new core.Location(x, y, 0), 0, face, null), handled: false };
+    q.emit('door:toggle', request); return request;
+  };
+  const at = (x, y) => { p.moveTo(new core.Location(x, y, 0)); };
+  const tile = () => [p.getLocation().getX(), p.getLocation().getY()];
+  at(3185, 3387);
+  assert.equal(toggle(core.ObjectIdentifiers.DOOR_71, 3185, 3388, 3).handled, true);
+  assert.deepEqual(tile(), [3185, 3387]); assert.equal(p.messages.at(-1), 'This door is locked from the inside.');
+  p.attributes.set('shield-of-arrav.gang', 2); q.quest.setStage(p, 4);
+  toggle(core.ObjectIdentifiers.DOOR_71, 3185, 3388, 3); assert.deepEqual(tile(), [3185, 3388]);
+  toggle(core.ObjectIdentifiers.DOOR_71, 3185, 3388, 3); assert.deepEqual(tile(), [3185, 3387]);
+  at(3247, 9780);
+  toggle(core.ObjectIdentifiers.DOOR_69, 3247, 9779, 1); assert.deepEqual(tile(), [3247, 9780], 'Black Arm members stay out of the Phoenix hideout');
+  p.attributes.set('shield-of-arrav.gang', 1);
+  toggle(core.ObjectIdentifiers.DOOR_69, 3247, 9779, 1); assert.deepEqual(tile(), [3247, 9779]);
+  at(3251, 3386);
+  toggle(core.ObjectIdentifiers.DOOR_70, 3251, 3386, 3); assert.deepEqual(tile(), [3251, 3386]);
+  p.items.set(759, 1);
+  toggle(core.ObjectIdentifiers.DOOR_70, 3251, 3386, 3); assert.deepEqual(tile(), [3251, 3385]);
+  assert.equal(toggle(core.ObjectIdentifiers.DOOR_297, 3190, 3384, 0).handled, false, 'ordinary doors stay with Doors.plugin.js');
+});
+
+test("Champions' Guild door turns away entrants under 32 Quest Points through the Guildmaster's transcript", () => {
+  const custom = new Map(), started = [];
+  const api = { core, onCustomEvent: (name, fn) => custom.set(name, fn), onNpcDialogueCondition: (fn) => custom.set('condition', fn),
+    emitCustomEvent: (name, payload) => started.push([name, payload]) };
+  require('../plugins/areas/ChampionsGuild.plugin').register(api);
+  const p = player(), door = (y) => {
+    p.moveTo(new core.Location(3191, y, 0));
+    const request = { player: p, objectId: core.ObjectIdentifiers.DOOR_45, handled: false };
+    custom.get('door:toggle')(request); return request.handled;
+  };
+  const condition = (text) => custom.get('condition')({ player: p, npcId: core.NpcIdentifiers.GUILDMASTER, text });
+  p.attributes.set('quest.points', 31);
+  assert.equal(door(3363), true);
+  assert.equal(started.at(-1)[1].variant, 'standard-dialogue-entering-the-champions-guild');
+  assert.equal(condition('If the player does not have at least 32 quest points:'), true);
+  assert.equal(door(3362), false, 'leaving is never stopped');
+  p.attributes.set('quest.points', 32);
+  assert.equal(door(3363), false);
+  assert.equal(condition('If the player does not have at least 32 quest points:'), false);
+  assert.equal(condition('If the player has at least 32 quest points:'), true);
+});

@@ -55,9 +55,9 @@ class FloatModel extends Model {
                 }
             }
             // The origin is a whole number in the game too.
-            Model.animateOriginX = tx + (n ? Math.trunc(sx / n) : 0);
-            Model.animateOriginY = ty + (n ? Math.trunc(sy / n) : 0);
-            Model.animateOriginZ = tz + (n ? Math.trunc(sz / n) : 0);
+            Model.animateOriginX = tx + (n ? (this.fractionalAnimation ? sx / n : Math.trunc(sx / n)) : 0);
+            Model.animateOriginY = ty + (n ? (this.fractionalAnimation ? sy / n : Math.trunc(sy / n)) : 0);
+            Model.animateOriginZ = tz + (n ? (this.fractionalAnimation ? sz / n : Math.trunc(sz / n)) : 0);
             return;
         }
         for (const l of labels) {
@@ -72,9 +72,16 @@ class FloatModel extends Model {
                 let z = this.z[v] - Model.animateOriginZ;
                 if (type === SeqTransformType.ROTATE) {
                     const az = (tz & 255) * 8, ax = (tx & 255) * 8, ay = (ty & 255) * 8;
+                    if (this.fractionalAnimation) {
+                        const r = Math.PI * 2 / 256;
+                        let s = Math.sin(tz*r), c = Math.cos(tz*r), t = s*y+c*x; y=c*y-s*x; x=t;
+                        s=Math.sin(tx*r); c=Math.cos(tx*r); t=c*y-s*z; z=s*y+c*z; y=t;
+                        s=Math.sin(ty*r); c=Math.cos(ty*r); t=s*z+c*x; z=c*z-s*x; x=t;
+                    } else {
                     if (az) { const s = SINE[az] / 65536, c = COSINE[az] / 65536; const t = s * y + c * x; y = c * y - s * x; x = t; }
                     if (ax) { const s = SINE[ax] / 65536, c = COSINE[ax] / 65536; const t = c * y - s * z; z = s * y + c * z; y = t; }
                     if (ay) { const s = SINE[ay] / 65536, c = COSINE[ay] / 65536; const t = s * z + c * x; z = c * z - s * x; x = t; }
+                }
                 } else if (type === SeqTransformType.SCALE) {
                     x = (tx * x) / 128; y = (ty * y) / 128; z = (tz * z) / 128;
                 } else continue;
@@ -159,6 +166,12 @@ for (let id = 0; id < 3000 && interleaved < 3; id++) {
     const error = maxError(models[1], (m) =>
         m.animateInterleavedFrames(actionFrame, !!action.op14, walkFrame, false, action.masks));
     assert.ok(error <= TOLERANCE, `interleaved seq ${id}: off by ${error}`);
+    const nextAction = frames.load(action.frameIds[Math.min(1, action.frameIds.length - 1)]);
+    const nextWalk = frames.load(seqTypes.load(819).frameIds[4]);
+    const smoothedError = maxError(models[1], (m) =>
+        m.animateInterleavedFramesInterpolated(actionFrame, nextAction, 0.35, !!action.op14,
+            walkFrame, nextWalk, 0.6, false, action.masks));
+    assert.ok(smoothedError < 0.001, `smoothed interleaved seq ${id}: off by ${smoothedError}`);
     interleaved++;
 }
 assert.ok(interleaved > 0, "found an interleaved player sequence");
@@ -175,13 +188,13 @@ for (const model of models) {
         sceneBuf.addModel(model, faces, undefined, false, buildActorNormals(model));
         const bytes = sceneBuf.vertexBuf.byteArray();
         const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
-        assert.equal(words.length, faces.length * 3 * 4, "one 16-byte vertex per face corner");
+        assert.equal(words.length, faces.length * 3 * 5, "one 20-byte vertex per face corner");
         faces.forEach((face, i) => {
             const corners = [model.indices1[face.index], model.indices2[face.index], model.indices3[face.index]];
             corners.forEach((v, k) => {
                 const j = i * 3 + k;
                 assert.equal(sceneBuf.indices[j], j, `index ${j} is its own corner`);
-                const w = j * 4;
+                const w = j * 5;
                 assert.equal(((words[w] >>> 17) & 0x7fff) - 0x4000, model.verticesX[v], `x of corner ${j}`);
                 assert.equal(-((words[w + 1] & 0x7fff) - 0x4000), model.verticesY[v], `y of corner ${j}`);
                 assert.equal(((words[w + 2] >>> 17) & 0x7fff) - 0x4000, model.verticesZ[v], `z of corner ${j}`);
@@ -189,6 +202,26 @@ for (const model of models) {
         });
     }
 }
+
+// Real cache regression: every sampled pose between idle frames 0 and 1 must be distinct.
+// Previously both paths held the body still for the entire interval then jumped one unit.
+const idle = seqTypes.load(808);
+const idleA = frames.load(idle.frameIds[0])!;
+const idleB = frames.load(idle.frameIds[1])!;
+const cpuPoses = new Set<string>();
+const gpuPoses = new Set<string>();
+for (let cycle = 0; cycle <= idle.frameLengths[0]; cycle++) {
+    const alpha = cycle / idle.frameLengths[0];
+    const cpu = Model.copyAnimated(models[1], false, true);
+    cpu.animateInterpolated(idleA, idleB, alpha, false);
+    cpuPoses.add(JSON.stringify([...cpu.verticesX, ...cpu.verticesY, ...cpu.verticesZ]));
+    const gpu = new LabelPose(LabelRig.of(models[1])!);
+    gpu.animateInterpolated(idleA, idleB, alpha, false);
+    gpuPoses.add(JSON.stringify([...gpu.finish(0, 0)]));
+    assert.ok(maxError(models[1], m => m.animateInterpolated(idleA, idleB, alpha, false)) < 0.001);
+}
+assert.equal(cpuPoses.size, idle.frameLengths[0] + 1);
+assert.equal(gpuPoses.size, idle.frameLengths[0] + 1);
 
 console.log(
     `GPU player poses match the CPU path: ${checked} frames, ${interleaved} interleaved, ` +

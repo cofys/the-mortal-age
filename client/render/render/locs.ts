@@ -410,6 +410,26 @@ export function getExtraLocsForMap(host: WebGLOsrsRendererHost,
     
 }
 
+/**
+ * Animation Smoothing bakes scenery animations when a square is built, so toggling it rebuilds
+ * the loaded scenery. The first call only records the state the loaded squares were built with.
+ */
+export function syncLocAnimationSmoothing(host: WebGLOsrsRendererHost): void {
+        const settings = host.osrsClient.animationSmoothingPlugin?.objectSettings();
+        const smooth = settings?.smoothLocAnimations ? settings.smoothLocAnimationSteps : -1;
+        if (host.smoothLocAnimations === smooth) return;
+        const first = host.smoothLocAnimations === undefined;
+        host.smoothLocAnimations = smooth;
+        if (first) return;
+        if (host.instanceActive) {
+            host.scheduleInstanceLocRebuild();
+            return;
+        }
+        for (const mapId of host.mapManager.mapSquares.keys()) {
+            host.scheduleLocGeometryUpdate(mapId >> 8, mapId & 0xff, "loc");
+        }
+}
+
 export function scheduleLocGeometryUpdate(host: WebGLOsrsRendererHost, 
         mapX: number,
         mapY: number,

@@ -31,6 +31,7 @@ uniform float u_modelYOffset;
 uniform vec2 u_projectileSubOffset;
 
 layout(location = 0) in uvec3 a_vertex;
+layout(location = 3) in uint a_positionFraction;
 
 out vec4 v_color;
 out vec2 v_texCoord;
@@ -114,6 +115,7 @@ mat4 rotationZ(in float angle) {
 
 void main() {
     Vertex vertex = decodeVertex(a_vertex.x, a_vertex.y, a_vertex.z, u_brightness, vec4(-1, -1, -1, 0));
+    vertex.pos += vec3(float(a_positionFraction & 1023u), -float((a_positionFraction >> 10u) & 1023u), float((a_positionFraction >> 20u) & 1023u)) / 1024.0;
 
     v_color = vertex.color;
 

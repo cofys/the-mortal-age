@@ -1,0 +1,125 @@
+{
+  "about": "Amoxliatl (https://oldschool.runescape.wiki/w/Amoxliatl), as captured in her chamber beneath the Ruins of Tapoyauik (rsprox captures 1147 and 1695): the door, the instance, the fight and the kill. Tiles are absolute, on the cache map; the instance copies them. See docs/amoxliatl.md.",
+  "npcs": {
+    "boss": 13685,
+    "iceBlock": 13688
+  },
+  "door": {
+    "about": "vmq3_ruins_door_multi: the Frozen door until The Heart of Darkness is done (varbit 11117), then 'Door' with Pass-through.",
+    "id": 55355,
+    "outside": [1602, 9631, 0]
+  },
+  "instance": {
+    "about": "As captured: the whole of map square 5446 (8x8 chunks), plane 0, unturned.",
+    "sourceChunkX": 168,
+    "sourceChunkY": 560,
+    "chunks": 8
+  },
+  "arrival": [1376, 4511, 0],
+  "arrivalFace": [1372, 4511],
+  "exits": {
+    "id": 54282,
+    "shape": 10,
+    "tiles": [[1377, 4512, 0, 1], [1377, 4511, 0, 1], [1377, 4510, 0, 3]],
+    "question": "Are you sure you want to exit?",
+    "yes": "Yes.",
+    "no": "No."
+  },
+  "fade": {
+    "about": "As captured, in and out alike: the fade out, the minimap off a tick later, the move at 2, the fade back in at 4 and the overlay closed at 6.",
+    "moveTicks": 2,
+    "inTicks": 4,
+    "closeTicks": 6
+  },
+  "music": 807,
+  "spawn": {
+    "tile": [1362, 4510, 0],
+    "direction": "EAST",
+    "afterArrivalTicks": 5,
+    "anim": 11527,
+    "say": "Euat! You are not welcome here!",
+    "firstAttackTicks": 4,
+    "respawnTicks": 29
+  },
+  "hud": {
+    "colours": [3204, 11761, 21407],
+    "fadeOutAfterDeathTicks": 6
+  },
+  "arena": {
+    "about": "The platform her spikes cover (every tile they were seen on), as rows of [y, minX, maxX], and the 3-wide path east to the ice blockage. Its centre plays the pools' sound.",
+    "rows": [
+      [4517, 1363, 1367],
+      [4516, 1362, 1368],
+      [4515, 1361, 1369],
+      [4514, 1360, 1370],
+      [4513, 1359, 1371],
+      [4512, 1359, 1376],
+      [4511, 1359, 1376],
+      [4510, 1359, 1376],
+      [4509, 1359, 1371],
+      [4508, 1360, 1370],
+      [4507, 1361, 1369],
+      [4506, 1362, 1368],
+      [4505, 1363, 1367]
+    ],
+    "pathFromX": 1372,
+    "centre": [1365, 4511, 0]
+  },
+  "attack": {
+    "speed": 8,
+    "anim": 11530,
+    "maxHit": 22,
+    "hurtSound": 9711
+  },
+  "spikes": {
+    "about": "Map animations on tiles around the player, as captured: the player's own tile about 3 in 4, the tiles next to it about 2 in 3, the rest out to 6 about 1 in 4. 3 ticks after the attack they come up: typeless damage to a player still on one (captured 10 and 6; 6-10 as the Wiki gives the pools).",
+    "spotanim": 2942,
+    "reach": 6,
+    "chance": [0.77, 0.64, 0.28],
+    "damageTicks": 3,
+    "damage": [6, 10]
+  },
+  "pools": {
+    "about": "An icy pool on the player's tile 3 ticks after each standard attack (captured); standing on one deals 6-10 a tick (Wiki). They stay until she dies, then go with a puff (captured).",
+    "id": 54279,
+    "shape": 10,
+    "afterTicks": 3,
+    "damage": [6, 10],
+    "sound": { "id": 9726, "delay": 30, "radius": 30, "attenuation": 30 },
+    "clearSpotanim": 2938
+  },
+  "specials": {
+    "about": "After every 2-4 standard attacks a special; the first at random, then in turn (Wiki). From the path she only has room for Icicle Crash.",
+    "afterAttacks": [2, 4],
+    "order": ["icicle", "unstableIce"]
+  },
+  "icicle": {
+    "anim": 11531,
+    "message": "<col=ff3045>Amoxliatl disables your prayers and launches an icicle attack!</col>",
+    "projectile": { "id": 2936, "start": 50, "end": 150, "startHeight": 448, "endHeight": 0, "angle": 128, "progress": 83 },
+    "impactTicks": 5,
+    "impactSpotanim": 2935,
+    "impactSound": 9720,
+    "maxHit": 34
+  },
+  "unstableIce": {
+    "anim": 11533,
+    "message": "<col=00ffff>Amoxliatl forms some unstable ice blocks around you.",
+    "count": [1, 4],
+    "reach": 4,
+    "projectile": { "id": 2936, "start": 50, "end": 90, "startHeight": 112, "endHeight": 0, "angle": 255, "progress": 83 },
+    "impactSpotanim": 2935,
+    "spawnTicks": 3,
+    "spawnAnim": 11536,
+    "spawnSound": { "id": 9713, "radius": 12, "attenuation": 6 },
+    "breakAnim": 11035,
+    "breakSound": { "id": 9721, "radius": 12, "attenuation": 6 },
+    "removeAfterBreakTicks": 1,
+    "shatterTicks": 15,
+    "shatterHeal": [16, 25]
+  },
+  "kill": {
+    "about": "As captured: the pools go on the killing blow; 2 ticks later (deathTicks) the kill count, the fight's length and the loot on her middle tile.",
+    "killCountVarp": 4403
+  }
+}

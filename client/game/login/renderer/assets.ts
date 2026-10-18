@@ -25,8 +25,16 @@ function loadSprites(spriteIndex: CacheIndex, name: string) {
 
         try {
             const archiveId = spriteIndex.getArchiveId(name);
-            if (archiveId === -1) return undefined;
-            return SpriteLoader.loadIntoIndexedSprites(spriteIndex, archiveId);
+            if (archiveId !== -1) return SpriteLoader.loadIntoIndexedSprites(spriteIndex, archiveId);
+            // Newer caches split some groups into one archive per frame: "name,0", "name,1", ...
+            const frames: IndexedSprite[] = [];
+            for (let frameId = spriteIndex.getArchiveId(`${name},0`); frameId !== -1; ) {
+                const frame = SpriteLoader.loadIntoIndexedSprite(spriteIndex, frameId);
+                if (!frame) return undefined;
+                frames.push(frame);
+                frameId = spriteIndex.getArchiveId(`${name},${frames.length}`);
+            }
+            return frames.length > 0 ? frames : undefined;
         } catch {
             return undefined;
         }

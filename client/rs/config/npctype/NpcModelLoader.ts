@@ -1,3 +1,4 @@
+import { applyInterpolatedFrames, interpolationFrame, type ActorInterpolation } from "../../model/seq/FrameInterpolation";
 import { Model } from "../../model/Model";
 import { ModelData } from "../../model/ModelData";
 import { ModelLoader } from "../../model/ModelLoader";
@@ -31,7 +32,7 @@ export class NpcModelLoader {
         frame: number,
         movementSeqId: number = -1,
         movementFrame: number = -1,
-        frameCycle: number = 0,
+        interpolation?: ActorInterpolation,
     ): Model | undefined {
         if (npcType.transforms) {
             const transformed = npcType.transform(this.varManager, this.npcTypeLoader);
@@ -44,7 +45,7 @@ export class NpcModelLoader {
                 frame,
                 movementSeqId | 0,
                 movementFrame | 0,
-                frameCycle | 0,
+                interpolation,
             );
         }
 
@@ -117,7 +118,7 @@ export class NpcModelLoader {
                 movementSeqType,
                 movementSeqId | 0,
                 movementFrame | 0,
-                frameCycle | 0,
+                interpolation,
             );
         } else if (hasScale) {
             model = Model.copyAnimated(model, true, true);
@@ -138,7 +139,7 @@ export class NpcModelLoader {
         overlayType: SeqType | undefined,
         overlaySeqId: number,
         overlayFrame: number,
-        frameCycle: number = 0,
+        interpolation?: ActorInterpolation,
     ): void {
         if (!baseType) {
             if (overlayType) {
@@ -147,7 +148,7 @@ export class NpcModelLoader {
                     overlayType,
                     overlaySeqId | 0,
                     overlayFrame | 0,
-                    frameCycle | 0,
+                    interpolation,
                 );
             }
             return;
@@ -158,8 +159,13 @@ export class NpcModelLoader {
                 baseType,
                 baseSeqId | 0,
                 baseFrame | 0,
-                frameCycle | 0,
+                interpolation,
             );
+            return;
+        }
+
+        if (interpolation && !baseType.isSkeletalSeq() && !overlayType.isSkeletalSeq()) {
+            applyInterpolatedFrames(model, this.seqFrameLoader, baseType, baseFrame, interpolation, overlayType, overlayFrame);
             return;
         }
 
@@ -204,7 +210,7 @@ export class NpcModelLoader {
                 model.animateSkeletal(baseSkeletal, baseLocal | 0);
             }
 
-            this.applyFrameOverlayToModel(model, baseType, overlayType, overlayFrame | 0);
+            this.applyFrameOverlayToModel(model, baseType, overlayType, overlayFrame | 0, interpolation);
             return;
         }
 
@@ -224,13 +230,15 @@ export class NpcModelLoader {
 
         if (overlayCached) {
             if (!interleave || interleave.length === 0) {
-                model.animate(baseSeqFrame, undefined, !!baseType.op14);
+                model.animateInterleavedFrame(baseSeqFrame, !!baseType.op14, undefined, false,
+                    interpolationFrame(baseType, interpolation?.base, this.seqFrameLoader), interpolation?.base?.alpha);
                 return;
             }
 
             const overlaySkeletal = this.skeletalSeqLoader?.load(overlayType.skeletalId);
             if (!overlaySkeletal) {
-                model.animate(baseSeqFrame, undefined, !!baseType.op14);
+                model.animateInterleavedFrame(baseSeqFrame, !!baseType.op14, undefined, false,
+                    interpolationFrame(baseType, interpolation?.base, this.seqFrameLoader), interpolation?.base?.alpha);
                 return;
             }
 
@@ -242,7 +250,8 @@ export class NpcModelLoader {
                 maskMatch: true,
                 applyAlpha: false,
             });
-            model.animateInterleavedFrame(baseSeqFrame, !!baseType.op14, interleave, false);
+            model.animateInterleavedFrame(baseSeqFrame, !!baseType.op14, interleave, false,
+                interpolationFrame(baseType, interpolation?.base, this.seqFrameLoader), interpolation?.base?.alpha);
             return;
         }
 
@@ -252,7 +261,8 @@ export class NpcModelLoader {
             !interleave ||
             interleave.length === 0
         ) {
-            model.animate(baseSeqFrame, undefined, !!baseType.op14);
+            model.animateInterleavedFrame(baseSeqFrame, !!baseType.op14, undefined, false,
+                    interpolationFrame(baseType, interpolation?.base, this.seqFrameLoader), interpolation?.base?.alpha);
             return;
         }
 
@@ -260,7 +270,8 @@ export class NpcModelLoader {
         const overlayIdx = Math.max(0, overlayFrame | 0) % (overlayIds.length | 0);
         const overlaySeqFrame = this.seqFrameLoader.load(overlayIds[overlayIdx] | 0);
         if (!overlaySeqFrame) {
-            model.animate(baseSeqFrame, undefined, !!baseType.op14);
+            model.animateInterleavedFrame(baseSeqFrame, !!baseType.op14, undefined, false,
+                    interpolationFrame(baseType, interpolation?.base, this.seqFrameLoader), interpolation?.base?.alpha);
             return;
         }
 
@@ -278,7 +289,7 @@ export class NpcModelLoader {
         seqType: SeqType,
         seqId: number,
         frame: number,
-        frameCycle: number = 0,
+        interpolation?: ActorInterpolation,
     ): void {
         if (seqType.isSkeletalSeq()) {
             const skeletalSeq = this.skeletalSeqLoader?.load(seqType.skeletalId);
@@ -299,15 +310,8 @@ export class NpcModelLoader {
         const idx = Math.max(0, frame | 0) % (frameIds.length | 0);
         const seqFrame = this.seqFrameLoader.load(frameIds[idx] | 0);
         if (!seqFrame) return;
-        // Animation smoothing: blend `frameCycle` cycles of the way toward the next frame.
-        const nextFrame =
-            frameCycle > 0 && idx + 1 < frameIds.length
-                ? this.seqFrameLoader.load(frameIds[idx + 1] | 0)
-                : undefined;
-        const length = nextFrame ? seqType.getFrameLength(this.seqFrameLoader, idx) | 0 : 0;
-        if (nextFrame && length > 0) {
-            const alpha = Math.min(1, frameCycle / length);
-            model.animateInterpolated(seqFrame, nextFrame, alpha, !!seqType.op14);
+        if (interpolation) {
+            applyInterpolatedFrames(model, this.seqFrameLoader, seqType, idx, interpolation);
         } else {
             model.animate(seqFrame, undefined, !!seqType.op14);
         }
@@ -318,6 +322,7 @@ export class NpcModelLoader {
         baseType: SeqType,
         overlayType: SeqType,
         overlayFrame: number,
+        interpolation?: ActorInterpolation,
     ): void {
         if (!overlayType.frameIds || overlayType.frameIds.length <= 0) {
             return;
@@ -333,11 +338,8 @@ export class NpcModelLoader {
         const interleave = Array.isArray(baseType?.masks)
             ? (baseType.masks as number[])
             : undefined;
-        if (interleave && interleave.length > 0) {
-            model.animateInterleavedFrame(overlaySeqFrame, !!overlayType.op14, interleave, true);
-        } else {
-            model.animate(overlaySeqFrame, undefined, !!overlayType.op14);
-        }
+        model.animateInterleavedFrame(overlaySeqFrame, !!overlayType.op14, interleave, true,
+            interpolationFrame(overlayType, interpolation?.overlay, this.seqFrameLoader), interpolation?.overlay?.alpha);
     }
 
     transformNpcModel(model: Model, seqType: SeqType, frame: number): Model {

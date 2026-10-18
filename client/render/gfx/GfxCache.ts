@@ -191,9 +191,10 @@ export class GfxCache {
             textureLoader,
             textureIdIndexMap,
             ((model as any).verticesCount | 0) + 16,
+            true,
         );
         const faces = getModelFacesFiltered(model, textureLoader, transparent);
-        if (faces.length > 0) sceneBuf.addModel(model, faces);
+        if (faces.length > 0) sceneBuf.addModel(model, faces, undefined, true, new Uint16Array(model.verticesCount));
         const out = {
             vertices: sceneBuf.vertexBuf.byteArray(),
             indices: new Int32Array(sceneBuf.indices),
@@ -210,7 +211,7 @@ export class GfxCache {
 
     /**
      * Cycles into `frameIdx` (1..length) when animation smoothing blends this graphic's frame
-     * toward the next one, else 0: keyframe animations only, and not their last frame.
+     * toward the next one, else 0. The last frame keeps one precise held pose.
      */
     smoothingCycle(spotId: number, frameIdx: number, frameCycle: number): number {
         if (!(frameCycle > 0)) return 0;
@@ -221,8 +222,8 @@ export class GfxCache {
         if (seqId < 0) return 0;
         const seq = mv.seqTypeLoader?.load?.(seqId | 0);
         const frames = seq?.frameIds?.length | 0;
-        if (!seq || seq.isSkeletalSeq?.() || (frameIdx | 0) + 1 >= frames) return 0;
-        return frameCycle | 0;
+        if (!seq || seq.isSkeletalSeq?.() || frameIdx < 0 || frameIdx >= frames) return 0;
+        return frameIdx + 1 === frames ? 1 : frameCycle | 0;
     }
 
     private applyFrame(
@@ -265,8 +266,8 @@ export class GfxCache {
                             ? mv.seqFrameLoader?.load?.(ids[idx + 1] | 0)
                             : undefined;
                     const length = next ? seq.getFrameLength(mv.seqFrameLoader, idx) | 0 : 0;
-                    if (next && length > 0) {
-                        const alpha = Math.min(1, frameCycle / length);
+                    if (frameCycle > 0) {
+                        const alpha = length > 0 ? Math.min(1, frameCycle / length) : 0;
                         out.animateInterpolated(seqFrame, next, alpha, !!seq.op14);
                     } else {
                         out.animate(seqFrame, undefined, !!seq.op14);

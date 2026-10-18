@@ -639,6 +639,12 @@ export class PacketSender {
     if (this.player.getSession().sendClientPacket(encodeChatMessage("game", message ?? ""))) return this;
   }
 
+  /** A game message on one of the chatbox's channels (`ChatType`): spam, or an NPC's line with its name as `from`. */
+  sendTypedMessage(chatType: number, message: string, from = ""): this {
+    this.player.getSession().sendClientPacket(encodeChatMessage("game", message ?? "", from, "", -1, chatType));
+    return this;
+  }
+
   sendPublicChat(message: string, from: string, playerId: number): this {
     this.player.getSession().sendClientPacket(
       encodeChatMessage("public", message, from, "", playerId)

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { multiLocVarps } from "../render/loc/MultiLocVarps";
+import { multiLocVariants, multiLocVarps } from "../render/loc/MultiLocVarps";
 
 // A totem site's base (multiloc on a varbit of varp 4770), a varp multiloc and a plain loc.
 const locs: Record<number, any> = {
@@ -18,3 +18,21 @@ assert.equal(multiLocVarps(square, locTypeLoader, varbitLoader), multiLocVarps(s
 assert.equal(multiLocVarps(undefined, locTypeLoader, varbitLoader).size, 0, "a square without loc data");
 
 console.log("multiloc-varps: ok");
+
+// Variants: what each multiloc shows for the current vars, so an unrelated varbit on the same varp
+// (one that changes no loc) leaves the square alone.
+{
+    const varLocs: Record<number, any> = {
+        100: { transforms: [1, 2, -1], transformVarbit: -1, transformVarp: 42, transform(vars: any) {
+            const index = vars.getVarp(42);
+            return { id: index >= 0 && index < 2 ? this.transforms[index] : -1 };
+        } },
+        1: { id: 1 }, 2: { id: 2 },
+    };
+    const loader: any = { load: (id: number) => varLocs[id] };
+    const ids = [Int32Array.from([100])];
+    const vars = (value: number): any => ({ getVarp: () => value, getVarbit: () => 0 });
+    assert.equal(multiLocVariants(ids, loader, vars(0)), multiLocVariants(ids, loader, vars(0)));
+    assert.notEqual(multiLocVariants(ids, loader, vars(0)), multiLocVariants(ids, loader, vars(1)));
+    assert.equal(multiLocVariants(undefined, loader, vars(0)), "");
+}

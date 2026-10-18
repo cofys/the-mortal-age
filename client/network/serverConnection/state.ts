@@ -80,6 +80,8 @@ export const state = {
     sessionPassword: null as string | null,
     sessionRevision: 0,
     sessionToken: null as string | null,
+    /** LOGIN_FLAG_* for the session's credentials (a token after "Stay logged in"). */
+    sessionLoginFlags: 0,
     currentTick: 0,
     serverTickMs: 600,
     serverClockOffsetMs: 0,
@@ -155,7 +157,7 @@ export const state = {
     worldEntityInfoListeners: new Set<(payload: WorldEntityInfoPayload) => void>(),
     welcomeListeners: new Set<(info: { tickMs: number; serverTime: number }) => void>(),
     loginResponseListeners: new Set<
-        (info: { success: boolean; error?: string; displayName?: string }) => void
+        (info: { success: boolean; error?: string; displayName?: string; loginToken?: string }) => void
     >(),
     logoutResponseListeners: new Set<(info: { success: boolean; reason?: string }) => void>(),
     handshakeListeners: new Set<

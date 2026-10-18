@@ -234,3 +234,58 @@ function rotateBlockTile(x, y, rotation, last) {
     default: return [last - y, x];
   }
 }
+
+test('compact collision grids preserve masks, planes and region boundaries', () => {
+  const { Region } = require('../dist/game/collision/Region');
+  const region = new Region((50 << 8) | 51, 0, 0);
+  const x = 50 * 64, y = 51 * 64;
+  assert.equal(region.getClip(x, y, 0), 0);
+  region.removeClip(x, y, 0, 1);
+  assert.equal(region.clips, undefined, 'reading/removing empty clipping allocates nothing');
+  for (let plane = 0; plane < 4; plane++) {
+    for (const [dx, dy] of [[0, 0], [0, 63], [63, 0], [63, 63], [12, 34]]) {
+      region.addClip(x + dx, y + dy, plane, 1 << plane);
+      region.addClip(x + dx, y + dy, plane, 0x80000000);
+      assert.equal(region.getClip(x + dx, y + dy, plane), (1 << plane) | 0x80000000);
+      region.removeClip(x + dx, y + dy, plane, 0x80000000);
+      assert.equal(region.getClip(x + dx, y + dy, plane), 1 << plane);
+    }
+  }
+  assert.ok(region.clips instanceof Uint32Array);
+  assert.equal(region.clips.byteLength, 65536);
+  const before = region.clips.slice();
+  for (const [dx, dy] of [[-1, 0], [64, 0], [0, -1], [0, 64]]) {
+    region.addClip(x + dx, y + dy, 0, -1);
+    region.removeClip(x + dx, y + dy, 0, -1);
+    assert.equal(region.getClip(x + dx, y + dy, 0), 0);
+  }
+  assert.deepEqual(region.clips, before, 'outside coordinates cannot alias another tile or plane');
+  region.addClip(x + 1, y + 1, -1, 128);
+  region.addClip(x + 1, y + 1, 4, 256);
+  assert.equal(region.getClip(x + 1, y + 1, 0), 384, 'invalid planes retain the plane-zero fallback');
+  region.clips = undefined;
+  assert.equal(region.getClip(x, y, 0), 0, 'region reset discards clipping');
+});
+
+test('entity flags preserve normalization, replacement and clearing with lazy storage', () => {
+  const { Entity } = require('../dist/game/entity/Entity');
+  const entity = new Entity(new Location(3200, 3200));
+  assert.deepEqual(entity.getFlags(), []);
+  assert.equal(entity.hasFlag('test'), false);
+  assert.equal(entity.removeFlag('test'), entity);
+  entity.setFlag(' test ').setFlag('test').setFlag('').setFlag(null);
+  assert.deepEqual(entity.getFlags(), ['test']);
+  assert.equal(entity.hasFlag('test'), true);
+  assert.equal(entity.hasFlag(' test '), false, 'queries retain their existing exact-match semantics');
+  const copy = entity.getFlags();
+  copy.push('external');
+  assert.equal(entity.hasFlag('external'), false);
+  entity.removeFlag('test');
+  assert.deepEqual(entity.getFlags(), []);
+  entity.setFlags(['a', ' b ', 'a']);
+  assert.deepEqual(entity.getFlags(), ['a', 'b']);
+  entity.setFlags(null);
+  assert.deepEqual(entity.getFlags(), []);
+  entity.setFlag('again').clearFlags().setFlag('last');
+  assert.deepEqual(entity.getFlags(), ['last']);
+});

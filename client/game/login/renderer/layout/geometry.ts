@@ -201,3 +201,27 @@ export function withContentTransform(host: LoginRendererHost, ctx: RenderContext
         }
 
 }
+
+/** Login form "Remember username" row (also asks to stay logged in), above the Login/Cancel buttons. */
+export const REMEMBER_USERNAME_TEXT = "Remember username: ";
+export const LOGIN_FORM_REMEMBER_Y = 281;
+export const LOGIN_FORM_BUTTON_Y = 321;
+
+/**
+ * Remembered-account screen, laid out like live's launcher login (measured from a live
+ * screenshot): "Welcome to ...", then the large "Play Now" button with the account name in it. "Switch account" below it is ours (the
+ * launcher logs out on live) and sits where "Can't login? Click here." does on the form.
+ */
+export const REMEMBERED_TITLE_Y = 207;
+/** Centre of titlebutton_large; "Play Now" sits 13 above it, the name's baseline 18 below. */
+export const REMEMBERED_PLAY_Y = 262;
+export const REMEMBERED_LOG_OUT_TEXT = "Switch account";
+export const REMEMBERED_LOG_OUT_Y = 357;
+
+/** The large Play Now button's bounds around its centre (titlebutton_large is 218x68). */
+export function getRememberedPlayBounds(host: LoginRendererHost) {
+    const width = host.titlebuttonLargeSprite?.width || 218;
+    const height = host.titlebuttonLargeSprite?.height || 68;
+    const centerX = host.loginBoxX + 180;
+    return { x: centerX - Math.floor(width / 2), y: REMEMBERED_PLAY_Y - Math.floor(height / 2), width, height };
+}

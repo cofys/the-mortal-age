@@ -22,6 +22,12 @@ export type LastServerPreference = {
     iceServers?: RTCIceServer[];
 };
 
+/** An account kept signed in on one server ("Stay logged in"): a token, never the password. */
+export type RememberedLoginPreference = {
+    username: string;
+    token: string;
+};
+
 export type ClientPreferences = {
     version: number;
     /** Login / title-screen music muted. */
@@ -32,6 +38,8 @@ export type ClientPreferences = {
     installPromptDismissed: boolean;
     /** Last selected login server. */
     lastServer?: LastServerPreference;
+    /** The account kept signed in on each server, keyed by rememberedLoginKey. */
+    rememberedLogins: Record<string, RememberedLoginPreference>;
 };
 
 const DEFAULTS: ClientPreferences = {
@@ -39,6 +47,7 @@ const DEFAULTS: ClientPreferences = {
     titleMusicDisabled: false,
     iosInstallHintDismissed: false,
     installPromptDismissed: false,
+    rememberedLogins: {},
 };
 
 let cache: ClientPreferences | undefined;
@@ -66,6 +75,18 @@ function normalizeLastServer(
     };
 }
 
+function normalizeRememberedLogins(value: unknown): Record<string, RememberedLoginPreference> {
+    const logins: Record<string, RememberedLoginPreference> = {};
+    if (!value || typeof value !== "object") return logins;
+    for (const [server, login] of Object.entries(value as Record<string, unknown>)) {
+        const { username, token } = (login ?? {}) as Partial<RememberedLoginPreference>;
+        if (typeof username === "string" && username && typeof token === "string" && token) {
+            logins[server] = { username, token };
+        }
+    }
+    return logins;
+}
+
 function normalize(raw: Partial<ClientPreferences> | undefined): ClientPreferences {
     return {
         version: PREFS_VERSION,
@@ -77,6 +98,7 @@ function normalize(raw: Partial<ClientPreferences> | undefined): ClientPreferenc
             raw?.installPromptDismissed ?? DEFAULTS.installPromptDismissed,
         ),
         lastServer: normalizeLastServer(raw?.lastServer),
+        rememberedLogins: normalizeRememberedLogins(raw?.rememberedLogins),
     };
 }
 

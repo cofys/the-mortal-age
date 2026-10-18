@@ -4,7 +4,7 @@ export class Region {
     private regionId: number;
     private terrainFile: number;
     private objectFile: number;
-    public clips?: number[][][];
+    public clips?: Uint32Array;
     public roofTiles?: Uint8Array;
     public waterTiles?: Uint8Array;
     public static readonly TILE_FLAG_UNDER_ROOF = 0x4;
@@ -14,11 +14,6 @@ export class Region {
         this.regionId = regionId;
         this.terrainFile = terrainFile;
         this.objectFile = objectFile;
-    }
-    private static createClipGrid(): number[][][] {
-        return Array.from({ length: 4 }, () =>
-            Array.from({ length: 64 }, () => new Array(64).fill(0))
-        );
     }
     public getRegionId(): number {
         return this.regionId;
@@ -32,54 +27,34 @@ export class Region {
         return this.objectFile;
     }
 
+    /** Returns -1 outside this region; masking coordinates would alias adjacent tiles. */
+    private clipIndex(x: number, y: number, height: number): number {
+        const localX = x - (this.regionId >> 8) * 64;
+        const localY = y - (this.regionId & 0xff) * 64;
+        if (!Number.isInteger(localX) || !Number.isInteger(localY) ||
+            localX < 0 || localX >= 64 || localY < 0 || localY >= 64) return -1;
+        if (height < 0 || height >= 4) height = 0;
+        if (!Number.isInteger(height)) return -1;
+        return (height << 12) | (localX << 6) | localY;
+    }
+
     public getClip(x: number, y: number, height: number): number {
-        let regionAbsX = (this.regionId >> 8) * 64;
-        let regionAbsY = (this.regionId & 0xff) * 64;
-        if (height < 0 || height >= 4)
-            height = 0;
-        const clips = this.clips;
-        if (!clips) {
-            return 0;
-        }
-        if (!clips[height] || clips[height].length !== 64) {
-            clips[height] = Array.from({ length: 64 }, () => new Array(64).fill(0));
-        }
-        if (!clips[height][x - regionAbsX]) {
-            clips[height][x - regionAbsX] = new Array(64).fill(0);
-        }
-        return clips[height][x - regionAbsX][y - regionAbsY] || 0;
+        const index = this.clipIndex(x, y, height);
+        // Preserve the signed 32-bit masks returned by the former bitwise grid.
+        return index < 0 ? 0 : (this.clips?.[index] ?? 0) | 0;
     }
 
     public addClip(x: number, y: number, height: number, shift: number): void {
-        let regionAbsX = (this.regionId >> 8) * 64;
-        let regionAbsY = (this.regionId & 0xff) * 64;
-        if (height < 0 || height >= 4)
-            height = 0;
-        const clips = this.clips ??= Region.createClipGrid();
-        if (!clips[height] || clips[height].length !== 64) {
-            clips[height] = Array.from({ length: 64 }, () => new Array(64).fill(0));
-        }
-        if (!clips[height][x - regionAbsX]) {
-            clips[height][x - regionAbsX] = new Array(64).fill(0);
-        }
-        clips[height][x - regionAbsX][y - regionAbsY] |= shift;
+        const index = this.clipIndex(x, y, height);
+        if (index < 0) return;
+        const clips = this.clips ??= new Uint32Array(4 * 64 * 64);
+        clips[index] |= shift;
     }
+
     public removeClip(x: number, y: number, height: number, shift: number): void {
-        let regionAbsX: number = (this.regionId >> 8) * 64;
-        let regionAbsY: number = (this.regionId & 0xff) * 64;
-        if (height < 0 || height >= 4)
-            height = 0;
-        const clips = this.clips;
-        if (!clips) {
-            return;
-        }
-        if (!clips[height] || clips[height].length !== 64) {
-            clips[height] = Array.from({ length: 64 }, () => new Array(64).fill(0));
-        }
-        if (!clips[height][x - regionAbsX]) {
-            clips[height][x - regionAbsX] = new Array(64).fill(0);
-        }
-        clips[height][x - regionAbsX][y - regionAbsY] &= ~shift;
+        const index = this.clipIndex(x, y, height);
+        if (index < 0 || !this.clips) return;
+        this.clips[index] &= ~shift;
     }
 
     public isUnderRoof(x: number, y: number, plane: number): boolean {

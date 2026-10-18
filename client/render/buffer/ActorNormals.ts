@@ -1,7 +1,7 @@
 import type { Model } from "../../rs/model/Model";
 
-// One extra word carries an octahedral normal and the original face colour.
-export const ACTOR_VERTEX_STRIDE = 16;
+// Extra words carry the normal/colour and 10 fractional bits per position coordinate.
+export const ACTOR_VERTEX_STRIDE = 20;
 
 export function packActorNormal(x: number, y: number, z: number): number {
     const length = Math.abs(x) + Math.abs(y) + Math.abs(z);

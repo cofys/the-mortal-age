@@ -78,13 +78,13 @@ export abstract class Mobile extends Entity {
     public graphic: Graphic;
     private following: Mobile;
 
-    private attributes = new Map<Object, Object>();
+    private attributes: Map<Object, Object> | null = null;
 
     public getAttribute(name: Object) {
-        return this.attributes.get(name);
+        return this.attributes?.get(name);
     }
     setAttribute(name: any, object: any) {
-        this.attributes.set(name, object);
+        (this.attributes ??= new Map()).set(name, object);
     }
     /*
      * Fields
@@ -99,8 +99,8 @@ export abstract class Mobile extends Entity {
      * doesn't expire on its own.
      */
     private venomed = false;
-    prayerActive = new Array<boolean>(30);
-    curseActive = new Array<boolean>(20);
+    // Allocated on first use: most actors never touch prayers.
+    private prayerActive: boolean[] | null = null;
     resetMovementQueue = false;
     needsPlacement = false;
     untargetable = false;
@@ -239,7 +239,7 @@ export abstract class Mobile extends Entity {
         this.forcedChat = null;
         this.animation = null;
         this.graphic = null;
-        this.slotGraphics.clear();
+        this.slotGraphics?.clear();
         this.displayedHealth = null;
         this.tintState = null;
     }
@@ -327,7 +327,8 @@ export abstract class Mobile extends Entity {
     }
 
     /** This tick's graphics in spotanim slots other than 0; null clears a slot. */
-    private readonly slotGraphics = new Map<number, Graphic | null>();
+    private static readonly NO_SLOT_GRAPHICS: ReadonlyMap<number, Graphic | null> = new Map();
+    private slotGraphics: Map<number, Graphic | null> | null = null;
 
     /**
      * Plays a graphic in one of the actor's spotanim slots, which show at once - a Manticore's
@@ -339,7 +340,7 @@ export abstract class Mobile extends Entity {
             if (graphic) this.performGraphic(graphic);
             return;
         }
-        this.slotGraphics.set(index, graphic);
+        (this.slotGraphics ??= new Map()).set(index, graphic);
         this.getUpdateFlag().flag(Flag.GRAPHIC);
     }
 
@@ -348,11 +349,11 @@ export abstract class Mobile extends Entity {
      * per-tick charge graphic on the tick a hit (processed after plugin tasks) cancels the charge.
      */
     withdrawGraphicInSlot(slot: number): void {
-        this.slotGraphics.delete(Math.trunc(slot) & 0xff);
+        this.slotGraphics?.delete(Math.trunc(slot) & 0xff);
     }
 
     getSlotGraphics(): ReadonlyMap<number, Graphic | null> {
-        return this.slotGraphics;
+        return this.slotGraphics ?? Mobile.NO_SLOT_GRAPHICS;
     }
 
     delayedAnimation(animation: Animation, ticks: number) {
@@ -568,29 +569,15 @@ export abstract class Mobile extends Entity {
     }
 
     getPrayerActive(): boolean[] {
-        return this.prayerActive;
+        return this.prayerActive ??= new Array<boolean>(30);
     }
     setPrayerActives(prayerActive: boolean[]): Mobile {
         this.prayerActive = prayerActive;
         return this;
     }
 
-    getCurseActive(): boolean[] {
-        return this.curseActive;
-    }
-
-    setCurseActive(curseActive: boolean[]): Mobile {
-        this.curseActive = curseActive;
-        return this;
-    }
-
     setPrayerActive(id: number, prayerActive: boolean): Mobile {
-        this.prayerActive[id] = prayerActive;
-        return this;
-    }
-
-    setCurseActives(id: number, curseActive: boolean): Mobile {
-        this.curseActive[id] = curseActive;
+        this.getPrayerActive()[id] = prayerActive;
         return this;
     }
 

@@ -1238,6 +1238,7 @@ export interface PluginCoreApi {
   FightStyle: any;
   WeaponInterfaceManager: any;
   PrayerHandler: any;
+  ChatType: any;
   DuelRule: any;
   RegionManager: any;
   Animation: any;
@@ -1300,6 +1301,7 @@ export interface PluginCoreApi {
   /** Which items poison, and how strongly. */
   CombatPoisonData: any;
   CacheDefinitions: any;
+  readTemplateRegion: typeof import("../game/collision/TemplateRegionData").readTemplateRegion;
   Wilderness: any;
   PathFinder: any;
   RsmodRouteFinding: any;

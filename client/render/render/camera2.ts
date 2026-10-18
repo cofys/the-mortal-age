@@ -326,7 +326,7 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
             camAngleX = terrainMinCamAngleX;
         }
         // active pitch-shake also raises the minimum camera angle for orbit distance.
-        if (host.cameraShakeEnabled[4]) {
+        if (host.cameraShakeEnabled[4] && !host.osrsClient.cameraShakeDisabled) {
             const shakeMinCamAngleX = (host.cameraShakeWaveAmplitude[4] | 0) + 128;
             if (shakeMinCamAngleX > camAngleX) {
                 camAngleX = shakeMinCamAngleX;

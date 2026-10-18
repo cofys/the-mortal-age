@@ -394,11 +394,17 @@ module.exports = function registerHorrorFromTheDeepQuest(api) {
 
   function clearBoss(player) {
     // Tracked spawn plus any of ours the map lost (a relog mid-fight leaves the
-    // NPC behind): never let two dagannoths share the room.
+    // NPC behind): never let two dagannoths share the room. The boss is spawned
+    // beside the player and the fight never leaves the room, so the region-indexed
+    // near lookup is enough; the old full-world scan ran for every player's death.
     const tracked = bossesByPlayer.get(player);
     if (tracked) api.removeNpc(tracked);
     bossesByPlayer.delete(player);
-    for (const npc of api.core.World.getNpcs()) {
+    // A dagannoth only exists once the lighthouse is fixed (both spawn actions
+    // require it). The death and logout hooks run for every player, so skip the
+    // lookup for the players it can never concern.
+    if (quest.getStage(player) < STAGE_REPAIRED_LIGHTHOUSE) return;
+    for (const npc of api.core.World.getNpcsNear(player.getLocation(), 32, null)) {
       const npcId = npc?.getId?.();
       if ((npcId === DAGANNOTH_JR_ID || npcId === DAGANNOTH_MOTHER_ID) && npc.getOwner?.() === player) {
         api.removeNpc(npc);

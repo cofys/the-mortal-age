@@ -152,7 +152,7 @@ function getTrackedRegionPayload(player, regionIdValue) {
 }
 
 function createEmptyClipGrid() {
-  return Array.from({ length: REGION_PLANES }, () => Array.from({ length: REGION_SIZE }, () => new Array(REGION_SIZE).fill(0)));
+  return new Uint32Array(REGION_PLANES * REGION_SIZE * REGION_SIZE);
 }
 
 function resetRegionToTerrainOnlyClipping(regionId) {

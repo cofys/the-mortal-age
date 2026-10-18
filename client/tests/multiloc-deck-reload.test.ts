@@ -8,7 +8,14 @@ import { getMapSquareId } from "../rs/map/MapFileIndex";
 // overlay map square 200+index). A change to its varp reloads the world square as a map square
 // but rebuilds the deck from its template: a plain reload of the deck's square built an empty
 // square in its place and the boat vanished.
-const locTypeLoader: any = { load: (id: number) => (id === 100 ? { transforms: [1, 2], transformVarbit: -1, transformVarp: 42 } : undefined) };
+const multiloc = {
+    transforms: [1, 2],
+    transformVarbit: -1,
+    transformVarp: 42,
+    transform: (vars: any) => ({ id: vars.getVarp(42) === 1 ? 2 : 1 }),
+};
+const locTypeLoader: any = { load: (id: number) => (id === 100 ? multiloc : undefined) };
+let varp42 = 0;
 const varbitLoader: any = { load: () => undefined };
 const withMultiloc = [Int32Array.from([100])];
 
@@ -20,7 +27,9 @@ const reloaded: string[] = [];
 const rebuiltDecks: number[] = [];
 const renderer: any = {
     changedVarps: new Set([42]),
+    multiLocBuilds: new Map(),
     osrsClient: {
+        varManager: { getVarp: () => varp42, getVarbit: () => 0 },
         loaderFactory: { getVarBitTypeLoader: () => varbitLoader },
         locTypeLoader,
         updateVars: () => {},
@@ -40,5 +49,16 @@ const renderer: any = {
 (GameRenderer.prototype as any).reloadMultiLocSquares.call(renderer);
 assert.deepEqual(reloaded, ["50,50"], "the world square reloads as a map square");
 assert.deepEqual(rebuiltDecks, [3008], "the deck rebuilds from its template");
+
+// Another change to varp 42 that leaves the multiloc showing the same variant (an unrelated
+// varbit on it) rebuilds nothing: a rebuild restarts every loc animation in the square.
+renderer.changedVarps = new Set([42]);
+(GameRenderer.prototype as any).reloadMultiLocSquares.call(renderer);
+assert.deepEqual(reloaded, ["50,50"], "an unchanged variant leaves the square alone");
+
+varp42 = 1;
+renderer.changedVarps = new Set([42]);
+(GameRenderer.prototype as any).reloadMultiLocSquares.call(renderer);
+assert.deepEqual(reloaded, ["50,50", "50,50"], "a changed variant reloads it");
 
 console.log("multiloc-deck-reload: ok");

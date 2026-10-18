@@ -1,3 +1,4 @@
+import { ACTOR_VERTEX_STRIDE } from "../../buffer/ActorNormals";
 import type { IProjectileManager } from "../../../game/interfaces/IProjectileManager";
 import type { OsrsClient } from "../../../game/OsrsClient";
 import { getClientCycle } from "../../../network/ServerConnection";
@@ -251,13 +252,13 @@ export class WebGPUActors {
             alpha: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
         };
         // DynamicNpcAnimLoader poses NPCs (and the CPU player path) into ACTOR_VERTEX_STRIDE
-        // (16-byte) SceneBuffers whose 4th word is the HD normal + base HSL; GfxCache emits
-        // 12-byte vertices. Players also take a per-vertex GPU pose label at @location(1).
+        // SceneBuffers: normal/base HSL in word 4 and position fractions in word 5.
+        // Players also take a per-vertex GPU pose label at @location(1).
         const KINDS: { kind: ActorKind; stride: number; cullMode: GPUCullMode }[] = [
-            { kind: "npc", stride: 16, cullMode: "back" },
-            { kind: "gfx", stride: 12, cullMode: "none" },
-            { kind: "projectile", stride: 12, cullMode: "none" },
-            { kind: "player", stride: 16, cullMode: "back" },
+            { kind: "npc", stride: ACTOR_VERTEX_STRIDE, cullMode: "back" },
+            { kind: "gfx", stride: ACTOR_VERTEX_STRIDE, cullMode: "none" },
+            { kind: "projectile", stride: ACTOR_VERTEX_STRIDE, cullMode: "none" },
+            { kind: "player", stride: ACTOR_VERTEX_STRIDE, cullMode: "back" },
         ];
         const createPipelines = (alpha: boolean, mode: Mode): Map<ActorKind, GPURenderPipeline> => {
             const depth = mode === "depth";
@@ -272,7 +273,8 @@ export class WebGPUActors {
                     {
                         arrayStride: stride,
                         attributes: [
-                            { shaderLocation: 0, offset: 0, format: stride === 16 ? "uint32x4" : "uint32x3" },
+                            { shaderLocation: 0, offset: 0, format: stride === ACTOR_VERTEX_STRIDE ? "uint32x4" : "uint32x3" },
+                            ...(stride === ACTOR_VERTEX_STRIDE ? [{ shaderLocation: 3, offset: 16, format: "uint32" as GPUVertexFormat }] : []),
                         ],
                     },
                 ];

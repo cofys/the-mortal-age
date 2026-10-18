@@ -36,6 +36,14 @@ players.setHeadIconPk(index, -1);
 assert.equal(appearance.headIcons.skull, -1);
 assert.equal(players.getHeadIconPk(index), -1, "clearing a skull must update appearance state");
 
+// A player who left view keeps their slot below size(); it must not keep their headicons.
+const leaving = players.allocatePlayer(2);
+players.setHeadIconPk(leaving, 0);
+players.setHeadIconPrayer(leaving, 1);
+players.deallocatePlayer(2);
+assert.equal(players.getHeadIconPk(leaving), -1, "a freed slot drops its skull");
+assert.equal(players.getHeadIconPrayer(leaving), -1, "a freed slot drops its prayer");
+
 const entry = { worldX: 0, worldZ: 0, plane: 0, groupKey: 1, heightOffsetTiles: 0.9,
     headIconPk: 0, headIconPrayer: 2, customHeadIcons: SPEAKER_HEAD_ICONS };
 const stacks = new Map<number, number>();

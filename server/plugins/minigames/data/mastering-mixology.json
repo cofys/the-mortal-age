@@ -1,0 +1,46 @@
+{
+  "_comment": "Mastering Mixology (docs/mastering-mixology.md). potions: indexed as the cache does (enum 5542, the lab multilocs, the order varbits); paste is units of 10 per letter, xp is for an ordered potion (an unordered one gives a third), resin is what an ordered potion pays. refiner: paste per herb or unfinished potion. All from the OSRS Wiki.",
+  "potions": {
+    "1": { "code": "MMM", "name": "Mammoth-might mix", "paste": [3, 0, 0], "xp": 190, "weight": 5, "resin": [20, 0, 0] },
+    "2": { "code": "MMA", "name": "Mystic mana amalgam", "paste": [2, 1, 0], "xp": 215, "weight": 4, "resin": [20, 10, 0] },
+    "3": { "code": "MML", "name": "Marley's moonlight", "paste": [2, 0, 1], "xp": 240, "weight": 4, "resin": [20, 0, 10] },
+    "4": { "code": "AAA", "name": "Alco-augmentator", "paste": [0, 3, 0], "xp": 190, "weight": 5, "resin": [0, 20, 0] },
+    "5": { "code": "AAM", "name": "Azure aura mix", "paste": [1, 2, 0], "xp": 265, "weight": 4, "resin": [10, 20, 0] },
+    "6": { "code": "AAL", "name": "Aqualux amalgam", "paste": [0, 2, 1], "xp": 290, "weight": 4, "resin": [0, 20, 10] },
+    "7": { "code": "LLL", "name": "Liplack liquor", "paste": [0, 0, 3], "xp": 190, "weight": 5, "resin": [0, 0, 20] },
+    "8": { "code": "LLM", "name": "Megalite liquid", "paste": [1, 0, 2], "xp": 315, "weight": 4, "resin": [10, 0, 20] },
+    "9": { "code": "LLA", "name": "Anti-leech lotion", "paste": [0, 1, 2], "xp": 340, "weight": 4, "resin": [0, 10, 20] },
+    "10": { "code": "MAL", "name": "Mixalot", "paste": [1, 1, 1], "xp": 365, "weight": 3, "resin": [20, 20, 20] }
+  },
+  "refiner": {
+    "GUAM_LEAF": ["mox", 10], "GUAM_POTION_UNF_": ["mox", 10],
+    "MARRENTILL": ["mox", 13], "MARRENTILL_POTION_UNF_": ["mox", 13],
+    "TARROMIN": ["mox", 15], "TARROMIN_POTION_UNF_": ["mox", 15],
+    "HARRALANDER": ["mox", 20], "HARRALANDER_POTION_UNF_": ["mox", 20],
+    "RANARR_WEED": ["lye", 26], "RANARR_POTION_UNF_": ["lye", 26],
+    "TOADFLAX": ["lye", 32], "TOADFLAX_POTION_UNF_": ["lye", 32],
+    "IRIT_LEAF": ["aga", 30], "IRIT_POTION_UNF_": ["aga", 30],
+    "AVANTOE": ["lye", 30], "AVANTOE_POTION_UNF_": ["lye", 30],
+    "KWUARM": ["lye", 33], "KWUARM_POTION_UNF_": ["lye", 33],
+    "HUASCA": ["aga", 20], "HUASCA_POTION_UNF_": ["aga", 20],
+    "SNAPDRAGON": ["lye", 40], "SNAPDRAGON_POTION_UNF_": ["lye", 40],
+    "CADANTINE": ["aga", 34], "CADANTINE_POTION_UNF_": ["aga", 34],
+    "LANTADYME": ["aga", 40], "LANTADYME_POTION_UNF_": ["aga", 40],
+    "DWARF_WEED": ["aga", 42], "DWARF_WEED_POTION_UNF_": ["aga", 42],
+    "TORSTOL": ["aga", 44], "TORSTOL_POTION_UNF_": ["aga", 44]
+  },
+  "shopDescriptions": {
+    "mixology_stock_low_potion_pack": "<col=ffffff>Requires level 60 Herblore.</col> A pack of potions made by an apprentice alchemist.",
+    "mixology_stock_med_potion_pack": "<col=ffffff>Requires level 70 Herblore.</col> A pack of potions made by an adept alchemist.",
+    "mixology_stock_high_potion_pack": "<col=ffffff>Requires level 85 Herblore.</col> A pack of potions made by an expert alchemist.",
+    "mixology_stock_alchemist_goggles": "Provides a 10% chance to save your secondary ingredient when mixing potions.",
+    "mixology_stock_alchemist_body": "Grants the wearer +10 IQ.",
+    "mixology_stock_alchemist_legs": "Breezy.",
+    "mixology_stock_alchemist_gloves": "No science is done without proper gloves.",
+    "mixology_stock_reagents_pouch": "A pouch for storing herblore potion ingredients.",
+    "mixology_stock_potion_storage": "Unlocks the ability to store potions within a separate area of the bank.",
+    "mixology_stock_prepot": "An item that can be freely assembled to allow you to consume many potions in a single action, such as combat boosting potions.",
+    "mixology_stock_amulet": "Useful when making potions - has the chance of giving an extra dose. Amulets of chemistry can be used on this amulet to give it 10 charges for each one. <col=ffffff>Upon purchasing this amulet, you will also receive 50 free charges.</col>",
+    "mixology_stock_juice": "A secondary ingredient for making Goading potions (54 Herblore) and Prayer regeneration potions (58 Herblore)."
+  }
+}

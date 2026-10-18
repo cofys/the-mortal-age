@@ -1,0 +1,14 @@
+{
+  "$comment": "Rat bone weapons (plugins/items/RatBoneWeapons.plugin.js). ratNames: the monsters with the Wiki's rat attribute (https://oldschool.runescape.wiki/w/Rat_(attribute), its Bestiary list), by cache name, since the monster dump has no rat attribute yet; its excluded look-alikes (Angry giant rat, Experiment No.2, Mouse) have other names.",
+  "ratNames": [
+    "Blessed giant rat",
+    "Brine rat",
+    "Crypt rat",
+    "Dungeon rat",
+    "Giant crypt rat",
+    "Giant rat",
+    "Rat",
+    "Scurrius",
+    "Zombie rat"
+  ]
+}

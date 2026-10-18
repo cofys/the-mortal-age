@@ -83,6 +83,8 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     format!: GPUTextureFormat;
 
     private world?: WorldResources;
+    /** Animation Smoothing state the loaded scenery was baked with (syncLocAnimationSmoothing). */
+    private smoothLocAnimations?: number;
     /** This frame's roof limit and culling inputs, reused by scene and shadow draws. */
     private frameRoofPlaneLimit = 3;
     private frameScenery?: SceneryDrawContext;
@@ -303,6 +305,26 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         void this.loadMapData(mapX, mapY, streamGeneration);
     }
 
+    /**
+     * Animation Smoothing bakes scenery animations when a square is built, so toggling it
+     * rebuilds the loaded scenery. The first call only records the state they were built with.
+     */
+    private syncLocAnimationSmoothing(): void {
+        const settings = this.osrsClient.animationSmoothingPlugin?.objectSettings();
+        const smooth = settings?.smoothLocAnimations ? settings.smoothLocAnimationSteps : -1;
+        if (this.smoothLocAnimations === smooth) return;
+        const first = this.smoothLocAnimations === undefined;
+        this.smoothLocAnimations = smooth;
+        if (first) return;
+        if (this.instanceActive) {
+            this.scheduleInstanceLocRebuild();
+            return;
+        }
+        for (const mapId of this.mapManager.mapSquares.keys()) {
+            this.queueLocReload(mapId >> 8, mapId & 0xff, "loc");
+        }
+    }
+
     /** Rebuilds a square after a loc change: just its door or loc geometry when that is all that changed. */
     queueLocReload(mapX: number, mapY: number, group: LocReloadGroup): void {
         if (this.instanceActive || !this.osrsClient.loadedCache) return;
@@ -323,6 +345,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             maxLevel: Math.max(0, Math.min(Scene.MAX_LEVELS - 1, Scene.MAX_LEVELS - 1)),
             loadNpcs: false,
             smoothTerrain: true,
+            ...this.osrsClient.animationSmoothingPlugin?.objectSettings(),
             minimizeDrawCalls: true,
             loadedTextureIds: this.world?.loadedTextureIds ?? new Set<number>(),
             locOverrides: this.locOverrides,
@@ -673,6 +696,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
                 resolveWebGPURenderDistance(this),
             );
             this.updateSkyColor();
+            this.syncLocAnimationSmoothing();
             for (const map of this.mapManager.visibleMaps) {
                 map.updateAnimatedLocs(this.osrsClient.seqFrameLoader, cycle);
             }

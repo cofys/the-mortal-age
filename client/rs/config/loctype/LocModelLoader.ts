@@ -1,3 +1,4 @@
+import { nextSequenceFrame } from "../../model/seq/FrameInterpolation";
 import { Model } from "../../model/Model";
 import { ModelData } from "../../model/ModelData";
 import { ModelLoader } from "../../model/ModelLoader";
@@ -275,6 +276,8 @@ export class LocModelLoader {
         seqId: number,
         frame: number,
         contourGroundInfo?: ContourGroundInfo,
+        frameCycle: number = 0,
+        interpolate: boolean = false,
     ): Model | undefined {
         let key: number;
         if (locType.types) {
@@ -310,7 +313,7 @@ export class LocModelLoader {
 
         if (seqId !== -1 && frame !== -1) {
             const seqType = this.seqTypeLoader.load(seqId);
-            model = this.transformModel(model, seqType, frame, rotation);
+            model = this.transformModel(model, seqType, frame, rotation, frameCycle, interpolate);
         }
 
         const isDiagonal = type === LocModelType.NORMAL && rotation > 3;
@@ -339,7 +342,18 @@ export class LocModelLoader {
         return model;
     }
 
-    transformModel(model: Model, seqType: SeqType, frame: number, rotation: number): Model {
+    /**
+     * `frameCycle` > 0 blends that many client cycles of the way toward the next keyframe
+     * (Animation Smoothing), including a valid object loop target.
+     */
+    transformModel(
+        model: Model,
+        seqType: SeqType,
+        frame: number,
+        rotation: number,
+        frameCycle: number = 0,
+        interpolate: boolean = false,
+    ): Model {
         if (seqType.isSkeletalSeq()) {
             const skeletalSeq = this.skeletalSeqLoader?.load(seqType.skeletalId);
             if (!skeletalSeq) {
@@ -376,12 +390,19 @@ export class LocModelLoader {
             }
 
             const seqFrame = this.seqFrameLoader.load(seqType.frameIds[frame]);
+            const nextIndex = nextSequenceFrame(seqType, frame, "object");
+            const nextFrame =
+                seqFrame && frameCycle > 0 && nextIndex !== undefined
+                    ? this.seqFrameLoader.load(seqType.frameIds[nextIndex])
+                    : undefined;
+            const length = nextFrame ? seqType.getFrameLength(this.seqFrameLoader, frame) | 0 : 0;
+            const blend = nextFrame && length > 0 ? Math.min(1, frameCycle / length) : 0;
 
             if (seqFrame) {
                 model = Model.copyAnimated(
                     model,
-                    !seqFrame.hasAlphaTransform,
-                    !seqFrame.hasColorTransform,
+                    !seqFrame.hasAlphaTransform && !(blend && nextFrame?.hasAlphaTransform),
+                    !seqFrame.hasColorTransform && !(blend && nextFrame?.hasColorTransform),
                 );
 
                 rotation &= 3;
@@ -393,7 +414,11 @@ export class LocModelLoader {
                     model.rotate90();
                 }
 
-                model.animate(seqFrame, undefined, seqType.op14);
+                if (interpolate || (blend > 0 && nextFrame)) {
+                    model.animateInterpolated(seqFrame, nextFrame, blend, !!seqType.op14);
+                } else {
+                    model.animate(seqFrame, undefined, seqType.op14);
+                }
 
                 if (rotation === 1) {
                     model.rotate90();

@@ -47,6 +47,9 @@ export class Model2DRenderer {
     private seqFrameLoader?: SeqFrameLoader;
     private skeletalSeqLoader?: SkeletalSeqLoader;
     private texCache = new Map<number, { size: number; pixels: Int32Array }>();
+    private scratchBuf = new Int32Array(0);
+    private scratchZbuf = new Float32Array(0);
+    private scratchAbuf = new Uint8Array(0);
     debug?: boolean;
     logger?: typeof console.log;
 
@@ -460,8 +463,16 @@ export class Model2DRenderer {
             );
             return new Uint8ClampedArray(4); // 1x1 transparent pixel
         }
-        const buf = new Int32Array(sw * sh);
-        const zbuf = new Float32Array(sw * sh);
+        // Animated widget models (Vardorvis' strangle overlay is two full-screen ones) render many
+        // times a second: reuse the scratch buffers rather than allocating ~3 MB a render.
+        const pixels = sw * sh;
+        if (this.scratchBuf.length < pixels) {
+            this.scratchBuf = new Int32Array(pixels);
+            this.scratchZbuf = new Float32Array(pixels);
+            this.scratchAbuf = new Uint8Array(pixels);
+        }
+        const buf = this.scratchBuf.subarray(0, pixels);
+        const zbuf = this.scratchZbuf.subarray(0, pixels);
         Rasterizer2D.setRaster(buf, sw, sh);
         Rasterizer2D.fillRectangle(0, 0, sw, sh, 0x00000000);
         Rasterizer3D.setClip();
@@ -477,7 +488,8 @@ export class Model2DRenderer {
         // Coverage per pixel. OSRS draws widget models straight into the frame, so a translucent
         // face (the fairy ring dials' windows) blends with what is behind the widget. Drawn into
         // its own texture here, such a face must stay translucent rather than blend with black.
-        const abuf = new Uint8Array(sw * sh);
+        const abuf = this.scratchAbuf.subarray(0, pixels);
+        abuf.fill(0);
         function plot(idx: number, R: number, G: number, B: number, ai: number) {
             const aD = abuf[idx];
             let r = R,

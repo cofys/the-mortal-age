@@ -1,3 +1,4 @@
+import { interpolationKey, type ActorInterpolation } from "../../rs/model/seq/FrameInterpolation";
 /**
  * DynamicNpcAnimLoader - Builds dynamic NPC sequence metadata and current-frame geometry on demand.
  *
@@ -148,7 +149,7 @@ export class DynamicNpcAnimLoader {
         frameId: number,
         overlaySeqId: number = -1,
         overlayFrameId: number = -1,
-        frameCycle: number = 0,
+        interpolation?: ActorInterpolation,
     ): DynamicNpcFrameGeometry | undefined {
         if (!this.isReady()) {
             return undefined;
@@ -169,16 +170,13 @@ export class DynamicNpcAnimLoader {
         const normalizedOverlayFrame = Math.max(0, overlayFrameId | 0);
         const overlayKey =
             overlaySeqId >= 0 ? `:${overlaySeqId | 0}:${normalizedOverlayFrame | 0}` : "";
-        // Animation smoothing blends toward the next frame once it has streamed in.
-        const cycle =
-            frameCycle > 0 &&
-            overlaySeqId < 0 &&
-            normalizedFrame + 1 < (meta.frameCount | 0) &&
-            this.isSequenceFrameReady(seqId, normalizedFrame + 1)
-                ? frameCycle | 0
-                : 0;
-        const cycleKey = cycle > 0 ? `~${cycle}` : "";
-        const key = `${resolvedNpcType.id}:${seqId}:${normalizedFrame}${cycleKey}${overlayKey}`;
+        if (interpolation) {
+            const ready = (id: number, blend: ActorInterpolation["base"]) =>
+                blend?.next !== undefined && !this.isSequenceFrameReady(id, blend.next)
+                    ? { next: undefined, alpha: 0 } : blend;
+            interpolation = { base: ready(seqId, interpolation.base), overlay: ready(overlaySeqId, interpolation.overlay) };
+        }
+        const key = `${resolvedNpcType.id}:${seqId}:${normalizedFrame}${interpolationKey(interpolation)}${overlayKey}`;
         const cached = this.geomCache.get(key);
         if (cached) {
             this.promoteGeometryEntry(key, cached);
@@ -199,7 +197,7 @@ export class DynamicNpcAnimLoader {
             normalizedFrame,
             overlaySeqId | 0,
             normalizedOverlayFrame | 0,
-            cycle,
+            interpolation,
         );
         if (!model) {
             return undefined;

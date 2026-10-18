@@ -88,6 +88,12 @@
     background: rgba(0, 0, 0, 0.5);
 }
 
+/* Text readouts only, so the HUD must not swallow clicks meant for the widgets under it
+   (the top-right box sits on the logout button). */
+.hud {
+    pointer-events: none;
+}
+
 .hud.left-top {
     position: absolute;
     padding: 10px;

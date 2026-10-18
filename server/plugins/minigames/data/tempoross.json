@@ -1,0 +1,163 @@
+{
+  "$comment": "Tempoross (docs/tempoross.md). Cove tiles are template tiles in the rev 241 cache (the captures' coordinates moved by y - 128); the instance copies the template's 8x8 chunks. Timings and messages from rsprox captures; numbers and loot from the OSRS Wiki.",
+  "fishingLevel": 35,
+  "lobby": {
+    "$comment": "Ruins of Unkah: the lobby HUD shows inside `zone`; `boat` is the waiting ship's deck.",
+    "zone": { "minX": 3120, "maxX": 3200, "minY": 2808, "maxY": 2872 },
+    "boat": { "minX": 3126, "maxX": 3134, "minY": 2824, "maxY": 2848 },
+    "boatTile": [3134, 2840, 0],
+    "dockTile": [3137, 2840, 0],
+    "ferryArrival": [3148, 2842, 0],
+    "alKharidArrival": [3272, 3143, 0],
+    "departureTicks": 50,
+    "maxPlayers": 40
+  },
+  "cove": {
+    "$comment": "The template: map squares (47, 44), all four planes.",
+    "sourceChunkX": 376,
+    "sourceChunkY": 352,
+    "chunks": 8,
+    "planes": 4,
+    "arrival": [[3035, 2852], [3035, 2851], [3038, 2853]],
+    "boss": [3043, 2845],
+    "$bossCentre": "where the captures aim cannon fire and cast the torrent from: the middle of its 9x9",
+    "bossCentre": [3047, 2849],
+    "spiritPools": [[3046, 2843], [3046, 2853]],
+    "spotSites": {
+      "north": [[3037, 2868], [3038, 2868], [3048, 2873], [3051, 2866], [3051, 2867]],
+      "south": [[3036, 2835], [3037, 2835], [3046, 2826], [3046, 2827], [3048, 2829]]
+    },
+    "crates": [
+      { "npc": 10576, "tile": [3038, 2850], "loc": [40968, 40972, 40976], "cannoneer": [10599, 3039, 2850], "cannon": 41238, "cannonTile": [3038, 2851], "muzzle": [3040, 2851], "side": "west" },
+      { "npc": 10577, "tile": [3038, 2848], "loc": [40969, 40973, 40977], "cannoneer": [10600, 3039, 2848], "cannon": 41239, "cannonTile": [3038, 2846], "muzzle": [3040, 2847], "side": "west" },
+      { "npc": 10578, "tile": [3056, 2850], "loc": [40970, 40974, 40978], "cannoneer": [10601, 3055, 2850], "cannon": 41240, "cannonTile": [3054, 2851], "muzzle": [3054, 2851], "side": "east" },
+      { "npc": 10579, "tile": [3056, 2848], "loc": [40971, 40975, 40979], "cannoneer": [10602, 3055, 2848], "cannon": 41241, "cannonTile": [3054, 2846], "muzzle": [3054, 2847], "side": "east" }
+    ],
+    "hosts": [
+      { "id": 10587, "victory": 10588, "tile": [3036, 2852], "side": "west" },
+      { "id": 10585, "victory": 10586, "tile": [3058, 2846], "side": "east" },
+      { "id": 10593, "victory": 10595, "tile": [3043, 2869], "side": "north" },
+      { "id": 10596, "victory": 10597, "tile": [3041, 2834], "side": "south" }
+    ],
+    "tethers": [
+      { "key": "north", "loc": 41354, "broken": 41010, "tile": [3044, 2867], "varbit": 1, "kind": "totem pole", "hud": 0 },
+      { "key": "west", "loc": 41352, "broken": 40996, "tile": [3036, 2849], "varbit": 2, "kind": "mast", "hud": 1 },
+      { "key": "east", "loc": 41353, "broken": 40997, "tile": [3058, 2849], "varbit": 3, "kind": "mast", "hud": 2 },
+      { "key": "south", "loc": 41355, "broken": 41011, "tile": [3043, 2833], "varbit": 4, "kind": "totem pole", "hud": 3 }
+    ],
+    "fireAreas": {
+      "$comment": "The HUD's four fire warnings (script 4074 args 11-14) in the order the tether sites take: north island, west ship, east ship, south island.",
+      "north": { "minX": 3008, "maxX": 3071, "minY": 2859, "maxY": 2879 },
+      "west": { "minX": 3008, "maxX": 3046, "minY": 2840, "maxY": 2858 },
+      "east": { "minX": 3047, "maxX": 3071, "minY": 2840, "maxY": 2858 },
+      "south": { "minX": 3008, "maxX": 3071, "minY": 2816, "maxY": 2839 }
+    },
+    "debris": [[3055, 2832], [3060, 2861]]
+  },
+  "fight": {
+    "$comment": "Energy and essence are ten times the Wiki's (captured HUD). Per player: Wiki, from 2,600/2,500 solo to 1,800/1,700 each with 40 (solo captured 2683/2492).",
+    "energyPerPlayer": { "solo": 2683, "full": 1800 },
+    "essencePerPlayer": { "solo": 2492, "full": 1700 },
+    "introBar": { "from": 130, "to": 240, "step": 2 },
+    "stormMax": 350,
+    "stormPerTick": 1,
+    "regenPerTick": 35,
+    "maxSurfacings": 3,
+    "enragedStormPerTick": 12,
+    "poolsActiveAfter": 11,
+    "victoryTicks": 31,
+    "$celebration": "captures: hosts cheer +1 then dance every 5 ticks; cannoneers cheer +1 then every 5-9 ticks",
+    "celebration": { "hostDanceTicks": 5, "cannoneerCheerTicks": [5, 9] },
+    "firstAttackTicks": 49,
+    "attackCooldown": [50, 55],
+    "lowEnergyCalm": 0.1,
+    "lowEnergyCalmTicks": 25,
+    "waveTicks": 13,
+    "waveOverlay": 300,
+    "waveOverlayHide": 60,
+    "tetherBreak": [15, 25],
+    "torrentTicks": 6,
+    "torrentChance": 0.25,
+    "torrentDisabledTicks": 24,
+    "lightningTicks": { "grow": 6, "charge": 11, "strike": 15, "fire": 16, "shrink": 16 },
+    "strikes": [4, 8],
+    "fireSpreadTicks": 40,
+    "fireSpreads": 2,
+    "fireBurnTicks": 2,
+    "specialSpotTicks": [30, 60],
+    "specialSpotLifeTicks": 20,
+    "spotMoveTicks": [60, 120],
+    "crateMid": 8,
+    "crateFull": 15,
+    "projectileCycles": 100,
+    "projectileHeights": [57, 90],
+    "shotLandsTicks": 2,
+    "impactDelay": 100,
+    "untetherAfterWave": 2
+  },
+  "damage": { "raw": 100, "cooked": 150, "crystallised": 100, "poolMax": 120 },
+  "points": {
+    "fish": 5, "cook": 10, "loadRaw": 20, "loadCrystallised": 20, "loadCooked": 65,
+    "repair": 40, "douse": 40, "wave": 10, "scatter": 55, "max": 32000,
+    "firstPermit": 2000, "perPermit": 700
+  },
+  "ticks": { "harpoon": 3, "cook": 3, "load": 2, "pool": 4, "rewardNet": 3, "rewardBigSearch": 3 },
+  "catch": { "harpoon": [170, 255], "dragon": [178, 267], "crystal": [187, 280], "bonusChance": 0.5, "crystallisedChance": 0.3333 },
+  "rewards": {
+    "$comment": "Wiki 'Reward pool': the main table out of 160; the fish sub-table (90/160) by base Fishing level; independent unique rolls. Materials and fish noted.",
+    "maxPermits": 8000,
+    "xp": 10,
+    "main": [
+      { "table": "spiritFlakes", "weight": 40 },
+      { "table": "casket", "weight": 8 },
+      { "table": "fish", "weight": 90 },
+      { "item": "PLANK", "min": 20, "max": 30, "noted": true, "weight": 7 },
+      { "item": "OAK_PLANK", "min": 15, "max": 25, "noted": true, "weight": 5 },
+      { "item": "SEAWEED", "min": 20, "max": 60, "noted": true, "weight": 4 },
+      { "item": "STEEL_NAILS", "min": 300, "max": 500, "weight": 2 },
+      { "item": "FEATHER", "min": 800, "max": 1600, "weight": 2 },
+      { "item": "FISHING_BAIT", "min": 800, "max": 1600, "weight": 2 }
+    ],
+    "spiritFlakes": { "item": "SPIRIT_FLAKES", "min": 32, "max": 64 },
+    "casket": { "item": "CASKET_4", "min": 1, "max": 1 },
+    "fish": [
+      { "minLevel": 81, "items": [["RAW_BASS", 30, 40], ["RAW_SWORDFISH", 20, 30], ["RAW_SHARK", 10, 20], ["RAW_SEA_TURTLE", 7, 12], ["RAW_MANTA_RAY", 5, 10]] },
+      { "minLevel": 79, "items": [["RAW_LOBSTER", 30, 40], ["RAW_BASS", 20, 30], ["RAW_SWORDFISH", 10, 20], ["RAW_SHARK", 7, 12], ["RAW_SEA_TURTLE", 5, 10]] },
+      { "minLevel": 76, "items": [["RAW_TUNA", 30, 40], ["RAW_LOBSTER", 20, 30], ["RAW_BASS", 10, 20], ["RAW_SWORDFISH", 7, 12], ["RAW_SHARK", 5, 10]] },
+      { "minLevel": 50, "items": [["RAW_SALMON", 30, 40], ["RAW_TUNA", 20, 30], ["RAW_LOBSTER", 10, 20], ["RAW_BASS", 7, 12], ["RAW_SWORDFISH", 5, 10]] },
+      { "minLevel": 46, "items": [["RAW_PIKE", 30, 40], ["RAW_SALMON", 20, 30], ["RAW_TUNA", 10, 20], ["RAW_LOBSTER", 7, 12], ["RAW_BASS", 5, 10]] },
+      { "minLevel": 40, "items": [["RAW_MACKEREL", 30, 40], ["RAW_PIKE", 20, 30], ["RAW_SALMON", 10, 20], ["RAW_TUNA", 7, 12], ["RAW_LOBSTER", 5, 10]] },
+      { "minLevel": 1, "items": [["RAW_HERRING", 30, 40], ["RAW_MACKEREL", 20, 30], ["RAW_PIKE", 10, 20], ["RAW_SALMON", 7, 12], ["RAW_TUNA", 5, 10]] }
+    ],
+    "fishWeights": [900, 810, 720, 630, 540],
+    "uniques": [
+      { "item": "TINY_TEMPOR", "chance": 8000, "pet": true },
+      { "item": "DRAGON_HARPOON", "chance": 8000 },
+      { "item": "TOME_OF_WATER_EMPTY_", "chance": 1600 },
+      { "item": "BIG_HARPOONFISH", "chance": 1600 },
+      { "item": "FISH_BARREL", "chance": 400, "duplicate": ["SOAKED_PAGE", 25] },
+      { "item": "TACKLE_BOX", "chance": 400, "duplicate": ["SOAKED_PAGE", 25] }
+    ],
+    "soakedPages": { "item": "SOAKED_PAGE", "min": 5, "max": 9, "chance": [149, 8000] }
+  },
+  "casketLoot": {
+    "$comment": "Wiki 'Casket (Reward pool)': one roll out of 230, everything noted except coins; clue scrolls are separate chances.",
+    "total": 230,
+    "items": [
+      ["RUNE_MED_HELM", 1, 1, 9], ["RUNE_FULL_HELM", 1, 1, 9], ["RUNE_CHAINBODY", 1, 1, 9],
+      ["RUNE_PLATEBODY", 2, 3, 1], ["RUNE_PLATELEGS", 2, 3, 1], ["RUNE_PLATESKIRT", 2, 3, 1],
+      ["RUNE_SQ_SHIELD", 3, 5, 1], ["RUNE_KITESHIELD", 3, 5, 1],
+      ["SAPPHIRE_RING", 10, 14, 9], ["EMERALD_RING", 7, 11, 9], ["RUBY_RING", 6, 8, 9], ["DIAMOND_RING", 3, 4, 9],
+      ["SAPPHIRE_NECKLACE", 10, 14, 9], ["EMERALD_NECKLACE", 7, 11, 9], ["RUBY_NECKLACE", 6, 8, 9], ["DIAMOND_NECKLACE", 3, 4, 9],
+      ["SAPPHIRE_BRACELET", 10, 14, 9], ["EMERALD_BRACELET", 7, 11, 9], ["RUBY_BRACELET", 6, 8, 9], ["DIAMOND_BRACELET", 3, 4, 9],
+      ["SAPPHIRE_RING", 20, 28, 1], ["EMERALD_RING", 14, 22, 1], ["RUBY_RING", 12, 16, 1], ["DIAMOND_RING", 6, 8, 1],
+      ["SAPPHIRE_NECKLACE", 20, 28, 1], ["EMERALD_NECKLACE", 14, 22, 1], ["RUBY_NECKLACE", 12, 16, 1], ["DIAMOND_NECKLACE", 4, 8, 1],
+      ["SAPPHIRE_BRACELET", 20, 28, 1], ["EMERALD_BRACELET", 14, 22, 1], ["RUBY_BRACELET", 12, 16, 1], ["DIAMOND_BRACELET", 3, 8, 1],
+      ["SILVER_BAR", 50, 100, 9], ["GOLD_BAR", 50, 100, 9], ["UNCUT_OPAL", 25, 50, 9], ["UNCUT_JADE", 25, 50, 9], ["UNCUT_RED_TOPAZ", 10, 15, 9],
+      ["UNCUT_SAPPHIRE", 20, 30, 1], ["UNCUT_EMERALD", 15, 25, 1], ["UNCUT_RUBY", 10, 20, 1], ["UNCUT_DIAMOND", 8, 13, 1], ["UNCUT_DRAGONSTONE", 2, 3, 1],
+      ["COINS", 4000, 6000, 9], ["COINS", 25000, 50000, 1],
+      ["LOOP_HALF_OF_KEY", 1, 1, 9], ["TOOTH_HALF_OF_KEY", 1, 1, 9]
+    ],
+    "clues": [["easy", 5, 100], ["medium", 3, 100], ["hard", 2, 100]]
+  }
+}

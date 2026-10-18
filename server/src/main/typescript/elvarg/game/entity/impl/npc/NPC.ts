@@ -116,7 +116,7 @@ export class NPC extends Mobile {
     private hitpoints: number;
     private maxHitpointsOverride = -1;
     private combatOverride: { stats?: number[]; maxHit?: number } | null = null;
-    private readonly combatOverrideViews = new Map<NpcDefinition, NpcDefinition>();
+    private combatOverrideViews: Map<NpcDefinition, NpcDefinition> | null = null;
     /** Multiplies this NPC's attack and defence rolls (raid scaling); 1 leaves them alone. */
     private rollFactor = 1;
     private spawnPosition: Location;
@@ -309,7 +309,9 @@ export class NPC extends Mobile {
             }
 
             AreaManager.process(this);
-            if (!this.hitpointsLocked && (this.getCombat().getLastAttack().hasElapsed(20000)
+            // "combat:no-regen": a boss whose fight has phases it can't be hit in (Vet'ion's hounds)
+            // keeps its damage.
+            if (!this.hitpointsLocked && !this.hasFlag("combat:no-regen") && (this.getCombat().getLastAttack().hasElapsed(20000)
                 || this.movementCoordinator.getCoordinateState() == CoordinateState.RETREATING)) {
                 const max = this.getMaxHitpoints();
                 if (max > this.hitpoints) {
@@ -387,20 +389,20 @@ export class NPC extends Mobile {
      */
     public setCombatOverride(override: { stats?: number[]; maxHit?: number } | null): NPC {
         this.combatOverride = override ? { stats: override.stats ? [...override.stats] : undefined, maxHit: override.maxHit } : null;
-        this.combatOverrideViews.clear();
+        this.combatOverrideViews = null;
         return this;
     }
 
     /** The definition as this NPC sees it: a view with its combat override, if it has one. */
     private withCombatOverride(definition: NpcDefinition): NpcDefinition {
         if (!this.combatOverride || !definition) return definition;
-        let view = this.combatOverrideViews.get(definition);
+        let view = this.combatOverrideViews?.get(definition);
         if (!view) {
             const { stats, maxHit } = this.combatOverride;
             view = Object.create(definition) as NpcDefinition;
             if (stats) view.getStats = () => stats;
             if (maxHit != null) view.getMaxHit = () => maxHit;
-            this.combatOverrideViews.set(definition, view);
+            (this.combatOverrideViews ??= new Map()).set(definition, view);
         }
         return view;
     }

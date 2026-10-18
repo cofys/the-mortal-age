@@ -57,6 +57,7 @@ import { World } from "../../../World";
 import { PluginManager } from "../../../../plugins/PluginManager";
 import { ServerPerf } from "../../../../util/ServerPerf";
 import { getSequencePriority } from "../../../cache/NpcAnimationScanner";
+import { LOGIN_TOKENS_ATTRIBUTE } from "../../../../net/login/LoginTokens";
 
 const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 const DEFAULT_AUDIO_SETTINGS: Readonly<Record<number, number>> = {
@@ -741,6 +742,10 @@ export class Player extends Mobile {
     }
 
     public setPasswordHashWithSalt(passwordHashWithSalt: string): Player {
+        // A new password signs out every remembered login.
+        if (this.passwordHashWithSalt && this.passwordHashWithSalt !== passwordHashWithSalt) {
+            this.setAttribute(LOGIN_TOKENS_ATTRIBUTE, []);
+        }
         this.passwordHashWithSalt = passwordHashWithSalt;
         return this;
     }

@@ -1,17 +1,18 @@
 // TODO: ported from xrsps-typescript; untested.
 module.exports = function registerVestasLongswordSpecialAttack(api) {
-  const { CombatSpecial, ItemIdentifiers, MeleeCombatMethod } = api.core;
+const { Animation, CombatSpecial, ItemIdentifiers, MeleeCombatMethod } = api.core;
 
-  const DRAIN = 25;
-  const FEINT_MINIMUM_DAMAGE_MULTIPLIER = 0.2;
-  const FEINT_MAXIMUM_DAMAGE_MULTIPLIER = 1.2;
-  const FEINT_DEFENCE_ROLL_MULTIPLIER = 0.25;
-  const STAB_DEFENCE_BONUS_INDEX = 0;
+const DRAIN = 25;
+const FEINT_MINIMUM_DAMAGE_MULTIPLIER = 0.2;
+const FEINT_MAXIMUM_DAMAGE_MULTIPLIER = 1.2;
+const FEINT_DEFENCE_ROLL_MULTIPLIER = 0.25;
+const STAB_DEFENCE_BONUS_INDEX = 0;
+const ANIMATION = new Animation(412); // the longsword Lunge thrust; the cache has no Feint seq of its own
 
-  class VestasLongswordCombatMethod extends MeleeCombatMethod {
-    start(character, target) {
-      CombatSpecial.drain(character, DRAIN);
-      super.start(character, target);
+class VestasLongswordCombatMethod extends MeleeCombatMethod {
+  start(character, target) {
+    CombatSpecial.drain(character, DRAIN);
+    character.performAnimation(ANIMATION);
     }
   }
 

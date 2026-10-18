@@ -1,14 +1,14 @@
-// TODO: ported from xrsps-typescript; untested.
-// TODO: Feint special attack animation/graphic ids not found; skipped.
+// Feint's animation is the longsword Lunge thrust (412); the cache has no Feint seq of its own.
 module.exports = function registerVestasLongswordBhSpecialAttack(api) {
-  const { CombatSpecial, ItemIdentifiers, MeleeCombatMethod } = api.core;
+  const { Animation, CombatSpecial, ItemIdentifiers, MeleeCombatMethod } = api.core;
 
   const DRAIN = 25;
+  const ANIMATION = new Animation(412);
 
   class VestasLongswordBhCombatMethod extends MeleeCombatMethod {
     start(character, target) {
       CombatSpecial.drain(character, DRAIN);
-      super.start(character, target);
+      character.performAnimation(ANIMATION);
     }
   }
 

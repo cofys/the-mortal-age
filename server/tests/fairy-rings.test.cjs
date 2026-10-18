@@ -212,3 +212,47 @@ test("travel log favourites: add from a code's star, use and remove them", () =>
   assert.equal(p.getAttribute(T.FAVOURITES_ATTRIBUTE), "");
   void varbits;
 });
+
+test('database table indexing skips mixed tuple values without changing decoded rows', () => {
+  const { DbRowType } = require('../dist/game/cache/codec/rs/config/dbrow/DbRowType');
+  // Column 0: (string type 36, int, string type 42), two tuples, then table 300.
+  const data = Int8Array.from([3, 1, 0, 3, 36, 0, 42, 2,
+    65, 0, 0, 0, 0, 7, 66, 0,
+    0, 255, 255, 255, 255, 67, 0,
+    255, 4, 172, 2, 0]);
+  assert.equal(DbRowType.readTableId(data), 300);
+  const row = DbRowType.decode(123, data);
+  assert.equal(row.tableId, 300);
+  assert.deepEqual(row.column(0), ['A', 7, 'B', '', -1, 'C']);
+  assert.equal(DbRowType.readTableId(Int8Array.of(0)), -1);
+});
+
+test('cache table queries decode only requested rows and reuse individual row objects', () => {
+  const { CacheDefinitions } = core;
+  const { DbRowType } = require('../dist/game/cache/codec/rs/config/dbrow/DbRowType');
+  const { CacheIndexDat2 } = require('../dist/game/cache/codec/rs/cache/CacheIndex');
+  const { IndexType } = require('../dist/game/cache/codec/rs/cache/IndexType');
+  const { ConfigType } = require('../dist/game/cache/codec/rs/cache/ConfigType');
+  const archive = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore()).getArchive(ConfigType.OSRS.dbRow);
+  const expectedByTable = new Map();
+  for (const id of archive.fileIds) {
+    const row = DbRowType.decode(id, archive.getFile(id).data);
+    assert.equal(DbRowType.readTableId(archive.getFile(id).data), row.tableId, `row ${id}`);
+    if (!expectedByTable.has(row.tableId)) expectedByTable.set(row.tableId, []);
+    expectedByTable.get(row.tableId).push(id);
+  }
+  const table = [...expectedByTable.keys()].find(id => !CacheDefinitions.dbTables.has(id));
+  const expectedIds = expectedByTable.get(table);
+  const before = new Set(CacheDefinitions.dbRows.keys());
+  const individual = CacheDefinitions.getDbRow(expectedIds[0]);
+  assert.equal(CacheDefinitions.dbRows.size, before.size + (before.has(individual.id) ? 0 : 1));
+  const rows = CacheDefinitions.getDbTableRows(table);
+  assert.deepEqual(rows.map(row => row.id), expectedIds);
+  assert.equal(rows[0], individual);
+  assert.equal(CacheDefinitions.getDbTableRows(table), rows);
+  assert.equal(CacheDefinitions.dbRows.size, new Set([...before, ...expectedIds]).size);
+  const count = CacheDefinitions.dbRows.size;
+  assert.equal(CacheDefinitions.getDbRow(-1), undefined);
+  assert.deepEqual(CacheDefinitions.getDbTableRows(-999), []);
+  assert.equal(CacheDefinitions.dbRows.size, count);
+});

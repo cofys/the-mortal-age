@@ -472,7 +472,7 @@ async function evaluateHover(cdp) {
                     String((el.style && el.style.pointerEvents) || "")
                 );
             });
-            const hud = document.querySelector(".hud.left-bottom");
+            const hud = document.querySelector(".hud.right-top");
             return {
                 enabled: !!client.hoverOverlayEnabled,
                 mouse: [client.inputManager.mouseX, client.inputManager.mouseY],

@@ -13,5 +13,9 @@ export const getEnv = (key: string): string | undefined =>
 
 export const DEFAULT_URL = getDefaultWsUrl();
 export const LOGIN_CONNECT_RETRY_DELAY_MS = 1000;
+/** LOGIN packet flags: ask for a "Stay logged in" token. */
+export const LOGIN_FLAG_REMEMBER = 1;
+/** LOGIN packet flags: the password field holds that token. */
+export const LOGIN_FLAG_TOKEN = 2;
 export const RECONNECT_DELAY_MAX_MS = 1000;
 export const RECONNECT_MAX_ATTEMPTS = 1;

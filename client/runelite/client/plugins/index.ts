@@ -1,6 +1,8 @@
+import { AnimationSmoothingConfig } from "../../../game/plugins/animationsmoothing/AnimationSmoothingConfig";
 import { VoiceChatPlugin } from "../../../game/plugins/voice/VoiceChatPlugin";
 import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { AttackTimerPlugin } from "../../../game/plugins/attacktimer/AttackTimerPlugin";
+import { CameraPlugin } from "../../../game/plugins/camera/CameraPlugin";
 import { FirstPersonPlugin } from "../../../game/plugins/firstperson/FirstPersonPlugin";
 import { GameFrame317Plugin } from "../../../game/plugins/gameframe317/GameFrame317Plugin";
 import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
@@ -14,7 +16,6 @@ import { MyKingdomPlugin } from "../../../game/plugins/mykingdom/MyKingdomPlugin
 import { StallsPlugin } from "../../../game/plugins/shop/StallsPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
-import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
 import { StewardPlugin } from "../../../game/plugins/steward/StewardPlugin";
 import { WarTablePlugin } from "../../../game/plugins/wartable/WarTablePlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
@@ -52,7 +53,6 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     WarTablePlugin,
     StewardPlugin,
     NotesPlugin,
-    RememberLoginPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
     AttackTimerPlugin,
@@ -67,6 +67,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     PrayerPlugin,
     StretchedModePlugin,
     GpuPlugin,
+    CameraPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */
@@ -91,6 +92,7 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
     },
     {
         name: "animationsmoothing",
+        config: AnimationSmoothingConfig,
         legacyKey: "osrs.plugin.animation_smoothing.v1",
         enabledKey: "animationsmoothingplugin",
     },
@@ -118,11 +120,6 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
         name: "hd",
         legacyKey: "xrsps.plugin.hd.enabled",
         enabledKey: "hdplugin",
-    },
-    {
-        name: "rememberlogin",
-        legacyKey: "osrs.plugin.remember_login.v1",
-        enabledKey: "rememberloginplugin",
     },
     {
         name: "menuswapper",

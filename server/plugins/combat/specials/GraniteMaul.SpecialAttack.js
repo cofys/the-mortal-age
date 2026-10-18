@@ -1,15 +1,24 @@
 // TODO: ported from xrsps-typescript; untested.
 module.exports = function registerGraniteMaulSpecialAttack(api) {
-  const { Animation, Graphic, GraphicHeight, ItemIdentifiers, MeleeCombatMethod, Sounds } = api.core;
+  const { Animation, CombatSpecial, Equipment, Graphic, GraphicHeight, ItemIdentifiers, MeleeCombatMethod, Sounds } = api.core;
 
   const STANDARD_DRAIN = 60;
   const ORNATE_DRAIN = 50;
   const ANIMATION = new Animation(1667);
   const GRAPHIC = new Graphic(340, GraphicHeight.HIGH);
 
-  // The granite maul drains and queues in CombatSpecial.activate, not here.
+  function drain(character) {
+    if (!character.isPlayer()) {
+      CombatSpecial.drain(character, STANDARD_DRAIN);
+      return;
+    }
+    const weaponId = character.getAsPlayer().getEquipment().get(Equipment.WEAPON_SLOT).getId();
+    CombatSpecial.drain(character, weaponId === ItemIdentifiers.GRANITE_MAUL_5 || weaponId === ItemIdentifiers.GRANITE_MAUL_7 ? ORNATE_DRAIN : STANDARD_DRAIN);
+  }
+
   class GraniteMaulCombatMethod extends MeleeCombatMethod {
     start(character, target) {
+      drain(character);
       character.performAnimation(ANIMATION);
       character.performGraphic(GRAPHIC);
       Sounds.sendSound(character, character.getAttackSound());
@@ -30,13 +39,14 @@ module.exports = function registerGraniteMaulSpecialAttack(api) {
     drainAmount: STANDARD_DRAIN,
     strengthMultiplier: 1,
     accuracyMultiplier: 1,
-    // One-tick queued attack: core performs the instant attack and skips the
-    // energy check while it is queued (see CombatSpecial.activate).
+    // One-tick queued attack: the swing happens on the press even mid-cooldown,
+    // bypassing the attack timer like an instant special (see CombatSpecial.activate).
     traits: {
       hitCount: 1,
       accuracyMultiplier: 1,
       damageMultiplier: 1,
       queuedAttack: true,
+      bypassAttackDelay: true,
     },
     drainAmountByItemId: {
       [ItemIdentifiers.GRANITE_MAUL_5]: ORNATE_DRAIN,

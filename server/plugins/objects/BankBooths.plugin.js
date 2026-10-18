@@ -119,6 +119,10 @@ module.exports = {
     api.onObjectInteraction("Bank chest", {
       "Use": ({ player }) => openBank(player),
     });
+    // Four chests (the Mixology lab's among them) are named "Bank Chest" in the cache.
+    api.onObjectInteraction("Bank Chest", {
+      "Use": ({ player }) => openBank(player),
+    });
 
     api.onNpcInteraction("Banker", {
       "Talk-to": openBankFromNpc,

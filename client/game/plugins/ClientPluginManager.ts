@@ -89,6 +89,20 @@ export type CameraInputContext = {
     deltaTime: number;
 };
 
+/**
+ * This frame's camera rotation from the player, in RS angle units (2048 per turn), before it
+ * is applied: the arrow keys, and the middle-mouse drag and middle-held wheel. A plugin may
+ * change it (RuneLite's camera speed and invert), or add to it with no input (a slide).
+ */
+export type CameraRotation = {
+    camera: Camera;
+    deltaTime: number;
+    keyYaw: number;
+    keyPitch: number;
+    dragYaw: number;
+    dragPitch: number;
+};
+
 export type GamepadContext = {
     gamepad: Gamepad;
     camera: Camera;
@@ -141,6 +155,7 @@ export interface ClientPlugin {
     handleCameraMouse?(context: CameraInputContext): boolean;
     handleCameraScroll?(context: CameraInputContext): boolean;
     updateInteractionPointer?(camera: Camera): void;
+    transformCameraRotation?(rotation: CameraRotation): void;
     handleCameraFollow?(context: CameraFollowContext): boolean;
     /** A connected standard-mapping controller, each frame; return true to take it over. */
     handleGamepad?(context: GamepadContext): boolean;
@@ -244,6 +259,10 @@ export class ClientPluginManager {
 
     updateInteractionPointer(camera: Camera): void {
         for (const plugin of this.plugins) plugin.updateInteractionPointer?.(camera);
+    }
+
+    transformCameraRotation(rotation: CameraRotation): void {
+        for (const plugin of this.plugins) plugin.transformCameraRotation?.(rotation);
     }
 
     handleCameraFollow(context: CameraFollowContext): boolean {

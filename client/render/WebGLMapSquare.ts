@@ -725,6 +725,10 @@ export class WebGLMapSquare {
                     stride: ACTOR_VERTEX_STRIDE,
                     integer: true as any,
                 })
+                .vertexAttributeBuffer(3, npcInterleavedBuffer, {
+                    type: PicoGL.UNSIGNED_INT, size: 1, stride: ACTOR_VERTEX_STRIDE,
+                    offset: 16, integer: true as any,
+                })
                 .indexBuffer(npcIndexBuffer);
         }
 
@@ -1550,6 +1554,10 @@ export class WebGLMapSquare {
                     size: 4,
                     stride: ACTOR_VERTEX_STRIDE,
                     integer: true as any,
+                })
+                .vertexAttributeBuffer(3, this.npcInterleavedBuffer, {
+                    type: PicoGL.UNSIGNED_INT, size: 1, stride: ACTOR_VERTEX_STRIDE,
+                    offset: 16, integer: true as any,
                 })
                 .indexBuffer(this.npcIndexBuffer);
 

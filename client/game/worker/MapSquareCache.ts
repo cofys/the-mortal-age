@@ -4,7 +4,7 @@ import type { SdMapLoaderInput } from "../../render/loader/SdMapLoaderInput";
 import type { VarManager } from "../../rs/config/vartype/VarManager";
 
 /** Bump when SdMapData or the geometry the loader emits changes, so old entries stop matching. */
-export const CACHE_FORMAT = 2;
+export const CACHE_FORMAT = 3;
 export const MAX_SQUARES = 64;
 
 const DB_NAME = "map-square-cache";
@@ -58,6 +58,8 @@ export function cacheKey(info: CacheInfo, input: SdMapLoaderInput, npcsHash: str
         input.smoothTerrain,
         input.minimizeDrawCalls,
         input.loadNpcs ? npcsHash : "",
+        // Only when on, so squares cached before this option keep their keys.
+        ...(input.smoothLocAnimations ? [`smoothLocAnimations:${input.smoothLocAnimationSteps ?? 4}`] : []),
     ];
     return `${prefix}|${fnv(JSON.stringify(fields))}-${input.mapX},${input.mapY}`;
 }

@@ -1,5 +1,6 @@
 import { ArchiveVarBitTypeLoader } from "./codec/rs/config/vartype/bit/VarBitTypeLoader";
 import type { VarManager } from "./codec/rs/config/vartype/VarManager";
+import type { Archive } from "./codec/rs/cache/Archive";
 import { CacheIndexDat2 } from "./codec/rs/cache/CacheIndex";
 import type { CacheInfo } from "./codec/rs/cache/CacheInfo";
 import { ConfigType } from "./codec/rs/cache/ConfigType";
@@ -44,7 +45,10 @@ export class CacheDefinitions {
     private static customItems = new Map<number, ServerCustomItem>();
     private static customItemTypes = new Map<number, ObjType>();
     private static customModels?: Array<{ id: number; data: string }>;
-    private static dbRows?: { byId: Map<number, DbRowType>; byTable: Map<number, DbRowType[]> };
+    private static dbArchive?: Archive;
+    private static dbRowIdsByTable?: Map<number, number[]>;
+    private static readonly dbRows = new Map<number, DbRowType>();
+    private static readonly dbTables = new Map<number, readonly DbRowType[]>();
     private static structParams = new Map<number, ReadonlyMap<number, number | string>>();
     private static enumValues = new Map<number, ReadonlyMap<number, number | string>>();
     /** The struct archive, read once: re-reading it per struct took ~75 ms each. */
@@ -84,33 +88,51 @@ export class CacheDefinitions {
         return this.getState().npcs.load(id);
     }
 
-    /** Every cache database row, decoded once (the whole archive takes well under a second). */
-    private static getDbRows() {
-        if (this.dbRows) return this.dbRows;
-        const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
-        const archive = configs.getArchive(ConfigType.OSRS.dbRow);
-        const byId = new Map<number, DbRowType>();
-        const byTable = new Map<number, DbRowType[]>();
-        for (const id of configs.getFileIds(ConfigType.OSRS.dbRow) ?? []) {
+    private static getDbArchive(): Archive {
+        if (!this.dbArchive) {
+            const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
+            this.dbArchive = configs.getArchive(ConfigType.OSRS.dbRow);
+        }
+        return this.dbArchive;
+    }
+
+    /** Only table membership is indexed; unused rows retain no decoded column data. */
+    private static getDbRowIdsByTable(): Map<number, number[]> {
+        if (this.dbRowIdsByTable) return this.dbRowIdsByTable;
+        const archive = this.getDbArchive();
+        const byTable = new Map<number, number[]>();
+        for (const id of archive.fileIds) {
             const file = archive.getFile(id);
             if (!file) continue;
-            const row = DbRowType.decode(id, new Int8Array(file.data));
-            byId.set(id, row);
-            if (!byTable.has(row.tableId)) byTable.set(row.tableId, []);
-            byTable.get(row.tableId)!.push(row);
+            const tableId = DbRowType.readTableId(file.data);
+            let ids = byTable.get(tableId);
+            if (!ids) byTable.set(tableId, ids = []);
+            ids.push(id);
         }
-        this.dbRows = { byId, byTable };
-        return this.dbRows;
+        this.dbRowIdsByTable = byTable;
+        return byTable;
     }
 
-    /** A cache database row by id (the rows cache scripts read with db_getfield). */
+    /** A cache database row by id, decoded and retained only when requested. */
     static getDbRow(id: number): DbRowType | undefined {
-        return this.getDbRows().byId.get(id);
+        const cached = this.dbRows.get(id);
+        if (cached) return cached;
+        const file = this.getDbArchive().getFile(id);
+        if (!file) return undefined;
+        const row = DbRowType.decode(id, file.data);
+        this.dbRows.set(id, row);
+        return row;
     }
 
-    /** Every row of a cache database table, in id order. */
+    /** Every row of a requested table, in id order, sharing the individual row cache. */
     static getDbTableRows(tableId: number): readonly DbRowType[] {
-        return this.getDbRows().byTable.get(tableId) ?? [];
+        const cached = this.dbTables.get(tableId);
+        if (cached) return cached;
+        const ids = this.getDbRowIdsByTable().get(tableId);
+        if (!ids) return [];
+        const rows = ids.map((id) => this.getDbRow(id)!);
+        this.dbTables.set(tableId, rows);
+        return rows;
     }
 
     /** A cache database table's id by its gameval name (`slayer_task`), or null. */
@@ -169,6 +191,16 @@ export class CacheDefinitions {
     /** Every named animation: id -> gameval name. */
     static getSeqNames(): ReadonlyMap<number, string> {
         return this.getGamevals().namesOf(GamevalKind.SEQ);
+    }
+
+    /** A database row's id by its gameval name (`mixology_rewards`), or null. */
+    static getDbRowId(name: string): number | null {
+        return this.idByName(GamevalKind.DBROW).get(name) ?? null;
+    }
+
+    /** A database row's gameval name, or null when the cache has none for it. */
+    static getDbRowName(id: number): string | null {
+        return this.getGamevals().namesOf(GamevalKind.DBROW).get(id) ?? null;
     }
 
     /** A graphic's id by its gameval name, or null. */

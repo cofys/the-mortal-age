@@ -3452,8 +3452,35 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 canvasAny2.__modelRenderCache = modelCache;
             }
 
+            // An animated model only changes when its frame does (a frame lasts several 20 ms
+            // client cycles; renders come every display frame). Keep each widget's last render
+            // and redraw it until the frame or anything else it was drawn with changes.
+            const sequenceFrame =
+                liveMovementFrame !== undefined ? liveMovementFrame : (w.modelFrame ?? 0) | 0;
+            const animatedKey =
+                isAnimated && !cacheKey && !isPlayerDesignPreview && !isPlayerModel
+                    ? `wa:${modelCacheId}:${sequenceId}:${sequenceFrame}:${rx}:${ry}:${rz}:${zoom}:${offX}:${offY}:o${
+                          ortho ? 1 : 0
+                      }:${width}:${height}`
+                    : null;
+            let animatedMemo: Map<
+                number,
+                { key: string; tex: any; offsetX: number; offsetY: number; w: number; h: number }
+            > = canvasAny2.__animatedModelMemo;
+            if (!animatedMemo) {
+                animatedMemo = new Map();
+                canvasAny2.__animatedModelMemo = animatedMemo;
+            }
+            const lastAnimated = animatedKey ? animatedMemo.get(w.uid) : undefined;
+
             // Check cache before expensive rendering
-            const cached = cacheKey ? modelCache.get(cacheKey) : null;
+            const cached = cacheKey
+                ? modelCache.get(cacheKey)
+                : lastAnimated &&
+                    lastAnimated.key === animatedKey &&
+                    glr.getTexture(`wm:dyn:${w.uid}`) === lastAnimated.tex
+                  ? lastAnimated
+                  : null;
 
             if (cached) {
                 modelCacheHits++;
@@ -3496,10 +3523,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         orthographic: ortho,
                         widget: w,
                         sequenceId,
-                        sequenceFrame:
-                            liveMovementFrame !== undefined
-                                ? liveMovementFrame
-                                : (w.modelFrame ?? 0) | 0,
+                        sequenceFrame,
                         depthTest: true,
                     },
                     width,
@@ -3517,6 +3541,16 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     // Cache the result for static models
                     if (cacheKey) {
                         modelCache.set(cacheKey, {
+                            tex,
+                            offsetX: res.offsetX | 0,
+                            offsetY: res.offsetY | 0,
+                            w: can.width,
+                            h: can.height,
+                        });
+                    }
+                    if (animatedKey) {
+                        animatedMemo.set(w.uid, {
+                            key: animatedKey,
                             tex,
                             offsetX: res.offsetX | 0,
                             offsetY: res.offsetY | 0,

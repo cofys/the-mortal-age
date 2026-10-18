@@ -2187,3 +2187,62 @@ test('a bot only tells the opponent to stop praying while they have an overhead 
   for (let i = 0; i < 400 && !seen; i++) seen = selectChatterLine(praying) === 'stop praying';
   assert.ok(seen, 'the prayer taunt is in the pool when the opponent prays');
 });
+
+test('a stale bot index rebuilds without loading live maps and preserves bridge planes', () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const { createTraversalAssist } = require('../plugins/bots/lib/TraversalAssist.PlayerBots');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-index-test-'));
+  const cachePath = path.join(directory, 'object-index.json');
+  const settings = new Uint8Array(4 * 64 * 64);
+  settings[(1 << 12) | (10 << 6) | 11] = 2;
+  const chunks = [[
+    { id: 2, localX: 3, localY: 4, plane: 0 },
+    { id: 2, localX: 10, localY: 11, plane: 1 },
+    { id: 2, localX: 10, localY: 11, plane: 0 }, // Ground beneath a bridge is not spawned.
+    { id: 2, localX: 10, localY: 11, plane: 2 },
+    { id: 99, localX: 1, localY: 1, plane: 0 },
+  ]];
+  let reads = 0;
+  const region = { isLoaded: () => false };
+  const regions = new Map([[0, region], [1, region]]);
+  const manager = {
+    regions, getRegionid: id => regions.get(id), regionIdForTile: (x, y) => ((x >> 6) << 8) | (y >> 6),
+    loadMapFiles: () => assert.fail('indexing must not load live objects or collision'),
+  };
+  const api = {
+    getRegionManager: () => manager,
+    core: { readTemplateRegion: id => { reads++; return id === 0 ? { settings, chunks } : null; } },
+  };
+  try {
+    fs.writeFileSync(cachePath, JSON.stringify({ v: 2, cache: fs.readFileSync('target.txt', 'utf8').trim(), ids: '1', r: {} }));
+    const index = createTraversalAssist(api, { objectIds: [2], cachePath });
+    assert.equal(index.initializePersistentIndex(), true);
+    assert.equal(reads, 2);
+    const saved = JSON.parse(fs.readFileSync(cachePath));
+    assert.deepEqual(saved.r, { 0: { 2: [[3, 4, 0], [10, 11, 0], [10, 11, 1]] } });
+    assert.deepEqual(index.findNearestIndexedLocation(fakePlayer('bot', 10, 10), [2]), { x: 10, y: 11, z: 0 });
+    const cached = createTraversalAssist(api, { objectIds: [2], cachePath });
+    assert.equal(cached.initializePersistentIndex(), true);
+    assert.equal(reads, 2, 'a valid index needs no rescan');
+    assert.ok([...regions.values()].every(region => !region.isLoaded()));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the packaged bot object index matches the current cache and tracked resource IDs', () => {
+  // Earlier brain tests resolve catalogs without a cache; use a fresh process for the real cache.
+  require('node:child_process').execFileSync(process.execPath, ['-e', `
+    const assert = require('node:assert/strict');
+    const fs = require('node:fs');
+    require('./dist/Server').Server.installProductionPathResolver();
+    (async () => {
+      await require('./dist/game/cache/CachePipeline').CachePipeline.initialize();
+      const { ObjectIds } = require('./dist/util/IdEnums');
+      const { listCatalogObjectIds } = require('./plugins/bots/brain/ObjectCatalog.PlayerBots');
+      const { BANK_BOOTH_IDS } = require('./plugins/bots/lib/BankBooths.PlayerBots');
+      const ids = [...new Set([ObjectIds.WILDERNESS_DITCH, ...listCatalogObjectIds(), ...BANK_BOOTH_IDS])].sort((a, b) => a - b).join(',');
+      const index = require('./plugins/bots/data/object-index.json');
+      assert.equal(index.cache, fs.readFileSync('target.txt', 'utf8').trim());
+      assert.equal(index.ids, ids, 'regenerate the bot object index when resource IDs change');
+    })().catch(error => { console.error(error); process.exitCode = 1; });
+  `], { cwd: require('node:path').resolve(__dirname, '..'), stdio: 'pipe' });
+});

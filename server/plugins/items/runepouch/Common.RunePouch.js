@@ -10,8 +10,6 @@
 const RUNES_ATTRIBUTE = "rune-pouch:runes";
 const SELECTED_QUANTITY_ATTRIBUTE = "rune-pouch:selected-quantity";
 const CUSTOM_QUANTITY_ATTRIBUTE = "rune-pouch:custom-quantity";
-/** Before runes moved to the player they were stored in the pouch item's meta under this key. */
-const LEGACY_META_KEY = "rune-pouch";
 
 const MAX_AMOUNT = 16000;
 const SLOTS = 4;
@@ -267,44 +265,17 @@ function closePrompt(player) {
   player.getPacketSender().sendClientScript(MESLAYER_CLOSE_SCRIPT, COUNT_INPUT_MODE);
 }
 
-/** Login: runes from an old pouch's meta move onto the player, then every var is sent. */
+/** Login: send the player's saved pouch slots and quantity settings. */
 function login(player) {
-  migrateLegacyMeta(player);
   sendSlots(player);
   setVarbit(player, varbit("rune_pouch_customquantity"), customQuantity(player));
   setVarbit(player, varbit("rune_pouch_selectedquantity"), selectedQuantity(player));
-}
-
-/** Every pouch item still carrying runes in its meta, in the inventory or the bank. */
-function legacyPouches(player) {
-  const containers = [player.getInventory()];
-  for (let tab = 0; tab < core.Bank.TOTAL_BANK_TABS; tab++) {
-    if (tab !== core.Bank.BANK_SEARCH_TAB_INDEX) containers.push(player.getBank(tab));
-  }
-  return containers.flatMap((container) => container.getValidItems().filter(
-    (item) => isPouch(item) && item.getMetaValue?.(LEGACY_META_KEY)));
-}
-
-function migrateLegacyMeta(player) {
-  for (const pouch of legacyPouches(player)) {
-    const stored = pouch.getMetaValue(LEGACY_META_KEY);
-    pouch.setMetaValue(LEGACY_META_KEY, undefined);
-    for (const [id, amount] of Object.entries(stored ?? {})) {
-      const runeId = Number(id);
-      const count = Number(amount);
-      if (!isRune(runeId) || !Number.isInteger(count) || count <= 0) continue;
-      // Runes that no longer fit (a second old pouch) go to the bank rather than being lost.
-      const kept = store(player, runeId, count, SLOTS);
-      if (count > kept) addToBank(player, runeId, count - kept);
-    }
-  }
 }
 
 module.exports = {
   RUNES_ATTRIBUTE,
   SELECTED_QUANTITY_ATTRIBUTE,
   CUSTOM_QUANTITY_ATTRIBUTE,
-  LEGACY_META_KEY,
   MAX_AMOUNT,
   SLOTS,
   POUCHES,

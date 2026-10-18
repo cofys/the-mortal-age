@@ -30,7 +30,6 @@ import {
     sendInteractStop,
     subscribeTick,
 } from "../../../network/ServerConnection";
-import { sendLogin } from "../../../network/ServerConnection";
 import { flushPackets } from "../../../network/packet";
 import { createTextureArray } from "../../../picogl/PicoTexture";
 import { RS_TO_RADIANS } from "../../../rs/MathConstants";
@@ -124,7 +123,7 @@ import {
 import type { ClientGroundItemStack, GroundItemOverlayEntry } from "../../../game/data/ground/GroundItemStore";
 import { NpcEcs } from "../../../game/ecs/NpcEcs";
 import type { PlayerAnimKey } from "../../../game/ecs/PlayerEcs";
-import { GameState, LoginIndex } from "../../../game/login";
+import { LoginIndex } from "../../../game/login";
 import { Ray, rayIntersectsBox } from "../../../game/math/Raycast";
 import { isMouseInUIRegion as checkMouseInUIRegion } from "../../../game/menu/WorldMenuBuilder";
 import {
@@ -372,21 +371,8 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     if (keyEvent.code === "Tab") {
                         host.osrsClient.handleLoginKeyInput("Tab", "");
                     } else if (keyEvent.code === "Enter" || keyEvent.code === "NumpadEnter") {
-                        // Enter in login form = login button or field switch
-                        const { loginState } = host.osrsClient;
-                        if (loginState.canAttemptLogin()) {
-                            // Update game state to CONNECTING (hides buttons)
-                            loginState.savePersistedLoginState();
-                            host.osrsClient.updateGameState(GameState.CONNECTING);
-                            sendLogin(
-                                loginState.username.trim(),
-                                loginState.password,
-                                host.osrsClient.loadedCache?.info?.revision ?? 0,
-                            );
-                        } else {
-                            loginState.showCredentialValidationError();
-                            host.osrsClient.handleLoginKeyInput("Enter", "");
-                        }
+                        // Enter = Play, the login button, or a field switch
+                        host.osrsClient.submitLoginFromKeyboard();
                     } else if (keyEvent.code === "Backspace") {
                         host.osrsClient.handleLoginKeyInput("Backspace", "");
                     }
@@ -415,14 +401,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                         host.syncMobileLoginInput(false);
                     }
                     if (action === "connect") {
-                        // Send login message
-                        const { loginState } = host.osrsClient;
-                        loginState.savePersistedLoginState();
-                        sendLogin(
-                            loginState.username.trim(),
-                            loginState.password,
-                            host.osrsClient.loadedCache?.info?.revision ?? 0,
-                        );
+                        host.osrsClient.sendLoginRequest();
                     }
                     // Clear click mode to prevent further processing
                     inputManager.clickMode3 = 0;

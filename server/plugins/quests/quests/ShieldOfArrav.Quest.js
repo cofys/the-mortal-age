@@ -2,6 +2,7 @@
 module.exports = function registerShieldOfArravQuest(api) {
   const { Location, Item, Area, Boundary, StatementDialogue, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, startTranscript, openBook } = require("../QuestRuntime");
+  const { crossingFor } = require("../../objects/WallDoor.Doors");
 
   const VARP_SHIELD_OF_ARRAV = 145;
   const VARP_BLACK_ARM_GANG = 146;
@@ -56,10 +57,6 @@ module.exports = function registerShieldOfArravQuest(api) {
   const WEAPON_STORE_DOOR_ID = ObjectIdentifiers.DOOR_70;
   const BLACKARM_DOOR_ID = ObjectIdentifiers.DOOR_71;
   const PHOENIX_HIDEOUT_DOOR_ID = ObjectIdentifiers.DOOR_69;
-
-  const WEAPON_STORE_DOOR_X = 3251;
-  const BLACKARM_DOOR_X = 3185;
-  const PHOENIX_HIDEOUT_DOOR_Y = 9779;
 
   const GANG_PHOENIX = 1;
   const GANG_BLACKARM = 2;
@@ -631,7 +628,7 @@ module.exports = function registerShieldOfArravQuest(api) {
     if (event.itemId !== KEY_ID || event.objectId !== WEAPON_STORE_DOOR_ID) return;
     if (!hasItem(event.player, KEY_ID)) return;
     event.player.sendMessage("You unlock the door using the key you're carrying.");
-    crossDoor(event.player, "x", WEAPON_STORE_DOOR_X);
+    crossDoor(event.player, event.object);
     event.handled = true;
   }
 
@@ -674,33 +671,27 @@ module.exports = function registerShieldOfArravQuest(api) {
       event.handled = true;
       return;
     }
-    if (objectId === WEAPON_STORE_DOOR_ID && option.includes("open")) {
+  }
+
+  /** Doors.plugin.js claims every "Door" first; the gang doors are claimed here through door:toggle. */
+  function handleGangDoor(request) {
+    const { player, objectId, object } = request;
+    if (request.handled || ![WEAPON_STORE_DOOR_ID, BLACKARM_DOOR_ID, PHOENIX_HIDEOUT_DOOR_ID].includes(objectId)) return;
+    request.handled = true;
+    if (objectId === WEAPON_STORE_DOOR_ID) {
       if (!hasItem(player, KEY_ID)) {
         player.sendMessage("The door is securely locked.");
-      } else {
-        player.sendMessage("You unlock the door using the key you're carrying.");
-        crossDoor(player, "x", WEAPON_STORE_DOOR_X);
+        return;
       }
-      event.handled = true;
+      player.sendMessage("You unlock the door using the key you're carrying.");
+    } else if (objectId === BLACKARM_DOOR_ID && (!isBlackArm(player) || quest.getStage(player) < STAGE_JOINED_GANG)) {
+      player.sendMessage("This door is locked from the inside.");
+      return;
+    } else if (objectId === PHOENIX_HIDEOUT_DOOR_ID && (!isPhoenix(player) || quest.getStage(player) < STAGE_JOINED_GANG)) {
+      player.sendMessage("Only Phoenix Gang members may pass.");
       return;
     }
-    if (objectId === BLACKARM_DOOR_ID && option.includes("open")) {
-      if (!isBlackArm(player) || quest.getStage(player) < STAGE_JOINED_GANG) {
-        player.sendMessage("This door is locked from the inside.");
-      } else {
-        crossDoor(player, "x", BLACKARM_DOOR_X);
-      }
-      event.handled = true;
-      return;
-    }
-    if (objectId === PHOENIX_HIDEOUT_DOOR_ID && option.includes("open")) {
-      if (!isPhoenix(player) || quest.getStage(player) < STAGE_JOINED_GANG) {
-        player.sendMessage("Only Phoenix Gang members may pass.");
-      } else {
-        crossDoor(player, "y", PHOENIX_HIDEOUT_DOOR_Y);
-      }
-      event.handled = true;
-    }
+    crossDoor(player, object);
   }
 
   function handleNpcDeath({ killer, npc, npcId }) {
@@ -768,17 +759,9 @@ module.exports = function registerShieldOfArravQuest(api) {
     giveItem(player, itemId, phoenix ? "You find half of a shield in the chest." : "You open the cupboard and find half of a shield inside.");
   }
 
-  function crossDoor(player, axis, coordinate) {
-    const location = player.getLocation();
-    if (axis === "x") {
-      player.moveTo(
-        new Location(location.getX() >= coordinate ? coordinate - 1 : coordinate + 1, location.getY(), location.getZ())
-      );
-    } else {
-      player.moveTo(
-        new Location(location.getX(), location.getY() >= coordinate ? coordinate - 1 : coordinate + 1, location.getZ())
-      );
-    }
+  function crossDoor(player, door) {
+    const crossing = crossingFor(door, player.getLocation());
+    if (crossing) player.moveTo(new Location(crossing.destination.x, crossing.destination.y, crossing.destination.z));
   }
 
   quest = registerQuest(api, {
@@ -825,6 +808,7 @@ module.exports = function registerShieldOfArravQuest(api) {
   api.onItemOnObject(useKeyOnDoor);
   api.onItemOnPlayer(handleItemOnPlayer);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onCustomEvent("door:toggle", handleGangDoor);
   api.onNpcDeath(handleNpcDeath);
   api.onGroundItemPickup(protectPhoenixCrossbows);
   api.registerArea(new WeaponsStoreArea([new Boundary(3242, 3253, 3380, 3390, 1)]));

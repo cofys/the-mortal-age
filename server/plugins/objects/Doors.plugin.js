@@ -65,7 +65,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // The two Ardougne Wall Door loc variants swing open by rotating the same cache loc.
     O.ARDOUGNE_WALL_DOOR, O.ARDOUGNE_WALL_DOOR_2,
     // Ghorrock Prison's western gate has no separate open loc in the cache.
-    O.GATE_282]);
+    O.GATE_282,
+    // The Champions' Guild door (1805): its id+1 is an unrelated nameless loc.
+    O.DOOR_45]);
   // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
   // door 1517 -> 1520, same models), or it has no "Close" (DOOR_181, the open Keldagrim door on
   // the way to the Blast Furnace, shares DOOR_180's model but offers no option). Witch's House's
@@ -75,12 +77,6 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_11, O.LARGE_DOOR_14],
     [O.DOOR_180, O.DOOR_181],
     [O.DOOR_499, O.DOOR_498],
-    // Lassar residential house doors use the next Close-action loc after an
-    // unused actionless variant (48262 Open -> 48264 Close).
-    [O.DOOR_679, O.DOOR_681],
-    // The door beside the residential blue-key room has the same skipped id:
-    // cache 48274 is Open, 48275 is actionless, and 48276 is its Close variant.
-    [O.DOOR_683, O.DOOR_685],
     // Vitur clothing-shop door is a transformed 61840 parent whose visible closed/open
     // children are 61842/61843. The unnamed parent cannot be catalogued by its cache name.
     [O.DOOR_837, O.DOOR_838],
@@ -363,6 +359,20 @@ function buildDoorCatalog() {
     ) {
       closedToOpen.set(id, id + 1);
       openToClosed.set(id + 1, id);
+    }
+    // An unused, actionless variant can sit between a door and its open loc: Varrock's
+    // 11780 -> 11782 (Katrine's hideout, the Phoenix Gang ladder house), Lassar's 48262 -> 48264.
+    const skipped = core.CacheDefinitions.getObject(id + 2);
+    if (
+      !partner.actions?.some(Boolean) &&
+      skipped?.name === def.name &&
+      hasAction(skipped.actions, "close") && !hasAction(skipped.actions, "open") &&
+      JSON.stringify(skipped.models) === JSON.stringify(def.models) &&
+      !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(id) && !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(id + 2) &&
+      !openToClosed.has(id)
+    ) {
+      closedToOpen.set(id, id + 2);
+      openToClosed.set(id + 2, id);
     }
   }
   for (const [closedId, openId] of SINGLE_DOOR_OPEN_IDS) {

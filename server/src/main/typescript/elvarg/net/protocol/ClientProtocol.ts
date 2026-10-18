@@ -23,6 +23,7 @@ export const enum ClientPacket {
   HANDSHAKE = 202,
   LOGOUT = 203,
   LOGIN = 204,
+  LOGIN_FORGET = 207,
   FACE = 211,
   MOVEMENT_INPUT = 215,
   LOC_INTERACT = 231,
@@ -298,7 +299,8 @@ export type ClientMessage =
   | { type: "hello" }
   | { type: "ping" }
   | { type: "logout" }
-  | { type: "login"; username: string; password: string; revision: number }
+  | { type: "login"; username: string; password: string; revision: number; flags: number }
+  | { type: "login_forget"; username: string; token: string }
   | { type: "handshake"; name: string; clientType: number };
 
 class Reader {
@@ -873,7 +875,11 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         username: reader.string(),
         password: reader.string(),
         revision: reader.int(),
+        // LOGIN_FLAG_* (net/login/LoginTokens); older clients don't send it.
+        flags: reader.remaining > 0 ? reader.byte() : 0,
       };
+    case ClientPacket.LOGIN_FORGET:
+      return { type: "login_forget", username: reader.string(), token: reader.string() };
     case ClientPacket.HANDSHAKE: {
       const name = reader.string();
       const hasAppearance = reader.byte() !== 0;
@@ -957,6 +963,15 @@ function packet(opcode: ServerPacket, payload: Buffer, lengthBytes: 0 | 1 | 2 = 
 function string(value: string): Buffer {
   return Buffer.concat([Buffer.from(value, "latin1"), Buffer.from([0])]);
 }
+
+/** Chatbox channels a game message can go to (the cache's chat types, as rsprox names them). */
+export const ChatType = {
+  GAME: 0,
+  /** Filtered out with "Filter: on" (the Game tab's filter). */
+  SPAM: 105,
+  /** An NPC's overhead line, shown as "Name: text"; the NPC's name goes in `from`. */
+  NPC_SAY: 116,
+} as const;
 
 export function encodeChatMessage(
   messageType: "game" | "public" | "private_in" | "private_out" | "channel" | "clan" | "trade" | "server",
@@ -2168,14 +2183,16 @@ export function encodeLoginResponse(
   success: boolean,
   errorCode = -1,
   error = "",
-  displayName = ""
+  displayName = "",
+  /** A new remembered-login token, empty when none was issued. */
+  loginToken = ""
 ): Buffer {
   const fixed = Buffer.alloc(5);
   fixed[0] = success ? 1 : 0;
   fixed.writeInt32BE(errorCode, 1);
   return packet(
     ServerPacket.LOGIN_RESPONSE,
-    Buffer.concat([fixed, string(error), string(displayName)])
+    Buffer.concat([fixed, string(error), string(displayName), string(loginToken)])
   );
 }
 

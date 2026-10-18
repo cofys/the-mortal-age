@@ -537,6 +537,9 @@ module.exports = {
     api.onObjectInteraction("Bank chest", {
       "Collect": openCollectionBox,
     });
+    api.onObjectInteraction("Bank Chest", {
+      "Collect": openCollectionBox,
+    });
 
     api.onInterfaceActionButton(COLLECTION_BUTTONS, handleCollectionButton);
     api.onItemFirstAction(handleInventoryItem);

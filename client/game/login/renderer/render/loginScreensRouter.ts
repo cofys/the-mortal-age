@@ -70,7 +70,7 @@ export function drawLoginScreenToCtx(host: LoginRendererHost, ctx: RenderContext
                     drawTryAgain(host, ctx, state);
                     break;
                 case LoginIndex.WELCOME_DISPLAY_NAME:
-                    drawWelcomeDisplayName(host, ctx, state);
+                    drawWelcomeDisplayName(host, ctx, state, gameState === GameState.CONNECTING);
                     break;
                 case LoginIndex.TERMS:
                     drawTerms(host, ctx, state);

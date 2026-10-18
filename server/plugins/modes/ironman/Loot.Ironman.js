@@ -4,7 +4,7 @@
  *   "You're an Ironman, so you can't take items that other players have dropped." Unowned world
  *   spawns are fine.
  * - A kill another player damaged gives no drop: "As an Ironman, you don't get loot if other
- *   players helped you kill the monster."
+ *   players helped you kill the monster." (bar what its plugin keeps, such as Scurrius' clues)
  * - Attacking an npc another player has damaged warns once: "As an Ironman, you might not receive
  *   kill-credit for this monster."
  * - A player an Ironman kills drops loot the Ironman can't take: it's registered to the fallen
@@ -25,11 +25,18 @@ function pickup(event) {
   event.handled = true;
 }
 
+/**
+ * A shared kill's loot is lost, except what the monster's plugin keeps for Ironmen
+ * (`ironman:shared-kill-keeps` { player, npc, npcId, keep }: item ids pushed onto `keep`).
+ */
 function rolledDrops(event) {
   const { player, drops, damagers } = event;
   if (!Common.isIron(player)) return;
   if (!(damagers ?? []).some((other) => other && other !== player)) return;
-  drops.splice(0, drops.length);
+  const request = { player, npc: event.npc, npcId: event.npcId, keep: [] };
+  Common.api.emitCustomEvent("ironman:shared-kill-keeps", request);
+  const kept = drops.filter((drop) => request.keep.includes(drop.itemId));
+  drops.splice(0, drops.length, ...kept);
   player.sendMessage(Common.message("sharedKill"));
 }
 

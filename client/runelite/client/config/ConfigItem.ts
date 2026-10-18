@@ -27,6 +27,8 @@ export interface ConfigItemDef<T = unknown> {
     alpha?: boolean;
     units?: string;
     range?: { min?: number; max?: number };
+    /** Step of a number field; whole numbers unless set (RuneLite's `double` items). */
+    step?: number;
     /** Enum values shown as a dropdown, in declaration order. */
     enum?: Record<string, unknown>;
     default: T;

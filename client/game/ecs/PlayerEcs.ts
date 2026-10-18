@@ -408,6 +408,9 @@ export class PlayerEcs {
         this.modelIndicesCountAlpha[index] = 0;
 
         if (this.interactionIndex) this.interactionIndex[index] = NO_INTERACTION;
+        // Overlay loops walk every slot below size(), freed ones included.
+        if (this.headIconPk) this.headIconPk[index] = -1;
+        if (this.headIconPrayer) this.headIconPrayer[index] = -1;
 
         this.clearOverheadChat(index);
     }

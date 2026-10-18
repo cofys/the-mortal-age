@@ -1,6 +1,6 @@
 # The boss HUD
 
-The `BossHud` plugin (`server/plugins/interface/BossHud.plugin.js`) sends the boss health HUD, interface 303 `hpbar_hud`, for every boss that shows it: the Mad Angel, the Doom of Mokhaiotl, the Gemstone Crab and the Tombs of Amascut bosses.
+The `BossHud` plugin (`server/plugins/interface/BossHud.plugin.js`) sends the boss health HUD, interface 303 `hpbar_hud`, for every boss that shows it: the Mad Angel, the Doom of Mokhaiotl, the Gemstone Crab, the Tombs of Amascut bosses and the Wilderness bosses in their lairs ([wilderness-bosses.md](wilderness-bosses.md)).
 
 ## How it works
 

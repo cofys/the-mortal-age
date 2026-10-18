@@ -1,0 +1,172 @@
+{
+  "$comment": "Vardorvis after Desert Treasure II (plugins/bosses/Vardorvis.plugin.js, docs/vardorvis.md). Tiles are the ritual site's own (region 4405); the instance copies its chunks unturned. Timings are server ticks; delays on map animations are client cycles (30 a tick). Captured from rsprox recordings 3285 (rev 234) and 3344 (rev 235); numbers marked Wiki in docs/vardorvis.md come from the OSRS Wiki.",
+  "instance": { "sourceChunkX": 139, "sourceChunkY": 425, "width": 5, "height": 5 },
+  "npcs": {
+    "boss": 12223,
+    "largeTendril": 12225,
+    "head": 12226,
+    "axe": 12227,
+    "axeStatic": 12229
+  },
+  "quest": "desert_treasure_ii",
+  "site": {
+    "entryLoc": 49495,
+    "exitLoc": 47603,
+    "exitSealedLoc": 47604,
+    "exitTile": [1118, 3428, 0],
+    "arrival": [1119, 3428, 0],
+    "outside": [1117, 3428, 0],
+    "enterMessage": "You enter the ritual site.",
+    "awakenQuestion": "Consume the awakener's orb to awaken Vardorvis?",
+    "awakenerOrb": 28334,
+    "fade": { "minimapTicks": 1, "moveTicks": 2, "inTicks": 4, "closeTicks": 6 }
+  },
+  "boss": {
+    "tile": [1128, 3417, 0],
+    "face": "NORTH_WEST",
+    "size": 2,
+    "meleeAnim": 10340,
+    "respawnTicks": 19,
+    "killTicks": 4,
+    "hudHideTicks": 12,
+    "normal": {
+      "hitpoints": 700,
+      "attack": 280,
+      "strength": [270, 360],
+      "defence": [215, 145],
+      "maxHit": [32, 43]
+    },
+    "awakened": {
+      "hitpoints": 1400,
+      "attack": 420,
+      "strength": [391, 522],
+      "defence": [268, 181],
+      "maxHit": [46, 61]
+    },
+    "prayerShare": 0.25,
+    "lifesteal": 0.5,
+    "healSplat": 6
+  },
+  "clock": {
+    "attackTicks": 5,
+    "firstAttackTicks": 1,
+    "firstAxesTicks": 14,
+    "axeTicks": 13,
+    "enragedAxeTicks": 8,
+    "axesAfterStrangleTicks": 8,
+    "enrageShare": 0.33,
+    "specialsBelow": 570,
+    "awakenedSpecialsBelow": 1140
+  },
+  "barrier": {
+    "west": 1123, "east": 1135, "south": 3412, "north": 3424,
+    "cyclesPerTile": 2,
+    "locs": [47599, 47600, 47601],
+    "blocking": 26209,
+    "cleared": 29733,
+    "riseSpots": [2516, 2517, 2518],
+    "fallSpots": [2513, 2514, 2515],
+    "sidePattern": [0, 2, 0, 1, 0, 2, 0, 2, 0, 1, 0, 2, 0],
+    "riseSounds": [7088, 3906],
+    "fallSound": 7155,
+    "fallTicks": 1
+  },
+  "axes": {
+    "centre": [1129, 3418],
+    "anchors": [[1123, 3417], [1123, 3422], [1128, 3422], [1133, 3422], [1133, 3417], [1133, 3412], [1128, 3412], [1123, 3412]],
+    "count": {
+      "normal": [[690, 1, 0], [231, 2, 1], [0, 3, 0]],
+      "awakened": [[1380, 2, 0], [462, 3, 1], [0, 4, 0]],
+      "extraChance": 0.6
+    },
+    "tendrilAnim": 10364,
+    "windupAnim": 10365,
+    "windupTicks": 1,
+    "throwTicks": 3,
+    "inset": 2,
+    "steps": [2, 2, 2, 1],
+    "spinAnim": 10366,
+    "staticAnim": 10336,
+    "sound": 7078,
+    "size": 3,
+    "maxHit": { "normal": 35, "awakened": 96 },
+    "prayerShare": 0.5,
+    "bleed": {
+      "message": "<col=ff3045>You have started bleeding!",
+      "sounds": [7081, 7083],
+      "damage": { "normal": 3, "awakened": 5 },
+      "splat": 67,
+      "firstTicks": 6,
+      "intervalTicks": 5,
+      "durationTicks": 16
+    }
+  },
+  "head": {
+    "message": "<col=ff289d>Vardorvis' head gazes upon you...</col>",
+    "lockMessage": "You've been injured and can't use protection prayers!",
+    "refusedMessage": "You've been injured and can't use that prayer!",
+    "landSound": 4015,
+    "flightTicks": 3,
+    "lockTicks": 3,
+    "prayerDrain": 10,
+    "spread": 3,
+    "pairGapTicks": 1,
+    "pairBelowShare": 0.5,
+    "styles": {
+      "ranged": { "projectile": 2521, "scream": 2550, "impact": 2552, "sound": 3539, "prayer": "PROTECT_FROM_MISSILES" },
+      "magic": { "projectile": 2520, "scream": 2549, "impact": 2551, "sound": 277, "prayer": "PROTECT_FROM_MAGIC" }
+    },
+    "projectile": { "start": 15, "end": 90, "angle": 8, "progress": 0, "startHeight": 124, "endHeight": 96 },
+    "impact": { "delay": 90, "height": 124 }
+  },
+  "dash": {
+    "anim": 10341,
+    "sound": 7154,
+    "darts": [[500, 1], [130, 2], [0, 3]],
+    "sides": [[[-2, -1], [-2, 0]], [[1, -1], [1, 0]], [[-1, 1], [0, 1]], [[-1, -2], [0, -2]]],
+    "warningSpot": 2510,
+    "eruptSpot": 2512,
+    "eruptTicks": 3,
+    "eruptSound": 7145,
+    "eruptAreaSound": { "id": 7109, "delay": 30 },
+    "delays": [3, 6, 9, 12],
+    "centreDelay": 6,
+    "tiles": [3, 5],
+    "reach": 2,
+    "maxHit": { "normal": 25, "awakened": 40 },
+    "cooldownTicks": 15,
+    "firstTicks": 30,
+    "chance": 0.6
+  },
+  "strangle": {
+    "startAnim": 10342,
+    "loopAnim": 10343,
+    "endAnim": 10344,
+    "startSound": 565,
+    "loopSound": 7099,
+    "endSound": 2414,
+    "openTicks": 2,
+    "windowTicks": { "normal": 5, "awakened": 3 },
+    "spores": { "first": 4, "max": 6 },
+    "chance": 0.25,
+    "interface": 833,
+    "sporeComponents": [11, 10, 9, 8, 7, 6],
+    "sporeVarp": 3942,
+    "setupScript": 1816,
+    "fadeScript": 1823,
+    "playerAnim": 10166,
+    "spots": { "spawn": 2523, "idle": 2524, "despawn": 2525 },
+    "maxHit": { "normal": 25, "awakened": 40 },
+    "minShare": 0.6,
+    "message": "<col=ff3045>Vardorvis entangles you in some tendrils!</col>",
+    "escapeMessage": "<col=229628>You manage to escape from the tendrils.</col>",
+    "tightenMessage": "<col=ff3045>The tendrils tighten around you, damaging you in the process!</col>"
+  },
+  "kill": {
+    "killCountVarp": 3970,
+    "awakenedKillCountVarp": 3971,
+    "message": "Your Vardorvis kill count is: <col=ff0000>%d</col>.",
+    "awakenedMessage": "Your Vardorvis (Awakened) kill count is: <col=ff0000>%d</col>.",
+    "awakenedTask": "Vardorvis Sleeper"
+  }
+}

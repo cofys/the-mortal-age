@@ -1,3 +1,4 @@
+import { npcInterpolation } from "../../npc/NpcInterpolation";
 import { getClientCycle } from "../../../network/ServerConnection";
 import { clamp } from "../../../common/utils/MathUtil";
 import type { NpcEcs } from "../../../game/ecs/NpcEcs";
@@ -226,7 +227,7 @@ export function shouldLayerNpcMovementSequence(
     }
 }
 
-/** Port of render/render/anim/npc2.ts resolveUnbatchedNpcGeometry (smoothing disabled). */
+/** Port of render/render/anim/npc2.ts resolveUnbatchedNpcGeometry (including animation smoothing). */
 export function resolveUnbatchedNpcGeometry(
     client: OsrsClient,
     loader: DynamicNpcAnimLoader,
@@ -259,6 +260,7 @@ export function resolveUnbatchedNpcGeometry(
                 frameId,
                 overlaySeqId,
                 overlayFrameId,
+                npcInterpolation(client, ecsId, renderSeqId, frameId, overlaySeqId, overlayFrameId),
             );
         }
         const hasGraphics =

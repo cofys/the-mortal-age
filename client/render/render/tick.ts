@@ -189,6 +189,7 @@ import { KNOWN_WATER_TEXTURE_IDS } from "../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "./hostInterface";
 import { RENDER_CONSTANTS } from "./constants";
 import { updateWorldEntityMotion } from "./worldEntityMotion";
+import { syncLocAnimationSmoothing } from "./locs";
 
 export function tickPass(host: WebGLOsrsRendererHost, 
         time: number,
@@ -198,6 +199,7 @@ export function tickPass(host: WebGLOsrsRendererHost,
     ): void {
 
         const seqFrameLoader = host.osrsClient.seqFrameLoader;
+        syncLocAnimationSmoothing(host);
 
         host.actorRenderCount = 0;
 

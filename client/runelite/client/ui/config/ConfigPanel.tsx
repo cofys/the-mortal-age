@@ -152,6 +152,7 @@ function ConfigField({
                     type="number"
                     min={item.range?.min}
                     max={item.range?.max}
+                    step={item.step}
                     value={Number(value)}
                     onChange={(event) => {
                         const numeric = Number(event.target.value);

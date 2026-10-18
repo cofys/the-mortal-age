@@ -280,6 +280,13 @@ function canLightFireAt(player, location, privateArea) {
   if (!location) {
     return false;
   }
+  // "firemaking:can-light" { player, location, allowed, message }: a place where fires can't be lit.
+  const request = { player, location, allowed: true, message: null };
+  pluginApi.emitCustomEvent("firemaking:can-light", request);
+  if (!request.allowed) {
+    if (request.message) player.sendMessage(request.message);
+    return false;
+  }
   if (isFireTileBlocked(location, privateArea ?? player.getPrivateArea())) {
     const handled = pluginApi.emitFiremakingBlocked({
       player,

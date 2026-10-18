@@ -431,8 +431,8 @@ fn actorFogAmount(localPos: vec4<f32>) -> f32 {
 
 type ActorKind = "npc" | "gfx" | "player" | "projectile";
 
-/** Kinds whose geometry is the 16-byte actor stride (4th word: HD normal + base HSL). */
-const WIDE_KINDS: ReadonlySet<ActorKind> = new Set(["npc", "player"]);
+/** Actor geometry carries normal/base HSL and fractional position words. */
+const WIDE_KINDS: ReadonlySet<ActorKind> = new Set(["npc", "player", "gfx", "projectile"]);
 
 /**
  * WGSL statements that decode and place one actor vertex. Defines `vertex`, `actorRotation`,
@@ -457,9 +457,12 @@ function placement(kind: ActorKind): string {
         : "vec4<f32>(vertex.pos, 1.0)";
     // player.vert.glsl: GPU-posed vertices are moved by their label's pose matrix, whose
     // rotation also turns their rest-pose normals (poseLinear).
+    const fraction = WIDE_KINDS.has(kind)
+        ? `vertex.pos += vec3<f32>(f32(a_positionFraction & 1023u), -f32((a_positionFraction >> 10u) & 1023u), f32((a_positionFraction >> 20u) & 1023u)) / 1024.0;` : "";
     const pose = player
         ? `
     var vertex = decodeVertex(a_vertex.x, a_vertex.y, a_vertex.z, scene.u_brightness, actorHslOverride);
+    ${fraction}
     var poseLinear = IDENTITY3;
     if (a_label > 0u && actorU.u_poseRow >= 0) {
         let texel = i32(a_label - 1u) * 3;
@@ -471,7 +474,8 @@ function placement(kind: ActorKind): string {
         poseLinear = transpose(mat3x3<f32>(r0.xyz, r1.xyz, r2.xyz));
     }`
         : `
-    let vertex = decodeVertex(a_vertex.x, a_vertex.y, a_vertex.z, scene.u_brightness, actorHslOverride);
+    var vertex = decodeVertex(a_vertex.x, a_vertex.y, a_vertex.z, scene.u_brightness, actorHslOverride);
+    ${fraction}
     let poseLinear = IDENTITY3;`;
     // player.vert.glsl: the equipment face layer biases projected depth only, keeping the
     // original screen position and perspective.
@@ -506,7 +510,7 @@ ${info}${pose}
 
 function vertexParams(kind: ActorKind): string {
     const wide = WIDE_KINDS.has(kind);
-    return `@location(0) a_vertex: vec${wide ? 4 : 3}<u32>${kind === "player" ? ", @location(1) a_label: u32" : ""}`;
+    return `@location(0) a_vertex: vec${wide ? 4 : 3}<u32>${wide ? ", @location(3) a_positionFraction: u32" : ""}${kind === "player" ? ", @location(1) a_label: u32" : ""}`;
 }
 
 function sceneVertexEntry(kind: ActorKind, ext?: WebGPUSceneShaders): string {

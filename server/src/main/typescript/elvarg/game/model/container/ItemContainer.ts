@@ -1,7 +1,7 @@
 import { Item } from "../Item";
 import type { Player } from "../../entity/impl/player/Player";
 
-import { StackType } from "./StackType";
+import { StackType, MAX_STACK_AMOUNT } from "./StackType";
 // Avoid eager imports here to prevent circular dependency when containers extend ItemContainer.
 // Use dynamic requires in methods where needed.
 const placeholder = (name: string) => {
@@ -315,10 +315,10 @@ export abstract class ItemContainer {
     ) {
       if (
         to.getAmount(item.getId()) + item.getAmount() >
-          Number.MAX_SAFE_INTEGER ||
+          MAX_STACK_AMOUNT ||
         to.getAmount(item.getId()) + item.getAmount() <= 0
       ) {
-        item.setAmount(Number.MAX_SAFE_INTEGER - to.getAmount(item.getId()));
+        item.setAmount(MAX_STACK_AMOUNT - to.getAmount(item.getId()));
         if (item.getAmount() <= 0) {
           this.getPlayer().sendMessage(
             "You cannot deposit that entire amount into your bank."
@@ -509,8 +509,8 @@ export abstract class ItemContainer {
       let totalAmount = this.items[slot].getAmount() + item.getAmount();
       this.items[slot].setId(item.getId());
       this.items[slot].setMeta(item.getMeta());
-      if (totalAmount > Number.MAX_SAFE_INTEGER) {
-        this.items[slot].setAmount(Number.MAX_SAFE_INTEGER);
+      if (totalAmount > MAX_STACK_AMOUNT) {
+        this.items[slot].setAmount(MAX_STACK_AMOUNT);
       } else {
         this.items[slot].setAmount(
           this.items[slot].getAmount() + item.getAmount()

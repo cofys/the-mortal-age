@@ -68,9 +68,21 @@ export class Model extends Entity {
     verticesCount: number;
     usedVertexCount: number;
 
-    verticesX!: Int32Array;
-    verticesY!: Int32Array;
-    verticesZ!: Int32Array;
+    verticesX!: Int32Array | Float32Array;
+    verticesY!: Int32Array | Float32Array;
+    verticesZ!: Int32Array | Float32Array;
+
+    protected fractionalAnimation = false;
+
+    /** Preserve sub-unit animation transforms without changing unanimated cache geometry. */
+    enableFractionalAnimation(): void {
+        if (this.fractionalAnimation) return;
+        this.fractionalAnimation = true;
+        // LabelPose stores matrices instead of vertices.
+        if (this.verticesX) this.verticesX = Float32Array.from(this.verticesX);
+        if (this.verticesY) this.verticesY = Float32Array.from(this.verticesY);
+        if (this.verticesZ) this.verticesZ = Float32Array.from(this.verticesZ);
+    }
 
     contourVerticesY?: Int32Array;
 
@@ -168,9 +180,10 @@ export class Model extends Entity {
         const copy: Model = Object.assign(Object.create(Object.getPrototypeOf(model)), model);
         // const copy = new Model();
 
-        copy.verticesX = new Int32Array(model.verticesCount);
-        copy.verticesY = new Int32Array(model.verticesCount);
-        copy.verticesZ = new Int32Array(model.verticesCount);
+        const Coordinates = model.fractionalAnimation ? Float32Array : Int32Array;
+        copy.verticesX = new Coordinates(model.verticesCount);
+        copy.verticesY = new Coordinates(model.verticesCount);
+        copy.verticesZ = new Coordinates(model.verticesCount);
 
         for (let i = 0; i < model.verticesCount; i++) {
             copy.verticesX[i] = model.verticesX[i];
@@ -773,9 +786,10 @@ export class Model extends Entity {
         const cos = COSINE[angle];
 
         for (let i = 0; i < this.verticesCount; i++) {
-            const temp = (sin * this.verticesZ[i] + cos * this.verticesX[i]) >> 16;
-            this.verticesZ[i] = (cos * this.verticesZ[i] - sin * this.verticesX[i]) >> 16;
-            this.verticesX[i] = temp;
+            const x = sin * this.verticesZ[i] + cos * this.verticesX[i];
+            const z = cos * this.verticesZ[i] - sin * this.verticesX[i];
+            this.verticesX[i] = this.fractionalAnimation ? x / 65536 : x >> 16;
+            this.verticesZ[i] = this.fractionalAnimation ? z / 65536 : z >> 16;
         }
 
         this.invalidateBounds();
@@ -793,9 +807,9 @@ export class Model extends Entity {
 
     scale(x: number, y: number, z: number): void {
         for (let i = 0; i < this.verticesCount; i++) {
-            this.verticesX[i] = ((this.verticesX[i] * x) / 128) | 0;
-            this.verticesY[i] = ((this.verticesY[i] * y) / 128) | 0;
-            this.verticesZ[i] = ((this.verticesZ[i] * z) / 128) | 0;
+            this.verticesX[i] = this.fractionalAnimation ? this.verticesX[i] * x / 128 : ((this.verticesX[i] * x) / 128) | 0;
+            this.verticesY[i] = this.fractionalAnimation ? this.verticesY[i] * y / 128 : ((this.verticesY[i] * y) / 128) | 0;
+            this.verticesZ[i] = this.fractionalAnimation ? this.verticesZ[i] * z / 128 : ((this.verticesZ[i] * z) / 128) | 0;
         }
 
         this.invalidateBounds();
@@ -847,6 +861,7 @@ export class Model extends Entity {
         alpha: number,
         op14: boolean,
     ): void {
+        this.enableFractionalAnimation();
         if (this.vertexLabels) {
             Model.resetAnimateOrigin();
 
@@ -929,9 +944,13 @@ export class Model extends Entity {
         match: boolean,
         op14: boolean,
     ): void {
-        void nextFrame;
-        void alpha;
-        this.applyInterleaveFrame(frame, interleave, match, op14);
+        if (!this.vertexLabels) return;
+        Model.resetAnimateOrigin();
+        const selected = new Array<boolean>(frame.base.count).fill(false);
+        for (const group of interleave) if (group < selected.length) selected[group] = true;
+        this.transformInterpolated(frame.base, frame,
+            nextFrame?.base === frame.base ? nextFrame : undefined,
+            selected, match, op14, 0xffff, alpha);
     }
 
     /**
@@ -944,7 +963,19 @@ export class Model extends Entity {
         op14: boolean,
         interleave: number[] | undefined,
         match: boolean,
+        nextFrame?: SeqFrame,
+        alpha?: number,
     ): void {
+        if (alpha !== undefined) {
+            this.enableFractionalAnimation();
+            if (!interleave?.length) {
+                this.animateInterpolated(frame, nextFrame, alpha, op14);
+                return;
+            }
+            this.applyInterleaveFrameInterpolated(frame, nextFrame, alpha, interleave, match, op14);
+            this.postAnimate();
+            return;
+        }
         if (!this.vertexLabels) return;
         if (!interleave || interleave.length === 0) {
             this.animate(frame, undefined, op14);
@@ -985,6 +1016,7 @@ export class Model extends Entity {
         overlayOp14: boolean,
         interleave: number[],
     ): void {
+        this.enableFractionalAnimation();
         if (!this.vertexLabels) return;
         if (!interleave || interleave.length === 0) {
             this.animateInterpolated(baseFrame, nextBaseFrame, baseAlpha, baseOp14);
@@ -1083,17 +1115,17 @@ export class Model extends Entity {
                 // every frame turns the same way each time and spins (the demonbane cast's
                 // staff). It snaps, as it does unblended.
                 const flip = dx === -128 || dy === -128 || dz === -128;
-                x = flip ? x0 : (x0 + Math.trunc(dx * alpha)) & 0xff;
-                y = flip ? y0 : (y0 + Math.trunc(dy * alpha)) & 0xff;
-                z = flip ? z0 : (z0 + Math.trunc(dz * alpha)) & 0xff;
+                x = flip ? x0 : ((x0 + dx * alpha) % 256 + 256) % 256;
+                y = flip ? y0 : ((y0 + dy * alpha) % 256 + 256) % 256;
+                z = flip ? z0 : ((z0 + dz * alpha) % 256 + 256) % 256;
             } else if (type === SeqTransformType.ALPHA) {
                 x = x0;
                 y = 0;
                 z = 0;
             } else {
-                x = x0 + Math.trunc((x1 - x0) * alpha);
-                y = y0 + Math.trunc((y1 - y0) * alpha);
-                z = z0 + Math.trunc((z1 - z0) * alpha);
+                x = x0 + (x1 - x0) * alpha;
+                y = y0 + (y1 - y0) * alpha;
+                z = z0 + (z1 - z0) * alpha;
             }
             this.transform(type, base.labels[group], x, y, z, op14, base.masks[group] & mask);
         }
@@ -1178,6 +1210,47 @@ export class Model extends Entity {
         }
     }
 
+    private transformFractional(type: SeqTransformType, labels: number[], tx: number, ty: number, tz: number): void {
+        if (type === SeqTransformType.ORIGIN) {
+            Model.resetAnimateOrigin();
+            let count = 0;
+            for (const label of labels) for (const v of this.vertexLabels[label] ?? []) {
+                Model.animateOriginX += this.verticesX[v];
+                Model.animateOriginY += this.verticesY[v];
+                Model.animateOriginZ += this.verticesZ[v];
+                count++;
+            }
+            Model.animateOriginX = tx + (count ? Model.animateOriginX / count : 0);
+            Model.animateOriginY = ty + (count ? Model.animateOriginY / count : 0);
+            Model.animateOriginZ = tz + (count ? Model.animateOriginZ / count : 0);
+            return;
+        }
+        const radians = Math.PI * 2 / 256;
+        const rotate = type === SeqTransformType.ROTATE;
+        const sx = rotate ? Math.sin(tx * radians) : 0, cx = rotate ? Math.cos(tx * radians) : 1;
+        const sy = rotate ? Math.sin(ty * radians) : 0, cy = rotate ? Math.cos(ty * radians) : 1;
+        const sz = rotate ? Math.sin(tz * radians) : 0, cz = rotate ? Math.cos(tz * radians) : 1;
+        for (const label of labels) for (const v of this.vertexLabels[label] ?? []) {
+            if (type === SeqTransformType.TRANSLATE) {
+                this.verticesX[v] += tx; this.verticesY[v] += ty; this.verticesZ[v] += tz;
+                continue;
+            }
+            let x = this.verticesX[v] - Model.animateOriginX;
+            let y = this.verticesY[v] - Model.animateOriginY;
+            let z = this.verticesZ[v] - Model.animateOriginZ;
+            if (type === SeqTransformType.ROTATE) {
+                let t = sz * y + cz * x; y = cz * y - sz * x; x = t;
+                t = cx * y - sx * z; z = sx * y + cx * z; y = t;
+                t = sy * z + cy * x; z = cy * z - sy * x; x = t;
+            } else if (type === SeqTransformType.SCALE) {
+                x *= tx / 128; y *= ty / 128; z *= tz / 128;
+            }
+            this.verticesX[v] = x + Model.animateOriginX;
+            this.verticesY[v] = y + Model.animateOriginY;
+            this.verticesZ[v] = z + Model.animateOriginZ;
+        }
+    }
+
     transform0(
         type: SeqTransformType,
         labels: number[],
@@ -1186,6 +1259,10 @@ export class Model extends Entity {
         tz: number,
         op14: boolean,
     ) {
+        if (this.fractionalAnimation && type <= SeqTransformType.SCALE) {
+            this.transformFractional(type, labels, tx, ty, tz);
+            return;
+        }
         switch (type) {
             case SeqTransformType.ORIGIN:
                 Model.resetAnimateOrigin();

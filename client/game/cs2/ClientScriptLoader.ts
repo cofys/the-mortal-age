@@ -5,6 +5,7 @@ import { retryOnMissingGroup } from "../../rs/cache/js5/retryOnMissingGroup";
 import { Opcodes } from "../../rs/cs2/Opcodes";
 import { type Script as Cs2Script, parseScriptFromBytes } from "../../rs/cs2/Script";
 import { applySortCallbacks } from "../../rs/cs2/sortCallbacks";
+import { applyZoomCallbacks } from "../../rs/cs2/zoomCallbacks";
 
 const CHAT_INPUT_SCRIPT_ID = 73;
 
@@ -128,6 +129,7 @@ export class ClientScriptLoader {
             }
         }
         applySortCallbacks(script);
+        applyZoomCallbacks(script);
         if (this.cache.has(scriptId)) {
             this.cache.delete(scriptId);
         }

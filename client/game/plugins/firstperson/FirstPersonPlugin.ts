@@ -1100,6 +1100,11 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         return this.enabled && this.client.menuOpen;
     }
 
+    /** First person is on (Backquote), so it owns the camera. */
+    isActive(): boolean {
+        return this.enabled;
+    }
+
     private setEnabled(enabled: boolean): void {
         this.spaceHandled = true;
         this.enabled = enabled;

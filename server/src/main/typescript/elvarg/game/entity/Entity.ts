@@ -11,7 +11,7 @@ export abstract class Entity {
      */
     private location: Location = (GameConstants?.DEFAULT_LOCATION?.clone?.() ?? new Location(0, 0));
     private area: Area | null = null;
-    private flags = new Set<string>();
+    private flags: Set<string> | null = null;
     /**
      * The Entities constructor.
      *
@@ -70,7 +70,7 @@ export abstract class Entity {
     }
 
     public hasFlag(flag: string): boolean {
-        return typeof flag === "string" && this.flags.has(flag);
+        return typeof flag === "string" && (this.flags?.has(flag) ?? false);
     }
 
     public setFlag(flag: string, enabled = true): this {
@@ -82,9 +82,10 @@ export abstract class Entity {
             return this;
         }
         if (enabled) {
-            this.flags.add(normalized);
+            (this.flags ??= new Set<string>()).add(normalized);
         } else {
-            this.flags.delete(normalized);
+            this.flags?.delete(normalized);
+            if (this.flags?.size === 0) this.flags = null;
         }
         return this;
     }
@@ -94,11 +95,11 @@ export abstract class Entity {
     }
 
     public getFlags(): string[] {
-        return Array.from(this.flags);
+        return this.flags ? Array.from(this.flags) : [];
     }
 
     public setFlags(flags: Iterable<string> | null | undefined): this {
-        this.flags.clear();
+        this.flags = null;
         if (flags == null) {
             return this;
         }
@@ -109,7 +110,7 @@ export abstract class Entity {
     }
 
     public clearFlags(): this {
-        this.flags.clear();
+        this.flags = null;
         return this;
     }
 }

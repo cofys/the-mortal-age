@@ -1,6 +1,8 @@
 // Lazy load to avoid circular container/definition bootstrap.
 const getItemDefinition = () => require('../definition/ItemDefinition').ItemDefinition as typeof import('../definition/ItemDefinition').ItemDefinition;
 
+import { MAX_STACK_AMOUNT } from "./container/StackType";
+
 export class Item {
 
     public static readonly UNTRADEABLE_META = "untradeable";
@@ -123,7 +125,7 @@ export class Item {
      * Increment the amount by 1.
      */
     public incrementAmount(): void {
-        if ((this.amount + 1) > Number.MAX_SAFE_INTEGER) {
+        if (this.amount >= MAX_STACK_AMOUNT) {
             return;
         }
         this.amount++;
@@ -140,8 +142,8 @@ export class Item {
     }
 
     public incrementAmountBy(amount: number): void {
-        if ((this.amount + amount) > Number.MAX_SAFE_INTEGER) {
-            this.amount = Number.MAX_SAFE_INTEGER;
+        if (this.amount + amount >= MAX_STACK_AMOUNT) {
+            this.amount = MAX_STACK_AMOUNT;
         } else {
             this.amount += amount;
         }

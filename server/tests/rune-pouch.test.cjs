@@ -509,12 +509,11 @@ test("spells take only the shortfall from the pouch", () => {
   assert.equal(CombatSpells.WIND_STRIKE.canCast(noPouch, false), false, "the runes need the pouch carried");
 });
 
-test("login moves runes from an old pouch's meta onto the player and sends the varbits", () => {
-  const pouch = new Item(Items.RUNE_POUCH, 1);
-  pouch.setMetaValue(Pouch.LEGACY_META_KEY, { [Items.AIR_RUNE]: 500, [Items.LAW_RUNE]: 3 });
-  const player = createPlayer([pouch]);
+test("login sends saved player pouch slots without opening bank tabs", () => {
+  const player = createPlayer();
+  player.setAttribute(Pouch.RUNES_ATTRIBUTE, [[Items.AIR_RUNE, 500], [Items.LAW_RUNE, 3]]);
+  player.getBank = () => { throw new Error("login must not instantiate bank tabs"); };
   Pouch.login(player);
-  assert.equal(pouch.getMetaValue(Pouch.LEGACY_META_KEY), undefined);
   assert.deepEqual(varbitSlots(player), [[Items.AIR_RUNE, 500], [Items.LAW_RUNE, 3]]);
 });
 

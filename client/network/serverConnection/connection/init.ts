@@ -84,6 +84,7 @@ export function initServerConnection(url: string = DEFAULT_URL): void {
                         username: state.sessionUsername,
                         password: state.sessionPassword,
                         revision: state.sessionRevision,
+                        flags: state.sessionLoginFlags,
                     },
                 } as any);
             }

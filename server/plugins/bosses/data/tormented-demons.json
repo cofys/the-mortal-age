@@ -1,0 +1,22 @@
+{
+  "$comment": "Tormented Demons (docs/tormented-demons.md). zones: how many demons a player may fight at once around each tile (varbit td_multiway_indicator); a tile takes the limit of the nearest zone point. The room points are the Wiki's multicombat map of the Ancient Guthixian Temple (Map:Multicombat_AGT), whose 26 spawns fall 8/1/1 single, 5x2 double and 2x3 triple; the corridor points are where rsprox captures show the indicator, and with them every captured tile gets its captured value but the two where it changes.",
+  "temple": { "minX": 4032, "maxX": 4159, "minY": 4352, "maxY": 4543, "z": 0 },
+  "zones": [
+    { "x": 4139, "y": 4383, "limit": 1 },
+    { "x": 4041, "y": 4420, "limit": 1 },
+    { "x": 4042, "y": 4450, "limit": 1 },
+    { "x": 4076, "y": 4429, "limit": 2 },
+    { "x": 4105, "y": 4469, "limit": 2 },
+    { "x": 4141, "y": 4465, "limit": 2 },
+    { "x": 4149, "y": 4451, "limit": 2 },
+    { "x": 4151, "y": 4425, "limit": 2 },
+    { "x": 4041, "y": 4379, "limit": 3 },
+    { "x": 4087, "y": 4375, "limit": 3 },
+    { "x": 4061, "y": 4466, "limit": 2, "captured": true },
+    { "x": 4060, "y": 4417, "limit": 2, "captured": true },
+    { "x": 4059, "y": 4415, "limit": 3, "captured": true },
+    { "x": 4091, "y": 4401, "limit": 2, "captured": true },
+    { "x": 4093, "y": 4400, "limit": 1, "captured": true },
+    { "x": 4112, "y": 4430, "limit": 2, "captured": true }
+  ]
+}

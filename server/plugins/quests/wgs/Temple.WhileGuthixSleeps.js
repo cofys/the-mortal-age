@@ -103,7 +103,7 @@ module.exports=function registerTemple({api,stage,advance,held,give,val,replace,
   for(const o of plants)replace(p,FLOWERING_VINE,[o.getLocation().getX(),o.getLocation().getY(),0],o.getType(),o.getFace());
  }
  function pick(e){const p=e.player;if(!sessions.has(p)||visible(e)!==FLOWERING_VINE)return false;if(!p.getInventory().getFreeSlots()){p.sendMessage('You need a free inventory space.');return true;}p.getInventory().adds(FLOWER,1);const l=e.object.getLocation();replace(p,DEAD_VINE,[l.getX(),l.getY(),0],e.object.getType(),e.object.getFace());return true;}
- function login({player:p}){const l=p.getLocation();if(l.getX()>=4032&&l.getX()<=4159&&l.getY()>=4352&&l.getY()<=4543)p.moveTo(loc(3229,9527,2));}
+ function login({player:p}){const l=p.getLocation();if(stage(p)<900&&l.getX()>=4032&&l.getX()<=4159&&l.getY()>=4352&&l.getY()<=4543)p.moveTo(loc(3229,9527,2));}
  api.onCustomEvent('wgs:enter-temple',enter);
  api.onObjectInteraction('Skeleton',{Search:skeleton});
  api.onObjectInteraction('Hole',{'Crawl-through':exit});

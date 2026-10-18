@@ -1,3 +1,4 @@
+import { ACTOR_VERTEX_STRIDE } from "../buffer/ActorNormals";
 import PicoGL, { DrawCall } from "picogl";
 
 import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
@@ -58,15 +59,19 @@ export class SpotAnimGpuCache {
             if (!geom || (geom.indices.length | 0) <= 0) return undefined;
 
             const app = (this.renderer as any).app;
-            const vb = app.createInterleavedBuffer(12, geom.vertices);
+            const vb = app.createInterleavedBuffer(ACTOR_VERTEX_STRIDE, geom.vertices);
             const ib = app.createIndexBuffer(PicoGL.UNSIGNED_INT as number, geom.indices);
             const vao = app
                 .createVertexArray()
                 .vertexAttributeBuffer(0, vb, {
                     type: PicoGL.UNSIGNED_INT,
                     size: 3,
-                    stride: 12,
+                    stride: ACTOR_VERTEX_STRIDE,
                     integer: true as any,
+                })
+                .vertexAttributeBuffer(3, vb, {
+                    type: PicoGL.UNSIGNED_INT, size: 1, stride: ACTOR_VERTEX_STRIDE,
+                    offset: 16, integer: true as any,
                 })
                 .indexBuffer(ib);
 

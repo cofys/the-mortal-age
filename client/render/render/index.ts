@@ -106,7 +106,7 @@ export { stepNpcSequenceTrack } from "./anim/npc2";
 export { ensureNpcDynamicSequenceMeta } from "./anim/npc2";
 export { uploadDynamicNpcGeometry } from "./anim/npc2";
 export { resolveUnbatchedNpcGeometry } from "./anim/npc2";
-export { npcSmoothingCycle } from "./anim/npc2";
+export { isNpcAnimationSmoothed } from "./anim/npc2";
 export { initFramebuffers } from "./init/framebuffers";
 export { initFramebuffer } from "./init/framebuffers";
 export { initTextureFramebuffer } from "./init/framebuffers";

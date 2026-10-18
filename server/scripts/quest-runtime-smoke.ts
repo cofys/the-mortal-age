@@ -7,6 +7,7 @@ const sent = {
     configs: [] as Array<[number, number]>,
     jingles: [] as number[],
     questLists: [] as any[],
+    flagRanges: [] as Array<[number, number, number]>,
     strings: [] as Array<[string, number]>,
     items: [] as Array<[number, number, number]>,
     interfaces: [] as number[],
@@ -26,7 +27,7 @@ const player = {
         sendVarbit: () => {},
         sendJingle: (id: number) => sent.jingles.push(id),
         sendQuestList: (groups: any) => sent.questLists.push(groups),
-        sendInterfaceFlagsRange: () => {},
+        sendInterfaceFlagsRange: (uid: number, from: number, to: number) => sent.flagRanges.push([uid, from, to]),
         sendString: (text: string, uid: number) => sent.strings.push([text, uid]),
         sendInterfaceRemoval: () => {},
         sendInterface: (id: number) => sent.interfaces.push(id),
@@ -127,6 +128,22 @@ openJournalBySlot(player, 3);
 assert.ok(
     sent.strings.some(([text, uid]) => uid === journalTitleUid && text.includes("The Beta Quest")),
     "a later group's slot opens the right journal"
+);
+
+// Every quest row gets its "Read journal:" flags, however long the list (#625).
+for (let i = 0; i < 250; i++) {
+    registerQuest(api, {
+        key: `zz_quest_${i}`, name: `Zz Quest ${i}`, varpId: 32,
+        startedValue: 1, completionValue: 2, questPoints: 0, buildJournal: () => [],
+    });
+}
+sent.flagRanges.length = 0;
+require("../plugins/quests/QuestRuntime").refreshQuestList(player);
+const lastSlot = Math.max(...sent.questLists.at(-1).flatMap((group: any) => group.quests.map((q: any) => q.slot)));
+assert.ok(lastSlot > 199, "list extends past slot 199");
+assert.ok(
+    sent.flagRanges.some(([uid, from, to]) => uid === ((399 << 16) | 7) && from <= lastSlot && lastSlot <= to),
+    "the last quest row gets its journal flags"
 );
 
 console.info("quest runtime smoke passed");

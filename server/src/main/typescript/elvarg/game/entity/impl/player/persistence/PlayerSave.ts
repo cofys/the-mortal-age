@@ -1,6 +1,7 @@
 import { PrayerHandler, PrayerData } from "../../../../content/PrayerHandler";
 import { AggressionTolerance } from "../../npc/AggressionTolerance";
 import { CREATION_MENU_LAST_ITEM_ATTRIBUTE } from "../../../../../net/packet/PacketSender";
+import { LOGIN_TOKENS_ATTRIBUTE } from "../../../../../net/login/LoginTokens";
 import { normalizeSailingState, type SailingState } from "../../../../content/sailing/SailingState";
 import { FightType } from "../../../../content/combat/FightType";
 import { CombatSpells } from "../../../../content/combat/magic/CombatSpells";
@@ -44,10 +45,14 @@ export class PlayerSave {
         ...Object.values(PlayerSave.LEGACY_FIELD_ATTRIBUTES),
         AggressionTolerance.ATTRIBUTE,
         CREATION_MENU_LAST_ITEM_ATTRIBUTE,
+        LOGIN_TOKENS_ATTRIBUTE,
     ]);
 
     /** JSON of each attribute's default: a value equal to it isn't saved, and a save without the key loads it. */
-    private static readonly attributeDefaults = new Map<string, string>([["ring-of-recoil:damage", "0"]]);
+    private static readonly attributeDefaults = new Map<string, string>([
+        ["ring-of-recoil:damage", "0"],
+        [LOGIN_TOKENS_ATTRIBUTE, "[]"],
+    ]);
 
     public static persistAttribute(key: string, defaultValue?: unknown): void {
         if (typeof key !== "string" || !key.trim() || key !== key.trim()) {

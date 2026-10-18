@@ -14,6 +14,8 @@ assert.notEqual(cacheKey(info, input, "a"), cacheKey(info, input, "b"));
 assert.notEqual(cacheKey(info, input, "a"), cacheKey({ ...info, revision: 231 }, input, "a"));
 assert.notEqual(cachePrefix(cacheKey(info, input, "a")), cachePrefix(cacheKey({ ...info, revision: 231 }, input, "a")));
 
+assert.notEqual(cacheKey(info, { ...input, smoothLocAnimations: true, smoothLocAnimationSteps: 4 }, "a"),
+    cacheKey(info, { ...input, smoothLocAnimations: true, smoothLocAnimationSteps: 8 }, "a"));
 assert.ok(isCacheable(input));
 assert.ok(!isCacheable({ ...input, persistentCache: false }));
 assert.ok(!isCacheable({ ...input, doorOnly: true }));

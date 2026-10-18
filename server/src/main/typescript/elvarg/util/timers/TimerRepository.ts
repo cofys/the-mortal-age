@@ -4,10 +4,10 @@ import { Timer } from '../timers/Timer'
 
 
 export class TimerRepository {
-    private timer = new Map<TimerKey, Timer>();
+    private timer: Map<TimerKey, Timer> | null = null;
 
     public has(key: TimerKey): boolean {
-        const timer = this.timer.get(key);
+        const timer = this.timer?.get(key);
         if (!timer) {
             return false;
         }
@@ -15,7 +15,7 @@ export class TimerRepository {
     }
 
     public register(timer: Timer) {
-        this.timer.set(timer.key(), timer);
+        this.timers().set(timer.key(), timer);
     }
     
     public registerTimerKey(key: TimerKey): void {
@@ -24,12 +24,12 @@ export class TimerRepository {
 
 
     public left(key: TimerKey): number {
-        const timer = this.timer.get(key);
+        const timer = this.timer?.get(key);
         return timer ? timer.ticks() : 0;
     }
 
     public willEndIn(key: TimerKey, ticks: number): boolean {
-        const timer = this.timer.get(key);
+        const timer = this.timer?.get(key);
         if (!timer) {
             return true;
         }
@@ -38,7 +38,7 @@ export class TimerRepository {
 
 
     public getTicks(key: TimerKey): number {
-        const timer = this.timer.get(key);
+        const timer = this.timer?.get(key);
         if (!timer) {
             return 0;
         }
@@ -46,24 +46,24 @@ export class TimerRepository {
     }
 
     public registers(key: TimerKey, ticks: number) {
-        this.timer.set(key, new Timer(key, ticks));
+        this.timers().set(key, new Timer(key, ticks));
     }
 
     public extendOrRegister(key: TimerKey, ticks: number) {
-        const existing = this.timer.get(key);
-        this.timer.set(key, !existing || existing.ticks() < ticks ? new Timer(key, ticks) : existing);
+        const existing = this.timer?.get(key);
+        this.timers().set(key, !existing || existing.ticks() < ticks ? new Timer(key, ticks) : existing);
     }
     public addOrSet(key: TimerKey, ticks: number) {
-        const existing = this.timer.get(key);
-        this.timer.set(key, existing ? new Timer(key, existing.ticks() + ticks) : new Timer(key, ticks));
+        const existing = this.timer?.get(key);
+        this.timers().set(key, existing ? new Timer(key, existing.ticks() + ticks) : new Timer(key, ticks));
     }
 
     public cancel(name: TimerKey) {
-        this.timer.delete(name);
+        this.timer?.delete(name);
     }
 
     public process() {
-        if (this.timer.size > 0) {
+        if (this.timer?.size > 0) {
             this.timer.forEach((timer: Timer) => {
                 timer.tick();
             });
@@ -71,11 +71,12 @@ export class TimerRepository {
     }
 
     public hasActive(): boolean {
+        if (!this.timer) return false;
         for (const timer of this.timer.values()) if (timer.ticks() > 0) return true;
         return false;
     }
 
     public timers(): Map<TimerKey, Timer> {
-        return this.timer;
+        return this.timer ??= new Map();
     }
 }

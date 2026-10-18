@@ -29,9 +29,9 @@ const MODEL_WORLD_SCALE = 1.0 / 128.0;
 const FOG_CORNER_ROUNDING = 0.0;
 
 type LocModelMesh = {
-    verticesX: Int32Array;
-    verticesY: Int32Array;
-    verticesZ: Int32Array;
+    verticesX: Int32Array | Float32Array;
+    verticesY: Int32Array | Float32Array;
+    verticesZ: Int32Array | Float32Array;
     indices1: Int32Array;
     indices2: Int32Array;
     indices3: Int32Array;

@@ -23,13 +23,13 @@ export class MagicOnItemPacketListener {
   private static readonly HIGH_ALCH_SPELL_ID = 1178;
   private static readonly LOW_ALCH_LEVEL = 21;
   private static readonly HIGH_ALCH_LEVEL = 55;
-  private static readonly LOW_ALCH_XP = 4000;
-  private static readonly HIGH_ALCH_XP = 20000;
+  private static readonly LOW_ALCH_XP = 31;
+  private static readonly HIGH_ALCH_XP = 65;
   private static readonly LOW_ALCH_FIRE_RUNES = 3;
   private static readonly HIGH_ALCH_FIRE_RUNES = 5;
   private static readonly TELEKINETIC_GRAB_SPELL_ID = 1168;
   private static readonly TELEKINETIC_GRAB_LEVEL = 33;
-  private static readonly TELEKINETIC_GRAB_XP = 3988;
+  private static readonly TELEKINETIC_GRAB_XP = 43;
   private static readonly TELEKINETIC_GRAB_RANGE = 10;
   private static readonly AIR_STAVES = new Set<number>([1381, 1397, 1405, 6562, 6563, 3053, 3054]);
   private static readonly FIRE_STAVES = new Set<number>([1387, 1393, 1401, 3053, 3054]);

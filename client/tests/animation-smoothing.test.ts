@@ -1,3 +1,9 @@
+import { nextSequenceFrame, sequenceInterpolation, interpolationKey } from "../rs/model/seq/FrameInterpolation";
+import { VertexBuffer } from "../render/buffer/VertexBuffer";
+import { ACTOR_VERTEX_STRIDE } from "../render/buffer/ActorNormals";
+import { ConfigManager } from "../runelite/client/config/ConfigManager";
+import { PluginInjector } from "../runelite/client/plugins/PluginInjector";
+import { AnimationSmoothingConfig } from "../game/plugins/animationsmoothing/AnimationSmoothingConfig";
 import { strict as assert } from "node:assert";
 
 import { AnimationSmoothingPlugin } from "../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
@@ -50,7 +56,7 @@ function model(): Model {
 const vertices = (m: Model) => [...m.verticesX, ...m.verticesY, ...m.verticesZ];
 function animated(f: SeqFrame): number[] {
     const m = model();
-    m.animate(f, undefined, false);
+    m.animateInterpolated(f, undefined, 0, false);
     return vertices(m);
 }
 function blended(a: SeqFrame, b: SeqFrame, alpha: number): number[] {
@@ -86,10 +92,10 @@ const last = model();
 last.animateInterpolated(a, undefined, 0.5, false);
 assert.deepEqual(vertices(last), animated(a));
 
-// A quarter of the way: values are truncated toward zero, as in RuneLite.
+// Fractional transforms survive the blend, including translations below one model unit.
 assert.deepEqual(
     blended(a, b, 0.25),
-    animated(frame([0, 0, 0, 0], [1, 12, 0, 0], [2, 0, 253, 0], [3, 144, 128, 128])),
+    animated(frame([0, 0, 0, 0], [1, 12.5, 0, 0], [2, 0, 253, 0], [3, 144, 128, 128])),
 );
 
 // A half turn has no short way round: it snaps (frame A held), or a part flipped every frame (the
@@ -144,8 +150,7 @@ assert.equal(plugin.smoothsNpc(8610, 808, false), false, "the wyrm's idle");
 assert.equal(plugin.smoothsNpc(8610, 1234, true), true, "but not its actions");
 assert.equal(plugin.smoothsNpc(3106, 808, false), true);
 
-// Graphics: a graphic's frame blends while the plugin is on, for keyframe animations, except
-// on the last frame.
+// Graphics: blend keyframes while enabled; keep one precise held pose for the last frame.
 let skeletal = false;
 let graphicsOn = true;
 const gfxCache = new GfxCache({
@@ -156,7 +161,8 @@ const gfxCache = new GfxCache({
     },
 } as any);
 assert.equal(gfxCache.smoothingCycle(100, 0, 3), 3);
-assert.equal(gfxCache.smoothingCycle(100, 2, 3), 0, "the last frame");
+assert.equal(gfxCache.smoothingCycle(100, 2, 3), 1, "the last frame holds with fractional precision");
+assert.equal(gfxCache.smoothingCycle(100, 2, 4), 1, "the last frame reuses its cached pose");
 assert.equal(gfxCache.smoothingCycle(100, 0, 0), 0, "no cycle yet");
 skeletal = true;
 assert.equal(gfxCache.smoothingCycle(100, 0, 3), 0, "skeletal animations");
@@ -173,5 +179,69 @@ assert.equal(cycleAt(60, 0), 4, "last cycle of frame 0");
 assert.equal(cycleAt(80, 1), 1, "first cycle of frame 1");
 assert.equal(cycleAt(170, 1), 5, "last cycle of frame 1");
 assert.equal(cycleAt(240, 0), 1, "looped back to frame 0");
+
+// A one-unit movement must retain intermediate positions, through the CPU upload too.
+const tinyA = frame([1, 0, 0, 0]);
+const tinyB = frame([1, 1, 0, 0]);
+assert.equal(blended(tinyA, tinyB, 0.25)[0], 100.25);
+const buffer = new VertexBuffer(4, ACTOR_VERTEX_STRIDE);
+for (const [x, y, z] of [[1.125, -7.375, 0.999], [-0.3, 0.4, -30.8]]) {
+    const i = buffer.addVertex(x, y, z, 0, 255, 0, 0, -1);
+    const offset = i * ACTOR_VERTEX_STRIDE;
+    const fraction = buffer.view.getUint32(offset + 16, true);
+    const decoded = [
+        (buffer.view.getUint32(offset, true) >>> 17) - 16384 + (fraction & 1023) / 1024,
+        16384 - (buffer.view.getUint32(offset + 4, true) & 32767) - ((fraction >>> 10) & 1023) / 1024,
+        (buffer.view.getUint32(offset + 8, true) >>> 17) - 16384 + ((fraction >>> 20) & 1023) / 1024,
+    ];
+    decoded.forEach((v, axis) => assert.ok(Math.abs(v - [x,y,z][axis]) < 1 / 1024));
+}
+assert.notEqual(buffer.addVertex(0.25, 0, 0, 0, 255, 0, 0, -1),
+    buffer.addVertex(0.75, 0, 0, 0, 255, 0, 0, -1), "vertex reuse preserves fractions");
+
+// The action and movement layers have independent clocks and respect the interleave mask.
+const layered = model();
+layered.animateInterleavedFramesInterpolated(tinyA, tinyB, 0.5, false,
+    frame([0,0,0,0], [2,0,0,0]), frame([0,0,0,0], [2,0,1,0]), 0.25, false, [2,9999999]);
+assert.deepEqual(vertices(layered), animated(frame([0,0,0,0], [1,0.5,0,0], [2,0,0.25,0])));
+
+// Movement resets to zero; actions stop; objects follow their own valid repeat range.
+const sequence: any = { frameIds: [1,2,3], frameStep: -1, looping: false, maxLoops: 2,
+    isSkeletalSeq: () => false, getFrameLength: () => 10 };
+assert.equal(nextSequenceFrame(sequence, 2, "movement"), 0);
+assert.equal(nextSequenceFrame(sequence, 2, "action"), undefined);
+assert.equal(nextSequenceFrame(sequence, 2, "object"), undefined);
+sequence.frameStep = 2;
+assert.equal(nextSequenceFrame(sequence, 2, "movement"), 1);
+assert.equal(nextSequenceFrame(sequence, 2, "object"), 1);
+assert.equal(nextSequenceFrame(sequence, 2, "action", 0), 1);
+assert.equal(nextSequenceFrame(sequence, 2, "action", 1), undefined, "last permitted action loop");
+sequence.looping = true;
+assert.equal(nextSequenceFrame(sequence, 2, "movement", 1), 0, "movement loop limit resets");
+const terminal = sequenceInterpolation(sequence, 2, 3, {} as any, "action", 1);
+assert.equal(terminal?.next, undefined);
+assert.equal(terminal?.alpha, 0);
+assert.notEqual(interpolationKey({base: terminal}), interpolationKey(undefined), "held smoothed pose has its own cache entry");
+assert.notEqual(interpolationKey({base: {next:1,alpha:0.2}, overlay: {next:2,alpha:0.3}}),
+    interpolationKey({base: {next:1,alpha:0.2}, overlay: {next:2,alpha:0.4}}), "overlay clock is part of the cache key");
+
+// Independently persisted categories and scenery density work without recreating the plugin.
+const configManager = new ConfigManager(undefined);
+const configured = new PluginInjector(configManager).runWith(() => new AnimationSmoothingPlugin());
+configured.setEnabledState(true);
+for (const property of ["players", "npcs", "graphics", "objects"]) {
+    configManager.setConfigValue(AnimationSmoothingConfig, property, false);
+}
+assert.equal(configured.smoothsPlayer(808), false);
+assert.equal(configured.smoothsNpc(3106, 808, false), false);
+assert.equal(configured.smoothsGraphics(), false);
+assert.equal(configured.smoothsObjects(), false);
+configManager.setConfigValue(AnimationSmoothingConfig, "players", true);
+assert.equal(configured.smoothsPlayer(808), true);
+assert.equal(configured.smoothsPlayer(244), false, "category toggles preserve exclusions");
+configManager.setConfigValue(AnimationSmoothingConfig, "sceneryQuality", 0);
+assert.equal(configured.objectSettings().smoothLocAnimationSteps, 0);
+configManager.setConfigValue(AnimationSmoothingConfig, "sceneryQuality", 123);
+assert.equal(configured.objectSettings().smoothLocAnimationSteps, 4);
 
 console.log("animation smoothing tests passed");

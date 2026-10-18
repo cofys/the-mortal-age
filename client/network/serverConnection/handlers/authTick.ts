@@ -2,6 +2,7 @@ import { ClientState } from "../../../game/ClientState";
 import { clearHintArrow, setHintArrowNpc, setHintArrowPlayer, setHintArrowTile } from "../../../game/HintArrow";
 import { clearAttackTimer, setAttackTimer } from "../../../game/plugins/attacktimer/attackTimerState";
 import { loadItemPrices } from "../domain/itemPrices";
+import { LOGIN_FLAG_TOKEN } from "../constants";
 import { state } from "../state";
 
 export function handleAuthTickMessage(msg: any): boolean {
@@ -21,6 +22,11 @@ export function handleAuthTickMessage(msg: any): boolean {
     }
     if (msg.type === "login_response") {
         console.log(`[ws] login_response success=${msg.payload.success}`);
+        if (msg.payload.success && msg.payload.loginToken) {
+            // The token just used (or the password) is spent; a resumed session logs in with this.
+            state.sessionPassword = msg.payload.loginToken;
+            state.sessionLoginFlags = LOGIN_FLAG_TOKEN;
+        }
         if (msg.payload.success) {
             clearAttackTimer();
             loadItemPrices();

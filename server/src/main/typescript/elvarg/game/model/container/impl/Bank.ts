@@ -3,7 +3,7 @@ import { Item } from "../../Item";
 import { ItemContainer } from "../ItemContainer";
 import { PlayerStatus } from "../../PlayerStatus";
 import { ItemDefinition } from "../../../definition/ItemDefinition";
-import { StackType } from "../StackType";
+import { StackType, MAX_STACK_AMOUNT } from "../StackType";
 import { Equipment } from "./Equipment";
 import { GameConstants } from "../../../GameConstants";
 import { WeaponInterfaceManager } from "../../../content/combat/WeaponInterfaceManager";
@@ -1049,9 +1049,9 @@ export class Bank extends ItemContainer {
         if (to instanceof Inventory) {
             const withdrawAsNote = this.getPlayer().withdrawAsNote() && canWithdrawAsNote;
             const checkId = withdrawAsNote ? noteId : item.getId();
-            if (to.getAmount(checkId) + item.getAmount() > Number.MAX_SAFE_INTEGER
+            if (to.getAmount(checkId) + item.getAmount() > MAX_STACK_AMOUNT
                     || to.getAmount(checkId) + item.getAmount() <= 0) {
-                item.setAmount(Number.MAX_SAFE_INTEGER - (to.getAmount(item.getId())));
+                item.setAmount(MAX_STACK_AMOUNT - (to.getAmount(item.getId())));
                 if (item.getAmount() <= 0) {
                     this.getPlayer().sendMessage("You cannot withdraw that entire amount into your inventory.");
                         return this;

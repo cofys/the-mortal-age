@@ -24,7 +24,6 @@ const QUEST_POINTS_TOTAL_VARBIT = 1782; // "Quest Points: X/<total>"
 const QUESTS_COMPLETED_VARBIT = 6347; // "Completed: <n>/<total>"
 const QUESTS_TOTAL_VARBIT = 11877;
 const QUEST_LIST_ENTRY_FLAGS = 0x7e;
-const QUEST_LIST_ENTRY_MAX_SLOT = 199;
 
 // Quest journal overlay (xrsps client/common/ui constants).
 const JOURNAL_GROUP = 119;
@@ -143,12 +142,7 @@ function sendQuestList(player) {
   packet.sendQuestList(groups);
   for (const [start, end] of ranges) {
     if (end >= start) {
-      packet.sendInterfaceFlagsRange(
-        QUEST_LIST_ENTRY_UID,
-        start,
-        Math.min(end, QUEST_LIST_ENTRY_MAX_SLOT),
-        QUEST_LIST_ENTRY_FLAGS
-      );
+      packet.sendInterfaceFlagsRange(QUEST_LIST_ENTRY_UID, start, end, QUEST_LIST_ENTRY_FLAGS);
     }
   }
   sendQuestHeaderStats(player);

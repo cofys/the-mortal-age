@@ -547,7 +547,7 @@ export function updateAnimatedDrawRanges(host: WebGLOsrsRendererHost,
                 continue;
             }
 
-            const frame = frames[loc.frame | 0];
+            const frame = frames[loc.drawFrame()];
             if (!frame) {
                 continue;
             }

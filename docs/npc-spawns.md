@@ -53,7 +53,7 @@ The surface (`mapID` 0, or none) is in game coordinates already.
 - `categories`: cache NPC categories (opcode 18). Category 2353 holds the Sailing sea creatures (sharks, rays, krakens, seabirds): labelled, not skipped.
 - `names`: cache NPC names. The Stronghold of Security doors are skipped, since tsps opens them as scenery.
 - `pagePatterns`: Wiki page titles. Leagues, Deadman and holiday-event pages are skipped.
-- `boxes`: areas such as instance templates a plugin spawns itself (none yet).
+- `boxes`: areas a plugin spawns itself (Pest Control's island, the Theatre of Blood, Scurrius' lair).
 - `unalignedLayers`: how unaligned Wiki map layers are treated (skipped).
 
 **Checks it prints:**
@@ -112,7 +112,7 @@ yarn sync:npc-spawns --box 1216,9344,1727,9855 --tag Neypotzli --write
   - `namePatterns` `^<col=`: coloured names are always props of a minigame, raid or quest (Theatre of Blood pillars, Nightmare totems, Inferno glyphs);
   - the *Defender of Varrock* zombies invading Varrock Palace (quest only).
 - **Removed by the new rule:** `<col=00ffff>Forebearer Janus</col>`, which the Varlamore batch had added in Civitas before the rule existed.
-- **Left out of the allowlist, for a later look:** raid and boss areas their plugins spawn (Tombs of Amascut, Theatre of Blood, the Nightmare, the Inferno, the Abyssal Nexus); bosses without a plugin yet (Skotizo, Yama, Scurrius, Phantom Muspah, the Headless Beast, the Jormungand); minigames (Barbarian Assault, Nightmare Zone, the Motherlode Mine); and single quest NPCs.
+- **Left out of the allowlist, for a later look:** raid and boss areas their plugins spawn (Tombs of Amascut, Theatre of Blood, the Nightmare, the Inferno, the Abyssal Nexus); bosses without a plugin yet (Skotizo, Yama, Phantom Muspah, the Headless Beast, the Jormungand); minigames (Barbarian Assault, Nightmare Zone, the Motherlode Mine); and single quest NPCs.
 
 ## Multi-version NPCs
 

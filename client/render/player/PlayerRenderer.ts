@@ -1,3 +1,5 @@
+import { playerInterpolation } from "./PlayerInterpolation";
+import { applyInterpolatedFrames, interpolationFrame, interpolationKey, type ActorInterpolation } from "../../rs/model/seq/FrameInterpolation";
 import { vec2 } from "gl-matrix";
 import PicoGL, { DrawCall, Texture, VertexBuffer } from "picogl";
 
@@ -100,8 +102,8 @@ export class PlayerRenderer {
             appearance: PlayerAppearance;
             seqId: number;
             frameIdx: number;
-            /** Cycles into the frame when animation smoothing blends it; 0 otherwise. */
-            frameCycle: number;
+            /** Independently timed action and movement layers, when smoothing is enabled. */
+            interpolation?: ActorInterpolation;
             overlaySeqId?: number;
             overlayFrameIdx?: number;
             instances: Array<{ slot: number; pid: number; mode: "idle" | "walk" | "run" }>;
@@ -115,8 +117,8 @@ export class PlayerRenderer {
             appearance: PlayerAppearance;
             seqId: number;
             frameIdx: number;
-            /** Cycles into the frame when animation smoothing blends it; 0 otherwise. */
-            frameCycle: number;
+            /** Independently timed action and movement layers, when smoothing is enabled. */
+            interpolation?: ActorInterpolation;
             overlaySeqId?: number;
             overlayFrameIdx?: number;
             instances: Array<{ slot: number; pid: number; mode: "idle" | "walk" | "run" }>;
@@ -514,6 +516,10 @@ export class PlayerRenderer {
                 stride: ACTOR_VERTEX_STRIDE,
                 integer: true as any,
             })
+            .vertexAttributeBuffer(3, vb, {
+                type: PicoGL.UNSIGNED_INT, size: 1, stride: ACTOR_VERTEX_STRIDE,
+                offset: 16, integer: true as any,
+            })
             .instanceAttributeBuffer(1, r.playerSlotBuffer, {
                 type: PicoGL.INT,
                 size: 1,
@@ -611,7 +617,7 @@ export class PlayerRenderer {
                         (group.overlaySeqId ?? -1) | 0,
                         (group.overlayFrameIdx ?? -1) | 0,
                         mv,
-                        group.frameCycle | 0,
+                        group.interpolation,
                     );
                     if (!pose.needsCpu) matrices = pose.finish(0, 0);
                 }
@@ -1227,7 +1233,7 @@ export class PlayerRenderer {
         seqId: number,
         frameIdx: number,
         mv: any,
-        frameCycle: number = 0,
+        interpolation?: ActorInterpolation,
     ): boolean {
         if (!seqType) return false;
         if (seqType.isSkeletalSeq?.()) {
@@ -1246,10 +1252,8 @@ export class PlayerRenderer {
             const key = ids[idx] | 0;
             const frame0 = mv.seqFrameLoader.load(key);
             if (frame0) {
-                const next = frameCycle > 0 ? this.smoothingTarget(seqType, idx, mv) : undefined;
-                if (next) {
-                    const alpha = Math.min(1, frameCycle / next.length);
-                    model.animateInterpolated(frame0, next.frame, alpha, !!seqType.op14);
+                if (interpolation) {
+                    return applyInterpolatedFrames(model, mv.seqFrameLoader, seqType, idx, interpolation);
                 } else {
                     model.animate(frame0, undefined, !!seqType.op14);
                 }
@@ -1259,39 +1263,7 @@ export class PlayerRenderer {
         return false;
     }
 
-    /**
-     * Cycles into the current frame when animation smoothing blends this player's animation
-     * toward its next frame, else 0. Only a single keyframe animation is blended (not skeletal
-     * ones, which already move every cycle, nor an action layered over movement).
-     */
-    private smoothingCycle(
-        seqId: number,
-        overlaySeqId: number | undefined,
-        frameCycle: number,
-    ): number {
-        if (!(frameCycle > 0) || seqId < 0 || overlaySeqId !== undefined) return 0;
-        if (!this.renderer.osrsClient.animationSmoothingPlugin?.smoothsPlayer(seqId)) return 0;
-        const seqType: any = this.renderer.osrsClient.seqTypeLoader.load(seqId | 0);
-        if (!seqType || seqType.isSkeletalSeq?.() || !(seqType.frameIds?.length > 1)) return 0;
-        return frameCycle | 0;
-    }
-
-    /** The frame after `idx` (wrapping like the sequence loops) and the current frame's length. */
-    private smoothingTarget(
-        seqType: any,
-        idx: number,
-        mv: any,
-    ): { frame: any; length: number } | undefined {
-        const ids = seqType.frameIds as number[];
-        let next = idx + 1;
-        // A looping walk blends its last frame into the frame it restarts at.
-        if (next >= ids.length) next = seqType.frameStep > 0 ? next - seqType.frameStep : 0;
-        if (next < 0 || next >= ids.length) return undefined;
-        const frame = mv.seqFrameLoader.load(ids[next] | 0);
-        const length = seqType.getFrameLength(mv.seqFrameLoader, idx) | 0;
-        return frame && length > 0 ? { frame, length } : undefined;
-    }
-
+    /** Apply action and movement masks, with independent interpolation for keyframe layers. */
     private applySequenceTransformationsToModel(
         model: Model,
         baseType: any,
@@ -1301,7 +1273,7 @@ export class PlayerRenderer {
         overlaySeqId: number,
         overlayFrameIdx: number,
         mv: any,
-        frameCycle: number = 0,
+        interpolation?: ActorInterpolation,
     ): boolean {
         if (!baseType) return false;
         if (!overlayType) {
@@ -1311,8 +1283,13 @@ export class PlayerRenderer {
                 baseSeqId | 0,
                 baseFrameIdx | 0,
                 mv,
-                frameCycle,
+                interpolation,
             );
+        }
+
+        if (interpolation && !baseType.isSkeletalSeq?.() && !overlayType.isSkeletalSeq?.()) {
+            return applyInterpolatedFrames(model, mv.seqFrameLoader, baseType, baseFrameIdx,
+                interpolation, overlayType, overlayFrameIdx);
         }
 
         const baseCached = !!baseType.isSkeletalSeq?.();
@@ -1376,11 +1353,8 @@ export class PlayerRenderer {
                 const interleave = Array.isArray(baseType?.masks)
                     ? (baseType.masks as number[])
                     : undefined;
-                if (interleave && interleave.length > 0) {
-                    model.animateInterleavedFrame(frame0, !!overlayType.op14, interleave, true);
-                } else {
-                    model.animate(frame0, undefined, !!overlayType.op14);
-                }
+                model.animateInterleavedFrame(frame0, !!overlayType.op14, interleave, true,
+                    interpolationFrame(overlayType, interpolation?.overlay, mv.seqFrameLoader), interpolation?.overlay?.alpha);
             }
             return true;
         }
@@ -1400,7 +1374,8 @@ export class PlayerRenderer {
         if (overlayCached) {
             // OSRS: requires an interleave array; otherwise overlay is ignored.
             if (!interleave || interleave.length === 0) {
-                model.animate(baseFrame0, undefined, !!baseType.op14);
+                model.animateInterleavedFrame(baseFrame0, !!baseType.op14, undefined, false,
+                    interpolationFrame(baseType, interpolation?.base, mv.seqFrameLoader), interpolation?.base?.alpha);
                 return true;
             }
 
@@ -1408,7 +1383,8 @@ export class PlayerRenderer {
                 .getSkeletalSeqLoader?.()
                 ?.load(overlayType.skeletalId);
             if (!overlaySkeletal) {
-                model.animate(baseFrame0, undefined, !!baseType.op14);
+                model.animateInterleavedFrame(baseFrame0, !!baseType.op14, undefined, false,
+                    interpolationFrame(baseType, interpolation?.base, mv.seqFrameLoader), interpolation?.base?.alpha);
                 return false;
             }
 
@@ -1425,7 +1401,8 @@ export class PlayerRenderer {
                 maskMatch: true,
                 applyAlpha: false,
             });
-            model.animateInterleavedFrame(baseFrame0, !!baseType.op14, interleave, false);
+            model.animateInterleavedFrame(baseFrame0, !!baseType.op14, interleave, false,
+                interpolationFrame(baseType, interpolation?.base, mv.seqFrameLoader), interpolation?.base?.alpha);
             return true;
         }
 
@@ -1436,7 +1413,8 @@ export class PlayerRenderer {
             !interleave ||
             interleave.length === 0
         ) {
-            model.animate(baseFrame0, undefined, !!baseType.op14);
+            model.animateInterleavedFrame(baseFrame0, !!baseType.op14, undefined, false,
+                    interpolationFrame(baseType, interpolation?.base, mv.seqFrameLoader), interpolation?.base?.alpha);
             return true;
         }
 
@@ -1445,7 +1423,8 @@ export class PlayerRenderer {
         const overlayKey = overlayIds[overlayIdx] | 0;
         const overlayFrame0 = mv.seqFrameLoader.load(overlayKey);
         if (!overlayFrame0) {
-            model.animate(baseFrame0, undefined, !!baseType.op14);
+            model.animateInterleavedFrame(baseFrame0, !!baseType.op14, undefined, false,
+                    interpolationFrame(baseType, interpolation?.base, mv.seqFrameLoader), interpolation?.base?.alpha);
             return false;
         }
 
@@ -1457,19 +1436,6 @@ export class PlayerRenderer {
             interleave,
         );
         return true;
-    }
-
-    private getMovementFrameCycle(pid: number, seqId: number, frameIdx: number): number {
-        const { playerEcs: ecs, playerAnimController: controller } = this.renderer.osrsClient;
-        // Resample the nearby local actor on client ticks; distant players keep cached keyframes.
-        if (!this.isControlledPid(pid) || !ecs.isMoving(pid) ||
-            seqId === ecs.getAnimSeq(pid, "idle") ||
-            (ecs.getAnimSeqId(pid) >= 0 && ecs.getAnimSeqDelay(pid) === 0)) {
-            return 0;
-        }
-        const serverId = ecs.getServerIdForIndex(pid);
-        const state = serverId === undefined ? undefined : controller?.getMovementSequenceState(serverId);
-        return state?.seqId === seqId && state.frame === frameIdx ? state.frameCycle : 0;
     }
 
     private dynamicUpdateBuffersFor(
@@ -1484,16 +1450,14 @@ export class PlayerRenderer {
         overlaySeqId?: number,
         overlayFrameIdx?: number,
         uploadTarget: "both" | "opaqueOnly" | "alphaOnly" | "cacheOnly" = "both",
-        frameCycle: number = 0,
+        interpolation?: ActorInterpolation,
     ): { countOpaque: number; countAlpha: number } {
         const r: any = this.renderer as any;
         if (!r.playerInterleavedBuffer || !r.playerIndexBuffer)
             return { countOpaque: 0, countAlpha: 0 };
         const controlled = this.isControlledPid(pid);
-        // Animation smoothing passes a cycle; otherwise the local mover still resamples its own walk.
-        if (!(frameCycle > 0) && overlaySeqId === undefined) frameCycle = this.getMovementFrameCycle(pid, seqId, frameIdx);
         // Opaque, alpha and shadow passes must share the same resampled pose.
-        if (cacheKey && frameCycle > 0) cacheKey += `|cycle:${frameCycle}`;
+        if (cacheKey) cacheKey += interpolationKey(interpolation);
         const uploadOpaque = uploadTarget === "both" || uploadTarget === "opaqueOnly";
         const uploadAlpha = uploadTarget === "both" || uploadTarget === "alphaOnly";
         const opaqueUploadKey = cacheKey && uploadOpaque ? `opaque:${cacheKey}` : undefined;
@@ -1573,7 +1537,7 @@ export class PlayerRenderer {
                     overlayId | 0,
                     overlayFrame | 0,
                     mv,
-                    frameCycle,
+                    interpolation,
                 );
             }
         } catch {}
@@ -1850,6 +1814,10 @@ export class PlayerRenderer {
                 size: 4,
                 stride: strideBytes,
                 integer: true as any,
+            })
+            .vertexAttributeBuffer(3, newBuf, {
+                type: PicoGL.UNSIGNED_INT, size: 1, stride: strideBytes,
+                offset: 16, integer: true as any,
             });
             r.playerInterleavedBuffer = newBuf;
             oldBuf?.delete();
@@ -1930,6 +1898,10 @@ export class PlayerRenderer {
                 size: 4,
                 stride: strideBytes,
                 integer: true as any,
+            })
+            .vertexAttributeBuffer(3, newBuf, {
+                type: PicoGL.UNSIGNED_INT, size: 1, stride: strideBytes,
+                offset: 16, integer: true as any,
             });
             r.playerInterleavedBufferAlpha = newBuf;
             oldBuf?.delete();
@@ -2233,8 +2205,6 @@ export class PlayerRenderer {
 
             let movementFrameIdx = 0;
             let actionFrameIdx = 0;
-            let movementFrameCycle = 0;
-            let actionFrameCycle = 0;
             if (!unanimatedIdle) {
                 const controller = this.renderer.osrsClient.playerAnimController;
                 const serverId = this.renderer.osrsClient.playerEcs.getServerIdForIndex(pid);
@@ -2243,8 +2213,6 @@ export class PlayerRenderer {
                     const actionState = controller.getSequenceState(serverId);
                     movementFrameIdx = (movementState?.frame ?? 0) | 0;
                     actionFrameIdx = (actionState?.frame ?? 0) | 0;
-                    movementFrameCycle = (movementState?.frameCycle ?? 0) | 0;
-                    actionFrameCycle = (actionState?.frameCycle ?? 0) | 0;
                 }
             }
 
@@ -2343,15 +2311,9 @@ export class PlayerRenderer {
                 typeof overlaySeqId === "number" && typeof overlayFrameIdx === "number"
                     ? `|${overlaySeqId | 0}|${overlayFrameIdx | 0}`
                     : "";
-            const frameCycle =
-                forcedSeq !== undefined || unanimatedIdle
-                    ? 0
-                    : this.smoothingCycle(
-                          seqId,
-                          overlaySeqId,
-                          useActionSequence ? actionFrameCycle : movementFrameCycle,
-                      );
-            const cycleKey = frameCycle > 0 ? `~${frameCycle}` : "";
+            const interpolation = forcedSeq !== undefined || unanimatedIdle ? undefined
+                : playerInterpolation(this.renderer.osrsClient, pid, seqId, frameIdx, overlaySeqId, overlayFrameIdx);
+            const cycleKey = interpolationKey(interpolation);
             const batchKey = `${appKey}|${seqId}|${frameIdx}${cycleKey}${overlayKey}`;
 
             // Add player to batch group
@@ -2361,7 +2323,7 @@ export class PlayerRenderer {
                     appearance: effectiveApp,
                     seqId: seqId | 0,
                     frameIdx: frameIdx | 0,
-                    frameCycle,
+                    interpolation,
                     overlaySeqId: overlaySeqId,
                     overlayFrameIdx: overlayFrameIdx,
                     instances: [],
@@ -2433,7 +2395,7 @@ export class PlayerRenderer {
                         group.overlaySeqId,
                         group.overlayFrameIdx,
                         "cacheOnly",
-                        group.frameCycle,
+                        group.interpolation,
                     );
                     gpuGeometry = this.getPlayerGpuGeometry(batchKey);
                 }
@@ -2454,7 +2416,7 @@ export class PlayerRenderer {
                           group.overlaySeqId,
                           group.overlayFrameIdx,
                           "opaqueOnly",
-                          group.frameCycle,
+                          group.interpolation,
                       );
                 for (const inst of group.instances) {
                     if (this.canBatchPlayer(inst.pid, playerEcs)) {
@@ -2502,7 +2464,7 @@ export class PlayerRenderer {
                     group.overlaySeqId,
                     group.overlayFrameIdx,
                     "opaqueOnly",
-                    group.frameCycle,
+                    group.interpolation,
                 );
                 this.framePlayerAlphaCounts.set(inst.pid | 0, counts.countAlpha | 0);
 
@@ -2611,8 +2573,6 @@ export class PlayerRenderer {
 
                 let movementFrameIdx = 0;
                 let actionFrameIdx = 0;
-                let movementFrameCycle = 0;
-                let actionFrameCycle = 0;
                 if (!unanimatedIdle) {
                     const controller = this.renderer.osrsClient.playerAnimController;
                     const serverId = this.renderer.osrsClient.playerEcs.getServerIdForIndex(pid);
@@ -2621,8 +2581,6 @@ export class PlayerRenderer {
                         const actionState = controller.getSequenceState(serverId);
                         movementFrameIdx = (movementState?.frame ?? 0) | 0;
                         actionFrameIdx = (actionState?.frame ?? 0) | 0;
-                        movementFrameCycle = (movementState?.frameCycle ?? 0) | 0;
-                        actionFrameCycle = (actionState?.frameCycle ?? 0) | 0;
                     }
                 }
 
@@ -2693,15 +2651,9 @@ export class PlayerRenderer {
                     typeof overlaySeqId === "number" && typeof overlayFrameIdx === "number"
                         ? `|${overlaySeqId | 0}|${overlayFrameIdx | 0}`
                         : "";
-                const frameCycle =
-                    forcedSeq !== undefined || unanimatedIdle
-                        ? 0
-                        : this.smoothingCycle(
-                              seqId,
-                              overlaySeqId,
-                              useActionSequence ? actionFrameCycle : movementFrameCycle,
-                          );
-                const cycleKey = frameCycle > 0 ? `~${frameCycle}` : "";
+                const interpolation = forcedSeq !== undefined || unanimatedIdle ? undefined
+                : playerInterpolation(this.renderer.osrsClient, pid, seqId, frameIdx, overlaySeqId, overlayFrameIdx);
+                const cycleKey = interpolationKey(interpolation);
                 const batchKey = `${appKey}|${seqId}|${frameIdx}${cycleKey}${overlayKey}`;
 
                 // Add to alpha batch group
@@ -2711,7 +2663,7 @@ export class PlayerRenderer {
                         appearance: effectiveApp,
                         seqId: seqId | 0,
                         frameIdx: frameIdx | 0,
-                        frameCycle,
+                        interpolation,
                         overlaySeqId: overlaySeqId,
                         overlayFrameIdx: overlayFrameIdx,
                         instances: [],
@@ -2769,7 +2721,7 @@ export class PlayerRenderer {
                             group.overlaySeqId,
                             group.overlayFrameIdx,
                             "cacheOnly",
-                            group.frameCycle,
+                            group.interpolation,
                         );
                         gpuGeometry = this.getPlayerGpuGeometry(batchKey);
                     }
@@ -2787,7 +2739,7 @@ export class PlayerRenderer {
                               group.overlaySeqId,
                               group.overlayFrameIdx,
                               "alphaOnly",
-                              group.frameCycle,
+                              group.interpolation,
                           );
                     if ((counts.countAlpha | 0) > 0) {
                         const playerDraw = gpuGeometry?.alpha
@@ -2830,7 +2782,7 @@ export class PlayerRenderer {
                         group.overlaySeqId,
                         group.overlayFrameIdx,
                         "alphaOnly",
-                        group.frameCycle,
+                        group.interpolation,
                     );
 
                     if ((counts.countAlpha | 0) <= 0) continue;

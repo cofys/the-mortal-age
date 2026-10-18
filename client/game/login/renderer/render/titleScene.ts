@@ -33,7 +33,7 @@ export function computeTitleStateHash(
             host.probed
         }|${host.serverList.map((s) => s.playerCount).join(",")}|${state.worldSelectOpen}|${
             state.worldSelectPage
-        }|${state.loadingPercent}|${state.rememberUsername}|${state.isUsernameHidden}|${
+        }|${state.loadingPercent}|${state.rememberUsername}|${state.isUsernameHidden}|${state.displayName}|${
             state.trustComputer
         }|${state.titleMusicDisabled}|${
             state.worldId

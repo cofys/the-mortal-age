@@ -71,16 +71,21 @@ const F2P_QUESTS = new Set([
 ]);
 
 /**
- * The api the quests get: their login hooks skip bots. A bot has no client to send quest progress
- * to and does no quests, and running every quest's login hook (about 160 of them) cost a bot
- * ~85 ms to log in: a minute of startup with the bot population, and a frozen tick when Pest
- * Control fills a lander with bots.
+ * The api the quests get: their login and death hooks skip bots. A bot has no client to send
+ * quest progress to and does no quests, and running every quest's login hook (about 160 of them)
+ * cost a bot ~85 ms to log in: a minute of startup with the bot population, and a frozen tick
+ * when Pest Control fills a lander with bots. The death hooks are worse per event: the bot
+ * population dies constantly in combat training, and Horror from the Deep's cleanup scans every
+ * NPC in the world (about 30k) on each one, which showed up as the Quests plugin's top cost in
+ * `::pluginperf`.
  */
+const BOT_SKIPPED_HOOKS = new Set(["onPlayerLogin", "onPlayerDeath"]);
+
 function forPlayers(api) {
   return new Proxy(api, {
     get(target, property) {
-      if (property === "onPlayerLogin") {
-        return (handler) => target.onPlayerLogin((event) => {
+      if (BOT_SKIPPED_HOOKS.has(property)) {
+        return (handler) => target[property]((event) => {
           if (event?.player?.isPlayerBot?.() === true) return;
           return handler(event);
         });

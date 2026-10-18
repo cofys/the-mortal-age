@@ -1,7 +1,12 @@
 import { GameState } from "../../GameState";
 import type { LoginState } from "../../LoginState";
 import type { LoginRendererHost, RenderContext } from "../host";
-import { getWelcomeLayout } from "../layout/geometry";
+import {
+    getWelcomeLayout,
+    LOGIN_FORM_BUTTON_Y,
+    LOGIN_FORM_REMEMBER_Y,
+    REMEMBER_USERNAME_TEXT,
+} from "../layout/geometry";
 import { isCaretVisible } from "../canvas";
 import { drawButton, drawCenteredText, drawText, drawSprite, measureText, getCheckboxSprite, truncateFromStart } from "./drawUtils";
 
@@ -145,39 +150,26 @@ export function drawLoginForm(host: LoginRendererHost, ctx: RenderContext, state
             0xffffff,
             true,
         );
-        textY += 30;
-
         // Checkboxes (only show when not connecting)
         if (!isConnecting) {
-            const checkboxX = host.loginBoxX + 180 - 108;
-            const rememberSprite = getCheckboxSprite(host, 
-                state.rememberUsername,
-                state.rememberUsernameHover,
-            );
-            if (rememberSprite) {
-                drawText(host, 
-                    ctx,
-                    host.fontBold12,
-                    "Remember username: ",
-                    checkboxX,
-                    textY,
-                    0xffff00,
-                    true,
-                );
-                const textWidth = measureText(host, host.fontBold12, "Remember username: ");
+            const labelX = host.loginBoxX + 180 - 108;
+            const sprite = getCheckboxSprite(host, state.rememberUsername, state.rememberUsernameHover);
+            if (sprite) {
+                const y = LOGIN_FORM_REMEMBER_Y;
+                drawText(host, ctx, host.fontBold12, REMEMBER_USERNAME_TEXT, labelX, y, 0xffff00, true);
                 drawSprite(host, 
                     ctx,
-                    rememberSprite,
-                    checkboxX + textWidth,
-                    textY - host.fontBold12.lineHeight,
+                    sprite,
+                    labelX + measureText(host, host.fontBold12, REMEMBER_USERNAME_TEXT),
+                    y - host.fontBold12.lineHeight,
                 );
             }
         }
 
         // Buttons (hide when connecting)
         if (!isConnecting) {
-            drawButton(host, ctx, host.loginBoxCenter - 80, 301, "Login");
-            drawButton(host, ctx, host.loginBoxCenter + 80, 301, "Cancel");
+            drawButton(host, ctx, host.loginBoxCenter - 80, LOGIN_FORM_BUTTON_Y, "Login");
+            drawButton(host, ctx, host.loginBoxCenter + 80, LOGIN_FORM_BUTTON_Y, "Cancel");
         }
 
         // Help link (only show when not connecting)

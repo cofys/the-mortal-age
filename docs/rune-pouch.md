@@ -29,7 +29,6 @@ The runes are kept on the player, not on the item. Slot N is two varbits:
 - **Where a rune goes:** onto its own slot if it has one, otherwise into the first empty slot. Slots don't shift when one empties.
 - **Sending:** only changed varbits are sent, and all of them again at login. The spellbook, the pouch interface and the bank view all draw from these varbits.
 - **On the server:** the slots are saved as the `rune-pouch:runes` attribute.
-- **Old saves:** they kept the runes in the pouch item's meta. Login moves those onto the player. Anything that doesn't fit goes to the bank, which only happens with a second old pouch.
 
 **Ours:** the runes only work while a pouch is carried. Losing or destroying the pouch keeps them on the player.
 

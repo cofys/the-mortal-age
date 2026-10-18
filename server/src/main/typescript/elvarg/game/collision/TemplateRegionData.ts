@@ -29,10 +29,15 @@ export function templateChunkKey(plane: number, chunkX: number, chunkY: number):
 /** Decodes (once) the cache map files of a region that instances use as templates. */
 export function getTemplateRegion(regionId: number): TemplateRegion | null {
     if (regions.has(regionId)) return regions.get(regionId)!;
-    const data = CacheMaps.getRegion(regionId);
-    const region = data?.terrainData ? decode(data.terrainData, data.objectData) : null;
+    const region = readTemplateRegion(regionId);
     regions.set(regionId, region);
     return region;
+}
+
+/** Reads a cache region without retaining its decoded locs or loading live collision/objects. */
+export function readTemplateRegion(regionId: number): TemplateRegion | null {
+    const data = CacheMaps.getRegion(regionId);
+    return data?.terrainData ? decode(data.terrainData, data.objectData) : null;
 }
 
 function decode(terrain: Uint8Array, objects: Uint8Array | undefined): TemplateRegion {

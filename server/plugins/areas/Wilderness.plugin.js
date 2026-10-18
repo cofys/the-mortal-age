@@ -502,35 +502,61 @@ function npcAggressionTolerance(player) {
 // Area
 // ---------------------------------------------------------------------------
 
-// PvP ground plus the duel arena, whose zones share the pvp_icons block (see needsPvpOverlay).
-// Its rules still read the tile, so membership only decides who is asked: anyone standing
-// elsewhere costs this plugin nothing.
-// ponytail: an actor holds one area, so a private instance built on PvP ground would skip
-// these rules; give that instance its own rules if one is ever placed there.
-function createWildernessArea(api, state) {
-  class WildernessArea extends api.core.Area {
+/** The Wilderness's area rules, for its own area and for any area on PvP ground. */
+function wildernessRules(api, state) {
+  return {
     process(mobile) {
       if (isRealPlayer(mobile)) processPlayer(state, mobile, api);
+    },
+    postEnter(mobile) {
+      if (isRealPlayer(mobile)) processPlayer(state, mobile, api);
+    },
+    postLeave(mobile, logout) {
+      if (isRealPlayer(mobile)) playerLeft(state, mobile, logout);
+    },
+    canAttack,
+    canTeleport,
+    npcAggressionTolerance,
+  };
+}
+
+/**
+ * "wilderness:rules" { rules: null }: an actor holds one area, so an area of its own on PvP
+ * ground (the Wilderness boss caves) asks for these and runs them first.
+ */
+function answerRules(api, state, request) {
+  request.rules = wildernessRules(api, state);
+}
+
+// PvP ground plus the duel arena, whose zones share the pvp_icons block (see needsPvpOverlay).
+// Its rules still read the tile, so membership only decides who is asked: anyone standing
+// elsewhere costs this plugin nothing. A plugin's own area on PvP ground runs the same rules
+// through "wilderness:rules".
+function createWildernessArea(api, state) {
+  const rules = wildernessRules(api, state);
+  class WildernessArea extends api.core.Area {
+    process(mobile) {
+      rules.process(mobile);
     }
 
     postEnter(mobile) {
-      if (isRealPlayer(mobile)) processPlayer(state, mobile, api);
+      rules.postEnter(mobile);
     }
 
     postLeave(mobile, logout) {
-      if (isRealPlayer(mobile)) playerLeft(state, mobile, logout);
+      rules.postLeave(mobile, logout);
     }
 
     canAttack(attacker, target) {
-      return canAttack(attacker, target);
+      return rules.canAttack(attacker, target);
     }
 
     canTeleport(player, wildernessLevelLimit) {
-      return canTeleport(player, wildernessLevelLimit);
+      return rules.canTeleport(player, wildernessLevelLimit);
     }
 
     npcAggressionTolerance(player) {
-      return npcAggressionTolerance(player);
+      return rules.npcAggressionTolerance(player);
     }
   }
   return new WildernessArea([...WORLD_ZONE_BOUNDARIES.pvp, ...WORLD_ZONE_BOUNDARIES.duel]);
@@ -613,6 +639,7 @@ module.exports = {
     const state = createState();
 
     api.onServerStartup(() => registerWildernessArea(api, state));
+    api.onCustomEvent("wilderness:rules", (request) => answerRules(api, state, request));
     api.onPlayerLogin(({ player }) => onPlayerLogin(state, api, player));
     api.onPlayerDisconnect(({ player }) => onPlayerDisconnect(state, player));
     api.onObjectFirstClick(Obelisks.OBELISK_IDS, onObeliskClick);

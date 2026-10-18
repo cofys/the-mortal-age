@@ -22,7 +22,7 @@ export const ACTOR_EXTENSION_FIRST_LOCATION = 5;
 /**
  * WGSL for one shader family. Vertex slot scope: world `vertex`, `modelInfo`, `localPos`,
  * `viewPos`, `out`; actor `vertex`, `localPos`, `viewPos`, `out`, `actorRotation`,
- * `actorHslOverride`, `extraWord` (the 4th u32 of 16-byte actor vertices, else 0) and
+ * `actorHslOverride`, `extraWord` (the 4th u32 of actor vertices) and
  * `poseLinear` (the GPU pose's rotation, identity when posed on the CPU). Fragment slot scope:
  * `input`, `front_facing`, `textureColor`, `alpha`, `material`, `paletteColor`, `surface`, `fog`,
  * `fogColor` (and, in the world shader, `isFloorWater`).

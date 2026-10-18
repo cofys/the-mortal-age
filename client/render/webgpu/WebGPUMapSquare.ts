@@ -718,7 +718,7 @@ export class WebGPUMapSquare implements MapSquare {
         for (const loc of this.locsAnimated) {
             loc.update(seqFrameLoader, cycle);
             for (const alpha of [false, true]) {
-                const frame = (alpha ? loc.anim.framesAlpha : loc.anim.frames)?.[loc.frame | 0];
+                const frame = (alpha ? loc.anim.framesAlpha : loc.anim.frames)?.[loc.drawFrame()];
                 for (const lod of [false, true]) {
                     const index = loc.getDrawRangeIndex(alpha, false, lod);
                     const target = lod ? (alpha ? ranges.alphaLod : ranges.opaqueLod)

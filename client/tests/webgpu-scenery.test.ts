@@ -125,7 +125,7 @@ test("WebGPU advances both full and far animated ranges to the same baked frame"
     const fullRange = full[0], farRange = far[0];
     const f = fixture(full, far);
     const frame = range(48, 12, 24);
-    f.square.locsAnimated = [{ frame: 0, anim: { frames: [frame] }, update() {},
+    f.square.locsAnimated = [{ frame: 0, anim: { frames: [frame] }, update() {}, drawFrame: () => 0,
         getDrawRangeIndex: (alpha: boolean) => alpha ? -1 : 0 } as any];
     f.square.updateAnimatedLocs({} as any, 10);
     assert.equal(full[0], fullRange);

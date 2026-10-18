@@ -1,5 +1,6 @@
 import type { LocTypeLoader } from "../../rs/config/loctype/LocTypeLoader";
 import type { VarBitTypeLoader } from "../../rs/config/vartype/bit/VarBitTypeLoader";
+import type { VarManager } from "../../rs/config/vartype/VarManager";
 
 /** The loaded square's loc ids per level, as both renderers keep them for picking. */
 export type TileLocIds = Int32Array[] | undefined;
@@ -39,4 +40,32 @@ export function multiLocVarps(
     }
     varpsBySquare.set(tileLocIds, varps);
     return varps;
+}
+
+/**
+ * What a square's multilocs show right now: each one's resolved variant, in a stable order. Many
+ * varps pack unrelated varbits (the Mixology lab's progress counters share a varp with a mixer
+ * slot), so a square is only rebuilt when this changes, not on every change to a varp it reads:
+ * a rebuild restarts every loc animation in the square.
+ */
+export function multiLocVariants(
+    tileLocIds: TileLocIds,
+    locTypeLoader: LocTypeLoader,
+    varManager: VarManager,
+): string {
+    if (!tileLocIds) return "";
+    const seen = new Set<number>();
+    const parts: string[] = [];
+    for (const ids of tileLocIds) {
+        if (!ids) continue;
+        for (let i = 0; i < ids.length; i++) {
+            const id = ids[i] | 0;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            const type = locTypeLoader.load(id);
+            if (!type?.transforms) continue;
+            parts.push(`${id}:${type.transform(varManager, locTypeLoader)?.id ?? -1}`);
+        }
+    }
+    return parts.join(",");
 }

@@ -1,3 +1,4 @@
+import { nextSequenceFrame } from "../../rs/model/seq/FrameInterpolation";
 import { ConfigType } from "../../rs/cache/ConfigType";
 import { IndexType } from "../../rs/cache/IndexType";
 import { BasTypeLoader } from "../../rs/config/bastype/BasTypeLoader";
@@ -8,6 +9,7 @@ import { LocTypeLoader } from "../../rs/config/loctype/LocTypeLoader";
 import { ArchiveMapElementTypeLoader } from "../../rs/config/meltype/MapElementTypeLoader";
 import { NpcModelLoader } from "../../rs/config/npctype/NpcModelLoader";
 import { NpcType } from "../../rs/config/npctype/NpcType";
+import type { SeqType } from "../../rs/config/seqtype/SeqType";
 import { SeqTypeLoader } from "../../rs/config/seqtype/SeqTypeLoader";
 import { VarManager } from "../../rs/config/vartype/VarManager";
 import { getMapIndexFromTile, getMapSquareId } from "../../rs/map/MapFileIndex";
@@ -28,6 +30,7 @@ import { DrawRange, NULL_DRAW_RANGE, newDrawRange } from "../DrawRange";
 import { ModelHashBuffer, getModelHash } from "../buffer/ModelHashBuffer";
 import { buildActorNormals } from "../buffer/ActorNormals";
 import { HD_OBJECT_LIGHTS_BY_ID } from "../../game/plugins/hd/hdObjectLightData";
+import { EXCLUDED_SEQUENCES } from "../../game/plugins/animationsmoothing/exclusions";
 import {
     ContourGroundType,
     DrawCommand,
@@ -260,6 +263,7 @@ function buildTerrainPickData(
         tile: SceneTile | undefined,
         drawPlane: number,
         heightPlane: number = drawPlane,
+        includeHidden: boolean = true,
     ): void => {
         const tileModel = tile?.tileModel;
         if (!tileModel) return;
@@ -293,7 +297,7 @@ function buildTerrainPickData(
         addFaces(tileModel.faces);
         // Invisible faces (transparent overlays such as bridge decks) are not
         // rendered but stay click-testable, like every face of a drawn tile.
-        if (tileModel.hiddenFaces.length > 0) {
+        if (includeHidden && tileModel.hiddenFaces.length > 0) {
             addFaces(tileModel.hiddenFaces);
         }
     };
@@ -309,7 +313,9 @@ function buildTerrainPickData(
                 const bridgeColumn = (scene.tileRenderFlags[1][x][y] & 0x2) !== 0;
                 const heightPlane = bridgeColumn ? level + 1 : level;
                 if (level === 0 && (scene.tileRenderFlags[1][x][y] & 0x8) !== 0) {
-                    addTile(scene.tiles[1][x]?.[y], level, bridgeColumn ? 2 : 1);
+                    // Only what is drawn: an invisible layer above the floor (the bear caves'
+                    // 0xff00ff overlay on plane 1) must not catch the click meant for the floor.
+                    addTile(scene.tiles[1][x]?.[y], level, bridgeColumn ? 2 : 1, false);
                 }
 
                 const tile = scene.tiles[level][x]?.[y];
@@ -890,22 +896,66 @@ export function buildLocGeometryData(sceneBuf: SceneBuffer): LocGeometryData {
     };
 }
 
+/**
+ * Blended frames baked per keyframe at most. One per client cycle grows a busy square's
+ * geometry by about half (Varrock's pigeons and signs); 4 keeps it near a sixth, and a
+ * 6-cycle fire or flag frame still moves every cycle and a half.
+ */
+const SMOOTHED_STEPS_PER_FRAME = 4;
+
+/**
+ * Each keyframe's baked frames when smoothed (Animation Smoothing), as [keyframe, cycles into
+ * it]: evenly spaced through its length, one per client cycle up to SMOOTHED_STEPS_PER_FRAME.
+ * A final keyframe blends only when the object has a valid loop target.
+ */
+function smoothedFrameRuns(
+    locModelLoader: LocModelLoader,
+    seqType: SeqType,
+    maxSteps: number,
+): { frame: number; cycle: number }[] {
+    const runs: { frame: number; cycle: number }[] = [];
+    const count = seqType.frameIds.length;
+    for (let frame = 0; frame < count; frame++) {
+        const length =
+            nextSequenceFrame(seqType, frame, "object") !== undefined ? seqType.getFrameLength(locModelLoader.seqFrameLoader, frame) | 0 : 1;
+        const steps = Math.max(1, Math.min(length, maxSteps === 0 ? length : maxSteps));
+        for (let step = 0; step < steps; step++) {
+            runs.push({ frame, cycle: Math.round((step * length) / steps) });
+        }
+    }
+    return runs;
+}
+
 function addLocAnimationFrames(
     locModelLoader: LocModelLoader,
     sceneBuf: SceneBuffer,
     entity: LocEntity,
     locType: LocType,
+    smoothAnimations: boolean,
+    maxSteps: number,
 ): AnimationFrames | undefined {
     const seqType = locModelLoader.seqTypeLoader.load(entity.seqId);
-    let frameCount: number;
+    // [keyframe, cycles into it] per baked frame; skeletal seqs already bake every cycle.
+    let bakes: { frame: number; cycle: number }[];
+    let frameStarts: number[] | undefined;
     if (seqType.isSkeletalSeq()) {
-        frameCount = seqType.getSkeletalDuration();
+        const duration = seqType.getSkeletalDuration();
+        bakes = Array.from({ length: duration }, (_, frame) => ({ frame, cycle: 0 }));
     } else {
         if (!seqType.frameIds) {
             return undefined;
         }
-        frameCount = seqType.frameIds.length;
+        if (smoothAnimations && !EXCLUDED_SEQUENCES.has(seqType.id)) {
+            bakes = smoothedFrameRuns(locModelLoader, seqType, maxSteps);
+            frameStarts = [];
+            bakes.forEach((bake, index) => {
+                if (bake.cycle === 0) frameStarts![bake.frame] = index;
+            });
+        } else {
+            bakes = seqType.frameIds.map((_, frame) => ({ frame, cycle: 0 }));
+        }
     }
+    const frameCount = bakes.length;
     if (frameCount === 0) {
         return undefined;
     }
@@ -919,7 +969,10 @@ function addLocAnimationFrames(
             entity.type,
             entity.rotation,
             entity.seqId,
-            i,
+            bakes[i].frame,
+            undefined,
+            bakes[i].cycle,
+            frameStarts !== undefined,
         );
         if (model) {
             frames[i] = sceneBuf.addModelAnimFrame(model, false, undefined, doubleSided, locType.id);
@@ -936,6 +989,7 @@ function addLocAnimationFrames(
     return {
         frames,
         framesAlpha: alphaFrameCount > 0 ? framesAlpha : undefined,
+        frameStarts,
     };
 }
 
@@ -948,6 +1002,8 @@ export function addLocEntities(
     doorSceneModels: SceneModel[],
     sceneBuf: SceneBuffer,
     locEntities: SceneLocEntity[],
+    smoothAnimations: boolean = false,
+    maxSteps: number = SMOOTHED_STEPS_PER_FRAME,
 ): Iterable<LocAnimatedGroup> {
     const locAnimatedGroupMap = new Map<number, LocAnimatedGroup>();
 
@@ -1057,7 +1113,14 @@ export function addLocEntities(
             if (group) {
                 group.locs.push(loc);
             } else {
-                const anim = addLocAnimationFrames(locModelLoader, sceneBuf, entity, locType);
+                const anim = addLocAnimationFrames(
+                    locModelLoader,
+                    sceneBuf,
+                    entity,
+                    locType,
+                    smoothAnimations,
+                    maxSteps,
+                );
                 if (!anim) {
                     continue;
                 }
@@ -1312,6 +1375,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             maxLevel,
             loadNpcs,
             smoothTerrain,
+            smoothLocAnimations = false,
+            smoothLocAnimationSteps = SMOOTHED_STEPS_PER_FRAME,
             minimizeDrawCalls,
             doorOnly = false,
             locOnly = false,
@@ -1644,6 +1709,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             doorSceneModels,
             locSceneBuf,
             locEntities,
+            smoothLocAnimations,
+            smoothLocAnimationSteps,
         );
 
         if (!shouldLoadDoorOnly) {

@@ -293,6 +293,10 @@ export async function initPlayerGeometry(host: WebGLOsrsRendererHost, ): Promise
                 stride: ACTOR_VERTEX_STRIDE,
                 integer: true as any,
             })
+            .vertexAttributeBuffer(3, interleavedBuffer, {
+                type: PicoGL.UNSIGNED_INT, size: 1, stride: ACTOR_VERTEX_STRIDE,
+                offset: 16, integer: true as any,
+            })
             .instanceAttributeBuffer(1, playerSlotBuffer, {
                 type: PicoGL.INT,
                 size: 1,
@@ -319,6 +323,10 @@ export async function initPlayerGeometry(host: WebGLOsrsRendererHost, ): Promise
                 size: 4,
                 stride: ACTOR_VERTEX_STRIDE,
                 integer: true as any,
+            })
+            .vertexAttributeBuffer(3, interleavedBufferAlpha, {
+                type: PicoGL.UNSIGNED_INT, size: 1, stride: ACTOR_VERTEX_STRIDE,
+                offset: 16, integer: true as any,
             })
             .instanceAttributeBuffer(1, playerSlotBuffer, {
                 type: PicoGL.INT,

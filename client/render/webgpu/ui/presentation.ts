@@ -5,7 +5,6 @@ import type { LoginRenderer } from "../../../game/login/LoginRenderer";
 import type { LoginState } from "../../../game/login/LoginState";
 import { withRenderTransform } from "../../../game/login/renderer/layout/config";
 import { getLogicalFirePositions } from "../../../game/login/renderer/layout/geometry";
-import { sendLogin } from "../../../network/ServerConnection";
 import { LoadingMessageOverlay } from "../../../ui/devoverlay/LoadingMessageOverlay";
 import type { OverlayUpdateArgs } from "../../../ui/devoverlay/Overlay";
 import { SystemUpdateOverlay } from "../../../ui/devoverlay/SystemUpdateOverlay";
@@ -115,19 +114,7 @@ export class WebgpuUiPresentation {
                 if (keyEvent.code === "Tab") {
                     osrsClient.handleLoginKeyInput("Tab", "");
                 } else if (keyEvent.code === "Enter" || keyEvent.code === "NumpadEnter") {
-                    const { loginState } = osrsClient;
-                    if (loginState.canAttemptLogin()) {
-                        loginState.savePersistedLoginState();
-                        osrsClient.updateGameState(GameState.CONNECTING);
-                        sendLogin(
-                            loginState.username.trim(),
-                            loginState.password,
-                            osrsClient.loadedCache?.info?.revision ?? 0,
-                        );
-                    } else {
-                        loginState.showCredentialValidationError();
-                        osrsClient.handleLoginKeyInput("Enter", "");
-                    }
+                    osrsClient.submitLoginFromKeyboard();
                 } else if (keyEvent.code === "Backspace") {
                     osrsClient.handleLoginKeyInput("Backspace", "");
                 }
@@ -152,12 +139,7 @@ export class WebgpuUiPresentation {
                         inputManager.isTouch,
                 );
                 if (action === "connect") {
-                    loginState.savePersistedLoginState();
-                    sendLogin(
-                        loginState.username.trim(),
-                        loginState.password,
-                        osrsClient.loadedCache?.info?.revision ?? 0,
-                    );
+                    osrsClient.sendLoginRequest();
                 }
                 inputManager.clickMode3 = 0;
                 inputManager.saveClickX = -1;

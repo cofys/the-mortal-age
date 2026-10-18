@@ -1,3 +1,5 @@
+import { playerInterpolation } from "../../player/PlayerInterpolation";
+import { applyInterpolatedFrames, interpolationFrame, interpolationKey, type ActorInterpolation } from "../../../rs/model/seq/FrameInterpolation";
 import type { OsrsClient } from "../../../game/OsrsClient";
 import { withSeqHandItems } from "../../../rs/config/player/Equipment";
 import type { PlayerAppearance } from "../../../rs/config/player/PlayerAppearance";
@@ -64,7 +66,7 @@ export class PlayerPoseGeometry {
         private readonly updateTextureArray: (textures: Map<number, Int32Array>) => void,
     ) {
         const textureLoader = client.textureLoader as TextureLoader;
-        // smoothActor=true -> ACTOR_VERTEX_STRIDE (16-byte) vertices, the layout the WebGL
+        // smoothActor=true -> ACTOR_VERTEX_STRIDE (20-byte) vertices, the layout the WebGL
         // player CPU path and the WebGPU player pipeline use.
         this.opaqueSceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, 0, true);
         this.alphaSceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, 0, true);
@@ -96,8 +98,6 @@ export class PlayerPoseGeometry {
 
         let movementFrameIdx = 0;
         let actionFrameIdx = 0;
-        let movementFrameCycle = 0;
-        let actionFrameCycle = 0;
         const controller = this.client.playerAnimController;
         const serverId = pe.getServerIdForIndex(pid);
         if (controller && serverId !== undefined) {
@@ -105,8 +105,6 @@ export class PlayerPoseGeometry {
             const actionState = controller.getSequenceState(serverId);
             movementFrameIdx = (movementState?.frame ?? 0) | 0;
             actionFrameIdx = (actionState?.frame ?? 0) | 0;
-            movementFrameCycle = (movementState?.frameCycle ?? 0) | 0;
-            actionFrameCycle = (actionState?.frameCycle ?? 0) | 0;
         }
 
         const seqId = actionActive ? actionSeqId : movementSeqId;
@@ -127,21 +125,17 @@ export class PlayerPoseGeometry {
             }
         }
 
-        const frameCycle = this.smoothingCycle(
-            seqId,
-            overlaySeqId,
-            actionActive ? actionFrameCycle : movementFrameCycle,
-        );
+        const interpolation = playerInterpolation(this.client, pid, seqId, frameIdx, overlaySeqId, overlayFrameIdx);
         const overlayKey =
             overlaySeqId !== undefined && overlayFrameIdx !== undefined
                 ? `|${overlaySeqId | 0}|${overlayFrameIdx | 0}`
                 : "";
-        const cycleKey = frameCycle > 0 ? `~${frameCycle}` : "";
+        const cycleKey = interpolationKey(interpolation);
         const appKey = app.getCacheKey?.() ?? this.appearanceFallbackKey(app);
         const key = `${appKey}|${seqId}|${frameIdx}${cycleKey}${overlayKey}`;
 
         if (allowGpu) {
-            const matrices = this.poseFor(key, base, { seqId, frameIdx, frameCycle, overlaySeqId, overlayFrameIdx });
+            const matrices = this.poseFor(key, base, { seqId, frameIdx, interpolation, overlaySeqId, overlayFrameIdx });
             const rest = matrices ? this.restMeshFor(appKey, base.baseModel) : undefined;
             if (rest) return { ...rest, matrices, poseKey: key };
         }
@@ -156,7 +150,7 @@ export class PlayerPoseGeometry {
         const geometry = this.build(base.baseModel, base.baseCenterX, base.baseCenterZ, {
             seqId,
             frameIdx,
-            frameCycle,
+            interpolation,
             overlaySeqId,
             overlayFrameIdx,
         });
@@ -183,7 +177,7 @@ export class PlayerPoseGeometry {
     private poseFor(
         key: string,
         base: BaseAppearance,
-        anim: { seqId: number; frameIdx: number; frameCycle: number; overlaySeqId?: number; overlayFrameIdx?: number },
+        anim: { seqId: number; frameIdx: number; interpolation?: ActorInterpolation; overlaySeqId?: number; overlayFrameIdx?: number },
     ): Float32Array | undefined {
         const cached = this.poseCache.get(key);
         if (cached !== undefined) {
@@ -208,7 +202,7 @@ export class PlayerPoseGeometry {
                         anim.frameIdx,
                         anim.overlaySeqId,
                         anim.overlayFrameIdx,
-                        anim.frameCycle,
+                        anim.interpolation,
                     );
                     if (!pose.needsCpu) matrices = pose.finish(0, 0);
                 }
@@ -353,7 +347,7 @@ export class PlayerPoseGeometry {
         anim: {
             seqId: number;
             frameIdx: number;
-            frameCycle: number;
+            interpolation?: ActorInterpolation;
             overlaySeqId?: number;
             overlayFrameIdx?: number;
         },
@@ -366,7 +360,7 @@ export class PlayerPoseGeometry {
                 anim.frameIdx,
                 anim.overlaySeqId,
                 anim.overlayFrameIdx,
-                anim.frameCycle,
+                anim.interpolation,
             );
 
             try {
@@ -377,8 +371,7 @@ export class PlayerPoseGeometry {
             } catch {}
 
             const textureLoader = this.client.textureLoader as TextureLoader;
-            // Player poses use the non-local (12-byte stride) SceneBuffer path; the actor WGSL
-            // vertex only reads the packed position/colour/uv words.
+            // CPU poses retain fractional positions alongside the normal and colour words.
             const actorNormals = buildActorNormals(model, baseModel);
             const opaqueFaces = getModelFacesFiltered(model, textureLoader, false);
             const alphaFaces = getModelFacesFiltered(model, textureLoader, true);
@@ -426,7 +419,7 @@ export class PlayerPoseGeometry {
         frameIdx: number,
         overlaySeqId: number | undefined,
         overlayFrameIdx: number | undefined,
-        frameCycle: number,
+        interpolation: ActorInterpolation | undefined,
     ): void {
         try {
             const seqType = this.client.seqTypeLoader.load(seqId | 0);
@@ -451,7 +444,7 @@ export class PlayerPoseGeometry {
                 overlayType as any,
                 overlayId,
                 overlayFrame,
-                frameCycle | 0,
+                interpolation,
             );
         } catch {}
     }
@@ -461,7 +454,7 @@ export class PlayerPoseGeometry {
         seqType: any,
         seqId: number,
         frameIdx: number,
-        frameCycle: number,
+        interpolation: ActorInterpolation | undefined,
     ): boolean {
         if (!seqType) return false;
         if (seqType.isSkeletalSeq?.()) {
@@ -478,12 +471,10 @@ export class PlayerPoseGeometry {
             const idx = Math.max(0, frameIdx | 0) % (ids.length | 0);
             const frame0 = this.client.seqFrameLoader.load(ids[idx] | 0);
             if (!frame0) return false;
-            const next = frameCycle > 0 ? this.smoothingTarget(seqType, idx) : undefined;
-            if (next) {
-                const alpha = Math.min(1, frameCycle / next.length);
-                model.animateInterpolated(frame0 as any, next.frame as any, alpha, !!seqType.op14);
+            if (interpolation) {
+                return applyInterpolatedFrames(model, this.client.seqFrameLoader, seqType, idx, interpolation);
             } else {
-                model.animate(frame0 as any, undefined, !!seqType.op14);
+                model.animate(frame0, undefined, !!seqType.op14);
             }
             return true;
         }
@@ -498,11 +489,16 @@ export class PlayerPoseGeometry {
         overlayType: any,
         overlaySeqId: number,
         overlayFrameIdx: number,
-        frameCycle: number,
+        interpolation: ActorInterpolation | undefined,
     ): boolean {
         if (!baseType) return false;
         if (!overlayType) {
-            return this.applySingleSequence(model, baseType, baseSeqId, baseFrameIdx, frameCycle);
+            return this.applySingleSequence(model, baseType, baseSeqId, baseFrameIdx, interpolation);
+        }
+
+        if (interpolation && !baseType.isSkeletalSeq?.() && !overlayType.isSkeletalSeq?.()) {
+            return applyInterpolatedFrames(model, this.client.seqFrameLoader, baseType, baseFrameIdx,
+                interpolation, overlayType, overlayFrameIdx);
         }
 
         const baseCached = !!baseType.isSkeletalSeq?.();
@@ -554,11 +550,8 @@ export class PlayerPoseGeometry {
                 const interleave = Array.isArray(baseType?.masks)
                     ? (baseType.masks as number[])
                     : undefined;
-                if (interleave && interleave.length > 0) {
-                    model.animateInterleavedFrame(frame0 as any, !!overlayType.op14, interleave, true);
-                } else {
-                    model.animate(frame0 as any, undefined, !!overlayType.op14);
-                }
+                model.animateInterleavedFrame(frame0, !!overlayType.op14, interleave, true,
+                    interpolationFrame(overlayType, interpolation?.overlay, this.client.seqFrameLoader), interpolation?.overlay?.alpha);
             }
             return true;
         }
@@ -591,7 +584,8 @@ export class PlayerPoseGeometry {
                 maskMatch: true,
                 applyAlpha: false,
             });
-            model.animateInterleavedFrame(baseFrame0 as any, !!baseType.op14, interleave, false);
+            model.animateInterleavedFrame(baseFrame0, !!baseType.op14, interleave, false,
+                interpolationFrame(baseType, interpolation?.base, this.client.seqFrameLoader), interpolation?.base?.alpha);
             return true;
         }
 
@@ -620,33 +614,6 @@ export class PlayerPoseGeometry {
             interleave,
         );
         return true;
-    }
-
-    private smoothingCycle(
-        seqId: number,
-        overlaySeqId: number | undefined,
-        frameCycle: number,
-    ): number {
-        if (!(frameCycle > 0) || seqId < 0 || overlaySeqId !== undefined) return 0;
-        try {
-            if (!this.client.animationSmoothingPlugin?.smoothsPlayer(seqId)) return 0;
-            const seqType: any = this.client.seqTypeLoader.load(seqId | 0);
-            if (!seqType || seqType.isSkeletalSeq?.() || !(seqType.frameIds?.length > 1)) return 0;
-            return frameCycle | 0;
-        } catch {
-            return 0;
-        }
-    }
-
-    private smoothingTarget(
-        seqType: any,
-        idx: number,
-    ): { frame: any; length: number } | undefined {
-        const ids = seqType.frameIds as number[];
-        if (idx + 1 >= ids.length) return undefined;
-        const frame = this.client.seqFrameLoader.load(ids[idx + 1] | 0);
-        const length = seqType.getFrameLength(this.client.seqFrameLoader, idx) | 0;
-        return frame && length > 0 ? { frame, length } : undefined;
     }
 
     private effectiveSkeletalDuration(seqType: any, seqId: number): number {

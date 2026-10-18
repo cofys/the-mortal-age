@@ -47,7 +47,7 @@ const BOSS_TELEPORT_DESTINATIONS = new Map([
   [28154, new Location(2977, 3702, 0)], // Crazy Archaeologist
   [28155, new Location(3010, 3849, 0)], // King Black Dragon entrance
   [28156, new Location(3233, 10341, 0)], // Scorpia
-  [28157, new Location(3332, 3734, 0)], // Venenatis
+  [28157, new Location(3320, 3796, 0)], // Venenatis: the Silk Chasm entrance
   [28158, new Location(3219, 3788, 0)], // Vet'ion
   [28159, COUNT_DRAYNOR_TELEPORT_DESTINATION], // Count Draynor
 ]);

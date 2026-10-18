@@ -568,12 +568,19 @@ export class CombatFactory {
             "combat.process.can_attack.multi_check",
             () => CombatFactory.multiCombatBetween(attacker, target)
         )) {
+            // An always-multi NPC (a boss's summoned minion) never ties up the one it fights: a
+            // player a hellhound is biting may still attack its master in a singles lair.
+            const lockedBy = (mobile: Mobile) => {
+                const by = mobile.getCombat().getAttacker();
+                return by != null && !(by.isNpc() && by.getAsNpc().isMultiCombat());
+            };
             if (
                 ServerPerf.measurePhase("combat.process.can_attack.attacker_busy", () =>
                     (
                         CombatFactory.isBeingAttacked(attacker) &&
                         attacker.getCombat().getAttacker() != target &&
-                        attacker.getCombat().getAttacker().getHitpoints() > 0
+                        attacker.getCombat().getAttacker().getHitpoints() > 0 &&
+                        lockedBy(attacker)
                     ) || !attacker.getCombat().getHitQueue().isEmpty(target)
                 )
             ) {
@@ -583,7 +590,7 @@ export class CombatFactory {
             // Here we check if we are already in combat with another entity.
             if (
                 ServerPerf.measurePhase("combat.process.can_attack.target_busy", () =>
-                    (CombatFactory.isBeingAttacked(target) && target.getCombat().getAttacker() != attacker) ||
+                    (CombatFactory.isBeingAttacked(target) && target.getCombat().getAttacker() != attacker && lockedBy(target)) ||
                     !target.getCombat().getHitQueue().isEmpty(attacker)
                 )
             ) {
@@ -1275,7 +1282,8 @@ export class CombatFactory {
             return;
         }
 
-        if (character.getSize() > 2) {
+        // Large NPCs shrug freezes off, unless one opts in (Callisto and Artio can be frozen).
+        if (character.getSize() > 2 && !character.hasFlag("combat:freezable")) {
             return;
         }
 
