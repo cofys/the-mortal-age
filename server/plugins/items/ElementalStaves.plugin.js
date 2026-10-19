@@ -21,13 +21,21 @@ function suppliedRunes(player) {
   return STAFF_GROUPS.find(([staffIds]) => staffIds.includes(weaponId))?.[1] ?? [];
 }
 
+function bypassSuppliedRune(event) {
+  if (Number.isInteger(event.runeId) && suppliedRunes(event.player).includes(event.runeId)) {
+    event.bypass = true;
+  }
+}
+
+/** `elemental-staves:runes` { player } -> `runes`: the rune ids the wielded staff supplies. */
+function reportSuppliedRunes(request) {
+  request.runes = suppliedRunes(request.player);
+}
+
 module.exports = {
   name: "ElementalStaves",
   register(api) {
-    api.onSpellRuneBypass((event) => {
-      if (Number.isInteger(event.runeId) && suppliedRunes(event.player).includes(event.runeId)) {
-        event.bypass = true;
-      }
-    });
+    api.onSpellRuneBypass(bypassSuppliedRune);
+    api.onCustomEvent("elemental-staves:runes", reportSuppliedRunes);
   },
 };

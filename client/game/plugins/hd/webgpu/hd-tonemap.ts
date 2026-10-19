@@ -4,7 +4,7 @@
  * writing the canvas. Replaces the old per-surface grade (hd-lighting.wgsl) that clipped.
  *
  * Missing bloom/AO views fall back to 1x1 black/white textures so the composite still runs; the
- * scene/bloom/ao views change per frame, so the source bind group is rebuilt per encode.
+ * source bind group is reused until a scene, bloom or AO view changes.
  */
 import { GPU_BUFFER_USAGE, GPU_SHADER_STAGE, GPU_TEXTURE_USAGE } from "../../../../render/webgpu/bindings";
 import { HD_TONEMAP_WGSL } from "./hd-tonemap.wgsl";
@@ -31,6 +31,11 @@ export class HdTonemapPass {
     private readonly aoFallbackTexture: GPUTexture;
     private readonly aoFallbackView: GPUTextureView;
     private readonly uniforms = new Float32Array(UNIFORM_FLOATS);
+    private uniformsReady = false;
+    private sourceBindGroup?: GPUBindGroup;
+    private sceneView?: GPUTextureView;
+    private bloomView?: GPUTextureView;
+    private aoView?: GPUTextureView;
     private disposed = false;
 
     constructor(device: GPUDevice, canvasFormat: GPUTextureFormat) {
@@ -130,31 +135,41 @@ export class HdTonemapPass {
     ): void {
         if (this.disposed) return;
         const uniforms = this.uniforms;
-        // EXPOSURE is tuned for ACES; without it the scene is shown as rendered, clipped at 1.
-        uniforms[0] = hdr ? EXPOSURE : 1;
-        uniforms[1] = SATURATION;
-        uniforms[2] = CONTRAST;
-        uniforms[3] = BLOOM_STRENGTH;
-        uniforms[4] = AO_STRENGTH;
-        uniforms[5] = hdr ? 1 : 0;
-        uniforms[6] = 0;
-        uniforms[7] = 0;
-        uniforms[8] = width;
-        uniforms[9] = height;
-        uniforms[10] = 1 / Math.max(1, width);
-        uniforms[11] = 1 / Math.max(1, height);
-        this.device.queue.writeBuffer(this.uniformBuffer, 0, uniforms);
+        if (!this.uniformsReady || uniforms[8] !== width || uniforms[9] !== height || uniforms[5] !== Number(hdr)) {
+            // EXPOSURE is tuned for ACES; without it the scene is shown as rendered, clipped at 1.
+            uniforms[0] = hdr ? EXPOSURE : 1;
+            uniforms[1] = SATURATION;
+            uniforms[2] = CONTRAST;
+            uniforms[3] = BLOOM_STRENGTH;
+            uniforms[4] = AO_STRENGTH;
+            uniforms[5] = hdr ? 1 : 0;
+            uniforms[6] = 0;
+            uniforms[7] = 0;
+            uniforms[8] = width;
+            uniforms[9] = height;
+            uniforms[10] = 1 / Math.max(1, width);
+            uniforms[11] = 1 / Math.max(1, height);
+            this.device.queue.writeBuffer(this.uniformBuffer, 0, uniforms);
+            this.uniformsReady = true;
+        }
 
-        const sourceBindGroup = this.device.createBindGroup({
-            label: "hd-tonemap source bind group",
-            layout: this.textureLayout,
-            entries: [
-                { binding: 0, resource: sceneView },
-                { binding: 1, resource: bloomView ?? this.blackView },
-                { binding: 2, resource: aoView ?? this.aoFallbackView },
-                { binding: 3, resource: this.sampler },
-            ],
-        });
+        const bloom = bloomView ?? this.blackView;
+        const ao = aoView ?? this.aoFallbackView;
+        if (!this.sourceBindGroup || this.sceneView !== sceneView || this.bloomView !== bloom || this.aoView !== ao) {
+            this.sourceBindGroup = this.device.createBindGroup({
+                label: "hd-tonemap source bind group",
+                layout: this.textureLayout,
+                entries: [
+                    { binding: 0, resource: sceneView },
+                    { binding: 1, resource: bloom },
+                    { binding: 2, resource: ao },
+                    { binding: 3, resource: this.sampler },
+                ],
+            });
+            this.sceneView = sceneView;
+            this.bloomView = bloom;
+            this.aoView = ao;
+        }
 
         const pass = encoder.beginRenderPass({
             label: "hd-tonemap",
@@ -169,7 +184,7 @@ export class HdTonemapPass {
         });
         pass.setPipeline(this.pipeline);
         pass.setBindGroup(0, this.uniformBindGroup);
-        pass.setBindGroup(1, sourceBindGroup);
+        pass.setBindGroup(1, this.sourceBindGroup);
         pass.draw(FULLSCREEN_VERTICES);
         pass.end();
     }
@@ -177,6 +192,8 @@ export class HdTonemapPass {
     dispose(): void {
         if (this.disposed) return;
         this.disposed = true;
+        this.sourceBindGroup = undefined;
+        this.sceneView = this.bloomView = this.aoView = undefined;
         this.uniformBuffer.destroy();
         this.blackTexture.destroy();
         this.aoFallbackTexture.destroy();

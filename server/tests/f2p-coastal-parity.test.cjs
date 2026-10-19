@@ -26,6 +26,9 @@ function register(name, key) {
       if (typeof nameOrFn === 'function') hooks.set('onNpcInteraction', [nameOrFn]);
       else for (const [action, fn] of Object.entries(actions)) namedNpc.set(`${nameOrFn}:${action}`, fn);
     },
+    onNpcsInteraction: (names, actions) => {
+      for (const name of names) for (const [action, fn] of Object.entries(actions)) namedNpc.set(`${name}:${action}`, fn);
+    },
     getItemOnGroundManager: () => ({
       registerLocation: (owner, item, location) => { ground.push({ owner, item, location }); }, getGroundItem: () => null,
     }),
@@ -341,6 +344,9 @@ test('Port Sarim sailing charges once and lands at the captured tile after five 
   assert.equal(p.getLocation().getX(), 2956); assert.equal(p.getLocation().getY(), 3146);
   q.namedNpc.get('Customs officer:Travel')({ player: p }); q.tick(5);
   assert.equal(p.getLocation().getX(), 3029); assert.equal(p.getLocation().getY(), 3217);
+  // After Pandemonium the boats name their stops instead of offering Travel.
+  p.items.set(995, 30); q.namedNpc.get('Captain Tobias:The Pandemonium')({ player: p }); q.tick(5);
+  assert.equal(p.items.get(995), 0); assert.equal(p.getLocation().getX(), 3069); assert.equal(p.getLocation().getY(), 2987);
 });
 
 test('Corsair vine ladder preserves the side used on its one-tick climb', () => {

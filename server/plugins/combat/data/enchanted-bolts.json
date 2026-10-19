@@ -1,0 +1,84 @@
+{
+  "bolts": [
+    {
+      "effect": "lucky-lightning",
+      "names": ["Opal bolts (e)", "Opal dragon bolts (e)"],
+      "spotanim": 749,
+      "sound": 2918,
+      "chance": { "npc": 0.05, "player": 0.05 },
+      "ignoresAccuracy": true
+    },
+    {
+      "effect": "earths-fury",
+      "names": ["Jade bolts (e)", "Jade dragon bolts (e)"],
+      "spotanim": 755,
+      "sound": 2916,
+      "chance": { "npc": 0, "player": 0.06 },
+      "ignoresAccuracy": true
+    },
+    {
+      "effect": "sea-curse",
+      "names": ["Pearl bolts (e)", "Pearl dragon bolts (e)"],
+      "spotanim": 750,
+      "sound": 2920,
+      "chance": { "npc": 0.06, "player": 0.06 },
+      "ignoresAccuracy": true
+    },
+    {
+      "effect": "down-to-earth",
+      "names": ["Topaz bolts (e)", "Topaz dragon bolts (e)"],
+      "spotanim": 757,
+      "sound": 2914,
+      "chance": { "npc": 0, "player": 0.04 },
+      "ignoresAccuracy": true
+    },
+    {
+      "effect": "clear-mind",
+      "names": ["Sapphire bolts (e)", "Sapphire dragon bolts (e)"],
+      "spotanim": 751,
+      "sound": 2912,
+      "chance": { "npc": 0.25, "player": 0.05 },
+      "ignoresAccuracy": false
+    },
+    {
+      "effect": "magical-poison",
+      "names": ["Emerald bolts (e)", "Emerald dragon bolts (e)"],
+      "spotanim": 752,
+      "sound": 2919,
+      "chance": { "npc": 0.55, "player": 0.54 },
+      "ignoresAccuracy": false
+    },
+    {
+      "effect": "blood-forfeit",
+      "names": ["Ruby bolts (e)", "Ruby dragon bolts (e)"],
+      "spotanim": 754,
+      "sound": 2911,
+      "chance": { "npc": 0.06, "player": 0.11 },
+      "ignoresAccuracy": true
+    },
+    {
+      "effect": "armour-piercing",
+      "names": ["Diamond bolts (e)", "Diamond dragon bolts (e)"],
+      "spotanim": 758,
+      "sound": 2913,
+      "chance": { "npc": 0.1, "player": 0.05 },
+      "ignoresAccuracy": true
+    },
+    {
+      "effect": "dragons-breath",
+      "names": ["Dragonstone bolts (e)", "Dragonstone dragon bolts (e)"],
+      "spotanim": 756,
+      "sound": 2915,
+      "chance": { "npc": 0.06, "player": 0.06 },
+      "ignoresAccuracy": false
+    },
+    {
+      "effect": "life-leech",
+      "names": ["Onyx bolts (e)", "Onyx dragon bolts (e)"],
+      "spotanim": 753,
+      "sound": 2917,
+      "chance": { "npc": 0.11, "player": 0.1 },
+      "ignoresAccuracy": false
+    }
+  ]
+}

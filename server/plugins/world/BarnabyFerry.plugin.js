@@ -1,9 +1,10 @@
 /**
  * Captain Barnaby's ferry (https://oldschool.runescape.wiki/w/Captain_Barnaby).
  *
- * The pay-fare option sails between East Ardougne, Brimhaven and Rimmington for
- * 30 coins, halved to 15 while any Karamja gloves are worn. The Wiki's free
- * ring of charos(a) route is dialogue-only and is not offered here.
+ * Each captain's destination options (revision 241 replaced Pay-fare with
+ * "Ardougne", "Brimhaven" and "Rimmington") and his Talk-to dialogue sail
+ * between the three docks for 30 coins, halved to 15 while any Karamja gloves
+ * are worn. The Wiki's free ring of charos(a) route is not offered here.
  */
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
@@ -11,13 +12,17 @@ const { Equipment } = require("../../src/main/typescript/elvarg/game/model/conta
 
 const BASE_FARE = 30;
 const GLOVES_FARE = 15;
-const PORT_TOLERANCE = 8;
 
+// `variant` is the dock's Talk-to transcript in npc-dialogues.json.
 const PORTS = [
-  { name: "East Ardougne", destination: new Location(2680, 3274, 0) },
-  { name: "Brimhaven", destination: new Location(2768, 3227, 0) },
-  { name: "Rimmington", destination: new Location(2916, 3225, 0) },
+  { name: "Ardougne", destination: new Location(2680, 3274, 0), variant: "standard-dialogue-if-the-player-is-on-the-dock-in-east-ardougne" },
+  { name: "Brimhaven", destination: new Location(2768, 3227, 0), variant: "standard-dialogue-if-the-player-is-on-the-dock-in-brimhaven" },
+  { name: "Rimmington", destination: new Location(2916, 3225, 0), variant: "standard-dialogue-if-the-player-is-on-the-dock-in-rimmington" },
 ];
+
+// The transcript's "You board the ship and sail to <port>." message steps.
+const BOARD_MESSAGE = /^You board the ship and sail to (.+)\.$/;
+const NO_FARE_CONDITION = "If the player does not have 30 coins:";
 
 const KARAMJA_GLOVES = new Set([
   ItemIdentifiers.KARAMJA_GLOVES,
@@ -31,23 +36,6 @@ const KARAMJA_GLOVES = new Set([
 ].filter(Number.isInteger));
 
 let core = null;
-let pluginApi = null;
-
-function currentPort(object) {
-  const location = object?.getLocation?.();
-  if (!location?.getX) {
-    return null;
-  }
-  for (const port of PORTS) {
-    if (
-      Math.abs(location.getX() - port.destination.getX()) <= PORT_TOLERANCE &&
-      Math.abs(location.getY() - port.destination.getY()) <= PORT_TOLERANCE
-    ) {
-      return port;
-    }
-  }
-  return null;
-}
 
 function fareFor(player) {
   const gloves = player.getEquipment?.()?.get?.(Equipment.HANDS_SLOT)?.getId?.();
@@ -69,30 +57,48 @@ function sail(player, port, fare) {
   core.TeleportHandler.teleport(player, port.destination, core.TeleportType.NORMAL, false);
 }
 
-function payFare(event) {
-  const { player, object } = event;
-  const from = currentPort(object);
-  const destinations = PORTS.filter((port) => port.name !== from?.name);
-  const fare = fareFor(player);
-  if (destinations.length === 0) {
-    player.sendMessage("The captain isn't sailing anywhere from here.");
-    return;
-  }
-  pluginApi.sendMultiChatboxPrompt(
-    player,
-    "Where would you like to sail to?",
-    ...destinations.flatMap((port) => [`${port.name} (${fare} coins)`, () => sail(player, port, fare)])
-  );
+function portNamed(name) {
+  return PORTS.find((port) => port.name === name) ?? null;
+}
+
+function isBarnaby(event) {
+  return event.definition?.getName?.() === "Captain Barnaby";
+}
+
+/** The clicked option is the destination's name. */
+function sailToOption(event) {
+  const port = portNamed(event.definition?.getActions?.()?.[event.clickType - 1]);
+  if (port) sail(event.player, port, fareFor(event.player));
+}
+
+/** Each dock's captain offers the other two ports, so the one he lacks is where he stands. */
+function selectDockVariant(event) {
+  const actions = isBarnaby(event) ? event.definition.getActions?.() ?? [] : [];
+  if (!actions.some(portNamed)) return null;
+  return PORTS.find((port) => !actions.includes(port.name))?.variant ?? null;
+}
+
+function answerFareCondition(event) {
+  if (!isBarnaby(event) || event.text !== NO_FARE_CONDITION) return null;
+  return event.player.getInventory().getAmount(ItemIdentifiers.COINS) < fareFor(event.player);
+}
+
+function boardFromDialogue(event) {
+  const port = isBarnaby(event) ? portNamed(BOARD_MESSAGE.exec(String(event.text ?? ""))?.[1]) : null;
+  if (!port) return;
+  event.handled = true;
+  sail(event.player, port, fareFor(event.player));
 }
 
 module.exports = {
   name: "BarnabyFerry",
   members: true,
-  _test: { currentPort, fareFor, sail, payFare, PORTS },
+  _test: { fareFor, sail, sailToOption, selectDockVariant, answerFareCondition, boardFromDialogue, PORTS },
   register(api) {
     core = api.core;
-    pluginApi = api;
-    api.onNpcInteraction("Captain Barnaby", { "Pay-fare": payFare });
-    api.onNpcInteraction("Captain Barnaby", { "Pay-Fare": payFare });
+    api.onNpcInteraction("Captain Barnaby", { Ardougne: sailToOption, Brimhaven: sailToOption, Rimmington: sailToOption });
+    api.onNpcDialogueVariant(selectDockVariant);
+    api.onNpcDialogueCondition(answerFareCondition);
+    api.onCustomEvent("npc-dialogue:action", boardFromDialogue);
   },
 };

@@ -102,5 +102,5 @@ Bold is captured; the rest are OpenRune's.
 - The rockfall's splash (spotanim 305): there's no packet for a graphic on a tile.
 - The respawn timers drawn over depleted veins (client script 5474, `add_overlaytimer_loc`).
 - The medium Falador diary that the eastern dark tunnel needs, since there are no achievement diaries yet.
-- The coal bag, gem bag and the prospector outfit's XP bonus.
+- The prospector outfit's XP bonus. The coal bag and gem bag work (docs/storage-items.md), but the sack's ore and gems don't go into them.
 - Mercy's other dialogue, and the Falador elite diary's better ore chances.

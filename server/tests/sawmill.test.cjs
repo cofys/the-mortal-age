@@ -203,5 +203,6 @@ test("Varrock diary: a normal plank, and 20 mahogany planks in one go", () => {
   convert(lots, 3101, mahogany(), 20);
   const few = createPlayer({ 1: { id: COINS, amount: 50000 }, ...logs(19) });
   convert(few, 3101, mahogany(), 19);
-  assert.deepEqual(events.map((event) => event.task), ["make-a-normal-plank-at-the-sawmill", "make-20-mahogany-planks-in-one-go"]);
+  const tasks = events.filter((event) => event.name === "diary:task").map((event) => event.task);
+  assert.deepEqual(tasks, ["make-a-normal-plank-at-the-sawmill", "make-20-mahogany-planks-in-one-go"]);
 });

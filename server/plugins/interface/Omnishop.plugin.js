@@ -19,15 +19,18 @@
  * - "omnishop:purchase" { player, shop, stock, itemId, handled }: once a unit is paid for;
  *   `handled` means the owner gave something else (an unlock), so no item is handed over.
  *
- * As live OSRS sends it (rsprox captures; Mixology Rewards in 1107, 4210, 4234, 4235):
+ * As live OSRS sends it (rsprox captures; Mixology Rewards in 1107, 4210, 4234, 4235; the
+ * Boat Emporium in rev 241):
  * - Opening: varps omnishop_lastshop (3874) = the shop row and omnishop_selected_id (3869) =
- *   -1, toplevel_mainmodal_background [-1, -3], both modals, omnishop_main_init [shop, -1],
+ *   -1, toplevel_mainmodal_background [-1, -3], both modals, omnishop_main_init [shop, -1, -1],
  *   omnishop_side_init [shop], and events on the list (OP1-6, OP10), the side items (OP1-6,
  *   OP10, DEPTH1, DRAGTARGET) and the side info layer (OP1).
- * - The list is 12 components per entry. Op1 selects (varp 3869 = the entry, then
- *   omnishop_main_info_setup [shop, -1, entry, restricted ? 1 : -1, 0, first cost, stock row,
- *   description, true]); ops 2-5 buy 1, 5, 10 or 50 (ops "-1", "-5", "-10", "-50"); op10
- *   examines. Buttons 1-4 buy 1/5/10/50 of the selected entry.
+ * - The list is 12 components per entry. Op1 selects: varp 3869 = the entry. The client draws
+ *   the info panel itself and asks for its text with a trigger on trigger_request_info
+ *   [shop, entry]; the server answers omnishop_main_info_update [shop, -1, entry, description,
+ *   1, 0, 1]. Ops 2-5 buy 1, 5, 10 or 50 (ops "-1", "-5", "-10", "-50"), at most the stock's
+ *   omnishop_stock_max_purchase; op10 examines. Buttons 1-4 buy 1/5/10/50 of the selected
+ *   entry. (Until rev 238 the server sent omnishop_main_info_setup on op1 instead.)
  * - Each unit bought takes each currency (one varp change per currency) and redraws it
  *   (omnishop_main_currency_redraw [shop]). Refusals: "You don't have enough Lye resin.",
  *   "You cannot buy any more of that item." (a restricted item already owned) and "You don't
@@ -50,13 +53,14 @@ const SCRIPT = {
   MAINMODAL_BACKGROUND: 917,
   MAIN_INIT: 7140,
   SIDE_INIT: 7246,
-  INFO_SETUP: 7146,
+  INFO_UPDATE: 9772,
   CURRENCY_REDRAW: 501,
   SIDE_INFO_SETUP: 7253,
   SIDE_INFO_CLOSE: 7256,
 };
 const COMPONENT = {
   LIST: "omnishop_main:list",
+  REQUEST_INFO: "omnishop_main:trigger_request_info",
   BUY: ["omnishop_main:button_1", "omnishop_main:button_2", "omnishop_main:button_3", "omnishop_main:button_4"],
   SIDE_ITEMS: "omnishop_side:items",
   SIDE_INFO: "omnishop_side:info_layer",
@@ -78,6 +82,7 @@ const EVENT = {
   DRAG_TARGET: 1 << 20,
 };
 const MESSAGE = {
+  /** Captured with resins, whose singular and plural names are the same; plural for the rest. */
   TOO_POOR: (currency) => `You don't have enough ${currency}.`,
   RESTRICTED: "You cannot buy any more of that item.",
   NO_SPACE: "You don't have enough inventory space.",
@@ -128,6 +133,7 @@ function shopOf(rowId) {
         || int(stockRow, TABLE.STOCK, "omnishop_stock_restricted_category") > 0,
       restrictedUim: int(stockRow, TABLE.STOCK, "omnishop_stock_restricted_uim") === 1,
       single: int(stockRow, TABLE.STOCK, "omnishop_stock_transaction_multiplier", 1) === 0,
+      maxPurchase: int(stockRow, TABLE.STOCK, "omnishop_stock_max_purchase", 0),
       sellable: int(stockRow, TABLE.STOCK, "omnishop_stock_sellable") === 1,
       noted: int(stockRow, TABLE.STOCK, "omnishop_stock_sold_noted") === 1,
     };
@@ -139,7 +145,7 @@ function shopOf(rowId) {
 
 function currencyName(currency) {
   const row = cache().getDbRow(currency);
-  return row ? String(values(row, TABLE.CURRENCY, "omnishop_currency_name_singular")[0] ?? "") : "";
+  return row ? String(values(row, TABLE.CURRENCY, "omnishop_currency_name_plural")[0] ?? "") : "";
 }
 
 function currencyObj(currency) {
@@ -194,7 +200,7 @@ function openShop(player, name) {
   player.setInterfaceId(MAIN);
   sender.sendSubInterface(MAIN_MODAL, MAIN, 0);
   sender.sendSubInterface(SIDE_MODAL, SIDE, SIDE_MODAL_TYPE);
-  sender.sendInterfaceScript(SCRIPT.MAIN_INIT, [shop.row, -1]);
+  sender.sendInterfaceScript(SCRIPT.MAIN_INIT, [shop.row, -1, -1]);
   sender.sendInterfaceScript(SCRIPT.SIDE_INIT, [shop.row]);
   sender.sendInterfaceFlagsRange(component(COMPONENT.LIST), 0, shop.stock.length * LIST_PER_ENTRY, EVENT.OP1_TO_OP6 | EVENT.OP10);
   sender.sendInterfaceFlagsRange(component(COMPONENT.SIDE_ITEMS), 0, INVENTORY_SIZE,
@@ -265,22 +271,47 @@ function buyOne(player, shop, entry) {
     inventory.refreshItems();
     pluginApi.emitCustomEvent("collection-log:obtain", { player, itemId: entry.itemId, amount: 1 });
   }
-  redraw(player, shop);
+  // A purchase handler may have closed the shop (a boat is delivered with a message box).
+  if (openShopFor(player)) redraw(player, shop);
   return true;
 }
 
 function buy(player, shop, entry, quantity) {
-  const units = entry.single ? 1 : quantity;
+  const units = entry.single ? 1 : entry.maxPurchase > 0 ? Math.min(quantity, entry.maxPurchase) : quantity;
   for (let unit = 0; unit < units; unit++) if (!buyOne(player, shop, entry)) break;
   pluginApi.emitCustomEvent("persistence:save", { player, reason: "omnishop" });
 }
 
-function select(player, shop, entry) {
-  const sender = player.getPacketSender();
-  sender.sendConfig(varp(VARP.SELECTED), entry.index);
-  sender.sendInterfaceScript(SCRIPT.INFO_SETUP, [
-    shop.row, -1, entry.index, entry.restricted ? 1 : -1, 0, entry.costs[0]?.amount ?? 0, entry.row,
-    description(player, shop, entry), 1,
+function select(player, entry) {
+  player.getPacketSender().sendConfig(varp(VARP.SELECTED), entry.index);
+}
+
+/** if_triggeroplocal arguments: ints as zigzag varints. */
+function triggerInts(argsData) {
+  const ints = [];
+  let value = 0;
+  let shift = 0;
+  for (const byte of argsData ?? []) {
+    value |= (byte & 0x7f) << shift;
+    shift += 7;
+    if ((byte & 0x80) !== 0) continue;
+    ints.push((value >>> 1) ^ -(value & 1));
+    value = 0;
+    shift = 0;
+  }
+  return ints;
+}
+
+/** The client's request for an entry's info text: [shop, entry]. */
+function requestInfo(event) {
+  if (!event.scriptTrigger) return;
+  const shop = openShopFor(event.player);
+  const [row, index] = triggerInts(event.argsData);
+  const entry = shop?.row === row ? shop.stock[index] : undefined;
+  if (!entry) return;
+  event.handled = true;
+  event.player.getPacketSender().sendInterfaceScript(SCRIPT.INFO_UPDATE, [
+    shop.row, -1, entry.index, description(event.player, shop, entry), 1, 0, 1,
   ]);
 }
 
@@ -295,7 +326,7 @@ function clickList({ player, slot, action }) {
   const entry = shop.stock[Math.floor(Number(slot) / LIST_PER_ENTRY)];
   if (!entry) return;
   const op = Number(action);
-  if (op === 1) select(player, shop, entry);
+  if (op === 1) select(player, entry);
   else if (op === EXAMINE_OP) examine(player, entry.itemId);
   else if (QUANTITIES[op - FIRST_QUANTITY_OP]) buy(player, shop, entry, QUANTITIES[op - FIRST_QUANTITY_OP]);
 }
@@ -381,6 +412,7 @@ module.exports = {
     api.onCustomEvent("omnishop:open", open);
     // The components move between revisions, so they are looked up by gameval name.
     api.onInterfaceActionButton(component(COMPONENT.LIST), clickList);
+    api.onInterfaceActionButton(component(COMPONENT.REQUEST_INFO), requestInfo);
     api.onInterfaceActionButton(COMPONENT.BUY.map(component), clickBuy);
     api.onInterfaceActionButton(component(COMPONENT.SIDE_ITEMS), clickSide);
     api.onInterfaceActionButton(COMPONENT.SELL.map(component), clickSell);

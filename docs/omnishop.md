@@ -6,7 +6,7 @@ Jagex's shared reward shop interface: `omnishop_main` (819) with `omnishop_side`
 - `omnishop_stock_data` (40): obj, cost pairs, restricted, sellable, sold noted, transaction multiplier
 - `omnishop_currency_data` (41): obj or none, names, graphic
 
-The interface draws itself from those tables. `server/plugins/interface/Omnishop.plugin.js` opens a shop, keeps the selection varps and balances right, and does the buying and selling. Mixology Rewards is the first shop on it. Other omnishops in the cache (Tithe Farm, Castle Wars, Bounty Hunter, Trouble Brewing, Forestry, abyssal pearls) can move onto it the same way.
+The interface draws itself from those tables. `server/plugins/interface/Omnishop.plugin.js` opens a shop, keeps the selection varps and balances right, and does the buying and selling. Mixology Rewards and the Boat Emporium (`sailing_boat_shop`, Sailing's Buy-boat) use it. Other omnishops in the cache (Tithe Farm, Castle Wars, Bounty Hunter, Trouble Brewing, Forestry, abyssal pearls) can move onto it the same way.
 
 ## Plugging a shop in
 
@@ -22,18 +22,19 @@ A currency with an obj is that item in the inventory, and the plugin handles it 
 
 ## Protocol
 
-From rsprox captures of Mixology Rewards (recordings 1107, 4182, 4210, 4234, 4235) and other omnishops (4288):
+From rsprox captures of Mixology Rewards (recordings 1107, 4182, 4210, 4234, 4235), other omnishops (4288) and the Boat Emporium (rev 241, docs/sailing-osrs-reference.md):
 
 - **Open:** varps `omnishop_lastshop` (3874) = shop row and `omnishop_selected_id` (3869) = -1, then:
   - script `toplevel_mainmodal_background` [-1, -3]
   - both modals
-  - `omnishop_main_init` [shop, -1] and `omnishop_side_init` [shop]
+  - `omnishop_main_init` [shop, -1, -1] and `omnishop_side_init` [shop]
   - events on `omnishop_main:list` (OP1-6, OP10), `omnishop_side:items` (OP1-6, OP10, DEPTH1, DRAGTARGET) and `omnishop_side:info_layer` (OP1)
 - **List:** each entry is 12 components.
-  - Op1 selects: varp 3869 = entry, then `omnishop_main_info_setup` [shop, -1, entry, restricted ? 1 : -1, 0, first cost, stock row, description, true].
-  - Ops 2-5 buy 1/5/10/50; op10 examines. `button_1`-`button_4` buy for the selected entry.
-- **Buying:** each unit takes each currency (one varp change per currency) and runs `omnishop_main_currency_redraw` [shop]. Refusals:
-  - "You don't have enough Lye resin." (the currency's singular name)
+  - Op1 selects: varp 3869 = entry. The client draws the info panel and asks for its text with a script trigger on `trigger_request_info` [shop, entry] (zigzag varint ints). The server answers `omnishop_main_info_update` (9772) [shop, -1, entry, description, 1, 0, 1].
+  - Until rev 238 the server sent `omnishop_main_info_setup` [shop, -1, entry, restricted ? 1 : -1, 0, first cost, stock row, description, true] on op1 instead.
+  - Ops 2-5 buy 1/5/10/50, capped at `omnishop_stock_max_purchase`; op10 examines. `button_1`-`button_4` buy for the selected entry. The client also sends a `trigger_buy` trigger with each buy, which the plugin ignores so that a click buys once.
+- **Buying:** each unit takes each currency (one varp change per currency) and runs `omnishop_main_currency_redraw` [shop], unless the purchase closed the shop (a boat delivery). Refusals:
+  - "You don't have enough Lye resin." (the currency's name: resins have the same singular and plural, so the plugin uses the plural, as in "Coins")
   - "You cannot buy any more of that item." (a restricted item already owned)
   - "You don't have enough inventory space."
 - **Selling (side panel):** op1 selects an inventory slot (varp 3870, `omnishop_side_info_setup` [slot, shop, 1, 0, sellable ? 1 : -1, entry or -1, description]). Ops 2-5 and the side buttons sell for 40% of each cost, then `omnishop_side_info_close`. Close Info sets 3870 back to -1.

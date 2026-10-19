@@ -1,4 +1,4 @@
-// A shipwright's Recover-boat: choose a boat in the boat selection interface, pay from the bank,
+// A shipwright's Buy-boat (the Boat Emporium, BoatShop.Sailing.js) and Recover-boat: choose a boat in the boat selection interface, pay from the bank,
 // and a Port Wizard brings it to this port. Recovers sunk boats and boats docked at other ports.
 // Fees by boat type from the cache (raft 250, skiff 3,750, sloop 50,000); the flow, texts and
 // effects from a live capture of Junior Jim (docs/sailing-osrs-reference.md).
@@ -17,6 +17,7 @@ const { dropLostOnRecovery } = require("./Cargo.Sailing");
 const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
 const { recoveryFee } = require("./BoatParts.Sailing");
 const { MODE, openBoatSelection } = require("./BoatSelection.plugin");
+const BoatShop = require("./BoatShop.Sailing");
 
 const COINS = 995;
 /** Port Wizards Perrie, Peter, Petra and Paulie; one appears for each recovery. */
@@ -123,9 +124,13 @@ module.exports = {
   recoverSlot,
   register(api) {
     pluginApi = api;
+    BoatShop.bind(api);
+    api.onCustomEvent("omnishop:describe", BoatShop.describe);
+    api.onCustomEvent("omnishop:can-buy", BoatShop.canBuy);
+    api.onCustomEvent("omnishop:purchase", BoatShop.deliver);
     const { docks } = content();
     for (const shipwright of new Set(docks.map((dock) => dock.shipwright).filter(Boolean))) {
-      api.onNpcInteraction(shipwright, { "Recover-boat": recoverBoat });
+      api.onNpcInteraction(shipwright, { "Buy-boat": BoatShop.openShop, "Recover-boat": recoverBoat });
     }
   },
 };

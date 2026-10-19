@@ -237,7 +237,9 @@ export class MapActorUniforms {
 
     private grow(capacity: number): void {
         this.capacity = capacity;
-        this.scratch = new Float32Array(capacity * (this.stride / 4));
+        const scratch = new Float32Array(capacity * (this.stride / 4));
+        scratch.set(this.scratch);
+        this.scratch = scratch;
         this.view = new DataView(this.scratch.buffer);
         const old = this.buffer;
         this.buffer = this.device.createBuffer({

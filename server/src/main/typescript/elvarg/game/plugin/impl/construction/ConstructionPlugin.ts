@@ -696,15 +696,31 @@ function getBuildMaterials(player: ConstructionPlayer, house: PlayerHouseInstanc
       if (house.getFurnitureAtTarget(target)?.buildableKey !== material.source) return `You need the ${material.source.replace(/_/g, " ").toLowerCase()} already built there.`;
     } else return "This build has an unsupported material requirement.";
   }
-  for (const [itemId, amount] of requiredItems) if (player.getInventory().getAmount(itemId) < amount) return "You do not have the required materials.";
+  for (const [itemId, amount] of requiredItems) {
+    if (player.getInventory().getAmount(itemId) + storedAmount(player, itemId) < amount) return "You do not have the required materials.";
+  }
   return requiredItems;
+}
+
+/** What a carried container (the plank sack) holds of a material ("storage:amount"). */
+function storedAmount(player: ConstructionPlayer, itemId: number): number {
+  const request = { player, itemId, amount: 0 };
+  pluginApi?.emitCustomEvent("storage:amount", request);
+  return request.amount;
+}
+
+/** Wiki (Plank sack): the inventory's planks go first, then the sack's ("storage:take"). */
+function useMaterial(player: ConstructionPlayer, itemId: number, amount: number): void {
+  const held = Math.min(amount, player.getInventory().getAmount(itemId));
+  if (held > 0) player.getInventory().delete(itemId, held);
+  if (amount > held) pluginApi?.emitCustomEvent("storage:take", { player, itemId, amount: amount - held, taken: 0 });
 }
 
 function buildFurniture(player: ConstructionPlayer, house: PlayerHouseInstance, target: HouseFurnitureTarget, buildable: ConstructionBuildable): void {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
   const materials = getBuildMaterials(player, house, target, buildable);
   if (typeof materials === "string") return player.sendMessage(materials);
-  for (const [itemId, amount] of materials) player.getInventory().delete(itemId, amount);
+  for (const [itemId, amount] of materials) useMaterial(player, itemId, amount);
   if (buildable.buildAnimationId >= 0) player.performAnimation(new Animation(buildable.buildAnimationId));
   house.setFurniture(target, buildable);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);

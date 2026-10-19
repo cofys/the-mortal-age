@@ -91,6 +91,7 @@ import {
   PluginPlayerOptionEvent,
   PluginPlayerDealtDamageEvent,
   PluginCombatHitRollEvent,
+  PluginCombatHitDamageEvent,
   PluginAttackTimingEvent,
   PluginCombatHitResolvedEvent,
   PluginCombatAttackDistanceEvent,
@@ -253,6 +254,7 @@ export class PluginManager {
   private static playerOptionHooks: PluginHook<PluginPlayerOptionEvent>[] = [];
   private static playerDealtDamageHooks: PluginHook<PluginPlayerDealtDamageEvent>[] = [];
   private static combatHitRollHooks: PluginHook<PluginCombatHitRollEvent>[] = [];
+  private static combatHitDamageHooks: PluginHook<PluginCombatHitDamageEvent>[] = [];
   private static attackTimingHooks: PluginHook<PluginAttackTimingEvent>[] = [];
   private static combatHitResolvedHooks: PluginHook<PluginCombatHitResolvedEvent>[] = [];
   private static combatAttackDistanceHooks: PluginHook<PluginCombatAttackDistanceEvent>[] = [];
@@ -1455,6 +1457,13 @@ export class PluginManager {
     if (!event?.attacker || !event?.target) return;
     for (const hook of PluginManager.combatHitRollHooks) {
       PluginManager.executeHook(hook, event, "combat_hit_roll", "combat_hit_roll");
+    }
+  }
+
+  public static emitCombatHitDamage(event: PluginCombatHitDamageEvent): void {
+    if (!event?.attacker || !event?.target || !event?.damage) return;
+    for (const hook of PluginManager.combatHitDamageHooks) {
+      PluginManager.executeHook(hook, event, "combat_hit_damage", "combat_hit_damage");
     }
   }
 
@@ -3263,6 +3272,10 @@ export class PluginManager {
       onCombatHitRoll: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.combatHitRollHooks.push({ pluginName, handler });
+      },
+      onCombatHitDamage: (handler) => {
+        if (typeof handler !== "function") return;
+        PluginManager.combatHitDamageHooks.push({ pluginName, handler });
       },
       onAttackTiming: (handler) => {
         if (typeof handler !== "function") return;

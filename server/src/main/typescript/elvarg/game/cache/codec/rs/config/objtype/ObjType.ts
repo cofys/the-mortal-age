@@ -82,6 +82,9 @@ export class ObjType extends Type {
 
     weight: number;
 
+    /** Opcode 94: the obj's category (the cache's `category=`), -1 when it has none. */
+    category: number;
+
     unnotedId: number;
     notedId: number;
 
@@ -140,6 +143,7 @@ export class ObjType extends Type {
         this.isTradable = false;
         this.isUnlockable = false;
         this.weight = 0;
+        this.category = -1;
         this.unnotedId = -1;
         this.notedId = -1;
         this.placeholder = -1;
@@ -395,7 +399,7 @@ export class ObjType extends Type {
         } else if (opcode === 93) {
             this.femaleHeadModel2 = this.readModelId(buffer);
         } else if (opcode === 94) {
-            buffer.readUnsignedShort();
+            this.category = buffer.readUnsignedShort();
         } else if (opcode === 95) {
             this.zan2d = buffer.readUnsignedShort();
         } else if (opcode === 96) {

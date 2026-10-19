@@ -39,6 +39,7 @@ export default defineConfig({
                     { text: 'Architecture', link: '/ARCHITECTURE' },
                     { text: 'Gamemodes', link: '/gamemodes' },
                     { text: 'Extrascripts', link: '/extrascripts' },
+                    { text: 'World configuration', link: '/world-configuration' },
                 ],
             },
         ],

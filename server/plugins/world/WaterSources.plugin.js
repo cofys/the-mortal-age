@@ -1,11 +1,12 @@
 /**
  * Filling empty containers at water sources (https://oldschool.runescape.wiki/w/Water_source).
  *
- * Using a Jug, Vial, Bucket, Bowl, Empty cup or Empty fishbowl on a fountain, sink, well, pump,
- * tap or water barrel fills one container per tick until none are left (rsprox captures 1692,
- * 1693, 3159, 4288). Every fill plays human_pickuptable and synth 2609 (2615 at a well); only
- * the first sends the message, "You fill the vial from the fountain.", or just "You fill the
- * jug." at a pump.
+ * Using a Jug, Vial, Bucket, Bowl, Empty cup, Empty fishbowl or a waterskin that isn't full on a
+ * fountain, sink, well, pump, tap or water barrel fills one container per tick until none are
+ * left (rsprox captures 1692, 1693, 3159, 4288). Every fill plays human_pickuptable and synth
+ * 2609 (2615 at a well); only the first sends the message, "You fill the vial from the
+ * fountain.", or just "You fill the jug." at a pump. No capture has a waterskin: it is filled
+ * the same way.
  *
  * It lives in plugins/world so it loads after the quest and minigame plugins: their own
  * handlers for one particular source (Taste of Hope's dry fountain, The Mess's sink,
@@ -42,6 +43,9 @@ function defineContainers({ ItemIdentifiers: Items }) {
     [Items.BOWL, { filled: Items.BOWL_OF_WATER, noun: "bowl" }],
     [Items.EMPTY_CUP, { filled: Items.CUP_OF_WATER, noun: "cup" }],
     [Items.EMPTY_FISHBOWL, { filled: Items.FISHBOWL, noun: "fishbowl" }],
+    // Wiki: a water source refills a waterskin to four doses, whatever it held.
+    ...[Items.WATERSKIN_0_, Items.WATERSKIN_1_, Items.WATERSKIN_2_, Items.WATERSKIN_3_]
+      .map((skin) => [skin, { filled: Items.WATERSKIN_4_, noun: "waterskin" }]),
   ]);
 }
 

@@ -206,7 +206,16 @@ Buy-boat opens the data-driven shop "omnishop", not a special interface:
   - buy, examine and request-info triggers 819:4, 819:3 and 819:5 (script triggers);
   - dropdown 819:41.
 
-Buying itself hasn't been captured yet.
+Captured buying a raft from Shipwright Sam at Port Sarim (rev 241, 2026-10-18) and opening the shop at Catherby (rsprox capture 3792, rev 235):
+
+- **Stock** (table 40): each entry's obj is the boat's deed (`sailing_deed_raft` 31993, skiff 31994, sloop 31995), its cost is coins (currency row 2467: 1,000, 15,000 and 200,000), `omnishop_stock_max_purchase` is 1, and `omnishop_stock_description_dynamic` names the boat's row in table 166 (8110-8112).
+- **Selecting** (list op1): only varp 3869 = the entry. The client then sends the request-info trigger with [8548, entry], and the server answers `omnishop_main_info_update` (9772) [8548, -1, entry, text, 1, 0, 1]. The text comes from the boat's row (level_required, size_desc, player_capacity, crew_capacity, facility_amount), with "Comes with a pre-built basic cargo hold." after the skiff and sloop, but not the raft:
+  - "Sailing level: 1<br>Size: Tiny (1x3)<br>Player capacity: 2<br>Crew capacity: 0<br>Facility slots: 1"
+  - "Sailing level: 15<br>Size: Small (2x5)<br>Player capacity: 5<br>Crew capacity: 2<br>Facility slots: 7<br><br>Comes with a pre-built basic cargo hold."
+  - "Sailing level: 50<br>Size: Medium (3x10)<br>Player capacity: 10<br>Crew capacity: 5<br>Facility slots: 13<br><br>Comes with a pre-built basic cargo hold."
+- **Buying** (button_1; the client sends the buy trigger [8548, entry, 1] as well): on the same tick, the coins leave the inventory, the next free slot's varbits are sent (owned 1, a random two-word name, bottle_previous_port 255, stored hp and max hp 20 for a raft), and synth sound 2114 plays. Both modals then close, and the objectbox (193) shows the deed with "Your brand new boat has been delivered to Port Sarim." Continue closes it.
+- Live asked for the bank PIN first (keypad titled "Boat Emporium"); tsps has no bank PINs.
+- **Not captured:** the refusals. tsps says "You need a Sailing level of 15 to buy a skiff." and "You don't have a free boat slot." Slots by Sailing level come from the Wiki (1 at level 1, then 15, 50, 78 and 91).
 
 ## Ports and docking
 
@@ -535,4 +544,4 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
 - Taking the helm, setting and trimming sails, steering and stopping.
 - Teleporting from sea, Escape, and logging out and back in at sea.
 - Disembarking at a port's gangplank without docking at its buoy first.
-- Buying a boat (Junior Jim's Buy-boat).
+- Buying a boat: the refusals (Sailing level too low, no free slot, too few coins).

@@ -112,7 +112,10 @@ function handleStealFromStall(event) {
   player.setPositionToFace(event.object.getLocation());
   player.performAnimation(THIEVING_ANIMATION);
   const reward = randomReward(stall.rewards);
-  player.getInventory().addItem(reward);
+  // An open gem bag takes stolen gems first ("storage:gather").
+  const request = { player, itemId: reward.getId(), amount: reward.getAmount(), stored: 0 };
+  pluginApi.emitCustomEvent("storage:gather", request);
+  if (reward.getAmount() > request.stored) player.getInventory().addItem(new Item(reward.getId(), reward.getAmount() - request.stored));
   player.getSkillManager().addExperiences(Skill.THIEVING, stall.xp);
   player.sendMessage(`You steal ${reward.getAmount()} x ${reward.getDefinition().getName()}.`);
   pluginApi.emitCustomEvent("thieving:success", { player, skill: Skill.THIEVING, petBase: stall.petBase });

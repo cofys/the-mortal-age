@@ -44,6 +44,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
   const STORE_CRATE_TILE = { x: 3009, y: 3207 };
   const PORT_SARIM_LANDING = new Location(3029, 3217, 0);
   const MUSA_POINT_LANDING = new Location(2956, 3146, 0);
+  const PANDEMONIUM_LANDING = new Location(3069, 2987, 0); // Pandemonium.Quest.js landing tile.
   const FARE = 30;
   const GARDENER_SHOUT = "First moles, now this! Take this, vandal!";
 
@@ -67,6 +68,8 @@ module.exports = function registerPiratesTreasureQuest(api) {
   const RUM_HANDIN_STEP_ID = "Uy0FFQ";
   /** Seamen/Tobias "The player is transported to Karamja." action steps. */
   const SAIL_TO_KARAMJA_STEP_IDS = new Set(["0dBZni", "ZZHN0-", "oJnbxR", "aCDRxJ"]);
+  /** Tobias's after-Pandemonium "The player is then transported to the Pandemonium." step. */
+  const SAIL_TO_PANDEMONIUM_STEP_ID = "yrFrGT";
   /** Their "If the player does not have enough coins" conditions. */
   const SAIL_FARE_CONDITION_IDS = new Set(["4EHa7z", "PWA2Z3", "FUAwJK"]);
   /** Customs officer payment steps: fare 30, 15 with Karamja gloves, free with Charos. */
@@ -289,6 +292,11 @@ module.exports = function registerPiratesTreasureQuest(api) {
       event.handled = true;
       return;
     }
+    if (stepId === SAIL_TO_PANDEMONIUM_STEP_ID) {
+      sailToPandemonium(player);
+      event.handled = true;
+      return;
+    }
     const returnFare = SAIL_BACK_FARES.get(stepId);
     if (returnFare !== undefined) {
       sailToPortSarim(player, returnFare);
@@ -425,10 +433,13 @@ module.exports = function registerPiratesTreasureQuest(api) {
   api.onObjectRoute(handleObjectRoute);
   api.onItemAction(handleItemAction);
   api.onCanUseItem(handleCanUseItem);
-  api.onNpcInteraction("Seaman Thresnor", { Travel: travelToKaramja });
-  api.onNpcInteraction("Seaman Lorris", { Travel: travelToKaramja });
-  api.onNpcInteraction("Captain Tobias", { Travel: travelToKaramja });
-  api.onNpcInteraction("Customs officer", { Travel: travelToPortSarim });
+  // After Pandemonium (varbit 18314) the boats' Travel becomes "Musa Point" and "The Pandemonium".
+  api.onNpcsInteraction(["Seaman Thresnor", "Seaman Lorris", "Captain Tobias"], {
+    Travel: travelToKaramja, "Musa Point": travelToKaramja, "The Pandemonium": travelToPandemonium,
+  });
+  api.onNpcInteraction("Customs officer", {
+    Travel: travelToPortSarim, "Port Sarim": travelToPortSarim, "The Pandemonium": travelFromKaramjaToPandemonium,
+  });
   api.onPlayerLogout(cleanupGardener);
   function buyRum(player) {
     const inventory = player.getInventory();
@@ -465,16 +476,36 @@ module.exports = function registerPiratesTreasureQuest(api) {
     return true;
   }
 
+  function sailToPandemonium(player) {
+    if (sailing.has(player)) return;
+    if (!payFare(player, FARE)) {
+      player.sendMessage("You don't have enough coins to pay for passage.");
+      return;
+    }
+    sail(player, PANDEMONIUM_LANDING, "the Pandemonium", FARE);
+  }
+
   function travelToKaramja({ player }) {
     sailToKaramja(player);
   }
 
-  function travelToPortSarim({ player, npc }) {
-    if (hasItem(player, RUM_ITEM_ID) && quest.getStage(player) < STAGE_COMPLETE) {
-      startTranscript(api, player, npc?.getId?.() || NpcIdentifiers.CUSTOMS_OFFICER, "Customs officer", "standard-dialogue-before-completing-pirate-s-treasure");
-      return;
-    }
-    sailToPortSarim(player);
+  function travelToPandemonium({ player }) {
+    sailToPandemonium(player);
+  }
+
+  /** The customs officer searches anyone leaving Karamja with rum mid-quest. */
+  function searchedForRum({ player, npc }) {
+    if (!hasItem(player, RUM_ITEM_ID) || quest.getStage(player) >= STAGE_COMPLETE) return false;
+    startTranscript(api, player, npc?.getId?.() || NpcIdentifiers.CUSTOMS_OFFICER, "Customs officer", "standard-dialogue-before-completing-pirate-s-treasure");
+    return true;
+  }
+
+  function travelToPortSarim(event) {
+    if (!searchedForRum(event)) sailToPortSarim(event.player);
+  }
+
+  function travelFromKaramjaToPandemonium(event) {
+    if (!searchedForRum(event)) sailToPandemonium(event.player);
   }
 
   function sail(player, destination, port, fare) {

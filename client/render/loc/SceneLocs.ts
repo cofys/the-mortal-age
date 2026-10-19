@@ -376,48 +376,26 @@ export function getSceneLocs(
 
                 let embeddedShift = { x: 0, y: 0 };
 
-                // Straight and corner walls live on tile.wall. Shape-9 diagonal walls live
-                // in tile.locs, so resolve both host representations before rendering.
-                if (sourceTile.wall) {
-                    const wallType = sourceTile.wall.flags & 0x3f;
-                    const wallRotation = (sourceTile.wall.flags >> 6) & 3;
+                // Shape-9 diagonal host walls live in tile.locs.
+                const diagonalWall = startLocList.find(
+                    (loc) => (loc.flags & 0x3f) === LocModelType.WALL_DIAGONAL,
+                );
+                if (diagonalWall) {
+                    const wallRotation = (diagonalWall.flags >> 6) & 3;
                     let wallDisplacement = LocType.DEFAULT_DECOR_DISPLACEMENT;
                     try {
                         wallDisplacement = locTypeLoader.load(
-                            getIdFromTag(sourceTile.wall.tag),
+                            getIdFromTag(diagonalWall.tag),
                         ).decorDisplacement;
                     } catch {}
 
                     embeddedShift = embeddedWallDecorationShift(
                         decorationType,
                         decorationRotation,
-                        wallType,
+                        LocModelType.WALL_DIAGONAL,
                         wallRotation,
                         wallDisplacement,
                     );
-                }
-
-                if (embeddedShift.x === 0 && embeddedShift.y === 0) {
-                    const diagonalWall = startLocList.find(
-                        (loc) => (loc.flags & 0x3f) === LocModelType.WALL_DIAGONAL,
-                    );
-                    if (diagonalWall) {
-                        const wallRotation = (diagonalWall.flags >> 6) & 3;
-                        let wallDisplacement = LocType.DEFAULT_DECOR_DISPLACEMENT;
-                        try {
-                            wallDisplacement = locTypeLoader.load(
-                                getIdFromTag(diagonalWall.tag),
-                            ).decorDisplacement;
-                        } catch {}
-
-                        embeddedShift = embeddedWallDecorationShift(
-                            decorationType,
-                            decorationRotation,
-                            LocModelType.WALL_DIAGONAL,
-                            wallRotation,
-                            wallDisplacement,
-                        );
-                    }
                 }
 
                 const nudge = wallDecorationNudge(decorationType, decorationRotation);

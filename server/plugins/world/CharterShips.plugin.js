@@ -2,7 +2,8 @@
  * Charter ships (https://oldschool.runescape.wiki/w/Charter_ship).
  *
  * Trader crewmembers (and Trader Stan at Port Sarim) sell passage between the
- * ports in plugins/world/data/charter-ships.json. Fares are halved by a worn
+ * ports in plugins/world/data/charter-ships.json from Talk-to and Charter, and
+ * Trade opens Trader Stan's Trading Post. Fares are halved by a worn
  * ring of charos(a) or by Cabin Fever; with both they are a quarter. Destination
  * quest requirements fail closed when their quest is unavailable.
  */
@@ -17,6 +18,8 @@ const QUEST_KEYS = {
   "The Grand Tree": "grand_tree",
 };
 const PORT_TOLERANCE = 12;
+const TRADING_POST_SHOP_ID = 1354; // shops.json "Trader Stan's Trading Post"
+const TRADERS = ["Trader Crewmember", "Trader crewmember", "Trader Stan"];
 
 let core = null;
 let pluginApi = null;
@@ -142,6 +145,12 @@ function openMenu(event) {
   // when this handler cannot open its destination list.
   return showPage(0);
 }
+
+/** shops.json binds only some of the cache's crewmember variants; every one of them trades. */
+function openTradingPost({ player }) {
+  return core.ShopManager.open(player, TRADING_POST_SHOP_ID);
+}
+
 module.exports = {
   name: "CharterShips",
   members: true,
@@ -153,9 +162,7 @@ module.exports = {
     const data = loadData();
     portsByName = new Map(data.ports.map((port) => [port.name, port]));
     fares = data.fares;
-    api.onNpcInteraction("Trader Crewmember", { "Talk-to": openMenu });
-    api.onNpcInteraction("Trader crewmember", { "Talk-to": openMenu });
-    api.onNpcInteraction("Trader Stan", { "Talk-to": openMenu });
+    api.onNpcsInteraction(TRADERS, { "Talk-to": openMenu, Charter: openMenu, Trade: openTradingPost });
     api.log("registered", { ports: portsByName.size, routes: Object.keys(fares).length });
   },
 };

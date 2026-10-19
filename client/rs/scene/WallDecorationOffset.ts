@@ -69,11 +69,9 @@ export function wallDecorationNudge(
 }
 
 /**
- * Returns the render-time correction needed to place a wall decoration on the
- * face of its host wall.
+ * Returns the render-time correction for decorations on diagonal host walls.
  *
- * Straight/corner walls are stored on tile.wall, while shape-9 diagonal walls
- * are scene locs. Callers resolve the host representation and pass its type,
+ * Shape-9 diagonal walls are scene locs. Callers resolve the host and pass its type,
  * rotation, and decorDisplacement here.
  */
 export function embeddedWallDecorationShift(
@@ -85,23 +83,6 @@ export function embeddedWallDecorationShift(
 ): WallDecorationShift {
     const decRot = decorationRotation & 3;
     const wallRot = wallRotation & 3;
-
-    if (decorationType === LocModelType.WALL_DECORATION_INSIDE) {
-        const onEdge =
-            (wallType === LocModelType.WALL && wallRot === decRot) ||
-            (wallType === LocModelType.WALL_CORNER &&
-                (wallRot === decRot || ((wallRot + 1) & 3) === decRot));
-
-        if (!onEdge) {
-            return { x: 0, y: 0 };
-        }
-
-        return wallDecorationOffset(
-            LocModelType.WALL_DECORATION_OUTSIDE,
-            decRot,
-            wallDisplacement,
-        );
-    }
 
     if (!isDiagonalDecoration(decorationType) || wallType !== LocModelType.WALL_DIAGONAL) {
         return { x: 0, y: 0 };

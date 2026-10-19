@@ -328,8 +328,40 @@ function findTool(player, tool) {
   return tool.variants.find((variant) => variant.level <= level && variant.ids.some(has)) ?? null;
 }
 
+/** Bait in the inventory first, then in a carried container (the tackle box, "storage:amount"). */
 function findBait(player, tool) {
-  return tool.bait.find((id) => player.getInventory().contains(id));
+  return tool.bait.find((id) => player.getInventory().contains(id)) ??
+    tool.bait.find((id) => storedAmount(player, id) > 0);
+}
+
+function storedAmount(player, itemId) {
+  const request = { player, itemId, amount: 0 };
+  pluginApi?.emitCustomEvent("storage:amount", request);
+  return request.amount;
+}
+
+function useBait(player, bait) {
+  if (player.getInventory().contains(bait)) {
+    player.getInventory().deleteNumber(bait, 1);
+    return;
+  }
+  pluginApi?.emitCustomEvent("storage:take", { player, itemId: bait, amount: 1, taken: 0 });
+}
+
+/** Whether an open container (the fish barrel, "storage:room") would take this fish. */
+function storageRoom(player, itemId) {
+  const request = { player, itemId, room: false };
+  pluginApi?.emitCustomEvent("storage:room", request);
+  return request.room;
+}
+
+/** An open container takes the catch first ("storage:gather"); the rest goes to the inventory. */
+function giveCatch(player, itemId, amount) {
+  const request = { player, itemId, amount, stored: 0 };
+  pluginApi?.emitCustomEvent("storage:gather", request);
+  if (amount > request.stored) {
+    player.getInventory().addItem(new Item(itemId, amount - request.stored));
+  }
 }
 
 /** Messages and returns null when the player can't fish with this tool, else the variant. */
@@ -426,15 +458,19 @@ function rollCatch(player, tool, random = Math.random, bonus = 100, context = nu
 function inventoryBlocks(player, tool) {
   const inventory = player.getInventory();
   return inventory.isFull() &&
-    !tool.fish.some((fish) => inventory.contains(fish.id) && pluginApi.core.ItemDefinition.forId(fish.id).isStackable());
+    !tool.fish.some((fish) => inventory.contains(fish.id) && pluginApi.core.ItemDefinition.forId(fish.id).isStackable()) &&
+    !tool.fish.some((fish) => storageRoom(player, fish.id));
 }
 
 function landCatch(player, tool, variant, caught) {
   const xpMultiplier = AnglerOutfit.xpMultiplier(player);
-  const landed = caught.slice(0, Math.max(1, player.getInventory().getFreeSlots()));
-  for (const fish of landed) {
+  // Each fish needs a free slot or room in an open fish barrel; the first always lands.
+  const landed = [];
+  for (const fish of caught) {
+    if (landed.length > 0 && player.getInventory().getFreeSlots() === 0 && !storageRoom(player, fish.id)) break;
+    landed.push(fish);
     if (!variant.infernal || !InfernalHarpoon.tryCookFish(player, fish.id)) {
-      player.getInventory().addItem(new Item(fish.id, fish.amount(player)));
+      giveCatch(player, fish.id, fish.amount(player));
       player.sendMessage(`You catch ${fish.caught}.`);
     }
     if (variant.crystal) {
@@ -463,7 +499,7 @@ function landCatch(player, tool, variant, caught) {
 
   // Bait and feathers are only used up by a catch, one per cast.
   if (bait !== undefined) {
-    player.getInventory().deleteNumber(bait, 1);
+    useBait(player, bait);
   }
   return stop;
 }

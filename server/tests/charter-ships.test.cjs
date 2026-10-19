@@ -33,7 +33,7 @@ CharterShips.register({
     TeleportType: { NORMAL: "NORMAL" },
   },
   sendMultiChatboxPrompt: (player, title, ...options) => { prompt = { title, options }; return true; },
-  onNpcInteraction: (name, actions) => npcHooks.push({ name, actions }),
+  onNpcsInteraction: (names, actions) => npcHooks.push({ names, actions }),
   emitCustomEvent,
   log() {},
 });
@@ -112,7 +112,10 @@ test("the menu identifies the current port and lists the others with fares", () 
   const labels = prompt.options.filter((option) => typeof option === "string");
   assert.ok(labels.some((label) => label.startsWith("Catherby (240 coins)")));
   assert.ok(!labels.some((label) => label.startsWith("Brimhaven")));
-  assert.equal(npcHooks.filter((hook) => hook.name.toLowerCase().includes("trader")).length >= 2, true);
+  const traders = npcHooks.find((hook) => hook.names.includes("Trader Stan"));
+  assert.ok(traders.names.includes("Trader Crewmember"));
+  assert.equal(traders.actions.Charter, CharterShips._test.openMenu);
+  assert.equal(typeof traders.actions.Trade, "function");
 });
 
 test("charter destinations page within the five-option chatbox and still sail to Port Phasmatys", () => {

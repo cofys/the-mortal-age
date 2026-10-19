@@ -11,7 +11,6 @@ const { ItemIds } = require("../dist/util/IdEnums");
 const BarnabyFerry = require("../plugins/world/BarnabyFerry.plugin");
 
 const teleports = [];
-let prompt = null;
 BarnabyFerry.register({
   core: {
     ItemIdentifiers: ItemIds,
@@ -21,8 +20,10 @@ BarnabyFerry.register({
     },
     TeleportType: { NORMAL: "NORMAL" },
   },
-  sendMultiChatboxPrompt: (player, title, ...options) => { prompt = { title, options }; },
   onNpcInteraction() {},
+  onNpcDialogueVariant() {},
+  onNpcDialogueCondition() {},
+  onCustomEvent() {},
 });
 
 function createPlayer({ coins = 100, gloves = 0 } = {}) {
@@ -49,31 +50,47 @@ test("the ferry costs 30 coins, or 15 with Karamja gloves", () => {
   assert.equal(BarnabyFerry._test.fareFor(createPlayer({ gloves: 1234 })), 30);
 });
 
-test("the port is found from the captain's tile", () => {
-  const brimhaven = { getLocation: () => ({ getX: () => 2768, getY: () => 3227 }) };
-  assert.equal(BarnabyFerry._test.currentPort(brimhaven)?.name, "Brimhaven");
-  assert.equal(BarnabyFerry._test.currentPort({ getLocation: () => ({ getX: () => 1, getY: () => 1 }) }), null);
-});
+const brimhavenCaptain = {
+  getName: () => "Captain Barnaby",
+  getActions: () => ["Talk-to", null, "Ardougne", "Rimmington", null],
+};
 
-test("pay-fare offers the other ports and sails after payment", () => {
+test("a destination option sails there after payment", () => {
   teleports.length = 0;
-  prompt = null;
-  const ardougne = { getLocation: () => ({ getX: () => 2680, getY: () => 3274 }) };
   const player = createPlayer();
-  BarnabyFerry._test.payFare({ player, object: ardougne });
-  const labels = prompt.options.filter((option) => typeof option === "string");
-  assert.ok(labels.includes("Brimhaven (30 coins)"));
-  assert.ok(labels.includes("Rimmington (30 coins)"));
-  assert.ok(!labels.some((label) => label.startsWith("East Ardougne")));
-
-  const brimhaven = BarnabyFerry._test.PORTS.find((port) => port.name === "Brimhaven");
-  BarnabyFerry._test.sail(player, brimhaven, 30);
+  BarnabyFerry._test.sailToOption({ player, definition: brimhavenCaptain, clickType: 4 });
   assert.equal(player.balance, 70);
   assert.equal(teleports.length, 1);
-  assert.equal(teleports[0].destination.getX(), 2768);
+  assert.equal(teleports[0].destination.getX(), 2916);
 
   const broke = createPlayer({ coins: 10 });
-  BarnabyFerry._test.sail(broke, brimhaven, 30);
+  BarnabyFerry._test.sailToOption({ player: broke, definition: brimhavenCaptain, clickType: 3 });
   assert.equal(teleports.length, 1);
   assert.equal(broke.balance, 10);
+});
+
+test("the Talk-to transcript is the captain's own dock", () => {
+  assert.equal(
+    BarnabyFerry._test.selectDockVariant({ definition: brimhavenCaptain }),
+    "standard-dialogue-if-the-player-is-on-the-dock-in-brimhaven"
+  );
+  const apeAtoll = { getName: () => "Captain Barnaby", getActions: () => ["Talk-to", null, null, null, null] };
+  assert.equal(BarnabyFerry._test.selectDockVariant({ definition: apeAtoll }), null);
+});
+
+test("the Talk-to transcript checks the fare and sails on its boarding message", () => {
+  teleports.length = 0;
+  const condition = (player) => BarnabyFerry._test.answerFareCondition({
+    player, definition: brimhavenCaptain, text: "If the player does not have 30 coins:",
+  });
+  assert.equal(condition(createPlayer()), false);
+  assert.equal(condition(createPlayer({ coins: 20 })), true);
+  assert.equal(condition(createPlayer({ coins: 20, gloves: ItemIds.KARAMJA_GLOVES_1 })), false);
+
+  const player = createPlayer();
+  const event = { player, definition: brimhavenCaptain, text: "You board the ship and sail to Ardougne." };
+  BarnabyFerry._test.boardFromDialogue(event);
+  assert.equal(event.handled, true);
+  assert.equal(player.balance, 70);
+  assert.equal(teleports[0].destination.getX(), 2680);
 });

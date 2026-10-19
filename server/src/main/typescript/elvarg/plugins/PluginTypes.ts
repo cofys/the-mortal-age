@@ -494,6 +494,21 @@ export interface PluginCombatAttackDistanceEvent {
   distance: number;
 }
 
+/**
+ * Fired once per hitsplat, after its accuracy and damage are rolled and before the damage is
+ * capped to the target's hitpoints. Handlers may change `damage` (a HitDamage) and `accurate`,
+ * which the hit then keeps (an effect that ignores the accuracy roll sets it).
+ */
+export interface PluginCombatHitDamageEvent {
+  attacker: any;
+  target: any;
+  combatType: any;
+  /** The PendingHit being rolled; its delay is the hit's flight time in ticks. */
+  hit: any;
+  damage: any;
+  accurate: boolean;
+}
+
 export interface PluginCombatHitResolvedEvent {
   attacker: any;
   target: any;
@@ -902,6 +917,7 @@ export interface PluginApi {
     handler: (event: PluginPlayerDealtDamageEvent) => void
   ): void;
   onCombatHitRoll(handler: (event: PluginCombatHitRollEvent) => void): void;
+  onCombatHitDamage(handler: (event: PluginCombatHitDamageEvent) => void): void;
   /** Lets an attack ignore the attack timer, or leave it untouched (see PluginAttackTimingEvent). */
   onAttackTiming(handler: (event: PluginAttackTimingEvent) => void): void;
   onCombatHitResolved(handler: (event: PluginCombatHitResolvedEvent) => void): void;

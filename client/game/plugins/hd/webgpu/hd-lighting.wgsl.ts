@@ -234,8 +234,8 @@ fn hdShade(
         let lightDir = hd.u_hdLightDirection.xyz;
         let half = normalize(lightDir + viewDir);
         let ndl = diffuse;
-        let ndv = max(dot(normal, viewDir), 1e-4);
-        let ndh = max(dot(normal, half), 0.0);
+        let ndv = clamp(dot(normal, viewDir), 1e-4, 1.0);
+        let ndh = clamp(dot(normal, half), 0.0, 1.0);
         // Trowbridge-Reitz (GGX) normal distribution.
         let a = roughness * roughness;
         let a2 = a * a;
@@ -245,11 +245,12 @@ fn hdShade(
         let gv = ndv / (ndv * (1.0 - k) + k);
         let gl = ndl / (ndl * (1.0 - k) + k);
         // Schlick Fresnel with a dielectric F0.
-        let f = vec3<f32>(0.04) + vec3<f32>(0.96) * pow(1.0 - max(dot(viewDir, half), 0.0), 5.0);
+        // Rounded unit-vector dots can exceed 1: a negative pow base produces NaN in HDR.
+        let f = vec3<f32>(0.04) + vec3<f32>(0.96) * pow(1.0 - clamp(dot(viewDir, half), 0.0, 1.0), 5.0);
         let specular = d * gv * gl * f / max(4.0 * ndv * ndl, 1e-4);
         color += hd.u_hdDirectional.xyz * specular * ndl * material.x * hd.u_hdSpecular * shadow * detail;
     }
-    color += vec3<f32>(pow(1.0 - max(dot(normal, viewDir), 0.0), 2.0) * hd.u_hdGrading.w);
+    color += vec3<f32>(pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), 2.0) * hd.u_hdGrading.w);
     // Linear HDR: saturation/contrast/exposure and the display encode moved to the HDR
     // tonemap pass (hd-tonemap), which replaces the old per-surface grade that clipped.
     return color;

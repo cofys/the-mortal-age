@@ -166,12 +166,11 @@ function awardOre(player, state) {
   if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, state.rock.oreId)) {
     player.sendMessage("The infernal pickaxe smelts the ore as you mine it.");
   } else {
-    // "mining:ore": a container may take the ore instead (an open coal bag).
-    const ore = { player, oreId: state.rock.oreId, banked: false };
-    pluginApi.emitCustomEvent("mining:ore", ore);
-    if (!ore.banked) player.getInventory().adds(state.rock.oreId, 1 + bonusOre);
+    // An open container takes the ore first ("storage:gather", the coal bag
+    // included — upstream #656 replaced the old "mining:ore" coal-bag event).
+    giveOre(player, state.rock.oreId, 1 + bonusOre);
     player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
-    if (bonusOre > 0 && !ore.banked) {
+    if (bonusOre > 0) {
       player.sendMessage(`A rich seam — ${bonusOre} extra ore!`);
     }
   }
@@ -206,10 +205,10 @@ function grantExtraOre(player, state) {
   }
   const request = { player, oreId: rock.oreId, rockLevel: rock.level, extra: false };
   pluginApi.emitCustomEvent("mining:extra-ore", request);
-  if (!request.extra || player.getInventory().isFull()) {
+  if (!request.extra || inventoryBlocks(player, rock.oreId)) {
     return;
   }
-  player.getInventory().adds(rock.oreId, 1);
+  giveOre(player, rock.oreId, 1);
   player.getSkillManager().addExperiences(Skill.MINING, rock.xp);
 }
 
@@ -242,7 +241,7 @@ function startMining(player, rockObject, rock, activeSessions) {
     player.sendMessage(`You need a Mining level of at least ${rock.level} to mine this rock.`);
     return false;
   }
-  if (player.getInventory().isFull()) {
+  if (inventoryBlocks(player, rock.oreId)) {
     player.getInventory().full();
     return false;
   }
@@ -311,7 +310,7 @@ class MiningTask extends Task {
       state.pickaxe = pickaxe;
       state.attemptIntervalTicks = pickaxe.attemptIntervalTicks;
 
-      if (player.getInventory().isFull()) {
+      if (inventoryBlocks(player, state.rock.oreId)) {
         player.getInventory().full();
         stopMining(this.activeSessions, player);
         continue;
@@ -344,7 +343,7 @@ class MiningTask extends Task {
       }
 
       if (state.rock.infinite) {
-        if (player.getInventory().isFull()) {
+        if (inventoryBlocks(player, state.rock.oreId)) {
           player.getInventory().full();
           stopMining(this.activeSessions, player);
           continue;
@@ -362,21 +361,23 @@ let TaskManager;
 let ObjectManager;
 let pluginApi;
 
-/**
- * "mining:extra-ore": a mining enhancer (the charged celestial ring) may grant a second ore with
- * its experience. Without room for it, neither is given (Wiki, Mod Ash).
- */
-function mineExtraOre(player, rock) {
-  if (rock.infinite) {
-    return;
+/** A full inventory stops mining unless an open container (the coal bag) has room for the ore ("storage:room"). */
+function inventoryBlocks(player, oreId) {
+  if (!player.getInventory().isFull()) {
+    return false;
   }
-  const request = { player, oreId: rock.oreId, rockLevel: rock.level, extra: false };
-  pluginApi.emitCustomEvent("mining:extra-ore", request);
-  if (!request.extra || player.getInventory().isFull()) {
-    return;
+  const request = { player, itemId: oreId, room: false };
+  pluginApi.emitCustomEvent("storage:room", request);
+  return !request.room;
+}
+
+/** An open container takes the ore first ("storage:gather"); the rest goes to the inventory. */
+function giveOre(player, oreId, amount) {
+  const request = { player, itemId: oreId, amount, stored: 0 };
+  pluginApi.emitCustomEvent("storage:gather", request);
+  if (amount > request.stored) {
+    player.getInventory().adds(oreId, amount - request.stored);
   }
-  player.getInventory().adds(rock.oreId, 1);
-  player.getSkillManager().addExperiences(Skill.MINING, rock.xp);
 }
 
 function handleMine(event) {

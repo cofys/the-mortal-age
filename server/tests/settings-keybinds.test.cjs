@@ -97,13 +97,13 @@ test('XP orb mounts the counter only while enabled, and Setup opens the cached s
   player.sent.length = 0;
   click({ player, opId: 1 });
   assert.equal(player.getAttribute('xp-drops:enabled'), true);
-  assert.deepEqual(player.sent, ['varbit 4702=1', `open ${(161 << 16) | 7}:122:1`]);
+  assert.deepEqual(player.sent, ['varbit 4702=1', `open ${(161 << 16) | 9}:122:1`]);
   player.sent.length = 0;
   logins[0]({ player });
   assert.deepEqual(player.sent, ['varbit 4702=1'], 'login restores the saved toggle before bootstrap');
   player.sent.length = 0;
   click({ player, opId: 1 });
-  assert.deepEqual(player.sent, ['varbit 4702=0', `close ${(161 << 16) | 7}`]);
+  assert.deepEqual(player.sent, ['varbit 4702=0', `close ${(161 << 16) | 9}`]);
   player.sent.length = 0;
   click({ player, opId: 2 });
   assert.deepEqual(player.sent, [`open ${(161 << 16) | 16}:137:0`]);

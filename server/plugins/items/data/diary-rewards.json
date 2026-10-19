@@ -1,0 +1,136 @@
+{
+  "casts": {
+    "standard": { "seq": "human_castteleport", "spotanim": "teleport_casting" },
+    "clap": { "seq": "human_castteleport", "spotanim": "teleport_casting", "clap": true },
+    "monastery": { "seq": "teleport_nardah_human", "spotanim": "teleport_monastery" },
+    "farm": { "seq": "teleport_nardah_human", "spotanim": "teleport_farm" },
+    "nardah": { "seq": "teleport_nardah_human", "spotanim": "teleport_nardah" },
+    "slime": { "seq": "teleport_slime_human", "spotanim": "teleport_slimepit" },
+    "rune": { "seq": "teleport_rune_human", "spotanim": "teleport_rune" },
+    "cabbage": { "seq": "teleport_cabbage_human", "spotanim": "teleport_cabbage" }
+  },
+  "destinations": {
+    "kandarin-monastery": { "tile": [2607, 3221, 0], "radius": 2, "cast": "monastery" },
+    "ardougne-farm": { "tile": [2665, 3375, 0], "radius": 2, "cast": "farm" },
+    "gem-mine": { "tile": [2840, 9387, 0], "radius": 2, "cast": "clap" },
+    "slayer-master": { "tile": [2869, 2982, 1], "radius": 1, "cast": "clap" },
+    "fountain-of-rune": { "tile": [3375, 3892, 0], "radius": 0, "cast": "rune" },
+    "ectofuntus": { "tile": [3683, 9888, 0], "radius": 1, "cast": "slime" },
+    "burgh-de-rott": { "tile": [3482, 3230, 0], "radius": 2, "cast": "slime" },
+    "rellekka": { "tile": [2645, 3672, 0], "radius": 2, "cast": "standard" },
+    "nardah": { "tile": [3420, 2918, 0], "radius": 3, "cast": "nardah" },
+    "nardah-shrine": { "tile": [3426, 2928, 0], "radius": 2, "cast": "nardah" },
+    "kalphite-cave": { "tile": [3322, 3122, 0], "radius": 0, "cast": "nardah" },
+    "sherlock": { "tile": [2733, 3415, 0], "radius": 2, "cast": "standard" },
+    "piscatoris": { "tile": [2332, 3681, 0], "radius": 3, "cast": "standard" },
+    "cabbage-patch": { "tile": [3052, 3291, 0], "radius": 4, "cast": "cabbage" },
+    "kourend-woodland": { "tile": [1555, 3456, 0], "radius": 2, "cast": "standard" },
+    "mount-karuulm": { "tile": [1311, 3796, 0], "radius": 1, "cast": "standard" }
+  },
+  "limits": {
+    "ardougne-farm": { "label": "Ardougne Farm", "varbit": null },
+    "fountain-of-rune": { "label": "Fountain of Rune", "varbit": "wilderness_sword_last_teleport" },
+    "ectofuntus": { "label": "Ectofuntus", "varbit": "morytania_legs_last_teleport" },
+    "rellekka": { "label": "Rellekka", "varbit": "fremennik_basic_teleport" },
+    "nardah": { "label": "Nardah", "varbit": "desert_nardah_teleport" },
+    "sherlock": { "label": "Sherlock", "varbit": "seers_sherlock_teleport" },
+    "piscatoris": { "label": "Piscatoris", "varbit": "western_pisc_teleport" },
+    "cabbage-patch": { "label": "cabbage patch", "varbit": "lumbridge_cabbage_teleport" },
+    "kourend-woodland": { "label": "Kourend Woodland", "varbit": "zeah_blessing_woodland_teleport" },
+    "mount-karuulm": { "label": "Mount Karuulm", "varbit": "zeah_blessing_brimstone_teleport" }
+  },
+  "families": [
+    {
+      "name": "Ardougne cloak",
+      "objs": ["ardy_cape_easy", "ardy_cape_medium", "ardy_cape_hard", "ardy_cape_elite"],
+      "teleports": [
+        { "options": ["Monastery Teleport", "Kandarin Monastery"], "to": "kandarin-monastery" },
+        { "options": ["Farm Teleport", "Ardougne Farm"], "to": "ardougne-farm", "limit": "ardougne-farm", "perDay": [0, 3, 5, null] }
+      ]
+    },
+    {
+      "name": "Karamja gloves",
+      "objs": ["atjun_gloves_easy", "atjun_gloves_med", "atjun_gloves_hard", "atjun_gloves_elite"],
+      "teleports": [
+        { "options": ["Gem Mine"], "to": "gem-mine" },
+        { "options": ["Slayer Master"], "to": "slayer-master" }
+      ]
+    },
+    {
+      "name": "Wilderness sword",
+      "objs": ["wilderness_sword_easy", "wilderness_sword_medium", "wilderness_sword_hard", "wilderness_sword_elite"],
+      "teleports": [
+        { "options": ["Teleport"], "to": "fountain-of-rune", "limit": "fountain-of-rune", "perDay": [0, 0, 1, null] }
+      ]
+    },
+    {
+      "name": "Morytania legs",
+      "objs": ["morytania_legs_easy", "morytania_legs_medium", "morytania_legs_hard", "morytania_legs_elite"],
+      "teleports": [
+        { "options": ["Ecto Teleport", "Ectofuntus Pit"], "to": "ectofuntus", "limit": "ectofuntus", "perDay": [2, 5, 5, null] },
+        { "options": ["Burgh Teleport", "Burgh de Rott"], "to": "burgh-de-rott" }
+      ]
+    },
+    {
+      "name": "Fremennik sea boots",
+      "objs": ["fremennik_boots_easy", "fremennik_boots_medium", "fremennik_boots_hard", "fremennik_boots_elite"],
+      "teleports": [
+        { "options": ["Teleport"], "to": "rellekka", "limit": "rellekka", "perDay": [1, 3, 5, null] }
+      ]
+    },
+    {
+      "name": "Desert amulet",
+      "objs": ["desert_amulet_easy", "desert_amulet_medium", "desert_amulet_hard", "desert_amulet_elite"],
+      "locked": "Your amulet can't teleport you until you have completed the medium Desert Diary.",
+      "teleports": [
+        { "options": ["Teleport", "Nardah"], "to": ["nardah", "nardah", "nardah", "nardah-shrine"], "limit": "nardah", "perDay": [0, 1, 1, null] },
+        { "options": ["Kalphite cave"], "to": "kalphite-cave" }
+      ]
+    },
+    {
+      "name": "Kandarin headgear",
+      "objs": ["seers_headband_easy", "seers_headband_medium", "seers_headband_hard", "seers_headband_elite"],
+      "teleports": [
+        { "options": ["Teleport"], "to": "sherlock", "limit": "sherlock", "perDay": [0, 0, 1, null] }
+      ]
+    },
+    {
+      "name": "Western banner",
+      "objs": ["western_banner_easy", "western_banner_medium", "western_banner_hard", "western_banner_elite"],
+      "locked": "Your banner can't teleport you until you have completed the hard Western Provinces Diary.",
+      "teleports": [
+        { "options": ["Teleport"], "to": "piscatoris", "limit": "piscatoris", "perDay": [0, 0, 1, null] }
+      ]
+    },
+    {
+      "name": "Explorer's ring",
+      "objs": ["lumbridge_ring_easy", "lumbridge_ring_medium", "lumbridge_ring_hard", "lumbridge_ring_elite"],
+      "teleports": [
+        { "options": ["Teleport"], "to": "cabbage-patch", "limit": "cabbage-patch", "perDay": [0, 3, null, null] }
+      ]
+    },
+    {
+      "name": "Rada's blessing",
+      "objs": ["zeah_blessing_easy", "zeah_blessing_medium", "zeah_blessing_hard", "zeah_blessing_elite"],
+      "teleports": [
+        { "options": ["Kourend Woodland"], "to": "kourend-woodland", "limit": "kourend-woodland", "perDay": [3, 5, null, null] },
+        { "options": ["Mount Karuulm"], "to": "mount-karuulm", "limit": "mount-karuulm", "perDay": [0, 0, 3, null] }
+      ]
+    }
+  ],
+  "faladorShield": {
+    "objs": ["falador_shield_easy", "falador_shield_medium", "falador_shield_hard", "falador_shield_elite"],
+    "restorePercent": [25, 50, 100, 100],
+    "perDay": [1, 1, 1, 2],
+    "varbit": "falador_shield_recharge",
+    "spotanim": "elysian_shield_defend_spotanim"
+  },
+  "explorersRing": {
+    "objs": ["lumbridge_ring_easy", "lumbridge_ring_medium", "lumbridge_ring_hard", "lumbridge_ring_elite"],
+    "energyPercent": [50, 50, 50, 100],
+    "energyPerDay": [2, 3, 4, 3],
+    "energyVarbit": "lumbridge_energy_restore",
+    "alchemyPerDay": 30,
+    "alchemyVarbit": "lumbridge_free_alchs"
+  }
+}

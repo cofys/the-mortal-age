@@ -21,6 +21,9 @@ import { ClientState } from "../ClientState";
 import { createSelectedSpellOnWidgetPacket } from "../selectedSpellPackets";
 import type { WidgetActionEvent } from "./widgetActionPayload";
 
+/** bankside: the inventory panel shown beside the open bank. */
+const BANK_SIDE_GROUP = 15;
+
 export type SelectedSpellInfo = {
     spellId: number;
     spellName: string;
@@ -267,7 +270,11 @@ export function handleWidgetActionTargeting(
         "boss log",
         "coin collection",
     ];
-    if (isInventoryItem && inventoryItemActions.includes(optionLower)) {
+    // The bank's inventory panel (bankside, group 15) has its own ops: its op9 is the item's
+    // bank op ("Empty" on a coal bag or fish barrel), which the server handles as a bank op.
+    // Sent as a plain inventory option it would empty into the inventory, or do nothing for
+    // items with no inventory "Empty".
+    if (isInventoryItem && groupId !== BANK_SIDE_GROUP && inventoryItemActions.includes(optionLower)) {
         const targetSlot = event.slot ?? event.widget.childIndex ?? childId;
         const quantity = event.widget.itemQuantity ?? 1;
         console.log(

@@ -1,6 +1,10 @@
 {
   "source": "https://oldschool.runescape.wiki/w/Mary_(Getting_Ahead)",
   "coins": 995,
+  "pricesSource": "https://oldschool.runescape.wiki/w/Sbott (2/5/25/45 coins: soft, hard, snakeskins, dragon leather)",
+  "prices": {
+    "Sbott": [2, 5, 25, 25, 45, 45, 45, 45]
+  },
   "hides": [
     { "raw": 1739, "product": 1741, "name": "Soft leather", "price": 1 },
     { "raw": 1739, "product": 1743, "name": "Hard leather", "price": 3 },

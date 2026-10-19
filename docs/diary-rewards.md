@@ -1,0 +1,109 @@
+# Diary reward items
+
+The achievement diaries' reward items (Ardougne cloak, Karamja gloves, Explorer's ring, ...) and what their own options do. The plugin is `server/plugins/items/DiaryRewards.plugin.js`, with its units in `server/plugins/items/diaryrewards/` and its data in `server/plugins/items/data/diary-rewards.json`. Claiming the items is the diary framework's job ([achievement-diaries.md](achievement-diaries.md)).
+
+**What's not here yet:**
+- the Explorer's ring's free alchemy (the Alchemy option and using items on the ring);
+- the passive perks: shop discounts, Kandarin headgear's extra logs, Rada's blessing's extra fish, Morytania legs as a ghostspeak amulet, desert heat protection, and the like.
+
+## Options
+
+Every option works whether the item is worn or carried. The inventory names and the worn names (cache params 451+) lead to the same thing.
+
+| Item | Option (inventory / worn) | Destination | Per day by tier (1 / 2 / 3 / 4) |
+| --- | --- | --- | --- |
+| Ardougne cloak | Monastery Teleport / Kandarin Monastery | Ardougne Monastery | unlimited |
+| | Farm Teleport / Ardougne Farm | Ardougne farm patch | – / 3 / 5 / unlimited |
+| Karamja gloves | Gem Mine | Shilo Village gem mine (underground) | – / – / unlimited / unlimited |
+| | Slayer Master | Duradel | – / – / – / unlimited |
+| Wilderness sword | Teleport | Fountain of Rune | – / – / 1 / unlimited |
+| Morytania legs | Ecto Teleport / Ectofuntus Pit | Ectofuntus slime pit | 2 / 5 / 5 / unlimited |
+| | Burgh Teleport / Burgh de Rott | Burgh de Rott | – / – / unlimited / unlimited |
+| Fremennik sea boots | Teleport | Rellekka | 1 / 3 / 5 / unlimited |
+| Desert amulet | Teleport / Nardah | Nardah; amulet 4 inside the shrine | locked / 1 / 1 / unlimited |
+| | Kalphite cave | Kalphite Cave | – / – / – / unlimited |
+| Kandarin headgear | Teleport | Sherlock | – / – / 1 / unlimited |
+| Western banner | Teleport | Piscatoris Fishing Colony | locked / locked / 1 / unlimited |
+| Explorer's ring | Teleport | Falador cabbage patch | – / 3 / unlimited / unlimited |
+| Rada's blessing | Kourend Woodland | Kourend Woodland | 3 / 5 / unlimited / unlimited |
+| | Mount Karuulm | Mount Karuulm | – / – / 3 / unlimited |
+| Falador shield | Recharge-prayer / Recharge Prayer | Restores 25% / 50% / 100% / 100% of the Prayer level | 1 / 1 / 1 / 2 |
+| | Check | The day's restores left | |
+| Explorer's ring | Energy (Functions > Energy on rings 2–4) | Restores 50% / 50% / 50% / 100% run energy | 2 / 3 / 4 / 3 |
+| | Check | The day's alchemy and energy charges, and ring 2's teleports | |
+
+"–" means the tier has no such option in the cache. "locked" means the option is there but does nothing until a later tier (Wiki).
+
+- **Daily limits** reset at 00:00 UTC.
+- **Counting is per destination,** not per item. Upgrading keeps the day's uses: Ardougne cloak 2's 3 farm teleports used leaves cloak 3 with 2 of 5 (Wiki trivia).
+- **The Falador shield** spends nothing when Prayer is already full (Wiki changelog). The restore rounds down.
+
+## From the captures
+
+Captures (rsprox) cover the Ardougne cloak (both teleports), the Desert amulet 4 (both), Morytania legs (Ecto and Burgh), Fremennik sea boots 4, Rada's blessing 4 (Mount Karuulm), Karamja gloves 4 (Slayer Master) and the Explorer's ring 4's Check.
+
+**Casting a teleport:**
+- **On the click:** the player's sequence and spotanim (height 92), area sound 200 and `busy` = 1.
+- **Three ticks later:** the move, the reset sequence and `busy` = 0, with the reset sent again a tick later.
+
+| Teleport | Sequence | Spotanim |
+| --- | --- | --- |
+| Ardougne Monastery | `teleport_nardah_human` | `teleport_monastery` |
+| Ardougne Farm | `teleport_nardah_human` | `teleport_farm` |
+| Nardah, Kalphite Cave | `teleport_nardah_human` | `teleport_nardah` |
+| Ectofuntus, Burgh de Rott | `teleport_slime_human` | `teleport_slimepit` |
+| Rellekka, Mount Karuulm | `human_castteleport` | `teleport_casting` |
+
+**The Karamja gloves clap first:**
+1. On the click: `emote_clap` and the spam-channel message "You clap your hands and the world changes...".
+2. Two ticks later: the standard cast, its sequence and spotanim delayed by 30 client cycles.
+3. Three ticks after that: the move (Duradel at 2868–2869, 2982–2983 on level 1).
+
+**Counter varbits:** after a limited teleport the server sets that destination's counter varbit to the day's uses. The elite tiers count too, though they are unlimited (`zeah_blessing_brimstone_teleport` 0→1→2, `fremennik_basic_teleport` 0→1). Ardougne cloak 2 also sends "You have used # of your # Ardougne Farm teleports for today." on arrival.
+
+**Landing tiles seen:**
+- Monastery: 2607–2608, 3219–3222.
+- Farm: 2664–2667, 3373–3377.
+- Burgh de Rott: 3481–3484, 3228–3232.
+- Rellekka: 2643–2647, 3670–3673.
+- Nardah shrine: 3424–3428, 2928–2929.
+- Kalphite Cave: 3322, 3122.
+- Mount Karuulm: 1310–1312, 3795–3797.
+
+The data file keeps a centre and a radius for each, and the landing is a free tile within it.
+
+**Explorer's ring 4 Check:** "You have # out of # alchemy charges left and # of your # energy restores left for today."
+
+| Allowance | Varbit |
+| --- | --- |
+| Fountain of Rune | `wilderness_sword_last_teleport` (4541) |
+| Ectofuntus | `morytania_legs_last_teleport` (4542) |
+| Rellekka | `fremennik_basic_teleport` (5005) |
+| Nardah | `desert_nardah_teleport` (4558) |
+| Sherlock | `seers_sherlock_teleport` (4561) |
+| Piscatoris | `western_pisc_teleport` (4564) |
+| Cabbage patch | `lumbridge_cabbage_teleport` (4552) |
+| Energy restores | `lumbridge_energy_restore` (4553) |
+| Kourend Woodland | `zeah_blessing_woodland_teleport` (7937) |
+| Mount Karuulm | `zeah_blessing_brimstone_teleport` (7938) |
+| Falador shield | `falador_shield_recharge` (4544) |
+
+The Ardougne farm count is split. Only its low bit has a name (`ardougne_cloak_lowbits`, 6069), so that count is kept server-side and not sent.
+
+## Unverified
+
+- **Casts nobody captured:**
+  - The Wilderness sword and the Explorer's ring use the matching `teleport_rune_human`/`teleport_rune` and `teleport_cabbage_human`/`teleport_cabbage` from the same set.
+  - The Gem Mine clap is assumed to match Slayer Master's.
+  - Kandarin headgear, the Western banner and Kourend Woodland use the standard cast.
+- **Destinations from the Wiki's maps, not captures:**
+  - The Ectofuntus pit, the gem mine, Nardah outside the shrine, Sherlock, Piscatoris, the cabbage patch and Kourend Woodland.
+  - The Fountain of Rune tile (3375, 3892) is a guess next to the fountain. Neither the Wiki nor our cache's map places it.
+- **The Falador shield's restore:**
+  - The Elysian spirit shield graphic (`elysian_shield_defend_spotanim`, Wiki trivia), with no player animation and no sound.
+- **Messages this server writes itself:**
+  - "You have already used all # of your … teleports for today." and "You have used # of your # … teleports for today." for the other teleports.
+  - The locked desert amulet and western banner lines.
+  - The Falador shield's messages: restored, full, spent and Check.
+  - The Explorer's ring's energy messages, and the extra teleports line on ring 2's Check.
+- **Explorer's ring recharge:** the Wiki says the ring's charges only come back after logging out and in. Here they reset at midnight like the others.

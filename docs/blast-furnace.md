@@ -33,4 +33,4 @@ The dwarven furnace under Keldagrim (`server/plugins/minigames/BlastFurnace.plug
 
 - **Working the furnace yourself:** the stove, pump, pedals, broken pipes and the temperature, all of which the dwarves now do.
 - **Dumpy and Numpty's idle animations.**
-- **Coal bag emptying onto the belt.** There's no coal bag in this server yet.
+- **Coal bag emptying onto the belt.** The coal bag exists (docs/storage-items.md) but the belt only takes the inventory's coal.

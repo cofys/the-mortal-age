@@ -14,7 +14,7 @@ Smithing.register({
   getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
   onPlayerDisconnect: handler => { disconnect = handler; },
   onCustomEvent() {}, emitCustomEvent(name, request) { if (name === "smithing:anvil-access") request.denied = denyAnvil; },
-  onItemOnObject: handler => { itemOnObject = handler; }, log() {},
+  onItemOnObject: handler => { itemOnObject = handler; }, onSpellOnItem() {}, log() {},
   onObjectInteraction: (name, actions) => objects.set(name, actions),
   onInterfaceActionButton: (ids, handler) => { for (const id of ids) buttons.set(id, handler); },
 });

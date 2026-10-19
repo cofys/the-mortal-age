@@ -54,6 +54,8 @@ export class Bank extends ItemContainer {
      * is not a withdrawal (op 9, Configure-Charges, on items with cache param 2257).
      */
     public static readonly ITEM_OP_EVENT = "bank:item-op";
+    /** `{ player }` after the open bank redraws its items and the side panel's inventory. */
+    public static readonly REFRESHED_EVENT = "bank:refreshed";
 
     /** Ends the client's bank search, as OSRS does on closing the bank or picking a tab. */
     public static closeSearch(player: Player): void {
@@ -1002,6 +1004,8 @@ export class Bank extends ItemContainer {
             sender.sendVarbit(4170 + tab, this.getPlayer().getBank(tab).getValidItems().length);
         }
         sender.sendBankSnapshot().sendItemContainer(this.getPlayer().getInventory(), Bank.INVENTORY_INTERFACE_ID);
+        // Plugins that label the side panel's item ops (if1-if4 bits) recompute them here.
+        getPluginManager().emitCustomEvent(Bank.REFRESHED_EVENT, { player: this.getPlayer() });
 
         return this;
     }

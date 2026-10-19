@@ -445,18 +445,30 @@ function getSmithingLevel(player) {
   return player.getSkillManager().getCurrentLevel(Skill.SMITHING);
 }
 
-function hasIngredients(inventory, recipe) {
+/** What a carried container (the coal bag) holds of an ingredient ("storage:amount"). */
+function storedAmount(player, itemId) {
+  const request = { player, itemId, amount: 0 };
+  pluginApi?.emitCustomEvent("storage:amount", request);
+  return request.amount;
+}
+
+function hasIngredients(player, recipe) {
+  const inventory = player.getInventory();
   for (const [itemId, amount] of recipe.ingredients) {
-    if (inventory.getAmount(itemId) < amount) {
+    if (inventory.getAmount(itemId) < amount && inventory.getAmount(itemId) + storedAmount(player, itemId) < amount) {
       return false;
     }
   }
   return true;
 }
 
-function consumeIngredients(inventory, recipe) {
+/** Wiki (Coal bag): the inventory's coal goes first, then the bag's ("storage:take"). */
+function consumeIngredients(player, recipe) {
+  const inventory = player.getInventory();
   for (const [itemId, amount] of recipe.ingredients) {
-    inventory.deleteNumber(itemId, amount);
+    const held = Math.min(amount, inventory.getAmount(itemId));
+    if (held > 0) inventory.deleteNumber(itemId, held);
+    if (amount > held) pluginApi?.emitCustomEvent("storage:take", { player, itemId, amount: amount - held, taken: 0 });
   }
 }
 
@@ -515,14 +527,14 @@ function performSmeltAction(player, recipe) {
     return false;
   }
 
-  if (!hasIngredients(inventory, recipe)) {
+  if (!hasIngredients(player, recipe)) {
     player.sendMessage(
       recipe.missingMessage ?? "You don't have the required ores to smelt this bar."
     );
     return false;
   }
 
-  consumeIngredients(inventory, recipe);
+  consumeIngredients(player, recipe);
 
   Sounds.sendSound(player, Sound.SMELTING);
   player.performAnimation(SMELT_ANIMATION);
@@ -630,7 +642,7 @@ function startSmeltingSession(activeSessions, player, recipe, amount) {
     return false;
   }
 
-  if (!hasIngredients(player.getInventory(), recipe)) {
+  if (!hasIngredients(player, recipe)) {
     player.sendMessage("You don't have the required ores to smelt this bar.");
     return false;
   }
@@ -949,12 +961,16 @@ module.exports = {
   quantityForSmeltAction,
   FURNACE_OBJECT_IDS,
   SMELTING_RECIPES,
+  hasIngredients,
+  consumeIngredients,
+  smeltingXp,
   startBotSmelting,
   isSmeltingActive,
   register(api) {
     pluginApi = api;
     TaskManager = api.getTaskManager();
     TaskManager.submit(new SmithingTask(ACTIVE_SMITHING_SESSIONS));
+    require("./smithing/Superheat.Smithing")(api);
 
     api.onPlayerDisconnect(({ player }) => {
       stopSmithingSession(ACTIVE_SMITHING_SESSIONS, player, false);

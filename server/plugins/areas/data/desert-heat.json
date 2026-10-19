@@ -1,0 +1,71 @@
+{
+  "about": "Desert heat (https://oldschool.runescape.wiki/w/Desert_heat), as captured. See docs/desert-heat.md.",
+  "baseTicks": 150,
+  "heat": {
+    "about": "Where the heat strikes: inclusive [minX, maxX, minY, maxY, minPlane, maxPlane].",
+    "boxes": [
+      [3136, 3519, 2688, 3115, 0, 0],
+      [3330, 3519, 3116, 3116, 0, 0],
+      [3136, 3231, 3116, 3132, 0, 0],
+      [3352, 3382, 2824, 2854, 1, 3],
+      [3036, 3052, 4690, 4702, 2, 3]
+    ]
+  },
+  "towns": {
+    "about": "Shaded towns inside the heat, plane 0: [minX, maxX, minY, maxY].",
+    "boxes": {
+      "Nardah": [3398, 3452, 2875, 2942],
+      "Pollnivneach": [3330, 3380, 2958, 3010],
+      "Sophanem": [3274, 3324, 2748, 2806],
+      "Menaphos": [3196, 3262, 2742, 2806],
+      "Ruins of Unkah": [3136, 3194, 2805, 2880],
+      "Bedabin Camp": [3160, 3190, 3020, 3055]
+    }
+  },
+  "armour": {
+    "about": "Ticks taken off for a worn item of this cache category in this slot (Mod Ash: hat 10, torso 40, legs 30, hands 10, shield 10, boots 10).",
+    "slots": [
+      { "slot": "HEAD_SLOT", "category": 2, "ticks": 10 },
+      { "slot": "BODY_SLOT", "category": 7, "ticks": 40 },
+      { "slot": "LEG_SLOT", "category": 8, "ticks": 30 },
+      { "slot": "HANDS_SLOT", "category": 16, "ticks": 10 },
+      { "slot": "SHIELD_SLOT", "category": 18, "ticks": 10 },
+      { "slot": "FEET_SLOT", "category": 17, "ticks": 10 }
+    ]
+  },
+  "resistant": {
+    "about": "Ticks added by a worn item of this name; such an item never counts as armour.",
+    "items": {
+      "Circlet of water": 20,
+      "Circlet of water (uncharged)": 20,
+      "Fez": 20,
+      "Desert top": 20,
+      "Desert robes": 20,
+      "Desert legs": 20,
+      "Desert disguise": 20,
+      "Desert shirt": 20,
+      "Desert robe": 20,
+      "Desert boots": 10,
+      "Slave shirt": 10,
+      "Slave robe": 10,
+      "Slave boots": 5,
+      "Robe of Elidinis": 20,
+      "Menaphite purple hat": 20,
+      "Menaphite purple top": 20,
+      "Menaphite purple robe": 20,
+      "Menaphite purple kilt": 20,
+      "Menaphite red hat": 20,
+      "Menaphite red top": 20,
+      "Menaphite red robe": 20,
+      "Menaphite red kilt": 20,
+      "Prospector helmet": 10,
+      "Prospector jacket": 20,
+      "Prospector legs": 20,
+      "Prospector boots": 10,
+      "Golden prospector helmet": 10,
+      "Golden prospector jacket": 20,
+      "Golden prospector legs": 20,
+      "Golden prospector boots": 10
+    }
+  }
+}

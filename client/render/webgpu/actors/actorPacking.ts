@@ -650,12 +650,9 @@ function resolveNpcSequenceFrameInfo(client: OsrsClient, seqId: number): NpcSequ
             frameCount = Math.max(1, seqType.getSkeletalDuration?.() | 0);
         } else if (Array.isArray(seqType.frameIds)) {
             frameCount = Math.max(1, seqType.frameIds.length | 0);
-            lengths = new Array<number>(frameCount).fill(1);
-            for (let k = 0; k < frameCount; k++) {
-                try {
-                    lengths[k] = seqType.getFrameLength(client.seqFrameLoader, k | 0) | 0;
-                } catch {}
-            }
+            // SeqType.getFrameLength reads this array directly. Share it instead of
+            // copying the whole sequence for every NPC on every client cycle.
+            lengths = seqType.frameLengths;
         }
     }
     return { seqType, frameCount, lengths };

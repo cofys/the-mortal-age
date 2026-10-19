@@ -1159,20 +1159,7 @@ export class SceneBuilder {
                 );
             }
 
-            // Apply a small positional offset so the decoration sits against the wall
-            // rather than at the tile center. This mirrors the displacement used by
-            // other wall decoration types and fixes banners appearing unshifted.
-            let displacement = LocType.DEFAULT_DECOR_DISPLACEMENT;
-            const wallTag = scene.getWallTag(level, tileX, tileY);
-            if (wallTag !== 0n) {
-                try {
-                    const wallLoc = this.locTypeLoader.load(getIdFromTag(wallTag));
-                    if (wallLoc?.decorDisplacement) displacement = wallLoc.decorDisplacement;
-                } catch {}
-            }
-            const displacementX = displacement * SceneBuilder.displacementX[rotation & 3];
-            const displacementY = displacement * SceneBuilder.displacementY[rotation & 3];
-
+            // Straight decorations use their model position; shape 5 adds wall displacement.
             scene.newWallDecoration(
                 level,
                 tileX,
@@ -1180,8 +1167,8 @@ export class SceneBuilder {
                 centerHeight,
                 entity,
                 undefined,
-                displacementX,
-                displacementY,
+                0,
+                0,
                 tag,
                 flags,
             );

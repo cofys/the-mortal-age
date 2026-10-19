@@ -213,6 +213,7 @@
   {
     "type": "skiff",
     "name": "Skiff",
+    "shopNote": "Comes with a pre-built basic cargo hold.",
     "configId": 2,
     "typeId": 1,
     "templateChunkX": 480,
@@ -458,6 +459,7 @@
   {
     "type": "sloop",
     "name": "Sloop",
+    "shopNote": "Comes with a pre-built basic cargo hold.",
     "configId": 3,
     "typeId": 2,
     "templateChunkX": 480,

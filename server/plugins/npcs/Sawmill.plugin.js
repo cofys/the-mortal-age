@@ -9,7 +9,8 @@
  *   need to bring me some more logs."; coins running short: "Those planks cost 1500 coins. You
  *   don't have enough money for all of them.";
  * - a sawmill voucher carried, with room for the extra plank, doubles one log's planks (Wiki);
- * - a log used on an operator makes one plank straight away.
+ * - a log used on an operator makes one plank straight away;
+ * - a carried plank sack takes the planks before the inventory (Wiki, since 1 November 2023).
  * Trade and Talk-to's housing supplies open the "Construction supplies" shop (shops.json).
  */
 const fs = require("fs");
@@ -41,6 +42,13 @@ function say(player, npcId, text) {
   ));
 }
 
+/** A carried plank sack takes the plank first (Wiki; "storage:gather"); otherwise the inventory does. */
+function givePlank(player, plankId) {
+  const request = { player, itemId: plankId, amount: 1, stored: 0 };
+  api.emitCustomEvent("storage:gather", request);
+  if (request.stored === 0) player.getInventory().adds(plankId, 1);
+}
+
 /** Plank by plank until the amount, the logs or the coins run out; the vouchers double a log. */
 function convert(player, npcId, plank, amount) {
   const { coins, voucher, messages, diary } = data();
@@ -60,8 +68,8 @@ function convert(player, npcId, plank, amount) {
     inventory.delete(plank.log, 1);
     const doubled = inventory.contains(voucher) && inventory.getFreeSlots() >= 2;
     if (doubled) inventory.delete(voucher, 1);
-    inventory.adds(plank.plank, 1);
-    if (doubled) inventory.adds(plank.plank, 1);
+    givePlank(player, plank.plank);
+    if (doubled) givePlank(player, plank.plank);
     made += doubled ? 2 : 1;
   }
   if (shortOfCoins) say(player, npcId, messages.noCoins.replace("{cost}", String(plank.cost)));

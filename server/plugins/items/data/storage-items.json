@@ -1,0 +1,48 @@
+{
+  "gems": ["Uncut sapphire", "Uncut emerald", "Uncut ruby", "Uncut diamond", "Uncut dragonstone"],
+  "fish": [
+    "Raw shrimps", "Raw anchovies", "Raw sardine", "Raw herring", "Raw mackerel", "Raw trout", "Raw cod",
+    "Raw pike", "Raw slimy eel", "Raw salmon", "Raw tuna", "Raw rainbow fish", "Raw cave eel", "Raw lobster",
+    "Raw bass", "Leaping trout", "Leaping salmon", "Leaping sturgeon", "Raw swordfish", "Raw lava eel",
+    "Raw monkfish", "Raw karambwan", "Raw shark", "Raw sea turtle", "Infernal eel", "Raw manta ray",
+    "Raw anglerfish", "Raw dark crab", "Sacred eel", "Raw giant carp", "Raw guppy", "Raw cavefish",
+    "Raw tetra", "Raw catfish", "Raw bream", "Raw swordtip squid", "Raw jumbo squid", "Raw giant krill",
+    "Raw haddock", "Raw yellowfin", "Raw halibut", "Raw bluefin", "Raw marlin"
+  ],
+  "logs": [
+    "Logs", "Achey tree logs", "Oak logs", "Willow logs", "Teak logs", "Jatoba logs", "Maple logs",
+    "Mahogany logs", "Arctic pine logs", "Yew logs", "Juniper logs", "Blisterwood logs", "Magic logs",
+    "Redwood logs", "Camphor logs", "Ironwood logs", "Rosewood logs", "Bark"
+  ],
+  "planks": {
+    "Plank": "plank_sack_plain",
+    "Oak plank": "plank_sack_oak",
+    "Teak plank": "plank_sack_teak",
+    "Mahogany plank": "plank_sack_mahogany",
+    "Camphor plank": "plank_sack_camphor",
+    "Ironwood plank": "plank_sack_ironwood",
+    "Rosewood plank": "plank_sack_rosewood"
+  },
+  "tackle": [
+    "Angler hat", "Angler top", "Angler waders", "Angler boots",
+    "Spirit angler headband", "Spirit angler top", "Spirit angler waders", "Spirit angler boots",
+    "Fishbowl helmet", "Flippers", "Dark flippers", "Diving apparatus",
+    "Rada's blessing 1", "Rada's blessing 2", "Rada's blessing 3", "Rada's blessing 4",
+    "Harpoon", "Barb-tail harpoon", "Dragon harpoon", "Dragon harpoon (or)", "Infernal harpoon",
+    "Infernal harpoon (or)", "Infernal harpoon (uncharged)", "Echo harpoon", "Crystal harpoon",
+    "Crystal harpoon (inactive)", "Merfolk trident",
+    "Fishing rod", "Fly fishing rod", "Oily fishing rod", "Barbarian rod", "Pearl fishing rod",
+    "Pearl fly fishing rod", "Oily pearl fishing rod", "Pearl barbarian rod",
+    "Tiny net", "Small fishing net", "Big fishing net", "Drift net", "Lobster pot", "Karambwan vessel",
+    "Fishing bait", "Dark fishing bait", "Raw karambwanji", "Feather", "Stripy feather", "Fish offcuts",
+    "Fine fish offcuts", "Molch pearl", "Shark lure", "Sandworms", "Diabolic worms", "Spirit flakes",
+    "Fishing potion(4)", "Fishing potion(3)", "Fishing potion(2)", "Fishing potion(1)",
+    "Super fishing potion(4)", "Super fishing potion(3)", "Super fishing potion(2)", "Super fishing potion(1)",
+    "Knife", "Hammer"
+  ],
+  "tackleGamevals": ["oil_lantern_lit", "bullseye_lantern_lit", "candle_lantern_lit"],
+  "tackleBait": [
+    "Fishing bait", "Dark fishing bait", "Raw karambwanji", "Feather", "Stripy feather", "Fish offcuts",
+    "Fine fish offcuts", "Molch pearl", "Shark lure", "Sandworms", "Diabolic worms", "Spirit flakes"
+  ]
+}

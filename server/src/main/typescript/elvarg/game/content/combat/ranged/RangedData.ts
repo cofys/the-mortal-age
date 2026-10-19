@@ -1,18 +1,11 @@
 
-import { CombatEquipment } from '../CombatEquipment';
-import { CombatFactory } from '../CombatFactory';
-import { Mobile } from '../../../entity/impl/Mobile';
 import type { Player } from '../../../entity/impl/player/Player';
 import { Graphic } from '../../../model/Graphic';
 import { GraphicHeight } from '../../../model/GraphicHeight';
-import { Skill } from '../../../model/Skill';
 import { Equipment } from '../../../model/container/impl/Equipment';
 import { ItemIdentifiers } from '../../../../util/ItemIdentifiers';
-import { Misc } from '../../../../util/Misc';
 import { BOW_OF_FAERDHINEN_ARROWS, CRYSTAL_BOW_ALL_WEAPON_IDS, CRYSTAL_BOW_PROJECTILE_ID, isCrystalBow } from './CrystalBow';
 import { PluginManager } from '../../../../plugins/PluginManager';
-import { HitDamage } from '../hit/HitDamage';
-import { HitMask } from '../hit/HitMask';
 
 const getFightType = () => require("../FightType").FightType as typeof import("../FightType").FightType;
 
@@ -25,116 +18,6 @@ export class RangedData {
     // TODO - Populate rangedAmmunition maps
     private static rangedWeapons: Map<number, RangedWeapon> = new Map<number, RangedWeapon>();
     private static rangedAmmunition: Map<number, Ammunition> = new Map<number, Ammunition>();
-
-    public static getSpecialEffectsMultiplier(p: Player, target: Mobile, damage: number): number {
-        let multiplier = 1.0;
-
-        // Enchanted dragon bolts have their gem's effect.
-        switch (Ammunition.effectOf(p.getCombat().getAmmunition())) {
-            case Ammunition.ENCHANTED_DIAMOND_BOLT:
-                target.performGraphic(new Graphic(758, 0, GraphicHeight.MIDDLE));
-                multiplier = 1.15;
-                break;
-
-            case Ammunition.ENCHANTED_DRAGONSTONE_DRAGON_BOLT:
-            case Ammunition.ENCHANTED_DRAGON_BOLT:
-                let multiply = true;
-                if (target.isPlayer()) {
-                    const t = target.getAsPlayer();
-                    multiply = !(!t.getCombat().getFireImmunityTimer().finished() || CombatEquipment.hasDragonProtectionGear(t));
-                }
-
-                if (multiply) {
-                    target.performGraphic(new Graphic(756));
-                    multiplier = 1.31;
-                }
-                break;
-
-            case Ammunition.ENCHANTED_EMERALD_BOLT:
-                target.performGraphic(new Graphic(752));
-                CombatFactory.poisonEntity(
-                    target,
-                    p.getEquipment().get(Equipment.WEAPON_SLOT).getId() === ItemIdentifiers.ZARYTE_CROSSBOW ? 27 : 25
-                );
-                break;
-
-            case Ammunition.ENCHANTED_JADE_BOLT:
-                target.performGraphic(new Graphic(755));
-                multiplier = 1.05;
-                break;
-
-            case Ammunition.ENCHANTED_ONYX_BOLT:
-                target.performGraphic(new Graphic(753));
-                multiplier = 1.26;
-                const heal = Math.floor(damage * 0.25) + 10;
-                p.getSkillManager().setCurrentLevels(Skill.HITPOINTS, p.getSkillManager().getCurrentLevel(Skill.HITPOINTS) + heal);
-                if (p.getSkillManager().getCurrentLevel(Skill.HITPOINTS) >= 1120) {
-                    p.getSkillManager().setCurrentLevels(Skill.HITPOINTS, 1120);
-                }
-                p.getSkillManager().updateSkill(Skill.HITPOINTS);
-                if (damage < 250 && Misc.getRandom(3) <= 1) {
-                    damage += 150 + Misc.getRandom(80);
-                }
-                break;
-
-            case Ammunition.ENCHANTED_PEARL_BOLT:
-                target.performGraphic(new Graphic(750));
-                multiplier = 1.1;
-                break;
-
-            case Ammunition.ENCHANTED_RUBY_BOLT: {
-                // Blood Forfeit (Wiki): 20% of the target's current hitpoints, at most 100, for
-                // 10% of the player's own; not when the player can't spare them.
-                const cost = Math.floor(p.getHitpoints() * 0.1);
-                const forfeit = Math.min(100, Math.floor(target.getHitpoints() * 0.2));
-                if (cost < 1 || forfeit < 1 || damage <= 0) break;
-                target.performGraphic(new Graphic(754));
-                p.getCombat().getHitQueue().addPendingDamage([new HitDamage(cost, HitMask.RED)]);
-                multiplier = forfeit / damage;
-                break;
-            }
-
-            case Ammunition.ENCHANTED_SAPPHIRE_BOLT:
-                target.performGraphic(new Graphic(751));
-                if (target.isPlayer()) {
-                    const t = target.getAsPlayer();
-                    t.getSkillManager().setCurrentLevels(Skill.PRAYER, t.getSkillManager().getCurrentLevel(Skill.PRAYER) - 20);
-                    if (t.getSkillManager().getCurrentLevel(Skill.PRAYER) < 0) {
-                        t.getSkillManager().setCurrentLevels(Skill.PRAYER, 0);
-                    }
-                    t.sendMessage("Your Prayer level has been leeched.");
-
-                    p.getSkillManager().setCurrentLevels(Skill.PRAYER, t.getSkillManager().getCurrentLevel(Skill.PRAYER) + 20);
-                    if (p.getSkillManager().getCurrentLevel(Skill.PRAYER) > p.getSkillManager().getMaxLevel(Skill.PRAYER)) {
-                        p.getSkillManager().setCurrentLevels(Skill.PRAYER, p.getSkillManager().getMaxLevel(Skill.PRAYER));
-                    } else {
-                        p.sendMessage("Your enchanced bolts leech some Prayer points from your opponent..");
-                    }
-                }
-                break;
-            case Ammunition.ENCHANTED_TOPAZ_BOLT:
-
-
-                target.performGraphic(new Graphic(757));
-                if (target.isPlayer()) {
-                    const t = target.getAsPlayer();
-                    t.getSkillManager().setCurrentLevels(Skill.MAGIC, t.getSkillManager().getCurrentLevel(Skill.MAGIC) - 3);
-                    t.sendMessage("Your Magic level has been reduced.");
-                }
-
-                break;
-            case Ammunition.ENCHANTED_OPAL_BOLT:
-
-
-                target.performGraphic(new Graphic(749));
-                multiplier = 1.3;
-
-                break;
-        }
-
-        return multiplier;
-    }
-
 }
 
 export class Ammunition {
@@ -221,26 +104,9 @@ export class Ammunition {
         Ammunition.DRAGONSTONE_DRAGON_BOLT, Ammunition.ENCHANTED_DRAGONSTONE_DRAGON_BOLT,
         Ammunition.ONYX_DRAGON_BOLT, Ammunition.ENCHANTED_ONYX_DRAGON_BOLT,
     ]
-    /** An enchanted dragon bolt -> the enchanted gem bolt whose effect it has. */
-    private static readonly DRAGON_BOLT_EFFECTS = new Map<Ammunition, Ammunition>([
-        [Ammunition.ENCHANTED_OPAL_DRAGON_BOLT, Ammunition.ENCHANTED_OPAL_BOLT],
-        [Ammunition.ENCHANTED_JADE_DRAGON_BOLT, Ammunition.ENCHANTED_JADE_BOLT],
-        [Ammunition.ENCHANTED_PEARL_DRAGON_BOLT, Ammunition.ENCHANTED_PEARL_BOLT],
-        [Ammunition.ENCHANTED_TOPAZ_DRAGON_BOLT, Ammunition.ENCHANTED_TOPAZ_BOLT],
-        [Ammunition.ENCHANTED_SAPPHIRE_DRAGON_BOLT, Ammunition.ENCHANTED_SAPPHIRE_BOLT],
-        [Ammunition.ENCHANTED_EMERALD_DRAGON_BOLT, Ammunition.ENCHANTED_EMERALD_BOLT],
-        [Ammunition.ENCHANTED_RUBY_DRAGON_BOLT, Ammunition.ENCHANTED_RUBY_BOLT],
-        [Ammunition.ENCHANTED_DIAMOND_DRAGON_BOLT, Ammunition.ENCHANTED_DIAMOND_BOLT],
-        [Ammunition.ENCHANTED_ONYX_DRAGON_BOLT, Ammunition.ENCHANTED_ONYX_BOLT],
-    ])
 
     private static dragonBolt(itemId: number): Ammunition {
         return new Ammunition(itemId, new Graphic(955, 0, GraphicHeight.HIGH), 27, 122)
-    }
-
-    /** The bolt whose special effect this ammunition has (itself, unless an enchanted dragon bolt). */
-    public static effectOf(ammunition: Ammunition | null | undefined): Ammunition | null | undefined {
-        return (ammunition && Ammunition.DRAGON_BOLT_EFFECTS.get(ammunition)) ?? ammunition
     }
 
     public static readonly BRONZE_DART = new Ammunition(806, new Graphic(232, 0, GraphicHeight.HIGH), 226, 1)

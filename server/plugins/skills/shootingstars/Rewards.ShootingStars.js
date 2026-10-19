@@ -51,7 +51,11 @@ function rollGemTable(player, random = Math.random) {
   const chance = wearsChargedGlory(player) ? DATA.gemTable.gloryChance : DATA.gemTable.chance;
   if (random() * chance >= 1) return false;
   const gemId = pickGem(random);
-  if (gemId != null && player.getInventory().getFreeSlots() > 0) player.getInventory().adds(gemId, 1);
+  if (gemId == null) return true;
+  // An open gem bag takes it first ("storage:gather"); otherwise it needs a free slot.
+  const request = { player, itemId: gemId, amount: 1, stored: 0 };
+  Common.api.emitCustomEvent("storage:gather", request);
+  if (request.stored === 0 && player.getInventory().getFreeSlots() > 0) player.getInventory().adds(gemId, 1);
   return true;
 }
 

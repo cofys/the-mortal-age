@@ -49,6 +49,13 @@ function track(player, World) {
     if (state.messages.length > MAX_MESSAGES) state.messages.shift();
     return send(message);
   };
+  // Messages on another chat channel (spam, an NPC's line) are game messages too.
+  const sendTyped = sender.sendTypedMessage.bind(sender);
+  sender.sendTypedMessage = (chatType, message, from) => {
+    state.messages.push(String(message));
+    if (state.messages.length > MAX_MESSAGES) state.messages.shift();
+    return sendTyped(chatType, message, from);
+  };
   recordClient(sender, state);
   const animate = player.performAnimation?.bind(player);
   if (animate) {

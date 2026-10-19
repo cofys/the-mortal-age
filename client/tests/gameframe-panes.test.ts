@@ -34,6 +34,8 @@ assert.equal(fixed.get(61), 66, "quest tab icon");
 assert.equal(fixed.get(7), -1, "components without a fixed slot map to -1");
 assert.equal(fixed.has(22), false, "components absent from the fixed pane are unmapped");
 assert.equal(fixed.get(33), 25, "fixed minimap orbs use their own overlay container");
+assert.equal(fixed.get(9), 34, "fixed XP drops mount (toplevel:xp_drops)");
+assert.equal(fixed.get(93), 36, "fixed PM chat mount (toplevel:pm_container)");
 
 const classic = loadGameframePaneRedirect(enumLoader, 164);
 assert.ok(classic, "classic layout has a redirect");
@@ -57,7 +59,7 @@ for (const root of [161, 164, 548, 601]) {
         const xpCounter = encodeGameframeBootstrap("Headless", root, enabled).find(packet =>
             packet[0] === ServerPacket.WIDGET_OPEN_SUB && packet.readUInt16BE(7) === 122);
         assert.equal(Boolean(xpCounter), enabled, "XP overlay follows the saved Show/Hide setting");
-        if (xpCounter) assert.equal(xpCounter.readInt32BE(3), (161 << 16) | 7);
+        if (xpCounter) assert.equal(xpCounter.readInt32BE(3), (161 << 16) | 9);
     }
 }
 

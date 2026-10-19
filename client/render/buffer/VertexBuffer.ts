@@ -5,9 +5,7 @@ import { DataBuffer } from "../../game/buffer/DataBuffer";
 export class VertexBuffer extends DataBuffer {
     static readonly STRIDE = 12;
 
-    // The complete packed vertex is the cache identity. A numeric hash based
-    // on multiplying its fields loses precision in JavaScript and can merge
-    // unrelated vertices, creating stray stretched triangles in the scene.
+    // Use every packed bit as the identity; numeric hashes can merge unrelated vertices.
     vertexIndices: Map<string, number>;
 
     constructor(count: number, stride: number = VertexBuffer.STRIDE) {
@@ -78,7 +76,16 @@ export class VertexBuffer extends DataBuffer {
             (uPacked >> 6);
 
         if (reuseVertex) {
-            const key = `${v0 >>> 0}:${v1 >>> 0}:${v2 >>> 0}` + (this.stride > VertexBuffer.STRIDE ? `:${actorData >>> 0}:${fractions >>> 0}` : "");
+            // Two UTF-16 code units retain each word exactly, without decimal formatting
+            // and long temporary strings for every vertex of every animated pose.
+            const key = String.fromCharCode(
+                v0 & 0xffff, v0 >>> 16,
+                v1 & 0xffff, v1 >>> 16,
+                v2 & 0xffff, v2 >>> 16,
+            ) + (this.stride > VertexBuffer.STRIDE ? String.fromCharCode(
+                actorData & 0xffff, actorData >>> 16,
+                fractions & 0xffff, fractions >>> 16,
+            ) : "");
             const cachedIndex = this.vertexIndices.get(key);
             if (cachedIndex !== undefined) {
                 return cachedIndex;

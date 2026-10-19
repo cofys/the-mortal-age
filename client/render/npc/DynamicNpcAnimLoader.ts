@@ -54,6 +54,8 @@ export class DynamicNpcAnimLoader {
     private seqMetaCache = new Map<string, DynamicNpcSequenceMeta>();
     private geomCache = new Map<string, DynamicNpcFrameGeometry>();
     private geomCacheBytes = 0;
+    private geometryTypes = new Map<string, number>();
+    private geometryTypeCache = new WeakMap<NpcType, number>();
     private opaqueSceneBuf: SceneBuffer | undefined;
     private alphaSceneBuf: SceneBuffer | undefined;
 
@@ -176,11 +178,12 @@ export class DynamicNpcAnimLoader {
                     ? { next: undefined, alpha: 0 } : blend;
             interpolation = { base: ready(seqId, interpolation.base), overlay: ready(overlaySeqId, interpolation.overlay) };
         }
-        const key = `${resolvedNpcType.id}:${seqId}:${normalizedFrame}${interpolationKey(interpolation)}${overlayKey}`;
+        const key = `${this.getGeometryTypeId(resolvedNpcType)}:${seqId}:${normalizedFrame}${interpolationKey(interpolation)}${overlayKey}`;
         const cached = this.geomCache.get(key);
         if (cached) {
             this.promoteGeometryEntry(key, cached);
-            return cached;
+            return cached.npcTypeId === resolvedNpcType.id
+                ? cached : { ...cached, npcTypeId: resolvedNpcType.id };
         }
 
         if (
@@ -231,11 +234,12 @@ export class DynamicNpcAnimLoader {
         const resolvedNpcType = this.getResolvedNpcType(npcTypeId);
         if (!resolvedNpcType) return undefined;
 
-        const key = `${resolvedNpcType.id}:base`;
+        const key = `${this.getGeometryTypeId(resolvedNpcType)}:base`;
         const cached = this.geomCache.get(key);
         if (cached) {
             this.promoteGeometryEntry(key, cached);
-            return cached;
+            return cached.npcTypeId === resolvedNpcType.id
+                ? cached : { ...cached, npcTypeId: resolvedNpcType.id };
         }
 
         const model = this.npcModelLoader?.getModel(resolvedNpcType, -1, -1);
@@ -284,6 +288,8 @@ export class DynamicNpcAnimLoader {
         this.seqMetaCache.clear();
         this.geomCache.clear();
         this.geomCacheBytes = 0;
+        this.geometryTypes.clear();
+        this.geometryTypeCache = new WeakMap();
         this.opaqueSceneBuf = undefined;
         this.alphaSceneBuf = undefined;
     }
@@ -318,6 +324,25 @@ export class DynamicNpcAnimLoader {
                 `[DynamicNpcAnimLoader] top geometry ${entry.key}: approxBytes=${entry.approxBytes}`,
             );
         }
+    }
+
+    /** Identical appearances share poses and GPU keys, while NPC identity stays per instance. */
+    private getGeometryTypeId(type: NpcType): number {
+        const cached = this.geometryTypeCache.get(type);
+        if (cached !== undefined) return cached;
+        // These are all NPC properties used by NpcModelLoader to build the body model.
+        const key = JSON.stringify([
+            type.modelIds, type.recolorFrom, type.recolorTo,
+            type.retextureFrom, type.retextureTo, type.ambient, type.contrast,
+            type.widthScale, type.heightScale,
+        ]);
+        let id = this.geometryTypes.get(key);
+        if (id === undefined) {
+            id = type.id;
+            this.geometryTypes.set(key, id);
+        }
+        this.geometryTypeCache.set(type, id);
+        return id;
     }
 
     private getResolvedNpcType(npcTypeId: number): NpcType | undefined {

@@ -199,6 +199,29 @@ for (const [x, y, z] of [[1.125, -7.375, 0.999], [-0.3, 0.4, -30.8]]) {
 assert.notEqual(buffer.addVertex(0.25, 0, 0, 0, 255, 0, 0, -1),
     buffer.addVertex(0.75, 0, 0, 0, 255, 0, 0, -1), "vertex reuse preserves fractions");
 
+// Reuse only byte-identical vertices, including normals, colours and fractional positions.
+for (const stride of [12, 16, ACTOR_VERTEX_STRIDE]) {
+    const raw = new VertexBuffer(8, stride);
+    const deduplicated = new VertexBuffer(8, stride);
+    const expected = new Map<string, number>();
+    for (let i = 0; i < 1024; i++) {
+        const n = i % 257;
+        const args: [number, number, number, number, number, number, number, number] = [
+            (n % 17) - 8 + (n % 4) / 4, (n % 13) - 6, (n % 11) - 5,
+            (n * 255) & 0xffff, n & 255, (n % 7) / 7, (n % 5) / 5, n % 3 - 1,
+        ];
+        const actor = (n * 0x10204081) >>> 0;
+        const rawIndex = raw.addVertex(...args, false, n % 12, false, actor);
+        const bytes = raw.bytes.subarray(rawIndex * stride, (rawIndex + 1) * stride);
+        const identity = Array.from(bytes).join(",");
+        if (!expected.has(identity)) expected.set(identity, expected.size);
+        const index = deduplicated.addVertex(...args, true, n % 12, false, actor);
+        assert.equal(index, expected.get(identity), `packed vertex identity at stride ${stride}`);
+        assert.deepEqual(deduplicated.bytes.subarray(index * stride, (index + 1) * stride), bytes);
+    }
+    assert.equal(deduplicated.offset, expected.size);
+}
+
 // The action and movement layers have independent clocks and respect the interleave mask.
 const layered = model();
 layered.animateInterleavedFramesInterpolated(tinyA, tinyB, 0.5, false,

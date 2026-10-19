@@ -211,17 +211,7 @@ export class PendingHit {
             if (this.accurate && this.attacker.isPlayer() && this.target.isPlayer()) {
                 ArceuusSpells.applyCorruption(this.attacker.getAsPlayer(), this.target.getAsPlayer());
             }
-            ServerPerf.measurePhase(
-                "combat.process.method_hits.extra_rolls",
-                () => CombatFactory.applyExtraHitRolls(
-                    this.attacker,
-                    this.target,
-                    this.combatType,
-                    damage,
-                    this.accurate,
-                    this.method
-                )
-            );
+            this.emitHitDamage(damage);
             capToRemaining(damage);
             this.totalDamage = damage.getDamage();
             return [damage];
@@ -259,22 +249,29 @@ export class PendingHit {
             if (this.accurate && this.attacker.isPlayer() && this.target.isPlayer()) {
                 ArceuusSpells.applyCorruption(this.attacker.getAsPlayer(), this.target.getAsPlayer());
             }
-            ServerPerf.measurePhase(
-                "combat.process.method_hits.extra_rolls",
-                () => CombatFactory.applyExtraHitRolls(
-                    this.attacker,
-                    this.target,
-                    this.combatType,
-                    damage,
-                    this.accurate,
-                    this.method
-                )
-            );
+            this.emitHitDamage(damage);
             capToRemaining(damage);
             this.totalDamage += damage.getDamage();
             hits[i] = damage;
         }
         return hits;
+    }
+
+    /** Lets plugins change a rolled hitsplat (enchanted bolts); they may also make it accurate. */
+    private emitHitDamage(damage: HitDamage): void {
+        const event = {
+            attacker: this.attacker,
+            target: this.target,
+            combatType: this.combatType,
+            hit: this,
+            damage,
+            accurate: this.accurate,
+        };
+        ServerPerf.measurePhase(
+            "combat.process.method_hits.extra_rolls",
+            () => PluginManager.emitCombatHitDamage(event)
+        );
+        this.accurate = event.accurate;
     }
 
     /**

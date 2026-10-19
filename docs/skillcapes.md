@@ -36,7 +36,7 @@ Firemaking cape's light, the Slayer cape's repeat chance).
 | Ranged: accumulator (72%), 80% after Vorkath's head | `items/AvasAccumulator.plugin.js` via `skillcape:ammo-recovery` |
 | Runecraft: every altar without talisman or tiara (varbits `rc_no_tally_required_*`) | `skills/Runecrafting.plugin.js` |
 | Slayer: no combat requirement (worn); 10% previous task (carried) | `skills/slayer/Tasks.Slayer.js` |
-| Smithing: gold bar XP; coal bag holds 36 | `skills/Smithing.plugin.js`, `items/CoalBag.plugin.js` |
+| Smithing: gold bar XP; coal bag holds 36 | `skills/Smithing.plugin.js`, `items/storage/CoalBag.StorageItems.js` |
 | Thieving: +10% pickpocket | `skills/thieving/Pickpocket.Thieving.js` |
 | Woodcutting: +10% nests | `skills/Woodcutting.plugin.js` |
 | Agility: graceful cape substitute | `items/GracefulOutfit.plugin.js` |

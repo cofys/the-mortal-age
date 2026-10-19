@@ -918,6 +918,137 @@ test("Junior Jim's Recover-boat asks which boat, takes the fee from the bank and
   assert.equal(h.bank.getAmount(995), 750, "nothing is charged for a refused recovery");
 });
 
+/** Junior Jim's Buy-boat with the real Omnishop plugin, on one custom-event bus. */
+function boatShopHarness({ sailingLevel = 1, coins = 0 } = {}) {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const core = PluginManager.getCoreApi();
+  const events = {};
+  const buttons = new Map();
+  const npcs = {};
+  const api = {
+    core,
+    onCustomEvent: (name, handler) => (events[name] ??= []).push(handler),
+    emitCustomEvent: (name, payload) => (events[name] ?? []).forEach((handler) => handler(payload)),
+    onInterfaceActionButton: (ids, handler) => [ids].flat().forEach((id) => buttons.set(id, handler)),
+    onNpcInteraction: (name, actions) => { npcs[name] = actions; },
+    spawnNpc: () => null,
+    removeNpc() {},
+  };
+  require("../plugins/interface/Omnishop.plugin").register(api);
+  require("../plugins/skills/sailing/Shipwright.plugin").register(api);
+  const player = sailor();
+  if (coins) player.getInventory().add(new Item(995, coins), false);
+  let interfaceId = -1;
+  const attributes = {};
+  const varps = new Map();
+  const varbits = new Map();
+  const scripts = [];
+  const sounds = [];
+  const dialogues = [];
+  const sender = new Proxy({}, {
+    get: (_t, key) => (...args) => {
+      if (key === "getVarp") return varps.get(args[0]) ?? 0;
+      if (key === "sendConfig") varps.set(args[0], args[1]);
+      if (key === "sendVarbit") varbits.set(args[0], args[1]);
+      if (key === "sendInterfaceScript") scripts.push(args);
+      if (key === "sendSoundEffect") sounds.push(args[0]);
+      if (key === "sendInterfaceRemoval") interfaceId = -1;
+      return sender;
+    },
+  });
+  Object.assign(player, {
+    getPacketSender: () => sender,
+    getInterfaceId: () => interfaceId,
+    setInterfaceId: (id) => { interfaceId = id; return player; },
+    getAttribute: (key) => attributes[key],
+    setAttribute: (key, value) => { attributes[key] = value; },
+    getSkillManager: () => ({ getMaxLevel: () => sailingLevel }),
+    getDialogueManager: () => ({ startDialogues: (chain) => dialogues.push(...chain.getDialogues().values()) }),
+  });
+  const component = (name) => core.CacheDefinitions.getComponentId(name);
+  const click = (name, fields) => buttons.get(component(name))({ player, buttonId: component(name), handled: false, ...fields });
+  const zigzag = (ints) => Buffer.from(ints.flatMap((value) => {
+    const bytes = [];
+    for (let v = (value << 1) ^ (value >> 31); ; v >>>= 7) {
+      if (v < 0x80) return [...bytes, v];
+      bytes.push((v & 0x7f) | 0x80);
+    }
+  }));
+  return {
+    player, varps, varbits, scripts, sounds, dialogues,
+    open: () => npcs["Junior Jim"]["Buy-boat"]({ player, npc: { getDefinition: () => ({ getName: () => "Junior Jim" }) } }),
+    select: (entry) => click("omnishop_main:list", { slot: entry * 12, action: 1 }),
+    requestInfo: (shop, entry) => click("omnishop_main:trigger_request_info", { action: 0, scriptTrigger: true, argsData: zigzag([shop, entry]) }),
+    buy: () => click("omnishop_main:button_1", { action: 1 }),
+  };
+}
+
+const BOAT_SHOP = 8548; // sailing_boat_shop
+
+test("Junior Jim's Buy-boat opens the Boat Emporium and answers the info request as live OSRS does", () => {
+  const h = boatShopHarness();
+  h.open();
+  assert.equal(h.player.getInterfaceId(), 819);
+  assert.equal(h.varps.get(3874), BOAT_SHOP, "omnishop_lastshop");
+  assert.equal(h.varps.get(3869), -1, "omnishop_selected_id");
+  assert.deepEqual(h.scripts.find(([id]) => id === 7140)[1], [BOAT_SHOP, -1, -1], "omnishop_main_init");
+
+  h.scripts.length = 0;
+  h.select(1);
+  assert.equal(h.varps.get(3869), 1);
+  assert.deepEqual(h.scripts, [], "op1 only selects; the client asks for the text");
+  h.requestInfo(BOAT_SHOP, 1);
+  assert.deepEqual(h.scripts, [[9772, [BOAT_SHOP, -1, 1,
+    "Sailing level: 15<br>Size: Small (2x5)<br>Player capacity: 5<br>Crew capacity: 2<br>Facility slots: 7<br><br>Comes with a pre-built basic cargo hold.",
+    1, 0, 1]]]);
+  h.requestInfo(BOAT_SHOP, 0);
+  assert.equal(h.scripts[1][1][3], "Sailing level: 1<br>Size: Tiny (1x3)<br>Player capacity: 2<br>Crew capacity: 0<br>Facility slots: 1");
+  h.requestInfo(BOAT_SHOP, 2);
+  assert.equal(h.scripts[2][1][3], "Sailing level: 50<br>Size: Medium (3x10)<br>Player capacity: 10<br>Crew capacity: 5<br>Facility slots: 13<br><br>Comes with a pre-built basic cargo hold.");
+});
+
+test("buying a raft takes 1,000 coins, moors it at the shipwright's dock and shows its deed", () => {
+  const h = boatShopHarness({ coins: 5000 });
+  h.open();
+  h.select(0);
+  h.buy();
+  assert.equal(h.player.getInventory().getAmount(995), 4000);
+  const [boat] = h.player.getSailing().boats;
+  assert.equal(boat.type, "raft");
+  assert.deepEqual(boat.location, { kind: "docked", dock: "the_pandemonium" });
+  assert.equal(h.varbits.get(19258), 1, "sailing_boat_1_owned");
+  assert.ok(boat.name.slice(1).every((word) => word > 0), "a random name");
+  assert.deepEqual(h.sounds, [2114]);
+  assert.equal(h.player.getInterfaceId(), -1, "the shop closes");
+  assert.equal(h.dialogues.length, 1);
+  assert.equal(h.dialogues[0].getItemId(), 31993, "sailing_deed_raft");
+  assert.equal(h.dialogues[0].getText(), "Your brand new boat has been delivered to the Pandemonium.");
+  assert.ok(!h.scripts.some(([id]) => id === 501), "no currency redraw on the closed shop");
+});
+
+test("the Boat Emporium refuses a boat above the player's level, past their slots, or unpaid", () => {
+  const h = boatShopHarness({ sailingLevel: 14, coins: 20000 });
+  h.open();
+  h.select(1);
+  h.buy();
+  assert.equal(h.player.messages.at(-1), "You need a Sailing level of 15 to buy a skiff.");
+  h.select(0);
+  h.buy();
+  assert.equal(h.player.getSailing().boats.length, 1);
+  h.open();
+  h.select(0);
+  h.buy();
+  assert.equal(h.player.messages.at(-1), "You don't have a free boat slot.", "one boat below level 15");
+  assert.equal(h.player.getInventory().getAmount(995), 19000);
+
+  const poor = boatShopHarness({ sailingLevel: 15 });
+  poor.open();
+  poor.select(1);
+  poor.buy();
+  assert.equal(poor.player.messages.at(-1), "You don't have enough Coins.");
+  assert.equal(poor.player.getSailing().boats.length, 0);
+});
+
 test("with more than one boat, the gangplank's Board asks which one", () => {
   const h = shipwrightHarness(0);
   const board = registerPlugin("Gangplank.plugin").objects.Gangplank.Board;

@@ -61,7 +61,8 @@
     "export-textures": "tsx scripts/cache/export-textures.ts",
     "export-height-map": "tsx scripts/cache/export-height-map.ts",
     "export-items": "tsx scripts/cache/export-items.ts",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "serve": "node scripts/serve-build.mjs"
   },
   "eslintConfig": {
     "extends": [

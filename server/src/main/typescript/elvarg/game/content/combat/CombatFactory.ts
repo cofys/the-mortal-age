@@ -14,7 +14,7 @@ import { CombatMethod } from "./method/CombatMethod";
 import { MagicCombatMethod } from "./method/impl/MagicCombatMethod";
 import { MeleeCombatMethod } from "./method/impl/MeleeCombatMethod";
 import { RangedCombatMethod } from "./method/impl/RangedCombatMethod";
-import { Ammunition, RangedData, RangedWeapon } from "./ranged/RangedData";
+import { Ammunition, RangedWeapon } from "./ranged/RangedData";
 import { Mobile } from "../../entity/impl/Mobile";
 import type { NPC } from "../../entity/impl/npc/NPC";
 import { CoordinateState } from "../../entity/impl/npc/NPCMovementCoordinator";
@@ -196,9 +196,6 @@ export class CombatFactory {
                 if (damageRange) {
                     damage = Math.max(damageRange.minimum, Math.min(damageRange.maximum, damage));
                 }
-                // Enchanted-bolt activation is applied exactly once, by
-                // applyExtraHitRolls after the accuracy roll. Rolling it here as
-                // well let a bolt fire twice on one shot.
             }
         } else if (type == CombatType.MAGIC) {
             damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride);
@@ -359,42 +356,6 @@ export class CombatFactory {
                 }
             })());
         }
-    }
-
-    /** Enchanted-bolt activation, honouring special traits that scale/guarantee it. */
-    private static boltEffectTriggered(entity: Mobile): boolean {
-        const traits = CombatSpecial.activeTraitsFor(entity);
-        if (traits?.guaranteedEnchantedBoltEffect === true) {
-            return true;
-        }
-        const multiplier = traits?.enchantedBoltEffectChanceMultiplier;
-        if (multiplier !== undefined && multiplier > 0) {
-            return Misc.getRandom(Math.max(1, Math.round(10 / multiplier))) === 1;
-        }
-        return Misc.getRandom(10) === 1;
-    }
-
-    static applyExtraHitRolls(attacker: Mobile, target: Mobile, combatType: CombatType, damage: HitDamage, accurate: boolean, method: CombatMethod) {
-        if (!attacker || !target || !damage) {
-            return;
-        }
-
-        if (!accurate) {
-            return;
-        }
-
-        // Bolt activation is data-driven: a special that guarantees the effect
-        // declares `guaranteedEnchantedBoltEffect` (see boltEffectTriggered).
-        if (combatType == CombatType.RANGED
-            && attacker.isPlayer()
-            && WeaponProfiles.get(attacker.getAsPlayer())?.boltEffects
-            && CombatFactory.boltEffectTriggered(attacker)) {
-            const multiplier = RangedData.getSpecialEffectsMultiplier(attacker.getAsPlayer(), target, damage.getDamage());
-            if (multiplier !== 1.0) {
-                damage.setDamage(Math.floor(damage.getDamage() * multiplier));
-            }
-        }
-
     }
 
     static validTarget(attacker: Mobile, target: Mobile) {

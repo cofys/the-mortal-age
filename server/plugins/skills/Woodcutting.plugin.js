@@ -62,6 +62,21 @@ let woodcuttingTick = 0;
 let activeSessionsRef = null;
 let pluginApi;
 
+/** A full inventory stops chopping unless an open log basket has room ("storage:room"). */
+function inventoryBlocks(player, logId) {
+  if (!player.getInventory().isFull()) return false;
+  const request = { player, itemId: logId, room: false };
+  pluginApi.emitCustomEvent("storage:room", request);
+  return !request.room;
+}
+
+/** An open log basket takes the log first ("storage:gather"); otherwise it goes to the inventory. */
+function giveLog(player, logId) {
+  const request = { player, itemId: logId, amount: 1, stored: 0 };
+  pluginApi.emitCustomEvent("storage:gather", request);
+  if (request.stored === 0) player.getInventory().adds(logId, 1);
+}
+
 const BIRD_NESTS = Object.freeze({
   RED_EGG_NEST: ItemIds.BIRD_NEST,
   GREEN_EGG_NEST: ItemIds.BIRD_NEST_2,
@@ -942,7 +957,7 @@ function startWoodcutting(player, treeObject, tree, activeSessions) {
     return false;
   }
 
-  if (tree.logId >= 0 && player.getInventory().isFull()) {
+  if (tree.logId >= 0 && inventoryBlocks(player, tree.logId)) {
     player.getInventory().full();
     return false;
   }
@@ -1049,7 +1064,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
 
     state.axe = axe;
 
-    if (state.tree.logId >= 0 && player.getInventory().isFull()) {
+    if (state.tree.logId >= 0 && inventoryBlocks(player, state.tree.logId)) {
       player.getInventory().full();
       stopWoodcutting(activeSessions, player);
       continue;
@@ -1080,7 +1095,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
 
     if (state.tree.logId >= 0) {
       if (!InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId)) {
-        player.getInventory().adds(state.tree.logId, 1);
+        giveLog(player, state.tree.logId);
         player.sendMessage(logMessage(state.tree));
       }
       CrystalAxe.tryUseCharge(player);

@@ -58,7 +58,7 @@ assert.deepEqual(
         0,
         16,
     ),
-    { x: 16, y: 0 },
+    { x: 0, y: 0 },
 );
 
 assert.deepEqual(
@@ -69,7 +69,7 @@ assert.deepEqual(
         0,
         16,
     ),
-    { x: 0, y: -16 },
+    { x: 0, y: 0 },
 );
 
 assert.deepEqual(

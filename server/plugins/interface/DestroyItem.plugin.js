@@ -247,6 +247,9 @@ module.exports = {
         const discarded = item.clone();
         player.getInventory().deleteAtSlot(pending.slot, pending.amount);
         api.emitCustomEvent("item:discarded", { player, item: discarded });
+        // A drop is a discard too; plugins that keep state for an item (a container's contents)
+        // hear only that it is gone for good.
+        api.emitCustomEvent("destroy-item:destroyed", { player, itemId: pending.itemId, amount: pending.amount });
       }
       close(player);
     });

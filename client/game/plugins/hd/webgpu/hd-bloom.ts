@@ -31,7 +31,6 @@ type BloomLevel = {
 
 type BloomPass = {
     readonly buffer: GPUBuffer;
-    readonly data: Float32Array;
     readonly uniformBindGroup: GPUBindGroup;
     readonly sourceBindGroup: GPUBindGroup;
 };
@@ -49,7 +48,6 @@ export class HdBloomPass {
     private levels: BloomLevel[] = [];
     private downsamples: BloomPass[] = [];
     private upsamples: BloomPass[] = [];
-    private readonly prefilterData = new Float32Array(UNIFORM_FLOATS);
     private prefilterBuffer?: GPUBuffer;
     private prefilterUniformBindGroup?: GPUBindGroup;
     private prefilterSourceBindGroup?: GPUBindGroup;
@@ -150,17 +148,18 @@ export class HdBloomPass {
         this.levels = levels;
 
         this.prefilterBuffer = this.createUniformBuffer("hd-bloom prefilter");
+        this.writeUniform(this.prefilterBuffer, sceneWidth, sceneHeight, levels[0]);
         this.prefilterUniformBindGroup = this.createUniformBindGroup(this.prefilterBuffer, "hd-bloom prefilter");
         this.prefilterSourceBindGroup = undefined;
         this.prefilterView = undefined;
 
         this.downsamples = [];
         for (let i = 0; i < LEVEL_COUNT - 1; i++) {
-            this.downsamples.push(this.createPass(levels[i], `hd-bloom downsample ${i}`));
+            this.downsamples.push(this.createPass(levels[i], levels[i + 1], `hd-bloom downsample ${i}`));
         }
         this.upsamples = [];
         for (let i = LEVEL_COUNT - 1; i >= 1; i--) {
-            this.upsamples.push(this.createPass(levels[i], `hd-bloom upsample ${i}`));
+            this.upsamples.push(this.createPass(levels[i], levels[i - 1], `hd-bloom upsample ${i}`));
         }
     }
 
@@ -184,7 +183,6 @@ export class HdBloomPass {
             this.prefilterView = sceneView;
         }
 
-        this.writeUniform(this.prefilterBuffer, this.prefilterData, this.sceneWidth, this.sceneHeight, levels[0]);
         this.recordPass(
             encoder,
             this.prefilterPipeline,
@@ -196,15 +194,12 @@ export class HdBloomPass {
 
         for (let i = 0; i < this.downsamples.length; i++) {
             const pass = this.downsamples[i];
-            this.writeUniform(pass.buffer, pass.data, levels[i].width, levels[i].height, levels[i + 1]);
             this.recordPass(encoder, this.downsamplePipeline, pass.uniformBindGroup, pass.sourceBindGroup, levels[i + 1], "clear");
         }
 
         for (let i = 0; i < this.upsamples.length; i++) {
             const pass = this.upsamples[i];
-            const source = levels[LEVEL_COUNT - 1 - i];
             const destination = levels[LEVEL_COUNT - 2 - i];
-            this.writeUniform(pass.buffer, pass.data, source.width, source.height, destination);
             this.recordPass(encoder, this.upsamplePipeline, pass.uniformBindGroup, pass.sourceBindGroup, destination, "load");
         }
 
@@ -235,11 +230,11 @@ export class HdBloomPass {
         });
     }
 
-    private createPass(source: BloomLevel, label: string): BloomPass {
+    private createPass(source: BloomLevel, destination: BloomLevel, label: string): BloomPass {
         const buffer = this.createUniformBuffer(label);
+        this.writeUniform(buffer, source.width, source.height, destination);
         return {
             buffer,
-            data: new Float32Array(UNIFORM_FLOATS),
             uniformBindGroup: this.createUniformBindGroup(buffer, label),
             sourceBindGroup: this.device.createBindGroup({
                 label: `${label} source bind group`,
@@ -254,11 +249,12 @@ export class HdBloomPass {
 
     private writeUniform(
         buffer: GPUBuffer,
-        data: Float32Array,
         sourceWidth: number,
         sourceHeight: number,
         destination: BloomLevel,
     ): void {
+        // Sizes and filter parameters stay constant until ensure() recreates the chain.
+        const data = new Float32Array(UNIFORM_FLOATS);
         data[0] = sourceWidth;
         data[1] = sourceHeight;
         data[2] = 1 / sourceWidth;

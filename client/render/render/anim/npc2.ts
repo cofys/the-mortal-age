@@ -479,6 +479,7 @@ export function resolveUnbatchedNpcGeometry(
 
 /** Whether this NPC needs dynamic interpolated poses instead of its baked keyframes. */
 export function isNpcAnimationSmoothed(host: WebGLOsrsRendererHost, ecsId: number): boolean {
+    if (!host.osrsClient.animationSmoothingPlugin?.isEnabled()) return false;
     if (!host.dynamicNpcAnimLoader?.isReady()) return false;
     const ecs = host.osrsClient.npcEcs;
     const actionId = ecs.getSeqId(ecsId);

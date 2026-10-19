@@ -1,4 +1,8 @@
-/** Native tanner324. Content requests this service through tanning:open after checking access. */
+/**
+ * Native tanner324. The tanners' own option opens it (Ellis, Tanner, Sbott, Eodan); other content
+ * requests it through tanning:open after checking access. tanning.json "prices" lists tanners who
+ * charge more than the default, per hide row.
+ */
 const data = require('./data/tanning.json');
 const GROUP = 324;
 // Current-cache gamevals: tanning_a_all through tanning_h_1; native IF1 buttons say Tan All/X/5/1.
@@ -9,27 +13,38 @@ const opened = new WeakMap();
 function openTanning(event) {
   if (!event.player || event.handled) return;
   const { player, npc } = event;
-  const context = { npc, origin: player.getLocation().clone() };
+  const context = { npc, origin: player.getLocation().clone(), prices: event.prices ?? null };
   event.handled = true;
   player.getPacketSender().sendInterface(GROUP);
   opened.set(player, context);
   for (const [index, hide] of data.hides.entries()) {
+    const price = priceOf(context, index);
     player.getPacketSender().sendItemOnInterfaces((GROUP << 16) | (100 + index), hide.product, 250)
       .sendString(hide.name, (GROUP << 16) | (108 + index))
-      .sendString(`${hide.price} coin${hide.price === 1 ? "" : "s"}`, (GROUP << 16) | (116 + index));
+      .sendString(`${price} coin${price === 1 ? "" : "s"}`, (GROUP << 16) | (116 + index));
   }
 }
 
-function tan(player, hide, requested, context) {
+function priceOf(context, index) {
+  return context.prices?.[index] ?? data.hides[index].price;
+}
+
+function tradeWithTanner(event) {
+  const prices = data.prices?.[event.definition?.getName?.()];
+  openTanning({ player: event.player, npc: event.npc, prices });
+}
+
+function tan(player, index, requested, context) {
+  const hide = data.hides[index], price = priceOf(context, index);
   if (opened.get(player) !== context || !Number.isSafeInteger(requested) || requested < 1) return 0;
   const at = player.getLocation();
   if (at.getZ() !== context.origin.getZ() || Math.max(Math.abs(at.getX() - context.origin.getX()), Math.abs(at.getY() - context.origin.getY())) > 8
     || context.npc?.isRegistered?.() === false) return 0;
   const inventory = player.getInventory(), held = inventory.getAmount(hide.raw);
   if (held === 0) { player.sendMessage("You don't have any suitable hides to tan."); return 0; }
-  const count = Math.min(requested, held, Math.floor(inventory.getAmount(data.coins) / hide.price));
+  const count = Math.min(requested, held, Math.floor(inventory.getAmount(data.coins) / price));
   if (count === 0) { player.sendMessage("You don't have enough coins to pay for tanning."); return 0; }
-  inventory.deleteNumber(data.coins, count * hide.price);
+  inventory.deleteNumber(data.coins, count * price);
   inventory.deleteNumber(hide.raw, count);
   inventory.adds(hide.product, count);
   return count;
@@ -42,11 +57,11 @@ function click(event) {
   const index = (buttonId & 0xffff) - 124;
   if (buttonId >>> 16 !== GROUP || index < 0 || index >=32) return;
   event.handled = true;
-  const hide = data.hides[index % 8], option = Math.floor(index / 8);
+  const row = index % 8, option = Math.floor(index / 8);
   if (option === 1) {
-    player.setEnteredAmountAction({ execute: amount => tan(player, hide, amount, context) });
+    player.setEnteredAmountAction({ execute: amount => tan(player, row, amount, context) });
     player.getPacketSender().sendEnterAmountPrompt('How many would you like to tan?');
-  } else tan(player, hide, option === 0 ? 0x7fffffff : option === 2 ? 5 : 1, context);
+  } else tan(player, row, option === 0 ? 0x7fffffff : option === 2 ? 5 : 1, context);
 }
 
 function close({ player, interfaceId }) {
@@ -60,6 +75,8 @@ module.exports = {
   members: true,
   register(api) {
     api.onCustomEvent('tanning:open', openTanning);
+    api.onNpcsInteraction(['Ellis', 'Tanner', 'Sbott'], { Trade: tradeWithTanner });
+    api.onNpcInteraction('Eodan', { 'Tan-hides': tradeWithTanner });
     api.onInterfaceActionButton([CLOSE, ...BUTTONS], click);
     api.onCustomEvent('interface:closed', close);
     api.onPlayerLogout(logout);

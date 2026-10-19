@@ -33,20 +33,33 @@ fn bloomUv(pixel: vec4<f32>) -> vec2<f32> {
     return vec2<f32>(pixel.x / u_bloom.u_dst.x, pixel.y / u_bloom.u_dst.y);
 }
 
-// 4 taps at +-0.5 source texel: the box filter the prefilter, downsample and upsample share.
-fn bloomTaps(uv: vec2<f32>) -> vec3<f32> {
+fn bloomTap(uv: vec2<f32>, suppressFireflies: bool) -> vec4<f32> {
+    let sampleColor = textureSampleLevel(t_src, s_src, uv, 0.0).rgb;
+    // Reject NaN/Infinity before filtering so one bad HDR pixel cannot black out whole levels.
+    let invalid = (bitcast<vec3<u32>>(sampleColor) & vec3<u32>(0x7f800000u)) == vec3<u32>(0x7f800000u);
+    let color = select(sampleColor, vec3<f32>(0.0), invalid);
+    var weight = 1.0;
+    if (suppressFireflies) {
+        // Karis weighting keeps isolated HDR pixels from flashing across the bloom chain.
+        weight = 1.0 / (1.0 + dot(color, vec3<f32>(0.2126, 0.7152, 0.0722)));
+    }
+    return vec4<f32>(color * weight, weight);
+}
+
+// Only the initial scene downsample weights highlights; later levels keep their box filter.
+fn bloomTaps(uv: vec2<f32>, suppressFireflies: bool) -> vec3<f32> {
     let texel = u_bloom.u_src.zw;
-    var color = vec3<f32>(0.0);
-    color += textureSampleLevel(t_src, s_src, uv + vec2<f32>(-0.5, -0.5) * texel, 0.0).rgb;
-    color += textureSampleLevel(t_src, s_src, uv + vec2<f32>(0.5, -0.5) * texel, 0.0).rgb;
-    color += textureSampleLevel(t_src, s_src, uv + vec2<f32>(-0.5, 0.5) * texel, 0.0).rgb;
-    color += textureSampleLevel(t_src, s_src, uv + vec2<f32>(0.5, 0.5) * texel, 0.0).rgb;
-    return color * 0.25;
+    var color = vec4<f32>(0.0);
+    color += bloomTap(uv + vec2<f32>(-0.5, -0.5) * texel, suppressFireflies);
+    color += bloomTap(uv + vec2<f32>(0.5, -0.5) * texel, suppressFireflies);
+    color += bloomTap(uv + vec2<f32>(-0.5, 0.5) * texel, suppressFireflies);
+    color += bloomTap(uv + vec2<f32>(0.5, 0.5) * texel, suppressFireflies);
+    return color.rgb / color.a;
 }
 
 @fragment
 fn fs_prefilter(@builtin(position) pixel: vec4<f32>) -> @location(0) vec4<f32> {
-    let color = bloomTaps(bloomUv(pixel));
+    let color = bloomTaps(bloomUv(pixel), true);
     let luma = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
     let knee = max(u_bloom.u_params.y, 1e-4);
     var soft = clamp(luma - u_bloom.u_params.x + knee, 0.0, 2.0 * knee);
@@ -57,12 +70,12 @@ fn fs_prefilter(@builtin(position) pixel: vec4<f32>) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_downsample(@builtin(position) pixel: vec4<f32>) -> @location(0) vec4<f32> {
-    return vec4<f32>(bloomTaps(bloomUv(pixel)), 1.0);
+    return vec4<f32>(bloomTaps(bloomUv(pixel), false), 1.0);
 }
 
 // The destination blends one/one onto its existing content, so this only adds its taps.
 @fragment
 fn fs_upsample(@builtin(position) pixel: vec4<f32>) -> @location(0) vec4<f32> {
-    return vec4<f32>(bloomTaps(bloomUv(pixel)), 1.0);
+    return vec4<f32>(bloomTaps(bloomUv(pixel), false), 1.0);
 }
 `;
